@@ -1,0 +1,59 @@
+[project]
+name = "raven-ai"
+version = "0.1.0"
+description = "Personal AI assistant — 24/7, multi-channel, multi-provider LLM"
+authors = [
+    { name = "Raven AI Team" },
+]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "httpx>=0.27",
+    "aiosqlite>=0.20",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "python-dotenv>=1.0",
+    "python-telegram-bot>=21.0",
+    "chromadb>=0.5",
+    "click>=8.1",
+    "rich>=13.0",
+    "loguru>=0.7",
+    "apscheduler>=3.10",
+    "playwright>=1.44",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.2",
+]
+
+[project.optional-dependencies]
+discord = ["discord.py>=2.3"]
+slack = ["slack-sdk>=3.27"]
+matrix = ["matrix-nio>=0.24"]
+all = ["raven-ai[discord,slack,matrix]"]
+
+[project.scripts]
+raven = "raven.cli.main:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["raven"]
+
+[tool.mypy]
+strict = true
+exclude = ["channels/"]
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+select = ["E", "F", "I", "N", "W"]

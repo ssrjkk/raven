@@ -1,0 +1,70 @@
+from __future__ import annotations
+import json
+from datetime import datetime
+from typing import Any, Callable, AsyncIterator, Literal
+from uuid import uuid4
+from pydantic import BaseModel, Field
+
+
+class Message(BaseModel):
+    id: str = Field(default_factory=lambda: uuid4().hex)
+    session_id: str
+    channel: str = ""
+    role: Literal["user", "assistant", "system", "tool"]
+    content: str
+    metadata: dict = {}
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "session_id": self.session_id,
+            "channel": self.channel,
+            "role": self.role,
+            "content": self.content,
+            "metadata": json.dumps(self.metadata),
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class Session(BaseModel):
+    id: str
+    channel: str
+    user_id: str
+    agent_id: str = "default"
+    system_prompt: str | None = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PluginTool(BaseModel):
+    name: str
+    description: str
+    parameters: dict
+    handler: Callable[..., Any]
+
+    class Config:
+        arbitrary_types_allowed = True
+
+
+class IncomingMessage(BaseModel):
+    channel: str
+    user_id: str
+    session_id: str = ""
+    text: str
+    metadata: dict = {}
+
+
+class LLMResponse(BaseModel):
+    content: str
+    tool_calls: list[dict] = []
+    finish_reason: str = "stop"
+
+
+class SessionSummary(BaseModel):
+    id: str
+    summary: str
+    message_count: int
+
+
+UserRole = Literal["user", "assistant", "system", "tool"]

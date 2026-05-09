@@ -1,0 +1,20 @@
+services:
+  raven:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file:
+      - ../.env
+    volumes:
+      - ~/.raven:/root/.raven
+    ports:
+      - "18888:18888"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "raven", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    environment:
+      - PYTHONUNBUFFERED=1

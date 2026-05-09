@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #0f1117;
+  --bg-secondary: #1a1d2e;
+  --bg-tertiary: #252840;
+  --accent: #7c3aed;
+  --accent-hover: #8b5cf6;
+  --text-primary: #e4e4e7;
+  --text-secondary: #a1a1aa;
+}
+
+* { scrollbar-width: thin; scrollbar-color: #2a2d3e transparent; }
+body { font-family: "Inter", system-ui, -apple-system, sans-serif; }
+
+pre { background: #0d0d1a; border-radius: 0.5rem; padding: 1rem; overflow-x: auto; }
+code { font-family: "JetBrains Mono", "Fira Code", monospace; font-size: 0.875rem; }
+p code { background: #1a1d2e; padding: 0.125rem 0.375rem; border-radius: 0.25rem; }
+
+.typing-dot { animation: blink 1.4s infinite both; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%, 80%, 100% { opacity: 0; } 40% { opacity: 1; } }

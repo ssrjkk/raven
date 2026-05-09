@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Raven AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { width: 380px; min-height: 500px; background: #0f1117; color: #e4e4e7; font-family: system-ui, sans-serif; }
+    .typing span { animation: blink 1.4s infinite both; }
+    .typing span:nth-child(2) { animation-delay: 0.2s; }
+    .typing span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink { 0%,80%,100% { opacity: 0; } 40% { opacity: 1; } }
+    .msg-user { background: #7c3aed; color: white; border-radius: 12px 12px 4px 12px; }
+    .msg-ai { background: #1a1d2e; border: 1px solid #252840; border-radius: 12px 12px 12px 4px; }
+  </style>
+</head>
+<body class="flex flex-col h-screen" x-data="app()">
+  <header class="flex items-center gap-2 px-4 py-3 border-b border-gray-800">
+    <span>🐦</span>
+    <span class="font-bold text-sm">Raven AI</span>
+    <span class="text-xs text-gray-600 ml-auto" x-text="connected ? '●' : '○'"></span>
+  </header>
+
+  <main class="flex-1 overflow-y-auto p-3 space-y-2" id="messages">
+    <template x-for="msg in messages" :key="msg.id">
+      <div :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
+        <div :class="msg.role === 'user' ? 'msg-user' : 'msg-ai'" class="max-w-[85%] px-3 py-2 text-sm">
+          <div x-html="render(msg.content)"></div>
+        </div>
+      </div>
+    </template>
+    <div x-show="loading" class="flex justify-start">
+      <div class="msg-ai px-3 py-2 text-sm typing">
+        <span>.</span><span>.</span><span>.</span>
+      </div>
+    </div>
+  </main>
+
+  <footer class="border-t border-gray-800 p-3">
+    <form @submit.prevent="send()" class="flex gap-2">
+      <input x-model="text" placeholder="Message..." class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-violet-500">
+      <button type="submit" class="bg-violet-600 hover:bg-violet-500 text-white px-3 py-2 rounded-lg text-sm">Send</button>
+    </form>
+  </footer>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    function app() {
+      return {
+        messages: [],
+        text: "",
+        loading: false,
+        ws: null,
+        connected: false,
+        init() {
+          this.connect();
+        },
+        connect() {
+          try {
+            this.ws = new WebSocket("ws://localhost:18888/ws");
+            this.ws.onopen = () => this.connected = true;
+            this.ws.onclose = () => { this.connected = false; setTimeout(() => this.connect(), 2000); };
+            this.ws.onmessage = (e) => {
+              const data = JSON.parse(e.data);
+              if (data.type === "message") {
+                this.messages.push({ id: Date.now(), role: data.role, content: data.content });
+                this.loading = false;
+                this.$nextTick(() => this.scroll());
+              }
+            };
+          } catch(e) { setTimeout(() => this.connect(), 2000); }
+        },
+        send() {
+          if (!this.text.trim() || this.loading) return;
+          this.messages.push({ id: Date.now(), role: "user", content: this.text });
+          this.ws?.send(JSON.stringify({ text: this.text, session_id: "extension:popup:default" }));
+          this.text = "";
+          this.loading = true;
+          this.$nextTick(() => this.scroll());
+        },
+        render(content) {
+          content = content.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          content = content.replace(/```(\w*)\n([\s\S]*?)```/g, "<pre class='bg-gray-950 rounded p-2 my-1 text-xs overflow-x-auto'>$2</pre>");
+          content = content.replace(/`([^`]+)`/g, "<code class='bg-gray-950 px-1 rounded text-xs'>$1</code>");
+          content = content.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+          content = content.replace(/\n/g, "<br>");
+          return content;
+        },
+        scroll() {
+          const el = document.getElementById("messages");
+          if (el) el.scrollTop = el.scrollHeight;
+        }
+      };
+    }
+  </script>
+</body>
+</html>
