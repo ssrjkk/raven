@@ -137,6 +137,9 @@ Set `DEFAULT_MODEL` in `.env` or prefix any model with `openrouter/`.
 | **cron** | APScheduler — cron-based task scheduling |
 | **code** | Sandboxed Python execution (no network, timeout, tmpdir) |
 | **files** | File reading and manipulation |
+| **api** | HTTP requests (GET, POST, PUT, DELETE) |
+| **ocr** | Tesseract OCR — text extraction from images |
+| **process** | System process management (run, list, kill) |
 
 ### Writing a plugin
 
@@ -198,7 +201,7 @@ raven-ai/
 │   ├── agent/         ReAct agent, multi-agent registry
 │   └── gateway/       Message routing, session management
 ├── channels/          Messaging adapters (Telegram, Discord, WebChat)
-├── plugins/           Plugin system (memory, browser, cron, code)
+├── plugins/           Plugin system (memory, browser, cron, code, files, api, ocr, process)
 ├── web/               TypeScript frontend (React + Vite)
 ├── desktop/           Electron desktop shell
 ├── extension/         Chrome browser extension

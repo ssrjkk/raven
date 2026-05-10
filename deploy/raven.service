@@ -6,7 +6,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=%i
+User=root
 ExecStart=/usr/local/bin/raven start
 Restart=always
 RestartSec=5

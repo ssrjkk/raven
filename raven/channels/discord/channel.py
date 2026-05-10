@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from typing import Callable, Awaitable
 from loguru import logger
 from raven.channels.base import BaseChannel
@@ -83,7 +84,7 @@ class DiscordChannel(BaseChannel):
         async def status_cmd(ctx: commands.Context):
             await ctx.reply("Raven AI is running.")
 
-        await self._bot.start(self._token)
+        asyncio.create_task(self._bot.start(self._token))
 
     async def stop(self):
         if self._bot:

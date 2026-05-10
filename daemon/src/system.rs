@@ -1,6 +1,5 @@
-use std::collections::HashMap;
 use serde::Serialize;
-use sysinfo::{System, Disks, Networks};
+use sysinfo::{System, Disks};
 use anyhow::Result;
 
 #[derive(Serialize)]

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use anyhow::Result;
 use axum::{
     routing::get,
@@ -7,8 +5,6 @@ use axum::{
     Json,
     extract::State,
 };
-use serde::Serialize;
-
 use crate::system;
 use crate::health;
 

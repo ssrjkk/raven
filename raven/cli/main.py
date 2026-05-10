@@ -58,7 +58,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     plugins_dir = Path(__file__).parent.parent / "plugins"
     plugin_loader = gateway.plugin_loader
     for pdir in plugins_dir.iterdir():
-        if pdir.is_dir():
+        if pdir.is_dir() and pdir.name != "__pycache__":
             plugin_loader.load_from_dir(pdir)
     console.print(Panel.fit(f"[bold green]Loaded {len(plugin_loader.tools)} tools from plugins[/bold green]"))
 
@@ -93,6 +93,12 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     @api_app.get("/api/agents")
     async def api_agents():
         return gateway.registry.list_agents()
+
+    @api_app.post("/api/shutdown")
+    async def api_shutdown():
+        logger.info("Shutdown requested via API")
+        stop_event.set()
+        return {"ok": True}
 
     from pydantic import BaseModel
     class AgentAssign(BaseModel):
@@ -175,37 +181,47 @@ def start(daemon: bool, port: Optional[int]):
 
 @cli.command()
 def stop():
-    """Stop the Raven AI daemon"""
-    pid_file = Path.home() / ".raven" / "raven.pid"
-    if pid_file.exists():
-        pid = int(pid_file.read_text().strip())
-        try:
-            os.kill(pid, signal.SIGTERM)
-            pid_file.unlink()
+    """Stop the Raven AI gateway"""
+    import httpx
+    try:
+        resp = httpx.post(f"http://localhost:{settings.web_port}/api/shutdown", timeout=5)
+        if resp.status_code == 200:
             console.print("[green]Raven stopped[/green]")
-        except ProcessLookupError:
-            pid_file.unlink()
-            console.print("[yellow]Process not found, cleaned up pid file[/yellow]")
-        except Exception as e:
-            console.print(f"[red]Error stopping: {e}[/red]")
-    else:
-        console.print("[yellow]No pid file found at ~/.raven/raven.pid[/yellow]")
-        console.print("Try: raven start")
+        else:
+            console.print(f"[yellow]Unexpected response: {resp.status_code}[/yellow]")
+    except httpx.ConnectError:
+        console.print("[yellow]Raven is not running[/yellow]")
+    except Exception as e:
+        console.print(f"[red]Error stopping: {e}[/red]")
 
 
 @cli.command()
 def status():
     """Show status of all channels and plugins"""
-    gateway = create_gateway()
-    table = Table(title="Raven AI Status")
-    table.add_column("Component", style="cyan")
-    table.add_column("Status", style="green")
-    table.add_column("Details")
-    table.add_row("Channels", "⚪", "Telegram, Discord, WebChat")
-    table.add_row("Plugins", "⚪", "memory, browser, cron, code")
-    table.add_row("Model", "⚪", settings.default_model)
-    table.add_row("Web UI", "⚪", f"http://localhost:{settings.web_port}")
-    console.print(table)
+    async def _status():
+        db = Database(settings.resolved_db_path)
+        await db.connect()
+        sessions = await db.get_sessions()
+        await db.disconnect()
+
+        import httpx
+        api_ok = False
+        try:
+            r = httpx.get(f"http://localhost:{settings.web_port}/api/status", timeout=3)
+            api_ok = r.is_success
+        except Exception:
+            pass
+
+        table = Table(title="Raven AI Status")
+        table.add_column("Component", style="cyan")
+        table.add_column("Status", style="green")
+        table.add_column("Details")
+        table.add_row("API", "🟢 Running" if api_ok else "🔴 Stopped", f"port {settings.web_port}")
+        table.add_row("Sessions", "🟢", str(len(sessions)))
+        table.add_row("Model", "⚪", settings.default_model)
+        table.add_row("DM Policy", "⚪", settings.dm_policy)
+        console.print(table)
+    asyncio.run(_status())
 
 
 @cli.command()
@@ -375,16 +391,11 @@ def plugins_list():
     table = Table(title="Loaded Plugins")
     table.add_column("Plugin", style="cyan")
     table.add_column("Tools")
-    plugin_tools: dict[str, list[str]] = {}
-    for t in loader.tools:
-        plugin_tools.setdefault("plugin", []).append(t.name)
-    for pdir in plugins_dir.iterdir():
+    for pdir in sorted(plugins_dir.iterdir(), key=lambda d: d.name):
         if pdir.is_dir():
-            tools_in_plugin = [t.name for t in loader.tools if t.handler.__module__.startswith(f"raven.plugins.{pdir.name}")]
+            tools_in_plugin = [t for t in loader.tools if t.handler.__module__.startswith(f"raven.plugins.{pdir.name}")]
             if tools_in_plugin:
-                table.add_row(pdir.name, ", ".join(tools_in_plugin))
-        elif not plugin_tools:
-            table.add_row("(built-in)", ", ".join(t.name for t in loader.tools))
+                table.add_row(pdir.name, ", ".join(t.name for t in tools_in_plugin))
     if not loader.tools:
         table.add_row("(none)", "No plugins loaded")
     console.print(table)
