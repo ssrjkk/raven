@@ -42,7 +42,7 @@
 [![OpenRouter](https://img.shields.io/badge/OpenRouter-Native-ff6b35?style=flat-square)](https://openrouter.ai)
 
 <p>
-  <b>Telegram</b> · <b>Discord</b> · <b>WebChat</b> · <b>Slack</b> · <b>Matrix</b> · <b>WhatsApp (soon)</b>
+  <b>Telegram</b> · <b>Discord</b> · <b>WebChat</b> · <b>Slack</b> · <b>Matrix</b>
 </p>
 
 ---
@@ -111,7 +111,6 @@ raven start
 | Discord | ✅ Built-in | discord.py |
 | Slack | 📦 Optional | slack-sdk |
 | Matrix | 📦 Optional | matrix-nio |
-| WhatsApp | 🚧 Roadmap | whatsapp-web.js |
 | Signal | 🚧 Roadmap | signal-cli |
 | iMessage | 🚧 Roadmap | pyobjc |
 
@@ -223,7 +222,7 @@ raven-ai/
 
 **v0.2** — Voice & Mobile
 - Wake word (Porcupine), TTS (ElevenLabs)
-- WhatsApp (baileys), Signal (signal-cli)
+- Signal (signal-cli)
 - iOS/Android push notifications
 
 **v0.3** — Advanced
