@@ -9,13 +9,16 @@ from raven.core.models import PluginTool
 
 
 def _type_to_json_schema(tp: Any) -> dict:
+    if isinstance(tp, str):
+        _type_map = {"str": "string", "int": "integer", "float": "number", "bool": "boolean", "list": "array", "dict": "object"}
+        return {"type": _type_map.get(tp, "string")}
     origin = getattr(tp, "__origin__", None)
     if origin is list or origin is set:
         args = getattr(tp, "__args__", [Any])
         return {"type": "array", "items": _type_to_json_schema(args[0]) if args else {"type": "string"}}
     if origin is dict:
         return {"type": "object"}
-    if tp is str:
+    if tp is str or tp is type(None) or tp is Any:
         return {"type": "string"}
     if tp is int:
         return {"type": "integer"}
@@ -23,8 +26,6 @@ def _type_to_json_schema(tp: Any) -> dict:
         return {"type": "number"}
     if tp is bool:
         return {"type": "boolean"}
-    if tp is type(None) or tp is Any:
-        return {"type": "string"}
     return {"type": "string"}
 
 
@@ -32,7 +33,8 @@ def func_to_tool(func: Callable[..., Any]) -> PluginTool:
     sig = inspect.signature(func)
     doc = inspect.getdoc(func) or ""
     desc_lines = doc.strip().split("\n")
-    description = desc_lines[0] if desc_lines else func.__name__
+    first = desc_lines[0] if desc_lines else func.__name__
+    description = re.split(r"\s*(?:Args|Returns|Example):", first, maxsplit=1)[0].strip() or first
 
     parameters = {"type": "object", "properties": {}, "required": []}
     for name, param in sig.parameters.items():

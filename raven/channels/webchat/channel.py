@@ -137,6 +137,11 @@ class WebChatChannel(BaseChannel):
 
 
 INDEX_HTML = """<!DOCTYPE html>
+<!--
+  The full React + Vite web UI is available at raven-ai/web/
+  Build: cd web && npm install && npm run build
+  The FastAPI server serves this minimal Alpine.js version as fallback.
+-->
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">

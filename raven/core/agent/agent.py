@@ -147,32 +147,33 @@ class Agent:
             messages.append({"role": "user", "content": user_message})
 
         schemas = self._tool_schemas() if self.tools else None
-        full_content = ""
+        tool_used = False
         final_content = ""
 
         for round_i in range(self.config.max_tool_rounds):
             resp = await self.llm.complete(messages, tools=schemas)
             content = resp.content or ""
-            full_content += content
 
             if resp.tool_calls:
+                tool_used = True
                 messages.append({"role": "assistant", "content": content, "tool_calls": [tc.to_dict() for tc in resp.tool_calls]})
                 for tc in resp.tool_calls:
                     tool_result = await self._execute_tool(tc)
                     messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(tool_result)})
                     yield f"[{tc.name} → ok]\n"
-                    full_content += f"\n[{tc.name} → ok]\n"
                 continue
 
-            if content:
-                final_content = content
+            final_content = content
             break
         else:
-            final_content = full_content or "I apologize, but I couldn't complete that request."
+            final_content = "I apologize, but I couldn't complete that request."
 
-        async for token in self.llm.complete_stream(messages):
-            final_content += token
-            yield token
+        if final_content:
+            yield final_content
+        elif tool_used:
+            async for token in self.llm.complete_stream(messages):
+                final_content += token
+                yield token
 
         user_msg = Message(session_id=self.session.id, channel=self.session.channel, role="user", content=user_message)
         assistant_msg = Message(session_id=self.session.id, channel=self.session.channel, role="assistant", content=final_content)
