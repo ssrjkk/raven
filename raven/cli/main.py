@@ -100,9 +100,32 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         stop_event.set()
         return {"ok": True}
 
-    from pydantic import BaseModel
+from pydantic import BaseModel
+    from typing import Optional as OptTyping
+
     class AgentAssign(BaseModel):
         agent_id: str = "default"
+
+    class RavenRequest(BaseModel):
+        action: str
+        code: str = ""
+        context: str = ""
+
+    @api_app.post("/api/raven")
+    async def api_raven(body: RavenRequest):
+        logger.info("Raven API call: action={}", body.action)
+        try:
+            session = await gateway.db.get_or_create_session(
+                f"vscode:{body.action}:default", "vscode", "vscode_user"
+            )
+            agent_obj = gateway.registry.create_agent(session)
+            full = ""
+            async for token in agent_obj.run(f"{body.action}:\n{body.code[:2000]}\n\nContext: {body.context[:500]}"):
+                full += token
+            return {"response": full[:5000]}
+        except Exception as e:
+            logger.error("Raven API error: {}", e)
+            return {"response": f"Error: {e}"}
 
     @api_app.post("/api/sessions/{session_id}/agent")
     async def api_set_agent(session_id: str, body: AgentAssign):
@@ -160,7 +183,8 @@ def cli():
 @cli.command()
 @click.option("--daemon", is_flag=True, help="Run as daemon process")
 @click.option("--port", default=None, type=int, help="Web UI port")
-def start(daemon: bool, port: Optional[int]):
+@click.option("--stateless", is_flag=True, default=False, help="Run without memory/context persistence")
+def start(daemon: bool, port: Optional[int], stateless: bool):
     """Start the Raven AI gateway"""
     setup_logging()
     if daemon:
@@ -171,10 +195,14 @@ def start(daemon: bool, port: Optional[int]):
 
     web_port = port or settings.web_port
     gateway = create_gateway()
+    if stateless:
+        for agent_conf in gateway.registry._configs.values():
+            agent_conf.stateless = True
     console.print(Panel.fit(
         "[bold blue]🐦 Raven AI[/bold blue]\n"
         f"[dim]Web UI: http://localhost:{web_port}[/dim]\n"
-        f"[dim]Model: {settings.default_model}[/dim]",
+        f"[dim]Model: {settings.default_model}[/dim]"
+        + ("\n[dim]Mode: stateless[/dim]" if stateless else "")
     ))
     asyncio.run(_run_gateway(gateway, web_port))
 

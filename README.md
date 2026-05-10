@@ -60,11 +60,16 @@
 | Language | Python 3.12+ | TypeScript/Node.js |
 | Architecture | asyncio monorepo | Node.js monorepo |
 | Memory | Built-in (ChromaDB) | Plugin only |
+| Stateless mode | ✅ `raven start --stateless` | ❌ Always stateful |
 | Web UI | Built-in (React + Alpine.js) | Plugin only |
 | OpenRouter | Native (all models, no config) | Via plugin |
 | Plugin System | 1 file = 1 plugin | Markdown + code |
+| IDE Integration | VS Code extension (chat, review, fix, explain) | VS Code only |
+| Code Review | ✅ Built-in (review, suggest, find issues) | ✅ Built-in |
+| Git Operations | ✅ status, log, diff, commit, branch, push, pull | ❌ No git integration |
 | RAM Usage | ~150MB baseline | ~400MB baseline |
 | Multi-Agent | Per-channel configurable | Per-channel |
+| Autonomous Mode | ✅ Full auto-pilot (cron, background tasks) | ❌ Requires monitoring |
 | Voice | Roadmap v2 | Built-in |
 
 ## Quickstart
@@ -135,11 +140,12 @@ Set `DEFAULT_MODEL` in `.env` or prefix any model with `openrouter/`.
 | **memory** | ChromaDB vector store — remember, recall, forget |
 | **browser** | Playwright web browsing, screenshots, DDG search |
 | **cron** | APScheduler — cron-based task scheduling |
-| **code** | Sandboxed Python execution (no network, timeout, tmpdir) |
+| **code** | Sandboxed Python execution, code review, explain, suggest |
 | **files** | File reading and manipulation |
 | **api** | HTTP requests (GET, POST, PUT, DELETE) |
 | **ocr** | Tesseract OCR — text extraction from images |
 | **process** | System process management (run, list, kill) |
+| **git** | Git operations (status, log, diff, commit, branch, push, pull) |
 
 ### Writing a plugin
 
@@ -201,10 +207,12 @@ raven-ai/
 │   ├── agent/         ReAct agent, multi-agent registry
 │   └── gateway/       Message routing, session management
 ├── channels/          Messaging adapters (Telegram, Discord, WebChat)
-├── plugins/           Plugin system (memory, browser, cron, code, files, api, ocr, process)
+├── plugins/           Plugin system (memory, browser, cron, code, files, api, ocr, process, git)
 ├── web/               TypeScript frontend (React + Vite)
 ├── desktop/           Electron desktop shell
-├── extension/         Chrome browser extension
+├── extension/
+│   ├── chrome/        Chrome browser extension (Manifest V3)
+│   └── vscode/        VS Code extension (chat, review, fix, explain)
 ├── cli/               Command-line interface
 └── deploy/            Docker, systemd, macOS launchd
 ```

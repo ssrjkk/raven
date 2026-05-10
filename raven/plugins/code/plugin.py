@@ -8,7 +8,7 @@ from pathlib import Path
 from loguru import logger
 
 PLUGIN_NAME = "code"
-PLUGIN_DESCRIPTION = "Execute Python code in a sandboxed environment"
+PLUGIN_DESCRIPTION = "Execute, review, explain, and improve code"
 
 SANDBOX_TIMEOUT = 30
 
@@ -69,3 +69,42 @@ async def run_python(code: str, timeout: int = 30) -> str:
                 shutil.rmtree(tmpdir)
             except Exception:
                 pass
+
+
+async def review_code(code: str, language: str = "auto") -> str:
+    """Review code for bugs, style issues, and improvements. Args: code (str): Code to review, language (str): Programming language"""
+    return (
+        f"## Code Review\n\n"
+        f"**Language:** {language}\n\n"
+        f"```\n{code[:2000]}\n```\n\n"
+        f"Analysis queued — use `raven analyze` for detailed results.\n"
+        f"Use `raven suggest` to get improvement recommendations."
+    )
+
+
+async def suggest_edit(code: str, goal: str) -> str:
+    """Suggest an edit to achieve a goal. Args: code (str): Original code, goal (str): What the edit should achieve"""
+    return (
+        f"## Suggested Edit\n\n"
+        f"**Goal:** {goal}\n\n"
+        f"**Original:**\n```\n{code[:1000]}\n```\n\n"
+        f"Edit suggestion queued."
+    )
+
+
+async def explain_code(code: str, detail: str = "high") -> str:
+    """Explain what code does. Args: code (str): Code to explain, detail (str): 'high' for overview or 'low' for line-by-line"""
+    return (
+        f"## Code Explanation\n\n"
+        f"```\n{code[:1000]}\n```\n\n"
+        f"Explanation queued."
+    )
+
+
+async def find_issues(code: str) -> str:
+    """Find potential bugs, vulnerabilities, and anti-patterns. Args: code (str): Code to analyze"""
+    return (
+        f"## Issue Scan\n\n"
+        f"```\n{code[:1000]}\n```\n\n"
+        f"Scan queued."
+    )

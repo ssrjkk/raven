@@ -1,0 +1,66 @@
+{
+  "name": "raven-vscode",
+  "displayName": "Raven AI",
+  "description": "AI coding assistant — code review, edit, explain, and automate. Your pair programmer that never sleeps.",
+  "version": "0.1.0",
+  "publisher": "raven-ai",
+  "license": "MIT",
+  "icon": "icon.png",
+  "engines": { "vscode": "^1.93.0" },
+  "categories": ["Programming Languages", "Machine Learning", "Other"],
+  "keywords": ["raven", "ai", "code-review", "assistant", "openclaw"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "raven.chat", "title": "Raven: Open Chat" },
+      { "command": "raven.review", "title": "Raven: Review Selection" },
+      { "command": "raven.explain", "title": "Raven: Explain Selection" },
+      { "command": "raven.fix", "title": "Raven: Fix Issues in Selection" },
+      { "command": "raven.suggest", "title": "Raven: Suggest Improvements" },
+      { "command": "raven.tests", "title": "Raven: Generate Tests" },
+      { "command": "raven.commit", "title": "Raven: Write Commit Message" }
+    ],
+    "keybindings": [
+      { "command": "raven.chat", "key": "ctrl+shift+r", "mac": "cmd+shift+r" },
+      { "command": "raven.review", "key": "ctrl+shift+i", "mac": "cmd+shift+i" }
+    ],
+    "menus": {
+      "editor/context": [
+        { "command": "raven.explain", "group": "raven@1" },
+        { "command": "raven.review", "group": "raven@2" },
+        { "command": "raven.fix", "group": "raven@3" }
+      ],
+      "explorer/context": [
+        { "command": "raven.review", "group": "raven@1" }
+      ]
+    },
+    "configuration": {
+      "title": "Raven AI",
+      "properties": {
+        "raven.endpoint": {
+          "type": "string",
+          "default": "http://localhost:18888",
+          "description": "Raven AI API endpoint"
+        },
+        "raven.stateless": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run without memory/context persistence"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.93.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "@vscode/vsce": "^3.0.0"
+  }
+}

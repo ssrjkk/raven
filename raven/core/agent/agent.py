@@ -16,13 +16,15 @@ class AgentConfig:
         max_tool_rounds: int = 10,
         max_history: int = 50,
         use_memory: bool = True,
+        stateless: bool = False,
     ):
         self.agent_id = agent_id
         self.system_prompt = system_prompt
         self.model = model
         self.max_tool_rounds = max_tool_rounds
-        self.max_history = max_history
-        self.use_memory = use_memory
+        self.max_history = 0 if stateless else max_history
+        self.use_memory = False if stateless else use_memory
+        self.stateless = stateless
 
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -131,18 +133,20 @@ class Agent:
         user_message: str,
         recall_context: str | None = None,
     ) -> AsyncIterator[str]:
-        if recall_context is None:
-            recall_context = await self._get_recall_context(user_message)
+        if not self.config.stateless:
+            if recall_context is None:
+                recall_context = await self._get_recall_context(user_message)
 
         messages: list[dict] = [{"role": "system", "content": self._build_system_prompt()}]
         if recall_context:
             messages.append({"role": "system", "content": f"Relevant memories:\n{recall_context}"})
 
-        history = await self._load_history()
-        messages.extend(history)
+        if not self.config.stateless:
+            history = await self._load_history()
+            messages.extend(history)
         messages.append({"role": "user", "content": user_message})
 
-        if len(messages) > self.config.max_history + 3:
+        if not self.config.stateless and len(messages) > self.config.max_history + 3:
             messages = await self._compress(messages)
             messages.append({"role": "user", "content": user_message})
 
@@ -175,12 +179,12 @@ class Agent:
                 final_content += token
                 yield token
 
-        user_msg = Message(session_id=self.session.id, channel=self.session.channel, role="user", content=user_message)
-        assistant_msg = Message(session_id=self.session.id, channel=self.session.channel, role="assistant", content=final_content)
-        await self.db.save_message(user_msg)
-        await self.db.save_message(assistant_msg)
-
-        await self._auto_memory(user_message, final_content)
+        if not self.config.stateless:
+            user_msg = Message(session_id=self.session.id, channel=self.session.channel, role="user", content=user_message)
+            assistant_msg = Message(session_id=self.session.id, channel=self.session.channel, role="assistant", content=final_content)
+            await self.db.save_message(user_msg)
+            await self.db.save_message(assistant_msg)
+            await self._auto_memory(user_message, final_content)
 
     async def _execute_tool(self, tc: ToolCall) -> dict:
         tool = self._tool_map.get(tc.name)
