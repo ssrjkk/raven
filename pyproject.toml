@@ -31,7 +31,8 @@ dependencies = [
 discord = ["discord.py>=2.3"]
 slack = ["slack-sdk>=3.27"]
 matrix = ["matrix-nio>=0.24"]
-all = ["raven-ai[discord,slack,matrix]"]
+build = ["pyinstaller>=6.0"]
+all = ["raven-ai[discord,slack,matrix,build]"]
 
 [project.scripts]
 raven = "raven.cli.main:cli"
