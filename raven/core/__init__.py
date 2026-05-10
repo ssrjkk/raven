@@ -6,6 +6,7 @@ from raven.core.plugin_loader import PluginLoader
 from raven.core.gateway.gateway import Gateway
 from raven.core.agent.agent import Agent, AgentConfig
 from raven.core.agent.registry import AgentRegistry
+from raven.core.task_queue import TaskQueue, Task, TaskStatus
 
 __all__ = [
     "Settings", "settings",
@@ -17,4 +18,5 @@ __all__ = [
     "Gateway",
     "Agent", "AgentConfig",
     "AgentRegistry",
+    "TaskQueue", "Task", "TaskStatus",
 ]
