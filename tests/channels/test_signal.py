@@ -1,24 +1,15 @@
 from __future__ import annotations
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 from raven.channels.signal.channel import SignalChannel
 from raven.core.models import Message, IncomingMessage
 
 
 @pytest.mark.asyncio
-async def test_signal_start_no_sdk():
-    with patch("raven.channels.signal.channel.HAS_SIGNAL", False):
-        c = SignalChannel()
-        await c.start()
-        assert not c._ready
-
-
-@pytest.mark.asyncio
 async def test_signal_start():
-    with patch("raven.channels.signal.channel.HAS_SIGNAL", True):
-        c = SignalChannel()
-        await c.start()
-        assert c._ready
+    c = SignalChannel()
+    await c.start()
+    assert c._ready
 
 
 @pytest.mark.asyncio

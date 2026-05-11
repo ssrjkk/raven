@@ -3,6 +3,13 @@ from typing import Callable, Awaitable
 from loguru import logger
 from raven.channels.base import BaseChannel
 from raven.core.models import Message, IncomingMessage
+from raven.core.config import settings
+
+try:
+    import httpx
+    HAS_HTTPX = True
+except ImportError:
+    HAS_HTTPX = False
 
 
 class GoogleChatChannel(BaseChannel):
@@ -10,14 +17,22 @@ class GoogleChatChannel(BaseChannel):
 
     def __init__(self):
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
+        self._client: httpx.AsyncClient | None = None
+        self._webhook_url = settings.googlechat_webhook_url or ""
         self._ready = False
 
     async def start(self):
+        if not HAS_HTTPX:
+            logger.warning("httpx not installed, Google Chat unavailable")
+            return
+        self._client = httpx.AsyncClient(timeout=15)
         self._ready = True
-        logger.info("Google Chat channel started (webhook-based)")
+        logger.info("Google Chat channel started")
 
     async def stop(self):
         self._ready = False
+        if self._client:
+            await self._client.aclose()
         logger.info("Google Chat channel stopped")
 
     async def connect(self):
@@ -50,4 +65,15 @@ class GoogleChatChannel(BaseChannel):
         return True
 
     async def send(self, session_id: str, message: Message):
-        logger.debug("Google Chat send stub: {}", message.content[:60])
+        if not self._client or not self._ready:
+            return
+        parts = session_id.split(":")
+        space = parts[1] if len(parts) >= 2 else None
+        if not space:
+            return
+        url = self._webhook_url or f"https://chat.googleapis.com/v1/spaces/{space}/messages"
+        try:
+            resp = await self._client.post(url, json={"text": message.content[:4000]})
+            resp.raise_for_status()
+        except Exception as e:
+            logger.error("Google Chat send failed: {}", e)

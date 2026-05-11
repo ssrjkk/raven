@@ -1,24 +1,15 @@
 from __future__ import annotations
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 from raven.channels.irc.channel import IRCChannel
 from raven.core.models import Message, IncomingMessage
 
 
 @pytest.mark.asyncio
-async def test_irc_start_no_sdk():
-    with patch("raven.channels.irc.channel.HAS_IRC", False):
-        c = IRCChannel()
-        await c.start()
-        assert not c._ready
-
-
-@pytest.mark.asyncio
 async def test_irc_start():
-    with patch("raven.channels.irc.channel.HAS_IRC", True):
-        c = IRCChannel()
-        await c.start()
-        assert c._ready
+    c = IRCChannel()
+    await c.start()
+    assert c._ready
 
 
 @pytest.mark.asyncio

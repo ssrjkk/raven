@@ -4,12 +4,13 @@ from typing import Callable, Awaitable
 from loguru import logger
 from raven.channels.base import BaseChannel
 from raven.core.models import Message, IncomingMessage
+from raven.core.config import settings
 
 try:
-    import irclib
-    HAS_IRC = True
+    import httpx
+    HAS_HTTPX = True
 except ImportError:
-    HAS_IRC = False
+    HAS_HTTPX = False
 
 
 class IRCChannel(BaseChannel):
@@ -17,21 +18,26 @@ class IRCChannel(BaseChannel):
 
     def __init__(self):
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
-        self._server = "irc.libera.chat"
-        self._port = 6697
-        self._nick = "raven-bot"
+        self._server = settings.irc_server or "irc.libera.chat"
+        self._port = settings.irc_port or 6697
+        self._nick = settings.irc_nick or "raven-bot"
+        self._password = settings.irc_password or ""
         self._channels: list[str] = []
+        self._reader: asyncio.StreamReader | None = None
+        self._writer: asyncio.StreamWriter | None = None
         self._ready = False
 
     async def start(self):
-        if not HAS_IRC:
-            logger.warning("irclib not installed, IRC channel unavailable")
-            return
         self._ready = True
         logger.info("IRC channel started: {}:{}/{}", self._server, self._port, self._nick)
 
     async def stop(self):
         self._ready = False
+        if self._writer:
+            try:
+                self._writer.close()
+            except Exception:
+                pass
         logger.info("IRC channel stopped")
 
     async def connect(self):
@@ -58,4 +64,16 @@ class IRCChannel(BaseChannel):
         await self._handler(msg)
 
     async def send(self, session_id: str, message: Message):
-        logger.debug("IRC send stub: {}", message.content[:60])
+        if not self._ready:
+            return
+        parts = session_id.split(":")
+        target = parts[1] if len(parts) >= 2 else None
+        if not target:
+            return
+        text = message.content[:400].replace("\n", " ")
+        if self._writer:
+            try:
+                self._writer.write(f"PRIVMSG {target} :{text}\r\n".encode())
+                await self._writer.drain()
+            except Exception as e:
+                logger.error("IRC send failed: {}", e)

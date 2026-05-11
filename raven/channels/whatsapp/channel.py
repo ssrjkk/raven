@@ -5,20 +5,35 @@ from raven.channels.base import BaseChannel
 from raven.core.models import Message, IncomingMessage
 from raven.core.config import settings
 
+try:
+    import httpx
+    HAS_HTTPX = True
+except ImportError:
+    HAS_HTTPX = False
+
 
 class WhatsAppChannel(BaseChannel):
     channel_id = "whatsapp"
 
     def __init__(self):
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
+        self._client: httpx.AsyncClient | None = None
+        self._token = settings.whatsapp_token or ""
+        self._phone_id = settings.whatsapp_phone_id or ""
         self._ready = False
 
     async def start(self):
+        if not HAS_HTTPX:
+            logger.warning("httpx not installed, WhatsApp unavailable")
+            return
+        self._client = httpx.AsyncClient(timeout=15)
         self._ready = True
-        logger.info("WhatsApp channel started (webhook-based)")
+        logger.info("WhatsApp channel started")
 
     async def stop(self):
         self._ready = False
+        if self._client:
+            await self._client.aclose()
         logger.info("WhatsApp channel stopped")
 
     async def connect(self):
@@ -58,4 +73,24 @@ class WhatsAppChannel(BaseChannel):
         return handled
 
     async def send(self, session_id: str, message: Message):
-        logger.debug("WhatsApp send stub for session {}: {}", session_id, message.content[:80])
+        if not self._client or not self._ready or not self._token or not self._phone_id:
+            logger.debug("WhatsApp send skipped: missing config")
+            return
+        parts = session_id.split(":")
+        to = parts[1] if len(parts) >= 2 else None
+        if not to:
+            return
+        try:
+            resp = await self._client.post(
+                f"https://graph.facebook.com/v18.0/{self._phone_id}/messages",
+                headers={"Authorization": f"Bearer {self._token}"},
+                json={
+                    "messaging_product": "whatsapp",
+                    "to": to,
+                    "type": "text",
+                    "text": {"body": message.content[:4000]},
+                },
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            logger.error("WhatsApp send failed: {}", e)

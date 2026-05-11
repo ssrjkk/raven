@@ -3,6 +3,13 @@ from typing import Callable, Awaitable
 from loguru import logger
 from raven.channels.base import BaseChannel
 from raven.core.models import Message, IncomingMessage
+from raven.core.config import settings
+
+try:
+    import httpx
+    HAS_HTTPX = True
+except ImportError:
+    HAS_HTTPX = False
 
 
 class TeamsChannel(BaseChannel):
@@ -10,15 +17,23 @@ class TeamsChannel(BaseChannel):
 
     def __init__(self):
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
+        self._client: httpx.AsyncClient | None = None
+        self._webhook_url = settings.teams_webhook_url or ""
         self._ready = False
 
     async def start(self):
+        if not HAS_HTTPX:
+            logger.warning("httpx not installed, Teams unavailable")
+            return
+        self._client = httpx.AsyncClient(timeout=15)
         self._ready = True
-        logger.info("Microsoft Teams channel started (webhook-based)")
+        logger.info("Microsoft Teams channel started")
 
     async def stop(self):
         self._ready = False
-        logger.info("Microsoft Teams channel stopped")
+        if self._client:
+            await self._client.aclose()
+        logger.info("Teams channel stopped")
 
     async def connect(self):
         pass
@@ -48,4 +63,27 @@ class TeamsChannel(BaseChannel):
         return True
 
     async def send(self, session_id: str, message: Message):
-        logger.debug("Teams send stub: {}", message.content[:60])
+        if not self._client or not self._ready:
+            return
+        if self._webhook_url:
+            try:
+                resp = await self._client.post(
+                    self._webhook_url,
+                    json={"text": message.content[:4000]},
+                )
+                resp.raise_for_status()
+            except Exception as e:
+                logger.error("Teams send failed: {}", e)
+            return
+        parts = session_id.split(":")
+        conversation = parts[1] if len(parts) >= 2 else None
+        if not conversation:
+            return
+        try:
+            resp = await self._client.post(
+                f"https://api.teams.microsoft.com/v1/conversations/{conversation}/messages",
+                json={"body": {"content": message.content[:4000]}},
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            logger.error("Teams send failed: {}", e)

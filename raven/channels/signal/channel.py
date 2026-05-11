@@ -3,12 +3,13 @@ from typing import Callable, Awaitable
 from loguru import logger
 from raven.channels.base import BaseChannel
 from raven.core.models import Message, IncomingMessage
+from raven.core.config import settings
 
 try:
-    from signal_cli import SignalAPI
-    HAS_SIGNAL = True
+    import httpx
+    HAS_HTTPX = True
 except ImportError:
-    HAS_SIGNAL = False
+    HAS_HTTPX = False
 
 
 class SignalChannel(BaseChannel):
@@ -16,18 +17,22 @@ class SignalChannel(BaseChannel):
 
     def __init__(self):
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
-        self._cli: str = ""
+        self._client: httpx.AsyncClient | None = None
+        self._api_url = settings.signal_api_url or "http://localhost:8080"
         self._ready = False
 
     async def start(self):
-        if not HAS_SIGNAL:
-            logger.warning("signal-cli not installed, Signal channel unavailable")
+        if not HAS_HTTPX:
+            logger.warning("httpx not installed, Signal channel unavailable")
             return
+        self._client = httpx.AsyncClient(base_url=self._api_url, timeout=15)
         self._ready = True
-        logger.info("Signal channel started")
+        logger.info("Signal channel started (API: {})", self._api_url)
 
     async def stop(self):
         self._ready = False
+        if self._client:
+            await self._client.aclose()
         logger.info("Signal channel stopped")
 
     async def connect(self):
@@ -59,4 +64,20 @@ class SignalChannel(BaseChannel):
         return True
 
     async def send(self, session_id: str, message: Message):
-        logger.debug("Signal send stub: {}", message.content[:60])
+        if not self._client or not self._ready:
+            return
+        parts = session_id.split(":")
+        recipient = parts[1] if len(parts) >= 2 else None
+        if not recipient:
+            return
+        try:
+            resp = await self._client.post(
+                "/v2/send",
+                json={
+                    "message": message.content[:3000],
+                    "recipient": recipient,
+                },
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            logger.error("Signal send failed: {}", e)

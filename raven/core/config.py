@@ -22,6 +22,20 @@ class Settings(BaseSettings):
     slack_signing_secret: str = ""
     matrix_homeserver: str = ""
     matrix_access_token: str = ""
+    whatsapp_token: str = ""
+    whatsapp_phone_id: str = ""
+    googlechat_webhook_url: str = ""
+    signal_api_url: str = ""
+    irc_server: str = ""
+    irc_port: int = 6697
+    irc_nick: str = ""
+    irc_password: str = ""
+    teams_webhook_url: str = ""
+    feishu_webhook_url: str = ""
+    feishu_app_id: str = ""
+    feishu_app_secret: str = ""
+    line_channel_token: str = ""
+    line_channel_secret: str = ""
 
     dm_policy: str = "pairing"
     web_port: int = 18888

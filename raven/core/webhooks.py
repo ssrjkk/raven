@@ -55,4 +55,39 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
             return int(challenge)
         raise HTTPException(status_code=403, detail="Verify token failed")
 
+    @router.post("/googlechat")
+    async def googlechat_webhook(body: dict, request: Request):
+        ch = request.app.state.googlechat_channel if hasattr(request.app.state, "googlechat_channel") else None
+        if ch:
+            await ch.handle_webhook(body)
+        return {"ok": True}
+
+    @router.post("/signal")
+    async def signal_webhook(body: dict, request: Request):
+        ch = request.app.state.signal_channel if hasattr(request.app.state, "signal_channel") else None
+        if ch:
+            await ch.handle_webhook(body)
+        return {"ok": True}
+
+    @router.post("/teams")
+    async def teams_webhook(body: dict, request: Request):
+        ch = request.app.state.teams_channel if hasattr(request.app.state, "teams_channel") else None
+        if ch:
+            await ch.handle_webhook(body)
+        return {"ok": True}
+
+    @router.post("/feishu")
+    async def feishu_webhook(body: dict, request: Request):
+        ch = request.app.state.feishu_channel if hasattr(request.app.state, "feishu_channel") else None
+        if ch:
+            await ch.handle_webhook(body)
+        return {"ok": True}
+
+    @router.post("/line")
+    async def line_webhook(body: dict, request: Request):
+        ch = request.app.state.line_channel if hasattr(request.app.state, "line_channel") else None
+        if ch:
+            await ch.handle_webhook(body)
+        return {"ok": True}
+
     return router

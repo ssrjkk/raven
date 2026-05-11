@@ -3,6 +3,13 @@ from typing import Callable, Awaitable
 from loguru import logger
 from raven.channels.base import BaseChannel
 from raven.core.models import Message, IncomingMessage
+from raven.core.config import settings
+
+try:
+    import httpx
+    HAS_HTTPX = True
+except ImportError:
+    HAS_HTTPX = False
 
 
 class LINECChannel(BaseChannel):
@@ -10,14 +17,23 @@ class LINECChannel(BaseChannel):
 
     def __init__(self):
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
+        self._client: httpx.AsyncClient | None = None
+        self._token = settings.line_channel_token or ""
+        self._secret = settings.line_channel_secret or ""
         self._ready = False
 
     async def start(self):
+        if not HAS_HTTPX:
+            logger.warning("httpx not installed, LINE unavailable")
+            return
+        self._client = httpx.AsyncClient(base_url="https://api.line.me", timeout=15)
         self._ready = True
-        logger.info("LINE channel started (webhook-based)")
+        logger.info("LINE channel started")
 
     async def stop(self):
         self._ready = False
+        if self._client:
+            await self._client.aclose()
         logger.info("LINE channel stopped")
 
     async def connect(self):
@@ -54,4 +70,21 @@ class LINECChannel(BaseChannel):
         return False
 
     async def send(self, session_id: str, message: Message):
-        logger.debug("LINE send stub: {}", message.content[:60])
+        if not self._client or not self._ready or not self._token:
+            return
+        parts = session_id.split(":")
+        to = parts[1] if len(parts) >= 2 else None
+        if not to:
+            return
+        try:
+            resp = await self._client.post(
+                "/v2/bot/message/push",
+                headers={"Authorization": f"Bearer {self._token}"},
+                json={
+                    "to": to,
+                    "messages": [{"type": "text", "text": message.content[:5000]}],
+                },
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            logger.error("LINE send failed: {}", e)
