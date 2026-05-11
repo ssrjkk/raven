@@ -1,13 +1,13 @@
 [project]
 name = "raven-ai"
-version = "0.1.0"
-description = "Personal AI assistant — 24/7, multi-channel, multi-provider LLM"
+version = "0.2.0"
+description = "Personal AI assistant — 24/7, multi-channel, multi-provider LLM, enterprise-grade"
 authors = [
-    { name = "Raven AI Team" },
+    { name = "ssrjkk" },
 ]
 license = { text = "MIT" }
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
@@ -17,7 +17,6 @@ dependencies = [
     "pydantic-settings>=2.3",
     "python-dotenv>=1.0",
     "python-telegram-bot>=21.0",
-    "chromadb>=0.5",
     "click>=8.1",
     "rich>=13.0",
     "loguru>=0.7",
@@ -30,9 +29,15 @@ dependencies = [
 [project.optional-dependencies]
 discord = ["discord.py>=2.3"]
 slack = ["slack-sdk>=3.27"]
-matrix = ["matrix-nio>=0.24"]
-build = ["pyinstaller>=6.0"]
-all = ["raven-ai[discord,slack,matrix,build]"]
+docker = ["docker>=7.0"]
+signal = ["signal-cli>=0.1"]
+irc = ["irclib>=1.0"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.5",
+]
+all = ["raven-ai[discord,slack,docker,signal,irc,dev]"]
 
 [project.scripts]
 raven = "raven.cli.main:cli"
@@ -55,6 +60,6 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.ruff]
-line-length = 100
-target-version = "py312"
+line-length = 120
+target-version = "py311"
 select = ["E", "F", "I", "N", "W"]
