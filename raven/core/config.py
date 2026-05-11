@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     llm_retry_max: int = 3
     llm_retry_delay: float = 1.0
     workspace_path: str = ""
+    channel_allow_from: str = ""
 
     @property
     def resolved_workspace(self) -> Path | None:

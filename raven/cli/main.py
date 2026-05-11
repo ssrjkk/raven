@@ -638,5 +638,70 @@ def db_version():
     asyncio.run(_version())
 
 
+@cli.command()
+@click.option("--message", required=True, help="Message to send to agent")
+@click.option("--agent", "agent_id", default="default", help="Agent ID to use")
+@click.option("--channel", default="cli", help="Channel to simulate")
+@click.option("--thinking", default=None, help="Thinking level: low, medium, high")
+def agent(message: str, agent_id: str, channel: str, thinking: Optional[str]):
+    """Send a message to the Raven AI agent and get a response"""
+    async def _agent():
+        db = Database(settings.resolved_db_path)
+        await db.connect()
+        plugin_loader = PluginLoader()
+        plugins_dir = Path(__file__).parent.parent / "plugins"
+        for pdir in plugins_dir.iterdir():
+            if pdir.is_dir() and pdir.name != "__pycache__":
+                plugin_loader.load_from_dir(pdir)
+        from raven.plugins.sessions import plugin as sessions_plugin
+        sessions_plugin.init(db)
+        llm = LLMRouter()
+        registry = AgentRegistry(db, llm, plugin_loader.tools)
+        registry.setup_defaults()
+        session_id = f"{channel}:agent:{agent_id}"
+        session = await db.get_or_create_session(session_id, channel, "agent_user", agent_id)
+        agent_obj = registry.create_agent(session, agent_id=agent_id)
+        console.print(f"[dim]Agent: {agent_id} | Channel: {channel}[/dim]")
+        full = ""
+        async for token in agent_obj.run(message):
+            full += token
+        if full.strip():
+            console.print(full)
+        await db.disconnect()
+    asyncio.run(_agent())
+
+
+@cli.group()
+def nodes():
+    """Manage Raven AI nodes (iOS/Android devices)"""
+
+
+@nodes.command("list")
+def nodes_list():
+    """List paired device nodes"""
+    console.print("[yellow]Node system: connect iOS/Android devices via Gateway WebSocket[/yellow]")
+    console.print("  iOS: https://docs.raven.ai/platforms/ios")
+    console.print("  Android: https://docs.raven.ai/platforms/android")
+    console.print("\nNo devices currently paired.")
+
+
+@nodes.command("pair")
+@click.argument("device_id")
+def nodes_pair(device_id: str):
+    """Pair a new device node"""
+    console.print(f"[green]Device {device_id} pairing initiated (stub)[/green]")
+
+
+@cli.group()
+def devices():
+    """Alias for nodes commands"""
+
+
+@devices.command("list")
+def devices_list():
+    """List paired devices"""
+    console.print("[yellow]See 'raven nodes list' for device information[/yellow]")
+
+
 if __name__ == "__main__":
     cli()

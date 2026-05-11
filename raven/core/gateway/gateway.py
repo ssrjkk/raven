@@ -93,30 +93,8 @@ class Gateway:
         metrics.inc("messages_received", {"channel": event.channel})
         try:
             user = await self.db.find_or_create_user(event.channel, event.user_id)
-            policy = settings.dm_policy
 
-            if policy == "closed":
-                if not user.get("is_allowed"):
-                    metrics.inc("messages_blocked", {"channel": event.channel, "reason": "policy_closed"})
-                    await self._send(event.channel, event.session_id, "Access denied. You are not authorized.")
-                    return
-
-            if policy == "pairing" and not user.get("is_allowed"):
-                if event.text.startswith("/pair"):
-                    code = event.text.split()[-1] if len(event.text.split()) > 1 else ""
-                    matched = await self.db.get_user_by_pairing_code(code)
-                    if matched and matched["id"] == user["id"]:
-                        await self.db.set_user_allowed(user["id"], True)
-                        await self.db.set_pairing_code(user["id"], "")
-                        audit.sensitive_op(event.user_id, "pairing_approve", f"{event.channel}:{event.user_id}", True)
-                        await self._send(event.channel, event.session_id, "You are now authorized!")
-                        metrics.inc("pairing_approved", {"channel": event.channel})
-                        return
-                code = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-                await self.db.find_or_create_user(event.channel, event.user_id)
-                await self.db.set_pairing_code(f"{event.channel}:{event.user_id}", code)
-                await self._send(event.channel, event.session_id, f"Welcome! Your pairing code is: `{code}`\nPlease send `/pair {code}` to authorize.")
-                metrics.inc("pairing_codes_sent", {"channel": event.channel})
+            if not await self._is_user_allowed(event, user):
                 return
 
             handled = await self._handle_command(event)
@@ -145,6 +123,47 @@ class Gateway:
             logger.error("handle_message error: {}", e)
             metrics.inc("message_errors", {"channel": event.channel})
             await self._send(event.channel, event.session_id, f"Sorry, an error occurred: {str(e)[:200]}")
+
+    async def _is_user_allowed(self, event: IncomingMessage, user: dict) -> bool:
+        policy = settings.dm_policy
+        allow_from_raw = settings.channel_allow_from
+        if allow_from_raw:
+            try:
+                import json
+                allow_map = json.loads(allow_from_raw)
+                channel_rules = allow_map.get(event.channel, [])
+                if channel_rules and "*" not in channel_rules and event.user_id not in channel_rules:
+                    metrics.inc("messages_blocked", {"channel": event.channel, "reason": "allowlist"})
+                    await self._send(event.channel, event.session_id, "Access denied. You are not on the allowlist.")
+                    return False
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        if policy == "closed":
+            if not user.get("is_allowed"):
+                metrics.inc("messages_blocked", {"channel": event.channel, "reason": "policy_closed"})
+                await self._send(event.channel, event.session_id, "Access denied. You are not authorized.")
+                return False
+
+        if policy == "pairing" and not user.get("is_allowed"):
+            if event.text.startswith("/pair"):
+                code = event.text.split()[-1] if len(event.text.split()) > 1 else ""
+                matched = await self.db.get_user_by_pairing_code(code)
+                if matched and matched["id"] == user["id"]:
+                    await self.db.set_user_allowed(user["id"], True)
+                    await self.db.set_pairing_code(user["id"], "")
+                    audit.sensitive_op(event.user_id, "pairing_approve", f"{event.channel}:{event.user_id}", True)
+                    await self._send(event.channel, event.session_id, "You are now authorized!")
+                    metrics.inc("pairing_approved", {"channel": event.channel})
+                    return False
+            code = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            await self.db.find_or_create_user(event.channel, event.user_id)
+            await self.db.set_pairing_code(f"{event.channel}:{event.user_id}", code)
+            await self._send(event.channel, event.session_id, f"Welcome! Your pairing code is: `{code}`\nPlease send `/pair {code}` to authorize.")
+            metrics.inc("pairing_codes_sent", {"channel": event.channel})
+            return False
+
+        return True
 
     async def _handle_command(self, event: IncomingMessage) -> bool:
         text = event.text.strip()
