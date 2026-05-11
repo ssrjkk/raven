@@ -1,5 +1,4 @@
 from __future__ import annotations
-import asyncio
 import random
 import string
 from typing import Callable, Awaitable
@@ -7,7 +6,7 @@ from loguru import logger
 from raven.core.config import settings
 from raven.core.db import Database
 from raven.core.llm import LLMRouter
-from raven.core.models import IncomingMessage, Message, Session
+from raven.core.models import IncomingMessage, Message
 from raven.core.agent.agent import Agent
 from raven.core.agent.registry import AgentRegistry
 from raven.core.plugin_loader import PluginLoader
@@ -103,6 +102,3 @@ class Gateway:
             import re
             text = re.sub(r"<@!?\d+>", "", text).strip()
         return text
-
-    def on_message(self, handler: Callable[[IncomingMessage], Awaitable[None]]):
-        pass

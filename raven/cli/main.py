@@ -414,13 +414,13 @@ def plugins_list():
     plugins_dir = Path(__file__).parent.parent / "plugins"
     loader = gateway.plugin_loader
     for pdir in plugins_dir.iterdir():
-        if pdir.is_dir():
+        if pdir.is_dir() and pdir.name != "__pycache__":
             loader.load_from_dir(pdir)
     table = Table(title="Loaded Plugins")
     table.add_column("Plugin", style="cyan")
     table.add_column("Tools")
     for pdir in sorted(plugins_dir.iterdir(), key=lambda d: d.name):
-        if pdir.is_dir():
+        if pdir.is_dir() and pdir.name != "__pycache__":
             tools_in_plugin = [t for t in loader.tools if t.handler.__module__.startswith(f"raven.plugins.{pdir.name}")]
             if tools_in_plugin:
                 table.add_row(pdir.name, ", ".join(t.name for t in tools_in_plugin))
