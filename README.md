@@ -55,22 +55,22 @@
 
 ## Features
 
-| Feature | Raven AI | OpenClaw |
-|---------|----------|----------|
-| Language | Python 3.12+ | TypeScript/Node.js |
-| Architecture | asyncio monorepo | Node.js monorepo |
-| Memory | Built-in (ChromaDB) | Plugin only |
-| Stateless mode | ✅ `raven start --stateless` | ❌ Always stateful |
-| Web UI | Built-in (React + Alpine.js) | Plugin only |
-| OpenRouter | Native (all models, no config) | Via plugin |
-| Plugin System | 1 file = 1 plugin | Markdown + code |
-| IDE Integration | VS Code extension (chat, review, fix, explain) | VS Code only |
-| Code Review | ✅ Built-in (review, suggest, find issues) | ✅ Built-in |
-| Git Operations | ✅ status, log, diff, commit, branch, push, pull | ❌ No git integration |
-| RAM Usage | ~150MB baseline | ~400MB baseline |
-| Multi-Agent | Per-channel configurable | Per-channel |
-| Autonomous Mode | ✅ Full auto-pilot (cron, background tasks) | ❌ Requires monitoring |
-| Voice | Roadmap v2 | Built-in |
+| Feature | Description |
+|---------|-------------|
+| Language | Python 3.12+ |
+| Architecture | asyncio monorepo |
+| Memory | Built-in (ChromaDB) |
+| Stateless mode | `raven start --stateless` |
+| Web UI | Built-in (React + Alpine.js) |
+| OpenRouter | Native (all models, no config) |
+| Plugin System | 1 file = 1 plugin |
+| IDE Integration | VS Code extension (chat, review, fix, explain) |
+| Code Review | Built-in (review, suggest, find issues) |
+| Git Operations | status, log, diff, commit, branch, push, pull |
+| RAM Usage | ~150MB baseline |
+| Multi-Agent | Per-channel configurable |
+| Autonomous Mode | Full auto-pilot (cron, background tasks) |
+| Voice | Roadmap |
 
 ## Quickstart
 

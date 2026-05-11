@@ -8,7 +8,7 @@
   "icon": "icon.png",
   "engines": { "vscode": "^1.93.0" },
   "categories": ["Programming Languages", "Machine Learning", "Other"],
-  "keywords": ["raven", "ai", "code-review", "assistant", "openclaw"],
+  "keywords": ["raven", "ai", "code-review", "assistant"],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
