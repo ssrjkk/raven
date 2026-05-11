@@ -54,27 +54,6 @@ class WebChatChannel(BaseChannel):
             await self._db.delete_session(session_id)
             return {"ok": True}
 
-        @app.get("/api/emotions")
-        async def list_emotions():
-            from raven.core.emotions import Emotion, EMOJI_MAP, EMOTION_COLORS
-            return {
-                e.value: {"emoji": EMOJI_MAP[e], "color": EMOTION_COLORS[e]}
-                for e in Emotion
-            }
-
-        @app.get("/api/emotions/current")
-        async def current_emotion():
-            from raven.core.emotions import EMOJI_MAP, EMOTION_COLORS, Emotion
-            from raven.core.agent.agent import _mood
-            mood = _mood.current if _mood else Emotion.NEUTRAL
-            return {
-                "emotion": mood.value,
-                "emoji": EMOJI_MAP.get(mood, ""),
-                "color": EMOTION_COLORS.get(mood, "#a1a1aa"),
-                "dominant": (_mood.dominant.value if _mood else Emotion.NEUTRAL.value),
-                "variety": _mood.variety if _mood else 0,
-            }
-
         @app.get("/api/messages/{session_id}")
         async def get_messages(session_id: str):
             msgs = await self._db.get_session_messages(session_id, limit=50)
@@ -83,7 +62,6 @@ class WebChatChannel(BaseChannel):
                     "id": m.id,
                     "role": m.role,
                     "content": m.content,
-                    "emotion": m.emotion,
                     "created_at": m.created_at.isoformat(),
                 }
                 for m in msgs
@@ -141,20 +119,11 @@ class WebChatChannel(BaseChannel):
         client_id = parts[1] if len(parts) >= 2 else None
         if client_id and client_id in self._connections:
             try:
-                from raven.core.emotions import EMOJI_MAP, EMOTION_COLORS, Emotion
-                emotion = message.emotion or "neutral"
-                try:
-                    e = Emotion(emotion)
-                except ValueError:
-                    e = Emotion.NEUTRAL
                 await self._connections[client_id].send_json({
                     "type": "message",
                     "role": "assistant",
                     "content": message.content,
                     "session_id": session_id,
-                    "emotion": e.value,
-                    "emoji": EMOJI_MAP.get(e, ""),
-                    "color": EMOTION_COLORS.get(e, "#a1a1aa"),
                 })
             except Exception as e:
                 logger.error("WebChat send failed: {}", e)
@@ -231,12 +200,9 @@ raven-ai v0.1.0
 <div class="flex-1 overflow-y-auto p-4 space-y-1" id="messages-container">
 <template x-for="msg in messages" :key="msg.id">
 <div class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
-            <div class="message" :class="msg.role" :style="msg.emotion ? 'border-left: 3px solid ' + msg.color : ''">
-                        <div class="flex items-center gap-1 mb-1" x-show="msg.emotion && msg.role === 'assistant'">
-                            <span x-text="msg.emoji" :title="msg.emotion"></span>
-                        </div>
-                        <div x-html="renderContent(msg.content)"></div>
-                    </div>
+<div class="message" :class="msg.role">
+                    <div x-html="renderContent(msg.content)"></div>
+                </div>
 </div>
 </template>
 <div x-show="isLoading" class="message assistant" style="max-width:80%">
@@ -283,7 +249,7 @@ this.ws = new WebSocket(`${protocol}//${location.host}/ws`);
 this.ws.onmessage = (e) => {
                     const data = JSON.parse(e.data);
                     if (data.type === 'message') {
-                        this.messages.push({ id: Date.now(), role: data.role, content: data.content, emotion: data.emotion || '', emoji: data.emoji || '', color: data.color || '', created_at: new Date().toISOString() });
+                        this.messages.push({ id: Date.now(), role: data.role, content: data.content, created_at: new Date().toISOString() });
                         this.isLoading = false;
                         this.$nextTick(() => this.scrollDown());
                     }
