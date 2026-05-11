@@ -25,6 +25,7 @@ class TelegramChannel(BaseChannel):
         self._app.add_handler(CommandHandler("start", self._cmd_start))
         self._app.add_handler(CommandHandler("new", self._cmd_new))
         self._app.add_handler(CommandHandler("reset", self._cmd_reset))
+        self._app.add_handler(CommandHandler("pair", self._cmd_pair))
         self._app.add_handler(CommandHandler("help", self._cmd_help))
         self._app.add_handler(TGMessageHandler(filters.TEXT & ~filters.COMMAND, self._on_text))
         await self._app.initialize()
@@ -97,6 +98,21 @@ class TelegramChannel(BaseChannel):
                 metadata={"chat_id": chat_id, "command": "new"},
             )
             await self._handler(event)
+
+    async def _cmd_pair(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not self._handler:
+            return
+        code = " ".join(context.args) if context.args else ""
+        user_id = str(update.message.from_user.id) if update.message.from_user else "unknown"
+        chat_id = str(update.effective_chat.id) if update.effective_chat else user_id
+        event = IncomingMessage(
+            channel="telegram",
+            user_id=user_id,
+            session_id=f"telegram:{chat_id}:default",
+            text=f"/pair {code}",
+            metadata={"chat_id": chat_id, "command": "pair"},
+        )
+        await self._handler(event)
 
     async def _cmd_reset(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Session reset.")

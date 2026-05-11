@@ -1,6 +1,6 @@
 from __future__ import annotations
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 import aiosqlite
@@ -89,10 +89,10 @@ class Database:
                 user_id=row["user_id"],
                 agent_id=row["agent_id"] or "default",
                 system_prompt=row["system_prompt"],
-                created_at=datetime.fromisoformat(row["created_at"]) if isinstance(row["created_at"], str) else datetime.utcnow(),
-                updated_at=datetime.fromisoformat(row["updated_at"]) if isinstance(row["updated_at"], str) else datetime.utcnow(),
+                created_at=datetime.fromisoformat(row["created_at"]) if isinstance(row["created_at"], str) else datetime.now(timezone.utc),
+                updated_at=datetime.fromisoformat(row["updated_at"]) if isinstance(row["updated_at"], str) else datetime.now(timezone.utc),
             )
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         session = Session(id=session_id, channel=channel, user_id=user_id, agent_id=agent_id, created_at=now, updated_at=now)
         await self._conn.execute(
             "INSERT INTO sessions (id, channel, user_id, agent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -108,7 +108,7 @@ class Database:
         )
         await self._conn.execute(
             "UPDATE sessions SET updated_at = ? WHERE id = ?",
-            (datetime.utcnow().isoformat(), msg.session_id),
+            (datetime.now(timezone.utc).isoformat(), msg.session_id),
         )
         await self._conn.commit()
 
@@ -126,7 +126,7 @@ class Database:
                 role=row["role"],
                 content=row["content"],
                 metadata=json.loads(row["metadata"]) if row["metadata"] else {},
-                created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.utcnow(),
+                created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.now(timezone.utc),
             ))
         return result
 
@@ -171,8 +171,8 @@ class Database:
         return [Session(
             id=r["id"], channel=r["channel"], user_id=r["user_id"],
             agent_id=r["agent_id"] or "default", system_prompt=r["system_prompt"],
-            created_at=datetime.fromisoformat(r["created_at"]) if r["created_at"] else datetime.utcnow(),
-            updated_at=datetime.fromisoformat(r["updated_at"]) if r["updated_at"] else datetime.utcnow(),
+            created_at=datetime.fromisoformat(r["created_at"]) if r["created_at"] else datetime.now(timezone.utc),
+            updated_at=datetime.fromisoformat(r["updated_at"]) if r["updated_at"] else datetime.now(timezone.utc),
         ) for r in rows]
 
     async def save_plugin_state(self, plugin_id: str, key: str, value: str):
