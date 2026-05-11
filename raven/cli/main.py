@@ -16,6 +16,9 @@ from loguru import logger
 
 from raven.core.config import settings
 from raven.core.db import Database
+from raven.core.llm import LLMRouter
+from raven.core.models import Message
+from raven.core.agent.registry import AgentRegistry
 from raven.core.gateway.gateway import Gateway
 from raven.core.plugin_loader import PluginLoader
 from raven.channels.telegram.channel import TelegramChannel
@@ -373,13 +376,46 @@ def message():
 
 
 @message.command("send")
-@click.option("--channel", required=True, help="Target channel (telegram, discord)")
+@click.option("--channel", required=True, help="Target channel (telegram, discord, webchat)")
 @click.option("--user", required=True, help="User ID")
 @click.option("--text", required=True, help="Message text")
-def msg_send(channel: str, user: str, text: str):
-    """Send a message to a user"""
-    console.print(f"[yellow]Message sending not yet implemented for direct CLI[/yellow]")
-    console.print(f"  channel={channel}, user={user}, text={text}")
+@click.option("--session", default=None, help="Session ID (optional)")
+def msg_send(channel: str, user: str, text: str, session: Optional[str]):
+    """Send a message to a user via Raven AI"""
+    async def _send():
+        db = Database(settings.resolved_db_path)
+        await db.connect()
+
+        session_id = session or f"{channel}:{user}:cli"
+        sess = await db.get_or_create_session(session_id, channel, user)
+
+        plugin_loader = PluginLoader()
+        plugins_dir = Path(__file__).parent.parent / "plugins"
+        for pdir in plugins_dir.iterdir():
+            if pdir.is_dir() and pdir.name != "__pycache__":
+                plugin_loader.load_from_dir(pdir)
+
+        llm = LLMRouter()
+        registry = AgentRegistry(db, llm, plugin_loader.tools)
+        registry.setup_defaults()
+        agent = registry.create_agent(sess)
+
+        user_msg = Message(session_id=session_id, channel=channel, role="user", content=text)
+        await db.save_message(user_msg)
+
+        console.print(f"[dim]Sending to {channel}/{user}...[/dim]")
+        full = ""
+        async for token in agent.run(text):
+            full += token
+
+        if full.strip():
+            assistant_msg = Message(session_id=session_id, channel=channel, role="assistant", content=full)
+            await db.save_message(assistant_msg)
+            console.print(f"[green]Response:[/green] {full[:500]}")
+
+        await db.disconnect()
+
+    asyncio.run(_send())
 
 
 @cli.group()

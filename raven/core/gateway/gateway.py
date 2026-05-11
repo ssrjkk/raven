@@ -1,7 +1,7 @@
 from __future__ import annotations
 import random
 import string
-from typing import Callable, Awaitable
+from typing import Any, Callable, Awaitable
 from loguru import logger
 from raven.core.config import settings
 from raven.core.db import Database
@@ -10,7 +10,6 @@ from raven.core.models import IncomingMessage, Message
 from raven.core.agent.agent import Agent
 from raven.core.agent.registry import AgentRegistry
 from raven.core.plugin_loader import PluginLoader
-from raven.channels.base import BaseChannel
 
 
 class Gateway:
@@ -18,7 +17,7 @@ class Gateway:
         self.db = db
         self.llm = LLMRouter()
         self.plugin_loader = plugin_loader
-        self.channels: dict[str, BaseChannel] = {}
+        self.channels: dict[str, Any] = {}
         self._running = False
         self.registry = AgentRegistry(db, self.llm, plugin_loader.tools)
 
