@@ -1,15 +1,20 @@
 from __future__ import annotations
 import random
 import string
-from typing import Any, Callable, Awaitable
+from typing import Any, Callable, Awaitable, TYPE_CHECKING
 from loguru import logger
 from raven.core.config import settings
+if TYPE_CHECKING:
+    from raven.channels.base import BaseChannel
 from raven.core.db import Database
 from raven.core.llm import LLMRouter
 from raven.core.models import IncomingMessage, Message
 from raven.core.agent.agent import Agent
 from raven.core.agent.registry import AgentRegistry
 from raven.core.plugin_loader import PluginLoader
+from raven.core.health import health
+from raven.core.logging import audit, get_correlation_id
+from raven.core.metrics import metrics
 
 
 class Gateway:
@@ -35,6 +40,7 @@ class Gateway:
                 logger.info("Channel started: {}", cid)
             except Exception as e:
                 logger.error("Failed to start channel {}: {}", cid, e)
+        self._register_health_checks()
 
     async def stop(self):
         logger.info("Stopping gateway...")
@@ -46,14 +52,31 @@ class Gateway:
             except Exception as e:
                 logger.error("Error stopping channel {}: {}", cid, e)
 
+    def _register_health_checks(self):
+        async def _db_check():
+            return await self.db.health_check()
+
+        async def _llm_check():
+            try:
+                result = await self.llm.complete([{"role": "user", "content": "ping"}], model=settings.default_model)
+                return bool(result.content)
+            except Exception:
+                return False
+
+        health.register("database", _db_check, timeout=3.0, critical=True)
+        health.register("llm", _llm_check, timeout=10.0, critical=False)
+
     async def handle_message(self, event: IncomingMessage):
+        cid = get_correlation_id()
         logger.info("Incoming message from {}[{}]: {}", event.channel, event.user_id, event.text[:80])
+        metrics.inc("messages_received", {"channel": event.channel})
         try:
             user = await self.db.find_or_create_user(event.channel, event.user_id)
             policy = settings.dm_policy
 
             if policy == "closed":
                 if not user.get("is_allowed"):
+                    metrics.inc("messages_blocked", {"channel": event.channel, "reason": "policy_closed"})
                     await self._send(event.channel, event.session_id, "Access denied. You are not authorized.")
                     return
 
@@ -64,12 +87,15 @@ class Gateway:
                     if matched and matched["id"] == user["id"]:
                         await self.db.set_user_allowed(user["id"], True)
                         await self.db.set_pairing_code(user["id"], "")
+                        audit.sensitive_op(event.user_id, "pairing_approve", f"{event.channel}:{event.user_id}", True)
                         await self._send(event.channel, event.session_id, "You are now authorized!")
+                        metrics.inc("pairing_approved", {"channel": event.channel})
                         return
                 code = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
                 await self.db.find_or_create_user(event.channel, event.user_id)
                 await self.db.set_pairing_code(f"{event.channel}:{event.user_id}", code)
                 await self._send(event.channel, event.session_id, f"Welcome! Your pairing code is: `{code}`\nPlease send `/pair {code}` to authorize.")
+                metrics.inc("pairing_codes_sent", {"channel": event.channel})
                 return
 
             session_id = event.session_id or f"{event.channel}:{event.user_id}:default"
@@ -84,9 +110,12 @@ class Gateway:
 
             if full_response.strip():
                 await self._send(event.channel, session_id, full_response)
+                metrics.inc("messages_sent", {"channel": event.channel})
+                metrics.observe("response_length", len(full_response), {"channel": event.channel})
 
         except Exception as e:
             logger.error("handle_message error: {}", e)
+            metrics.inc("message_errors", {"channel": event.channel})
             await self._send(event.channel, event.session_id, f"Sorry, an error occurred: {str(e)[:200]}")
 
     async def _send(self, channel_id: str, session_id: str, text: str):

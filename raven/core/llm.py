@@ -1,10 +1,12 @@
 from __future__ import annotations
+import asyncio
 import json
 from abc import ABC, abstractmethod
 from typing import AsyncIterator, Any
 import httpx
 from loguru import logger
 from raven.core.config import settings
+from raven.core.metrics import metrics
 
 
 class ToolCall:
@@ -16,6 +18,9 @@ class ToolCall:
         self.id = id
         self.name = name
         self.arguments = arguments
+
+    def __repr__(self):
+        return f"ToolCall(id={self.id}, name={self.name})"
 
     def to_dict(self) -> dict:
         return {"id": self.id, "type": "function", "function": {"name": self.name, "arguments": json.dumps(self.arguments)}}
@@ -271,10 +276,27 @@ class LLMRouter:
     async def complete_stream(self, messages: list[dict], model: str | None = None, tools: list[dict] | None = None) -> AsyncIterator[str]:
         model = model or settings.default_model
         provider = self._get_provider(model)
+        metrics.inc("llm_stream_start", {"model": model, "provider": type(provider).__name__})
         async for token in provider.complete_stream(messages, model, tools):
             yield token
 
     async def complete(self, messages: list[dict], model: str | None = None, tools: list[dict] | None = None) -> LLMResponse:
         model = model or settings.default_model
         provider = self._get_provider(model)
-        return await provider.complete(messages, model, tools)
+        last_exc = None
+        for attempt in range(max(1, settings.llm_retry_max)):
+            try:
+                resp = await provider.complete(messages, model, tools)
+                metrics.inc("llm_complete", {"model": model, "status": "ok"})
+                return resp
+            except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.NetworkError) as e:
+                last_exc = e
+                metrics.inc("llm_complete", {"model": model, "status": "retry"})
+                if attempt < settings.llm_retry_max - 1:
+                    delay = settings.llm_retry_delay * (2 ** attempt)
+                    logger.warning("LLM call failed (attempt {}/{}): {}, retrying in {}s", attempt + 1, settings.llm_retry_max, e, delay)
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error("LLM call failed after {} attempts: {}", settings.llm_retry_max, e)
+        metrics.inc("llm_complete", {"model": model, "status": "error"})
+        raise last_exc or RuntimeError("LLM call failed")

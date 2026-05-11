@@ -6,12 +6,14 @@ from typing import Any
 import aiosqlite
 from loguru import logger
 from raven.core.models import Message, Session
+from raven.core.migrations import Migrator
 
 
 class Database:
     def __init__(self, db_path: Path):
         self.db_path = db_path
         self._conn: aiosqlite.Connection | None = None
+        self.migrator = Migrator(db_path)
 
     async def connect(self):
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -19,9 +21,12 @@ class Database:
         self._conn.row_factory = aiosqlite.Row
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA foreign_keys=ON")
+        await self._conn.execute("PRAGMA busy_timeout=5000")
+        await self._conn.execute("PRAGMA synchronous=NORMAL")
         await self._migrate()
 
     async def _migrate(self):
+        await self.migrator.migrate()
         async with self._conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name") as c:
             rows = await c.fetchall()
             existing = {r[0] for r in rows}
@@ -76,6 +81,7 @@ class Database:
     async def disconnect(self):
         if self._conn:
             await self._conn.close()
+            self._conn = None
 
     async def get_or_create_session(self, session_id: str, channel: str, user_id: str, agent_id: str = "default") -> Session:
         async with self._conn.execute(
@@ -191,3 +197,13 @@ class Database:
         await self._conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
         await self._conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
         await self._conn.commit()
+
+    async def health_check(self) -> bool:
+        if not self._conn:
+            return False
+        try:
+            async with self._conn.execute("SELECT 1") as c:
+                await c.fetchone()
+            return True
+        except Exception:
+            return False

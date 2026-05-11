@@ -21,30 +21,16 @@ from raven.core.models import Message
 from raven.core.agent.registry import AgentRegistry
 from raven.core.gateway.gateway import Gateway
 from raven.core.plugin_loader import PluginLoader
+from raven.core.logging import setup_logging, audit
+from raven.core.health import health
+from raven.core.metrics import metrics
+from raven.core.middleware import request_id_middleware, rate_limit_middleware, auth_middleware, rate_limiter
+from pydantic import BaseModel
 from raven.channels.telegram.channel import TelegramChannel
 from raven.channels.discord.channel import DiscordChannel
 from raven.channels.webchat.channel import WebChatChannel
 
 console = Console()
-
-
-def setup_logging():
-    log_file = settings.resolved_log_file
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-    logger.remove()
-    logger.add(
-        sys.stderr,
-        level=settings.log_level,
-        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan> - <level>{message}</level>",
-        colorize=True,
-    )
-    logger.add(
-        str(log_file),
-        level="DEBUG",
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-        rotation="10 MB",
-        retention="1 week",
-    )
 
 
 def create_gateway() -> Gateway:
@@ -65,6 +51,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             plugin_loader.load_from_dir(pdir)
     console.print(Panel.fit(f"[bold green]Loaded {len(plugin_loader.tools)} tools from plugins[/bold green]"))
 
+    settings.validate()
+    audit.log("system", "startup", "gateway", f"plugins={len(plugin_loader.tools)}")
+
     telegram = TelegramChannel()
     discord = DiscordChannel()
     webchat = WebChatChannel(gateway.db)
@@ -83,6 +72,17 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     api_app = webchat.app
 
+    api_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.web_cors_origins.split(",") if settings.web_cors_origins != "*" else ["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    api_app.middleware("http")(request_id_middleware)
+    api_app.middleware("http")(rate_limit_middleware)
+    api_app.middleware("http")(auth_middleware)
+
     @api_app.get("/api/status")
     async def api_status():
         return {
@@ -91,20 +91,40 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             "plugins": len(plugin_loader.tools),
             "agents": gateway.registry.list_agents(),
             "model": settings.default_model,
+            "version": "1.0.0",
         }
 
     @api_app.get("/api/agents")
     async def api_agents():
         return gateway.registry.list_agents()
 
+    @api_app.get("/api/health")
+    async def api_health():
+        return await health.check_all()
+
+    @api_app.get("/api/health/ready")
+    async def api_ready():
+        return await health.check_readiness()
+
+    @api_app.get("/api/health/live")
+    async def api_live():
+        return {"status": "ok"}
+
+    @api_app.get("/api/metrics")
+    async def api_metrics():
+        return metrics.snapshot()
+
+    @api_app.get("/api/metrics/prometheus")
+    async def api_metrics_prometheus():
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(metrics.prometheus())
+
     @api_app.post("/api/shutdown")
     async def api_shutdown():
         logger.info("Shutdown requested via API")
+        audit.sensitive_op("api", "shutdown", "system", True)
         stop_event.set()
         return {"ok": True}
-
-from pydantic import BaseModel
-    from typing import Optional as OptTyping
 
     class AgentAssign(BaseModel):
         agent_id: str = "default"
@@ -117,6 +137,7 @@ from pydantic import BaseModel
     @api_app.post("/api/raven")
     async def api_raven(body: RavenRequest):
         logger.info("Raven API call: action={}", body.action)
+        audit.log("api", "raven", "inference", body.action)
         try:
             session = await gateway.db.get_or_create_session(
                 f"vscode:{body.action}:default", "vscode", "vscode_user"
@@ -134,28 +155,6 @@ from pydantic import BaseModel
     async def api_set_agent(session_id: str, body: AgentAssign):
         logger.info("Session {} → agent {}", session_id, body.agent_id)
         return {"ok": True, "session_id": session_id, "agent_id": body.agent_id}
-
-    api_app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-
-    @api_app.middleware("http")
-    async def auth_middleware(request, call_next):
-        import os
-        from fastapi.responses import JSONResponse
-        secret_key = os.getenv("WEB_SECRET_KEY", "")
-        if secret_key:
-            auth = request.headers.get("X-Raven-Key", "")
-            if auth != secret_key:
-                path = request.url.path
-                if path.startswith(("/api/shutdown", "/api/raven", "/api/agents")):
-                    return JSONResponse(status_code=403, content={"error": "Forbidden"})
-        response = await call_next(request)
-        return response
 
     stop_event = asyncio.Event()
 
@@ -178,18 +177,45 @@ from pydantic import BaseModel
 
         await stop_event.wait()
         logger.info("Shutting down...")
-        await gateway.stop()
-        await gateway.db.disconnect()
-        server_task.cancel()
+        shutdown_task = asyncio.create_task(_shutdown(gateway, server_task))
         try:
-            await server_task
+            await asyncio.wait_for(shutdown_task, timeout=30)
+        except asyncio.TimeoutError:
+            logger.warning("Shutdown timed out, forcing exit")
+            os._exit(1)
+
+    async def _shutdown(gw: Gateway, sv_task: asyncio.Task):
+        try:
+            await asyncio.wait_for(gw.llm.cleanup(), timeout=5)
+        except Exception:
+            pass
+        try:
+            await asyncio.wait_for(gw.stop(), timeout=10)
+        except Exception:
+            pass
+        try:
+            await asyncio.wait_for(gw.db.disconnect(), timeout=5)
+        except Exception:
+            pass
+        sv_task.cancel()
+        try:
+            await sv_task
         except asyncio.CancelledError:
             pass
+        logger.info("Shutdown complete")
 
     try:
         await run_all()
     except (KeyboardInterrupt, asyncio.CancelledError):
-        pass
+        logger.info("Interrupted, shutting down...")
+        try:
+            await asyncio.wait_for(gateway.stop(), timeout=10)
+        except Exception:
+            pass
+        try:
+            await asyncio.wait_for(gateway.db.disconnect(), timeout=5)
+        except Exception:
+            pass
 
 
 @click.group()
@@ -287,6 +313,10 @@ def doctor():
     checks.append(("Telegram", "✅ Configured" if settings.telegram_bot_token else "⚠️  Not set"))
     checks.append(("Discord", "✅ Configured" if settings.discord_bot_token else "⚠️  Not set"))
     checks.append(("DM Policy", settings.dm_policy))
+    checks.append(("Web Secret Key", "✅ Set" if settings.web_secret_key else "⚠️  Not set"))
+    checks.append(("JSON Logging", "✅ On" if settings.json_log else "❌ Off"))
+    checks.append(("Rate Limit", f"{settings.rate_limit_max}/min"))
+    checks.append(("LLM Retry", f"{settings.llm_retry_max} attempts"))
 
     try:
         import playwright
@@ -314,6 +344,7 @@ def onboard():
     setup["discord"] = click.prompt("Discord Bot Token (optional)", default="")
     setup["policy"] = click.prompt("DM Policy [pairing/open/closed]", default="pairing")
     setup["port"] = click.prompt("Web UI Port", default=18888, type=int)
+    setup["secret"] = click.prompt("Web Secret Key (API auth, optional)", default="")
 
     env_path = Path(".env")
     existing = env_path.read_text() if env_path.exists() else ""
@@ -334,6 +365,8 @@ def onboard():
         env_vars["DISCORD_BOT_TOKEN"] = setup["discord"]
     env_vars["DM_POLICY"] = setup["policy"]
     env_vars["WEB_PORT"] = str(setup["port"])
+    if setup["secret"]:
+        env_vars["WEB_SECRET_KEY"] = setup["secret"]
 
     content = "\n".join(f"{k}={v}" for k, v in env_vars.items())
     env_path.write_text(content)
@@ -500,6 +533,49 @@ def history(session_id: str):
             color = role_color.get(m.role, "white")
             console.print(f"[{color}][{m.role}][/{color}] {m.content[:200]}")
     asyncio.run(_history())
+
+
+@cli.group()
+def db():
+    """Manage the database"""
+
+
+@db.command("migrate")
+@click.option("--target", default=None, type=int, help="Target migration version")
+def db_migrate(target: Optional[int]):
+    """Run pending database migrations"""
+    async def _migrate():
+        db = Database(settings.resolved_db_path)
+        await db.connect()
+        await db.disconnect()
+        console.print("[green]Migrations complete[/green]")
+    asyncio.run(_migrate())
+
+
+@db.command("backup")
+@click.argument("output", default=None, required=False)
+def db_backup(output: Optional[str]):
+    """Backup the database"""
+    import shutil
+    src = settings.resolved_db_path
+    if not src.exists():
+        console.print("[red]Database file not found[/red]")
+        return
+    dst = Path(output) if output else src.with_suffix(f".backup.{src.suffix}")
+    shutil.copy2(str(src), str(dst))
+    console.print(f"[green]Database backed up to {dst}[/green]")
+
+
+@db.command("version")
+def db_version():
+    """Show current database schema version"""
+    async def _version():
+        db = Database(settings.resolved_db_path)
+        await db.connect()
+        version = await db.migrator.get_current_version()
+        await db.disconnect()
+        console.print(f"Database schema version: [bold]{version}[/bold]")
+    asyncio.run(_version())
 
 
 if __name__ == "__main__":

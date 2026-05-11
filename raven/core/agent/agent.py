@@ -5,6 +5,9 @@ from loguru import logger
 from raven.core.db import Database
 from raven.core.llm import LLMRouter, ToolCall, LLMResponse
 from raven.core.models import Message, Session, PluginTool
+from raven.core.emotions import detect_emotion, MoodTracker, Emotion
+
+_mood = MoodTracker()
 
 
 class AgentConfig:
@@ -178,9 +181,15 @@ class Agent:
                 final_content += token
                 yield token
 
+        emotion = detect_emotion(final_content)
+        _mood.record(emotion)
+
         if not self.config.stateless:
             user_msg = Message(session_id=self.session.id, channel=self.session.channel, role="user", content=user_message)
-            assistant_msg = Message(session_id=self.session.id, channel=self.session.channel, role="assistant", content=final_content)
+            assistant_msg = Message(
+                session_id=self.session.id, channel=self.session.channel,
+                role="assistant", content=final_content, emotion=emotion.value,
+            )
             await self.db.save_message(user_msg)
             await self.db.save_message(assistant_msg)
             await self._auto_memory(user_message, final_content)

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from pydantic_settings import BaseSettings
+from loguru import logger
 
 
 class Settings(BaseSettings):
@@ -21,10 +22,16 @@ class Settings(BaseSettings):
     dm_policy: str = "pairing"
     web_port: int = 18888
     web_secret_key: str = ""
-
+    web_cors_origins: str = "*"
+    rate_limit_max: int = 60
+    rate_limit_window: int = 60
+    json_log: bool = True
     log_level: str = "INFO"
     db_path: str = "data/raven.db"
     log_file: str = "data/raven.log"
+    llm_timeout: int = 120
+    llm_retry_max: int = 3
+    llm_retry_delay: float = 1.0
 
     @property
     def resolved_db_path(self) -> Path:
@@ -41,6 +48,22 @@ class Settings(BaseSettings):
             base = Path(__file__).parent.parent.parent
             return base / p
         return p
+
+    def validate(self):
+        errors = []
+        if self.dm_policy not in ("pairing", "open", "closed"):
+            errors.append(f"DM_POLICY must be 'pairing', 'open', or 'closed', got '{self.dm_policy}'")
+        if self.web_port < 1 or self.web_port > 65535:
+            errors.append(f"WEB_PORT must be 1-65535, got {self.web_port}")
+        if self.rate_limit_max < 1:
+            errors.append(f"RATE_LIMIT_MAX must be >= 1, got {self.rate_limit_max}")
+        if self.llm_retry_max < 0:
+            errors.append(f"LLM_RETRY_MAX must be >= 0, got {self.llm_retry_max}")
+        if errors:
+            for err in errors:
+                logger.error("Config validation error: {}", err)
+            raise ValueError("\n".join(errors))
+        return True
 
 
 settings = Settings()
