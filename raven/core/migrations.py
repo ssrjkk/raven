@@ -26,6 +26,14 @@ def register(version: int, description: str, sql: str | None = None):
     return wrapper
 
 
+@register(1, "Add agent_skills column to sessions")
+async def _migration_1(conn):
+    try:
+        await conn.execute("ALTER TABLE sessions ADD COLUMN agent_skills TEXT DEFAULT '[]'")
+    except Exception:
+        pass
+
+
 class Migrator:
     def __init__(self, db_path: Path):
         self.db_path = db_path

@@ -17,6 +17,7 @@ class AgentConfig:
         max_history: int = 50,
         use_memory: bool = True,
         stateless: bool = False,
+        workspace: str | None = None,
     ):
         self.agent_id = agent_id
         self.system_prompt = system_prompt
@@ -25,6 +26,7 @@ class AgentConfig:
         self.max_history = 0 if stateless else max_history
         self.use_memory = False if stateless else use_memory
         self.stateless = stateless
+        self.workspace = workspace
 
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -55,6 +57,16 @@ class Agent:
         base = self.config.system_prompt or DEFAULT_SYSTEM_PROMPT
         if self.session.system_prompt:
             base = self.session.system_prompt + "\n\n" + base
+        workspace = self.config.workspace
+        if workspace:
+            from pathlib import Path
+            ws = Path(workspace)
+            for fname in ("SOUL.md", "AGENTS.md", "TOOLS.md"):
+                fp = ws / fname
+                if fp.exists():
+                    content = fp.read_text(encoding="utf-8").strip()
+                    if content:
+                        base += f"\n\n---\n[{fname}]\n{content}"
         return base
 
     def _tool_schemas(self) -> list[dict]:

@@ -38,6 +38,7 @@ class Database:
                     channel TEXT NOT NULL,
                     user_id TEXT NOT NULL,
                     agent_id TEXT DEFAULT 'default',
+                    agent_skills TEXT DEFAULT '[]',
                     system_prompt TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -89,11 +90,17 @@ class Database:
         ) as c:
             row = await c.fetchone()
         if row:
+            try:
+                skills_val = row["agent_skills"]
+                skills = json.loads(skills_val) if skills_val and skills_val != "[]" else []
+            except (IndexError, KeyError):
+                skills = []
             return Session(
                 id=row["id"],
                 channel=row["channel"],
                 user_id=row["user_id"],
                 agent_id=row["agent_id"] or "default",
+                agent_skills=skills,
                 system_prompt=row["system_prompt"],
                 created_at=datetime.fromisoformat(row["created_at"]) if isinstance(row["created_at"], str) else datetime.now(timezone.utc),
                 updated_at=datetime.fromisoformat(row["updated_at"]) if isinstance(row["updated_at"], str) else datetime.now(timezone.utc),
@@ -101,8 +108,8 @@ class Database:
         now = datetime.now(timezone.utc)
         session = Session(id=session_id, channel=channel, user_id=user_id, agent_id=agent_id, created_at=now, updated_at=now)
         await self._conn.execute(
-            "INSERT INTO sessions (id, channel, user_id, agent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (session.id, session.channel, session.user_id, session.agent_id, session.created_at.isoformat(), session.updated_at.isoformat()),
+            "INSERT INTO sessions (id, channel, user_id, agent_id, agent_skills, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (session.id, session.channel, session.user_id, session.agent_id, json.dumps(session.agent_skills), session.created_at.isoformat(), session.updated_at.isoformat()),
         )
         await self._conn.commit()
         return session
@@ -174,12 +181,22 @@ class Database:
         else:
             async with self._conn.execute("SELECT * FROM sessions ORDER BY updated_at DESC") as c:
                 rows = await c.fetchall()
-        return [Session(
-            id=r["id"], channel=r["channel"], user_id=r["user_id"],
-            agent_id=r["agent_id"] or "default", system_prompt=r["system_prompt"],
-            created_at=datetime.fromisoformat(r["created_at"]) if r["created_at"] else datetime.now(timezone.utc),
-            updated_at=datetime.fromisoformat(r["updated_at"]) if r["updated_at"] else datetime.now(timezone.utc),
-        ) for r in rows]
+        result = []
+        for r in rows:
+            try:
+                skills_val = r["agent_skills"]
+                skills = json.loads(skills_val) if skills_val and skills_val != "[]" else []
+            except (IndexError, KeyError):
+                skills = []
+            result.append(Session(
+                id=r["id"], channel=r["channel"], user_id=r["user_id"],
+                agent_id=r["agent_id"] or "default",
+                agent_skills=skills,
+                system_prompt=r["system_prompt"],
+                created_at=datetime.fromisoformat(r["created_at"]) if r["created_at"] else datetime.now(timezone.utc),
+                updated_at=datetime.fromisoformat(r["updated_at"]) if r["updated_at"] else datetime.now(timezone.utc),
+            ))
+        return result
 
     async def save_plugin_state(self, plugin_id: str, key: str, value: str):
         await self._conn.execute(
@@ -196,6 +213,21 @@ class Database:
     async def delete_session(self, session_id: str):
         await self._conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
         await self._conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        await self._conn.commit()
+
+    async def replace_session_messages(self, session_id: str, new_messages: list[dict]):
+        await self._conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+        for msg in new_messages:
+            m = Message(
+                session_id=session_id,
+                channel="",
+                role=msg.get("role", "system"),
+                content=msg.get("content", ""),
+            )
+            await self._conn.execute(
+                "INSERT INTO messages (id, session_id, channel, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (m.id, m.session_id, m.channel, m.role, m.content, m.metadata, m.created_at.isoformat()),
+            )
         await self._conn.commit()
 
     async def health_check(self) -> bool:

@@ -55,6 +55,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             plugin_loader.load_from_dir(pdir)
     console.print(Panel.fit(f"[bold green]Loaded {len(plugin_loader.tools)} tools from plugins[/bold green]"))
 
+    from raven.plugins.sessions import plugin as sessions_plugin
+    sessions_plugin.init(gateway.db)
+
     settings.validate()
     audit.log("system", "startup", "gateway", f"plugins={len(plugin_loader.tools)}")
 

@@ -36,6 +36,17 @@ class Settings(BaseSettings):
     llm_timeout: int = 120
     llm_retry_max: int = 3
     llm_retry_delay: float = 1.0
+    workspace_path: str = ""
+
+    @property
+    def resolved_workspace(self) -> Path | None:
+        if not self.workspace_path:
+            return None
+        p = Path(self.workspace_path)
+        if not p.is_absolute():
+            base = Path(__file__).parent.parent.parent
+            return base / p
+        return p
 
     @property
     def resolved_db_path(self) -> Path:

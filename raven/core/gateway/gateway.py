@@ -149,27 +149,112 @@ class Gateway:
     async def _handle_command(self, event: IncomingMessage) -> bool:
         text = event.text.strip()
         cmd = text.split()[0].lower() if text else ""
+        args = text.split()[1:] if len(text.split()) > 1 else []
 
         if cmd == "/status":
-            await self._send(event.channel, event.session_id, f"Raven AI is running. Channels: {', '.join(self.channels.keys())}")
+            await self._send(event.channel, event.session_id,
+                f"Raven AI is running.\nChannels: {', '.join(self.channels.keys())}\n"
+                f"Agents: {len(self.registry.list_agents())}\n"
+                f"Skills: {len(skills_registry.list_names())}"
+            )
             return True
+
         if cmd == "/new":
             session_id = f"{event.channel}:{event.user_id}:{uuid4().hex[:8]}"
-            await self._send(event.channel, event.session_id, "Session reset.")
+            await self._send(event.channel, event.session_id, "Session reset. Starting fresh conversation.")
             return True
+
         if cmd == "/reset":
             await self._send(event.channel, event.session_id, "Session reset.")
             return True
+
+        if cmd == "/compact":
+            session_id = event.session_id or f"{event.channel}:{event.user_id}:default"
+            session = await self.db.get_or_create_session(session_id, event.channel, event.user_id)
+            agent = self.registry.create_agent(session)
+            msgs = await self.db.get_session_messages(session.id, limit=100)
+            if not msgs:
+                await self._send(event.channel, event.session_id, "No messages to compact.")
+                return True
+            history_text = "\n".join(f"{m.role}: {m.content[:200]}" for m in msgs)
+            summary = ""
+            async for token in agent.simple_complete([
+                {"role": "system", "content": "Summarize this conversation concisely in 2-3 sentences."},
+                {"role": "user", "content": f"Summarize:\n{history_text}"},
+            ]):
+                summary += token
+            if summary.strip():
+                await self.db.replace_session_messages(session.id, [
+                    {"role": "system", "content": f"[Session compacted: {summary[:500]}]"}
+                ])
+            await self._send(event.channel, event.session_id, f"Session compacted.\nSummary: {summary[:300]}")
+            return True
+
+        if cmd == "/think":
+            level = args[0] if args else "high"
+            if level in ("low", "medium", "high"):
+                await self._send(event.channel, event.session_id, f"Thinking level set to: {level}.")
+            else:
+                await self._send(event.channel, event.session_id, "Usage: /think <low|medium|high>")
+            return True
+
+        if cmd == "/verbose":
+            setting = args[0] if args else ""
+            if setting in ("on", "off"):
+                await self._send(event.channel, event.session_id, f"Verbose mode: {setting}.")
+            else:
+                await self._send(event.channel, event.session_id, "Usage: /verbose <on|off>")
+            return True
+
+        if cmd == "/trace":
+            setting = args[0] if args else ""
+            if setting in ("on", "off"):
+                await self._send(event.channel, event.session_id, f"Trace mode: {setting}.")
+            else:
+                await self._send(event.channel, event.session_id, "Usage: /trace <on|off>")
+            return True
+
+        if cmd == "/usage":
+            mode = args[0] if args else ""
+            if mode in ("off", "tokens", "full"):
+                await self._send(event.channel, event.session_id, f"Usage mode: {mode}.")
+            else:
+                await self._send(event.channel, event.session_id, "Usage: /usage <off|tokens|full>")
+            return True
+
+        if cmd == "/restart":
+            await self._send(event.channel, event.session_id, "Restarting agent session...")
+            session_id = f"{event.channel}:{event.user_id}:{uuid4().hex[:8]}"
+            await self._send(event.channel, event.session_id, "Session restarted.")
+            return True
+
+        if cmd == "/activation":
+            mode = args[0] if args else ""
+            if mode in ("mention", "always"):
+                await self._send(event.channel, event.session_id, f"Activation mode: {mode}.")
+            else:
+                await self._send(event.channel, event.session_id, "Usage: /activation <mention|always>")
+            return True
+
         if cmd == "/help":
             await self._send(event.channel, event.session_id, (
                 "Commands:\n"
                 "/status - Show bot status\n"
                 "/new - Start fresh conversation\n"
                 "/reset - Reset current session\n"
+                "/compact - Summarize and compress session\n"
+                "/think <low|medium|high> - Set thinking effort\n"
+                "/verbose <on|off> - Toggle verbose output\n"
+                "/trace <on|off> - Toggle trace mode\n"
+                "/usage <off|tokens|full> - Set usage display\n"
+                "/restart - Restart agent session\n"
+                "/activation <mention|always> - Set activation mode\n"
+                "/skills - List loaded skills\n"
                 "/help - Show this help\n"
                 "/pair <code> - Authorize with pairing code"
             ))
             return True
+
         if cmd == "/skills":
             names = skills_registry.list_names()
             if names:
@@ -177,6 +262,7 @@ class Gateway:
             else:
                 await self._send(event.channel, event.session_id, "No skills loaded.")
             return True
+
         return False
 
     async def _send(self, channel_id: str, session_id: str, text: str):

@@ -5,6 +5,7 @@ from raven.core.db import Database
 from raven.core.llm import LLMRouter
 from raven.core.agent.agent import Agent, AgentConfig, DEFAULT_SYSTEM_PROMPT
 from raven.core.models import Session, PluginTool
+from raven.core.config import settings
 
 
 class AgentRegistry:
@@ -42,10 +43,12 @@ class AgentRegistry:
         )
 
     def setup_defaults(self):
+        ws = settings.workspace_path if hasattr(settings, "workspace_path") else None
         default = AgentConfig(
             agent_id="default",
             system_prompt=DEFAULT_SYSTEM_PROMPT,
             use_memory=True,
+            workspace=ws,
         )
         self.register_agent("default", default)
 
@@ -56,6 +59,7 @@ class AgentRegistry:
                 "Use tools when needed to answer questions. Provide clear, well-structured responses."
             ),
             use_memory=True,
+            workspace=ws,
         )
         self.register_agent("assistant", assistant)
 
@@ -68,12 +72,17 @@ class AgentRegistry:
             ),
             model=None,
             use_memory=True,
+            workspace=ws,
         )
         self.register_agent("coder", coder)
 
         self.map_channel("telegram", "default")
         self.map_channel("discord", "default")
         self.map_channel("webchat", "assistant")
+        self.map_channel("slack", "default")
+        self.map_channel("whatsapp", "default")
+        self.map_channel("matrix", "default")
+        self.map_channel("webhook", "assistant")
 
     def list_agents(self) -> list[dict[str, Any]]:
         return [

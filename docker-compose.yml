@@ -1,0 +1,12 @@
+services:
+  raven:
+    build: .
+    ports:
+      - "18888:18888"
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env:ro
+      - ./workspace:/app/workspace:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
