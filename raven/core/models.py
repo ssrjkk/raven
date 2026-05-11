@@ -1,6 +1,6 @@
 from __future__ import annotations
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, AsyncIterator, Literal
 from uuid import uuid4
 from pydantic import BaseModel, Field
@@ -13,7 +13,7 @@ class Message(BaseModel):
     role: Literal["user", "assistant", "system", "tool"]
     content: str
     metadata: dict = {}
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> dict:
         return {
@@ -33,8 +33,8 @@ class Session(BaseModel):
     user_id: str
     agent_id: str = "default"
     system_prompt: str | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class PluginTool(BaseModel):

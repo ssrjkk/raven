@@ -107,11 +107,24 @@ class DiscordChannel(BaseChannel):
         if len(parts) >= 2:
             channel_id_str = parts[1]
             try:
-                channel = self._bot.get_channel(int(channel_id_str))
-                if channel:
+                channel_id = int(channel_id_str)
+                channel = self._bot.get_channel(channel_id)
+            except (ValueError, TypeError):
+                channel = None
+            if channel is None:
+                user_id = parts[1].replace("dm_", "") if len(parts) > 1 else ""
+                if user_id:
+                    try:
+                        user = await self._bot.fetch_user(int(user_id))
+                        if user:
+                            channel = user
+                    except Exception:
+                        pass
+            if channel:
+                try:
                     content = message.content
                     if len(content) > 1900:
                         content = content[:1900] + "..."
                     await channel.send(content)
-            except Exception as e:
-                logger.error("Discord send failed: {}", e)
+                except Exception as e:
+                    logger.error("Discord send failed: {}", e)

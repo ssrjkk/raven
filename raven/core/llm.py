@@ -70,9 +70,10 @@ def _parse_openai_response(data: dict) -> LLMResponse:
 class LLMProvider(ABC):
     @abstractmethod
     async def complete_stream(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> AsyncIterator[str]: ...
-
     @abstractmethod
     async def complete(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> LLMResponse: ...
+    async def cleanup(self):
+        pass
 
 
 class OpenRouterProvider(LLMProvider):
@@ -80,6 +81,9 @@ class OpenRouterProvider(LLMProvider):
         self.api_key = settings.openrouter_api_key
         self.base_url = "https://openrouter.ai/api/v1"
         self.http = httpx.AsyncClient(timeout=120)
+
+    async def cleanup(self):
+        await self.http.aclose()
 
     async def _headers(self) -> dict:
         return {
@@ -111,6 +115,9 @@ class OpenAIProvider(LLMProvider):
         self.api_key = settings.openai_api_key
         self.http = httpx.AsyncClient(timeout=120)
 
+    async def cleanup(self):
+        await self.http.aclose()
+
     async def complete_stream(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> AsyncIterator[str]:
         body = {"model": model, "messages": messages, "stream": True}
         if tools:
@@ -135,6 +142,9 @@ class AnthropicProvider(LLMProvider):
     def __init__(self):
         self.api_key = settings.anthropic_api_key
         self.http = httpx.AsyncClient(timeout=120)
+
+    async def cleanup(self):
+        await self.http.aclose()
 
     def _build_body(self, messages: list[dict], model: str, stream: bool, tools: list[dict] | None = None) -> dict:
         body = {
@@ -166,13 +176,24 @@ class AnthropicProvider(LLMProvider):
         resp.raise_for_status()
         data = resp.json()
         content = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
-        return LLMResponse(content=content, finish_reason="stop")
+        tool_calls_raw = [b for b in data.get("content", []) if b.get("type") == "tool_use"]
+        tool_calls = []
+        for tc in tool_calls_raw:
+            tool_calls.append(ToolCall(
+                id=tc.get("id", ""),
+                name=tc.get("name", ""),
+                arguments=tc.get("input", {}),
+            ))
+        return LLMResponse(content=content, tool_calls=tool_calls, finish_reason="stop")
 
 
 class OllamaProvider(LLMProvider):
     def __init__(self):
         self.base_url = settings.ollama_base_url
         self.http = httpx.AsyncClient(timeout=120)
+
+    async def cleanup(self):
+        await self.http.aclose()
 
     async def complete_stream(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> AsyncIterator[str]:
         model_name = model.replace("ollama/", "")
@@ -194,15 +215,35 @@ class OllamaProvider(LLMProvider):
     async def complete(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> LLMResponse:
         model_name = model.replace("ollama/", "")
         body = {"model": model_name, "messages": messages, "stream": False}
+        if tools:
+            body["tools"] = tools
         resp = await self.http.post(f"{self.base_url}/api/chat", json=body)
         resp.raise_for_status()
         data = resp.json()
-        return LLMResponse(content=data.get("message", {}).get("content", ""), finish_reason="stop")
+        content = data.get("message", {}).get("content", "")
+        tool_calls_raw = data.get("message", {}).get("tool_calls", [])
+        tool_calls = []
+        for tc in tool_calls_raw:
+            func = tc.get("function", tc)
+            tool_calls.append(ToolCall(
+                id=tc.get("id", ""),
+                name=func.get("name", ""),
+                arguments=func.get("arguments", {}),
+            ))
+        return LLMResponse(content=content, tool_calls=tool_calls, finish_reason="stop")
 
 
 class LLMRouter:
     def __init__(self):
         self._providers: dict[str, LLMProvider] = {}
+
+    async def cleanup(self):
+        for p in self._providers.values():
+            try:
+                await p.cleanup()
+            except Exception:
+                pass
+        self._providers.clear()
 
     def _get_provider(self, model: str) -> LLMProvider:
         if not model:

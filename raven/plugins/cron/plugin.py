@@ -1,6 +1,5 @@
 from __future__ import annotations
 import asyncio
-import json
 from datetime import datetime, timezone
 from typing import Any
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -13,6 +12,7 @@ PLUGIN_DESCRIPTION = "Schedule and manage recurring tasks using cron expressions
 
 _scheduler: AsyncIOScheduler | None = None
 _callbacks: dict[str, Any] = {}
+_lock = asyncio.Lock()
 
 
 def _get_scheduler() -> AsyncIOScheduler:
@@ -30,7 +30,8 @@ async def register_callback(name: str, callback) -> None:
 
 async def schedule(cron: str, task: str, task_id: str | None = None) -> str:
     """Schedule a task to run on a cron schedule. Args: cron (str): Cron expression (e.g. '0 9 * * *'), task (str): Description of task to run, task_id (str): Optional unique task ID"""
-    scheduler = _get_scheduler()
+    async with _lock:
+        scheduler = _get_scheduler()
     tid = task_id or f"cron_{hash(cron + task) % 100000}"
 
     async def run_task():
@@ -57,7 +58,8 @@ async def schedule(cron: str, task: str, task_id: str | None = None) -> str:
 
 async def list_schedules() -> str:
     """List all active scheduled tasks"""
-    scheduler = _get_scheduler()
+    async with _lock:
+        scheduler = _get_scheduler()
     jobs = scheduler.get_jobs()
     if not jobs:
         return "No scheduled tasks."
@@ -71,7 +73,8 @@ async def list_schedules() -> str:
 
 async def cancel_schedule(task_id: str) -> str:
     """Cancel a scheduled task by its ID. Args: task_id (str): ID of the task to cancel"""
-    scheduler = _get_scheduler()
+    async with _lock:
+        scheduler = _get_scheduler()
     try:
         scheduler.remove_job(task_id)
         return f"Cancelled task: {task_id}"

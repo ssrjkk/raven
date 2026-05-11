@@ -83,9 +83,16 @@ class TaskQueue:
             payload=payload or {},
         )
         await self.db.save_plugin_state("task_queue", task.id, json.dumps(task.to_dict()))
+        await self._update_index(task.id)
         await self._queue.put(task)
         logger.info("Enqueued task: {} ({})", task.id, name)
         return task
+
+    async def _update_index(self, task_id: str):
+        raw = await self.db.get_plugin_state("task_queue", "index")
+        ids = json.loads(raw) if raw else []
+        ids.append(task_id)
+        await self.db.save_plugin_state("task_queue", "index", json.dumps(ids))
 
     async def start(self):
         self._running = True

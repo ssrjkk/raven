@@ -9,18 +9,25 @@ PLUGIN_NAME = "process"
 PLUGIN_DESCRIPTION = "Run, list, and manage system processes"
 
 
-async def run(command: str, timeout: int = 30, shell: bool = True) -> str:
-    """Run a shell command and return output. Args: command (str): Command to execute, timeout (int): Max execution time in seconds, shell (bool): Use shell"""
+async def run(command: str, timeout: int = 30, shell: bool = False) -> str:
+    """Run a command and return output. Args: command (str): Command to execute, timeout (int): Max execution time, shell (bool): Use shell (default: False for safety)"""
     try:
-        proc = await asyncio.create_subprocess_shell(
-            command if shell else command.split(),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        if shell:
+            proc = await asyncio.create_subprocess_shell(
+                command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        else:
+            proc = await asyncio.create_subprocess_exec(
+                *command.split(),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except asyncio.TimeoutError:
-            proc.kill()
+            await proc.kill()
             return f"Command timed out after {timeout}s"
 
         result = ""
@@ -30,7 +37,7 @@ async def run(command: str, timeout: int = 30, shell: bool = True) -> str:
             error_text = stderr.decode("utf-8", errors="replace")
             if error_text.strip():
                 result += f"\n[stderr]\n{error_text}"
-        if proc.returncode != 0:
+        if proc.returncode is not None and proc.returncode != 0:
             result += f"\n[exit code: {proc.returncode}]"
         return result[:5000] or "(no output)"
     except Exception as e:
@@ -39,7 +46,8 @@ async def run(command: str, timeout: int = 30, shell: bool = True) -> str:
 
 async def run_python(code: str, timeout: int = 15) -> str:
     """Run Python code in a subprocess. Args: code (str): Python code, timeout (int): Max execution time"""
-    return await run(f"{sys.executable} -c {_quote(code)}", timeout=timeout, shell=True)
+    import shlex
+    return await run(f"{sys.executable} -c {shlex.quote(code)}", timeout=timeout, shell=True)
 
 
 async def list_processes(filter: str = "") -> str:
@@ -48,7 +56,7 @@ async def list_processes(filter: str = "") -> str:
         cmd = "tasklist /FO CSV /NH"
     else:
         cmd = "ps aux --sort=-%mem"
-    result = await run(cmd, timeout=10)
+    result = await run(cmd, timeout=10, shell=True)
     if filter:
         lines = result.split("\n")
         filtered = [l for l in lines if filter.lower() in l.lower()]
@@ -68,8 +76,3 @@ async def kill(pid: int, force: bool = False) -> str:
         return f"Permission denied to kill process {pid}"
     except Exception as e:
         return f"Error killing process {pid}: {e}"
-
-
-def _quote(s: str) -> str:
-    escaped = s.replace("\\", "\\\\").replace('"', '\\"').replace("'", "'\\''")
-    return f'"{escaped}"'

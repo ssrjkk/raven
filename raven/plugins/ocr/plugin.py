@@ -20,7 +20,7 @@ async def ocr_image(image_path: str, language: str = "eng+rus") -> str:
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
         except asyncio.TimeoutError:
-            proc.kill()
+            await proc.kill()
             return "OCR timed out after 30s"
         text = stdout.decode("utf-8", errors="replace").strip()
         if stderr:

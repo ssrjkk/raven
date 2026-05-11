@@ -143,6 +143,20 @@ from pydantic import BaseModel
         allow_headers=["*"],
     )
 
+    @api_app.middleware("http")
+    async def auth_middleware(request, call_next):
+        import os
+        from fastapi.responses import JSONResponse
+        secret_key = os.getenv("WEB_SECRET_KEY", "")
+        if secret_key:
+            auth = request.headers.get("X-Raven-Key", "")
+            if auth != secret_key:
+                path = request.url.path
+                if path.startswith(("/api/shutdown", "/api/raven", "/api/agents")):
+                    return JSONResponse(status_code=403, content={"error": "Forbidden"})
+        response = await call_next(request)
+        return response
+
     stop_event = asyncio.Event()
 
     def shutdown_handler():
@@ -252,6 +266,10 @@ def status():
         table.add_row("Model", "⚪", settings.default_model)
         table.add_row("DM Policy", "⚪", settings.dm_policy)
         console.print(table)
+
+        if not api_ok:
+            raise SystemExit(1)
+
     asyncio.run(_status())
 
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 import asyncio
-import os
-import sys
+import shlex
 from pathlib import Path
 from loguru import logger
 
@@ -29,8 +28,9 @@ async def git_commit(path: str = ".", message: str = "") -> str:
     """Stage all and commit. Args: path (str): Repository path, message (str): Commit message"""
     if not message:
         return "Commit message is required"
+    safe_msg = message.replace('"', '\\"')[:200]
     await _run_git("add -A", path)
-    return await _run_git(f'commit -m "{message}"', path)
+    return await _run_git(f'commit -m "{safe_msg}"', path)
 
 
 async def git_branch(path: str = ".", create: str = "") -> str:
@@ -55,7 +55,7 @@ async def git_pull(path: str = ".", remote: str = "origin", branch: str = "") ->
 async def _run_git(args: str, repo_path: str) -> str:
     try:
         proc = await asyncio.create_subprocess_exec(
-            "git", *args.split(),
+            "git", *shlex.split(args),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=Path(repo_path).resolve() if repo_path != "." else None,
@@ -68,7 +68,7 @@ async def _run_git(args: str, repo_path: str) -> str:
             err = stderr.decode("utf-8", errors="replace").strip()
             if err:
                 result += f"\n[stderr]\n{err}"
-        if proc.returncode != 0:
+        if proc.returncode is not None and proc.returncode != 0:
             result += f"\n[exit code: {proc.returncode}]"
         return result[:3000] or "(no output)"
     except FileNotFoundError:

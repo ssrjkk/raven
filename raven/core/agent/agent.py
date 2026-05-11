@@ -103,25 +103,25 @@ class Agent:
     async def _auto_memory(self, user_text: str, response_text: str):
         if not self.config.use_memory:
             return
-        recall_tool = self._tool_map.get("recall")
+        recall_tool = self._tool_map.get("search_memory")
         remember_tool = self._tool_map.get("remember")
         if recall_tool and user_text.strip():
             try:
-                await recall_tool.handler(query=user_text, limit=3)
+                await recall_tool.handler(query=user_text, n_results=3)
             except Exception as e:
                 logger.debug("Auto-recall: {}", e)
         if remember_tool and response_text.strip():
             try:
-                await remember_tool.handler(content=f"User: {user_text[:300]}")
+                await remember_tool.handler(key="auto", value=f"User: {user_text[:300]}")
             except Exception as e:
                 logger.debug("Auto-remember: {}", e)
 
     async def _get_recall_context(self, query: str) -> str | None:
-        recall_tool = self._tool_map.get("recall")
+        recall_tool = self._tool_map.get("search_memory")
         if not recall_tool:
             return None
         try:
-            result = await recall_tool.handler(query=query, limit=5)
+            result = await recall_tool.handler(query=query, n_results=5)
             text = str(result) if result else ""
             return text if text.strip() and "No relevant memories" not in text else None
         except Exception as e:
@@ -148,7 +148,6 @@ class Agent:
 
         if not self.config.stateless and len(messages) > self.config.max_history + 3:
             messages = await self._compress(messages)
-            messages.append({"role": "user", "content": user_message})
 
         schemas = self._tool_schemas() if self.tools else None
         tool_used = False
