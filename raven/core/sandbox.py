@@ -80,7 +80,10 @@ class Sandbox:
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.config.timeout)
         except asyncio.TimeoutError:
-            await proc.kill()
+            try:
+                proc.kill()
+            except Exception:
+                pass
             return "Execution timed out"
         result = ""
         if stdout:

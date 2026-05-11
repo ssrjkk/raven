@@ -7,10 +7,12 @@ from raven.core.models import Message, IncomingMessage
 from raven.core.config import settings
 
 try:
-    from slack_sdk.web.async_client import AsyncWebClient
+    from slack_sdk.web.async_client import AsyncWebClient as _SlackClient
     from slack_sdk.errors import SlackApiError
     HAS_SLACK = True
 except ImportError:
+    _SlackClient = None
+    SlackApiError = Exception
     HAS_SLACK = False
 
 
@@ -20,7 +22,7 @@ class SlackChannel(BaseChannel):
     def __init__(self):
         self._token = settings.slack_bot_token
         self._signing_secret = settings.slack_signing_secret
-        self._client: AsyncWebClient | None = None
+        self._client: _SlackClient | None = None
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
         self._ready = False
 
@@ -31,7 +33,7 @@ class SlackChannel(BaseChannel):
         if not self._token:
             logger.warning("Slack token not configured, skipping")
             return
-        self._client = AsyncWebClient(token=self._token)
+        self._client = _SlackClient(token=self._token)
         self._ready = True
         logger.info("Slack channel started")
 

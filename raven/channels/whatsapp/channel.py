@@ -33,6 +33,7 @@ class WhatsAppChannel(BaseChannel):
     async def handle_webhook(self, body: dict) -> bool:
         if not self._handler or not self._ready:
             return False
+        handled = False
         entry = body.get("entry", [])
         for e in entry:
             changes = e.get("changes", [])
@@ -53,7 +54,8 @@ class WhatsAppChannel(BaseChannel):
                                 metadata={"msg_id": msg_id, "from": from_id},
                             )
                             await self._handler(event)
-        return True
+                            handled = True
+        return handled
 
     async def send(self, session_id: str, message: Message):
         logger.debug("WhatsApp send stub for session {}: {}", session_id, message.content[:80])
