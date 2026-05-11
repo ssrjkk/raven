@@ -1,6 +1,7 @@
 from __future__ import annotations
 import random
 import string
+from uuid import uuid4
 from typing import Any, Callable, Awaitable, TYPE_CHECKING
 from loguru import logger
 from raven.core.config import settings
@@ -11,6 +12,9 @@ from raven.core.llm import LLMRouter
 from raven.core.models import IncomingMessage, Message
 from raven.core.agent.agent import Agent
 from raven.core.agent.registry import AgentRegistry
+from raven.core.failover import ModelFailover
+from raven.core.sandbox import Sandbox, SandboxConfig
+from raven.core.skills import SkillsRegistry, skills_registry, Skill
 from raven.core.plugin_loader import PluginLoader
 from raven.core.health import health
 from raven.core.logging import audit, get_correlation_id
@@ -21,14 +25,30 @@ class Gateway:
     def __init__(self, db: Database, plugin_loader: PluginLoader):
         self.db = db
         self.llm = LLMRouter()
+        self.failover = ModelFailover(self.llm)
         self.plugin_loader = plugin_loader
         self.channels: dict[str, Any] = {}
         self._running = False
         self.registry = AgentRegistry(db, self.llm, plugin_loader.tools)
+        self.sandbox = Sandbox()
+        self._skill_dirs: list[str] = []
 
     def register_channel(self, channel: BaseChannel):
         self.channels[channel.channel_id] = channel
         logger.info("Registered channel: {}", channel.channel_id)
+
+    def load_skills(self, skills_path: str | None = None):
+        from pathlib import Path
+        paths = [skills_path] if skills_path else []
+        base = Path(__file__).parent.parent.parent
+        ws = base / "workspace" / "skills"
+        if ws.exists():
+            paths.append(str(ws))
+        for p in paths:
+            skills_registry.register_from_dir(Path(p))
+
+    def register_skill(self, skill: Skill):
+        skills_registry.register(skill)
 
     async def start(self):
         self.registry.setup_defaults()
@@ -40,6 +60,7 @@ class Gateway:
                 logger.info("Channel started: {}", cid)
             except Exception as e:
                 logger.error("Failed to start channel {}: {}", cid, e)
+        self.load_skills()
         self._register_health_checks()
 
     async def stop(self):
@@ -98,14 +119,21 @@ class Gateway:
                 metrics.inc("pairing_codes_sent", {"channel": event.channel})
                 return
 
+            handled = await self._handle_command(event)
+            if handled:
+                return
+
             session_id = event.session_id or f"{event.channel}:{event.user_id}:default"
             session = await self.db.get_or_create_session(session_id, event.channel, event.user_id)
             agent = self.registry.create_agent(session)
 
             event.text = self._clean_text(event.channel, event.text)
 
+            skill_prompts = skills_registry.active_prompts(session.agent_skills or [])
+            recall_context = None
+
             full_response = ""
-            async for token in agent.run(event.text):
+            async for token in agent.run(event.text, recall_context=recall_context):
                 full_response += token
 
             if full_response.strip():
@@ -117,6 +145,39 @@ class Gateway:
             logger.error("handle_message error: {}", e)
             metrics.inc("message_errors", {"channel": event.channel})
             await self._send(event.channel, event.session_id, f"Sorry, an error occurred: {str(e)[:200]}")
+
+    async def _handle_command(self, event: IncomingMessage) -> bool:
+        text = event.text.strip()
+        cmd = text.split()[0].lower() if text else ""
+
+        if cmd == "/status":
+            await self._send(event.channel, event.session_id, f"Raven AI is running. Channels: {', '.join(self.channels.keys())}")
+            return True
+        if cmd == "/new":
+            session_id = f"{event.channel}:{event.user_id}:{uuid4().hex[:8]}"
+            await self._send(event.channel, event.session_id, "Session reset.")
+            return True
+        if cmd == "/reset":
+            await self._send(event.channel, event.session_id, "Session reset.")
+            return True
+        if cmd == "/help":
+            await self._send(event.channel, event.session_id, (
+                "Commands:\n"
+                "/status - Show bot status\n"
+                "/new - Start fresh conversation\n"
+                "/reset - Reset current session\n"
+                "/help - Show this help\n"
+                "/pair <code> - Authorize with pairing code"
+            ))
+            return True
+        if cmd == "/skills":
+            names = skills_registry.list_names()
+            if names:
+                await self._send(event.channel, event.session_id, f"Skills: {', '.join(names)}")
+            else:
+                await self._send(event.channel, event.session_id, "No skills loaded.")
+            return True
+        return False
 
     async def _send(self, channel_id: str, session_id: str, text: str):
         channel = self.channels.get(channel_id)

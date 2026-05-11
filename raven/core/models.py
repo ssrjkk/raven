@@ -32,6 +32,7 @@ class Session(BaseModel):
     channel: str
     user_id: str
     agent_id: str = "default"
+    agent_skills: list[str] = []
     system_prompt: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -43,8 +44,7 @@ class PluginTool(BaseModel):
     parameters: dict
     handler: Callable[..., Any]
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = {"arbitrary_types_allowed": True}
 
 
 class IncomingMessage(BaseModel):

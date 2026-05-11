@@ -18,6 +18,10 @@ class Settings(BaseSettings):
 
     telegram_bot_token: str = ""
     discord_bot_token: str = ""
+    slack_bot_token: str = ""
+    slack_signing_secret: str = ""
+    matrix_homeserver: str = ""
+    matrix_access_token: str = ""
 
     dm_policy: str = "pairing"
     web_port: int = 18888

@@ -29,6 +29,10 @@ from pydantic import BaseModel
 from raven.channels.telegram.channel import TelegramChannel
 from raven.channels.discord.channel import DiscordChannel
 from raven.channels.webchat.channel import WebChatChannel
+from raven.channels.slack.channel import SlackChannel
+from raven.channels.whatsapp.channel import WhatsAppChannel
+from raven.channels.matrix.channel import MatrixChannel
+from raven.core.webhooks import create_webhook_router
 
 console = Console()
 
@@ -57,14 +61,23 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     telegram = TelegramChannel()
     discord = DiscordChannel()
     webchat = WebChatChannel(gateway.db)
+    slack = SlackChannel()
+    whatsapp = WhatsAppChannel()
+    matrix = MatrixChannel()
 
     telegram.on_message(gateway.handle_message)
     discord.on_message(gateway.handle_message)
     webchat.on_message(gateway.handle_message)
+    slack.on_message(gateway.handle_message)
+    whatsapp.on_message(gateway.handle_message)
+    matrix.on_message(gateway.handle_message)
 
     gateway.register_channel(telegram)
     gateway.register_channel(discord)
     gateway.register_channel(webchat)
+    gateway.register_channel(slack)
+    gateway.register_channel(whatsapp)
+    gateway.register_channel(matrix)
 
     import uvicorn
     from fastapi import FastAPI
@@ -82,6 +95,13 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     api_app.middleware("http")(request_id_middleware)
     api_app.middleware("http")(rate_limit_middleware)
     api_app.middleware("http")(auth_middleware)
+
+    api_app.state.slack_channel = slack
+    api_app.state.whatsapp_channel = whatsapp
+    api_app.state.matrix_channel = matrix
+
+    webhook_router = create_webhook_router(gateway.db, gateway.handle_message)
+    api_app.include_router(webhook_router)
 
     @api_app.get("/api/status")
     async def api_status():
@@ -312,6 +332,9 @@ def doctor():
     checks.append(("Anthropic", "✅ Configured" if settings.anthropic_api_key else "⚠️  Not set"))
     checks.append(("Telegram", "✅ Configured" if settings.telegram_bot_token else "⚠️  Not set"))
     checks.append(("Discord", "✅ Configured" if settings.discord_bot_token else "⚠️  Not set"))
+    checks.append(("Slack", "✅ Configured" if settings.slack_bot_token else "⚠️  Not set"))
+    checks.append(("WhatsApp", "✅ Configured" if settings.web_secret_key else "⚠️  Needs web_secret_key"))
+    checks.append(("Matrix", "✅ Configured" if settings.matrix_homeserver else "⚠️  Not set"))
     checks.append(("DM Policy", settings.dm_policy))
     checks.append(("Web Secret Key", "✅ Set" if settings.web_secret_key else "⚠️  Not set"))
     checks.append(("JSON Logging", "✅ On" if settings.json_log else "❌ Off"))
@@ -342,6 +365,7 @@ def onboard():
     setup["anthropic"] = click.prompt("Anthropic API Key (optional)", default="")
     setup["telegram"] = click.prompt("Telegram Bot Token (optional)", default="")
     setup["discord"] = click.prompt("Discord Bot Token (optional)", default="")
+    setup["slack"] = click.prompt("Slack Bot Token (optional)", default="")
     setup["policy"] = click.prompt("DM Policy [pairing/open/closed]", default="pairing")
     setup["port"] = click.prompt("Web UI Port", default=18888, type=int)
     setup["secret"] = click.prompt("Web Secret Key (API auth, optional)", default="")
@@ -363,6 +387,8 @@ def onboard():
         env_vars["TELEGRAM_BOT_TOKEN"] = setup["telegram"]
     if setup["discord"]:
         env_vars["DISCORD_BOT_TOKEN"] = setup["discord"]
+    if setup["slack"]:
+        env_vars["SLACK_BOT_TOKEN"] = setup["slack"]
     env_vars["DM_POLICY"] = setup["policy"]
     env_vars["WEB_PORT"] = str(setup["port"])
     if setup["secret"]:
@@ -427,7 +453,7 @@ def message():
 
 
 @message.command("send")
-@click.option("--channel", required=True, help="Target channel (telegram, discord, webchat)")
+@click.option("--channel", required=True, help="Target channel (telegram, discord, webchat, slack, whatsapp)")
 @click.option("--user", required=True, help="User ID")
 @click.option("--text", required=True, help="Message text")
 @click.option("--session", default=None, help="Session ID (optional)")
