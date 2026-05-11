@@ -83,6 +83,12 @@ class AgentRegistry:
         self.map_channel("whatsapp", "default")
         self.map_channel("matrix", "default")
         self.map_channel("webhook", "assistant")
+        self.map_channel("googlechat", "default")
+        self.map_channel("signal", "default")
+        self.map_channel("irc", "default")
+        self.map_channel("teams", "default")
+        self.map_channel("feishu", "default")
+        self.map_channel("line", "default")
 
     def list_agents(self) -> list[dict[str, Any]]:
         return [

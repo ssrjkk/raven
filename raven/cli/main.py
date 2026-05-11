@@ -32,6 +32,12 @@ from raven.channels.webchat.channel import WebChatChannel
 from raven.channels.slack.channel import SlackChannel
 from raven.channels.whatsapp.channel import WhatsAppChannel
 from raven.channels.matrix.channel import MatrixChannel
+from raven.channels.googlechat.channel import GoogleChatChannel
+from raven.channels.signal.channel import SignalChannel
+from raven.channels.irc.channel import IRCChannel
+from raven.channels.teams.channel import TeamsChannel
+from raven.channels.feishu.channel import FeishuChannel
+from raven.channels.line.channel import LINECChannel
 from raven.core.webhooks import create_webhook_router
 
 console = Console()
@@ -67,6 +73,12 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     slack = SlackChannel()
     whatsapp = WhatsAppChannel()
     matrix = MatrixChannel()
+    googlechat = GoogleChatChannel()
+    signal = SignalChannel()
+    irc = IRCChannel()
+    teams = TeamsChannel()
+    feishu = FeishuChannel()
+    line = LINECChannel()
 
     telegram.on_message(gateway.handle_message)
     discord.on_message(gateway.handle_message)
@@ -74,6 +86,12 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     slack.on_message(gateway.handle_message)
     whatsapp.on_message(gateway.handle_message)
     matrix.on_message(gateway.handle_message)
+    googlechat.on_message(gateway.handle_message)
+    signal.on_message(gateway.handle_message)
+    irc.on_message(gateway.handle_message)
+    teams.on_message(gateway.handle_message)
+    feishu.on_message(gateway.handle_message)
+    line.on_message(gateway.handle_message)
 
     gateway.register_channel(telegram)
     gateway.register_channel(discord)
@@ -81,6 +99,12 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     gateway.register_channel(slack)
     gateway.register_channel(whatsapp)
     gateway.register_channel(matrix)
+    gateway.register_channel(googlechat)
+    gateway.register_channel(signal)
+    gateway.register_channel(irc)
+    gateway.register_channel(teams)
+    gateway.register_channel(feishu)
+    gateway.register_channel(line)
 
     import uvicorn
     from fastapi import FastAPI
@@ -102,6 +126,12 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     api_app.state.slack_channel = slack
     api_app.state.whatsapp_channel = whatsapp
     api_app.state.matrix_channel = matrix
+    api_app.state.googlechat_channel = googlechat
+    api_app.state.signal_channel = signal
+    api_app.state.irc_channel = irc
+    api_app.state.teams_channel = teams
+    api_app.state.feishu_channel = feishu
+    api_app.state.line_channel = line
 
     webhook_router = create_webhook_router(gateway.db, gateway.handle_message)
     api_app.include_router(webhook_router)
@@ -338,6 +368,7 @@ def doctor():
     checks.append(("Slack", "✅ Configured" if settings.slack_bot_token else "⚠️  Not set"))
     checks.append(("WhatsApp", "✅ Configured" if settings.web_secret_key else "⚠️  Needs web_secret_key"))
     checks.append(("Matrix", "✅ Configured" if settings.matrix_homeserver else "⚠️  Not set"))
+    checks.append(("Channels", f"12 registered"))
     checks.append(("DM Policy", settings.dm_policy))
     checks.append(("Web Secret Key", "✅ Set" if settings.web_secret_key else "⚠️  Not set"))
     checks.append(("JSON Logging", "✅ On" if settings.json_log else "❌ Off"))
@@ -456,7 +487,7 @@ def message():
 
 
 @message.command("send")
-@click.option("--channel", required=True, help="Target channel (telegram, discord, webchat, slack, whatsapp)")
+@click.option("--channel", required=True, help="Target channel (telegram, discord, webchat, slack, whatsapp, matrix, googlechat, signal, irc, teams, feishu, line)")
 @click.option("--user", required=True, help="User ID")
 @click.option("--text", required=True, help="Message text")
 @click.option("--session", default=None, help="Session ID (optional)")
