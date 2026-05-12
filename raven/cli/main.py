@@ -24,7 +24,13 @@ from raven.core.plugin_loader import PluginLoader
 from raven.core.logging import setup_logging, audit
 from raven.core.health import health
 from raven.core.metrics import metrics
-from raven.core.middleware import request_id_middleware, rate_limit_middleware, auth_middleware, rate_limiter
+from raven.core.middleware import request_id_middleware, rate_limit_middleware, auth_middleware, error_handler_middleware, rate_limiter
+from raven.core.audit import audit_logger, AuditEventType
+from raven.core.http_client import client_manager
+from raven.core.config_watcher import ConfigWatcher
+from raven.core.jobs import job_manager
+from raven.core.admin_api import create_admin_router
+from raven.core.secrets import secrets
 from pydantic import BaseModel
 from raven.channels.telegram.channel import TelegramChannel
 from raven.channels.discord.channel import DiscordChannel
@@ -53,6 +59,10 @@ def create_gateway() -> Gateway:
 
 
 async def _run_gateway(gateway: Gateway, web_port: int):
+    audit_logger.start()
+    secrets.load()
+    config_watcher = ConfigWatcher()
+    await config_watcher.start()
     await gateway.db.connect()
     plugins_dir = Path(__file__).parent.parent / "plugins"
     plugin_loader = gateway.plugin_loader
@@ -122,6 +132,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     api_app.middleware("http")(request_id_middleware)
     api_app.middleware("http")(rate_limit_middleware)
     api_app.middleware("http")(auth_middleware)
+    api_app.middleware("http")(error_handler_middleware)
 
     api_app.state.slack_channel = slack
     api_app.state.whatsapp_channel = whatsapp
@@ -132,9 +143,22 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     api_app.state.teams_channel = teams
     api_app.state.feishu_channel = feishu
     api_app.state.line_channel = line
+    api_app.state.stop_event = stop_event
 
     webhook_router = create_webhook_router(gateway.db, gateway.handle_message)
     api_app.include_router(webhook_router)
+
+    def _get_channels():
+        return gateway.channels
+
+    def _get_registry():
+        return gateway.registry
+
+    def _get_gateway():
+        return gateway
+
+    admin_router = create_admin_router(_get_channels, _get_registry, _get_gateway)
+    api_app.include_router(admin_router)
 
     @api_app.get("/api/status")
     async def api_status():
@@ -248,6 +272,18 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             pass
         try:
             await asyncio.wait_for(gw.db.disconnect(), timeout=5)
+        except Exception:
+            pass
+        try:
+            await asyncio.wait_for(client_manager.close(), timeout=5)
+        except Exception:
+            pass
+        try:
+            await config_watcher.stop()
+        except Exception:
+            pass
+        try:
+            audit_logger.stop()
         except Exception:
             pass
         sv_task.cancel()

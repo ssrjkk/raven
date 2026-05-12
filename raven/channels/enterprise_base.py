@@ -7,6 +7,9 @@ from typing import Awaitable, Callable
 
 from loguru import logger
 
+from raven.core.audit import AuditEventType, audit_logger
+from raven.core.http_client import client_manager
+from raven.core.metrics import metrics
 from raven.core.models import IncomingMessage, Message
 
 
@@ -103,13 +106,7 @@ class EnterpriseChannel(ABC):
         return {**self._stats, "channel": self.channel_id}
 
     async def _post(self, url: str, json: dict, headers: dict | None = None, timeout: float = 15.0) -> dict:
-        import httpx
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.post(url, json=json, headers=headers or {})
-            resp.raise_for_status()
-            if resp.content:
-                return resp.json()
-            return {}
+        return await client_manager.post(url, json=json, headers=headers or {}, timeout=timeout)
 
     async def _retry_call(self, fn, max_retries: int = 3, base_delay: float = 1.0):
         last_ex = None
@@ -123,3 +120,14 @@ class EnterpriseChannel(ABC):
                     logger.warning("[{}] retry {}/{} after {}s: {}", self.channel_id, attempt + 1, max_retries, wait, e)
                     await asyncio.sleep(wait)
         raise last_ex  # type: ignore
+
+    def _audit_send(self, session_id: str, message: Message):
+        user_id = session_id.split(":")[1] if ":" in session_id else session_id
+        audit_logger.log(AuditEventType.MESSAGE_SENT, f"channel:{self.channel_id}", user_id,
+                         detail={"length": len(message.content)}, channel=self.channel_id)
+        metrics.inc(f"channel.{self.channel_id}.sent", {"channel": self.channel_id})
+
+    def _audit_receive(self, user_id: str, text: str):
+        audit_logger.log(AuditEventType.MESSAGE_RECEIVED, user_id, f"channel:{self.channel_id}",
+                         detail={"length": len(text)}, channel=self.channel_id)
+        metrics.inc(f"channel.{self.channel_id}.received", {"channel": self.channel_id})

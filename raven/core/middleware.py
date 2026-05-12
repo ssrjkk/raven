@@ -1,13 +1,18 @@
 from __future__ import annotations
+
 import asyncio
 import time
 import uuid
 from collections import defaultdict
+
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from loguru import logger
-from raven.core.logging import set_correlation_id, get_correlation_id
+
+from raven.core.audit import AuditEventType, audit_logger
 from raven.core.config import settings
+from raven.core.errors import AppError, ErrorCode, classify_error
+from raven.core.logging import set_correlation_id
 from raven.core.metrics import metrics
 
 
@@ -58,6 +63,19 @@ async def request_id_middleware(request: Request, call_next):
 async def rate_limit_middleware(request: Request, call_next):
     if request.method == "GET":
         return await call_next(request)
+
+
+async def error_handler_middleware(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except AppError as e:
+        status = {ErrorCode.AUTH_DENIED: 403, ErrorCode.RATE_LIMITED: 429, ErrorCode.NOT_FOUND: 404}.get(e.code, 400)
+        audit_logger.log(AuditEventType.ERROR, "api", request.url.path, detail=e.to_dict())
+        return JSONResponse(status_code=status, content=e.to_dict())
+    except Exception as e:
+        classify_error(e)
+        logger.error("Unhandled error: {} {}", type(e).__name__, e)
+        return JSONResponse(status_code=500, content={"code": "internal.error", "message": str(e)[:200]})
     client_ip = request.client.host if request.client else "unknown"
     allowed = await rate_limiter.check(client_ip)
     if not allowed:
