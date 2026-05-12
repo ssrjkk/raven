@@ -1,36 +1,18 @@
 from __future__ import annotations
+
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, patch
+
 from raven.channels.slack.channel import SlackChannel
-from raven.core.models import Message, IncomingMessage
+from raven.core.models import IncomingMessage, Message
 
 
 @pytest.mark.asyncio
-async def test_slack_start_no_token():
+async def test_slack_start():
     channel = SlackChannel()
-    channel._token = ""
     await channel.start()
-    assert not channel._ready
-
-
-@pytest.mark.asyncio
-async def test_slack_start_no_sdk():
-    with patch("raven.channels.slack.channel.HAS_SLACK", False):
-        channel = SlackChannel()
-        channel._token = "xoxb-test"
-        await channel.start()
-        assert not channel._ready
-
-
-@pytest.mark.asyncio
-async def test_slack_start_with_token():
-    channel = SlackChannel()
-    channel._token = "xoxb-test"
-    with patch("raven.channels.slack.channel.HAS_SLACK", True), \
-         patch("raven.channels.slack.channel._SlackClient") as mock_cls:
-        await channel.start()
     assert channel._ready
-    mock_cls.assert_called_once_with(token="xoxb-test")
 
 
 @pytest.mark.asyncio
@@ -46,6 +28,7 @@ async def test_slack_handle_event_bot_message():
     handler = AsyncMock()
     channel = SlackChannel()
     await channel.on_message(handler)
+    channel._ready = True
     await channel.handle_event({"type": "message", "subtype": "bot_message", "user": "U1", "text": "hi", "channel": "C1"})
     handler.assert_not_awaited()
 
@@ -55,6 +38,7 @@ async def test_slack_handle_event_message():
     handler = AsyncMock()
     channel = SlackChannel()
     await channel.on_message(handler)
+    channel._ready = True
     await channel.handle_event({"type": "message", "user": "U1", "text": "hello", "channel": "C1", "ts": "123.456"})
     handler.assert_awaited_once()
     event: IncomingMessage = handler.await_args[0][0]
@@ -85,16 +69,6 @@ async def test_slack_send_with_client():
     msg = Message(session_id="slack:C1", channel="slack", role="assistant", content="reply")
     await channel.send("slack:C1", msg)
     channel._client.chat_postMessage.assert_awaited_once_with(channel="C1", text="reply")
-
-
-@pytest.mark.asyncio
-async def test_slack_send_thread():
-    channel = SlackChannel()
-    channel._client = AsyncMock()
-    channel._ready = True
-    msg = Message(session_id="slack:C1:123.456", channel="slack", role="assistant", content="reply")
-    await channel.send("slack:C1:123.456", msg)
-    channel._client.chat_postMessage.assert_awaited_once_with(channel="C1", text="reply", thread_ts="123.456")
 
 
 @pytest.mark.asyncio

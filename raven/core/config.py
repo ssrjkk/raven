@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     irc_port: int = 6697
     irc_nick: str = ""
     irc_password: str = ""
+    irc_channels: str = ""
     teams_webhook_url: str = ""
     feishu_webhook_url: str = ""
     feishu_app_id: str = ""

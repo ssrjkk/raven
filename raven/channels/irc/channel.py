@@ -1,76 +1,115 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Awaitable, Callable
+import re
 
 from loguru import logger
 
-from raven.channels.base import BaseChannel
+from raven.channels.enterprise_base import EnterpriseChannel
 from raven.core.config import settings
 from raven.core.models import IncomingMessage, Message
 
 
-class IRCChannel(BaseChannel):
+class IRCChannel(EnterpriseChannel):
     channel_id = "irc"
 
     def __init__(self):
-        self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
+        super().__init__()
+        self._nick = "raven-bot"
+        self._server = "irc.libera.chat"
+        self._port = 6697
+        self._password = ""
+        self._user = "raven-bot"
+        self._realname = "Raven AI"
+        self._channels_to_join: list[str] = []
+        self._reader: asyncio.StreamReader | None = None
+        self._writer: asyncio.StreamWriter | None = None
+        self._reconnect_delay = 1.0
+
+    async def _start(self):
         self._server = settings.irc_server or "irc.libera.chat"
         self._port = settings.irc_port or 6697
         self._nick = settings.irc_nick or "raven-bot"
         self._password = settings.irc_password or ""
-        self._channels: list[str] = []
-        self._reader: asyncio.StreamReader | None = None
-        self._writer: asyncio.StreamWriter | None = None
-        self._ready = False
+        self._user = settings.irc_nick or "raven-bot"
+        self._realname = "Raven AI"
+        self._channels_to_join = (settings.irc_channels or "#raven").split(",")
+        self._reconnect_delay = 1.0
 
-    async def start(self):
-        self._ready = True
-        logger.info("IRC channel started: {}:{}/{}", self._server, self._port, self._nick)
+    async def _stop(self):
+        self._writer = None
+        self._reader = None
 
-    async def stop(self):
-        self._ready = False
-        if self._writer:
+    async def _connect_irc(self):
+        loop = asyncio.get_running_loop()
+        self._reader, self._writer = await asyncio.open_connection(self._server, self._port, loop=loop)
+        self._writer.write(f"NICK {self._nick}\r\n".encode())
+        self._writer.write(f"USER {self._user} 0 * :{self._realname}\r\n".encode())
+        await self._writer.drain()
+        if self._password:
+            self._writer.write(f"PRIVMSG NickServ :IDENTIFY {self._password}\r\n".encode())
+            await self._writer.drain()
+        for ch in self._channels_to_join:
+            self._writer.write(f"JOIN {ch}\r\n".encode())
+        await self._writer.drain()
+        self._reconnect_delay = 1.0
+        asyncio.create_task(self._read_loop())
+
+    async def _read_loop(self):
+        while self._ready and self._reader:
             try:
-                self._writer.close()
-            except Exception:
-                pass
-        logger.info("IRC channel stopped")
+                line = (await self._reader.readline()).decode("utf-8", errors="replace").strip()
+                if not line:
+                    continue
+                self._handle_raw(line)
+            except Exception as e:
+                if self._ready:
+                    logger.warning("[irc] read error: {} — reconnecting", e)
+                    self._stats["reconnects"] += 1
+                    await asyncio.sleep(self._reconnect_delay)
+                    self._reconnect_delay = min(self._reconnect_delay * 2, 60)
+                    try:
+                        self._reader, self._writer = await asyncio.open_connection(self._server, self._port)
+                    except Exception:
+                        pass
 
-    async def connect(self):
-        pass
+    _PRIVMSG_RE = re.compile(r":(\S+)!\S+ PRIVMSG (\S+) :(.+)")
 
-    async def disconnect(self):
-        await self.stop()
-
-    async def on_message(self, handler: Callable[[IncomingMessage], Awaitable[None]]):
-        self._handler = handler
+    def _handle_raw(self, line: str):
+        if line.startswith("PING"):
+            if self._writer:
+                self._writer.write(line.replace("PING", "PONG").encode() + b"\r\n")
+        m = self._PRIVMSG_RE.match(line)
+        if m:
+            nick, target, text = m.group(1), m.group(2), m.group(3)
+            if nick != self._nick and text and self._handler:
+                self._stats["received"] += 1
+                asyncio.create_task(self._handler(IncomingMessage(
+                    channel="irc",
+                    user_id=nick,
+                    session_id=f"irc:{target}:{nick}",
+                    text=text,
+                    metadata={"channel": target, "server": self._server},
+                )))
 
     async def handle_message(self, nick: str, channel: str, text: str):
-        if not self._handler or not self._ready:
+        if not self._handler or not self._ready or nick == self._nick:
             return
-        if nick == self._nick:
-            return
-        msg = IncomingMessage(
+        self._stats["received"] += 1
+        await self._handler(IncomingMessage(
             channel="irc",
             user_id=nick,
             session_id=f"irc:{channel}:{nick}",
             text=text,
             metadata={"channel": channel, "server": self._server},
-        )
-        await self._handler(msg)
+        ))
 
-    async def send(self, session_id: str, message: Message):
-        if not self._ready:
-            return
+    async def _send_message(self, session_id: str, message: Message):
         parts = session_id.split(":")
         target = parts[1] if len(parts) >= 2 else None
         if not target:
             return
-        text = message.content[:400].replace("\n", " ")
         if self._writer:
-            try:
-                self._writer.write(f"PRIVMSG {target} :{text}\r\n".encode())
-                await self._writer.drain()
-            except Exception as e:
-                logger.error("IRC send failed: {}", e)
+            text = message.content[:400].replace("\n", " ")
+            self._writer.write(f"PRIVMSG {target} :{text}\r\n".encode())
+            await self._writer.drain()
