@@ -1,7 +1,7 @@
 [project]
 name = "raven-ai"
-version = "0.2.0"
-description = "Personal AI assistant — 24/7, multi-channel, multi-provider LLM, enterprise-grade"
+version = "0.3.0"
+description = "Enterprise-grade personal AI assistant — 12 channels, multi-provider LLM, circuit breakers, audit, admin API"
 authors = [
     { name = "ssrjkk" },
 ]
@@ -30,14 +30,13 @@ dependencies = [
 discord = ["discord.py>=2.3"]
 slack = ["slack-sdk>=3.27"]
 docker = ["docker>=7.0"]
-signal = ["signal-cli>=0.1"]
-irc = ["irclib>=1.0"]
+secrets = ["cryptography>=41.0"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "ruff>=0.5",
 ]
-all = ["raven-ai[discord,slack,docker,signal,irc,dev]"]
+all = ["raven-ai[discord,slack,docker,secrets,dev]"]
 
 [project.scripts]
 raven = "raven.cli.main:cli"
