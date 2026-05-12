@@ -1,24 +1,27 @@
 from __future__ import annotations
+
 import random
 import string
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
-from typing import Any, Callable, Awaitable, TYPE_CHECKING
+
 from loguru import logger
+
 from raven.core.config import settings
+
 if TYPE_CHECKING:
     from raven.channels.base import BaseChannel
-from raven.core.db import Database
-from raven.core.llm import LLMRouter
-from raven.core.models import IncomingMessage, Message
-from raven.core.agent.agent import Agent
 from raven.core.agent.registry import AgentRegistry
+from raven.core.db import Database
 from raven.core.failover import ModelFailover
-from raven.core.sandbox import Sandbox, SandboxConfig
-from raven.core.skills import SkillsRegistry, skills_registry, Skill
-from raven.core.plugin_loader import PluginLoader
 from raven.core.health import health
-from raven.core.logging import audit, get_correlation_id
+from raven.core.llm import LLMRouter
+from raven.core.logging import audit
 from raven.core.metrics import metrics
+from raven.core.models import IncomingMessage, Message
+from raven.core.plugin_loader import PluginLoader
+from raven.core.sandbox import Sandbox
+from raven.core.skills import Skill, skills_registry
 
 
 class Gateway:
@@ -88,7 +91,6 @@ class Gateway:
         health.register("llm", _llm_check, timeout=10.0, critical=False)
 
     async def handle_message(self, event: IncomingMessage):
-        cid = get_correlation_id()
         logger.info("Incoming message from {}[{}]: {}", event.channel, event.user_id, event.text[:80])
         metrics.inc("messages_received", {"channel": event.channel})
         try:
@@ -106,8 +108,6 @@ class Gateway:
             agent = self.registry.create_agent(session)
 
             event.text = self._clean_text(event.channel, event.text)
-
-            skill_prompts = skills_registry.active_prompts(session.agent_skills or [])
             recall_context = None
 
             full_response = ""

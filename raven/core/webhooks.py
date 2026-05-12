@@ -1,11 +1,13 @@
 from __future__ import annotations
+
 from typing import Any
-from fastapi import APIRouter, Request, HTTPException
+
+from fastapi import APIRouter, HTTPException, Request
 from loguru import logger
-from raven.core.models import Message, IncomingMessage
-from raven.core.db import Database
-from raven.core.logging import audit
+
 from raven.core.config import settings
+from raven.core.db import Database
+from raven.core.models import IncomingMessage
 
 
 def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
