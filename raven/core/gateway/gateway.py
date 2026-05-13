@@ -272,6 +272,11 @@ class Gateway:
             await self._handle_monitor_cmd(event, sub, args[1:] if len(args) > 1 else [])
             return True
 
+        if cmd == "/code":
+            sub = args[0].lower() if args else "help"
+            await self._handle_code_cmd(event, sub, args[1:] if len(args) > 1 else [])
+            return True
+
         if cmd == "/help":
             await self._send(event.channel, event.session_id, (
                 "Commands:\n"
@@ -281,6 +286,10 @@ class Gateway:
                 "/task <goal> - Plan and execute a task\n"
                 "/monitor list - List your monitors\n"
                 "/monitor add <type> <target> - Add monitor\n"
+                "/code index [path] - Index codebase\n"
+                "/code search <query> - Search code\n"
+                "/code review <file> - Review file\n"
+                "/code start <goal> - Start coding session\n"
                 "/compact - Summarize conversation\n"
                 "/think <low|medium|high> - Set thinking level\n"
                 "/skills - List loaded skills\n"
@@ -436,3 +445,99 @@ class Gateway:
                 "  /monitor remove <id>\n"
                 "  /monitor pause <id>\n"
                 "  /monitor resume <id>")
+
+    async def _handle_code_cmd(self, event: IncomingMessage, sub: str, args: list[str]) -> None:
+        from raven.core.coder.models import CodingSession, SessionStatus
+        from raven.core.coder.session import CodingSessionManager
+        from raven.core.coder.indexer import CodeIndexer
+        from raven.core.coder.review import CodeReviewer
+        from pathlib import Path
+
+        mgr = CodingSessionManager(self.db.db_path)
+
+        if sub == "index":
+            root = args[0] if args else str(Path.cwd())
+            await self._send(event.channel, event.session_id, f"Indexing {root}...")
+            indexer = CodeIndexer(root)
+            files = indexer.index(max_files=2000)
+            summary = indexer.summary()
+            langs = ", ".join(f"{k}:{v}" for k, v in summary.get("languages", {}).items())
+            await self._send(event.channel, event.session_id,
+                f"Indexed {summary['files']} files\nLanguages: {langs}")
+
+        elif sub == "search" and args:
+            query = " ".join(args)
+            root = str(Path.cwd())
+            indexer = CodeIndexer(root)
+            indexer.index(max_files=2000)
+            results = indexer.search(query)
+            if not results:
+                await self._send(event.channel, event.session_id, f"No results for '{query}'")
+                return
+            lines = [f"🔍 Results for '{query}':"]
+            for f in results[:10]:
+                syms = ", ".join(s.name for s in f.symbols[:3])
+                lines.append(f"  {f.path} [{f.language}] {syms}")
+            await self._send(event.channel, event.session_id, "\n".join(lines))
+
+        elif sub == "review" and args:
+            path = " ".join(args)
+            p = Path(path).expanduser().resolve()
+            if not p.is_file():
+                await self._send(event.channel, event.session_id, f"File not found: {p}")
+                return
+            content = p.read_text(encoding="utf-8", errors="replace")
+            reviewer = CodeReviewer()
+            comments = await reviewer.review_file(str(p), content)
+            if not comments:
+                await self._send(event.channel, event.session_id, "✅ No issues found!")
+                return
+            lines = [f"📋 Review: {p.name}"]
+            for c in comments[:15]:
+                icon = {"critical": "🔴", "warning": "🟡", "suggestion": "🔵", "praise": "🟢"}
+                lines.append(f"  {icon.get(c.severity.value, '⚪')} L{c.line}: {c.message}")
+            if len(comments) > 15:
+                lines.append(f"  ... and {len(comments) - 15} more")
+            await self._send(event.channel, event.session_id, "\n".join(lines))
+
+        elif sub == "start" and args:
+            goal = " ".join(args)
+            project = str(Path.cwd())
+            session = CodingSession(user_id=event.user_id, channel=event.channel, goal=goal, project_path=project)
+            mgr.create_session(session)
+            await self._send(event.channel, event.session_id,
+                f"💻 Coding session started: {session.id[:8]}\n"
+                f"Goal: {goal}\n"
+                f"Project: {project}\n"
+                f"Use /code status {session.id[:8]} to check")
+
+        elif sub == "status" and args:
+            session = mgr.get_session(args[0])
+            if not session:
+                await self._send(event.channel, event.session_id, f"Session not found: {args[0]}")
+                return
+            await self._send(event.channel, event.session_id,
+                f"💻 Session: {session.id[:8]}\n"
+                f"Goal: {session.goal}\n"
+                f"Status: {session.status.value}\n"
+                f"Files: {len(session.files)}\n"
+                f"Messages: {len(session.history)}")
+
+        elif sub == "end" and args:
+            session = mgr.get_session(args[0])
+            if not session:
+                await self._send(event.channel, event.session_id, f"Session not found: {args[0]}")
+                return
+            session.status = SessionStatus.COMPLETED
+            mgr.update_session(session)
+            await self._send(event.channel, event.session_id, f"Session {args[0][:8]} ended.")
+
+        else:
+            await self._send(event.channel, event.session_id,
+                "💻 Code commands:\n"
+                "  /code index [path] - Index a codebase\n"
+                "  /code search <query> - Search indexed code\n"
+                "  /code review <file> - Review a file\n"
+                "  /code start <goal> - Start coding session\n"
+                "  /code status <id> - Session status\n"
+                "  /code end <id> - End session")

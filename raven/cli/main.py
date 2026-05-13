@@ -1113,6 +1113,150 @@ def monitor_logs(monitor_id: str, limit: int):
 
 
 @cli.group()
+def code():
+    """Coding assistant — index, review, sessions"""
+
+
+@code.command("index")
+@click.argument("path", default=".", required=False)
+@click.option("--max-files", default=2000, type=int, help="Max files to index")
+def code_index(path: str, max_files: int):
+    """Index a codebase for context-aware assistance"""
+    from raven.core.coder.indexer import CodeIndexer
+    from pathlib import Path
+    p = Path(path).expanduser().resolve()
+    if not p.is_dir():
+        console.print(f"[red]Not a directory: {p}[/red]")
+        return
+    with console.status("[bold]Indexing...", spinner="dots"):
+        indexer = CodeIndexer(str(p))
+        files = indexer.index(max_files=max_files)
+    summary = indexer.summary()
+    console.print(f"[green]Indexed {summary['files']} files[/green]")
+    for lang, count in summary.get("languages", {}).items():
+        console.print(f"  {lang}: {count} files")
+
+
+@code.command("search")
+@click.argument("query")
+@click.argument("path", default=".", required=False)
+def code_search(query: str, path: str):
+    """Search indexed codebase for symbols"""
+    from raven.core.coder.indexer import CodeIndexer
+    from pathlib import Path
+
+    p = Path(path).expanduser().resolve()
+    if not p.is_dir():
+        p = Path.cwd()
+    with console.status("[bold]Searching...", spinner="dots"):
+        indexer = CodeIndexer(str(p))
+        indexer.index(max_files=2000)
+        results = indexer.search(query)
+
+    if not results:
+        console.print("[yellow]No results found[/yellow]")
+        return
+    table = Table(title=f"Search: {query}")
+    table.add_column("File", style="cyan")
+    table.add_column("Language", style="blue")
+    table.add_column("Symbols", style="green")
+    for f in results[:20]:
+        syms = ", ".join(s.name for s in f.symbols[:5])
+        table.add_row(f.path, f.language, syms)
+    console.print(table)
+
+
+@code.command("review")
+@click.argument("path")
+@click.option("--language", default="", help="Programming language")
+def code_review(path: str, language: str):
+    """Review a file for issues"""
+    from raven.core.coder.review import CodeReviewer
+    from pathlib import Path
+
+    p = Path(path).expanduser().resolve()
+    if not p.is_file():
+        console.print(f"[red]File not found: {p}[/red]")
+        return
+    content = p.read_text(encoding="utf-8", errors="replace")
+    ext = p.suffix
+    lang_map = {".py": "python", ".js": "javascript", ".ts": "typescript", ".go": "go", ".rs": "rust", ".java": "java"}
+    lang = language or lang_map.get(ext, "")
+
+    reviewer = CodeReviewer()
+    comments = asyncio.run(reviewer.review_file(str(p), content, lang))
+
+    if not comments:
+        console.print("[green]No issues found![/green]")
+        return
+
+    table = Table(title=f"Review: {p.name}")
+    table.add_column("Line", style="cyan")
+    table.add_column("Severity")
+    table.add_column("Issue", style="white")
+    table.add_column("Suggestion", style="dim")
+    for c in comments:
+        severity_colors = {"critical": "red", "warning": "yellow", "suggestion": "blue", "praise": "green"}
+        table.add_row(str(c.line), f"[{severity_colors.get(c.severity.value, 'white')}]{c.severity.value}[/]", c.message, c.suggestion)
+    console.print(table)
+
+
+@code.command("start")
+@click.argument("goal")
+@click.option("--project", default=".", help="Project path")
+@click.option("--user", default="cli", help="User ID")
+def code_start(goal: str, project: str, user: str):
+    """Start a coding session"""
+    from raven.core.coder.models import CodingSession
+    from raven.core.coder.session import CodingSessionManager
+    from pathlib import Path
+
+    p = Path(project).expanduser().resolve()
+    session = CodingSession(user_id=user, goal=goal, project_path=str(p))
+    mgr = CodingSessionManager(settings.resolved_db_path)
+    mgr.create_session(session)
+    console.print(f"[green]Coding session started: {session.id[:8]}[/green]")
+    console.print(f"  Goal: {goal}")
+    console.print(f"  Project: {p}")
+    console.print(f"  [dim]Run 'raven code status {session.id[:8]}' to check[/dim]")
+
+
+@code.command("status")
+@click.argument("session_id")
+def code_status(session_id: str):
+    """Show coding session status"""
+    from raven.core.coder.session import CodingSessionManager
+    mgr = CodingSessionManager(settings.resolved_db_path)
+    session = mgr.get_session(session_id)
+    if not session:
+        console.print(f"[red]Session not found: {session_id}[/red]")
+        return
+    console.print(Panel.fit(f"[bold]Coding Session: {session.id}[/bold]\n"
+                            f"[cyan]Goal:[/cyan] {session.goal}\n"
+                            f"[cyan]Project:[/cyan] {session.project_path}\n"
+                            f"[cyan]Status:[/cyan] {session.status.value}\n"
+                            f"[cyan]Files:[/cyan] {len(session.files)}\n"
+                            f"[cyan]Messages:[/cyan] {len(session.history)}"))
+
+
+@code.command("end")
+@click.argument("session_id")
+def code_end(session_id: str):
+    """End a coding session"""
+    from raven.core.coder.models import SessionStatus
+    from raven.core.coder.session import CodingSessionManager
+    mgr = CodingSessionManager(settings.resolved_db_path)
+    session = mgr.get_session(session_id)
+    if not session:
+        console.print(f"[red]Session not found: {session_id}[/red]")
+        return
+    session.status = SessionStatus.COMPLETED
+    mgr.update_session(session)
+    console.print(f"[green]Session {session_id[:8]} ended[/green]")
+
+
+
+@cli.group()
 def nodes():
     """Manage Raven AI nodes (iOS/Android devices)"""
 
