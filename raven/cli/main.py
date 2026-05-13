@@ -959,6 +959,160 @@ def task_logs(task_id: str):
 
 
 @cli.group()
+def monitor():
+    """Manage monitors (HTTP, price, RSS, file, process)"""
+
+
+@monitor.command("list")
+@click.option("--user", default=None, help="Filter by user ID")
+@click.option("--status", default=None, help="Filter by status (active/paused)")
+def monitor_list(user: Optional[str], status: Optional[str]):
+    """List all monitors"""
+    from raven.core.monitor.store import MonitorStore
+    store = MonitorStore(settings.resolved_db_path)
+    monitors = store.list_monitors(user_id=user, status=status)
+    if not monitors:
+        console.print("[yellow]No monitors configured[/yellow]")
+        return
+    table = Table(title="Monitors")
+    table.add_column("ID", style="cyan")
+    table.add_column("Name", style="white")
+    table.add_column("Type", style="blue")
+    table.add_column("Target", style="dim")
+    table.add_column("Interval", style="green")
+    table.add_column("Status")
+    table.add_column("Last Check")
+    for m in monitors:
+        icon = {"active": "🟢", "paused": "⏸", "error": "🔴"}.get(m.status.value, "❓")
+        last = ""
+        if m.last_check:
+            last = f"{'✅' if m.last_check.status == 'up' else '❌'} {m.last_check.checked_at:.0f}s ago"
+        table.add_row(m.id[:8], m.name, m.type.value, m.target[:40],
+                      f"{m.interval_seconds}s", f"{icon} {m.status.value}", last)
+    console.print(table)
+
+
+@monitor.command("add")
+@click.option("--name", required=True, help="Monitor name")
+@click.option("--type", "mon_type", required=True, type=click.Choice(["http", "price", "rss", "file", "process"]))
+@click.option("--target", required=True, help="URL, symbol, path, or process name")
+@click.option("--interval", default=300, type=int, help="Check interval in seconds")
+@click.option("--condition", "conditions", multiple=True, help="Condition (e.g. status_code!=200)")
+@click.option("--user", default="cli", help="User ID")
+def monitor_add(name: str, mon_type: str, target: str, interval: int, conditions: tuple[str], user: str):
+    """Add a new monitor"""
+    from raven.core.monitor.models import Condition, ConditionOperator, Monitor, MonitorType, MonitorStatus
+    from raven.core.monitor.store import MonitorStore
+
+    parsed_conditions = []
+    for c in conditions:
+        parts = c.split("!", 1) if "!" in c else c.split("=", 1) if "=" in c else c.split(">", 1) if ">" in c else c.split("<", 1) if "<" in c else [c, ""]
+        if len(parts) == 2:
+            op_str = "!=" if "!" in c else "=" if "=" in c else ">" if ">" in c else "<"
+            op_map = {"=": ConditionOperator.EQ, "!=": ConditionOperator.NE, ">": ConditionOperator.GT, "<": ConditionOperator.LT}
+            val = parts[1]
+            try:
+                val = int(val)
+            except ValueError:
+                try:
+                    val = float(val)
+                except ValueError:
+                    pass
+            parsed_conditions.append(Condition(metric=parts[0].strip(), operator=op_map.get(op_str, ConditionOperator.EQ), value=val))
+
+    monitor = Monitor(
+        name=name,
+        type=MonitorType(mon_type),
+        target=target,
+        interval_seconds=interval,
+        status=MonitorStatus.ACTIVE,
+        conditions=parsed_conditions,
+        user_id=user,
+    )
+    store = MonitorStore(settings.resolved_db_path)
+    store.save_monitor(monitor)
+    console.print(f"[green]Monitor '{name}' ({monitor.id[:8]}) added[/green]")
+    if parsed_conditions:
+        for c in parsed_conditions:
+            console.print(f"  ⚡ Condition: {c.metric} {c.operator.value} {c.value}")
+
+
+@monitor.command("remove")
+@click.argument("monitor_id")
+def monitor_remove(monitor_id: str):
+    """Remove a monitor"""
+    from raven.core.monitor.store import MonitorStore
+    store = MonitorStore(settings.resolved_db_path)
+    m = store.load_monitor(monitor_id)
+    if not m:
+        console.print(f"[red]Monitor not found: {monitor_id}[/red]")
+        return
+    store.delete_monitor(monitor_id)
+    console.print(f"[yellow]Monitor '{m.name}' removed[/yellow]")
+
+
+@monitor.command("pause")
+@click.argument("monitor_id")
+def monitor_pause(monitor_id: str):
+    """Pause a monitor"""
+    from raven.core.monitor.models import MonitorStatus
+    from raven.core.monitor.store import MonitorStore
+    store = MonitorStore(settings.resolved_db_path)
+    m = store.load_monitor(monitor_id)
+    if not m:
+        console.print(f"[red]Monitor not found: {monitor_id}[/red]")
+        return
+    store.update_status(monitor_id, MonitorStatus.PAUSED)
+    console.print(f"[yellow]Monitor '{m.name}' paused[/yellow]")
+
+
+@monitor.command("resume")
+@click.argument("monitor_id")
+def monitor_resume(monitor_id: str):
+    """Resume a paused monitor"""
+    from raven.core.monitor.models import MonitorStatus
+    from raven.core.monitor.store import MonitorStore
+    store = MonitorStore(settings.resolved_db_path)
+    m = store.load_monitor(monitor_id)
+    if not m:
+        console.print(f"[red]Monitor not found: {monitor_id}[/red]")
+        return
+    store.update_status(monitor_id, MonitorStatus.ACTIVE)
+    console.print(f"[green]Monitor '{m.name}' resumed[/green]")
+
+
+@monitor.command("logs")
+@click.argument("monitor_id")
+@click.option("--limit", default=20, type=int, help="Number of checks to show")
+def monitor_logs(monitor_id: str, limit: int):
+    """Show check history for a monitor"""
+    from raven.core.monitor.store import MonitorStore
+    store = MonitorStore(settings.resolved_db_path)
+    m = store.load_monitor(monitor_id)
+    if not m:
+        console.print(f"[red]Monitor not found: {monitor_id}[/red]")
+        return
+    checks = store.get_checks(monitor_id, limit=limit)
+    if not checks:
+        console.print("[yellow]No checks recorded yet[/yellow]")
+        return
+    table = Table(title=f"Check History: {m.name}")
+    table.add_column("Time", style="dim")
+    table.add_column("Status")
+    table.add_column("Response", style="blue")
+    table.add_column("Triggered")
+    table.add_column("Error", style="red")
+    for c in checks:
+        t = __import__("time").strftime("%H:%M:%S", __import__("time").localtime(c.checked_at))
+        icon = "✅" if c.status == "up" else "❌"
+        ms = f"{c.response_time_ms:.0f}ms" if c.response_time_ms else ""
+        trig = "🔔" if c.triggered else ""
+        err = (c.error or "")[:40]
+        table.add_row(t, f"{icon} {c.status}", ms, trig, err)
+    console.print(table)
+
+
+@cli.group()
 def nodes():
     """Manage Raven AI nodes (iOS/Android devices)"""
 

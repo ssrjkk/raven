@@ -267,19 +267,22 @@ class Gateway:
             asyncio.create_task(self._run_task(event, goal))
             return True
 
+        if cmd == "/monitor":
+            sub = args[0].lower() if args else "help"
+            await self._handle_monitor_cmd(event, sub, args[1:] if len(args) > 1 else [])
+            return True
+
         if cmd == "/help":
             await self._send(event.channel, event.session_id, (
                 "Commands:\n"
                 "/status - Show bot status\n"
                 "/new - Start fresh conversation\n"
-                "/reset - Reset current session\n"
-                "/compact - Summarize and compress session\n"
-                "/think <low|medium|high> - Set thinking effort\n"
-                "/verbose <on|off> - Toggle verbose output\n"
-                "/trace <on|off> - Toggle trace mode\n"
-                "/usage <off|tokens|full> - Set usage display\n"
-                "/restart - Restart agent session\n"
-                "/activation <mention|always> - Set activation mode\n"
+                "/reset - Reset session\n"
+                "/task <goal> - Plan and execute a task\n"
+                "/monitor list - List your monitors\n"
+                "/monitor add <type> <target> - Add monitor\n"
+                "/compact - Summarize conversation\n"
+                "/think <low|medium|high> - Set thinking level\n"
                 "/skills - List loaded skills\n"
                 "/help - Show this help\n"
                 "/pair <code> - Authorize with pairing code"
@@ -348,3 +351,88 @@ class Gateway:
         except Exception as e:
             logger.error("Task execution error: {}", e)
             await self._send(event.channel, event.session_id, f"❌ Task error: {e}")
+
+    async def _handle_monitor_cmd(self, event: IncomingMessage, sub: str, args: list[str]) -> None:
+        from raven.core.monitor.models import Condition, ConditionOperator, Monitor, MonitorStatus, MonitorType
+        from raven.core.monitor.store import MonitorStore
+
+        store = MonitorStore(self.db.db_path)
+
+        if sub == "list":
+            monitors = store.list_monitors(user_id=event.user_id)
+            if not monitors:
+                await self._send(event.channel, event.session_id, "No monitors configured.")
+                return
+            lines = ["📊 Your Monitors:"]
+            for m in monitors[:10]:
+                icon = {"active": "🟢", "paused": "⏸", "error": "🔴"}.get(m.status.value, "❓")
+                last = ""
+                if m.last_check:
+                    last = f" {'✅' if m.last_check.status == 'up' else '❌'}"
+                lines.append(f"  {icon} {m.id[:8]} {m.name} [{m.type.value}] every {m.interval_seconds}s{last}")
+            await self._send(event.channel, event.session_id, "\n".join(lines))
+
+        elif sub == "add":
+            if len(args) < 2:
+                await self._send(event.channel, event.session_id,
+                    "Usage: /monitor add <type> <target> [name]\n"
+                    "Types: http <url>, price <symbol>, rss <url>, file <path>, process <name>")
+                return
+            mtype = args[0].lower()
+            target = args[1]
+            name = " ".join(args[2:]) if len(args) > 2 else f"{mtype}:{target[:30]}"
+
+            type_map = {
+                "http": MonitorType.HTTP, "price": MonitorType.PRICE,
+                "rss": MonitorType.RSS, "file": MonitorType.FILE,
+                "process": MonitorType.PROCESS,
+            }
+            if mtype not in type_map:
+                await self._send(event.channel, event.session_id, f"Unknown type: {mtype}")
+                return
+
+            monitor = Monitor(
+                name=name, type=type_map[mtype], target=target,
+                interval_seconds=300, status=MonitorStatus.ACTIVE,
+                user_id=event.user_id, channel=event.channel,
+            )
+            store.save_monitor(monitor)
+            await self._send(event.channel, event.session_id,
+                f"✅ Monitor '{name}' ({monitor.id[:8]}) added. Checks every 5min.")
+
+        elif sub == "remove" and args:
+            m = store.load_monitor(args[0])
+            if not m:
+                await self._send(event.channel, event.session_id, f"Monitor not found: {args[0]}")
+                return
+            store.delete_monitor(args[0])
+            await self._send(event.channel, event.session_id, f"🗑 Monitor '{m.name}' removed.")
+
+        elif sub == "pause" and args:
+            m = store.load_monitor(args[0])
+            if not m:
+                await self._send(event.channel, event.session_id, f"Monitor not found: {args[0]}")
+                return
+            store.update_status(args[0], MonitorStatus.PAUSED)
+            await self._send(event.channel, event.session_id, f"⏸ Monitor '{m.name}' paused.")
+
+        elif sub == "resume" and args:
+            m = store.load_monitor(args[0])
+            if not m:
+                await self._send(event.channel, event.session_id, f"Monitor not found: {args[0]}")
+                return
+            store.update_status(args[0], MonitorStatus.ACTIVE)
+            await self._send(event.channel, event.session_id, f"▶️ Monitor '{m.name}' resumed.")
+
+        else:
+            await self._send(event.channel, event.session_id,
+                "📊 Monitor commands:\n"
+                "  /monitor list\n"
+                "  /monitor add http <url>\n"
+                "  /monitor add price <symbol>\n"
+                "  /monitor add rss <url>\n"
+                "  /monitor add file <path>\n"
+                "  /monitor add process <name>\n"
+                "  /monitor remove <id>\n"
+                "  /monitor pause <id>\n"
+                "  /monitor resume <id>")
