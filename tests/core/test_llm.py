@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 import json
-import pytest
 from unittest.mock import AsyncMock, patch
-from raven.core.llm import ToolCall, LLMResponse, LLMRouter
+
+import pytest
+
+from raven.core.llm import LLMResponse, LLMRouter, ToolCall
 
 
 class TestToolCall:

@@ -1,14 +1,16 @@
 from __future__ import annotations
+
 import json
-from typing import Callable, Awaitable
+from typing import Awaitable, Callable
 from uuid import uuid4
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from loguru import logger
+
 from raven.channels.base import BaseChannel
-from raven.core.models import Message, IncomingMessage
-from raven.core.config import settings
 from raven.core.db import Database
+from raven.core.models import IncomingMessage, Message
 
 
 class WebChatChannel(BaseChannel):

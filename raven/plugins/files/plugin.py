@@ -1,7 +1,9 @@
 from __future__ import annotations
-import os
+
 import glob as glob_mod
+import os
 from pathlib import Path
+
 from loguru import logger
 
 PLUGIN_NAME = "files"

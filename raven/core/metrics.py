@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import time
 from functools import wraps
-from typing import Callable, Any
+from typing import Any, Callable
+
 from loguru import logger
 
 

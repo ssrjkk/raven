@@ -1,6 +1,7 @@
 from __future__ import annotations
-from raven.core.db import Database
+
 from raven.core.config import settings
+from raven.core.db import Database
 
 _db: Database | None = None
 

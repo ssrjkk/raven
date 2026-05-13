@@ -1,7 +1,10 @@
 from __future__ import annotations
-from pathlib import Path
+
 import tempfile
+from pathlib import Path
+
 import pytest
+
 from raven.core.plugin_loader import PluginLoader, func_to_tool
 
 

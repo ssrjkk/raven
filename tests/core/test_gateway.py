@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 from unittest.mock import AsyncMock, patch
+
 import pytest
-from raven.core.gateway.gateway import Gateway
+
 from raven.core.db import Database
-from raven.core.plugin_loader import PluginLoader
+from raven.core.gateway.gateway import Gateway
 from raven.core.models import IncomingMessage
+from raven.core.plugin_loader import PluginLoader
 
 
 @pytest.fixture

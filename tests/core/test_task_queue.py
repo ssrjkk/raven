@@ -1,9 +1,12 @@
 from __future__ import annotations
-import json
+
 import asyncio
-import pytest
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
-from raven.core.task_queue import Task, TaskStatus, TaskQueue
+
+import pytest
+
+from raven.core.task_queue import Task, TaskQueue, TaskStatus
 
 
 class TestTask:

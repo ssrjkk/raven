@@ -1,8 +1,11 @@
 from __future__ import annotations
-import pytest
+
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from raven.channels.whatsapp.channel import WhatsAppChannel
-from raven.core.models import Message, IncomingMessage
+from raven.core.models import IncomingMessage, Message
 
 
 @pytest.mark.asyncio

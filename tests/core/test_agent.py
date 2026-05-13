@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 from unittest.mock import AsyncMock, patch
+
 import pytest
+
 from raven.core.agent.agent import Agent, AgentConfig
-from raven.core.agent.registry import AgentRegistry, DEFAULT_SYSTEM_PROMPT
-from raven.core.models import Session, PluginTool
+from raven.core.agent.registry import DEFAULT_SYSTEM_PROMPT, AgentRegistry
+from raven.core.models import PluginTool, Session
 
 
 @pytest.fixture

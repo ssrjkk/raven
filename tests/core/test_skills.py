@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import tempfile
 from pathlib import Path
+
 from raven.core.skills import Skill, SkillsRegistry, skills_registry
 
 

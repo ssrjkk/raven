@@ -1,12 +1,16 @@
 from __future__ import annotations
-from typing import Callable, Awaitable
+
+from typing import Awaitable, Callable
 from uuid import uuid4
+
 from loguru import logger
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler as TGMessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, filters
+from telegram.ext import MessageHandler as TGMessageHandler
+
 from raven.channels.base import BaseChannel
-from raven.core.models import Message, IncomingMessage
 from raven.core.config import settings
+from raven.core.models import IncomingMessage, Message
 
 
 class TelegramChannel(BaseChannel):

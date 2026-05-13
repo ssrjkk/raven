@@ -1,8 +1,9 @@
 from __future__ import annotations
+
 import json
 from pathlib import Path
-from loguru import logger
 
+from loguru import logger
 
 MIGRATIONS_TABLE = "CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
 

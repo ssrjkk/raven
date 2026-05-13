@@ -1,8 +1,11 @@
 from __future__ import annotations
-import pytest
+
 from unittest.mock import AsyncMock, MagicMock
-from raven.core.webhooks import create_webhook_router
+
+import pytest
+
 from raven.core.models import IncomingMessage
+from raven.core.webhooks import create_webhook_router
 
 
 class FakeAppState:

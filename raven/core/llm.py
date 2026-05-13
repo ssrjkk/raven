@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 import asyncio
 import json
 from abc import ABC, abstractmethod
-from typing import AsyncIterator, Any
+from typing import Any, AsyncIterator
+
 import httpx
 from loguru import logger
+
 from raven.core.config import settings
 from raven.core.metrics import metrics
 

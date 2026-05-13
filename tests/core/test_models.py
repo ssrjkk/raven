@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 from datetime import datetime
+
 import pytest
 from pydantic import ValidationError
-from raven.core.models import Message, Session, PluginTool, IncomingMessage
+
+from raven.core.models import IncomingMessage, Message, PluginTool, Session
 
 
 class TestMessage:

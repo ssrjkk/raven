@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar
 
-from pydantic_settings import BaseSettings
 from loguru import logger
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):

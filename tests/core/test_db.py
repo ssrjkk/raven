@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import pytest
-from raven.core.models import Message
+
 from raven.core.db import Database
+from raven.core.models import Message
 
 
 @pytest.fixture

@@ -1,12 +1,15 @@
 from __future__ import annotations
+
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
 import aiosqlite
 from loguru import logger
-from raven.core.models import Message, Session
+
 from raven.core.migrations import Migrator
+from raven.core.models import Message, Session
 
 
 class Database:

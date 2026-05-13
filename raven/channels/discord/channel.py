@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 import asyncio
-from typing import Callable, Awaitable
+from typing import Awaitable, Callable
+
 from loguru import logger
+
 from raven.channels.base import BaseChannel
-from raven.core.models import Message, IncomingMessage
 from raven.core.config import settings
+from raven.core.models import IncomingMessage, Message
 
 try:
     import discord

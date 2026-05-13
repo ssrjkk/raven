@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Callable, Awaitable
-from raven.core.models import Message, IncomingMessage
+from typing import Awaitable, Callable
+
+from raven.core.models import IncomingMessage, Message
 
 MessageHandler = Callable[[IncomingMessage], Awaitable[None]]
 

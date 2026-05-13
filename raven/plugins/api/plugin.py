@@ -1,8 +1,10 @@
 from __future__ import annotations
-import json
+
 import ipaddress
+import json
 import socket
 from urllib.parse import urlparse
+
 import httpx
 from loguru import logger
 

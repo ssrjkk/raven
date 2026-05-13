@@ -1,49 +1,51 @@
 from __future__ import annotations
+
+import asyncio
 import os
 import sys
-import json
-import signal
-import asyncio
 from pathlib import Path
 from typing import Optional
 
 import click
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.markdown import Markdown
 from loguru import logger
-
-from raven.core.config import settings
-from raven.core.db import Database
-from raven.core.llm import LLMRouter
-from raven.core.models import Message
-from raven.core.agent.registry import AgentRegistry
-from raven.core.gateway.gateway import Gateway
-from raven.core.plugin_loader import PluginLoader
-from raven.core.logging import setup_logging, audit
-from raven.core.health import health
-from raven.core.metrics import metrics
-from raven.core.middleware import request_id_middleware, rate_limit_middleware, auth_middleware, error_handler_middleware, rate_limiter
-from raven.core.audit import audit_logger, AuditEventType
-from raven.core.http_client import client_manager
-from raven.core.config_watcher import ConfigWatcher
-from raven.core.jobs import job_manager
-from raven.core.admin_api import create_admin_router
-from raven.core.secrets import secrets
 from pydantic import BaseModel
-from raven.channels.telegram.channel import TelegramChannel
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+
 from raven.channels.discord.channel import DiscordChannel
-from raven.channels.webchat.channel import WebChatChannel
-from raven.channels.slack.channel import SlackChannel
-from raven.channels.whatsapp.channel import WhatsAppChannel
-from raven.channels.matrix.channel import MatrixChannel
-from raven.channels.googlechat.channel import GoogleChatChannel
-from raven.channels.signal.channel import SignalChannel
-from raven.channels.irc.channel import IRCChannel
-from raven.channels.teams.channel import TeamsChannel
 from raven.channels.feishu.channel import FeishuChannel
+from raven.channels.googlechat.channel import GoogleChatChannel
+from raven.channels.irc.channel import IRCChannel
 from raven.channels.line.channel import LINECChannel
+from raven.channels.matrix.channel import MatrixChannel
+from raven.channels.signal.channel import SignalChannel
+from raven.channels.slack.channel import SlackChannel
+from raven.channels.teams.channel import TeamsChannel
+from raven.channels.telegram.channel import TelegramChannel
+from raven.channels.webchat.channel import WebChatChannel
+from raven.channels.whatsapp.channel import WhatsAppChannel
+from raven.core.admin_api import create_admin_router
+from raven.core.agent.registry import AgentRegistry
+from raven.core.audit import AuditEventType, audit_logger
+from raven.core.config import settings
+from raven.core.config_watcher import ConfigWatcher
+from raven.core.db import Database
+from raven.core.gateway.gateway import Gateway
+from raven.core.health import health
+from raven.core.http_client import client_manager
+from raven.core.llm import LLMRouter
+from raven.core.logging import setup_logging
+from raven.core.metrics import metrics
+from raven.core.middleware import (
+    auth_middleware,
+    error_handler_middleware,
+    rate_limit_middleware,
+    request_id_middleware,
+)
+from raven.core.models import Message
+from raven.core.plugin_loader import PluginLoader
+from raven.core.secrets import secrets
 from raven.core.webhooks import create_webhook_router
 
 console = Console()
@@ -75,7 +77,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     sessions_plugin.init(gateway.db)
 
     settings.validate()
-    audit.log("system", "startup", "gateway", f"plugins={len(plugin_loader.tools)}")
+    audit_logger.log(AuditEventType.SYSTEM_STARTUP, "system", "gateway", detail={"plugins": len(plugin_loader.tools)})
 
     telegram = TelegramChannel()
     discord = DiscordChannel()
@@ -84,7 +86,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     whatsapp = WhatsAppChannel()
     matrix = MatrixChannel()
     googlechat = GoogleChatChannel()
-    signal = SignalChannel()
+    sig_ch = SignalChannel()
     irc = IRCChannel()
     teams = TeamsChannel()
     feishu = FeishuChannel()
@@ -97,7 +99,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     whatsapp.on_message(gateway.handle_message)
     matrix.on_message(gateway.handle_message)
     googlechat.on_message(gateway.handle_message)
-    signal.on_message(gateway.handle_message)
+    sig_ch.on_message(gateway.handle_message)
     irc.on_message(gateway.handle_message)
     teams.on_message(gateway.handle_message)
     feishu.on_message(gateway.handle_message)
@@ -110,14 +112,15 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     gateway.register_channel(whatsapp)
     gateway.register_channel(matrix)
     gateway.register_channel(googlechat)
-    gateway.register_channel(signal)
+    gateway.register_channel(sig_ch)
     gateway.register_channel(irc)
     gateway.register_channel(teams)
     gateway.register_channel(feishu)
     gateway.register_channel(line)
 
+    import signal
+
     import uvicorn
-    from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
 
     api_app = webchat.app
@@ -143,6 +146,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     api_app.state.teams_channel = teams
     api_app.state.feishu_channel = feishu
     api_app.state.line_channel = line
+    stop_event = asyncio.Event()
     api_app.state.stop_event = stop_event
 
     webhook_router = create_webhook_router(gateway.db, gateway.handle_message)
@@ -199,7 +203,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     @api_app.post("/api/shutdown")
     async def api_shutdown():
         logger.info("Shutdown requested via API")
-        audit.sensitive_op("api", "shutdown", "system", True)
+        audit_logger.sensitive("shutdown", "api", "system", True)
         stop_event.set()
         return {"ok": True}
 
@@ -214,7 +218,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     @api_app.post("/api/raven")
     async def api_raven(body: RavenRequest):
         logger.info("Raven API call: action={}", body.action)
-        audit.log("api", "raven", "inference", body.action)
+        audit_logger.log(AuditEventType.COMMAND, "api", "raven", detail={"action": body.action})
         try:
             session = await gateway.db.get_or_create_session(
                 f"vscode:{body.action}:default", "vscode", "vscode_user"
@@ -402,17 +406,25 @@ def doctor():
     checks.append(("Telegram", "✅ Configured" if settings.telegram_bot_token else "⚠️  Not set"))
     checks.append(("Discord", "✅ Configured" if settings.discord_bot_token else "⚠️  Not set"))
     checks.append(("Slack", "✅ Configured" if settings.slack_bot_token else "⚠️  Not set"))
-    checks.append(("WhatsApp", "✅ Configured" if settings.web_secret_key else "⚠️  Needs web_secret_key"))
+    checks.append(("WhatsApp", "✅ Configured" if settings.whatsapp_token else "⚠️  Not set"))
     checks.append(("Matrix", "✅ Configured" if settings.matrix_homeserver else "⚠️  Not set"))
-    checks.append(("Channels", f"12 registered"))
+    checks.append(("Google Chat", "✅ Configured" if settings.googlechat_webhook_url else "⚠️  Not set"))
+    checks.append(("Signal", "✅ Configured" if settings.signal_api_url else "⚠️  Not set"))
+    checks.append(("IRC", "✅ Configured" if settings.irc_server else "⚠️  Not set"))
+    checks.append(("Teams", "✅ Configured" if settings.teams_webhook_url else "⚠️  Not set"))
+    checks.append(("Feishu", "✅ Configured" if settings.feishu_app_id else "⚠️  Not set"))
+    checks.append(("LINE", "✅ Configured" if settings.line_channel_token else "⚠️  Not set"))
+    checks.append(("Channels", "12 registered"))
     checks.append(("DM Policy", settings.dm_policy))
     checks.append(("Web Secret Key", "✅ Set" if settings.web_secret_key else "⚠️  Not set"))
+    has_crypto = __import__("importlib.util").util.find_spec("cryptography")
+    checks.append(("Secrets Encryption", "✅ Available" if has_crypto else "⚠️  Install cryptography for secrets"))
     checks.append(("JSON Logging", "✅ On" if settings.json_log else "❌ Off"))
     checks.append(("Rate Limit", f"{settings.rate_limit_max}/min"))
     checks.append(("LLM Retry", f"{settings.llm_retry_max} attempts"))
 
     try:
-        import playwright
+        import playwright  # noqa: F401
         checks.append(("Playwright", "✅ Installed"))
     except ImportError:
         checks.append(("Playwright", "⚠️  Not installed (browser plugin limited)"))

@@ -1,8 +1,11 @@
 from __future__ import annotations
-import pytest
+
 from unittest.mock import AsyncMock
+
+import pytest
+
 from raven.channels.line.channel import LINECChannel
-from raven.core.models import Message, IncomingMessage
+from raven.core.models import IncomingMessage, Message
 
 
 @pytest.mark.asyncio

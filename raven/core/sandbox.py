@@ -1,12 +1,13 @@
 from __future__ import annotations
+
 import asyncio
 import os
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
-from loguru import logger
 
+from loguru import logger
 
 SANDBOX_IMAGE = "python:3.12-slim"
 

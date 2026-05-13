@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 import json
 import os
 import sys
 import uuid
 from contextvars import ContextVar
 from pathlib import Path
+
 from loguru import logger
 
 correlation_id: ContextVar[str] = ContextVar("correlation_id", default="")

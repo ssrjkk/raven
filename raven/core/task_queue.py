@@ -1,11 +1,14 @@
 from __future__ import annotations
+
 import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Awaitable
+from typing import Any, Awaitable, Callable
+
 from loguru import logger
+
 from raven.core.db import Database
 
 

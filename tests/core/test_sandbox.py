@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import pytest
+
 from raven.core.sandbox import Sandbox, SandboxConfig
 
 

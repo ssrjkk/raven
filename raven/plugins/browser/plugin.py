@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import asyncio
 import ipaddress
 import socket
 from urllib.parse import quote_plus, urlparse
+
 import httpx
 from bs4 import BeautifulSoup
 from loguru import logger
