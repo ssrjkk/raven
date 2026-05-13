@@ -1255,6 +1255,132 @@ def code_end(session_id: str):
     console.print(f"[green]Session {session_id[:8]} ended[/green]")
 
 
+@cli.group()
+def routine():
+    """Manage automated routines (briefing, email, file organization)"""
+
+
+@routine.command("list")
+@click.option("--user", default=None, help="Filter by user ID")
+def routine_list(user: Optional[str]):
+    """List configured routines"""
+    from raven.core.routine.store import RoutineStore
+    store = RoutineStore(settings.resolved_db_path)
+    routines = store.list_routines(user_id=user)
+    if not routines:
+        console.print("[yellow]No routines configured[/yellow]")
+        return
+    table = Table(title="Routines")
+    table.add_column("ID", style="cyan")
+    table.add_column("Name", style="white")
+    table.add_column("Action", style="blue")
+    table.add_column("Schedule", style="green")
+    table.add_column("Status")
+    table.add_column("Last Run")
+    for r in routines:
+        icon = {"active": "🟢", "paused": "⏸", "error": "🔴"}.get(r.status.value, "❓")
+        last = r.last_run_status if r.last_run_status else "—"
+        table.add_row(r.id[:8], r.name, r.action.value, r.schedule, f"{icon} {r.status.value}", last)
+    console.print(table)
+
+
+@routine.command("add")
+@click.option("--name", required=True, help="Routine name")
+@click.option("--action", required=True, type=click.Choice(["send_briefing", "send_message", "check_email", "organize_files"]))
+@click.option("--schedule", default="0 7 * * *", help="Cron expression or HH:MM or interval seconds")
+@click.option("--description", default="", help="Description")
+@click.option("--user", default="cli", help="User ID")
+@click.option("--channel", default="telegram", help="Channel")
+def routine_add(name: str, action: str, schedule: str, description: str, user: str, channel: str):
+    """Add a new automated routine"""
+    from raven.core.routine.models import Routine, RoutineAction, RoutineStatus, RoutineTrigger
+    from raven.core.routine.store import RoutineStore
+
+    if schedule.replace(":", "").replace("*", "").replace(" ", "").isdigit() and ":" not in schedule:
+        trigger = RoutineTrigger.INTERVAL
+    else:
+        trigger = RoutineTrigger.SCHEDULED
+
+    routine = Routine(
+        name=name, description=description,
+        action=RoutineAction(action), trigger=trigger,
+        schedule=schedule, status=RoutineStatus.ACTIVE,
+        user_id=user, channel=channel,
+    )
+    store = RoutineStore(settings.resolved_db_path)
+    store.save_routine(routine)
+    console.print(f"[green]Routine '{name}' ({routine.id[:8]}) added[/green]")
+    console.print(f"  Action: {action}")
+    console.print(f"  Schedule: {schedule}")
+    console.print(f"  Trigger: {trigger.value}")
+
+
+@routine.command("remove")
+@click.argument("routine_id")
+def routine_remove(routine_id: str):
+    """Remove a routine"""
+    from raven.core.routine.store import RoutineStore
+    store = RoutineStore(settings.resolved_db_path)
+    r = store.load_routine(routine_id)
+    if not r:
+        console.print(f"[red]Routine not found: {routine_id}[/red]")
+        return
+    store.delete_routine(routine_id)
+    console.print(f"[yellow]Routine '{r.name}' removed[/yellow]")
+
+
+@routine.command("pause")
+@click.argument("routine_id")
+def routine_pause(routine_id: str):
+    """Pause a routine"""
+    from raven.core.routine.models import RoutineStatus
+    from raven.core.routine.store import RoutineStore
+    store = RoutineStore(settings.resolved_db_path)
+    r = store.load_routine(routine_id)
+    if not r:
+        console.print(f"[red]Routine not found: {routine_id}[/red]")
+        return
+    store.update_status(routine_id, RoutineStatus.PAUSED)
+    console.print(f"[yellow]Routine '{r.name}' paused[/yellow]")
+
+
+@routine.command("resume")
+@click.argument("routine_id")
+def routine_resume(routine_id: str):
+    """Resume a paused routine"""
+    from raven.core.routine.models import RoutineStatus
+    from raven.core.routine.store import RoutineStore
+    store = RoutineStore(settings.resolved_db_path)
+    r = store.load_routine(routine_id)
+    if not r:
+        console.print(f"[red]Routine not found: {routine_id}[/red]")
+        return
+    store.update_status(routine_id, RoutineStatus.ACTIVE)
+    console.print(f"[green]Routine '{r.name}' resumed[/green]")
+
+
+@routine.command("logs")
+@click.argument("routine_id")
+def routine_logs(routine_id: str):
+    """Show execution logs for a routine"""
+    from raven.core.routine.store import RoutineStore
+    store = RoutineStore(settings.resolved_db_path)
+    logs = store.get_logs(routine_id)
+    if not logs:
+        console.print("[yellow]No logs recorded yet[/yellow]")
+        return
+    table = Table(title="Routine Logs")
+    table.add_column("Time", style="dim")
+    table.add_column("Status")
+    table.add_column("Message", style="white")
+    table.add_column("Duration", style="blue")
+    for log in logs:
+        t = __import__("time").strftime("%H:%M:%S", __import__("time").localtime(log.created_at))
+        icon = "✅" if log.status == "success" else "❌"
+        ms = f"{log.duration_ms:.0f}ms"
+        table.add_row(t, f"{icon} {log.status}", log.message[:80], ms)
+    console.print(table)
+
 
 @cli.group()
 def nodes():

@@ -277,6 +277,11 @@ class Gateway:
             await self._handle_code_cmd(event, sub, args[1:] if len(args) > 1 else [])
             return True
 
+        if cmd == "/routine":
+            sub = args[0].lower() if args else "help"
+            await self._handle_routine_cmd(event, sub, args[1:] if len(args) > 1 else [])
+            return True
+
         if cmd == "/help":
             await self._send(event.channel, event.session_id, (
                 "Commands:\n"
@@ -290,6 +295,8 @@ class Gateway:
                 "/code search <query> - Search code\n"
                 "/code review <file> - Review file\n"
                 "/code start <goal> - Start coding session\n"
+                "/routine list - List routines\n"
+                "/routine add <action> <sched> - Add routine\n"
                 "/compact - Summarize conversation\n"
                 "/think <low|medium|high> - Set thinking level\n"
                 "/skills - List loaded skills\n"
@@ -541,3 +548,95 @@ class Gateway:
                 "  /code start <goal> - Start coding session\n"
                 "  /code status <id> - Session status\n"
                 "  /code end <id> - End session")
+
+    async def _handle_routine_cmd(self, event: IncomingMessage, sub: str, args: list[str]) -> None:
+        from raven.core.routine.models import Routine, RoutineAction, RoutineStatus, RoutineTrigger
+        from raven.core.routine.store import RoutineStore
+        from raven.core.routine.engine import RoutineEngine
+        from raven.routines.register_all import register_all_routines
+
+        store = RoutineStore(self.db.db_path)
+
+        if sub == "list":
+            routines = store.list_routines(user_id=event.user_id)
+            if not routines:
+                await self._send(event.channel, event.session_id, "No routines configured.")
+                return
+            lines = ["⏰ Your Routines:"]
+            for r in routines[:10]:
+                icon = {"active": "🟢", "paused": "⏸", "error": "🔴"}.get(r.status.value, "❓")
+                last = f" last: {r.last_run_status}" if r.last_run_status else ""
+                lines.append(f"  {icon} {r.id[:8]} {r.name} [{r.action.value}] {r.schedule}{last}")
+            await self._send(event.channel, event.session_id, "\n".join(lines))
+
+        elif sub == "add":
+            if len(args) < 2:
+                await self._send(event.channel, event.session_id,
+                    "Usage: /routine add <action> <schedule> [name]\n"
+                    "Actions: send_briefing, send_message, check_email, organize_files\n"
+                    "Schedule: HH:MM, cron, or interval_seconds")
+                return
+            action = args[0].lower()
+            schedule = args[1]
+            name = " ".join(args[2:]) if len(args) > 2 else f"{action}@{schedule}"
+
+            action_map = {
+                "send_briefing": RoutineAction.SEND_BRIEFING,
+                "send_message": RoutineAction.SEND_MESSAGE,
+                "check_email": RoutineAction.CHECK_EMAIL,
+                "organize_files": RoutineAction.ORGANIZE_FILES,
+            }
+            if action not in action_map:
+                await self._send(event.channel, event.session_id, f"Unknown action: {action}")
+                return
+
+            if ":" in schedule:
+                trigger = RoutineTrigger.SCHEDULED
+            else:
+                try:
+                    int(schedule)
+                    trigger = RoutineTrigger.INTERVAL
+                except ValueError:
+                    trigger = RoutineTrigger.SCHEDULED
+
+            routine = Routine(
+                name=name, action=action_map[action], trigger=trigger,
+                schedule=schedule, status=RoutineStatus.ACTIVE,
+                user_id=event.user_id, channel=event.channel,
+            )
+            store.save_routine(routine)
+            await self._send(event.channel, event.session_id,
+                f"⏰ Routine '{name}' ({routine.id[:8]}) added. {trigger.value}: {schedule}")
+
+        elif sub == "remove" and args:
+            r = store.load_routine(args[0])
+            if not r:
+                await self._send(event.channel, event.session_id, f"Routine not found: {args[0]}")
+                return
+            store.delete_routine(args[0])
+            await self._send(event.channel, event.session_id, f"🗑 Routine '{r.name}' removed.")
+
+        elif sub == "pause" and args:
+            r = store.load_routine(args[0])
+            if not r:
+                await self._send(event.channel, event.session_id, f"Routine not found: {args[0]}")
+                return
+            store.update_status(args[0], RoutineStatus.PAUSED)
+            await self._send(event.channel, event.session_id, f"⏸ Routine '{r.name}' paused.")
+
+        elif sub == "resume" and args:
+            r = store.load_routine(args[0])
+            if not r:
+                await self._send(event.channel, event.session_id, f"Routine not found: {args[0]}")
+                return
+            store.update_status(args[0], RoutineStatus.ACTIVE)
+            await self._send(event.channel, event.session_id, f"▶️ Routine '{r.name}' resumed.")
+
+        else:
+            await self._send(event.channel, event.session_id,
+                "⏰ Routine commands:\n"
+                "  /routine list\n"
+                "  /routine add <action> <schedule> [name]\n"
+                "  /routine remove <id>\n"
+                "  /routine pause <id>\n"
+                "  /routine resume <id>")
