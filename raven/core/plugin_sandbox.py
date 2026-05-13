@@ -33,7 +33,8 @@ class PluginSandbox:
 
     def deny_plugin(self, plugin_name: str, *capabilities: str):
         if plugin_name in self._per_plugin:
-            self._per_plugin[plugin_name].discard(capabilities)
+            for cap in capabilities:
+                self._per_plugin[plugin_name].discard(cap)
 
     def check(self, plugin_name: str, capability: str) -> bool:
         if capability in self._global_deny:

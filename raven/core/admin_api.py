@@ -84,7 +84,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     async def admin_sessions(limit: int = 50, offset: int = 0):
         gateway = get_gateway_fn()
         sessions = await gateway.db.get_sessions()
-        return [{"id": s.session_id, "channel": s.channel, "user_id": s.user_id} for s in sessions]
+        return [{"id": s.id, "channel": s.channel, "user_id": s.user_id} for s in sessions]
 
     @router.get("/audit")
     async def admin_audit(limit: int = 50):

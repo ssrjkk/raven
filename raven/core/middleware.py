@@ -63,6 +63,13 @@ async def request_id_middleware(request: Request, call_next):
 async def rate_limit_middleware(request: Request, call_next):
     if request.method == "GET":
         return await call_next(request)
+    client_ip = request.client.host if request.client else request.headers.get("X-Forwarded-For", "unknown")
+    allowed = await rate_limiter.check(client_ip)
+    if not allowed:
+        metrics.inc("http_rate_limited", {"ip": client_ip})
+        logger.warning("Rate limit exceeded for {}", client_ip)
+        return JSONResponse(status_code=429, content={"error": "Too many requests", "retry_after": 60})
+    return await call_next(request)
 
 
 async def error_handler_middleware(request: Request, call_next):
@@ -76,13 +83,6 @@ async def error_handler_middleware(request: Request, call_next):
         classify_error(e)
         logger.error("Unhandled error: {} {}", type(e).__name__, e)
         return JSONResponse(status_code=500, content={"code": "internal.error", "message": str(e)[:200]})
-    client_ip = request.client.host if request.client else "unknown"
-    allowed = await rate_limiter.check(client_ip)
-    if not allowed:
-        metrics.inc("http_rate_limited", {"ip": client_ip})
-        logger.warning("Rate limit exceeded for {}", client_ip)
-        return JSONResponse(status_code=429, content={"error": "Too many requests", "retry_after": 60})
-    return await call_next(request)
 
 
 async def auth_middleware(request: Request, call_next):

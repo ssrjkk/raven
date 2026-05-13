@@ -1,7 +1,7 @@
 [project]
-name = "raven-ai"
-version = "0.3.0"
-description = "Enterprise-grade personal AI assistant — 12 channels, multi-provider LLM, circuit breakers, audit, admin API"
+name = "raven-agent"
+version = "0.4.0"
+description = "Enterprise-grade personal AI assistant — Telegram-first, 12 channels, multi-provider LLM, circuit breakers, audit, admin API"
 authors = [
     { name = "ssrjkk" },
 ]
@@ -19,6 +19,7 @@ dependencies = [
     "python-telegram-bot>=21.0",
     "click>=8.1",
     "rich>=13.0",
+    "prompt-toolkit>=3.0",
     "loguru>=0.7",
     "apscheduler>=3.10",
     "playwright>=1.44",
@@ -31,12 +32,13 @@ discord = ["discord.py>=2.3"]
 slack = ["slack-sdk>=3.27"]
 docker = ["docker>=7.0"]
 secrets = ["cryptography>=41.0"]
+service-win = ["pywin32>=306"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "ruff>=0.5",
 ]
-all = ["raven-ai[discord,slack,docker,secrets,dev]"]
+all = ["raven-agent[discord,slack,docker,secrets,service-win,dev]"]
 
 [project.scripts]
 raven = "raven.cli.main:cli"

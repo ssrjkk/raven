@@ -21,6 +21,11 @@ class TelegramChannel(BaseChannel):
         self._app: Application | None = None
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
 
+    @staticmethod
+    def _build_test_app(token: str) -> Application:
+        app = Application.builder().token(token).build()
+        return app
+
     async def start(self):
         if not self._token:
             logger.warning("Telegram token not configured, skipping")
@@ -34,6 +39,7 @@ class TelegramChannel(BaseChannel):
         self._app.add_handler(TGMessageHandler(filters.TEXT & ~filters.COMMAND, self._on_text))
         await self._app.initialize()
         await self._app.start()
+        await self._app.updater.start_polling()
         logger.info("Telegram channel started")
 
     async def stop(self):

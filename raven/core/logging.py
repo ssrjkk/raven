@@ -61,29 +61,3 @@ def setup_logging(log_file: str | Path | None = None, level: str = "INFO", json_
         logger.add(str(log_target.with_suffix(".err.log")), level="WARNING", format=_serialize, rotation="100 MB", retention="90 days")
 
     logger.info("Logging initialized", extra={"json_format": json_format, "level": log_level})
-
-
-class AuditLogger:
-    def __init__(self):
-        self._audit = logger.bind(audit=True)
-
-    def log(self, action: str, actor: str, resource: str, detail: str | None = None):
-        self._audit.info("AUDIT", extra={
-            "audit_action": action,
-            "audit_actor": actor,
-            "audit_resource": resource,
-            "audit_detail": detail,
-        })
-
-    def sensitive_op(self, actor: str, operation: str, resource: str, success: bool, detail: str | None = None):
-        level = logger.info if success else logger.warning
-        level("AUDIT_SENSITIVE", extra={
-            "audit_action": operation,
-            "audit_actor": actor,
-            "audit_resource": resource,
-            "audit_success": success,
-            "audit_detail": detail,
-        })
-
-
-audit = AuditLogger()

@@ -29,6 +29,7 @@ from raven.core.admin_api import create_admin_router
 from raven.core.agent.registry import AgentRegistry
 from raven.core.audit import AuditEventType, audit_logger
 from raven.core.config import settings
+from raven.core.config_store import config_store
 from raven.core.config_watcher import ConfigWatcher
 from raven.core.db import Database
 from raven.core.gateway.gateway import Gateway
@@ -394,40 +395,62 @@ def status():
 
 @cli.command()
 def doctor():
-    """Diagnose configuration and dependencies"""
+    """Diagnose configuration, dependencies, and service health"""
     console.print(Panel.fit("[bold]Raven AI Doctor[/bold]"))
     checks = []
 
-    checks.append(("Config file", "✅ Found" if Path(".env").exists() else "⚠️  Missing .env (using defaults)"))
+    config_store.load()
+    cfg = config_store._data
+
+    checks.append(("Config Store", f"✅ {config_store.path}" if config_store.path.exists() else "⚠️  Not initialized"))
     checks.append(("Python", sys.version))
     checks.append(("DB Path", str(settings.resolved_db_path)))
-    checks.append(("OpenRouter", "✅ Configured" if settings.openrouter_api_key else "⚠️  Not set"))
-    checks.append(("Anthropic", "✅ Configured" if settings.anthropic_api_key else "⚠️  Not set"))
-    checks.append(("Telegram", "✅ Configured" if settings.telegram_bot_token else "⚠️  Not set"))
-    checks.append(("Discord", "✅ Configured" if settings.discord_bot_token else "⚠️  Not set"))
-    checks.append(("Slack", "✅ Configured" if settings.slack_bot_token else "⚠️  Not set"))
-    checks.append(("WhatsApp", "✅ Configured" if settings.whatsapp_token else "⚠️  Not set"))
-    checks.append(("Matrix", "✅ Configured" if settings.matrix_homeserver else "⚠️  Not set"))
-    checks.append(("Google Chat", "✅ Configured" if settings.googlechat_webhook_url else "⚠️  Not set"))
-    checks.append(("Signal", "✅ Configured" if settings.signal_api_url else "⚠️  Not set"))
-    checks.append(("IRC", "✅ Configured" if settings.irc_server else "⚠️  Not set"))
-    checks.append(("Teams", "✅ Configured" if settings.teams_webhook_url else "⚠️  Not set"))
-    checks.append(("Feishu", "✅ Configured" if settings.feishu_app_id else "⚠️  Not set"))
-    checks.append(("LINE", "✅ Configured" if settings.line_channel_token else "⚠️  Not set"))
-    checks.append(("Channels", "12 registered"))
-    checks.append(("DM Policy", settings.dm_policy))
-    checks.append(("Web Secret Key", "✅ Set" if settings.web_secret_key else "⚠️  Not set"))
+
+    has_any_key = bool(cfg.get("openrouter_api_key") or cfg.get("anthropic_api_key") or cfg.get("openai_api_key") or cfg.get("ollama_base_url"))
+    checks.append(("LLM Provider", "✅ Configured" if has_any_key else "⚠️  No provider configured"))
+
+    provider_names = []
+    if cfg.get("openrouter_api_key"): provider_names.append("OpenRouter")
+    if cfg.get("anthropic_api_key"): provider_names.append("Anthropic")
+    if cfg.get("openai_api_key"): provider_names.append("OpenAI")
+    if cfg.get("ollama_base_url"): provider_names.append("Ollama")
+    if provider_names:
+        checks.append(("Providers", ", ".join(provider_names)))
+
+    checks.append(("Default Model", cfg.get("default_model", "—")))
+    checks.append(("Telegram", "✅ Configured" if cfg.get("telegram_bot_token") else "⚠️  Not set"))
+    checks.append(("Discord", "✅ Configured" if cfg.get("discord_bot_token") else "⚠️  Not set"))
+    checks.append(("Slack", "✅ Configured" if cfg.get("slack_bot_token") else "⚠️  Not set"))
+    checks.append(("DM Policy", cfg.get("dm_policy", "pairing")))
+    checks.append(("Web Port", str(cfg.get("web_port", 18888))))
+    checks.append(("Web Secret Key", "✅ Set" if cfg.get("web_secret_key") else "⚠️  Not set"))
+
     has_crypto = __import__("importlib.util").util.find_spec("cryptography")
     checks.append(("Secrets Encryption", "✅ Available" if has_crypto else "⚠️  Install cryptography for secrets"))
-    checks.append(("JSON Logging", "✅ On" if settings.json_log else "❌ Off"))
-    checks.append(("Rate Limit", f"{settings.rate_limit_max}/min"))
-    checks.append(("LLM Retry", f"{settings.llm_retry_max} attempts"))
+
+    try:
+        import pywin32  # noqa: F401
+        checks.append(("Windows Service", "✅ pywin32 available"))
+    except ImportError:
+        if sys.platform == "win32":
+            checks.append(("Windows Service", "⚠️  Install pywin32 for service support"))
+    except Exception:
+        pass
 
     try:
         import playwright  # noqa: F401
         checks.append(("Playwright", "✅ Installed"))
     except ImportError:
         checks.append(("Playwright", "⚠️  Not installed (browser plugin limited)"))
+
+    api_ok = False
+    try:
+        import httpx
+        r = httpx.get(f"http://localhost:{settings.web_port}/api/status", timeout=3)
+        api_ok = r.is_success
+    except Exception:
+        pass
+    checks.append(("API", "🟢 Running" if api_ok else "🔴 Stopped"))
 
     table = Table(show_header=False)
     table.add_column("Check", style="cyan")
@@ -436,50 +459,93 @@ def doctor():
         table.add_row(name, result)
     console.print(table)
 
+    if not api_ok and not any(key in os.environ.get("RUNNING_TESTS", "") for key in ("1", "true")):
+        console.print("\n[yellow]Raven is not running. Start it with: raven start[/yellow]")
+
 
 @cli.command()
 def onboard():
     """Interactive setup wizard"""
-    console.print(Panel.fit("[bold]🐦 Welcome to Raven AI Setup Wizard[/bold]"))
+    from raven.cli.onboard import onboard as _onboard_async
+    asyncio.run(_onboard_async())
 
-    setup = {}
-    setup["openrouter"] = click.prompt("OpenRouter API Key (optional)", default="")
-    setup["anthropic"] = click.prompt("Anthropic API Key (optional)", default="")
-    setup["telegram"] = click.prompt("Telegram Bot Token (optional)", default="")
-    setup["discord"] = click.prompt("Discord Bot Token (optional)", default="")
-    setup["slack"] = click.prompt("Slack Bot Token (optional)", default="")
-    setup["policy"] = click.prompt("DM Policy [pairing/open/closed]", default="pairing")
-    setup["port"] = click.prompt("Web UI Port", default=18888, type=int)
-    setup["secret"] = click.prompt("Web Secret Key (API auth, optional)", default="")
 
-    env_path = Path(".env")
-    existing = env_path.read_text() if env_path.exists() else ""
-    lines = existing.splitlines() if existing else []
-    env_vars = {}
-    for line in lines:
-        if "=" in line and not line.startswith("#"):
-            k, v = line.split("=", 1)
-            env_vars[k.strip()] = v.strip()
+@cli.group()
+def service():
+    """Manage Raven as a platform-native service"""
 
-    if setup["openrouter"]:
-        env_vars["OPENROUTER_API_KEY"] = setup["openrouter"]
-    if setup["anthropic"]:
-        env_vars["ANTHROPIC_API_KEY"] = setup["anthropic"]
-    if setup["telegram"]:
-        env_vars["TELEGRAM_BOT_TOKEN"] = setup["telegram"]
-    if setup["discord"]:
-        env_vars["DISCORD_BOT_TOKEN"] = setup["discord"]
-    if setup["slack"]:
-        env_vars["SLACK_BOT_TOKEN"] = setup["slack"]
-    env_vars["DM_POLICY"] = setup["policy"]
-    env_vars["WEB_PORT"] = str(setup["port"])
-    if setup["secret"]:
-        env_vars["WEB_SECRET_KEY"] = setup["secret"]
 
-    content = "\n".join(f"{k}={v}" for k, v in env_vars.items())
-    env_path.write_text(content)
-    console.print("[green]✅ Configuration saved to .env[/green]")
-    console.print("\nRun [bold]raven start[/bold] to launch!")
+@service.command("install")
+def service_install():
+    """Install Raven as a service (Windows/Systemd/Launchd)"""
+    from raven.cli.service import service_install as _install
+    _install()
+
+
+@service.command("start")
+def service_start():
+    """Start the Raven service"""
+    from raven.cli.service import service_start as _start
+    _start()
+
+
+@service.command("stop")
+def service_stop():
+    """Stop the Raven service"""
+    from raven.cli.service import service_stop as _stop
+    _stop()
+
+
+@service.command("status")
+def service_status():
+    """Show Raven service status"""
+    from raven.cli.service import service_status as _status
+    _status()
+
+
+@service.command("remove")
+def service_remove():
+    """Remove the Raven service"""
+    from raven.cli.service import service_remove as _remove
+    _remove()
+
+
+@service.command("restart")
+def service_restart():
+    """Restart the Raven service"""
+    from raven.cli.service import service_restart as _restart
+    _restart()
+
+
+@cli.command()
+@click.option("--dry-run", is_flag=True, help="Check for updates without applying")
+def update(dry_run: bool):
+    """Check for and apply updates via pip"""
+    import subprocess
+    console.print("[bold]Checking for Raven updates...[/bold]")
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--upgrade", "--dry-run", "raven-agent"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if "Would install" in result.stdout or "Requirement already satisfied" not in result.stdout:
+            console.print("[yellow]Update available[/yellow]" if not dry_run else "[green]Run without --dry-run to update[/green]")
+            if not dry_run:
+                console.print("[bold]Updating...[/bold]")
+                upg = subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "--upgrade", "raven-agent"],
+                    capture_output=True, text=True, timeout=120,
+                )
+                if upg.returncode == 0:
+                    console.print("[green]✅ Update complete![/green]")
+                else:
+                    console.print(f"[red]Update failed: {upg.stderr}[/red]")
+        else:
+            console.print("[green]Raven is up to date[/green]")
+    except subprocess.TimeoutExpired:
+        console.print("[red]Update check timed out[/red]")
+    except FileNotFoundError:
+        console.print("[yellow]Not installed via pip; update manually[/yellow]")
 
 
 @cli.group()
