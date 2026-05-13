@@ -4,7 +4,6 @@ import asyncio
 import shlex
 from pathlib import Path
 
-from loguru import logger
 
 PLUGIN_NAME = "git"
 PLUGIN_DESCRIPTION = "Git operations: status, log, diff, commit, branch, PR"

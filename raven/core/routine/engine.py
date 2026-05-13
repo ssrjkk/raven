@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Awaitable, Callable
+from typing import Awaitable, Callable
 
 from loguru import logger
 
-from raven.core.routine.models import Routine, RoutineAction, RoutineLog, RoutineStatus
+from raven.core.routine.models import Routine, RoutineLog, RoutineStatus
 
 RoutineHandler = Callable[[Routine], Awaitable[str]]
 

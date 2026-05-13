@@ -14,13 +14,13 @@ Stop:
 
 Remove:
     python -m daemon.windows_service remove
-"""
+"""  # noqa: E402
 
-import asyncio
-import os
-import sys
-import threading
-from pathlib import Path
+import asyncio  # noqa: E402
+import os  # noqa: E402
+import sys  # noqa: E402
+import threading  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 
 SERVICE_NAME = "RavenAI"
@@ -47,8 +47,6 @@ class RavenWindowsService:
     @staticmethod
     def install():
         _ensure_pywin32()
-        import win32serviceutil
-        import servicemanager
         script = _get_script_path()
         os.system(f'{sys.executable} "{script}" install')
         print(f"Service '{SERVICE_NAME}' installed.")
@@ -56,22 +54,18 @@ class RavenWindowsService:
     @staticmethod
     def start():
         _ensure_pywin32()
-        import win32serviceutil
         os.system(f"net start {SERVICE_NAME}")
         print(f"Service '{SERVICE_NAME}' start requested.")
 
     @staticmethod
     def stop():
         _ensure_pywin32()
-        import win32serviceutil
         os.system(f"net stop {SERVICE_NAME}")
         print(f"Service '{SERVICE_NAME}' stop requested.")
 
     @staticmethod
     def remove():
         _ensure_pywin32()
-        import win32serviceutil
-        import servicemanager
         script = _get_script_path()
         os.system(f'{sys.executable} "{script}" remove')
         print(f"Service '{SERVICE_NAME}' removed.")

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar
 
 from loguru import logger
 from pydantic_settings import BaseSettings

@@ -6,7 +6,6 @@ import socket
 from urllib.parse import urlparse
 
 import httpx
-from loguru import logger
 
 PLUGIN_NAME = "api"
 PLUGIN_DESCRIPTION = "Make HTTP requests to external APIs (GET, POST, PUT, DELETE)"

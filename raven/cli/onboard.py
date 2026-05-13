@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from pathlib import Path
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -13,9 +12,8 @@ from rich.table import Table
 from rich.text import Text
 
 from raven.channels.telegram.channel import TelegramChannel
-from raven.core.config import settings
 from raven.core.config_store import config_store
-from raven.core.models import IncomingMessage, Message
+from raven.core.models import IncomingMessage
 
 console = Console()
 

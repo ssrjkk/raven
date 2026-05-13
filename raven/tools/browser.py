@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import subprocess
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 

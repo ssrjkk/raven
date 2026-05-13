@@ -5,7 +5,6 @@ import os
 import signal
 import sys
 
-from loguru import logger
 
 PLUGIN_NAME = "process"
 PLUGIN_DESCRIPTION = "Run, list, and manage system processes"

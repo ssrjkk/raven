@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from raven.channels.line.channel import LINECChannel
-from raven.core.models import IncomingMessage, Message
+from raven.core.models import Message
 
 
 @pytest.mark.asyncio

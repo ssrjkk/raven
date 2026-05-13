@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from raven.core.models import IncomingMessage
 from raven.core.webhooks import create_webhook_router
 
 

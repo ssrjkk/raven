@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec

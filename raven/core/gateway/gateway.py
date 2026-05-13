@@ -370,7 +370,7 @@ class Gateway:
             await self._send(event.channel, event.session_id, f"❌ Task error: {e}")
 
     async def _handle_monitor_cmd(self, event: IncomingMessage, sub: str, args: list[str]) -> None:
-        from raven.core.monitor.models import Condition, ConditionOperator, Monitor, MonitorStatus, MonitorType
+        from raven.core.monitor.models import Monitor, MonitorStatus, MonitorType
         from raven.core.monitor.store import MonitorStore
 
         store = MonitorStore(self.db.db_path)
@@ -553,8 +553,6 @@ class Gateway:
     async def _handle_routine_cmd(self, event: IncomingMessage, sub: str, args: list[str]) -> None:
         from raven.core.routine.models import Routine, RoutineAction, RoutineStatus, RoutineTrigger
         from raven.core.routine.store import RoutineStore
-        from raven.core.routine.engine import RoutineEngine
-        from raven.routines.register_all import register_all_routines
 
         store = RoutineStore(self.db.db_path)
 

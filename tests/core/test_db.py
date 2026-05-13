@@ -32,7 +32,7 @@ class TestDatabase:
         assert session2.id == "s1"
 
     async def test_save_and_get_messages(self, db):
-        session = await db.get_or_create_session("s1", "telegram", "user1")
+        await db.get_or_create_session("s1", "telegram", "user1")
         msg = Message(session_id="s1", channel="telegram", role="user", content="hello")
         await db.save_message(msg)
 

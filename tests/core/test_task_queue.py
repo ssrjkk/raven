@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -67,7 +67,7 @@ class TestTaskQueue:
         handler = AsyncMock(return_value="done")
         q.register("test_job", handler)
 
-        task = await q.enqueue("test_job", {"key": "val"})
+        await q.enqueue("test_job", {"key": "val"})
         await q.start()
         await asyncio.sleep(0.05)
         await q.stop()

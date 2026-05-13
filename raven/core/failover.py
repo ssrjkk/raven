@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 import random
-from typing import Any, Callable
 
 from loguru import logger
 
 from raven.core.config import settings
-from raven.core.llm import LLMResponse, LLMRouter, ToolCall
+from raven.core.llm import LLMResponse, LLMRouter
 from raven.core.metrics import metrics
 
 

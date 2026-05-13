@@ -69,7 +69,6 @@ async def _check_custom_url(url: str, monitor: Monitor) -> dict[str, Any]:
         data = resp.json()
 
     if json_path:
-        import json
         try:
             parts = json_path.split(".")
             val = data

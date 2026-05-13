@@ -3,10 +3,8 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any
 
 import aiosqlite
-from loguru import logger
 
 from raven.core.auth.models import Role, User
 from raven.core.auth.password import hash_password, verify_password

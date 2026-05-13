@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
 from raven.core.agent.agent import Agent, AgentConfig
-from raven.core.agent.registry import DEFAULT_SYSTEM_PROMPT, AgentRegistry
+from raven.core.agent.registry import AgentRegistry
 from raven.core.models import PluginTool, Session
 
 
@@ -62,10 +62,8 @@ class TestAgent:
 
         config = AgentConfig(max_tool_rounds=3, use_memory=False)
         agent = Agent(session=session, tools=tools, db=mock_db, llm=llm, config=config)
-        tokens = []
-        async for token in agent.run("ping"):
-            tokens.append(token)
-        result = "".join(tokens)
+        async for _ in agent.run("ping"):
+            pass
 
     async def test_tool_execution(self, agent):
         from raven.core.llm import ToolCall

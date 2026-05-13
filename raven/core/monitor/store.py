@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from raven.core.monitor.models import Condition, ConditionOperator, Monitor, MonitorCheck, MonitorStatus, MonitorType
+from raven.core.monitor.models import Condition, Monitor, MonitorCheck, MonitorStatus, MonitorType
 
 _local = threading.local()
 

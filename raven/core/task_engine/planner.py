@@ -7,7 +7,7 @@ from typing import Any
 from loguru import logger
 
 from raven.core.llm import LLMRouter
-from raven.core.task_engine.models import Task, TaskPriority, TaskStep
+from raven.core.task_engine.models import Task, TaskStep
 from raven.core.task_engine.tool_registry import ToolRegistry
 
 PLANNER_PROMPT = """\

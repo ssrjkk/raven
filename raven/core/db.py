@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import aiosqlite
-from loguru import logger
 
 from raven.core.migrations import Migrator
 from raven.core.models import Message, Session

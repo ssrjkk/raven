@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 import os
 import sys
 import textwrap
 from pathlib import Path
 
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
 
-from raven.core.config import settings
 
 console = Console()
 
