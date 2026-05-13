@@ -258,6 +258,15 @@ class Gateway:
                 await self._send(event.channel, event.session_id, "Usage: /activation <mention|always>")
             return True
 
+        if cmd == "/task":
+            goal = " ".join(args)
+            if not goal:
+                await self._send(event.channel, event.session_id, "Usage: /task <goal description>")
+                return True
+            await self._send(event.channel, event.session_id, f"Planning task: {goal[:100]}...")
+            asyncio.create_task(self._run_task(event, goal))
+            return True
+
         if cmd == "/help":
             await self._send(event.channel, event.session_id, (
                 "Commands:\n"
@@ -299,3 +308,43 @@ class Gateway:
             import re
             text = re.sub(r"<@!?\d+>", "", text).strip()
         return text
+
+    async def _run_task(self, event: IncomingMessage, goal: str) -> None:
+        from raven.core.task_engine.planner import TaskPlanner
+        from raven.core.task_engine.runner import TaskRunner
+        from raven.core.task_engine.store import TaskStore
+        from raven.tools.register_all import create_tool_registry
+
+        tools = create_tool_registry()
+        store = TaskStore(self.db.db_path)
+        planner = TaskPlanner(tools)
+        runner = TaskRunner(store, tools)
+
+        try:
+            task = await planner.plan(goal, self.llm, user_id=event.user_id, channel=event.channel)
+            await self._send(event.channel, event.session_id,
+                f"📋 Plan: {task.plan_summary or goal}\n"
+                + "\n".join(f"  {i+1}. {s.description}" for i, s in enumerate(task.steps[:10]))
+            )
+            await runner.submit(task)
+            task = await runner.wait(task.id, timeout=600)
+
+            if task.status.value == "completed":
+                results = []
+                for s in task.steps:
+                    if s.result:
+                        r = str(s.result)[:200]
+                        results.append(f"  ✅ {s.description}: {r}")
+                msg = f"✅ Task completed!\n" + "\n".join(results[:10])
+                await self._send(event.channel, event.session_id, msg)
+            elif task.status.value == "failed":
+                await self._send(event.channel, event.session_id,
+                    f"❌ Task failed: {task.error or 'Unknown error'}")
+            elif task.status.value == "cancelled":
+                await self._send(event.channel, event.session_id, "🚫 Task cancelled")
+            else:
+                await self._send(event.channel, event.session_id,
+                    f"Task status: {task.status.value}")
+        except Exception as e:
+            logger.error("Task execution error: {}", e)
+            await self._send(event.channel, event.session_id, f"❌ Task error: {e}")

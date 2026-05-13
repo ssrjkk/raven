@@ -1,0 +1,65 @@
+from __future__ import annotations
+
+from typing import Any, Awaitable, Callable
+
+from pydantic import BaseModel, Field
+
+
+class ToolSpec(BaseModel):
+    name: str
+    description: str
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    handler: Any = None
+    category: str = "general"
+    timeout: int = 60
+
+    def to_llm_tool(self) -> dict:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": self.parameters,
+                    "required": [k for k, v in self.parameters.items() if v.get("required")],
+                },
+            },
+        }
+
+
+ToolHandler = Callable[..., Awaitable[Any]]
+
+
+class ToolRegistry:
+    def __init__(self):
+        self._tools: dict[str, ToolSpec] = {}
+
+    def register(self, spec: ToolSpec) -> None:
+        self._tools[spec.name] = spec
+
+    def unregister(self, name: str) -> None:
+        self._tools.pop(name, None)
+
+    def get(self, name: str) -> ToolSpec | None:
+        return self._tools.get(name)
+
+    def list(self, category: str | None = None) -> list[ToolSpec]:
+        if category:
+            return [t for t in self._tools.values() if t.category == category]
+        return list(self._tools.values())
+
+    def to_llm_tools(self) -> list[dict]:
+        return [t.to_llm_tool() for t in self._tools.values()]
+
+    async def call(self, name: str, **params: Any) -> Any:
+        spec = self.get(name)
+        if not spec:
+            raise ValueError(f"Unknown tool: {name}")
+        if spec.handler is None:
+            raise ValueError(f"Tool {name} has no handler registered")
+        return await spec.handler(**params)
+
+    @property
+    def count(self) -> int:
+        return len(self._tools)
