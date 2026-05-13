@@ -149,3 +149,81 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         }
 
     return router
+
+
+AUTH_ENABLED = False
+_auth_store = None
+
+
+def init_auth_routes(app, db_path: str):
+    global AUTH_ENABLED, _auth_store
+    from raven.core.auth.store import AuthStore
+    from raven.core.auth.tokens import token_manager
+
+    store = AuthStore(db_path)
+
+    @app.post("/api/auth/login")
+    async def auth_login(body: dict):
+        username = body.get("username", "")
+        password = body.get("password", "")
+        user = await store.authenticate(username, password)
+        if not user:
+            from fastapi import HTTPException
+            raise HTTPException(401, "Invalid credentials")
+        token = token_manager.create_token(user.id, user.role.value)
+        return {"token": token, "user_id": user.id, "role": user.role.value, "username": user.username}
+
+    @app.post("/api/auth/register")
+    async def auth_register(body: dict):
+        username = body.get("username", "")
+        password = body.get("password", "")
+        display = body.get("display_name", username)
+        if not username or not password:
+            from fastapi import HTTPException
+            raise HTTPException(400, "username and password required")
+        existing = await store.get_user(username)
+        if existing:
+            raise HTTPException(409, "Username already exists")
+        user = await store.create_user(username, password, display_name=display)
+        token = token_manager.create_token(user.id, user.role.value)
+        return {"token": token, "user_id": user.id, "role": user.role.value, "username": user.username}
+
+    @app.get("/api/auth/me")
+    async def auth_me(request: Request):
+        return {
+            "user_id": getattr(request.state, "user_id", "anonymous"),
+            "role": getattr(request.state, "user_role", "anonymous"),
+        }
+
+    @app.post("/api/auth/logout")
+    async def auth_logout(request: Request):
+        token = request.headers.get("Authorization", "").replace("Bearer ", "")
+        if token:
+            token_manager.revoke_token(token)
+        return {"ok": True}
+
+    @app.get("/api/auth/users")
+    async def auth_list_users(request: Request):
+        users = await store.list_users()
+        return [
+            {"id": u.id, "username": u.username, "display_name": u.display_name, "role": u.role.value, "is_active": u.is_active}
+            for u in users
+        ]
+
+    @app.post("/api/auth/users/{username}/role")
+    async def auth_update_role(username: str, body: dict):
+        new_role = body.get("role", "")
+        if new_role not in ("admin", "user", "viewer", "banned"):
+            from fastapi import HTTPException
+            raise HTTPException(400, f"Invalid role: {new_role}")
+        await store.update_role(username, new_role)
+        return {"ok": True}
+
+    @app.post("/api/auth/users/{username}/deactivate")
+    async def auth_deactivate_user(username: str):
+        await store.set_active(username, False)
+        token_manager.revoke_user_tokens(f"user:{username}")
+        return {"ok": True}
+
+    AUTH_ENABLED = True
+    _auth_store = store

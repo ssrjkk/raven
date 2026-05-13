@@ -4,12 +4,14 @@ import asyncio
 import time
 import uuid
 from collections import defaultdict
-
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from loguru import logger
 
 from raven.core.audit import AuditEventType, audit_logger
+from raven.core.auth.models import Permission, Role
+from raven.core.auth.rbac import rbac
+from raven.core.auth.tokens import token_manager
 from raven.core.config import settings
 from raven.core.errors import AppError, ErrorCode, classify_error
 from raven.core.logging import set_correlation_id
@@ -46,6 +48,12 @@ class RateLimiter:
 
 rate_limiter = RateLimiter()
 
+PATH_PERMISSIONS: dict[str, Permission] = {
+    "/api/admin": Permission.ADMIN_READ,
+    "/api/shutdown": Permission.SYSTEM_SHUTDOWN,
+    "/api/raven": Permission.ADMIN_WRITE,
+}
+
 
 async def request_id_middleware(request: Request, call_next):
     cid = request.headers.get("X-Correlation-ID") or uuid.uuid4().hex
@@ -54,7 +62,8 @@ async def request_id_middleware(request: Request, call_next):
     response: Response = await call_next(request)
     duration = time.monotonic() - start
     response.headers["X-Correlation-ID"] = cid
-    metrics.inc("http_requests_total", {"method": request.method, "path": request.url.path, "status": str(response.status_code)})
+    status_group = str(response.status_code)[0] + "xx"
+    metrics.inc("http_requests_total", {"method": request.method, "path": request.url.path, "status": status_group})
     metrics.observe("http_request_duration", duration, {"method": request.method, "path": request.url.path})
     logger.info("{} {} {} {}ms", request.method, request.url.path, response.status_code, int(duration * 1000))
     return response
@@ -86,13 +95,31 @@ async def error_handler_middleware(request: Request, call_next):
 
 
 async def auth_middleware(request: Request, call_next):
-    secret_key = settings.web_secret_key
-    if secret_key:
-        path = request.url.path
-        sensitive = ("/api/shutdown", "/api/raven", "/api/agents", "/api/admin")
-        if any(path.startswith(p) for p in sensitive):
-            auth = request.headers.get("X-Raven-Key", "")
-            if auth != secret_key:
-                metrics.inc("http_auth_failed", {"path": path})
-                return JSONResponse(status_code=403, content={"error": "Forbidden"})
+    request.state.user_role = Role.USER.value
+    request.state.user_id = "anonymous"
+
+    auth_header = request.headers.get("Authorization", "")
+    token = request.headers.get("X-Raven-Key", "")
+
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+
+    if token:
+        session = token_manager.validate_token(token)
+        if session:
+            request.state.user_role = session["role"]
+            request.state.user_id = session["user_id"]
+        else:
+            secret_key = settings.web_secret_key
+            if secret_key and token == secret_key:
+                request.state.user_role = Role.ADMIN.value
+                request.state.user_id = "admin"
+
+    path = request.url.path
+    for prefix, required_perm in PATH_PERMISSIONS.items():
+        if path.startswith(prefix):
+            if not rbac.has_permission(request.state.user_role, required_perm):
+                metrics.inc("http_auth_failed", {"path": path, "role": request.state.user_role})
+                return JSONResponse(status_code=403, content={"error": "Forbidden", "required": required_perm.value})
+
     return await call_next(request)

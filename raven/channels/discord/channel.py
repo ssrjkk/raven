@@ -11,10 +11,31 @@ from raven.core.models import IncomingMessage, Message
 
 try:
     import discord
+    from discord import app_commands
     from discord.ext import commands
     HAS_DISCORD = True
 except ImportError:
     HAS_DISCORD = False
+
+
+COLORS = {
+    "info": 0x3498DB,
+    "success": 0x2ECC71,
+    "warning": 0xF39C12,
+    "error": 0xE74C3C,
+}
+
+
+def build_embed(title: str, description: str = "", color: str = "info", fields: list[tuple] | None = None) -> discord.Embed:
+    embed = discord.Embed(
+        title=title[:256],
+        description=description[:4096],
+        color=COLORS.get(color, COLORS["info"]),
+    )
+    if fields:
+        for name, value, inline in fields:
+            embed.add_field(name=str(name)[:256], value=str(value)[:1024], inline=inline)
+    return embed
 
 
 class DiscordChannel(BaseChannel):
@@ -25,6 +46,7 @@ class DiscordChannel(BaseChannel):
         self._bot: commands.Bot | None = None
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
         self._ready = False
+        self._tree: app_commands.CommandTree | None = None
 
     async def start(self):
         if not HAS_DISCORD:
@@ -36,11 +58,15 @@ class DiscordChannel(BaseChannel):
         intents = discord.Intents.default()
         intents.message_content = True
         self._bot = commands.Bot(command_prefix="/", intents=intents)
+        self._tree = app_commands.CommandTree(self._bot)
 
         @self._bot.event
         async def on_ready():
             self._ready = True
-            logger.info("Discord channel started as {}", self._bot.user)
+            await self._tree.sync()
+            logger.info("Discord channel started as {} ({} slash commands synced)",
+                        self._bot.user, len(self._tree.get_commands()))
+            await self._bot.change_presence(activity=discord.Game(name="/help | Raven AI"))
 
         @self._bot.event
         async def on_message(msg: discord.Message):
@@ -56,28 +82,30 @@ class DiscordChannel(BaseChannel):
                 channel_id = str(msg.channel.id) if not is_dm else f"dm_{user_id}"
                 if self._handler:
                     clean_text = msg.content.replace(f"<@{self._bot.user.id}>", "").strip() if self._bot.user else msg.content
+                    async with msg.channel.typing():
+                        event = IncomingMessage(
+                            channel="discord",
+                            user_id=user_id,
+                            session_id=f"discord:{channel_id}:default",
+                            text=clean_text or msg.content,
+                            metadata={"channel_id": channel_id, "username": str(msg.author)},
+                        )
+                        await self._handler(event)
+
+        @self._bot.command(name="chat")
+        async def chat_cmd(ctx: commands.Context, *, text: str):
+            async with ctx.typing():
+                user_id = str(ctx.author.id)
+                channel_id = str(ctx.channel.id)
+                if self._handler:
                     event = IncomingMessage(
                         channel="discord",
                         user_id=user_id,
                         session_id=f"discord:{channel_id}:default",
-                        text=clean_text or msg.content,
-                        metadata={"channel_id": channel_id, "username": str(msg.author)},
+                        text=text,
+                        metadata={"channel_id": channel_id, "username": str(ctx.author)},
                     )
                     await self._handler(event)
-
-        @self._bot.command(name="chat")
-        async def chat_cmd(ctx: commands.Context, *, text: str):
-            user_id = str(ctx.author.id)
-            channel_id = str(ctx.channel.id)
-            if self._handler:
-                event = IncomingMessage(
-                    channel="discord",
-                    user_id=user_id,
-                    session_id=f"discord:{channel_id}:default",
-                    text=text,
-                    metadata={"channel_id": channel_id, "username": str(ctx.author)},
-                )
-                await self._handler(event)
 
         @self._bot.command(name="reset")
         async def reset_cmd(ctx: commands.Context):
@@ -85,9 +113,100 @@ class DiscordChannel(BaseChannel):
 
         @self._bot.command(name="status")
         async def status_cmd(ctx: commands.Context):
-            await ctx.reply("Raven AI is running.")
+            embed = build_embed(
+                "Raven AI Status",
+                "Personal AI Assistant",
+                color="info",
+                fields=[("Channels", "12 registered", True), ("Status", "Running", True)],
+            )
+            await ctx.reply(embed=embed)
 
+        self._register_slash_commands()
         asyncio.create_task(self._bot.start(self._token))
+
+    def _register_slash_commands(self):
+        if not self._tree:
+            return
+
+        @self._tree.command(name="task", description="Plan and execute a task")
+        @app_commands.describe(goal="What do you want to accomplish?")
+        async def slash_task(interaction: discord.Interaction, goal: str):
+            await interaction.response.defer(thinking=True)
+            user_id = str(interaction.user.id)
+            channel_id = str(interaction.channel.id) if interaction.channel else user_id
+            if self._handler:
+                event = IncomingMessage(
+                    channel="discord",
+                    user_id=user_id,
+                    session_id=f"discord:{channel_id}:default",
+                    text=f"/task {goal}",
+                    metadata={"channel_id": channel_id, "username": str(interaction.user)},
+                )
+                await self._handler(event)
+            await interaction.followup.send(f"📋 Task planned: {goal}", ephemeral=True)
+
+        @self._tree.command(name="monitor", description="Manage monitors")
+        @app_commands.describe(action="list, add, remove, pause, resume")
+        @app_commands.describe(target="URL, symbol, path or process name")
+        async def slash_monitor(interaction: discord.Interaction, action: str, target: str = ""):
+            await interaction.response.defer(thinking=True)
+            user_id = str(interaction.user.id)
+            channel_id = str(interaction.channel.id) if interaction.channel else user_id
+            text = f"/monitor {action}"
+            if target:
+                text += f" {target}"
+            if self._handler:
+                event = IncomingMessage(
+                    channel="discord",
+                    user_id=user_id,
+                    session_id=f"discord:{channel_id}:default",
+                    text=text,
+                    metadata={"channel_id": channel_id, "username": str(interaction.user)},
+                )
+                await self._handler(event)
+            await interaction.followup.send(f"📊 Monitor command: {action}", ephemeral=True)
+
+        @self._tree.command(name="code", description="Coding assistant")
+        @app_commands.describe(action="index, search, review, start")
+        @app_commands.describe(arg="Path, query, or goal")
+        async def slash_code(interaction: discord.Interaction, action: str, arg: str = ""):
+            await interaction.response.defer(thinking=True)
+            user_id = str(interaction.user.id)
+            channel_id = str(interaction.channel.id) if interaction.channel else user_id
+            text = f"/code {action}"
+            if arg:
+                text += f" {arg}"
+            if self._handler:
+                event = IncomingMessage(
+                    channel="discord",
+                    user_id=user_id,
+                    session_id=f"discord:{channel_id}:default",
+                    text=text,
+                    metadata={"channel_id": channel_id, "username": str(interaction.user)},
+                )
+                await self._handler(event)
+            await interaction.followup.send(f"💻 Code command: {action}", ephemeral=True)
+
+        @self._tree.command(name="routine", description="Manage automated routines")
+        @app_commands.describe(action="list, add, remove, pause, resume")
+        @app_commands.describe(args="Action and schedule for 'add'")
+        async def slash_routine(interaction: discord.Interaction, action: str, args: str = ""):
+            await interaction.response.defer(thinking=True)
+            user_id = str(interaction.user.id)
+            channel_id = str(interaction.channel.id) if interaction.channel else user_id
+            text = f"/routine {action}"
+            if args:
+                text += f" {args}"
+            if self._handler:
+                event = IncomingMessage(
+                    channel="discord",
+                    user_id=user_id,
+                    session_id=f"discord:{channel_id}:default",
+                    text=text,
+                    metadata={"channel_id": channel_id, "username": str(interaction.user)},
+                )
+                await self._handler(event)
+            await interaction.followup.send(f"⏰ Routine command: {action}", ephemeral=True)
 
     async def stop(self):
         if self._bot:
@@ -126,8 +245,18 @@ class DiscordChannel(BaseChannel):
             if channel:
                 try:
                     content = message.content
-                    if len(content) > 1900:
-                        content = content[:1900] + "..."
-                    await channel.send(content)
+                    metadata = message.metadata or {}
+
+                    if metadata.get("as_embed"):
+                        embed = build_embed(
+                            metadata.get("embed_title", "Raven AI"),
+                            content[:4096],
+                            color=metadata.get("embed_color", "info"),
+                        )
+                        await channel.send(embed=embed)
+                    else:
+                        if len(content) > 1900:
+                            content = content[:1900] + "..."
+                        await channel.send(content)
                 except Exception as e:
                     logger.error("Discord send failed: {}", e)

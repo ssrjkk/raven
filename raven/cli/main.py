@@ -153,6 +153,14 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     webhook_router = create_webhook_router(gateway.db, gateway.handle_message)
     api_app.include_router(webhook_router)
 
+    web_dist = Path(__file__).parent.parent.parent / "web" / "dist"
+    if web_dist.is_dir():
+        from fastapi.staticfiles import StaticFiles
+        api_app.mount("/dashboard", StaticFiles(directory=str(web_dist), html=True), name="dashboard")
+        logger.info("Web dashboard mounted from {}", web_dist)
+    else:
+        logger.info("Web dashboard not built (no web/dist). Run cd web && npm install && npm run build")
+
     def _get_channels():
         return gateway.channels
 
@@ -179,6 +187,117 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     @api_app.get("/api/agents")
     async def api_agents():
         return gateway.registry.list_agents()
+
+    @api_app.get("/api/monitor/list")
+    async def api_monitor_list():
+        from raven.core.monitor.store import MonitorStore
+        store = MonitorStore(settings.resolved_db_path)
+        monitors = store.list_monitors()
+        return [
+            {
+                "id": m.id, "name": m.name, "type": m.type.value,
+                "target": m.target, "interval_seconds": m.interval_seconds,
+                "status": m.status.value,
+                "last_check": {"status": m.last_check.status, "checked_at": m.last_check.checked_at} if m.last_check else None,
+            }
+            for m in monitors
+        ]
+
+    @api_app.post("/api/monitor/{action}/{monitor_id}")
+    async def api_monitor_toggle(action: str, monitor_id: str):
+        from raven.core.monitor.store import MonitorStore
+        from raven.core.monitor.models import MonitorStatus
+        store = MonitorStore(settings.resolved_db_path)
+        if action == "pause":
+            store.update_status(monitor_id, MonitorStatus.PAUSED)
+        elif action == "resume":
+            store.update_status(monitor_id, MonitorStatus.ACTIVE)
+        return {"ok": True}
+
+    @api_app.get("/api/routine/list")
+    async def api_routine_list():
+        from raven.core.routine.store import RoutineStore
+        store = RoutineStore(settings.resolved_db_path)
+        routines = store.list_routines()
+        return [
+            {
+                "id": r.id, "name": r.name, "action": r.action.value,
+                "schedule": r.schedule, "trigger": r.trigger.value,
+                "status": r.status.value, "last_run_status": r.last_run_status,
+            }
+            for r in routines
+        ]
+
+    @api_app.post("/api/routine/{action}/{routine_id}")
+    async def api_routine_toggle(action: str, routine_id: str):
+        from raven.core.routine.store import RoutineStore
+        from raven.core.routine.models import RoutineStatus
+        store = RoutineStore(settings.resolved_db_path)
+        if action == "pause":
+            store.update_status(routine_id, RoutineStatus.PAUSED)
+        elif action == "resume":
+            store.update_status(routine_id, RoutineStatus.ACTIVE)
+        return {"ok": True}
+
+    @api_app.get("/api/task/list")
+    async def api_task_list():
+        from raven.core.task_engine.store import TaskStore
+        store = TaskStore(settings.resolved_db_path)
+        tasks = store.list_tasks()
+        return [
+            {
+                "id": t.id, "goal": t.goal, "status": t.status.value,
+                "steps": [
+                    {"order": s.order, "description": s.description, "tool": s.tool, "status": s.status.value}
+                    for s in t.steps
+                ],
+                "created_at": t.created_at,
+            }
+            for t in tasks
+        ]
+
+    @api_app.post("/api/task/run")
+    async def api_task_run(body: dict):
+        from raven.core.task_engine.store import TaskStore
+        from raven.core.task_engine.planner import TaskPlanner
+        from raven.core.task_engine.runner import TaskRunner
+        from raven.tools.register_all import create_tool_registry
+        goal = body.get("goal", "")
+        if not goal:
+            from fastapi import HTTPException
+            raise HTTPException(400, "goal required")
+        tools = create_tool_registry()
+        store = TaskStore(settings.resolved_db_path)
+        planner = TaskPlanner(tools)
+        runner = TaskRunner(store, tools)
+        task = await planner.plan(goal, gateway.llm)
+        await runner.submit(task)
+        asyncio.create_task(runner.wait(task.id, timeout=600))
+        return {"id": task.id}
+
+    @api_app.post("/api/task/{task_id}/cancel")
+    async def api_task_cancel(task_id: str):
+        from raven.core.task_engine.store import TaskStore
+        from raven.core.task_engine.runner import TaskRunner
+        from raven.tools.register_all import create_tool_registry
+        tools = create_tool_registry()
+        store = TaskStore(settings.resolved_db_path)
+        runner = TaskRunner(store, tools)
+        ok = await runner.cancel(task_id)
+        return {"ok": ok}
+
+    @api_app.get("/api/code/list")
+    async def api_code_sessions():
+        from raven.core.coder.session import CodingSessionManager
+        mgr = CodingSessionManager(settings.resolved_db_path)
+        sessions = mgr.list_sessions()
+        return [
+            {
+                "id": s.id, "goal": s.goal, "status": s.status.value,
+                "project_path": s.project_path, "files": len(s.files) if hasattr(s, "files") else 0,
+            }
+            for s in sessions
+        ]
 
     @api_app.get("/api/health")
     async def api_health():

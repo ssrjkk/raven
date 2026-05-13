@@ -21,6 +21,65 @@ export interface StatusData {
   model: string;
 }
 
+export interface ChannelInfo {
+  id: string;
+  type: string;
+  ready: boolean;
+  stats: Record<string, number>;
+}
+
+export interface HealthCheck {
+  name: string;
+  ok: boolean;
+  latency_ms: number;
+  critical: boolean;
+}
+
+export interface HealthData {
+  overall: boolean;
+  checks: HealthCheck[];
+}
+
+export interface MetricsSnapshot {
+  [key: string]: number;
+}
+
+export interface MonitorData {
+  id: string;
+  name: string;
+  type: string;
+  target: string;
+  interval_seconds: number;
+  status: string;
+  last_check: { status: string; checked_at: number } | null;
+}
+
+export interface RoutineData {
+  id: string;
+  name: string;
+  action: string;
+  schedule: string;
+  trigger: string;
+  status: string;
+  last_run_status: string | null;
+}
+
+export interface TaskData {
+  id: string;
+  goal: string;
+  status: string;
+  steps: { order: number; description: string; tool: string; status: string }[];
+  created_at: number;
+}
+
+export interface CodingSessionData {
+  id: string;
+  goal: string;
+  status: string;
+  project_path: string;
+  files: number;
+}
+
 export interface WsMessage {
   type: "message";
   role: string;
@@ -46,4 +105,18 @@ export const api = {
   createSession: () => request<{ id: string; channel: string }>("/api/sessions", { method: "POST" }),
   deleteSession: (id: string) => request<{ ok: boolean }>(`/api/sessions/${id}`, { method: "DELETE" }),
   agents: () => request<StatusData["agents"]>("/api/agents"),
+  health: () => request<HealthData>("/api/health"),
+  metrics: () => request<MetricsSnapshot>("/api/metrics"),
+  channels: () => request<ChannelInfo[]>("/api/admin/channels"),
+  systemStatus: () => request<{ channels: number; agents: number; running: boolean; version: string }>("/api/admin/system/status"),
+  monitors: () => request<MonitorData[]>("/api/monitor/list"),
+  monitorToggle: (action: string, id: string) => request<{ ok: boolean }>(`/api/monitor/${action}/${id}`, { method: "POST" }),
+  routines: () => request<RoutineData[]>("/api/routine/list"),
+  routineToggle: (action: string, id: string) => request<{ ok: boolean }>(`/api/routine/${action}/${id}`, { method: "POST" }),
+  tasks: () => request<TaskData[]>("/api/task/list"),
+  taskRun: (goal: string) => request<{ id: string }>("/api/task/run", { method: "POST", body: JSON.stringify({ goal }) }),
+  taskCancel: (id: string) => request<{ ok: boolean }>(`/api/task/${id}/cancel`, { method: "POST" }),
+  codeSessions: () => request<CodingSessionData[]>("/api/code/list"),
+  config: () => request<Record<string, string>>("/api/admin/config"),
+  shutdown: () => request<{ ok: boolean }>("/api/shutdown", { method: "POST" }),
 };
