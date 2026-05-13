@@ -1,6 +1,6 @@
 <div align="center">
   <h1> Raven AI</h1>
-  <p><i>Enterprise-grade personal AI assistant. 12 channels. Zero compromise.</i></p>
+  <p><i>Enterprise-grade personal AI assistant. 12 channels. Task engine. Monitors. Coding assistant. RAG. Dashboard.</i></p>
 </div>
 
 ---
@@ -12,9 +12,15 @@
 | Language | Python 3.11+ |
 | Architecture | asyncio monorepo with circuit breakers, retry, rate limit |
 | Channels | 12: Telegram, Discord, WebChat, Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE |
-| Memory | Built-in (SQLite + vector recall) |
+| Task Engine | Plan + execute multi-step goals with 20+ built-in tools |
+| Monitor Engine | HTTP, price, RSS, file, process monitors with conditions + alerts |
+| Coding Assistant | Codebase indexing, AST parsing, file review, coding sessions |
+| Routines | Automated briefings, email checks, file organization on schedule |
+| RAG Knowledge Base | Embedding engine (OpenAI + local), vector store, document chunking, semantic retrieval |
+| Auth & RBAC | Multi-user auth, role-based permissions (admin/user/viewer/banned), API tokens |
+| Web Dashboard | React/Vite SPA with 6 pages (Dashboard, Chat, Tasks, Monitors, Routines, Code, Settings) |
+| Memory | Built-in (SQLite + vector recall + conversation summaries) |
 | Stateless mode | `raven start --stateless` |
-| Web UI | Built-in FastAPI + WebSocket |
 | LLM Providers | OpenRouter, Anthropic, OpenAI, Ollama |
 | Model Failover | Weighted fallback across providers with circuit breaker |
 | Plugin System | 10 plugins: api, browser, code, cron, files, git, memory, ocr, process, sessions |
@@ -22,12 +28,12 @@
 | Sandboxing | Direct, subprocess, and Docker execution modes |
 | Skills/Playbooks | SKILL.md registry with workspace loading |
 | Webhooks | Generic, Slack events, WhatsApp, Google Chat, Signal, Teams, Feishu, LINE |
-| Chat Commands | /status, /new, /reset, /compact, /think, /verbose, /trace, /usage, /restart, /activation, /help, /skills, /pair |
+| Chat Commands | /status, /new, /reset, /compact, /task, /monitor, /code, /routine, /think, /verbose, /trace, /usage, /help, /skills, /pair |
 | Multi-Agent | Per-channel routing with isolated agent configs |
 | Workspace | AGENTS.md, SOUL.md, TOOLS.md prompt injection |
-| Security | DM pairing, per-channel allowlist, rate limiting, API auth, Fernet secrets encryption |
+| Security | DM pairing, per-channel allowlist, rate limiting, API auth, RBAC, Fernet secrets encryption |
 | Observability | Structured JSON audit log, Prometheus metrics, health checks |
-| Admin API | RESTful management: channels, agents, sessions, config, secrets, jobs, audit |
+| Admin API | RESTful management: channels, agents, sessions, config, secrets, jobs, audit, auth, users |
 | Background Jobs | Async job manager with status tracking and cancellation |
 | Config Hot-Reload | Auto-detect .env changes without restart |
 | CI/CD | GitHub Actions (lint + test, Python 3.11-3.13) |
@@ -42,12 +48,20 @@ cp .env.example .env
 raven start
 ```
 
-Open **http://localhost:18888** for the web UI.
+Open **http://localhost:18888** for the web chat or **http://localhost:18888/dashboard** for the full dashboard.
 
 ### Docker
 
 ```bash
 docker compose up
+```
+
+### Web Dashboard (development)
+
+```bash
+cd web
+npm install
+npm run dev    # http://localhost:5173 (proxies /api to :18888)
 ```
 
 ## Enterprise Infrastructure
@@ -63,6 +77,8 @@ docker compose up
 | `core/audit.py` | `AuditLogger` — structured JSON event log (20 event types), `sensitive()` marker, `recent()` query |
 | `core/plugin_sandbox.py` | `PluginSandbox` — capability-based `check()` with global deny + per-plugin allow lists |
 | `core/admin_api.py` | RESTful admin API at `/api/admin/*` — health, channels, agents, sessions, audit, config, secrets, jobs |
+| `core/auth/` | Multi-user auth, RBAC (4 roles, 16 permissions), API tokens, password hashing |
+| `core/rag/` | Embedding engine, vector store, document chunking, semantic retrieval, conversation memory |
 | `channels/enterprise_base.py` | `EnterpriseChannel` — `RateLimiter`, `_retry_call()`, `_post()` via shared HTTP pool, `stats()`, `health_check()` |
 
 ## Channels
@@ -70,8 +86,8 @@ docker compose up
 | Channel | Status | Integration |
 |---------|--------|-------------|
 | WebChat | ✅ Built-in | FastAPI + WebSocket |
-| Telegram | ✅ Built-in | python-telegram-bot |
-| Discord | ✅ Built-in | discord.py |
+| Telegram | ✅ Built-in | python-telegram-bot + voice transcription + inline keyboards |
+| Discord | ✅ Built-in | discord.py + slash commands + embeds |
 | Slack | ✅ Enterprise | slack-sdk async |
 | WhatsApp | ✅ Enterprise | Graph API + Webhook |
 | Matrix | ✅ Enterprise | Matrix Client-Server API + sync loop |
@@ -106,6 +122,26 @@ All channels include: rate limiting, retry with exponential backoff, structured 
 | `DELETE /api/admin/jobs/{id}` | Cancel a job |
 | `POST /api/admin/shutdown` | Graceful shutdown |
 | `GET /api/admin/system/status` | System overview |
+| `POST /api/auth/login` | Login with username/password |
+| `POST /api/auth/register` | Register new user |
+| `POST /api/auth/logout` | Revoke token |
+| `GET /api/auth/me` | Current user info |
+| `GET /api/auth/users` | List users |
+| `POST /api/auth/users/{name}/role` | Change user role |
+| `POST /api/auth/users/{name}/deactivate` | Deactivate user |
+
+### Management Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/monitor/list` | List monitors |
+| `POST /api/monitor/{action}/{id}` | pause/resume monitor |
+| `GET /api/routine/list` | List routines |
+| `POST /api/routine/{action}/{id}` | pause/resume routine |
+| `GET /api/task/list` | List tasks |
+| `POST /api/task/run` | Create and run a task |
+| `POST /api/task/{id}/cancel` | Cancel a task |
+| `GET /api/code/list` | List coding sessions |
 
 ## CLI
 
@@ -121,10 +157,21 @@ raven pairing approve CODE     Approve user
 raven models list              Available models
 raven plugins list             Loaded plugins
 raven history SESSION_ID       View messages
-raven nodes list               List device nodes
-raven nodes pair DEVICE_ID     Pair a device
 raven db migrate               Run migrations
 raven db backup                Backup database
+raven task list                List tasks
+raven task run <goal>          Run a task
+raven task show <id>           View task details
+raven task cancel <id>         Cancel a task
+raven task retry <id>          Retry failed task
+raven monitor list             List monitors
+raven monitor add ...          Add monitor
+raven code index <path>        Index codebase
+raven code search <query>      Search code
+raven code review <file>       Review file
+raven code start <goal>        Start coding session
+raven routine list             List routines
+raven routine add ...          Add routine
 ```
 
 ## Chat Commands
@@ -143,6 +190,15 @@ raven db backup                Backup database
 /help                 Show all commands
 /skills               List loaded skills
 /pair <code>          Authorize with pairing code
+/task <goal>          Plan and execute a task
+/monitor list         List monitors
+/monitor add <type> <target>  Add monitor
+/code index [path]    Index codebase
+/code search <query>  Search code
+/code review <file>   Review a file
+/code start <goal>    Start coding session
+/routine list         List routines
+/routine add <action> <schedule>  Add routine
 ```
 
 ## Plugins
@@ -169,7 +225,8 @@ raven db backup                Backup database
 - **Secrets Encryption**: Fernet/PBKDF2 encryption for sensitive config values
 - **Sandbox**: Subprocess isolation (no network, temp dir, timeout) or full Docker sandbox
 - **Rate Limiting**: Configurable per-minute throttle (global + per-channel)
-- **API Auth**: X-Raven-Key header required on all sensitive endpoints
+- **API Auth**: X-Raven-Key header or Bearer token on sensitive endpoints
+- **RBAC**: 4 roles (admin/user/viewer/banned), 16 granular permissions
 - **Audit Log**: Every message, auth event, and admin action is logged
 
 ## Environment
@@ -244,6 +301,12 @@ raven-ai/
 │   ├── agent/          ReAct agent, multi-agent registry, workspace prompts
 │   ├── gateway/        Message routing, session management, chat commands
 │   ├── admin_api.py    RESTful admin API (channels, agents, config, secrets, jobs, audit)
+│   ├── auth/           Multi-user auth, RBAC (4 roles, 16 permissions), API tokens
+│   ├── rag/            Embedding engine, vector store, document chunking, retriever, conversation memory
+│   ├── task_engine/    Task planner, runner, store (multi-step tool-driven tasks)
+│   ├── monitor/        HTTP, price, RSS, file, process monitors with conditions
+│   ├── coder/          Codebase indexer, AST parser, file reviewer, coding session manager
+│   ├── routine/        Routine engine, store (briefings, email checks, file organization)
 │   ├── audit.py        Structured JSON event log (20 event types)
 │   ├── circuit_breaker.py  Stateful circuit breaker (closed/open/half-open)
 │   ├── errors.py       Typed error framework (20 ErrorCodes, classify_error)
@@ -265,8 +328,8 @@ raven-ai/
 │   └── webhooks.py     Generic, Slack, WhatsApp, Google Chat, Signal, Teams, Feishu, LINE
 ├── channels/
 │   ├── enterprise_base.py  Base class: RateLimiter, retry, audit, metrics, HTTP pool
-│   ├── telegram/       python-telegram-bot adapter
-│   ├── discord/        discord.py adapter
+│   ├── telegram/       python-telegram-bot + voice transcription + inline keyboards
+│   ├── discord/        discord.py + slash commands + embeds
 │   ├── webchat/        FastAPI + WebSocket adapter
 │   ├── slack/          slack-sdk async adapter
 │   ├── whatsapp/       Graph API + webhook
@@ -278,7 +341,11 @@ raven-ai/
 │   ├── feishu/         Feishu Open API + auto-refresh token
 │   └── line/           LINE Messaging API
 ├── plugins/            10 plugins (api, browser, code, cron, files, git, memory, ocr, process, sessions)
-├── cli/                CLI with 15+ commands
+├── cli/                CLI with 25+ commands
+├── web/                React/Vite dashboard (6 pages: Dashboard, Chat, Tasks, Monitors, Routines, Code, Settings)
+├── tools/              File, shell, notify, browser tools
+├── routines/           Briefing, email, file organizer implementations
+├── monitors/           HTTP, price, RSS, file, process check implementations
 ├── .github/            GitHub Actions CI (3.11-3.13)
 ├── data/               SQLite DB, audit log, encrypted secrets
 └── workspace/          AGENTS.md, SOUL.md, TOOLS.md, skills/
@@ -290,9 +357,12 @@ raven-ai/
 |-------|-----------|
 | **Backend** | Python 3.11+, FastAPI, asyncio, SQLite |
 | **LLM** | OpenRouter, Anthropic, OpenAI, Ollama |
-| **Memory** | SQLite (relational + vector recall) |
+| **Memory** | SQLite (relational) + ChromaDB + numpy vector store (semantic) |
+| **RAG** | OpenAI embeddings / sentence-transformers, cosine similarity, document chunking |
+| **Auth** | PBKDF2 password hashing, Bearer tokens, RBAC |
+| **Frontend** | React 19, Vite, Tailwind CSS 4, react-router-dom |
 | **Observability** | Prometheus metrics, structured JSON audit, health checks, correlation IDs |
-| **Security** | Rate limiting, API auth, DM pairing, per-channel allowlist, Fernet encryption, plugin sandbox |
+| **Security** | Rate limiting, API auth, DM pairing, per-channel allowlist, Fernet encryption, plugin sandbox, RBAC |
 | **Resilience** | Circuit breakers, exponential backoff retry, connection pooling, config hot-reload |
 | **CI** | GitHub Actions (pytest, ruff lint, import check) |
 | **Deploy** | Docker, docker-compose |
