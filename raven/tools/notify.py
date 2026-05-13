@@ -19,7 +19,7 @@ async def notify_telegram(message: str, token: str = "", chat_id: str = "") -> s
         from telegram import Bot
         bot = Bot(token=token)
         await bot.send_message(chat_id=chat_id, text=message[:4000]) if chat_id else None
-        return f"Sent Telegram notification"
+        return "Sent Telegram notification"
     except Exception as e:
         return f"Telegram notify failed: {e}"
 

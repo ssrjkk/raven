@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from raven.core.config import settings
 from raven.core.db import Database
+
+PLUGIN_NAME = "sessions"
+PLUGIN_DESCRIPTION = "List and inspect conversation sessions"
 
 _db: Database | None = None
 

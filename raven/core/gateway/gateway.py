@@ -355,7 +355,7 @@ class Gateway:
                     if s.result:
                         r = str(s.result)[:200]
                         results.append(f"  ✅ {s.description}: {r}")
-                msg = f"✅ Task completed!\n" + "\n".join(results[:10])
+                msg = "✅ Task completed!\n" + "\n".join(results[:10])
                 await self._send(event.channel, event.session_id, msg)
             elif task.status.value == "failed":
                 await self._send(event.channel, event.session_id,
@@ -467,7 +467,7 @@ class Gateway:
             root = args[0] if args else str(Path.cwd())
             await self._send(event.channel, event.session_id, f"Indexing {root}...")
             indexer = CodeIndexer(root)
-            files = indexer.index(max_files=2000)
+            indexer.index(max_files=2000)
             summary = indexer.summary()
             langs = ", ".join(f"{k}:{v}" for k, v in summary.get("languages", {}).items())
             await self._send(event.channel, event.session_id,

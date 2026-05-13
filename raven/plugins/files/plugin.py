@@ -61,7 +61,6 @@ async def ls(path: str = ".", pattern: str = "*") -> str:
     lines = []
     for item in sorted(items):
         size = item.stat().st_size if item.is_file() else 0
-        mtime = item.stat().st_mtime
         kind = "📄" if item.is_file() else "📁"
         lines.append(f"{kind} {item.name:30s} {size:>8,d}B")
     total = len(lines)

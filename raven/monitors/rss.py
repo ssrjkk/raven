@@ -35,7 +35,6 @@ async def check_rss(monitor: Monitor) -> dict[str, Any]:
                 "published": pubdate or "",
             })
 
-        latest_item = root.find(".//item") or root.find(".//atom:entry", namespaces)
         last_build = _find_text(root, "lastBuildDate", ns) or _find_text(root, "updated", ns) or ""
 
         return {

@@ -120,7 +120,7 @@ async def explain_code(code: str, detail: str = "high") -> str:
         f"## Code Explanation ({detail} level)\n\n"
         + (f"**{len(lines)} lines, ~{len(code)} chars**\n\n" if detail == "high" else "")
         + f"```\n{code[:2000]}\n```\n\n"
-        + ("\n".join(f"`{i+1}` | {l.strip()}" for i, l in enumerate(lines[:30]) if l.strip()) if detail == "low" else "Overview only.")
+        + ("\n".join(f"`{i+1}` | {line.strip()}" for i, line in enumerate(lines[:30]) if line.strip()) if detail == "low" else "Overview only.")
     )
 
 

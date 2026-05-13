@@ -81,7 +81,7 @@ def timed(name: str, labels: dict[str, str] | None = None) -> Callable:
                 result = await fn(*args, **kwargs)
                 metrics.observe(name, time.monotonic() - start, labels)
                 return result
-            except Exception as e:
+            except Exception:
                 metrics.error(name, labels)
                 metrics.observe(name, time.monotonic() - start, labels)
                 raise
@@ -93,7 +93,7 @@ def timed(name: str, labels: dict[str, str] | None = None) -> Callable:
                 result = fn(*args, **kwargs)
                 metrics.observe(name, time.monotonic() - start, labels)
                 return result
-            except Exception as e:
+            except Exception:
                 metrics.error(name, labels)
                 metrics.observe(name, time.monotonic() - start, labels)
                 raise

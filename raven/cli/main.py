@@ -529,10 +529,14 @@ def doctor():
     checks.append(("LLM Provider", "✅ Configured" if has_any_key else "⚠️  No provider configured"))
 
     provider_names = []
-    if cfg.get("openrouter_api_key"): provider_names.append("OpenRouter")
-    if cfg.get("anthropic_api_key"): provider_names.append("Anthropic")
-    if cfg.get("openai_api_key"): provider_names.append("OpenAI")
-    if cfg.get("ollama_base_url"): provider_names.append("Ollama")
+    if cfg.get("openrouter_api_key"):
+        provider_names.append("OpenRouter")
+    if cfg.get("anthropic_api_key"):
+        provider_names.append("Anthropic")
+    if cfg.get("openai_api_key"):
+        provider_names.append("OpenAI")
+    if cfg.get("ollama_base_url"):
+        provider_names.append("Ollama")
     if provider_names:
         checks.append(("Providers", ", ".join(provider_names)))
 
@@ -1249,7 +1253,7 @@ def code_index(path: str, max_files: int):
         return
     with console.status("[bold]Indexing...", spinner="dots"):
         indexer = CodeIndexer(str(p))
-        files = indexer.index(max_files=max_files)
+        indexer.index(max_files=max_files)
     summary = indexer.summary()
     console.print(f"[green]Indexed {summary['files']} files[/green]")
     for lang, count in summary.get("languages", {}).items():

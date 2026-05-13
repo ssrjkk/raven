@@ -61,7 +61,7 @@ async def list_processes(filter: str = "") -> str:
     result = await run(cmd, timeout=10, shell=True)
     if filter:
         lines = result.split("\n")
-        filtered = [l for l in lines if filter.lower() in l.lower()]
+        filtered = [line for line in lines if filter.lower() in line.lower()]
         result = "\n".join(filtered) if filtered else f"No processes matching '{filter}'"
     return result
 

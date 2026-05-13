@@ -214,10 +214,10 @@ async def onboard() -> None:
     console.print(Panel.fit(
         "[bold green]Setup complete![/bold green]\n\n"
         "Next steps:\n"
-        f"  [bold]raven start[/bold]         Launch Raven\n"
-        f"  [bold]raven status[/bold]        Check status\n"
-        f"  [bold]raven doctor[/bold]        Diagnose issues\n"
-        f"  [bold]raven service install[/bold]  Install as Windows service\n\n"
+        "  [bold]raven start[/bold]         Launch Raven\n"
+        "  [bold]raven status[/bold]        Check status\n"
+        "  [bold]raven doctor[/bold]        Diagnose issues\n"
+        "  [bold]raven service install[/bold]  Install as Windows service\n\n"
         "Run [bold]raven --help[/bold] for all commands",
         border_style="green",
     ))

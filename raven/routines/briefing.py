@@ -90,7 +90,7 @@ async def send_message(routine: Routine) -> str:
                 return f"Message sent: {text[:100]}"
             except Exception as e:
                 return f"Send failed: {e}"
-    return f"No channel configured to send message"
+    return "No channel configured to send message"
 
 
 async def check_email(routine: Routine) -> str:
