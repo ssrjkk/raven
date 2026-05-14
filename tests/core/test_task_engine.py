@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from raven.core.task_engine.models import Task, TaskPriority, TaskStatus, TaskStep
+from raven.core.task_engine.models import Task, TaskStatus, TaskStep
 from raven.core.task_engine.store import TaskStore
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
