@@ -21,7 +21,7 @@
     <img src="https://img.shields.io/badge/channels-12-8A2BE2" alt="Channels">
   </a>
   <a href="https://github.com/ssrjkk/raven">
-    <img src="https://img.shields.io/badge/tests-160_passing-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-220_passing-brightgreen" alt="Tests">
   </a>
 </div>
 
@@ -47,9 +47,11 @@
 ## Quickstart
 
 ```bash
-pip install -e .
+pip install raven-agent
+# Или для разработки: pip install -e .
 cp .env.example .env
 # Отредактируйте .env — добавьте хотя бы один API-ключ LLM
+raven onboard   # Интерактивный мастер настройки (LLM, Telegram, каналы)
 raven start
 ```
 
@@ -83,6 +85,7 @@ npm run dev    # http://localhost:5173 (прокси на :18888)
 | **Coding Assistant** | Индексация кода (AST-парсинг, 8 языков), семантический поиск, ревью файлов (LLM-driven), сессии разработки |
 | **Routines** | Автоматические рутины по расписанию: send_briefing, check_email, organize_files, send_message |
 | **RAG Knowledge Base** | Embedding engine (OpenAI + local), векторное хранилище, чанкинг документов (PDF/TXT/код), семантический retrieval |
+| **Workspace Skills** | Навыки в `workspace/skills/`: криптовалюта, утренний бриффинг, веб-поиск. Загружаются автоматически через SKILL.md |
 | **Web Dashboard** | React 19 + Vite + Tailwind: Dashboard, Chat, Tasks, Monitors, Routines, Code Sessions, Settings |
 | **Auth & RBAC** | Мультипользовательская аутентификация, 4 роли (admin/user/viewer/banned), 16 пермишенов, Bearer-токены |
 | **Enterprise инфраструктура** | Circuit breaker, HTTP-пул, rate limiter, retry c экспоненциальной задержкой, audit-лог (20 типов событий), Prometheus metrics, health checks |
@@ -169,6 +172,8 @@ raven-ai/
 ├── tools/              file, shell, notify, browser
 ├── routines/           briefing, email, file organizer
 ├── monitors/           http, price, rss, file, process
+├── workspace/
+│   └── skills/         crypto, briefing, web_search (SKILL.md)
 └── .github/            GitHub Actions CI (pytest + ruff, 3.11-3.13)
 ```
 
@@ -185,6 +190,9 @@ raven-ai/
 | **Auth** | PBKDF2, Bearer tokens, RBAC |
 | **Frontend** | React 19, Vite, Tailwind CSS 4, react-router-dom |
 | **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, Graph API |
+| **Monitor Engine** | 5 типов (HTTP, price, RSS, file, process), ConditionEvaluator, AlertDispatcher |
+| **Routine Engine** | Интервальные и scheduled рутины с `_parse_cron`, логированием |
+| **Workspace Skills** | SKILL.md в `workspace/skills/`, авто-загрузка через SkillsRegistry |
 | **Observability** | Prometheus metrics, JSON audit, health checks, correlation IDs |
 | **Security** | Rate limiting, API auth, DM pairing, Fernet encryption, RBAC, plugin sandbox |
 | **Resilience** | Circuit breaker, retry, connection pooling, hot-reload |
@@ -202,7 +210,7 @@ raven-ai/
   <p>
     <a href="https://github.com/ssrjkk/raven">GitHub</a> •
     <a href="https://github.com/ssrjkk">Telegram</a> •
-    <a href="mailto:ssrjkk@yandex.ru">ssrjkk@yandex.ru</a>
+    <a href="mailto:ray013lefe@gmail.com">ray013lefe@gmail.com</a>
   </p>
   <p>
     Есть идея или баг? → <a href="https://github.com/ssrjkk/raven/issues">Откройте issue</a>
