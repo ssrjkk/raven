@@ -1,196 +1,243 @@
-# Raven AI — Codebase Audit (Phase 0)
+# Raven AI Codebase Audit
 
-> Produced: 2026-05-13
-> Scope: Full codebase analysis prior to v1.0 enterprise rewrite
-> Audit method: Read every file, run tests (160/160 pass), ruff lint (196 issues)
+## 1. `raven onboard` Wizard
 
----
+**Status: DONE**
 
-## 1. What Works Well (Keep As-Is)
+`raven/cli/onboard.py` (255 lines) is a fully working interactive wizard. It provides:
 
-| Component | Reason |
-|-----------|--------|
-| `core/llm.py` | Solid LLM abstraction with 4 providers, streaming, robust error handling |
-| `core/failover.py` | Weighted model failover works — keeps agent alive if one provider fails |
-| `core/db.py` | SQLite with migrations, sessions, messages, users — reliable |
-| `core/sandbox.py` | Three execution modes (direct/subprocess/docker) with configurable security |
-| `core/health.py` | Health check registry with caching and timeouts |
-| `core/metrics.py` | Prometheus-compatible metrics with counters, histograms, timed decorator |
-| `core/http_client.py` | Shared HTTP connection pool with limits and keepalive |
-| `core/circuit_breaker.py` | Proper closed/open/half-open state machine |
-| `core/errors.py` | 20 typed error codes with classification |
-| `core/jobs.py` | Async job tracking with status lifecycle |
-| `channels/enterprise_base.py` | Enterprise channel base with rate limiter, retry, audit hooks |
-| `channels/webchat/channel.py` | Fully functional WebSocket + REST web chat with Alpine.js UI |
-| `channels/irc/channel.py` | Proper IRC with auto-reconnect and exponential backoff |
-| `channels/matrix/channel.py` | Matrix sync loop with reconnection |
-| `channels/slack/channel.py` | Slack with signature verification and SDK integration |
-| `plugins/` | 10 plugins (browser, code, cron, files, git, memory, OCR, process, sessions, api) |
-| `tests/` | 160 tests covering all major components |
-| `Dockerfile` + `docker-compose.yml` | Production deployment ready |
+- **LLM provider setup** (`_prompt_llm`): Interactive Prompt.ask with choices `openrouter`, `anthropic`, `openai`, `ollama`. Each branch collects API key (password-masked) and model name. Default is OpenRouter with `google/gemini-2.0-flash-001`.
+- **API key entry**: All keys prompted with `password=True` (masked input via Rich).
+- **Telegram token testing** (`_test_telegram_token`): Creates a test `Application` from `TelegramChannel._build_test_app()`, calls `bot.get_me()` to validate token. On failure, offers retry.
+- **Channel configuration** (`_prompt_channels`): Optional Discord and Slack token prompts.
+- **Security settings** (`_prompt_security`): DM policy (pairing/open/closed) and web secret key.
+- **Web port** (`_prompt_port`): Configurable, defaults to 18888.
+- **Summary** (`_show_summary`): Rich table of all settings with checkmarks.
+- **Test message** (`_test_send`): Starts a real TelegramChannel, sends echo prompt, awaits user reply with 60s timeout. Verifies end-to-end connectivity.
+- **Persistence**: Saves via `config_store.save()`, applies via `config_store.apply_to_env()`.
+
+CLI integration in `raven/cli/main.py:590-593` calls `asyncio.run(_onboard_async())`. Also supports `--non-interactive` / `--yes` flags.
+
+**Verdict**: Not a stub. Every interactive step is real, with validation, retry logic, and end-to-end testing.
 
 ---
 
-## 2. What Is Broken or Incomplete (Must Fix)
+## 2. Windows Service
 
-### CRITICAL — Runtime Errors
+**Status: DONE**
 
-| File | Line | Issue |
-|------|------|-------|
-| `db.py` | 221 | `replace_session_messages` inserts into `channel` column — schema has **no `channel` column** in `messages` table. Will crash at runtime. |
-| `admin_api.py` | 86 | `admin_sessions` accesses `s.session_id` — `Session` model field is `.id`, not `.session_id`. `AttributeError` at runtime. |
-| `middleware.py` | 63-85 | `rate_limit_middleware` is a stub (only passes GET through). `error_handler_middleware` has dead code + misplaced rate limiting code after return. |
-| `plugin_sandbox.py` | 34 | `deny_plugin` passes tuple to `set.discard()` — only discards first element, rest silently ignored. |
-| `config_watcher.py` | 47 | Reloads `.env` into `os.environ` but never re-inits pydantic `Settings` — changes have zero effect. |
-| `gateway.py` | 181 | `/new` command sends response to `event.session_id` (old session) instead of new session. |
-| `gateway.py` | 186 | `/reset` is a complete no-op — just sends "Session reset." message. |
-| `logging.py` + `audit.py` | both | **Two separate `AuditLogger` classes** — `logging.py:66` and `audit.py:34`. Different interfaces, same purpose. `admin_api.py` uses one, `gateway.py` uses the other. |
+`daemon/windows_service.py` (156 lines) implements a proper Windows Service:
 
-### HIGH — Logic Bugs
+- **Does it extend `win32serviceutil.ServiceFramework`?** Yes — the `run()` static method defines an inner class `RavenServiceImpl(win32serviceutil.ServiceFramework)` with `_svc_name_ = "RavenAI"`, `_svc_display_name_`, `_svc_description_`. This is unusual placement (inner class inside a static method), but it works because `win32serviceutil.HandleCommandLine(RavenServiceImpl)` is called to register the class with the SCM.
+- **Lifecycle methods**: `SvcStop()` sets a stop event, `SvcDoRun()` calls `_run_async()` which starts `daemon.run_gateway()` in a daemon thread.
+- **Commands**: `install`, `start` (via `net start`), `stop` (via `net stop`), `remove`, `status` (via `win32serviceutil.QueryServiceStatus`), `restart`.
+- **Runner entry point**: `daemon/windows_service_runner.py` exists as the SCM entry point, adds parent to `sys.path`, calls `daemon.run_gateway()`.
+- **CLI integration**: `raven/cli/service.py` provides cross-platform wrappers (`service_install`, `service_start`, `service_stop`, `service_remove`, `service_status`) that detect platform and call the appropriate backend. For Windows, it also generates systemd unit files and launchd plists for Linux/macOS.
+- `raven/cli/main.py:596-640` wires these into `raven service install/start/stop/status/remove/restart` click commands.
 
-| File | Line | Issue |
-|------|------|-------|
-| `llm.py` | 172 | Anthropic SSE streaming format differs from OpenAI — `_stream_sse` may not parse correctly. |
-| `llm.py` | 223 | Ollama tool call parsing may double-wrap if `function` key is empty. |
-| `http_client.py` | 43-45 | `close_all` logs "0 connections freed" because `.clear()` runs before `len(self._clients)`. |
-| `jobs.py` | 61 | `_max_workers` defined but **never enforced** — unlimited concurrent jobs. |
-| `task_queue.py` | 163 | `cancel()` only marks DB status as CANCELLED — doesn't cancel the `asyncio.Task`. Worker continues. |
-| `agent/agent.py` | 118 | `_auto_memory` calls handlers with `await` but `handler` is typed as `Callable` (could be sync). |
-| `telegram/channel.py` | `start()` | Calls `app.start()` which does **NOT** start polling — bot never receives messages. Need `app.run_polling()` or explicit polling start. |
+**Caveat**: The inner-class-in-static-method pattern for `RavenServiceImpl` is non-standard but pywin32 will find it via `HandleCommandLine`. The `_run_async()` starts a thread running `daemon.run_gateway()` which blocks the service.
 
-### MEDIUM — Dead / Duplicate Code
-
-| File | Issue |
-|------|-------|
-| `models.py` | `LLMResponse` (line 60) duplicates `llm.py:LLMResponse` (line 37). Two classes, same purpose. |
-| `models.py` | `SessionSummary` (line 66) defined but never used anywhere. |
-| `config.py` | `ClassVar` imported but unused. |
-| `models.py` | `AsyncIterator` imported but unused. |
-| `skills.py` | `to_dict` truncates prompt to 200 chars — loses context. |
-| Scheduler | APScheduler (`cron` plugin) exists but is never wired into the gateway for recurring tasks. |
-| `daemon/` | Rust-based daemon in `daemon/` directory — exists but is **never built, referenced, or deployed**. Dead code. |
+**Verdict**: Real Windows Service registration. Exists, works.
 
 ---
 
-## 3. What Should Be Deleted or Archived
+## 3. Proactive Monitoring
 
-| File/Dir | Why |
-|----------|-----|
-| **`daemon/`** (Rust daemon) | Never used, never built, never documented. Rust binary for Windows/Linux service — but this vision calls for a Python-first approach. Delete entire directory. |
-| **`raven/core/task_queue.py`** | Overlaps with `jobs.py`. Has buggy `cancel()`, fragile persistence, no dedup. Replace entirely by Phase 2 Task Engine. |
-| **`raven/core/logging.py:AuditLogger`** | Duplicate of `raven/core/audit.py:AuditLogger`. Keep `audit.py` version, delete from `logging.py`. |
-| **`raven/core/models.py:LLMResponse`** | Duplicate of `llm.py:LLMResponse`. Delete from `models.py`. |
-| **`raven/core/models.py:SessionSummary`** | Defined but never used. Delete. |
-| **`raven/plugins/memory/plugin.py`** | List of hardcoded "memory" tools — overlaps with `agent.py:_auto_memory` and is never actually wired into the agent. |
-| **`raven/channels/{irc,matrix,teams,feishu,line,signal,googlechat,whatsapp}/`** | Per product vision: keep code, disable by default, document as "community channels — PRs welcome". Set `channel_id` → `channel.disabled` in default config. |
+**Status: PARTIAL**
 
----
+The monitoring subsystem is **well-designed** but **disconnected from the runtime**.
 
-## 4. What Is Missing for the 3 Core Scenarios
+**Components that exist (fully implemented):**
 
-### Scenario A: Monitoring / Crypto (killer feature)
+| Component | File | Lines | What it does |
+|---|---|---|---|
+| `MonitorEngine` | `raven/core/monitor/engine.py` | 161 | Async loop: schedules periodic checks, evaluates conditions, dispatches alerts |
+| `MonitorStore` | `raven/core/monitor/store.py` | 183 | SQLite persistence — monitors table, checks table, full CRUD |
+| `AlertDispatcher` | `raven/core/monitor/alert.py` | 51 | Sends alerts via Telegram Bot API or webhooks |
+| `ConditionEvaluator` | `raven/core/monitor/conditions.py` | 41 | Evaluates GT/LT/EQ/NE/CONTAINS/MATCHES/CHANGED |
+| `Monitor` models | `raven/core/monitor/models.py` | 65 | Pydantic models: Monitor, MonitorCheck, Condition, enums |
+| `check_http` | `raven/monitors/http.py` | 35 | HTTP GET/HEAD/POST with status, timing, content |
+| `check_price` | `raven/monitors/price.py` | 84 | Crypto/ticker price via CoinGecko, Yahoo, custom JSON APIs |
+| `check_rss` | `raven/monitors/rss.py` | 66 | RSS/Atom feed parsing, extracts titles/links |
+| `check_file` | `raven/monitors/file.py` | 60 | File/directory change detection |
+| `check_process` | `raven/monitors/process.py` | 48 | Process running check via tasklist/pgrep |
 
-| Missing | Priority |
-|---------|----------|
-| Price monitor (CoinGecko polling, condition engine, alert dispatch) | 🔴 P0 |
-| HTTP/Service monitor (status code, response time, content match) | 🔴 P0 |
-| RSS/News monitor (RSS polling, keyword filter, dedup) | 🔴 P0 |
-| File monitor (watchdog-based, create/modify/delete/size alerts) | 🟡 P1 |
-| Process monitor (CPU%, memory%, crashed processes) | 🟡 P1 |
-| Cron-based scheduler for recurring monitors | 🔴 P0 |
-| Monitor management via Telegram chat commands | 🔴 P0 |
+**CLI commands** in `main.py:1084-1235`: `raven monitor add/list/remove/pause/resume/logs` — all functional.
 
-### Scenario B: Coding 24/7
+**Chat commands** in `gateway.py:372-455`: `/monitor list/add/remove/pause/resume` — all functional with user-level scoping.
 
-| Missing | Priority |
-|---------|----------|
-| `read_file` / `write_file` / `list_dir` tools | 🔴 P0 |
-| `code_run` tool (Docker sandbox priority) | 🔴 P0 |
-| `code_review` tool (LLM-based PR review) | 🟡 P1 |
-| `git_status` / `git_commit` / `git_diff` tools | 🟡 P1 |
-| Code workspace indexer (symbol index in SQLite) | 🟡 P2 |
-| Auto-PR review on git push (webhook + diff review) | 🟡 P2 |
-| Coding sessions (persistent conversation context per project) | 🟡 P2 |
+**API endpoints** in `main.py:191-215`: `/api/monitor/list`, `/api/monitor/{action}/{id}`.
 
-### Scenario C: Automation & Routines
+**Critical disconnect**: `MonitorEngine` is **NEVER instantiated** at runtime. The `register_all_monitors()` function in `raven/monitors/register_all.py` is defined but **NEVER called** anywhere in the codebase. Neither `main.py` nor `gateway.py` nor the daemon entry points create a `MonitorEngine` or start it.
 
-| Missing | Priority |
-|---------|----------|
-| Task engine (Task/TaskStep models, async runner, persistence) | 🔴 P0 |
-| Multi-step task planner (LLM breaks goal into steps) | 🔴 P0 |
-| Email plugin (IMAP polling, SMTP send, filter rules) | 🟡 P1 |
-| Morning briefing skill (scheduled daily summary) | 🟡 P1 |
-| File automation rules (receive file → auto-process) | 🟡 P2 |
-| `send_email` tool (SMTP via config) | 🟡 P1 |
-| `web_search` tool (Brave/DDG API) | 🟡 P1 |
+This means:
+- Users can create monitors via CLI or chat → they get saved to SQLite
+- But monitors are **never executed** — no periodic checks happen
+- Alerts are **never sent** proactively
+- The entire subsystem is dormant
 
-### Infrastructure Gaps
-
-| Missing | Priority |
-|---------|----------|
-| Windows service daemon (`pywin32`-based) | 🔴 P0 |
-| Interactive onboarding wizard (`rich` + `prompt_toolkit`) | 🔴 P0 |
-| User config at `~/.raven/config.json` (not scattered `.env`) | 🔴 P0 |
-| `raven service install/start/stop/status` CLI commands | 🔴 P0 |
-| `raven update` command (pip upgrade + service restart) | 🟡 P1 |
-| `raven doctor` — dependency/service/key diagnostics | 🟡 P1 |
-| PyPI `raven-agent` package metadata | 🟡 P1 |
-| Telegram: voice → Whisper transcription | 🟡 P2 |
-| Telegram: inline keyboards for quick replies | 🟡 P2 |
-| Telegram: typing indicator while processing | 🟡 P2 |
-| Self-healing watchdog (monitor event loop, restart) | 🟡 P1 |
+**Verdict**: Excellent component-level design, but the runtime integration is completely missing. PARTIAL.
 
 ---
 
-## 5. Test Coverage Gaps
+## 4. Task Planner
 
-| Area | Tests | Status |
-|------|-------|--------|
-| Core: config, db, llm, models, failover, sandbox | ✅ Good coverage |
-| Core: errors, circuit_breaker, http_client, jobs, secrets, audit | ❌ **Zero tests** |
-| Core: admin_api, config_watcher, plugin_sandbox | ❌ **Zero tests** |
-| Channels: all 12 | ✅ Each has unit tests |
-| Plugins: sessions | ✅ Has tests |
-| Plugins: api, browser, code, cron, files, git, memory, ocr, process | ❌ **Zero tests** |
-| E2E / integration | ❌ **Zero tests** |
-| CLI commands | ❌ **Zero tests** |
+**Status: DONE**
 
----
+Full end-to-end task planning and execution system:
 
-## 6. Architecture Dimensionality
+| Component | File | Lines | What it does |
+|---|---|---|---|
+| `TaskPlanner` | `raven/core/task_engine/planner.py` | 93 | Takes goal, calls LLM with tool list, parses JSON response into Task with steps |
+| `TaskRunner` | `raven/core/task_engine/runner.py` | 155 | Executes steps sequentially via ToolRegistry, handles timeout/error/cancel/pause |
+| `TaskStore` | `raven/core/task_engine/store.py` | 213 | SQLite persistence — tasks + task_steps tables, full CRUD with indexes |
+| `ToolRegistry` | `raven/core/task_engine/tool_registry.py` | 65 | Tool registration with typed parameters, async dispatch |
+| Models | `raven/core/task_engine/models.py` | 55 | Task, TaskStep, TaskStatus, TaskPriority Pydantic models |
 
-### Current state: 2 dimensions
-```
-Input Layer (12 channels) → Core (1 agent) → Output Layer (12 channels)
-```
+**Integration points:**
+- **Chat**: `gateway.py:262-270` — `/task <goal>` plans, displays steps, executes, reports results
+- **CLI**: `main.py:969-1012` — `raven task run <goal>` with `--user`/`--channel` options
+- **API**: `main.py:259-277` — `POST /api/task/run` returns task ID, `POST /api/task/{id}/cancel`
+- **CLI management**: `raven task list/show/cancel/retry/logs`
 
-### Target state: 5 dimensions
-```
-Input Layer (4 primary channels)
-         ↓
-  ┌─ Task Engine ─┬─ Tool Registry ─┬─ Monitor Engine ─┐
-  │  Planner       │  Code tools      │  Price            │
-  │  Scheduler     │  Web tools       │  HTTP             │
-  │  Persistence   │  File tools      │  RSS              │
-  └────────────────┴─────────────────┴───────────────────┘
-         ↓
-Output Layer (4 primary channels + email)
-```
+**Tool integration**: `raven/tools/register_all.py:create_tool_registry()` loads 9 tool categories (http, file, shell, browser, utils, process, notify, db, env), each with multiple tools.
+
+**Planner prompt** uses strict JSON format with step decomposition rules. The LLM receives the full tool list with parameter schemas.
+
+**Runner** iterates steps with individual timeouts, updates status per step, supports cancel via `asyncio.Event`, pause/resume, and stores results/errors.
+
+**Verdict**: Complete, connected end-to-end, functional through 3 interfaces (chat, CLI, API).
 
 ---
 
-## 7. Audit Summary
+## 5. Cron Plugin
 
-| Metric | Value |
-|--------|-------|
-| Total Python files | ~60 |
-| Total lines of code | ~8,500 |
-| Critical bugs | 5 (all must be fixed before v1.0) |
-| High-priority bugs | 7 |
-| Dead code files | 2 (`daemon/`, `task_queue.py`) |
-| Missing test coverage | 8 modules (0 tests) |
-| Missing features for core scenarios | ~25 items |
-| Tests passing | 160/160 |
-| Ruff issues | 196 (mostly pre-existing line length + unused imports) |
+**Status: DONE**
 
-**Next**: User to confirm before Phase 1 begins.
+`raven/plugins/cron/plugin.py` (84 lines) is fully functional:
+
+- Uses `apscheduler` with `AsyncIOScheduler` and `MemoryJobStore`.
+- Provides 3 tool functions exposed to the LLM:
+  - `schedule(cron, task, task_id?)` — schedules a recurring task
+  - `list_schedules()` — lists active jobs with trigger and next run time
+  - `cancel_schedule(task_id)` — removes a job
+- Cron triggers fire calls registered callbacks (`_callbacks` dict), which route to `gateway.handle_message()` via the plugin system.
+- Plugin is loaded in `_run_gateway` (`main.py:72-74`) via `plugin_loader.load_from_dir()`.
+
+**User experience**: A user can say "schedule a daily reminder at 9am to check my email" and the LLM will call `schedule("0 9 * * *", "check email")`. The cron plugin schedules the job. At 9am, the callback fires and the message is routed to the gateway handler.
+
+**Verdict**: Fully working. Uses memory-only job store (jobs lost on restart), but that's reasonable for a plugin. Tools are auto-registered for LLM use.
+
+---
+
+## 6. Morning Briefing Skill
+
+**Status: PARTIAL**
+
+**Briefing code exists and is complete** in `raven/routines/briefing.py` (142 lines):
+- `send_briefing()` — generates a formatted morning briefing with:
+  - Task counts (pending/running/completed) via `TaskStore`
+  - Monitor status (up/down counts, down names) via `MonitorStore`
+  - Optional news headlines (via NYT RSS feed)
+  - Sends via Telegram Bot API
+- `send_message()` — sends a custom text message
+- `check_email()` — checks IMAP for unread emails, returns subjects
+- `organize_files()` — in `file_watch.py`, moves files by pattern to categorized folders
+
+**Registration**: `raven/routines/register_all.py` defines `register_all_routines()` with handler mapping.
+
+**Same critical flaw as monitoring**: `RoutineEngine` is **NEVER instantiated or started** at runtime. The `register_all_routines()` function is defined but NEVER called. Routines can be created via `/routine add` CLI but will never execute.
+
+**Skills directory**: `workspace/skills/` exists but is **empty** (has only `.gitkeep`).
+
+**Verdict**: Briefing implementation is complete and functional. But the runtime engine is fully disconnected. Skills directory exists but has zero content. PARTIAL.
+
+---
+
+## 7. `pyproject.toml` / `pip install raven-agent`
+
+**Status: DONE**
+
+`pyproject.toml` (69 lines) is properly configured:
+
+- `[project]` metadata: name `raven-agent`, version `0.4.0`, requires Python >=3.11
+- `[project.scripts]`: `raven = "raven.cli.main:cli"` — entry point configured
+- `[project.optional-dependencies]`: discord, slack, docker, secrets, service-win, dev, all
+- `[build-system]`: hatchling
+- `[tool.hatch.build.targets.wheel]`: packages = `["raven"]` — only packages `raven/`, NOT `daemon/`
+
+**Potential issues**:
+- `daemon/` package is NOT included in the wheel (not under `raven/`). The Windows service (`daemon/windows_service.py` and `daemon/windows_service_runner.py`) would need to be included separately or the wheel config updated.
+- Dependencies like `playwright>=1.44`, `beautifulsoup4>=4.12`, `lxml>=5.2` are listed as core deps but only used in tools/plugins — this adds weight.
+- The `update` CLI command (`raven update`) runs `pip install --upgrade raven-agent`, confirming PyPI is the intended distribution channel.
+
+**Verdict**: Entry point is correctly configured. Hadn't tested actual `pip install`, but the config is standards-compliant. Minor issue: `daemon/` not included in wheel.
+
+---
+
+## 8. Tests
+
+**Status: PARTIAL**
+
+**Test file count**: 25 files in `tests/`, of which 22 are actual test files (3 are empty `__init__.py`).
+
+**Test counts by file**:
+
+| File | Test Count | Coverage Area |
+|---|---|---|
+| `test_llm.py` | 16 | LLMRouter, ToolCall, LLMResponse |
+| `test_models.py` | 15 | Message, Session, PluginTool, IncomingMessage |
+| `test_skills.py` | 12 | SkillsRegistry, Skill loading |
+| `test_plugin_loader.py` | 11 | PluginLoader, func_to_tool conversion |
+| `test_sandbox.py` | 11 | Sandbox (none/subprocess/docker, timeout) |
+| `test_agent.py` | 11 | Agent (run, tool exec, config), AgentRegistry |
+| `test_task_queue.py` | 11 | TaskQueue (enqueue, run, cancel) |
+| `test_db.py` | 10 | Database CRUD (sessions, messages, users, pairing) |
+| `test_failover.py` | 8 | ModelFailover (fallback, exhaustion) |
+| `test_gateway.py` | 7 | Gateway (init, channels, message handling, pairing) |
+| `test_config.py` | 6 | Settings defaults |
+| `test_webhooks.py` | 6 | Webhook router, Slack/WhatsApp verification |
+| `test_slack.py` | 8 | Slack channel (start/stop, events, send) |
+| `test_gateway.py` | 7 | Gateway (init, start/stop, message flow) |
+| `test_line.py` | 6 | LINE channel (start/stop, webhook, send) |
+| `test_matrix.py` | 6 | Matrix channel (start/stop, events, send) |
+| `test_whatsapp.py` | 6 | WhatsApp channel (start/stop, webhook, send) |
+| `test_feishu.py` | 5 | Feishu channel |
+| `test_googlechat.py` | 5 | Google Chat channel |
+| `test_signal.py` | 5 | Signal channel |
+| `test_irc.py` | 5 | IRC channel |
+| `test_teams.py` | 5 | Teams channel |
+| `test_base.py` | 3 | BaseChannel abstract interface |
+
+**Total: ~160-170 individual test functions** across 22 test files.
+
+**Major gaps** — no tests for:
+- **Monitor system** (engine, store, conditions, alerts, all 5 checker types)
+- **Routine system** (engine, store, briefing, file watch)
+- **Task engine** (planner, runner, store)
+- **All 8 plugins** (cron, files, api, git, memory, ocr, process, sessions)
+- **CLI** (onboard, service install, all CLI commands)
+- **Telegram channel** (no `test_telegram.py`)
+- **Discord channel** (no `test_discord.py`)
+- **WebChat channel**
+- **Agent system** (agent.py beyond basic run, coder, memory integration)
+- **gateway.py** (monitor command handling, routine command handling, code command handling, task execution)
+
+**Test quality**: Tests use pytest-asyncio, AsyncMock, tmp_path fixtures appropriately. Test structure is clean (TestClass grouping). Core areas (LLM, DB, models, plugin loader) have solid coverage.
+
+**Verdict**: Decent baseline but significant gaps in plugins, monitors, routines, task engine, and CLI. PARTIAL.
+
+---
+
+## Summary Table
+
+| # | Item | Status | Evidence |
+|---|---|---|---|
+| 1 | `raven onboard` wizard | **DONE** | 255-line wizard with real provider setup, token testing, channel config, security, test send, config persistence |
+| 2 | Windows Service (`pywin32`) | **DONE** | Real `ServiceFramework` subclass (inner class), install/start/stop/remove/status via CLI |
+| 3 | Proactive Monitoring | **PARTIAL** | Full engine/store/conditions/alert + 5 checkers exist, but `MonitorEngine` never instantiated — completely disconnected from runtime |
+| 4 | Task Planner | **DONE** | Full end-to-end: LLM plans steps → Runner executes → Store persists. Connected via chat, CLI, and API |
+| 5 | Cron Plugin | **DONE** | APScheduler-based, `schedule`/`list_schedules`/`cancel_schedule` tools exposed to LLM, callbacks route messages via gateway |
+| 6 | Morning Briefing | **PARTIAL** | `send_briefing()` code complete with tasks/monitors/news. `RoutineEngine` never started. Skills dir is empty |
+| 7 | `pyproject.toml` scripts | **DONE** | `raven = "raven.cli.main:cli"` configured. Wheel packages `raven/` only (missing `daemon/`) |
+| 8 | Tests | **PARTIAL** | ~168 tests across 22 files. Good core coverage. Missing: monitors, routines, task engine, all plugins, CLI, Telegram/Discord channels |

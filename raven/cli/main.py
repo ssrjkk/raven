@@ -48,6 +48,12 @@ from raven.core.models import Message
 from raven.core.plugin_loader import PluginLoader
 from raven.core.secrets import secrets
 from raven.core.webhooks import create_webhook_router
+from raven.core.monitor.engine import MonitorEngine
+from raven.core.monitor.store import MonitorStore
+from raven.core.routine.engine import RoutineEngine
+from raven.core.routine.store import RoutineStore
+from raven.monitors.register_all import register_all_monitors
+from raven.routines.register_all import register_all_routines
 
 console = Console()
 
@@ -190,9 +196,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     @api_app.get("/api/monitor/list")
     async def api_monitor_list():
-        from raven.core.monitor.store import MonitorStore
-        store = MonitorStore(settings.resolved_db_path)
-        monitors = store.list_monitors()
+        eng: MonitorEngine = api_app.state.monitor_engine
+        monitors = eng.list_monitors()
         return [
             {
                 "id": m.id, "name": m.name, "type": m.type.value,
@@ -205,38 +210,32 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     @api_app.post("/api/monitor/{action}/{monitor_id}")
     async def api_monitor_toggle(action: str, monitor_id: str):
-        from raven.core.monitor.store import MonitorStore
-        from raven.core.monitor.models import MonitorStatus
-        store = MonitorStore(settings.resolved_db_path)
+        eng: MonitorEngine = api_app.state.monitor_engine
         if action == "pause":
-            store.update_status(monitor_id, MonitorStatus.PAUSED)
+            eng.pause_monitor(monitor_id)
         elif action == "resume":
-            store.update_status(monitor_id, MonitorStatus.ACTIVE)
+            eng.resume_monitor(monitor_id)
         return {"ok": True}
 
     @api_app.get("/api/routine/list")
     async def api_routine_list():
-        from raven.core.routine.store import RoutineStore
-        store = RoutineStore(settings.resolved_db_path)
-        routines = store.list_routines()
+        eng: RoutineEngine = api_app.state.routine_engine
         return [
             {
                 "id": r.id, "name": r.name, "action": r.action.value,
                 "schedule": r.schedule, "trigger": r.trigger.value,
                 "status": r.status.value, "last_run_status": r.last_run_status,
             }
-            for r in routines
+            for r in eng._store.list_routines()
         ]
 
     @api_app.post("/api/routine/{action}/{routine_id}")
     async def api_routine_toggle(action: str, routine_id: str):
-        from raven.core.routine.store import RoutineStore
-        from raven.core.routine.models import RoutineStatus
-        store = RoutineStore(settings.resolved_db_path)
+        eng: RoutineEngine = api_app.state.routine_engine
         if action == "pause":
-            store.update_status(routine_id, RoutineStatus.PAUSED)
+            eng.pause_routine(routine_id)
         elif action == "resume":
-            store.update_status(routine_id, RoutineStatus.ACTIVE)
+            eng.resume_routine(routine_id)
         return {"ok": True}
 
     @api_app.get("/api/task/list")
@@ -370,8 +369,20 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         except NotImplementedError:
             pass
 
+    monitor_store = MonitorStore(settings.resolved_db_path)
+    monitor_engine = MonitorEngine(monitor_store)
+    register_all_monitors(monitor_engine)
+    api_app.state.monitor_engine = monitor_engine
+
+    routine_store = RoutineStore(settings.resolved_db_path)
+    routine_engine = RoutineEngine(routine_store)
+    register_all_routines(routine_engine)
+    api_app.state.routine_engine = routine_engine
+
     async def run_all():
         await gateway.start()
+        await monitor_engine.start()
+        await routine_engine.start()
         config = uvicorn.Config(api_app, host="0.0.0.0", port=web_port, log_level="info", ws="auto")
         server = uvicorn.Server(config)
         server_task = asyncio.create_task(server.serve())
@@ -386,6 +397,14 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             os._exit(1)
 
     async def _shutdown(gw: Gateway, sv_task: asyncio.Task):
+        try:
+            await asyncio.wait_for(monitor_engine.stop(), timeout=5)
+        except Exception:
+            pass
+        try:
+            await asyncio.wait_for(routine_engine.stop(), timeout=5)
+        except Exception:
+            pass
         try:
             await asyncio.wait_for(gw.llm.cleanup(), timeout=5)
         except Exception:

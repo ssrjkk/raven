@@ -20,6 +20,8 @@ class TaskRunner:
     async def submit(self, task: Task) -> Task:
         task.status = TaskStatus.PENDING
         task.updated_at = time.time()
+        for step in task.steps:
+            step.task_id = task.id
         self._store.save_task(task)
 
         cancel_ev = asyncio.Event()
