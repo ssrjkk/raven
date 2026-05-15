@@ -123,7 +123,7 @@ class Sandbox:
                 cpu_quota=50000,
                 pids_limit=64,
             )
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, container.start)
             exit_code = await loop.run_in_executor(
                 None,
