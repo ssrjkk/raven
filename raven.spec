@@ -21,6 +21,8 @@ a = Analysis(
     binaries=[],
     datas=[
         (str(ROOT / "raven" / "plugins"), "raven/plugins"),
+        (str(ROOT / "workspace"), "workspace"),
+        (str(ROOT / "plugins"), "plugins"),
     ],
     hiddenimports=[
         # Core modules
@@ -68,6 +70,10 @@ a = Analysis(
         "raven.plugins.ocr.plugin",
         "raven.plugins.process",
         "raven.plugins.process.plugin",
+        "raven.plugins.git",
+        "raven.plugins.git.plugin",
+        "raven.plugins.sessions",
+        "raven.plugins.sessions.plugin",
         # Third-party hidden imports
         "pkg_resources",
         "pkgutil",
@@ -138,5 +144,5 @@ exe = EXE(
     upx_exclude=[],
     runtime_tmpdir=None,
     console=True,
-    icon=str(ROOT / "resources" / "raven.ico") if (ROOT / "resources" / "raven.ico").exists() else None,
+    icon=None,
 )
