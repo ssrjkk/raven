@@ -2,160 +2,262 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from loguru import logger
 
-from raven.core.monitor.alert import AlertDispatcher
-from raven.core.monitor.conditions import ConditionEvaluator
-from raven.core.monitor.models import ConditionOperator, Monitor, MonitorCheck, MonitorStatus
+from raven.core.audit import AuditEventType, audit_logger
+from raven.core.http_client import client_manager
+from raven.core.monitor.models import (
+    CheckResult,
+    Monitor,
+    MonitorStatus,
+    MonitorType,
+)
 from raven.core.monitor.store import MonitorStore
-
-MonitorHandler = Callable[[Monitor], Awaitable[dict[str, Any]]]
 
 
 class MonitorEngine:
-    def __init__(self, store: MonitorStore, alert_dispatcher: AlertDispatcher | None = None):
+    def __init__(self, store: MonitorStore):
         self._store = store
-        self._evaluator = ConditionEvaluator()
-        self._alerts = alert_dispatcher or AlertDispatcher()
-        self._handlers: dict[str, MonitorHandler] = {}
         self._tasks: dict[str, asyncio.Task] = {}
         self._running = False
+        self._gateway_ref: Any = None
 
-    def register_handler(self, monitor_type: str, handler: MonitorHandler) -> None:
-        self._handlers[monitor_type] = handler
+    def bind_gateway(self, gateway: Any):
+        self._gateway_ref = gateway
 
-    async def start(self) -> None:
+    async def start(self):
         self._running = True
-        monitors = self._store.list_active()
+        monitors = self._store.list_active_monitors()
         for m in monitors:
             self._schedule_monitor(m)
-        logger.info("Monitor engine started with {} monitors", len(monitors))
+        logger.info("MonitorEngine started with {} monitors", len(monitors))
 
-    async def stop(self) -> None:
+    async def stop(self):
         self._running = False
-        for tid, task in self._tasks.items():
+        for mid, task in list(self._tasks.items()):
             task.cancel()
-        await asyncio.gather(*self._tasks.values(), return_exceptions=True)
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         self._tasks.clear()
-        logger.info("Monitor engine stopped")
+        logger.info("MonitorEngine stopped")
 
-    def add_monitor(self, monitor: Monitor) -> None:
+    def pause_monitor(self, monitor_id: str):
+        self._store.update_status(monitor_id, MonitorStatus.PAUSED)
+        task = self._tasks.pop(monitor_id, None)
+        if task:
+            task.cancel()
+
+    def resume_monitor(self, monitor_id: str):
+        self._store.update_status(monitor_id, MonitorStatus.ACTIVE)
+        m = self._store.load_monitor(monitor_id)
+        if m:
+            self._schedule_monitor(m)
+
+    def list_monitors(self) -> list[Monitor]:
+        return self._store.list_monitors()
+
+    def add_monitor(self, monitor: Monitor):
         self._store.save_monitor(monitor)
-        if monitor.status == MonitorStatus.ACTIVE:
+        if monitor.status == MonitorStatus.ACTIVE and self._running:
             self._schedule_monitor(monitor)
 
-    def remove_monitor(self, monitor_id: str) -> None:
+    def remove_monitor(self, monitor_id: str):
         task = self._tasks.pop(monitor_id, None)
         if task:
             task.cancel()
         self._store.delete_monitor(monitor_id)
 
-    def pause_monitor(self, monitor_id: str) -> bool:
-        task = self._tasks.pop(monitor_id, None)
-        if task:
-            task.cancel()
-        self._store.update_status(monitor_id, MonitorStatus.PAUSED)
-        return True
+    def _schedule_monitor(self, monitor: Monitor):
+        if monitor.id in self._tasks:
+            self._tasks[monitor.id].cancel()
+        self._tasks[monitor.id] = asyncio.create_task(
+            self._run_loop(monitor)
+        )
 
-    def resume_monitor(self, monitor_id: str) -> bool:
-        self._store.update_status(monitor_id, MonitorStatus.ACTIVE)
-        monitor = self._store.load_monitor(monitor_id)
-        if monitor:
-            self._schedule_monitor(monitor)
-            return True
-        return False
-
-    def get_monitor(self, monitor_id: str) -> Monitor | None:
-        return self._store.load_monitor(monitor_id)
-
-    def list_monitors(self, user_id: str | None = None) -> list[Monitor]:
-        return self._store.list_monitors(user_id=user_id)
-
-    def get_checks(self, monitor_id: str, limit: int = 50) -> list[MonitorCheck]:
-        return self._store.get_checks(monitor_id, limit=limit)
-
-    def _schedule_monitor(self, monitor: Monitor) -> None:
-        task = asyncio.create_task(self._run_loop(monitor))
-        self._tasks[monitor.id] = task
-
-    async def _run_loop(self, monitor: Monitor) -> None:
+    async def _run_loop(self, monitor: Monitor):
         while self._running:
             try:
-                await self._run_check(monitor)
+                await self._check(monitor)
+                await asyncio.sleep(monitor.interval_seconds)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error("Monitor {} check error: {}", monitor.id, e)
+                await asyncio.sleep(60)
 
-            await asyncio.sleep(monitor.interval_seconds)
-
-            if not self._running:
-                break
-
-            refreshed = self._store.load_monitor(monitor.id)
-            if refreshed and refreshed.status != MonitorStatus.ACTIVE:
-                break
-
-    async def _run_check(self, monitor: Monitor) -> None:
+    async def _check(self, monitor: Monitor):
         start = time.time()
-        handler = self._handlers.get(monitor.type.value)
-        if not handler:
-            logger.warning("No handler for monitor type: {}", monitor.type.value)
-            return
-
-        check = MonitorCheck(
-            monitor_id=monitor.id,
-            checked_at=time.time(),
-        )
-
         try:
-            result = await handler(monitor)
-            elapsed = (time.time() - start) * 1000
-            check.response_time_ms = elapsed
-            check.result = result
-            check.status = "up"
+            if monitor.type == MonitorType.HTTP:
+                result = await self._check_http(monitor)
+            elif monitor.type == MonitorType.PRICE:
+                result = await self._check_price(monitor)
+            elif monitor.type == MonitorType.RSS:
+                result = await self._check_rss(monitor)
+            elif monitor.type == MonitorType.FILE:
+                result = self._check_file(monitor)
+            elif monitor.type == MonitorType.PROCESS:
+                result = self._check_process(monitor)
+            else:
+                return
 
-            check.triggered = self._evaluator.check_all(monitor.conditions, result)
+            result.response_time_ms = (time.time() - start) * 1000
+            result.triggered = self._evaluate_conditions(monitor, result)
+            monitor.last_check = result
+            self._store.save_check(monitor.id, result)
 
-            if check.triggered:
-                alert_msg = self._build_alert_message(monitor, check)
-                await self._alerts.dispatch(monitor, check, alert_msg)
+            audit_logger.log(
+                AuditEventType.MESSAGE_RECEIVED,
+                "monitor",
+                monitor.id,
+                detail={"type": monitor.type.value, "target": monitor.target, "status": result.status, "triggered": result.triggered},
+            )
+
+            if result.triggered:
+                await self._alert(monitor, result)
 
         except Exception as e:
-            elapsed = (time.time() - start) * 1000
-            check.response_time_ms = elapsed
-            check.status = "down"
-            check.error = str(e)
-            check.result = {"error": str(e)}
-
-            has_down_condition = any(
-                c.metric == "status" and c.operator == ConditionOperator.EQ and c.value == "down"
-                for c in monitor.conditions
+            logger.error("Monitor {} check failed: {}", monitor.id, e)
+            result = CheckResult(
+                status="error",
+                checked_at=time.time(),
+                response_time_ms=(time.time() - start) * 1000,
+                triggered=False,
+                error=str(e),
             )
-            check.triggered = has_down_condition or not monitor.conditions
+            monitor.last_check = result
+            self._store.save_check(monitor.id, result)
 
-            if check.triggered:
-                alert_msg = self._build_alert_message(monitor, check)
-                await self._alerts.dispatch(monitor, check, alert_msg)
+    async def _check_http(self, monitor: Monitor) -> CheckResult:
+        url = monitor.config.get("target", monitor.target)
+        method = monitor.config.get("method", "GET")
+        headers = monitor.config.get("headers", {})
+        timeout = monitor.config.get("timeout", 15)
 
-        monitor.last_check = check
-        self._store.save_check(check)
+        try:
+            from raven.core.http_client import HTTPClientPool
+            client = await HTTPClientPool.get_instance().get_client(timeout=timeout)
+            if method.upper() == "GET":
+                resp = await client.get(url, headers=headers)
+            else:
+                resp = await client.post(url, json=monitor.config.get("body"), headers=headers)
+            status_code = resp.status_code
+            return CheckResult(
+                status="up" if status_code < 400 else "down",
+                checked_at=time.time(),
+                triggered=status_code >= 400,
+                response_time_ms=resp.elapsed.total_seconds() * 1000 if hasattr(resp, "elapsed") else None,
+            )
+        except Exception as e:
+            return CheckResult(
+                status="down",
+                checked_at=time.time(),
+                triggered=True,
+                error=str(e),
+            )
 
-    def _build_alert_message(self, monitor: Monitor, check: MonitorCheck) -> str:
-        status_icon = "✅" if check.status == "up" else "❌"
-        lines = [
-            f"{status_icon} Monitor: {monitor.name}",
-            f"   Type: {monitor.type.value}",
-            f"   Target: {monitor.target}",
-            f"   Status: {check.status}",
-        ]
-        if check.response_time_ms is not None:
-            lines.append(f"   Response: {check.response_time_ms:.0f}ms")
-        if check.error:
-            lines.append(f"   Error: {check.error}")
-        if check.result:
-            for k, v in list(check.result.items())[:5]:
-                lines.append(f"   {k}: {v}")
-        return "\n".join(lines)
+    async def _check_price(self, monitor: Monitor) -> CheckResult:
+        symbol = monitor.config.get("target", monitor.target)
+        try:
+            url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol.upper()}"
+            await client_manager.get(url)
+            return CheckResult(
+                status="up",
+                checked_at=time.time(),
+                triggered=False,
+            )
+        except Exception as e:
+            return CheckResult(
+                status="error",
+                checked_at=time.time(),
+                triggered=False,
+                error=str(e),
+            )
+
+    async def _check_rss(self, monitor: Monitor) -> CheckResult:
+        from raven.core.monitor.checkers.rss import check_rss_feed
+        return await asyncio.get_event_loop().run_in_executor(
+            None, check_rss_feed, monitor, self._store
+        )
+
+    def _check_file(self, monitor: Monitor) -> CheckResult:
+        path = monitor.config.get("target", monitor.target)
+        import os
+        try:
+            exists = os.path.exists(path)
+            return CheckResult(
+                status="up" if exists else "down",
+                checked_at=time.time(),
+                triggered=not exists,
+            )
+        except Exception as e:
+            return CheckResult(
+                status="error",
+                checked_at=time.time(),
+                triggered=False,
+                error=str(e),
+            )
+
+    def _check_process(self, monitor: Monitor) -> CheckResult:
+        name = monitor.config.get("target", monitor.target)
+        import subprocess
+        import sys
+        try:
+            if sys.platform == "win32":
+                cmd = f'tasklist /FI "IMAGENAME eq {name}" 2>NUL'
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+                running = name.lower() in result.stdout.lower()
+            else:
+                result = subprocess.run(["pgrep", "-f", name], capture_output=True, timeout=10)
+                running = result.returncode == 0
+            return CheckResult(
+                status="up" if running else "down",
+                checked_at=time.time(),
+                triggered=not running,
+            )
+        except Exception as e:
+            return CheckResult(
+                status="error",
+                checked_at=time.time(),
+                triggered=False,
+                error=str(e),
+            )
+
+    def _evaluate_conditions(self, monitor: Monitor, result: CheckResult) -> bool:
+        if not monitor.conditions:
+            return result.status == "down"
+        for cond in monitor.conditions:
+            if cond.metric == "status":
+                if cond.evaluate(result.status):
+                    return True
+            elif cond.metric == "response_time_ms" and result.response_time_ms is not None:
+                if cond.evaluate(result.response_time_ms):
+                    return True
+        return False
+
+    async def _alert(self, monitor: Monitor, result: CheckResult):
+        if not monitor.should_notify():
+            return
+        channels = monitor.notify_channels or [monitor.channel] if monitor.channel else []
+        msg = self._format_alert(monitor, result)
+        for ch in channels:
+            await self._send_alert(ch, monitor.user_id, msg)
+
+    def _format_alert(self, monitor: Monitor, result: CheckResult) -> str:
+        return (
+            f" Monitor Alert: {monitor.name}\n"
+            f"Type: {monitor.type.value}\n"
+            f"Target: {monitor.target}\n"
+            f"Status: {result.status}\n"
+            f"{'Error: ' + result.error if result.error else ''}"
+        )
+
+    async def _send_alert(self, channel: str, user_id: str, text: str):
+        if not self._gateway_ref:
+            return
+        session_id = f"{channel}:{user_id}:monitor"
+        await self._gateway_ref._send(channel, session_id, text)

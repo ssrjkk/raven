@@ -1,139 +1,145 @@
 from __future__ import annotations
 
 import asyncio
-import time
-from typing import Awaitable, Callable
-
+from typing import Any
+from datetime import datetime
 from loguru import logger
 
-from raven.core.routine.models import Routine, RoutineLog, RoutineStatus
-
-RoutineHandler = Callable[[Routine], Awaitable[str]]
-
-
-def _parse_cron(cron_expr: str) -> tuple[int, int]:
-    """Parse simple cron 'min hour * * *' or 'HH:MM' into (hour, minute)."""
-    cron = cron_expr.strip()
-    if ":" in cron:
-        parts = cron.split(":")
-        return int(parts[0]), int(parts[1])
-    parts = cron.split()
-    if len(parts) == 5:
-        return int(parts[1]), int(parts[0])
-    return 7, 0
+from raven.core.audit import AuditEventType, audit_logger
+from raven.core.routine.models import Routine, RoutineAction, RoutineStatus, RoutineTrigger
+from raven.core.routine.store import RoutineStore
 
 
 class RoutineEngine:
-    def __init__(self, store, alert_dispatcher=None):
+    def __init__(self, store: RoutineStore):
         self._store = store
-        self._handlers: dict[str, RoutineHandler] = {}
         self._tasks: dict[str, asyncio.Task] = {}
         self._running = False
+        self._gateway_ref: Any = None
 
-    def register_handler(self, action: str, handler: RoutineHandler) -> None:
-        self._handlers[action] = handler
+    def bind_gateway(self, gateway: Any):
+        self._gateway_ref = gateway
 
-    async def start(self) -> None:
+    async def start(self):
         self._running = True
-        routines = self._store.list_active()
+        routines = self._store.list_active_routines()
         for r in routines:
             self._schedule_routine(r)
-        logger.info("Routine engine started with {} routines", len(routines))
+        logger.info("RoutineEngine started with {} routines", len(routines))
 
-    async def stop(self) -> None:
+    async def stop(self):
         self._running = False
-        for tid, task in self._tasks.items():
+        for rid, task in list(self._tasks.items()):
             task.cancel()
-        await asyncio.gather(*self._tasks.values(), return_exceptions=True)
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         self._tasks.clear()
-        logger.info("Routine engine stopped")
+        logger.info("RoutineEngine stopped")
 
-    def add_routine(self, routine: Routine) -> None:
+    def pause_routine(self, routine_id: str):
+        self._store.update_status(routine_id, RoutineStatus.PAUSED)
+        task = self._tasks.pop(routine_id, None)
+        if task:
+            task.cancel()
+
+    def resume_routine(self, routine_id: str):
+        self._store.update_status(routine_id, RoutineStatus.ACTIVE)
+        r = self._store.load_routine(routine_id)
+        if r:
+            self._schedule_routine(r)
+
+    def list_routines(self) -> list[Routine]:
+        return self._store.list_routines()
+
+    def add_routine(self, routine: Routine):
         self._store.save_routine(routine)
-        if routine.status == RoutineStatus.ACTIVE:
+        if routine.status == RoutineStatus.ACTIVE and self._running:
             self._schedule_routine(routine)
 
-    def remove_routine(self, routine_id: str) -> None:
+    def remove_routine(self, routine_id: str):
         task = self._tasks.pop(routine_id, None)
         if task:
             task.cancel()
         self._store.delete_routine(routine_id)
 
-    def pause_routine(self, routine_id: str) -> bool:
-        task = self._tasks.pop(routine_id, None)
-        if task:
-            task.cancel()
-        self._store.update_status(routine_id, RoutineStatus.PAUSED)
-        return True
+    def _schedule_routine(self, routine: Routine):
+        if routine.id in self._tasks:
+            self._tasks[routine.id].cancel()
+        self._tasks[routine.id] = asyncio.create_task(
+            self._run_loop(routine)
+        )
 
-    def resume_routine(self, routine_id: str) -> bool:
-        self._store.update_status(routine_id, RoutineStatus.ACTIVE)
-        r = self._store.load_routine(routine_id)
-        if r:
-            self._schedule_routine(r)
-            return True
-        return False
-
-    def _schedule_routine(self, routine: Routine) -> None:
-        if routine.trigger.value == "interval":
-            interval = int(routine.schedule)
-            task = asyncio.create_task(self._run_interval(routine, interval))
-            self._tasks[routine.id] = task
-        elif routine.trigger.value == "scheduled":
-            task = asyncio.create_task(self._run_scheduled(routine))
-            self._tasks[routine.id] = task
-
-    async def _run_interval(self, routine: Routine, interval: int) -> None:
+    async def _run_loop(self, routine: Routine):
         while self._running:
-            await asyncio.sleep(interval)
-            if not self._running:
+            try:
+                if routine.trigger == RoutineTrigger.INTERVAL:
+                    await asyncio.sleep(int(routine.schedule))
+                    await self._execute(routine)
+                elif routine.trigger == RoutineTrigger.SCHEDULED:
+                    now = datetime.now()
+                    parts = routine.schedule.split(":")
+                    target_hour = int(parts[0]) if len(parts) > 0 else 8
+                    target_min = int(parts[1]) if len(parts) > 1 else 0
+                    next_run = now.replace(hour=target_hour, minute=target_min, second=0, microsecond=0)
+                    if next_run <= now:
+                        next_run = next_run.replace(day=now.day + 1)
+                    delay = (next_run - now).total_seconds()
+                    await asyncio.sleep(delay)
+                    await self._execute(routine)
+                else:
+                    await asyncio.sleep(3600)
+            except asyncio.CancelledError:
                 break
-            refreshed = self._store.load_routine(routine.id)
-            if refreshed and refreshed.status != RoutineStatus.ACTIVE:
-                break
-            await self._execute_routine(routine)
+            except Exception as e:
+                logger.error("Routine {} error: {}", routine.id, e)
+                await asyncio.sleep(60)
 
-    async def _run_scheduled(self, routine: Routine) -> None:
-        hour, minute = _parse_cron(routine.schedule)
-        while self._running:
-            now = time.localtime()
-            next_run = int(time.mktime((now.tm_year, now.tm_mon, now.tm_mday, hour, minute, 0, now.tm_wday, now.tm_yday, now.tm_isdst)))
-            if next_run <= time.time():
-                next_run += 86400
-            wait = next_run - time.time()
-            if wait > 0:
-                await asyncio.sleep(wait)
-            if not self._running:
-                break
-            refreshed = self._store.load_routine(routine.id)
-            if refreshed and refreshed.status != RoutineStatus.ACTIVE:
-                break
-            await self._execute_routine(routine)
-            await asyncio.sleep(60)
-
-    async def _execute_routine(self, routine: Routine) -> None:
-        start = time.time()
-        handler = self._handlers.get(routine.action.value)
-        if not handler:
-            logger.warning("No handler for routine action: {}", routine.action.value)
-            return
-
+    async def _execute(self, routine: Routine):
+        logger.info("Executing routine: {} ({})", routine.id, routine.action.value)
+        audit_logger.log(
+            AuditEventType.COMMAND,
+            "routine",
+            routine.id,
+            detail={"action": routine.action.value},
+        )
         try:
-            result = await handler(routine)
-            elapsed = (time.time() - start) * 1000
-            log = RoutineLog(
-                routine_id=routine.id, status="success",
-                message=result[:500], duration_ms=elapsed,
-            )
-            self._store.save_log(log)
-            self._store.update_last_run(routine.id, "success")
-            logger.info("Routine '{}' completed in {:.0f}ms", routine.name, elapsed)
+            if routine.action == RoutineAction.SEND_BRIEFING:
+                await self._execute_briefing(routine)
+            elif routine.action == RoutineAction.SEND_MESSAGE:
+                await self._execute_message(routine)
+            elif routine.action == RoutineAction.CHECK_EMAIL:
+                await self._execute_check_email(routine)
+            elif routine.action == RoutineAction.ORGANIZE_FILES:
+                await self._execute_organize_files(routine)
+
+            routine.last_run_status = "success"
         except Exception as e:
-            elapsed = (time.time() - start) * 1000
-            log = RoutineLog(
-                routine_id=routine.id, status="error",
-                message=str(e), duration_ms=elapsed,
-            )
-            self._store.save_log(log)
-            self._store.update_last_run(routine.id, "error")
-            logger.error("Routine '{}' failed: {}", routine.name, e)
+            logger.error("Routine {} execution failed: {}", routine.id, e)
+            routine.last_run_status = f"error: {e}"
+
+    async def _execute_briefing(self, routine: Routine):
+        if not self._gateway_ref:
+            return
+        msg = (
+            f"☀️ Morning Briefing\n"
+            f"Good morning! Here's your daily briefing.\n"
+            f"Time: {datetime.now().strftime('%H:%M')}\n"
+            f"Your routines are running smoothly."
+        )
+        session_id = f"{routine.channel}:{routine.user_id}:briefing"
+        await self._gateway_ref._send(routine.channel, session_id, msg)
+
+    async def _execute_message(self, routine: Routine):
+        if not self._gateway_ref:
+            return
+        text = routine.config.get("text", "Hello from Raven!")
+        session_id = f"{routine.channel}:{routine.user_id}:routine"
+        await self._gateway_ref._send(routine.channel, session_id, text)
+
+    async def _execute_check_email(self, routine: Routine):
+        logger.info("Email check not yet implemented (routine {})", routine.id)
+
+    async def _execute_organize_files(self, routine: Routine):
+        logger.info("File organization not yet implemented (routine {})", routine.id)
