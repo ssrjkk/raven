@@ -38,3 +38,44 @@ jobs:
       - name: Check import consistency
         run: |
           python -c "from raven.core.config import Settings; from raven.core.gateway.gateway import Gateway; print('Imports OK')"
+
+      - name: Verify raven.spec hidden imports exist
+        run: |
+          python -c "
+          imports = [
+              'raven.core.config',
+              'raven.core.db',
+              'raven.core.llm',
+              'raven.core.agent',
+              'raven.core.gateway',
+              'raven.core.task_queue',
+              'raven.core.plugin_loader',
+              'raven.core.models',
+              'raven.plugins.memory',
+              'raven.plugins.browser',
+              'raven.plugins.cron',
+              'raven.plugins.code',
+              'raven.plugins.files',
+              'raven.plugins.api',
+              'raven.plugins.ocr',
+              'raven.plugins.process',
+              'raven.plugins.sessions',
+              'raven.plugins.git',
+          ]
+          failed = []
+          for imp in imports:
+              try:
+                  __import__(imp)
+              except ImportError as e:
+                  failed.append(f'{imp}: {e}')
+          if failed:
+              print('MISSING IMPORTS:')
+              for f in failed:
+                  print(f'  {f}')
+              exit(1)
+          print('All spec imports verified OK')
+          "
+
+      - name: Check for Windows path antipatterns
+        run: |
+          ruff check raven/ --select PTH --output-format github || true
