@@ -26,30 +26,46 @@ class ConditionOperator(str, Enum):
     NE = "!="
     GT = ">"
     LT = "<"
+    CONTAINS = "contains"
+    MATCHES = "matches"
+    CHANGED = "changed"
 
 
 @dataclass
 class Condition:
-    metric: str
-    operator: ConditionOperator
-    value: Any
+    metric: str = ""
+    operator: ConditionOperator = ConditionOperator.EQ
+    value: Any = None
 
-    def evaluate(self, actual: Any) -> bool:
-        if self.operator == ConditionOperator.EQ:
-            return actual == self.value
-        elif self.operator == ConditionOperator.NE:
-            return actual != self.value
-        elif self.operator == ConditionOperator.GT:
-            return float(actual) > float(self.value)
-        elif self.operator == ConditionOperator.LT:
-            return float(actual) < float(self.value)
-        return False
+
+@dataclass
+class MonitorCheck:
+    id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
+    monitor_id: str = ""
+    status: str = ""
+    result: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    triggered: bool = False
+    checked_at: float | None = None
+    response_time_ms: float | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "monitor_id": self.monitor_id,
+            "status": self.status,
+            "result": self.result,
+            "error": self.error,
+            "triggered": self.triggered,
+            "checked_at": self.checked_at,
+            "response_time_ms": self.response_time_ms,
+        }
 
 
 @dataclass
 class CheckResult:
-    status: str
-    checked_at: float
+    status: str = ""
+    checked_at: float = 0.0
     response_time_ms: float | None = None
     triggered: bool = False
     error: str | None = None

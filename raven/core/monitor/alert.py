@@ -1,51 +1,37 @@
 from __future__ import annotations
 
+from typing import Any
+
 from loguru import logger
 
+from raven.core.audit import AuditEventType, audit_logger
 from raven.core.monitor.models import Monitor, MonitorCheck
 
 
 class AlertDispatcher:
     def __init__(self):
-        self._webhook_urls: list[str] = []
+        self._gateway_ref: Any = None
 
-    def add_webhook(self, url: str) -> None:
-        self._webhook_urls.append(url)
+    def bind_gateway(self, gateway: Any):
+        self._gateway_ref = gateway
 
-    async def dispatch(self, monitor: Monitor, check: MonitorCheck, message: str) -> None:
-        logger.info("ALERT: [{}] {} — {}", monitor.name, check.status, message)
+    async def dispatch(self, monitor: Monitor, check: MonitorCheck, message: str):
+        logger.info("Alert: {} — {}", monitor.name, message)
+        audit_logger.log(
+            AuditEventType.MESSAGE_RECEIVED,
+            "alert",
+            monitor.id,
+            detail={"message": message, "status": check.status},
+        )
+        if self._gateway_ref:
+            session_id = f"{monitor.channel}:{monitor.user_id}:monitor"
+            await self._gateway_ref._send(monitor.channel or "telegram", session_id, message)
 
-        if monitor.channel == "telegram" or check.result.get("telegram_token"):
-            await self._send_telegram(monitor, check, message)
-
-        for url in self._webhook_urls:
-            await self._send_webhook(url, monitor, check, message)
-
-    async def _send_telegram(self, monitor: Monitor, check: MonitorCheck, message: str) -> None:
-        token = check.result.get("telegram_token", "")
-        chat_id = check.result.get("telegram_chat_id", "")
-        if not token or not chat_id:
-            from raven.core.config import settings
-            token = settings.telegram_bot_token
-        if not token or not chat_id:
-            logger.warning("Alert: Telegram not configured for monitor {}", monitor.id)
-            return
-        try:
-            from telegram import Bot
-            bot = Bot(token=token)
-            await bot.send_message(chat_id=chat_id, text=message[:4000])
-        except Exception as e:
-            logger.error("Alert: Telegram send failed: {}", e)
-
-    async def _send_webhook(self, url: str, monitor: Monitor, check: MonitorCheck, message: str) -> None:
-        try:
-            import httpx
-            async with httpx.AsyncClient(timeout=10) as c:
-                await c.post(url, json={
-                    "monitor": monitor.name,
-                    "status": check.status,
-                    "message": message,
-                    "time": check.checked_at,
-                })
-        except Exception as e:
-            logger.error("Alert: Webhook {} failed: {}", url, e)
+    def format_alert(self, monitor: Monitor, check: MonitorCheck) -> str:
+        return (
+            f" Monitor Alert: {monitor.name}\n"
+            f"Type: {monitor.type.value}\n"
+            f"Target: {monitor.target}\n"
+            f"Status: {check.status}\n"
+            f"{'Error: ' + check.error if check.error else ''}"
+        )

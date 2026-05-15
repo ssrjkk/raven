@@ -12,6 +12,7 @@ from raven.core.monitor.models import (
     Condition,
     ConditionOperator,
     Monitor,
+    MonitorCheck,
     MonitorStatus,
     MonitorType,
 )
@@ -51,13 +52,14 @@ CREATE TABLE IF NOT EXISTS monitor_checks (
     checked_at REAL NOT NULL,
     response_time_ms REAL,
     triggered INTEGER DEFAULT 0,
+    result TEXT,
     error TEXT
 );
 """
 
 
 class MonitorStore:
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: str | Path):
         self._path = str(db_path)
         conn = sqlite3.connect(self._path)
         conn.executescript(SCHEMA)
@@ -69,7 +71,9 @@ class MonitorStore:
 
     def save_monitor(self, monitor: Monitor):
         conn = self._conn()
-        config_json = json.dumps(monitor.config)
+        config = dict(monitor.config)
+        config["target"] = monitor.target
+        config_json = json.dumps(config)
         conditions_json = json.dumps([
             {"metric": c.metric, "operator": c.operator.value, "value": c.value}
             for c in monitor.conditions
@@ -119,6 +123,9 @@ class MonitorStore:
         rows = conn.execute(" ".join(parts), params).fetchall()
         return [self._row_to_monitor(r) for r in rows if r]
 
+    def list_active(self) -> list[Monitor]:
+        return self.list_monitors(status="active")
+
     def update_status(self, monitor_id: str, status: MonitorStatus):
         conn = self._conn()
         conn.execute(
@@ -127,43 +134,59 @@ class MonitorStore:
         )
         conn.commit()
 
-    def get_checks(self, monitor_id: str, limit: int = 20) -> list[CheckResult]:
+    def get_checks(self, monitor_id: str, limit: int = 20) -> list[MonitorCheck]:
         conn = self._conn()
         rows = conn.execute(
             "SELECT * FROM monitor_checks WHERE monitor_id = ? ORDER BY checked_at DESC LIMIT ?",
             (monitor_id, limit),
         ).fetchall()
         return [
-            CheckResult(
-                status=row["status"],
-                checked_at=row["checked_at"],
-                response_time_ms=row["response_time_ms"],
-                triggered=bool(row["triggered"]),
-                error=row["error"],
+            MonitorCheck(
+                id=str(r["id"]),
+                monitor_id=r["monitor_id"],
+                status=r["status"],
+                result=json.loads(r["result"]) if r["result"] else {},
+                error=r["error"],
+                triggered=bool(r["triggered"]),
+                checked_at=r["checked_at"],
+                response_time_ms=r["response_time_ms"],
             )
-            for row in rows
+            for r in rows
         ]
 
-    def save_check(self, monitor_id: str, check: CheckResult):
+    def save_check(self, check: MonitorCheck):
         conn = self._conn()
+        result_json = json.dumps(check.result) if check.result else "{}"
         conn.execute(
             """INSERT INTO monitor_checks
-               (monitor_id, status, checked_at, response_time_ms, triggered, error)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+               (monitor_id, status, checked_at, response_time_ms, triggered, result, error)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (
-                monitor_id, check.status, check.checked_at,
-                check.response_time_ms, int(check.triggered), check.error,
+                check.monitor_id, check.status, check.checked_at or time.time(),
+                check.response_time_ms, int(check.triggered), result_json, check.error,
             ),
         )
         conn.execute(
             "UPDATE monitors SET last_checked = ?, last_triggered = ? WHERE id = ?",
             (
-                str(check.checked_at),
-                str(check.checked_at) if check.triggered else None,
-                monitor_id,
+                str(check.checked_at or time.time()),
+                str(check.checked_at or time.time()) if check.triggered else None,
+                check.monitor_id,
             ),
         )
         conn.commit()
+
+    def save_check_result(self, monitor_id: str, check: CheckResult):
+        mc = MonitorCheck(
+            monitor_id=monitor_id,
+            status=check.status,
+            result={"status": check.status, "response_time_ms": check.response_time_ms},
+            error=check.error,
+            triggered=check.triggered,
+            checked_at=check.checked_at,
+            response_time_ms=check.response_time_ms,
+        )
+        self.save_check(mc)
 
     def _row_to_monitor(self, row: sqlite3.Row) -> Monitor | None:
         try:
@@ -189,6 +212,8 @@ class MonitorStore:
                 notify_channels=notify,
                 cooldown_minutes=row["cooldown_minutes"],
                 config=config,
+                user_id=row["user_id"],
+                channel=row["channel"],
                 created_at=row["created_at"],
             )
 

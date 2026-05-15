@@ -14,6 +14,7 @@ class RoutineAction(str, Enum):
 
 
 class RoutineTrigger(str, Enum):
+    MANUAL = "manual"
     SCHEDULED = "scheduled"
     INTERVAL = "interval"
     EVENT = "event"
@@ -23,6 +24,16 @@ class RoutineStatus(str, Enum):
     ACTIVE = "active"
     PAUSED = "paused"
     ERROR = "error"
+
+
+@dataclass
+class RoutineLog:
+    id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
+    routine_id: str = ""
+    status: str = ""
+    message: str = ""
+    duration_ms: float | None = None
+    created_at: float | None = None
 
 
 @dataclass
@@ -36,6 +47,7 @@ class Routine:
     user_id: str = ""
     channel: str = ""
     last_run_status: str | None = None
+    last_run_at: float | None = None
     config: dict[str, Any] = field(default_factory=dict)
     created_at: float | None = None
 
@@ -50,6 +62,7 @@ class Routine:
             "user_id": self.user_id,
             "channel": self.channel,
             "last_run_status": self.last_run_status,
+            "last_run_at": self.last_run_at,
             "config": self.config,
             "created_at": self.created_at,
         }
@@ -66,6 +79,7 @@ class Routine:
             user_id=data.get("user_id", ""),
             channel=data.get("channel", ""),
             last_run_status=data.get("last_run_status"),
+            last_run_at=data.get("last_run_at"),
             config=data.get("config", {}),
             created_at=data.get("created_at"),
         )

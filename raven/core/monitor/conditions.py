@@ -7,35 +7,28 @@ from raven.core.monitor.models import Condition, ConditionOperator
 
 
 class ConditionEvaluator:
-    def evaluate(self, condition: Condition, check_result: dict[str, Any]) -> bool:
-        metric_value = check_result.get(condition.metric)
-        if metric_value is None:
+    def evaluate(self, condition: Condition, data: dict[str, Any]) -> bool:
+        actual = data.get(condition.metric)
+        if actual is None:
             return False
 
-        op = condition.operator
-        target = condition.value
-
-        try:
-            if op == ConditionOperator.GT:
-                return float(metric_value) > float(target)
-            elif op == ConditionOperator.LT:
-                return float(metric_value) < float(target)
-            elif op == ConditionOperator.EQ:
-                return str(metric_value) == str(target)
-            elif op == ConditionOperator.NE:
-                return str(metric_value) != str(target)
-            elif op == ConditionOperator.CONTAINS:
-                return str(target).lower() in str(metric_value).lower()
-            elif op == ConditionOperator.MATCHES:
-                return bool(re.search(str(target), str(metric_value)))
-            elif op == ConditionOperator.CHANGED:
-                return check_result.get("changed", False)
-        except (ValueError, TypeError):
-            return False
-
+        if condition.operator == ConditionOperator.EQ:
+            return str(actual) == str(condition.value)
+        elif condition.operator == ConditionOperator.NE:
+            return str(actual) != str(condition.value)
+        elif condition.operator == ConditionOperator.GT:
+            return float(actual) > float(condition.value)
+        elif condition.operator == ConditionOperator.LT:
+            return float(actual) < float(condition.value)
+        elif condition.operator == ConditionOperator.CONTAINS:
+            return str(condition.value) in str(actual)
+        elif condition.operator == ConditionOperator.MATCHES:
+            return bool(re.search(str(condition.value), str(actual)))
+        elif condition.operator == ConditionOperator.CHANGED:
+            return bool(data.get("changed", False))
         return False
 
-    def check_all(self, conditions: list[Condition], check_result: dict[str, Any]) -> bool:
+    def check_all(self, conditions: list[Condition], data: dict[str, Any]) -> bool:
         if not conditions:
             return False
-        return all(self.evaluate(c, check_result) for c in conditions)
+        return all(self.evaluate(c, data) for c in conditions)
