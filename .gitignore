@@ -15,3 +15,20 @@ node_modules/
 *.log
 *.pid
 .DS_Store
+
+# Runtime data — never commit
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.log
+data/*.log.*
+data/secrets.enc
+data/.secrets
+
+# Build artifacts
+desktop/dist/
+desktop/node_modules/
+extension/dist/
+extension/node_modules/
+web/node_modules/
+web/dist/
