@@ -13,7 +13,7 @@ async def transcribe_voice(file_path: str) -> str:
         if not api_key:
             return _local_transcribe(file_path)
 
-        with open(file_path, "rb") as f:
+        with Path(file_path).open("rb") as f:
             async with httpx.AsyncClient(timeout=60) as c:
                 resp = await c.post(
                     "https://api.openai.com/v1/audio/transcriptions",

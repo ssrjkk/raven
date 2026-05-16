@@ -7,7 +7,7 @@ from pathlib import Path
 PLUGIN_NAME = "files"
 PLUGIN_DESCRIPTION = "Read, write, list, and manage files on the local filesystem"
 
-ALLOWED_ROOTS = [os.path.expanduser("~"), os.getcwd(), "/tmp"]
+ALLOWED_ROOTS = [str(Path.home()), str(Path.cwd()), "/tmp"]
 
 
 def _check_path(path: str) -> Path:

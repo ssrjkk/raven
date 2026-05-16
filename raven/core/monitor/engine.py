@@ -182,10 +182,10 @@ class MonitorEngine:
             return None
 
     async def _check_file(self, monitor: Monitor) -> str | None:
-        import os
+        from pathlib import Path
 
-        path = monitor.config.get("target", monitor.target)
-        if not os.path.exists(path):
+        path = Path(monitor.config.get("target", monitor.target))
+        if not path.exists():
             return f"🔴 File not found: {path}"
         return None
 

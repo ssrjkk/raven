@@ -31,23 +31,23 @@ class VectorStore:
         vpath = self._vectors_path()
         if vpath.exists():
             try:
-                with open(vpath, "rb") as f:
+                with vpath.open("rb") as f:
                     self._vectors = pickle.load(f)
             except Exception as e:
                 logger.warning("Failed to load vectors: {}", e)
         mpath = self._metadata_path()
         if mpath.exists():
             try:
-                with open(mpath) as f:
+                with mpath.open() as f:
                     raw = json.load(f)
                     self._metadata = {k: v for k, v in raw.items()}
             except Exception as e:
                 logger.warning("Failed to load metadata: {}", e)
 
     def _save(self):
-        with open(self._vectors_path(), "wb") as f:
+        with self._vectors_path().open("wb") as f:
             pickle.dump(self._vectors, f)
-        with open(self._metadata_path(), "w") as f:
+        with self._metadata_path().open("w") as f:
             json.dump(self._metadata, f, default=str)
 
     async def upsert(self, doc_id: str, text: str, metadata: dict | None = None):

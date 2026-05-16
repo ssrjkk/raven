@@ -47,7 +47,7 @@ class ConfigWatcher:
     def _reload_env(self):
         if not self._env_path.exists():
             return
-        with open(self._env_path) as f:
+        with self._env_path.open() as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#") or "=" not in line:

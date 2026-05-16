@@ -194,9 +194,9 @@ class TelegramChannel(BaseChannel):
             return
 
         text = await transcribe_voice(file_path)
-        import os
+        from pathlib import Path
         try:
-            os.unlink(file_path)
+            Path(file_path).unlink()
         except Exception:
             pass
 

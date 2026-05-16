@@ -4,6 +4,7 @@ import asyncio
 import os
 import sys
 import tempfile
+from pathlib import Path
 
 
 SANDBOX_IMAGE = "python:3.12-slim"
@@ -61,8 +62,8 @@ class Sandbox:
 
     async def _exec_subprocess(self, code: str) -> str:
         self._tmpdir = tempfile.mkdtemp(prefix="raven_sandbox_")
-        script = os.path.join(self._tmpdir, "script.py")
-        with open(script, "w") as f:
+        script = Path(self._tmpdir) / "script.py"
+        with script.open("w") as f:
             f.write(code)
         env = os.environ.copy()
         if not self.config.allow_network:
@@ -105,8 +106,8 @@ class Sandbox:
             return f"Docker not available: {e}"
 
         self._tmpdir = tempfile.mkdtemp(prefix="raven_sandbox_")
-        script_path = os.path.join(self._tmpdir, "script.py")
-        with open(script_path, "w") as f:
+        script_path = Path(self._tmpdir) / "script.py"
+        with script_path.open("w") as f:
             f.write(code)
 
         container = None

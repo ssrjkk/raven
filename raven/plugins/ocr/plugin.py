@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import tempfile
+from pathlib import Path
 
 import httpx
 from loguru import logger
@@ -52,5 +53,5 @@ async def ocr_url(url: str, language: str = "eng+rus") -> str:
     except Exception as e:
         return f"OCR URL error: {e}"
     finally:
-        if tmp and os.path.exists(tmp.name):
-            os.unlink(tmp.name)
+        if tmp and Path(tmp.name).exists():
+            Path(tmp.name).unlink()

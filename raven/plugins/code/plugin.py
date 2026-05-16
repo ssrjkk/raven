@@ -4,6 +4,7 @@ import asyncio
 import os
 import sys
 import tempfile
+from pathlib import Path
 
 from loguru import logger
 
@@ -18,8 +19,8 @@ async def run_python(code: str, timeout: int = 30) -> str:
     tmpdir = None
     try:
         tmpdir = tempfile.mkdtemp(prefix="raven_sandbox_")
-        script_path = os.path.join(tmpdir, "script.py")
-        with open(script_path, "w", encoding="utf-8") as f:
+        script_path = Path(tmpdir) / "script.py"
+        with script_path.open("w", encoding="utf-8") as f:
             f.write(code)
 
         env = os.environ.copy()
@@ -63,7 +64,7 @@ async def run_python(code: str, timeout: int = 30) -> str:
         logger.error("Code execution failed: {}", e)
         return f"Error: {e}"
     finally:
-        if tmpdir and os.path.exists(tmpdir):
+        if tmpdir and Path(tmpdir).exists():
             import shutil
             try:
                 shutil.rmtree(tmpdir)

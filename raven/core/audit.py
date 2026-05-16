@@ -38,7 +38,7 @@ class AuditLogger:
         self._file = None
 
     def start(self):
-        self._file = open(self._path, "a", encoding="utf-8")
+        self._file = self._path.open("a", encoding="utf-8")
 
     def stop(self):
         if self._file:
@@ -67,7 +67,7 @@ class AuditLogger:
     def recent(self, limit: int = 20) -> list[dict]:
         if not self._path.exists():
             return []
-        with open(self._path) as f:
+        with self._path.open() as f:
             lines = f.readlines()[-limit:]
         result = []
         for line in lines:
