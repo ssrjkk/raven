@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Request
 from loguru import logger
 
@@ -13,6 +15,150 @@ from raven.core.secrets import secrets
 
 def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> APIRouter:
     router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+    # -- Monitor CRUD --
+
+    @router.get("/monitors")
+    async def admin_monitors_list(user_id: str | None = None):
+        gateway = get_gateway_fn()
+        from raven.core.monitor.store import MonitorStore
+        store = MonitorStore(gateway.db.db_path)
+        monitors = store.list_monitors(user_id=user_id)
+        return [
+            {
+                "id": m.id, "name": m.name, "type": m.type.value,
+                "target": m.target, "interval_seconds": m.interval_seconds,
+                "status": m.status.value,
+                "last_check": {"status": m.last_check.status, "checked_at": m.last_check.checked_at} if m.last_check else None,
+                "conditions": [{"metric": c.metric, "operator": c.operator.value, "value": c.value} for c in m.conditions],
+                "user_id": m.user_id, "channel": m.channel, "cooldown_minutes": m.cooldown_minutes,
+            }
+            for m in monitors
+        ]
+
+    @router.get("/monitors/{monitor_id}")
+    async def admin_monitor_get(monitor_id: str):
+        gateway = get_gateway_fn()
+        from raven.core.monitor.store import MonitorStore
+        store = MonitorStore(gateway.db.db_path)
+        m = store.load_monitor(monitor_id)
+        if not m:
+            raise HTTPException(404, "Monitor not found")
+        return {
+            "id": m.id, "name": m.name, "type": m.type.value,
+            "target": m.target, "interval_seconds": m.interval_seconds,
+            "status": m.status.value,
+            "last_check": {"status": m.last_check.status, "checked_at": m.last_check.checked_at} if m.last_check else None,
+            "conditions": [{"metric": c.metric, "operator": c.operator.value, "value": c.value} for c in m.conditions],
+            "user_id": m.user_id, "channel": m.channel, "cooldown_minutes": m.cooldown_minutes,
+        }
+
+    @router.post("/monitors")
+    async def admin_monitor_create(body: dict[str, Any]):
+        gateway = get_gateway_fn()
+        from raven.core.monitor.models import Condition, ConditionOperator, Monitor, MonitorStatus, MonitorType
+        from raven.core.monitor.store import MonitorStore
+        store = MonitorStore(gateway.db.db_path)
+        conditions = []
+        for c in body.get("conditions", []):
+            conditions.append(Condition(
+                metric=c.get("metric", ""),
+                operator=ConditionOperator(c.get("operator", "=")),
+                value=c.get("value"),
+            ))
+        monitor = Monitor(
+            name=body.get("name", ""),
+            type=MonitorType(body.get("type", "http")),
+            target=body.get("target", ""),
+            interval_seconds=body.get("interval_seconds", 300),
+            status=MonitorStatus(body.get("status", "active")),
+            conditions=conditions,
+            user_id=body.get("user_id", ""),
+            channel=body.get("channel", ""),
+            cooldown_minutes=body.get("cooldown_minutes", 30),
+            config=body.get("config", {}),
+        )
+        store.save_monitor(monitor)
+        audit_logger.log(AuditEventType.COMMAND, "admin", "monitor.create", detail={"monitor_id": monitor.id})
+        return {"ok": True, "id": monitor.id}
+
+    @router.put("/monitors/{monitor_id}")
+    async def admin_monitor_update(monitor_id: str, body: dict[str, Any]):
+        gateway = get_gateway_fn()
+        from raven.core.monitor.models import Condition, ConditionOperator, MonitorStatus, MonitorType
+        from raven.core.monitor.store import MonitorStore
+        store = MonitorStore(gateway.db.db_path)
+        existing = store.load_monitor(monitor_id)
+        if not existing:
+            raise HTTPException(404, "Monitor not found")
+        if "name" in body:
+            existing.name = body["name"]
+        if "type" in body:
+            existing.type = MonitorType(body["type"])
+        if "target" in body:
+            existing.target = body["target"]
+        if "interval_seconds" in body:
+            existing.interval_seconds = body["interval_seconds"]
+        if "status" in body:
+            existing.status = MonitorStatus(body["status"])
+        if "user_id" in body:
+            existing.user_id = body["user_id"]
+        if "channel" in body:
+            existing.channel = body["channel"]
+        if "cooldown_minutes" in body:
+            existing.cooldown_minutes = body["cooldown_minutes"]
+        if "config" in body:
+            existing.config = body["config"]
+        if "conditions" in body:
+            existing.conditions = [
+                Condition(
+                    metric=c.get("metric", ""),
+                    operator=ConditionOperator(c.get("operator", "=")),
+                    value=c.get("value"),
+                )
+                for c in body["conditions"]
+            ]
+        store.save_monitor(existing)
+        audit_logger.log(AuditEventType.COMMAND, "admin", "monitor.update", detail={"monitor_id": monitor_id})
+        return {"ok": True}
+
+    @router.delete("/monitors/{monitor_id}")
+    async def admin_monitor_delete(monitor_id: str):
+        gateway = get_gateway_fn()
+        from raven.core.monitor.store import MonitorStore
+        store = MonitorStore(gateway.db.db_path)
+        m = store.load_monitor(monitor_id)
+        if not m:
+            raise HTTPException(404, "Monitor not found")
+        store.delete_monitor(monitor_id)
+        audit_logger.log(AuditEventType.COMMAND, "admin", "monitor.delete", detail={"monitor_id": monitor_id})
+        return {"ok": True}
+
+    @router.post("/monitors/{monitor_id}/check")
+    async def admin_monitor_check_now(monitor_id: str):
+        from raven.core.monitor.engine import MonitorEngine
+        from raven.core.monitor.store import MonitorStore
+        gateway = get_gateway_fn()
+        store = MonitorStore(gateway.db.db_path)
+        engine = MonitorEngine(store, send_fn=lambda cid, txt: logger.info("Alert[{}]: {}", cid, txt))
+        alert_text = await engine.check_now(monitor_id)
+        return {"ok": True, "alert": alert_text}
+
+    @router.post("/monitors/{monitor_id}/pause")
+    async def admin_monitor_pause(monitor_id: str):
+        gateway = get_gateway_fn()
+        engine = getattr(gateway, "_monitor_engine", None)
+        if engine:
+            engine.pause_monitor(monitor_id)
+        return {"ok": True}
+
+    @router.post("/monitors/{monitor_id}/resume")
+    async def admin_monitor_resume(monitor_id: str):
+        gateway = get_gateway_fn()
+        engine = getattr(gateway, "_monitor_engine", None)
+        if engine:
+            engine.resume_monitor(monitor_id)
+        return {"ok": True}
 
     @router.get("/health")
     async def admin_health():

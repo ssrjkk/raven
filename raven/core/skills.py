@@ -1,16 +1,26 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
 
 class Skill:
-    def __init__(self, name: str, description: str, prompt: str, tools: list[str] | None = None):
+    def __init__(self, name: str, description: str, prompt: str, tools: list[str] | None = None, handler: Any = None):
         self.name = name
         self.description = description
         self.prompt = prompt
         self.tools = tools or []
+        self._handler = handler
+
+    async def execute(self, *args, **kwargs) -> str | None:
+        if self._handler:
+            if asyncio.iscoroutinefunction(self._handler):
+                return await self._handler(*args, **kwargs)
+            return self._handler(*args, **kwargs)
+        return None
 
     def to_dict(self) -> dict:
         return {

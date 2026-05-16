@@ -372,6 +372,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     monitor_store = MonitorStore(settings.resolved_db_path)
     monitor_engine = MonitorEngine(monitor_store)
     register_all_monitors(monitor_engine)
+    gateway._monitor_engine = monitor_engine
     api_app.state.monitor_engine = monitor_engine
 
     routine_store = RoutineStore(settings.resolved_db_path)

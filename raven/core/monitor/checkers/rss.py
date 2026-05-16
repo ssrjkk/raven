@@ -1,66 +1,50 @@
 from __future__ import annotations
 
-import sqlite3
-import time
 from typing import TYPE_CHECKING
 
 from raven.core.http_client import client_manager
 
 if TYPE_CHECKING:
-    from raven.core.monitor.models import CheckResult, Monitor
-    from raven.core.monitor.store import MonitorStore
+    from raven.core.monitor.models import Monitor
 
-
-def check_rss_feed(monitor: Monitor, store: MonitorStore) -> CheckResult:
-    from raven.core.monitor.models import CheckResult
-
-    url = monitor.config.get("target", monitor.target)
-    try:
-        import asyncio
-        data = asyncio.run(client_manager.get(url))
-        items = data if isinstance(data, list) else data.get("items", data.get("entries", [])) if isinstance(data, dict) else []
-        new_items = 0
-        for item in items:
-            guid = item.get("id", item.get("guid", item.get("link", "")))
-            if guid:
-                seen = _is_seen(monitor.id, guid)
-                if not seen:
-                    new_items += 1
-        return CheckResult(
-            status="up",
-            checked_at=time.time(),
-            triggered=new_items > 0,
-        )
-    except Exception as e:
-        return CheckResult(
-            status="down",
-            checked_at=time.time(),
-            triggered=False,
-            error=str(e),
-        )
+_seen_guids: dict[str, set[str]] = {}
 
 
 def _mark_seen(monitor_id: str, guid: str):
-    from raven.core.config import settings
-    conn = sqlite3.connect(str(settings.resolved_db_path))
-    try:
-        conn.execute(
-            "INSERT OR IGNORE INTO rss_seen_items (guid, monitor_id) VALUES (?, ?)",
-            (guid, monitor_id),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    if monitor_id not in _seen_guids:
+        _seen_guids[monitor_id] = set()
+    _seen_guids[monitor_id].add(guid)
 
 
 def _is_seen(monitor_id: str, guid: str) -> bool:
-    from raven.core.config import settings
-    conn = sqlite3.connect(str(settings.resolved_db_path))
+    return guid in _seen_guids.get(monitor_id, set())
+
+
+async def check_rss(monitor: Monitor) -> str | None:
+    url = monitor.config.get("target", monitor.target)
     try:
-        row = conn.execute(
-            "SELECT 1 FROM rss_seen_items WHERE guid = ? AND monitor_id = ?",
-            (guid, monitor_id),
-        ).fetchone()
-        return row is not None
-    finally:
-        conn.close()
+        import feedparser
+        raw = await client_manager.get(url)
+        if isinstance(raw, dict):
+            raw_text = str(raw)
+        elif isinstance(raw, str):
+            raw_text = raw
+        else:
+            raw_text = str(raw)
+        feed = feedparser.parse(raw_text)
+    except Exception as exc:
+        return f"🔴 RSS check failed for {url}: {exc}"
+
+    new_entries: list[str] = []
+    for entry in feed.entries[:10]:
+        guid = entry.get("id", entry.get("link", ""))
+        if not guid:
+            continue
+        if not _is_seen(monitor.id, guid):
+            _mark_seen(monitor.id, guid)
+            new_entries.append(entry.get("title", "(no title)"))
+
+    if new_entries:
+        return f"📰 New RSS entries from {url[:50]}:\n" + "\n".join(f"  • {t}" for t in new_entries[:5])
+
+    return None

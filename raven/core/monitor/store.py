@@ -219,9 +219,11 @@ class MonitorStore:
 
             last_checked = row["last_checked"]
             if last_checked:
+                last_triggered = row["last_triggered"]
                 m.last_check = CheckResult(
                     status="up",
                     checked_at=float(last_checked),
+                    triggered=last_triggered is not None,
                 )
             return m
         except Exception:

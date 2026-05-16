@@ -26,6 +26,7 @@ dependencies = [
     "playwright>=1.44",
     "beautifulsoup4>=4.12",
     "lxml>=5.2",
+    "feedparser>=6.0",
 ]
 
 [project.optional-dependencies]

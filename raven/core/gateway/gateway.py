@@ -65,6 +65,7 @@ class Gateway:
             except Exception as e:
                 logger.error("Failed to start channel {}: {}", cid, e)
         self.load_skills()
+        self._register_skill_handlers()
         self._register_health_checks()
 
     async def stop(self):
@@ -76,6 +77,46 @@ class Gateway:
                 logger.info("Channel stopped: {}", cid)
             except Exception as e:
                 logger.error("Error stopping channel {}: {}", cid, e)
+
+    def _register_skill_handlers(self):
+        async def _morning_briefing(user_id: str, channel: str) -> str:
+            try:
+                monitors_info = ""
+                from raven.core.monitor.store import MonitorStore
+                store = MonitorStore(self.db.db_path)
+                monitors = store.list_monitors(user_id=user_id)
+                if monitors:
+                    statuses = [f"{m.name}[{m.type.value}]:{'🟢' if m.status.value == 'active' else '⏸'}" for m in monitors[:5]]
+                    monitors_info = "Monitors: " + ", ".join(statuses)
+
+                from raven.core.task_engine.store import TaskStore
+                tstore = TaskStore(self.db.db_path)
+                tasks = tstore.list_tasks(user_id=user_id, limit=5)
+                tasks_info = ""
+                if tasks:
+                    pending = [t for t in tasks if t.status.value in ("pending", "running")]
+                    tasks_info = f"Tasks: {len(pending)} pending of {len(tasks)} total"
+
+                prompt = (
+                    f"Generate a friendly morning briefing (2-3 paragraphs) for the user.\n"
+                    f"{monitors_info}\n{tasks_info}\n"
+                    f"Keep it concise and warm."
+                )
+                result = ""
+                async for token in self.llm.complete_stream(
+                    [{"role": "user", "content": prompt}],
+                    model=settings.default_model,
+                ):
+                    result += token
+                return result.strip() or "Good morning! Everything is running smoothly."
+            except Exception as e:
+                logger.error("Morning briefing error: {}", e)
+                return "Good morning! I had trouble gathering your briefing. Everything appears to be running."
+
+        skill = skills_registry.get("morning_briefing")
+        if skill:
+            skill._handler = _morning_briefing
+            logger.info("Registered morning_briefing skill handler")
 
     def _register_health_checks(self):
         async def _db_check():
@@ -104,6 +145,10 @@ class Gateway:
             if handled:
                 return
 
+            intent_handled = await self._handle_intent(event)
+            if intent_handled:
+                return
+
             session_id = event.session_id or f"{event.channel}:{event.user_id}:default"
             session = await self.db.get_or_create_session(session_id, event.channel, event.user_id)
             agent = self.registry.create_agent(session)
@@ -124,6 +169,96 @@ class Gateway:
             logger.error("handle_message error: {}", e)
             metrics.inc("message_errors", {"channel": event.channel})
             await self._send(event.channel, event.session_id, f"Sorry, an error occurred: {str(e)[:200]}")
+
+    async def _handle_intent(self, event: IncomingMessage) -> bool:
+        import re
+        text = event.text.strip().lower()
+
+        price_pattern = re.compile(
+            r"(?:what(?:'s| is| are)?\s+)?(?:the\s+)?(?:price|rate|cost)\s+(?:of\s+)?(\w+)|"
+            r"(\w+)\s+(?:price|rate)(?:\s+now|\s+today)?$|"
+            r"how\s+much\s+is\s+(\w+)"
+        )
+        m = price_pattern.search(text)
+        if m:
+            coin = m.group(1) or m.group(2) or m.group(3)
+            from raven.core.monitor.checkers.price import check_price
+            from raven.core.monitor.models import Monitor, MonitorType
+            pseudo = Monitor(
+                name="intent-price",
+                type=MonitorType.PRICE,
+                target=coin,
+                config={"target": coin},
+            )
+            try:
+                result = await check_price(pseudo)
+                if result:
+                    await self._send(event.channel, event.session_id, result)
+                else:
+                    pass
+            except Exception:
+                pass
+            return True if m else False
+
+        monitor_pattern = re.compile(
+            r"(?:how\s+are\s+my\s+)?monitors?|"
+            r"(?:check|show|list)\s+(?:my\s+)?(?:monitors?|checks?)|"
+            r"(?:monitor|check)\s+(?:status|health)"
+        )
+        if monitor_pattern.search(text):
+            from raven.core.monitor.store import MonitorStore
+            store = MonitorStore(self.db.db_path)
+            monitors = store.list_monitors(user_id=event.user_id)
+            if not monitors:
+                await self._send(event.channel, event.session_id, "You have no monitors configured.")
+                return True
+            lines = ["📊 Your Monitors:"]
+            for m in monitors[:10]:
+                icon = {"active": "🟢", "paused": "⏸", "error": "🔴"}.get(m.status.value, "❓")
+                lines.append(f"  {icon} {m.name} [{m.type.value}] every {m.interval_seconds}s")
+            await self._send(event.channel, event.session_id, "\n".join(lines))
+            return True
+
+        briefing_pattern = re.compile(
+            r"(?:good\s+)?morning(?:\s+briefing|\s+summary|\s+report)?$|"
+            r"(?:daily|morning)\s+(?:briefing|summary|update|report)"
+        )
+        if briefing_pattern.search(text):
+            from raven.core.skills import skills_registry
+            briefing = skills_registry.get("morning_briefing")
+            if briefing:
+                result = await briefing.execute(event.user_id, event.channel)
+                if result:
+                    await self._send(event.channel, event.session_id, str(result))
+                    return True
+            await self._send(event.channel, event.session_id, "Morning briefing skill not loaded.")
+            return True
+
+        task_intent = re.compile(
+            r"(?:remind\s+(?:me|us)\s+(?:to|about|that))|"
+            r"(?:set\s+(?:a|an)?\s*(?:reminder|timer|task|alarm))|"
+            r"(?:schedule\s+(?:a|an)?\s*(?:reminder|task))"
+        )
+        if task_intent.search(text):
+            from raven.core.task_engine.store import TaskStore
+            from raven.core.task_engine.planner import TaskPlanner
+            from raven.core.task_engine.runner import TaskRunner
+            from raven.tools.register_all import create_tool_registry
+            tools = create_tool_registry()
+            store = TaskStore(self.db.db_path)
+            planner = TaskPlanner(tools)
+            runner = TaskRunner(store, tools)
+            try:
+                task = await planner.plan(text, self.llm, user_id=event.user_id, channel=event.channel)
+                await self._send(event.channel, event.session_id,
+                    f"📋 Task planned: {task.plan_summary or text[:80]}")
+                await runner.submit(task)
+                asyncio.create_task(runner.wait(task.id, timeout=600))
+            except Exception as e:
+                logger.error("Intent task planning error: {}", e)
+            return True
+
+        return False
 
     async def _is_user_allowed(self, event: IncomingMessage, user: dict) -> bool:
         policy = settings.dm_policy

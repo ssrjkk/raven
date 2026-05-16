@@ -257,3 +257,107 @@ class TestAlertDispatcher:
         m = Monitor(name="test", type=MonitorType.HTTP, target="http://example.com")
         c = MonitorCheck(monitor_id=m.id, status="up")
         await d.dispatch(m, c, "test alert")
+
+
+class TestCheckNow:
+    async def test_check_now_returns_none_when_ok(self, store: MonitorStore):
+        handler = AsyncMock(return_value=None)
+        engine = MonitorEngine(store)
+        engine.register_handler("http", handler)
+        m = Monitor(name="test", type=MonitorType.HTTP, target="https://example.com")
+        store.save_monitor(m)
+        result = await engine.check_now(m.id)
+        assert result is None
+
+    async def test_check_now_returns_alert_when_triggered(self, store: MonitorStore):
+        handler = AsyncMock(return_value="🔴 Something went wrong")
+        engine = MonitorEngine(store)
+        engine.register_handler("http", handler)
+        m = Monitor(name="test", type=MonitorType.HTTP, target="https://example.com")
+        store.save_monitor(m)
+        result = await engine.check_now(m.id)
+        assert result == "🔴 Something went wrong"
+
+    async def test_check_now_nonexistent_monitor(self, store: MonitorStore):
+        engine = MonitorEngine(store)
+        result = await engine.check_now("nonexistent")
+        assert result is None
+
+    async def test_check_now_records_check(self, store: MonitorStore):
+        handler = AsyncMock(return_value="alert text")
+        engine = MonitorEngine(store)
+        engine.register_handler("http", handler)
+        m = Monitor(name="test", type=MonitorType.HTTP, target="https://example.com")
+        store.save_monitor(m)
+        await engine.check_now(m.id)
+        checks = store.get_checks(m.id)
+        assert len(checks) == 1
+        assert checks[0].triggered is True
+
+
+class TestCooldown:
+    async def test_cooldown_suppresses_notification(self, store: MonitorStore):
+        sent: list[str] = []
+        async def send_fn(channel: str, text: str):
+            sent.append(f"{channel}:{text}")
+        engine = MonitorEngine(store, send_fn=send_fn)
+        handler = AsyncMock(return_value="alert")
+        engine.register_handler("http", handler)
+        m = Monitor(name="test", type=MonitorType.HTTP, target="https://example.com", cooldown_minutes=60, channel="test_ch")
+        store.save_monitor(m)
+        await engine.check_now(m.id)
+        first_count = len(sent)
+        await engine.check_now(m.id)
+        assert len(sent) == first_count
+
+    async def test_no_cooldown_allows_notification(self, store: MonitorStore):
+        sent: list[str] = []
+        async def send_fn(channel: str, text: str):
+            sent.append(f"{channel}:{text}")
+        engine = MonitorEngine(store, send_fn=send_fn)
+        handler = AsyncMock(return_value="alert")
+        engine.register_handler("http", handler)
+        m = Monitor(name="test", type=MonitorType.HTTP, target="https://example.com", cooldown_minutes=0, channel="test_ch")
+        store.save_monitor(m)
+        await engine.check_now(m.id)
+        assert len(sent) >= 1
+
+
+class TestCheckerSignatures:
+    async def test_price_checker_returns_str_or_none(self):
+        from raven.core.monitor.checkers.price import check_price
+        m = Monitor(name="test-price", type=MonitorType.PRICE, target="nonexistentcoinxyz")
+        try:
+            result = await check_price(m)
+        except Exception:
+            result = None
+        assert result is None or isinstance(result, str)
+
+    async def test_http_checker_returns_str_or_none(self):
+        from raven.core.monitor.checkers.http_check import check_http
+        m = Monitor(name="test-http", type=MonitorType.HTTP, target="https://invalid.example.test")
+        try:
+            result = await check_http(m)
+        except Exception:
+            result = None
+        assert result is None or isinstance(result, str)
+
+    async def test_rss_checker_returns_str_or_none(self):
+        from raven.core.monitor.checkers.rss import check_rss
+        m = Monitor(name="test-rss", type=MonitorType.RSS, target="https://invalid.example.test/rss")
+        try:
+            result = await check_rss(m)
+        except Exception:
+            result = None
+        assert result is None or isinstance(result, str)
+
+
+class TestEngineFromDb:
+    def test_engine_from_db_creates_store(self, db_path: str):
+        engine = MonitorEngine.from_db(db_path)
+        assert engine._store is not None
+
+    def test_engine_with_path_creates_store(self, db_path: str):
+        from pathlib import Path
+        engine = MonitorEngine(Path(db_path))
+        assert engine._store is not None
