@@ -9,7 +9,8 @@
   <a href="#tech-stack">Tech Stack</a> •
   <a href="#license">License</a>
 
-  <br><br>
+<img width="1024" height="1536" alt="image" src="https://github.com/user-attachments/assets/b5e003da-b6d2-4e5c-93ba-6a8173480f25" />
+
 
   <a href="https://github.com/ssrjkk/raven">
     <img src="https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white" alt="Python">
