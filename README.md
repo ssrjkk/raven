@@ -14,21 +14,6 @@
 <img width="680" height="860" alt="image" src="https://github.com/user-attachments/assets/29b4d99d-4adf-411f-b3aa-e1c1582d6ba6" />
 
 
-
-  <a href="https://github.com/ssrjkk/raven">
-    <img src="https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white" alt="Python">
-  </a>
-  <a href="https://github.com/ssrjkk/raven">
-    <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
-  </a>
-  <a href="https://github.com/ssrjkk/raven">
-    <img src="https://img.shields.io/badge/channels-12-8A2BE2" alt="Channels">
-  </a>
-  <a href="https://github.com/ssrjkk/raven">
-    <img src="https://img.shields.io/badge/tests-220_passing-brightgreen" alt="Tests">
-  </a>
-</div>
-
 ---
 
 ## Why Raven AI?
