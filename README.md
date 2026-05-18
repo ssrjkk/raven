@@ -1,6 +1,6 @@
 <div align="center">
   <h1>🐦 Raven AI</h1>
-  <p><i>Enterprise-Grade Personal AI Assistant. 12 Channels. Task Engine. Monitors. Coding Assistant. RAG Knowledge Base. Web Dashboard.</i></p>
+  <p><i>Персональный ИИ-помощник корпоративного уровня. 12 каналов. Механизм задач. Мониторы. Помощник по программированию. База знаний RAG. Веб-панель управления.</i></p>
 
   <a href="#features">Features</a> •
   <a href="#quickstart">Quickstart</a> •
