@@ -1,0 +1,101 @@
+from __future__ import annotations
+
+from raven.core.tracing import (
+    HAS_OTEL,
+    _NoopSpan,
+    _NoopTracer,
+    get_tracer,
+    trace_llm_call,
+    trace_tool_call,
+    setup_tracing,
+)
+
+
+def test_noop_tracer():
+    t = _NoopTracer()
+    span = t.start_span("test")
+    assert isinstance(span, _NoopSpan)
+
+
+def test_noop_span():
+    s = _NoopSpan("test")
+    s.set_attribute("key", "val")
+    s.set_status("ok")
+    s.end()
+    with s as ctx:
+        assert ctx is s
+
+
+def test_get_tracer_returns_tracer():
+    t = get_tracer("test")
+    span = t.start_span("x")
+    assert hasattr(span, "set_attribute")
+    assert hasattr(span, "end")
+
+
+def test_trace_llm_call_context():
+    gen = trace_llm_call("gpt-4", prompt="hello")
+    try:
+        span = next(gen)
+        assert span is not None
+        span.set_attribute("test", "value")
+    except StopIteration:
+        pass
+    finally:
+        try:
+            next(gen)
+        except StopIteration:
+            pass
+
+
+def test_trace_llm_call_exception():
+    gen = trace_llm_call("test-model")
+    try:
+        next(gen)
+        raise ValueError("oops")
+    except ValueError:
+        pass
+    finally:
+        try:
+            next(gen)
+        except StopIteration:
+            pass
+
+
+async def _dummy_tool(x: int) -> int:
+    return x * 2
+
+
+def test_trace_tool_call_decorator():
+    decorated = trace_tool_call("dummy")(_dummy_tool)
+    import asyncio
+    result = asyncio.run(decorated(5))
+    assert result == 10
+
+
+def test_trace_tool_call_exception():
+    async def _failing():
+        raise RuntimeError("fail")
+
+    decorated = trace_tool_call("failing")(_failing)
+    import asyncio
+    try:
+        asyncio.run(decorated())
+    except RuntimeError:
+        pass
+
+
+def test_trace_tool_call_default_name():
+    decorated = trace_tool_call()(_dummy_tool)
+    import asyncio
+    result = asyncio.run(decorated(3))
+    assert result == 6
+
+
+def test_setup_tracing_no_otel():
+    setup_tracing(service_name="test", enable_console=False)
+    assert True
+
+
+def test_has_otel_attribute():
+    assert HAS_OTEL in (True, False)

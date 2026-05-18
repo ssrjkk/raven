@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from loguru import logger
 
 from raven.core.audit import AuditEventType, audit_logger
@@ -369,6 +370,24 @@ def init_auth_routes(app, db_path: str):
     async def auth_deactivate_user(username: str):
         await store.set_active(username, False)
         token_manager.revoke_user_tokens(f"user:{username}")
+        return {"ok": True}
+
+    @app.get("/api/stream")
+    async def sse_stream(request: Request, session: str = "default"):
+        from raven.core.sse import sse_stream
+        async def event_generator():
+            async for chunk in sse_stream.stream(session):
+                yield chunk
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+    @app.post("/api/stream/push")
+    async def sse_push(body: dict):
+        from raven.core.sse import sse_stream
+        await sse_stream.push(
+            event=body.get("event", "message"),
+            data=body.get("data", {}),
+            session_id=body.get("session"),
+        )
         return {"ok": True}
 
     AUTH_ENABLED = True

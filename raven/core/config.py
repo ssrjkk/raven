@@ -6,6 +6,15 @@ from loguru import logger
 from pydantic_settings import BaseSettings
 
 
+_DEFAULT_TOOLS_DENY = [
+    "group:automation",
+    "group:runtime",
+    "sessions_spawn",
+    "shell.exec",
+    "browser.control",
+]
+
+
 class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
@@ -52,6 +61,17 @@ class Settings(BaseSettings):
     llm_retry_delay: float = 1.0
     workspace_path: str = ""
     channel_allow_from: str = ""
+
+    # --- Security Policy ---
+    tools_profile: str = "messaging"
+    tools_deny: str = ",".join(_DEFAULT_TOOLS_DENY)
+    tools_allow: str = ""
+    exec_security: str = "deny"
+    exec_ask_mode: str = "always"
+    workspace_only: bool = True
+    context_visibility: str = "all"
+    sandbox_mode: str = "non-main"
+    sandbox_backend: str = "subprocess"
 
     @property
     def resolved_workspace(self) -> Path | None:

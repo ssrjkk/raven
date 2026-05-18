@@ -1,0 +1,135 @@
+from __future__ import annotations
+
+from enum import Enum
+from pathlib import Path
+from typing import Any
+
+
+class ExecSecurity(str, Enum):
+    DENY = "deny"
+    ASK = "ask"
+    FULL = "full"
+
+
+class ExecAskMode(str, Enum):
+    OFF = "off"
+    ON_MISS = "on-miss"
+    ALWAYS = "always"
+
+
+class ToolPolicyEvaluator:
+    def __init__(
+        self,
+        profile: str = "messaging",
+        deny: list[str] | None = None,
+        allow: list[str] | None = None,
+        exec_security: ExecSecurity = ExecSecurity.DENY,
+        exec_ask: ExecAskMode = ExecAskMode.ALWAYS,
+        workspace_only: bool = True,
+        workspace_root: str | None = None,
+    ):
+        self.profile = profile
+        self._deny = set(deny or [])
+        self._allow = set(allow or [])
+        self.exec_security = exec_security
+        self.exec_ask = exec_ask
+        self.workspace_only = workspace_only
+        self._workspace_root = Path(workspace_root).resolve() if workspace_root else None
+
+        self._profiles: dict[str, set[str]] = {
+            "messaging": {"file.read", "notify.send", "memory.search", "web.search"},
+            "minimal": {"notify.send"},
+            "full": set(),
+        }
+
+    def set_workspace_root(self, path: str | Path):
+        self._workspace_root = Path(path).resolve()
+
+    def _profile_tools(self) -> set[str]:
+        return self._profiles.get(self.profile, set())
+
+    def is_tool_allowed(self, tool_name: str) -> bool:
+        try:
+            from raven.core.security.policy_engine import policy_engine
+            rs = policy_engine.get_ruleset("tools")
+            if rs is not None and len(rs.rules) > 0:
+                if not policy_engine.check("tools", {"tool": tool_name, "profile": self.profile, "action": "call"}):
+                    return False
+        except ImportError:
+            pass
+
+        if tool_name in self._deny:
+            return False
+        if self._allow:
+            return tool_name in self._allow
+        profile_set = self._profile_tools()
+        if profile_set:
+            return tool_name in profile_set
+        return True
+
+    def check_path(self, path: str) -> bool:
+        if not self.workspace_only or not self._workspace_root:
+            return True
+        try:
+            resolved = Path(path).resolve()
+            return str(resolved).startswith(str(self._workspace_root))
+        except Exception:
+            return False
+
+    async def check_exec(
+        self,
+        tool_name: str,
+        args: dict[str, Any] | None = None,
+        confirm_fn: Any = None,
+    ) -> tuple[bool, str | None]:
+        args = args or {}
+
+        try:
+            from raven.core.security.policy_engine import policy_engine
+            allowed = policy_engine.check("exec", {"tool": tool_name, "args": args, "exec_security": self.exec_security.value})
+            if not allowed:
+                return False, "exec denied by policy engine"
+        except ImportError:
+            pass
+
+        if self.exec_security == ExecSecurity.DENY:
+            return False, "exec denied by policy (security=deny)"
+
+        if self.workspace_only:
+            for k, v in args.items():
+                if isinstance(v, str) and ("/" in v or "\\" in v):
+                    if not self.check_path(v):
+                        return False, f"path '{v}' outside workspace root"
+
+        if self.exec_security == ExecSecurity.FULL:
+            return True, None
+
+        if self.exec_security == ExecSecurity.ASK:
+            if self.exec_ask == ExecAskMode.OFF:
+                return True, None
+            if self.exec_ask == ExecAskMode.ALWAYS:
+                if confirm_fn:
+                    confirmed = await confirm_fn(tool_name, args)
+                    if not confirmed:
+                        return False, "exec cancelled by user"
+                return True, None
+            if self.exec_ask == ExecAskMode.ON_MISS:
+                if tool_name not in self._allow and tool_name not in self._profile_tools():
+                    if confirm_fn:
+                        confirmed = await confirm_fn(tool_name, args)
+                        if not confirmed:
+                            return False, "exec cancelled by user"
+                return True, None
+
+        return True, None
+
+    def to_dict(self) -> dict:
+        return {
+            "profile": self.profile,
+            "deny": list(self._deny),
+            "allow": list(self._allow),
+            "exec_security": self.exec_security.value,
+            "exec_ask": self.exec_ask.value,
+            "workspace_only": self.workspace_only,
+            "workspace_root": str(self._workspace_root) if self._workspace_root else None,
+        }

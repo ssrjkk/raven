@@ -65,8 +65,14 @@ class TestAgent:
         async for _ in agent.run("ping"):
             pass
 
-    async def test_tool_execution(self, agent):
+    async def test_tool_execution(self, agent, session, tools, mock_db, mock_llm):
         from raven.core.llm import ToolCall
+        from raven.core.security.tool_policy import ToolPolicyEvaluator
+        agent = Agent(
+            session=session, tools=tools, db=mock_db, llm=mock_llm,
+            config=AgentConfig(max_tool_rounds=3, use_memory=False),
+            tool_policy=ToolPolicyEvaluator("full", "", ""),
+        )
         tc = ToolCall(id="call1", name="ping", arguments={})
         result = await agent._execute_tool(tc)
         assert "result" in result

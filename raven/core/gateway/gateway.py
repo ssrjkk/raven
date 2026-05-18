@@ -23,6 +23,7 @@ from raven.core.models import IncomingMessage, Message
 from raven.core.plugin_loader import PluginLoader
 from raven.core.sandbox import Sandbox
 from raven.core.skills import Skill, skills_registry
+from raven.core.security.context_filter import ContextVisibility, filter_context_by_visibility
 
 
 class Gateway:
@@ -154,6 +155,7 @@ class Gateway:
             agent = self.registry.create_agent(session)
 
             event.text = self._clean_text(event.channel, event.text)
+            event.text = self._apply_context_filter(event, user, event.text)
             recall_context = None
 
             full_response = ""
@@ -169,6 +171,12 @@ class Gateway:
             logger.error("handle_message error: {}", e)
             metrics.inc("message_errors", {"channel": event.channel})
             await self._send(event.channel, event.session_id, f"Sorry, an error occurred: {str(e)[:200]}")
+
+    def _apply_context_filter(self, event, user: dict, text: str) -> str:
+        from raven.core.config import settings
+        visibility = ContextVisibility(settings.context_visibility)
+        is_allowlisted = bool(user.get("is_allowed")) or settings.dm_policy == "open"
+        return filter_context_by_visibility(text, visibility, is_allowlisted, user.get("id", ""))
 
     async def _handle_intent(self, event: IncomingMessage) -> bool:
         import re

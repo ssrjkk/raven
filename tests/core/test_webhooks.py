@@ -36,7 +36,8 @@ async def test_generic_webhook_text_field():
     handler.assert_awaited_once()
     event = handler.await_args[0][0]
     assert event.channel == "webhook"
-    assert event.text == "hello"
+    assert "hello" in event.text
+    assert "<<<EXTERNAL_UNTRUSTED_CONTENT>>>" in event.text
 
 
 @pytest.mark.asyncio
@@ -49,7 +50,8 @@ async def test_generic_webhook_message_field():
     resp = await router.routes[0].endpoint(body, req)
     assert resp["ok"] is True
     event = handler.await_args[0][0]
-    assert event.text == "world"
+    assert "world" in event.text
+    assert "<<<EXTERNAL_UNTRUSTED_CONTENT>>>" in event.text
 
 
 @pytest.mark.asyncio

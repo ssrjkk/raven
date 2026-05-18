@@ -35,12 +35,14 @@ slack = ["slack-sdk>=3.27"]
 docker = ["docker>=7.0"]
 secrets = ["cryptography>=41.0"]
 service-win = ["pywin32>=306"]
+tui = ["textual>=1.0"]
+tracing = ["opentelemetry-api>=1.25", "opentelemetry-sdk>=1.25"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "ruff>=0.5",
 ]
-all = ["raven-agent[discord,slack,docker,secrets,service-win,dev]"]
+all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,dev]"]
 
 [project.scripts]
 raven = "raven.cli.main:cli"

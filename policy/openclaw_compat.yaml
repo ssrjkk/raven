@@ -1,0 +1,50 @@
+# Raven AI — OpenClaw Compatibility Profile
+# Copy to ~/.raven/config.yaml and adapt for production
+#
+# Three pillars:
+#   1. Identity first  → who can talk to the bot
+#   2. Scope next      → where the bot is allowed to act
+#   3. Model last      → limit blast radius (model can be tricked)
+
+gateway:
+  mode: local
+  bind: loopback
+  auth:
+    mode: token
+    token: "${RAVEN_GATEWAY_TOKEN}"
+
+session:
+  dmScope: per-channel-peer  # isolates sessions by channel+user
+
+tools:
+  profile: messaging           # messaging | minimal | full
+  deny:                        # deny > allow priority
+    - "group:automation"
+    - "group:runtime"
+    - "sessions_spawn"
+    - "shell.exec"
+    - "browser.control"
+  allow: []                    # empty = use profile defaults
+  exec:
+    security: deny             # deny | ask | full
+    ask: always                # off | on-miss | always
+    workspaceOnly: true        # restrict FS to workspace root
+  fs:
+    root: "${RAVEN_WORKSPACE}" # workspace root for path validation
+
+channels:
+  defaults:
+    dmPolicy: pairing          # pairing | closed | open
+    groups:
+      "*":
+        requireMention: true
+        policy: allowlist
+  telegram:
+    allowFrom: []              # empty = only pairing allowed
+
+context:
+  visibility: allowlist        # all | allowlist | allowlist_quote
+
+sandbox:
+  mode: non-main               # main | non-main | all | none
+  backend: subprocess          # subprocess | docker | none

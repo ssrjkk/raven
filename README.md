@@ -21,7 +21,10 @@
     <img src="https://img.shields.io/badge/channels-12-8A2BE2" alt="Channels">
   </a>
   <a href="https://github.com/ssrjkk/raven">
-    <img src="https://img.shields.io/badge/tests-220_passing-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-231_passing-brightgreen" alt="Tests">
+  </a>
+  <a href="https://github.com/ssrjkk/raven">
+    <img src="https://img.shields.io/badge/security-OpenClaw_compat-blueviolet" alt="OpenClaw Compat">
   </a>
 </div>
 
@@ -91,6 +94,7 @@ npm run dev    # http://localhost:5173 (прокси на :18888)
 | **Enterprise инфраструктура** | Circuit breaker, HTTP-пул, rate limiter, retry c экспоненциальной задержкой, audit-лог (20 типов событий), Prometheus metrics, health checks |
 | **Plugin система** | 10 плагинов — browser, code, cron, files, git, memory, api, ocr, process, sessions. Sandbox c capability-based контролем |
 | **Safety** | DM pairing, allowlist по каналам, Fernet-шифрование секретов, rate limiting, subprocess/Docker sandbox |
+| **Security Policy** | OpenClaw-compatible: ToolPolicyEvaluator, exec.security (deny/ask/full), deny > allow priority, workspaceOnly FS, contextVisibility, sanitize_external_content, security audit CLI |
 
 ---
 
@@ -121,6 +125,9 @@ raven code search <query>      Поиск по коду
 raven code review <file>       Ревью файла
 raven routine list             Список рутин
 raven routine add ...          Добавить рутину
+raven security audit           Проверка безопасности
+raven security audit --deep    Глубокая проверка (сеть, env, зависимости)
+raven security audit --fix     Авто-исправление проблем
 ```
 
 ## Chat Commands
@@ -155,6 +162,7 @@ raven-ai/
 │   ├── rag/            Векторное хранилище, embeddings, чанкинг, retriever
 │   ├── task_engine/    Планировщик, исполнитель, хранилище задач
 │   ├── monitor/        HTTP, price, RSS, file, process мониторы + условия
+│   ├── security/       ToolPolicyEvaluator, ContextVisibility, sanitize_external_content, SecurityAudit
 │   ├── coder/          Индексатор, парсер AST, ревьюер, менеджер сессий
 │   ├── routine/        Движок рутин, хранилище (бриффинги, email, файлы)
 │   ├── admin_api.py    REST API (каналы, агенты, конфиг, секреты, задачи, аудит)
@@ -194,7 +202,7 @@ raven-ai/
 | **Routine Engine** | Интервальные и scheduled рутины с `_parse_cron`, логированием |
 | **Workspace Skills** | SKILL.md в `workspace/skills/`, авто-загрузка через SkillsRegistry |
 | **Observability** | Prometheus metrics, JSON audit, health checks, correlation IDs |
-| **Security** | Rate limiting, API auth, DM pairing, Fernet encryption, RBAC, plugin sandbox |
+| **Security** | Rate limiting, API auth, DM pairing, Fernet encryption, RBAC, plugin sandbox, ToolPolicyEvaluator (deny/allow), exec security policy, contextVisibility, workspace isolation, security audit CLI |
 | **Resilience** | Circuit breaker, retry, connection pooling, hot-reload |
 | **CI** | GitHub Actions (pytest, ruff lint, compile check) |
 | **Deploy** | Docker, docker-compose |

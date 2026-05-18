@@ -1,0 +1,53 @@
+{
+  "rules": [
+    {
+      "name": "deny-dangerous-tools",
+      "condition": {
+        "or": [
+          {"tool": "shell.exec"},
+          {"tool": "sessions_spawn"},
+          {"tool": "browser.control"}
+        ]
+      },
+      "effect": "deny",
+      "priority": 100
+    },
+    {
+      "name": "deny-automation-group",
+      "condition": {
+        "match": {"field": "tool", "pattern": "^group:automation"}
+      },
+      "effect": "deny",
+      "priority": 90
+    },
+    {
+      "name": "allow-messaging-tools",
+      "condition": {
+        "or": [
+          {"tool": "file.read", "profile": "messaging"},
+          {"tool": "notify.send", "profile": "messaging"},
+          {"tool": "memory.search", "profile": "messaging"},
+          {"tool": "web.search", "profile": "messaging"}
+        ]
+      },
+      "effect": "allow",
+      "priority": 50
+    },
+    {
+      "name": "deny-exec-by-default",
+      "condition": {
+        "exec_security": "deny"
+      },
+      "effect": "deny",
+      "priority": 10
+    },
+    {
+      "name": "allow-ask-with-confirm",
+      "condition": {
+        "exec_security": "ask"
+      },
+      "effect": "allow",
+      "priority": 20
+    }
+  ]
+}

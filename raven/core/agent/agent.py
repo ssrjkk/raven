@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 from loguru import logger
 
@@ -48,6 +48,7 @@ class Agent:
         db: Database,
         llm: LLMRouter,
         config: AgentConfig | None = None,
+        tool_policy: Any = None,
     ):
         self.session = session
         self.tools = tools
@@ -55,6 +56,26 @@ class Agent:
         self.llm = llm
         self.config = config or AgentConfig()
         self._tool_map: dict[str, PluginTool] = {t.name: t for t in tools}
+        self._tool_policy = tool_policy or self._init_tool_policy()
+
+    def _init_tool_policy(self):
+        from raven.core.config import settings, _DEFAULT_TOOLS_DENY
+        from raven.core.security.tool_policy import ExecAskMode, ExecSecurity, ToolPolicyEvaluator
+        deny_raw = settings.tools_deny
+        deny_list = [d.strip() for d in deny_raw.split(",") if d.strip()] if deny_raw else list(_DEFAULT_TOOLS_DENY)
+        allow_raw = settings.tools_allow
+        allow_list = [a.strip() for a in allow_raw.split(",") if a.strip()] if allow_raw else []
+        ws_path = settings.resolved_workspace
+        ws_root = str(ws_path) if ws_path else None
+        return ToolPolicyEvaluator(
+            profile=settings.tools_profile,
+            deny=deny_list,
+            allow=allow_list,
+            exec_security=ExecSecurity(settings.exec_security),
+            exec_ask=ExecAskMode(settings.exec_ask_mode),
+            workspace_only=settings.workspace_only,
+            workspace_root=ws_root,
+        )
 
     def _build_system_prompt(self) -> str:
         base = self.config.system_prompt or DEFAULT_SYSTEM_PROMPT
@@ -205,6 +226,13 @@ class Agent:
         if not tool:
             logger.warning("Unknown tool: {}", tc.name)
             return {"error": f"Unknown tool: {tc.name}"}
+        allowed = self._tool_policy.is_tool_allowed(tc.name)
+        if not allowed:
+            logger.warning("Tool '{}' denied by policy", tc.name)
+            return {"error": f"Tool '{tc.name}' is denied by security policy"}
+        path_ok = self._tool_policy.check_path(str(tc.arguments) if tc.arguments else "")
+        if not path_ok:
+            return {"error": "Path outside workspace root — denied by security policy"}
         try:
             logger.info("Tool call: {} args={}", tc.name, tc.arguments)
             result = await tool.handler(**tc.arguments)

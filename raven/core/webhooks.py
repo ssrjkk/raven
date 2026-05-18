@@ -20,6 +20,8 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
         user_id = body.get("user_id", "") or body.get("user", "") or f"webhook:{source}"
         if not text:
             raise HTTPException(status_code=400, detail="No text content")
+        from raven.core.security.context_filter import sanitize_external_content
+        text = sanitize_external_content(text, source=source, channel="webhook", sender=user_id)
         event = IncomingMessage(
             channel="webhook",
             user_id=user_id,

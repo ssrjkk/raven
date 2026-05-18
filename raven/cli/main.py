@@ -614,6 +614,24 @@ def onboard():
 
 
 @cli.group()
+def security():
+    """Security audit and policy management"""
+
+
+@security.command("audit")
+@click.option("--deep", is_flag=True, help="Run deep audit (network, env file, dependencies)")
+@click.option("--fix", is_flag=True, help="Auto-fix common issues")
+def security_audit(deep: bool, fix: bool):
+    """Run security audit checks (OpenClaw-compatible)"""
+    from raven.core.security.security_audit import SecurityAudit
+    from raven.cli.doctor import _render_security_audit
+
+    auditor = SecurityAudit()
+    results = auditor.run_all(deep=deep)
+    _render_security_audit(results, fix=fix)
+
+
+@cli.group()
 def service():
     """Manage Raven as a platform-native service"""
 
@@ -1555,6 +1573,25 @@ def devices():
 def devices_list():
     """List paired devices"""
     console.print("[yellow]See 'raven nodes list' for device information[/yellow]")
+
+
+@cli.command()
+def tui():
+    """Launch the Textual TUI dashboard"""
+    import sys
+    extra_path = Path("D:/PythonPackages")
+    if extra_path.is_dir() and str(extra_path) not in sys.path:
+        sys.path.insert(0, str(extra_path))
+    try:
+        from raven.tui.app import run as run_tui
+    except ImportError:
+        console.print("[red]Textual is not installed. Install with: pip install raven-agent[tui][/red]")
+        raise SystemExit(1)
+    try:
+        run_tui()
+    except Exception as e:
+        console.print(f"[red]TUI error: {e}[/red]")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
