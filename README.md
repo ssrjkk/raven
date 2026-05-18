@@ -9,7 +9,6 @@
   <a href="#tech-stack">Tech Stack</a> •
   <a href="#license">License</a>
 
-  <br><br>
 
   <a href="https://github.com/ssrjkk/raven">
     <img src="https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white" alt="Python">
@@ -21,12 +20,14 @@
     <img src="https://img.shields.io/badge/channels-12-8A2BE2" alt="Channels">
   </a>
   <a href="https://github.com/ssrjkk/raven">
-    <img src="https://img.shields.io/badge/tests-231_passing-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-438_passing-brightgreen" alt="Tests">
   </a>
   <a href="https://github.com/ssrjkk/raven">
     <img src="https://img.shields.io/badge/security-OpenClaw_compat-blueviolet" alt="OpenClaw Compat">
   </a>
 </div>
+
+<img width="680" height="860" alt="image" src="https://github.com/user-attachments/assets/29b4d99d-4adf-411f-b3aa-e1c1582d6ba6" />
 
 ---
 
