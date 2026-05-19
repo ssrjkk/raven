@@ -1,0 +1,113 @@
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from raven.channels.telegram.channel import TelegramChannel
+from raven.core.models import Message
+
+
+@pytest.fixture
+def channel():
+    return TelegramChannel()
+
+
+@pytest.mark.asyncio
+async def test_start_no_token(channel):
+    with patch("raven.channels.telegram.channel.settings") as mock_settings:
+        mock_settings.telegram_bot_token = ""
+        await channel.start()
+        assert channel._app is None
+
+
+@pytest.mark.asyncio
+async def test_start_with_token(channel):
+    mock_app = MagicMock()
+    mock_app.initialize = AsyncMock()
+    mock_app.start = AsyncMock()
+    mock_app.stop = AsyncMock()
+    mock_app.shutdown = AsyncMock()
+    mock_app.updater = MagicMock()
+    mock_app.updater.start_polling = AsyncMock()
+    mock_builder = MagicMock()
+    mock_builder.token.return_value = mock_builder
+    mock_builder.build.return_value = mock_app
+    channel._token = "fake:token"
+    with patch("raven.channels.telegram.channel.Application.builder", return_value=mock_builder):
+        await channel.start()
+        assert channel._app is not None
+        await channel.stop()
+
+
+@pytest.mark.asyncio
+async def test_stop(channel):
+    mock_app = AsyncMock()
+    channel._app = mock_app
+    await channel.stop()
+    mock_app.stop.assert_awaited_once()
+    mock_app.shutdown.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_on_message(channel):
+    handler = AsyncMock()
+    await channel.on_message(handler)
+    assert channel._handler is handler
+
+
+@pytest.mark.asyncio
+async def test_send_no_app(channel):
+    msg = Message(session_id="telegram:C1", channel="telegram", role="assistant", content="hello")
+    await channel.send("telegram:C1", msg)
+
+
+@pytest.mark.asyncio
+async def test_send_with_app(channel):
+    mock_app = MagicMock()
+    mock_app.bot = AsyncMock()
+    channel._app = mock_app
+    msg = Message(session_id="telegram:12345", channel="telegram", role="assistant", content="hello")
+    await channel.send("telegram:12345", msg)
+    mock_app.bot.send_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_send_invalid_session(channel):
+    mock_app = MagicMock()
+    mock_app.bot = AsyncMock()
+    channel._app = mock_app
+    msg = Message(session_id="invalid", channel="telegram", role="assistant", content="hello")
+    await channel.send("invalid", msg)
+    mock_app.bot.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_typing(channel):
+    mock_app = MagicMock()
+    mock_app.bot = AsyncMock()
+    channel._app = mock_app
+    await channel.send_typing(12345)
+    mock_app.bot.send_chat_action.assert_awaited_once_with(chat_id=12345, action="typing")
+
+
+@pytest.mark.asyncio
+async def test_send_typing_no_app(channel):
+    await channel.send_typing(12345)
+
+
+@pytest.mark.asyncio
+async def test_build_test_app():
+    app = TelegramChannel._build_test_app("fake_token")
+    assert app is not None
+
+
+@pytest.mark.asyncio
+async def test_channel_id(channel):
+    assert channel.channel_id == "telegram"
+
+
+@pytest.mark.asyncio
+async def test_connect_disconnect(channel):
+    await channel.connect()
+    await channel.disconnect()
