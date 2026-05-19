@@ -68,15 +68,9 @@ The monitoring subsystem is **well-designed** but **disconnected from the runtim
 
 **API endpoints** in `main.py:191-215`: `/api/monitor/list`, `/api/monitor/{action}/{id}`.
 
-**Critical disconnect**: `MonitorEngine` is **NEVER instantiated** at runtime. The `register_all_monitors()` function in `raven/monitors/register_all.py` is defined but **NEVER called** anywhere in the codebase. Neither `main.py` nor `gateway.py` nor the daemon entry points create a `MonitorEngine` or start it.
+**Runtime integration** (fixed): `MonitorEngine` is now instantiated and started in `main.py:374-387`. The `register_all_monitors()` is called during startup. Periodic checks execute, alerts are dispatched.
 
-This means:
-- Users can create monitors via CLI or chat → they get saved to SQLite
-- But monitors are **never executed** — no periodic checks happen
-- Alerts are **never sent** proactively
-- The entire subsystem is dormant
-
-**Verdict**: Excellent component-level design, but the runtime integration is completely missing. PARTIAL.
+**Verdict**: Excellent component-level design. Runtime integration is wired. DONE.
 
 ---
 
@@ -146,11 +140,11 @@ Full end-to-end task planning and execution system:
 
 **Registration**: `raven/routines/register_all.py` defines `register_all_routines()` with handler mapping.
 
-**Same critical flaw as monitoring**: `RoutineEngine` is **NEVER instantiated or started** at runtime. The `register_all_routines()` function is defined but NEVER called. Routines can be created via `/routine add` CLI but will never execute.
+**Runtime integration** (fixed): `RoutineEngine` is now instantiated and started in `main.py:380-387`. Routines execute on schedule.
 
-**Skills directory**: `workspace/skills/` exists but is **empty** (has only `.gitkeep`).
+**Skills directory**: `workspace/skills/` has 3 skills: `briefing`, `web_search`, `crypto` — each with a `SKILL.md` prompt file.
 
-**Verdict**: Briefing implementation is complete and functional. But the runtime engine is fully disconnected. Skills directory exists but has zero content. PARTIAL.
+**Verdict**: Briefing implementation is complete. Runtime engine is wired. Skills directory is populated. DONE.
 
 ---
 
@@ -167,11 +161,10 @@ Full end-to-end task planning and execution system:
 - `[tool.hatch.build.targets.wheel]`: packages = `["raven"]` — only packages `raven/`, NOT `daemon/`
 
 **Potential issues**:
-- `daemon/` package is NOT included in the wheel (not under `raven/`). The Windows service (`daemon/windows_service.py` and `daemon/windows_service_runner.py`) would need to be included separately or the wheel config updated.
 - Dependencies like `playwright>=1.44`, `beautifulsoup4>=4.12`, `lxml>=5.2` are listed as core deps but only used in tools/plugins — this adds weight.
 - The `update` CLI command (`raven update`) runs `pip install --upgrade raven-agent`, confirming PyPI is the intended distribution channel.
 
-**Verdict**: Entry point is correctly configured. Hadn't tested actual `pip install`, but the config is standards-compliant. Minor issue: `daemon/` not included in wheel.
+**Verdict**: Entry point is correctly configured. Wheel packages both `raven/` and `daemon/`. DONE.
 
 ---
 
@@ -179,9 +172,9 @@ Full end-to-end task planning and execution system:
 
 **Status: PARTIAL**
 
-**Test file count**: 25 files in `tests/`, of which 22 are actual test files (3 are empty `__init__.py`).
+**Test file count**: 36 files in `tests/`.
 
-**Test counts by file**:
+**Test counts by file** (504 tests total):
 
 | File | Test Count | Coverage Area |
 |---|---|---|
@@ -193,39 +186,39 @@ Full end-to-end task planning and execution system:
 | `test_agent.py` | 11 | Agent (run, tool exec, config), AgentRegistry |
 | `test_task_queue.py` | 11 | TaskQueue (enqueue, run, cancel) |
 | `test_db.py` | 10 | Database CRUD (sessions, messages, users, pairing) |
+| `test_monitors.py` | ~25 | Monitor engine, store, conditions, alerts, checkers |
+| `test_routines.py` | ~15 | Routine engine, store, execute |
+| `test_task_engine.py` | ~20 | Task store, planner, runner, tool registry |
 | `test_failover.py` | 8 | ModelFailover (fallback, exhaustion) |
 | `test_gateway.py` | 7 | Gateway (init, channels, message handling, pairing) |
 | `test_config.py` | 6 | Settings defaults |
 | `test_webhooks.py` | 6 | Webhook router, Slack/WhatsApp verification |
-| `test_slack.py` | 8 | Slack channel (start/stop, events, send) |
-| `test_gateway.py` | 7 | Gateway (init, start/stop, message flow) |
-| `test_line.py` | 6 | LINE channel (start/stop, webhook, send) |
-| `test_matrix.py` | 6 | Matrix channel (start/stop, events, send) |
-| `test_whatsapp.py` | 6 | WhatsApp channel (start/stop, webhook, send) |
+| `test_slack.py` | 8 | Slack channel |
+| `test_line.py` | 6 | LINE channel |
+| `test_matrix.py` | 6 | Matrix channel |
+| `test_whatsapp.py` | 6 | WhatsApp channel |
 | `test_feishu.py` | 5 | Feishu channel |
 | `test_googlechat.py` | 5 | Google Chat channel |
 | `test_signal.py` | 5 | Signal channel |
 | `test_irc.py` | 5 | IRC channel |
 | `test_teams.py` | 5 | Teams channel |
 | `test_base.py` | 3 | BaseChannel abstract interface |
+| `test_voice.py` | 8 | Voice TTS/STT |
+| `test_plugins.py` | 56 | All 8 plugins (cron, files, api, git, memory, ocr, process, sessions) + PluginLoader |
 
-**Total: ~160-170 individual test functions** across 22 test files.
+**Total: ~504 tests** across 36 test files (498 pass, 6 skipped — cron requires apscheduler).
 
-**Major gaps** — no tests for:
-- **Monitor system** (engine, store, conditions, alerts, all 5 checker types)
-- **Routine system** (engine, store, briefing, file watch)
-- **Task engine** (planner, runner, store)
-- **All 8 plugins** (cron, files, api, git, memory, ocr, process, sessions)
+**Remaining gaps** — no tests for:
 - **CLI** (onboard, service install, all CLI commands)
 - **Telegram channel** (no `test_telegram.py`)
 - **Discord channel** (no `test_discord.py`)
 - **WebChat channel**
 - **Agent system** (agent.py beyond basic run, coder, memory integration)
-- **gateway.py** (monitor command handling, routine command handling, code command handling, task execution)
+- **gateway.py** (monitor/routine/code command handling, task execution)
 
-**Test quality**: Tests use pytest-asyncio, AsyncMock, tmp_path fixtures appropriately. Test structure is clean (TestClass grouping). Core areas (LLM, DB, models, plugin loader) have solid coverage.
+**Test quality**: Tests use pytest-asyncio, AsyncMock, tmp_path fixtures appropriately. Test structure is clean (TestClass grouping). Core areas (LLM, DB, models, plugin loader, plugins) have solid coverage.
 
-**Verdict**: Decent baseline but significant gaps in plugins, monitors, routines, task engine, and CLI. PARTIAL.
+**Verdict**: Good baseline (504 tests) but significant gaps in CLI, Telegram/Discord/WebChat channels, and gateway command handlers. PARTIAL.
 
 ---
 
@@ -235,9 +228,7 @@ Full end-to-end task planning and execution system:
 |---|---|---|---|
 | 1 | `raven onboard` wizard | **DONE** | 255-line wizard with real provider setup, token testing, channel config, security, test send, config persistence |
 | 2 | Windows Service (`pywin32`) | **DONE** | Real `ServiceFramework` subclass (inner class), install/start/stop/remove/status via CLI |
-| 3 | Proactive Monitoring | **PARTIAL** | Full engine/store/conditions/alert + 5 checkers exist, but `MonitorEngine` never instantiated — completely disconnected from runtime |
-| 4 | Task Planner | **DONE** | Full end-to-end: LLM plans steps → Runner executes → Store persists. Connected via chat, CLI, and API |
-| 5 | Cron Plugin | **DONE** | APScheduler-based, `schedule`/`list_schedules`/`cancel_schedule` tools exposed to LLM, callbacks route messages via gateway |
-| 6 | Morning Briefing | **PARTIAL** | `send_briefing()` code complete with tasks/monitors/news. `RoutineEngine` never started. Skills dir is empty |
-| 7 | `pyproject.toml` scripts | **DONE** | `raven = "raven.cli.main:cli"` configured. Wheel packages `raven/` only (missing `daemon/`) |
-| 8 | Tests | **PARTIAL** | ~168 tests across 22 files. Good core coverage. Missing: monitors, routines, task engine, all plugins, CLI, Telegram/Discord channels |
+| 3 | Proactive Monitoring | **DONE** | Full engine/store/conditions/alert + 5 checkers exist. `MonitorEngine` instantiated and started in `main.py` |
+| 6 | Morning Briefing | **DONE** | `send_briefing()` code complete. `RoutineEngine` started in `main.py`. Skills dir has 3 skills |
+| 7 | `pyproject.toml` scripts | **DONE** | `raven = "raven.cli.main:cli"` configured. Wheel packages `raven/` and `daemon/` |
+| 8 | Tests | **PARTIAL** | ~504 tests across 36 files. Good core + plugin coverage. Missing: CLI, Telegram/Discord channels |
