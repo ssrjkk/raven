@@ -4,6 +4,8 @@ import json
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from raven.core.audit import AuditEntry, AuditEventType, AuditLogger
 
 
@@ -334,22 +336,21 @@ def test_audit_entry_timestamp_dt():
     assert dt.year >= 1970
 
 
-def test_audit_alog():
-    import asyncio
+@pytest.mark.asyncio
+async def test_audit_alog():
+    import tempfile
+    from pathlib import Path
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
     logger = AuditLogger(log_path)
     logger.start()
-
-    async def _test():
-        await logger.alog("test.event", "user")
-        logger.stop()
-        entries = logger.recent()
-        assert len(entries) == 1
-        assert entries[0]["event"] == "test.event"
-
-    asyncio.run(_test())
+    await logger.alog("test.event", "user")
+    logger.stop()
+    entries = logger.recent()
+    assert len(entries) == 1
+    assert entries[0]["event"] == "test.event"
     Path(log_path).unlink(missing_ok=True)
 
 

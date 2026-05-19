@@ -1,23 +1,13 @@
 from __future__ import annotations
 
+import pytest
+
 from raven.core.security.context_filter import (
     ContextVisibility,
     filter_context_by_visibility,
     sanitize_external_content,
 )
 from raven.core.security.tool_policy import ExecSecurity, ToolPolicyEvaluator
-
-
-def _run(coro):
-    import asyncio
-    try:
-        loop = asyncio.get_running_loop()
-        if loop.is_running():
-            fut = asyncio.run_coroutine_threadsafe(coro, loop)
-            return fut.result()
-    except RuntimeError:
-        pass
-    return asyncio.run(coro)
 
 
 class TestToolPolicyEvaluator:
@@ -44,15 +34,17 @@ class TestToolPolicyEvaluator:
         p = ToolPolicyEvaluator(workspace_only=False)
         assert p.check_path("/etc/passwd")
 
-    def test_exec_security_deny(self):
+    @pytest.mark.asyncio
+    async def test_exec_security_deny(self):
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.DENY)
-        allowed, reason = _run(p.check_exec("test_tool"))
+        allowed, reason = await p.check_exec("test_tool")
         assert not allowed
         assert "deny" in (reason or "")
 
-    def test_exec_security_full(self):
+    @pytest.mark.asyncio
+    async def test_exec_security_full(self):
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL)
-        allowed, reason = _run(p.check_exec("test_tool"))
+        allowed, reason = await p.check_exec("test_tool")
         assert allowed
 
     def test_profile_minimal(self):
@@ -168,8 +160,3 @@ class TestSecurityAudit:
         results = auditor.run_all()
         non_empty_names = [r.name for r in results if r.name]
         assert len(non_empty_names) == len(results)
-
-
-
-
-

@@ -182,7 +182,12 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     async def admin_channels():
         channels = get_channels_fn()
         return [
-            {"id": cid, "type": type(ch).__name__, "stats": ch.stats() if hasattr(ch, "stats") else {}}
+            {
+                "id": cid,
+                "type": type(ch).__name__,
+                "ready": ch._ready if hasattr(ch, "_ready") else True,
+                "stats": ch.stats() if hasattr(ch, "stats") else {},
+            }
             for cid, ch in channels.items()
         ]
 
@@ -294,6 +299,47 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
             "running": gateway._running if hasattr(gateway, "_running") else False,
             "version": "1.0.0",
         }
+
+    @router.get("/logs/stream")
+    async def admin_logs_stream():
+        import asyncio
+        import json
+        import time
+        from fastapi.responses import StreamingResponse
+
+        async def event_generator():
+            from collections import deque
+            buf = deque(maxlen=50)
+            while True:
+                for handler in logger._core.handlers.values():
+                    if hasattr(handler, "stream") and hasattr(handler.stream, "getvalue"):
+                        try:
+                            new_lines = handler.stream.getvalue().splitlines()
+                            for line in new_lines:
+                                buf.append(line)
+                        except Exception:
+                            pass
+                if buf:
+                    while buf:
+                        line = buf.popleft()
+                        yield f"data: {json.dumps({'timestamp': time.strftime('%H:%M:%S'), 'level': 'INFO', 'message': line})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'timestamp': time.strftime('%H:%M:%S'), 'level': 'INFO', 'message': 'heartbeat'})}\n\n"
+                await asyncio.sleep(1)
+
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+    @router.post("/config/key")
+    async def admin_update_config_key(body: dict):
+        key = body.get("key", "")
+        value = body.get("value", "")
+        if not key or not value:
+            raise HTTPException(400, "key and value required")
+        from raven.core.config_store import config_store
+        config_store.set(key, value)
+        config_store.save()
+        audit_logger.log(AuditEventType.COMMAND, "admin", "config.update", detail={"key": key})
+        return {"ok": True}
 
     return router
 

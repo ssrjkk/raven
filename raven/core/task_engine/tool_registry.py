@@ -4,6 +4,8 @@ from typing import Any, Awaitable, Callable
 
 from pydantic import BaseModel, Field
 
+from raven.core.tracing import get_tracer
+
 
 class ToolSpec(BaseModel):
     name: str
@@ -58,7 +60,11 @@ class ToolRegistry:
             raise ValueError(f"Unknown tool: {name}")
         if spec.handler is None:
             raise ValueError(f"Tool {name} has no handler registered")
-        return await spec.handler(**params)
+        tracer = get_tracer()
+        with tracer.start_as_current_span("tool.call") as span:
+            span.set_attribute("tool.name", name)
+            span.set_attribute("tool.category", spec.category)
+            return await spec.handler(**params)
 
     @property
     def count(self) -> int:

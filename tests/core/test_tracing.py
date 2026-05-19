@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from raven.core.tracing import (
     HAS_OTEL,
     _NoopSpan,
@@ -66,29 +68,27 @@ async def _dummy_tool(x: int) -> int:
     return x * 2
 
 
-def test_trace_tool_call_decorator():
+@pytest.mark.asyncio
+async def test_trace_tool_call_decorator():
     decorated = trace_tool_call("dummy")(_dummy_tool)
-    import asyncio
-    result = asyncio.run(decorated(5))
+    result = await decorated(5)
     assert result == 10
 
 
-def test_trace_tool_call_exception():
+@pytest.mark.asyncio
+async def test_trace_tool_call_exception():
     async def _failing():
         raise RuntimeError("fail")
 
     decorated = trace_tool_call("failing")(_failing)
-    import asyncio
-    try:
-        asyncio.run(decorated())
-    except RuntimeError:
-        pass
+    with pytest.raises(RuntimeError):
+        await decorated()
 
 
-def test_trace_tool_call_default_name():
+@pytest.mark.asyncio
+async def test_trace_tool_call_default_name():
     decorated = trace_tool_call()(_dummy_tool)
-    import asyncio
-    result = asyncio.run(decorated(3))
+    result = await decorated(3)
     assert result == 6
 
 

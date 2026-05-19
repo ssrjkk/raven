@@ -1,21 +1,72 @@
 @import "tailwindcss";
 
 :root {
-  --bg-primary: #0f1117;
-  --bg-secondary: #1a1d2e;
-  --bg-tertiary: #252840;
-  --accent: #7c3aed;
-  --accent-hover: #8b5cf6;
-  --text-primary: #e4e4e7;
-  --text-secondary: #a1a1aa;
+  --dt-version: 1.0.0;
+  --dt-colors-bg-primary: #0f1117;
+  --dt-colors-bg-secondary: #1a1d2e;
+  --dt-colors-bg-tertiary: #252840;
+  --dt-colors-bg-hover: #2a2d42;
+  --dt-colors-bg-active: #323660;
+  --dt-colors-bg-inverse: #ffffff;
+  --dt-colors-surface-default: #1a1d2e;
+  --dt-colors-surface-elevated: #252840;
+  --dt-colors-surface-card: #1e2140;
+  --dt-colors-surface-tooltip: #2a2d42;
+  --dt-colors-surface-modal: #1a1d2e;
+  --dt-colors-accent-default: #7c3aed;
+  --dt-colors-accent-hover: #8b5cf6;
+  --dt-colors-accent-active: #6d28d9;
+  --dt-colors-accent-muted: rgba(124, 58, 237, 0.15);
+  --dt-colors-accent-subtle: rgba(124, 58, 237, 0.08);
+  --dt-colors-text-primary: #e4e4e7;
+  --dt-colors-text-secondary: #a1a1aa;
+  --dt-colors-text-tertiary: #71717a;
+  --dt-colors-text-inverse: #09090b;
+  --dt-colors-text-link: #8b5cf6;
+  --dt-colors-text-link-hover: #a78bfa;
+  --dt-colors-border-default: #2a2d3e;
+  --dt-colors-border-hover: #3a3d52;
+  --dt-colors-border-focus: #7c3aed;
+  --dt-colors-border-muted: #1f2235;
+  --dt-colors-status-success: #22c55e;
+  --dt-colors-status-warning: #eab308;
+  --dt-colors-status-error: #ef4444;
+  --dt-colors-status-info: #3b82f6;
+  --dt-spacing-xs: 0.25rem;
+  --dt-spacing-sm: 0.5rem;
+  --dt-spacing-md: 1rem;
+  --dt-spacing-lg: 1.5rem;
+  --dt-spacing-xl: 2rem;
+  --dt-spacing-2xl: 3rem;
+  --dt-spacing-3xl: 4rem;
+  --dt-typography-font-size-xs: 0.75rem;
+  --dt-typography-font-size-sm: 0.875rem;
+  --dt-typography-font-size-base: 1rem;
+  --dt-typography-font-size-lg: 1.125rem;
+  --dt-typography-font-size-xl: 1.25rem;
+  --dt-typography-font-size-2xl: 1.5rem;
+  --dt-typography-font-size-3xl: 1.875rem;
+  --dt-border-radius-sm: 0.25rem;
+  --dt-border-radius-md: 0.5rem;
+  --dt-border-radius-lg: 0.75rem;
+  --dt-border-radius-xl: 1rem;
+  --dt-border-radius-full: 9999px;
+  --dt-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --dt-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  --dt-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+  --dt-shadow-glow-accent: 0 0 12px rgba(124, 58, 237, 0.4);
+  --dt-z-index-dropdown: 50;
+  --dt-z-index-modal: 200;
+  --dt-z-index-tooltip: 300;
+  --dt-z-index-toast: 400;
 }
 
 * { scrollbar-width: thin; scrollbar-color: #2a2d3e transparent; }
-body { font-family: "Inter", system-ui, -apple-system, sans-serif; }
+body { font-family: "Inter", system-ui, -apple-system, sans-serif; background-color: var(--dt-colors-bg-primary); color: var(--dt-colors-text-primary); }
 
-pre { background: #0d0d1a; border-radius: 0.5rem; padding: 1rem; overflow-x: auto; }
-code { font-family: "JetBrains Mono", "Fira Code", monospace; font-size: 0.875rem; }
-p code { background: #1a1d2e; padding: 0.125rem 0.375rem; border-radius: 0.25rem; }
+pre { background: var(--dt-colors-surface-elevated); border-radius: var(--dt-border-radius-md); padding: var(--dt-spacing-md); overflow-x: auto; }
+code { font-family: "JetBrains Mono", "Fira Code", monospace; font-size: var(--dt-typography-font-size-sm); }
+p code { background: var(--dt-colors-surface-default); padding: 0.125rem 0.375rem; border-radius: var(--dt-border-radius-sm); }
 
 .typing-dot { animation: blink 1.4s infinite both; }
 .typing-dot:nth-child(2) { animation-delay: 0.2s; }

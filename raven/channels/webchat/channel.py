@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 from loguru import logger
 
 from raven.channels.base import BaseChannel
+from raven.core.canvas import canvas_manager
 from raven.core.db import Database
 from raven.core.models import IncomingMessage, Message
 
@@ -95,6 +96,45 @@ class WebChatChannel(BaseChannel):
                 pass
             finally:
                 self._connections.pop(client_id, None)
+
+        @app.websocket("/ws/canvas")
+        async def canvas_websocket(websocket: WebSocket):
+            await websocket.accept()
+            session = canvas_manager.create_session(str(uuid4().hex[:12]))
+            try:
+                while True:
+                    data = await websocket.receive_text()
+                    msg = json.loads(data)
+                    action = msg.get("action", "")
+                    if action == "render":
+                        from raven.core.canvas import CanvasComponent
+                        comp_data = msg.get("component", {})
+                        if comp_data:
+                            def _from_dict(d):
+                                c = CanvasComponent(d["type"], d.get("props"))
+                                for child in d.get("children", []):
+                                    c.add_child(_from_dict(child))
+                                return c
+                            comp = _from_dict(comp_data)
+                            session.render(comp)
+                            await websocket.send_json({"type": "canvas_rendered", "session_id": session.session_id})
+                    elif action == "update_props":
+                        session.update_props(msg["component_id"], msg.get("props", {}))
+                        await websocket.send_json({"type": "props_updated"})
+                    elif action == "action":
+                        result = canvas_manager.handle_action(
+                            session.session_id, msg.get("component_id", ""),
+                            msg.get("action_name", ""), msg.get("data"),
+                        )
+                        await websocket.send_json({"type": "action_result", "result": result})
+                    elif action == "get_state":
+                        await websocket.send_json({"type": "canvas_state", **session.to_dict()})
+                    elif action == "list_sessions":
+                        await websocket.send_json({"type": "session_list", "sessions": canvas_manager.list_sessions()})
+            except WebSocketDisconnect:
+                pass
+            finally:
+                canvas_manager.delete_session(session.session_id)
 
     async def start(self):
         logger.info("WebChat channel ready")

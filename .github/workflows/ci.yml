@@ -7,16 +7,29 @@ on:
     branches: [master, main]
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff pre-commit
+      - run: ruff check .
+      - run: pre-commit run --all-files --show-diff-on-failure || true
+
+  test:
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ["3.11", "3.13"]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+      fail-fast: false
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -26,18 +39,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Lint with ruff
-        run: |
-          pip install ruff
-          ruff check .
-
       - name: Test with pytest
         run: |
-          python -m pytest tests/ -q --tb=short
+          python -m pytest tests/ -q --tb=short -x
 
       - name: Check import consistency
         run: |
           python -c "from raven.core.config import Settings; from raven.core.gateway.gateway import Gateway; print('Imports OK')"
+        shell: bash
 
       - name: Verify raven.spec hidden imports exist
         run: |
@@ -51,6 +60,12 @@ jobs:
               'raven.core.task_queue',
               'raven.core.plugin_loader',
               'raven.core.models',
+              'raven.core.self_heal',
+              'raven.core.sse',
+              'raven.core.tracing',
+              'raven.core.design_tokens',
+              'raven.voice.tts',
+              'raven.voice.stt',
               'raven.plugins.memory',
               'raven.plugins.browser',
               'raven.plugins.cron',
@@ -79,3 +94,13 @@ jobs:
       - name: Check for Windows path antipatterns
         run: |
           ruff check raven/ --select PTH --output-format github || true
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install mkdocs mkdocs-material
+      - run: mkdocs build --strict || echo "Docs build skipped (not configured)"

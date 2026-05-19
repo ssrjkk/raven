@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
 from raven.core.sse import Backpressure, SSEEvent, SSEStream
@@ -42,47 +40,40 @@ def test_sse_stream_subscribe_unsubscribe():
     assert "test-session" not in stream._queues
 
 
-def test_sse_stream_push():
+@pytest.mark.asyncio
+async def test_sse_stream_push():
     stream = SSEStream()
     q = stream.subscribe("test-session")
-
-    async def _test():
-        await stream.push("test", {"key": "val"}, session_id="test-session")
-        payload = await asyncio.wait_for(q.get(), timeout=1.0)
-        assert payload.event == "test"
-        assert payload.data["key"] == "val"
-
-    asyncio.run(_test())
+    import asyncio
+    await stream.push("test", {"key": "val"}, session_id="test-session")
+    payload = await asyncio.wait_for(q.get(), timeout=1.0)
+    assert payload.event == "test"
+    assert payload.data["key"] == "val"
     stream.unsubscribe("test-session")
 
 
-def test_sse_stream_broadcast():
+@pytest.mark.asyncio
+async def test_sse_stream_broadcast():
     stream = SSEStream()
     q1 = stream.subscribe("s1")
     q2 = stream.subscribe("s2")
-
-    async def _test():
-        await stream.broadcast("broadcast", {"msg": "to all"})
-        p1 = await asyncio.wait_for(q1.get(), timeout=1.0)
-        p2 = await asyncio.wait_for(q2.get(), timeout=1.0)
-        assert p1.event == "broadcast"
-        assert p2.event == "broadcast"
-
-    asyncio.run(_test())
+    import asyncio
+    await stream.broadcast("broadcast", {"msg": "to all"})
+    p1 = await asyncio.wait_for(q1.get(), timeout=1.0)
+    p2 = await asyncio.wait_for(q2.get(), timeout=1.0)
+    assert p1.event == "broadcast"
+    assert p2.event == "broadcast"
     stream.unsubscribe("s1")
     stream.unsubscribe("s2")
 
 
-def test_sse_stream_generator():
+@pytest.mark.asyncio
+async def test_sse_stream_generator():
     stream = SSEStream()
-
-    async def _test():
-        gen = stream.stream("gen-session")
-        first = await gen.__anext__()
-        assert "event: connected" in first
-        assert "gen-session" in first
-
-    asyncio.run(_test())
+    gen = stream.stream("gen-session")
+    first = await gen.__anext__()
+    assert "event: connected" in first
+    assert "gen-session" in first
     stream.unsubscribe("gen-session")
 
 
@@ -94,8 +85,6 @@ async def test_sse_stream_cleanup():
     await stream.stop()
     assert stream._task is None
 
-
-# ─── New tests ──────────────────────────────────────────────────────
 
 def test_sse_stream_active_sessions():
     stream = SSEStream()
@@ -110,23 +99,18 @@ def test_sse_stream_active_sessions():
     assert stream.active_sessions == 0
 
 
-def test_sse_stream_metrics():
+@pytest.mark.asyncio
+async def test_sse_stream_metrics():
     stream = SSEStream()
     assert stream.total_pushed == 0
     assert stream.total_dropped == 0
-
     q = stream.subscribe("s1")
-
-    async def _test():
-        await stream.push("evt", {"n": 1}, session_id="s1")
-        assert stream.total_pushed == 1
-        await stream.push("evt", {"n": 2}, session_id="s1")
-        assert stream.total_pushed == 2
-        # Consume
-        await q.get()
-        await q.get()
-
-    asyncio.run(_test())
+    await stream.push("evt", {"n": 1}, session_id="s1")
+    assert stream.total_pushed == 1
+    await stream.push("evt", {"n": 2}, session_id="s1")
+    assert stream.total_pushed == 2
+    await q.get()
+    await q.get()
     stream.unsubscribe("s1")
 
 
@@ -154,50 +138,40 @@ def test_sse_session_info():
     stream.unsubscribe("s1")
 
 
-def test_sse_backpressure_drop():
+@pytest.mark.asyncio
+async def test_sse_backpressure_drop():
     stream = SSEStream(max_queue=2, backpressure=Backpressure.DROP)
     stream.subscribe("s1")
-
-    async def _test():
-        await stream.push("a", {}, session_id="s1")
-        await stream.push("b", {}, session_id="s1")
-        await stream.push("c", {}, session_id="s1")
-        await stream.push("d", {}, session_id="s1")
-
-    asyncio.run(_test())
-    # Queue cap 2, after 4 pushes + drop strategy, at least 2 were dropped
+    await stream.push("a", {}, session_id="s1")
+    await stream.push("b", {}, session_id="s1")
+    await stream.push("c", {}, session_id="s1")
+    await stream.push("d", {}, session_id="s1")
     assert stream.total_dropped >= 2
     stream.unsubscribe("s1")
 
 
-def test_sse_backpressure_block():
+@pytest.mark.asyncio
+async def test_sse_backpressure_block():
     stream = SSEStream(max_queue=1, backpressure=Backpressure.BLOCK)
     q = stream.subscribe("s1")
-
-    async def _test():
-        await stream.push("a", {}, session_id="s1")
-        # Consume so queue has space, then push succeeds
-        consumed = await asyncio.wait_for(q.get(), timeout=0.5)
-        assert consumed.event == "a"
-        await stream.push("b", {}, session_id="s1")
-        consumed2 = await asyncio.wait_for(q.get(), timeout=0.5)
-        assert consumed2.event == "b"
-
-    asyncio.run(_test())
+    import asyncio
+    await stream.push("a", {}, session_id="s1")
+    consumed = await asyncio.wait_for(q.get(), timeout=0.5)
+    assert consumed.event == "a"
+    await stream.push("b", {}, session_id="s1")
+    consumed2 = await asyncio.wait_for(q.get(), timeout=0.5)
+    assert consumed2.event == "b"
     assert stream.total_pushed == 2
     assert stream.total_dropped == 0
     stream.unsubscribe("s1")
 
 
-def test_sse_backpressure_throttle():
+@pytest.mark.asyncio
+async def test_sse_backpressure_throttle():
     stream = SSEStream(max_queue=2, backpressure=Backpressure.THROTTLE)
     stream.subscribe("s1")
-
-    async def _test():
-        for i in range(5):
-            await stream.push("evt", {"i": i}, session_id="s1")
-
-    asyncio.run(_test())
+    for i in range(5):
+        await stream.push("evt", {"i": i}, session_id="s1")
     assert stream.total_pushed >= 1
     stream.unsubscribe("s1")
 
@@ -208,19 +182,15 @@ def test_sse_event_serialize_has_id():
     assert "id: evt-" in serialized
 
 
-def test_sse_stream_generator_last_event_id():
+@pytest.mark.asyncio
+async def test_sse_stream_generator_last_event_id():
     stream = SSEStream()
     q = stream.subscribe("s1")
-
-    async def _test():
-        await stream.push("e1", {"n": 1}, session_id="s1")
-        p1 = await q.get()
-        # Simulate reconnect with last_event_id
-        gen = stream.stream("s1", last_event_id=p1.id)
-        first = await gen.__anext__()
-        assert "event: connected" in first
-
-    asyncio.run(_test())
+    await stream.push("e1", {"n": 1}, session_id="s1")
+    p1 = await q.get()
+    gen = stream.stream("s1", last_event_id=p1.id)
+    first = await gen.__anext__()
+    assert "event: connected" in first
     stream.unsubscribe("s1")
 
 
@@ -230,13 +200,10 @@ def test_sse_backpressure_enum():
     assert Backpressure.THROTTLE.value == "throttle"
 
 
-def test_sse_stop_clears_all():
+@pytest.mark.asyncio
+async def test_sse_stop_clears_all():
     stream = SSEStream()
     stream.subscribe("s1")
     stream.subscribe("s2")
-
-    async def _test():
-        await stream.stop()
-
-    asyncio.run(_test())
+    await stream.stop()
     assert stream.active_sessions == 0

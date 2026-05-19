@@ -41,6 +41,7 @@ from raven.core.metrics import metrics
 from raven.core.middleware import (
     auth_middleware,
     error_handler_middleware,
+    input_sanitize_middleware,
     rate_limit_middleware,
     request_id_middleware,
 )
@@ -143,6 +144,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     api_app.middleware("http")(rate_limit_middleware)
     api_app.middleware("http")(auth_middleware)
     api_app.middleware("http")(error_handler_middleware)
+    api_app.middleware("http")(input_sanitize_middleware)
 
     api_app.state.slack_channel = slack
     api_app.state.whatsapp_channel = whatsapp

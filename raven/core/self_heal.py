@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+import asyncio
+import time
+from typing import Any, Callable
+
+from loguru import logger
+
+HEAL_INTERVAL = 30.0
+MAX_RESTART_ATTEMPTS = 3
+BACKOFF_BASE = 5.0
+
+
+class ServiceStatus:
+    def __init__(self, name: str):
+        self.name = name
+        self.last_ok: float = 0.0
+        self.failures: int = 0
+        self.restart_attempts: int = 0
+        self.alive: bool = True
+
+    def record_success(self):
+        self.last_ok = time.time()
+        self.failures = 0
+
+    def record_failure(self):
+        self.failures += 1
+        if self.failures >= 3:
+            self.alive = False
+
+    @property
+    def needs_restart(self) -> bool:
+        return not self.alive and self.restart_attempts < MAX_RESTART_ATTEMPTS
+
+
+class SelfHealer:
+    def __init__(self):
+        self._services: dict[str, tuple[ServiceStatus, Callable[[], Any], Callable[[], Any]]] = {}
+        self._task: asyncio.Task | None = None
+
+    def register(self, name: str, health_check: Callable[[], Any], restart: Callable[[], Any]):
+        self._services[name] = (ServiceStatus(name), health_check, restart)
+
+    def unregister(self, name: str):
+        self._services.pop(name, None)
+
+    def start(self):
+        if self._task is None:
+            self._task = asyncio.create_task(self._loop())
+            logger.info("Self-healer started with {} service(s)", len(self._services))
+
+    async def stop(self):
+        if self._task:
+            self._task.cancel()
+            try:
+                await asyncio.wait_for(self._task, timeout=5.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+            self._task = None
+
+    async def _loop(self):
+        while True:
+            for name, (status, health_check, restart_fn) in list(self._services.items()):
+                try:
+                    healthy = await health_check() if asyncio.iscoroutinefunction(health_check) else health_check()
+                    if healthy:
+                        status.record_success()
+                    else:
+                        status.record_failure()
+                except Exception as e:
+                    status.record_failure()
+                    logger.warning("Health check failed for {}: {}", name, e)
+
+                if status.needs_restart:
+                    status.restart_attempts += 1
+                    backoff = BACKOFF_BASE * (2 ** (status.restart_attempts - 1))
+                    logger.info("Restarting {} (attempt {}/{}, backoff {}s)", name, status.restart_attempts, MAX_RESTART_ATTEMPTS, backoff)
+                    try:
+                        await restart_fn() if asyncio.iscoroutinefunction(restart_fn) else restart_fn()
+                        status.alive = True
+                        logger.info("Restart of {} succeeded", name)
+                    except Exception as e:
+                        logger.error("Restart of {} failed: {}", name, e)
+
+            await asyncio.sleep(HEAL_INTERVAL)
+
+    def status_report(self) -> dict[str, dict]:
+        return {
+            name: {
+                "alive": s.alive,
+                "failures": s.failures,
+                "restart_attempts": s.restart_attempts,
+                "last_ok": s.last_ok,
+            }
+            for name, (s, _, _) in self._services.items()
+        }
+
+
+self_healer = SelfHealer()

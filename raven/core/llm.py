@@ -10,6 +10,7 @@ from loguru import logger
 
 from raven.core.config import settings
 from raven.core.metrics import metrics
+from raven.core.tracing import trace_llm_call
 
 
 class ToolCall:
@@ -280,8 +281,9 @@ class LLMRouter:
         model = model or settings.default_model
         provider = self._get_provider(model)
         metrics.inc("llm_stream_start", {"model": model, "provider": type(provider).__name__})
-        async for token in provider.complete_stream(messages, model, tools):
-            yield token
+        async with trace_llm_call(model=model):
+            async for token in provider.complete_stream(messages, model, tools):
+                yield token
 
     async def complete(self, messages: list[dict], model: str | None = None, tools: list[dict] | None = None) -> LLMResponse:
         model = model or settings.default_model
@@ -289,7 +291,8 @@ class LLMRouter:
         last_exc = None
         for attempt in range(max(1, settings.llm_retry_max)):
             try:
-                resp = await provider.complete(messages, model, tools)
+                async with trace_llm_call(model=model):
+                    resp = await provider.complete(messages, model, tools)
                 metrics.inc("llm_complete", {"model": model, "status": "ok"})
                 return resp
             except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.NetworkError) as e:

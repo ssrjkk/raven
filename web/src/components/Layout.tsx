@@ -3,11 +3,12 @@ import { NavLink, Outlet } from "react-router-dom";
 const nav = [
   { to: "/", label: "Dashboard", icon: "◉" },
   { to: "/chat", label: "Chat", icon: "💬" },
+  { to: "/admin", label: "Admin", icon: "⚙" },
   { to: "/tasks", label: "Tasks", icon: "📋" },
   { to: "/monitors", label: "Monitors", icon: "📊" },
   { to: "/routines", label: "Routines", icon: "⏰" },
   { to: "/code", label: "Code", icon: "💻" },
-  { to: "/settings", label: "Settings", icon: "⚙" },
+  { to: "/settings", label: "System", icon: "🔧" },
 ];
 
 export default function Layout() {

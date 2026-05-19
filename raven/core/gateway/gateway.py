@@ -22,6 +22,7 @@ from raven.core.metrics import metrics
 from raven.core.models import IncomingMessage, Message
 from raven.core.plugin_loader import PluginLoader
 from raven.core.sandbox import Sandbox
+from raven.core.self_heal import self_healer
 from raven.core.skills import Skill, skills_registry
 from raven.core.security.context_filter import ContextVisibility, filter_context_by_visibility
 
@@ -68,6 +69,7 @@ class Gateway:
         self.load_skills()
         self._register_skill_handlers()
         self._register_health_checks()
+        self._register_channel_heal()
 
     async def stop(self):
         logger.info("Stopping gateway...")
@@ -130,8 +132,33 @@ class Gateway:
             except Exception:
                 return False
 
+        async def _db_restart():
+            await self.db.disconnect()
+            await self.db.connect()
+
+        async def _llm_restart():
+            self.llm = LLMRouter()
+            self.failover = ModelFailover(self.llm)
+
         health.register("database", _db_check, timeout=3.0, critical=True)
         health.register("llm", _llm_check, timeout=10.0, critical=False)
+        self_healer.register("database", _db_check, _db_restart)
+        self_healer.register("llm", _llm_check, _llm_restart)
+
+    def _register_channel_heal(self):
+        for cid, channel in self.channels.items():
+            async def _check(ch=channel):
+                return await ch.health_check() if hasattr(ch, "health_check") else True
+            async def _restart(ch=channel, cid=cid):
+                try:
+                    await ch.stop()
+                    await ch.start()
+                    logger.info("Self-heal restarted channel {}", cid)
+                except Exception as e:
+                    logger.error("Self-heal restart failed for {}: {}", cid, e)
+            self_healer.register(f"channel:{cid}", _check, _restart)
+        if self.channels:
+            self_healer.start()
 
     async def handle_message(self, event: IncomingMessage):
         logger.info("Incoming message from {}[{}]: {}", event.channel, event.user_id, event.text[:80])
@@ -426,6 +453,11 @@ class Gateway:
             await self._handle_routine_cmd(event, sub, args[1:] if len(args) > 1 else [])
             return True
 
+        if cmd == "/voice":
+            sub = args[0].lower() if args else "help"
+            await self._handle_voice_cmd(event, sub, args[1:] if len(args) > 1 else [])
+            return True
+
         if cmd == "/help":
             await self._send(event.channel, event.session_id, (
                 "Commands:\n"
@@ -441,6 +473,8 @@ class Gateway:
                 "/code start <goal> - Start coding session\n"
                 "/routine list - List routines\n"
                 "/routine add <action> <sched> - Add routine\n"
+                "/voice tts <text> - Text-to-speech synthesis\n"
+                "/voice providers - List TTS providers\n"
                 "/compact - Summarize conversation\n"
                 "/think <low|medium|high> - Set thinking level\n"
                 "/skills - List loaded skills\n"
@@ -782,3 +816,29 @@ class Gateway:
                 "  /routine remove <id>\n"
                 "  /routine pause <id>\n"
                 "  /routine resume <id>")
+
+    async def _handle_voice_cmd(self, event: IncomingMessage, sub: str, args: list[str]) -> None:
+        if sub == "tts":
+            text = " ".join(args) if args else ""
+            if not text:
+                await self._send(event.channel, event.session_id, "Usage: /voice tts <text>")
+                return
+            from raven.voice import TextToSpeech
+            tts = TextToSpeech()
+            try:
+                output = await asyncio.get_event_loop().run_in_executor(None, tts.synthesize, text)
+                await self._send(event.channel, event.session_id, f"🔊 TTS saved to: {output}")
+            except Exception as e:
+                await self._send(event.channel, event.session_id, f"❌ TTS failed: {e}")
+
+        elif sub == "providers":
+            from raven.voice import TTSProvider
+            providers = [p.value for p in TTSProvider]
+            await self._send(event.channel, event.session_id,
+                "🔊 TTS Providers:\n" + "\n".join(f"  • {p}" for p in providers))
+
+        else:
+            await self._send(event.channel, event.session_id,
+                "🔊 Voice commands:\n"
+                "  /voice tts <text> - Synthesize speech\n"
+                "  /voice providers - List TTS providers")

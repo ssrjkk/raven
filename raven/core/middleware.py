@@ -19,18 +19,28 @@ from raven.core.metrics import metrics
 
 
 class RateLimiter:
-    def __init__(self, max_requests: int = 60, window_seconds: float = 60.0):
+    def __init__(self, max_requests: int = 60, window_seconds: float = 60.0, burst_multiplier: float = 1.5):
         self.max_requests = max_requests
         self.window = window_seconds
+        self.burst_multiplier = burst_multiplier
         self._buckets: dict[str, list[float]] = defaultdict(list)
+        self._blocked: dict[str, float] = {}
         self._lock = asyncio.Lock()
 
     async def check(self, key: str) -> bool:
         now = time.monotonic()
-        cutoff = now - self.window
         async with self._lock:
+            if key in self._blocked:
+                if now - self._blocked[key] < self.window * 2:
+                    return False
+                del self._blocked[key]
+            cutoff = now - self.window
             bucket = self._buckets[key]
             bucket[:] = [t for t in bucket if t > cutoff]
+            burst_limit = int(self.max_requests * self.burst_multiplier)
+            if len(bucket) >= burst_limit:
+                self._blocked[key] = now
+                return False
             if len(bucket) >= self.max_requests:
                 return False
             bucket.append(now)
@@ -39,11 +49,18 @@ class RateLimiter:
     async def cleanup(self):
         now = time.monotonic()
         cutoff = now - self.window * 2
+        blocked_cutoff = now - self.window * 4
         async with self._lock:
             for key in list(self._buckets.keys()):
                 self._buckets[key] = [t for t in self._buckets[key] if t > cutoff]
                 if not self._buckets[key]:
                     del self._buckets[key]
+            for key in list(self._blocked.keys()):
+                if now - self._blocked[key] > blocked_cutoff:
+                    del self._blocked[key]
+
+    def is_blocked(self, key: str) -> bool:
+        return key in self._blocked
 
 
 rate_limiter = RateLimiter()
@@ -119,7 +136,34 @@ async def auth_middleware(request: Request, call_next):
     for prefix, required_perm in PATH_PERMISSIONS.items():
         if path.startswith(prefix):
             if not rbac.has_permission(request.state.user_role, required_perm):
-                metrics.inc("http_auth_failed", {"path": path, "role": request.state.user_role})
                 return JSONResponse(status_code=403, content={"error": "Forbidden", "required": required_perm.value})
 
+    return await call_next(request)
+
+
+async def input_sanitize_middleware(request: Request, call_next):
+    if request.method in ("POST", "PUT", "PATCH"):
+        content_type = request.headers.get("content-type", "")
+        if "json" in content_type:
+            try:
+                body = await request.json()
+            except Exception:
+                return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
+            if isinstance(body, dict):
+                MAX_DEPTH = 10
+                def _check_depth(obj, depth=0):
+                    if depth > MAX_DEPTH:
+                        raise ValueError("Max depth exceeded")
+                    if isinstance(obj, dict):
+                        for k, v in obj.items():
+                            if not isinstance(k, str):
+                                raise ValueError(f"Non-string key: {k}")
+                            _check_depth(v, depth + 1)
+                    elif isinstance(obj, list):
+                        for item in obj:
+                            _check_depth(item, depth + 1)
+                try:
+                    _check_depth(body)
+                except ValueError as e:
+                    return JSONResponse(status_code=400, content={"error": str(e)})
     return await call_next(request)

@@ -94,13 +94,13 @@ class TestToolRegistry:
         tools = registry.list(category="general")
         assert len(tools) == 3
 
-    def test_call_success(self, registry: ToolRegistry):
-        result = asyncio.run(registry.call("web_search", query="hello"))
+    async def test_call_success(self, registry: ToolRegistry):
+        result = await registry.call("web_search", query="hello")
         assert result == "search results"
 
-    def test_call_unknown(self, registry: ToolRegistry):
+    async def test_call_unknown(self, registry: ToolRegistry):
         with pytest.raises(ValueError, match="Unknown tool"):
-            asyncio.run(registry.call("nonexistent"))
+            await registry.call("nonexistent")
 
     def test_to_llm_tools(self, registry: ToolRegistry):
         tools = registry.to_llm_tools()
