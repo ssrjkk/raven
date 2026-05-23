@@ -230,6 +230,3 @@ raven-ai/
   <p><i>Built with ❤️ for developers who need their personal AI 24/7</i></p>
 </div>
 
-## License
-
-MIT © 2026 [@ssrjkk](https://github.com/ssrjkk)
