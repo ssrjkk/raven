@@ -216,29 +216,6 @@ raven-ai/
 
 ---
 
-## Контакты
-
-<div align="center">
-  <p>
-    <b>Raven AI</b> — разрабатывается <a href="https://github.com/ssrjkk">@ssrjkk</a>
-  </p>
-  <p>
-    <a href="https://github.com/ssrjkk/raven">GitHub</a> •
-    <a href="https://github.com/ssrjkk">Telegram</a> •
-    <a href="mailto:ray013lefe@gmail.com">ray013lefe@gmail.com</a> •
-<a href="https://t.me/ssrjkk">@ssrjkk</a>
-  </p>
-  <p>
-    Есть идея или баг? → <a href="https://github.com/ssrjkk/raven/issues">Откройте issue</a>
-  </p>
-  <p>
-    Хотите внести вклад? → <a href="https://github.com/ssrjkk/raven/pulls">Pull Request</a>
-  </p>
-  <p><i>Built for developers who need their personal AI 24/7</i></p>
-</div>
-
----
-
 ## AI-OS-MVP — Hybrid Architecture
 
 Raven AI теперь работает в гибридной архитектуре **AI-OS-MVP**:
@@ -279,6 +256,30 @@ cd web && npm install && npm run dev
 ```
 
 ---
+
+
+---
+
+## Контакты
+
+<div align="center">
+  <p>
+    <b>Raven AI</b> — разрабатывается <a href="https://github.com/ssrjkk">@ssrjkk</a>
+  </p>
+  <p>
+    <a href="https://github.com/ssrjkk/raven">GitHub</a> •
+    <a href="https://github.com/ssrjkk">Telegram</a> •
+    <a href="mailto:ray013lefe@gmail.com">ray013lefe@gmail.com</a> •
+<a href="https://t.me/ssrjkk">@ssrjkk</a>
+  </p>
+  <p>
+    Есть идея или баг? → <a href="https://github.com/ssrjkk/raven/issues">Откройте issue</a>
+  </p>
+  <p>
+    Хотите внести вклад? → <a href="https://github.com/ssrjkk/raven/pulls">Pull Request</a>
+  </p>
+  <p><i>Built for developers who need their personal AI 24/7</i></p>
+</div>
 
 ## License
 
