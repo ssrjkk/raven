@@ -9,6 +9,7 @@ import Monitors from "./pages/Monitors";
 import Routines from "./pages/Routines";
 import CodeSessions from "./pages/CodeSessions";
 import Settings from "./pages/Settings";
+import IDEPage from "./pages/IDE";
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
             <Route path="monitors" element={<Monitors />} />
             <Route path="routines" element={<Routines />} />
             <Route path="code" element={<CodeSessions />} />
+            <Route path="ide" element={<IDEPage />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>

@@ -61,8 +61,16 @@ export default function Sidebar({ sessions, currentSession, onSelect, onNew }: S
           </p>
         )}
       </div>
-      <div className="p-3 border-t border-gray-800/50 text-[10px] text-gray-700 text-center">
-        Raven AI v0.1.0
+      <div className="p-3 border-t border-gray-800/50 space-y-1">
+        <a
+          href="/ide"
+          className="block text-center text-[11px] text-violet-400 hover:text-violet-300 transition font-medium"
+        >
+          🚀 Open AI-OS IDE
+        </a>
+        <div className="text-[10px] text-gray-700 text-center">
+          Raven AI v0.1.0
+        </div>
       </div>
     </aside>
   );

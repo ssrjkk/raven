@@ -49,6 +49,7 @@ from raven.core.models import Message
 from raven.core.plugin_loader import PluginLoader
 from raven.core.secrets import secrets
 from raven.core.webhooks import create_webhook_router
+from aios.api.bridge import router as aios_router
 from raven.core.monitor.engine import MonitorEngine
 from raven.core.monitor.store import MonitorStore
 from raven.core.routine.engine import RoutineEngine
@@ -180,6 +181,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     admin_router = create_admin_router(_get_channels, _get_registry, _get_gateway)
     api_app.include_router(admin_router)
+
+    api_app.include_router(aios_router)
 
     @api_app.get("/api/status")
     async def api_status():
@@ -456,6 +459,64 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 @click.group()
 def cli():
     """Raven AI — Personal AI Assistant 24/7"""
+
+
+# ── AI-OS-MVP (Hybrid Architecture) ──────────────────────────────
+
+
+@cli.group()
+def aios():
+    """AI-OS-MVP — Hybrid Web + API + Desktop architecture"""
+
+
+@aios.command()
+@click.option("--port", default=3001, help="Fastify AI Gateway port")
+def gateway(port: int):
+    """Start the AI Gateway (Fastify-compatible bridge)"""
+    import uvicorn
+    from fastapi import FastAPI
+    from aios.api.bridge import router
+
+    app = FastAPI(title="AI-OS-MVP Gateway")
+    app.include_router(router)
+
+    click.echo(f"AI-OS-MVP Gateway running on http://localhost:{port}")
+    uvicorn.run(app, host="0.0.0.0", port=port)
+
+
+@aios.command()
+@click.argument("task")
+@click.option("--agent", default="autonomous", help="Agent type: planner, coder, debugger, autonomous")
+def run(task: str, agent: str):
+    """Run an AI-OS-MVP agent task"""
+    import asyncio
+    from aios.agents.orchestrator import Orchestrator, AgentType
+
+    async def _run():
+        orch = Orchestrator()
+        agent_type = AgentType(agent) if agent in [e.value for e in AgentType] else AgentType.AUTONOMOUS
+        result = await orch.dispatch(task, agent_type)
+        click.echo(f"Agent: {agent}")
+        click.echo(f"Result: {result}")
+
+    asyncio.run(_run())
+
+
+@aios.command()
+@click.argument("cmd")
+def exec(cmd: str):
+    """Execute a command via the unified runtime"""
+    import asyncio
+    from aios.runtime.adapter import RuntimeAdapter
+
+    async def _run():
+        result = await RuntimeAdapter.run_command(cmd)
+        click.echo(result)
+
+    asyncio.run(_run())
+
+
+# ── Core Commands ─────────────────────────────────────────────────
 
 
 @cli.command()

@@ -25,6 +25,12 @@
   <a href="https://github.com/ssrjkk/raven">
     <img src="https://img.shields.io/badge/security-OpenClaw_compat-blueviolet" alt="OpenClaw Compat">
   </a>
+  <a href="https://github.com/ssrjkk/raven">
+    <img src="https://img.shields.io/badge/aios-mvp-purple" alt="AI-OS-MVP">
+  </a>
+  <a href="https://github.com/ssrjkk/raven">
+    <img src="https://img.shields.io/badge/hybrid-web+api+desktop-orange" alt="Hybrid Architecture">
+  </a>
 </div>
 
 <img width="680" height="860" alt="image" src="https://github.com/user-attachments/assets/29b4d99d-4adf-411f-b3aa-e1c1582d6ba6" />
@@ -229,6 +235,59 @@ raven-ai/
   </p>
   <p><i>Built with ❤️ for developers who need their personal AI 24/7</i></p>
 </div>
+
+---
+
+## 🔥 AI-OS-MVP — Hybrid Architecture
+
+Raven AI теперь работает в гибридной архитектуре **AI-OS-MVP**:
+
+```
+raven-ai/
+├── 🧠 aios/                    # AI-OS-MVP bridge (Python ↔ TS)
+│   ├── api/bridge.py           # Fastify-совместимый AI Gateway
+│   ├── agents/orchestrator.py  # Оркестратор агентов
+│   └── runtime/adapter.py      # Единый рантайм
+├── 🌐 web/                     # Web IDE (React 19 + Monaco)
+│   └── src/pages/IDE.tsx       # Cursor-like IDE с терминалом
+├── 🖥 desktop/                  # Electron desktop
+├── 🖥 desktop-tauri/            # Tauri desktop (Rust)
+├── 📦 packages/                # TypeScript packages
+│   ├── ai-core/                # AI роутер + провайдеры
+│   ├── agents/                 # multi-agent система
+│   ├── runtime/                # terminal, fs, docker
+│   └── repo/                   # индексер, AST, embeddings
+├── .opencode/agents/           # opencode агенты
+│   ├── raven.md                # raven = openclaw
+│   └── ravencode.md            # ravencode = cursor/claude/opencode
+└── opencode.json               # opencode конфиг
+```
+
+### Быстрый старт AI-OS-MVP
+
+```bash
+# AI Gateway (bridge над Raven)
+raven aios gateway --port 3001
+
+# Запустить автономного агента
+raven aios run "создай REST API" --agent autonomous
+
+# Выполнить команду
+raven aios exec "npm run dev"
+
+# Web IDE (Monaco редактор)
+cd web && npm install && npm run dev
+# Открой http://localhost:5173/ide
+```
+
+### OpenCode модули
+
+| Agent | Engine | Описание |
+|-------|--------|----------|
+| `raven` | `openclaw` | Автономный AI engineering agent |
+| `ravencode` | `cursor/claude/opencode` | Гибрид Cursor IDE + Claude Code + OpenCode |
+
+---
 
 ## License
 
