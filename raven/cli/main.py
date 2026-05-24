@@ -685,7 +685,7 @@ def security():
 @click.option("--deep", is_flag=True, help="Run deep audit (network, env file, dependencies)")
 @click.option("--fix", is_flag=True, help="Auto-fix common issues")
 def security_audit(deep: bool, fix: bool):
-    """Run security audit checks (OpenClaw-compatible)"""
+    """Run comprehensive security audit checks"""
     from raven.core.security.security_audit import SecurityAudit
     from raven.cli.doctor import _render_security_audit
 

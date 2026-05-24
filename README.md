@@ -23,7 +23,7 @@
     <img src="https://img.shields.io/badge/tests-438_passing-brightgreen" alt="Tests">
   </a>
   <a href="https://github.com/ssrjkk/raven">
-    <img src="https://img.shields.io/badge/security-OpenClaw_compat-blueviolet" alt="OpenClaw Compat">
+    <img src="https://img.shields.io/badge/security-hardened-blueviolet" alt="Security">
   </a>
   <a href="https://github.com/ssrjkk/raven">
     <img src="https://img.shields.io/badge/aios-mvp-purple" alt="AI-OS-MVP">
@@ -101,7 +101,7 @@ npm run dev    # http://localhost:5173 (прокси на :18888)
 | **Enterprise инфраструктура** | Circuit breaker, HTTP-пул, rate limiter, retry c экспоненциальной задержкой, audit-лог (20 типов событий), Prometheus metrics, health checks |
 | **Plugin система** | 10 плагинов — browser, code, cron, files, git, memory, api, ocr, process, sessions. Sandbox c capability-based контролем |
 | **Safety** | DM pairing, allowlist по каналам, Fernet-шифрование секретов, rate limiting, subprocess/Docker sandbox |
-| **Security Policy** | OpenClaw-compatible: ToolPolicyEvaluator, exec.security (deny/ask/full), deny > allow priority, workspaceOnly FS, contextVisibility, sanitize_external_content, security audit CLI |
+| **Security Policy** | ToolPolicyEvaluator, exec.security (deny/ask/full), deny > allow priority, workspaceOnly FS, contextVisibility, sanitize_external_content, security audit CLI |
 
 ---
 
@@ -258,8 +258,8 @@ raven-ai/
 │   ├── runtime/                # terminal, fs, docker
 │   └── repo/                   # индексер, AST, embeddings
 ├── .opencode/agents/           # opencode агенты
-│   ├── raven.md                # raven = openclaw
-│   └── ravencode.md            # ravencode = cursor/claude/opencode
+│   ├── raven.md                # основной агент
+│   └── ravencode.md            # гибридный агент
 └── opencode.json               # opencode конфиг
 ```
 
@@ -280,12 +280,12 @@ cd web && npm install && npm run dev
 # Открой http://localhost:5173/ide
 ```
 
-### OpenCode модули
+### Агенты
 
-| Agent | Engine | Описание |
-|-------|--------|----------|
-| `raven` | `openclaw` | Автономный AI engineering agent |
-| `ravencode` | `cursor/claude/opencode` | Гибрид Cursor IDE + Claude Code + OpenCode |
+| Agent | Описание |
+|-------|----------|
+| `raven` | Автономный AI engineering agent |
+| `ravencode` | Гибридный агент для автономной разработки |
 
 ---
 
