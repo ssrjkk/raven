@@ -4,6 +4,7 @@ from loguru import logger
 
 from raven.core.llm import LLMRouter
 from raven.core.config import settings
+from aios.runtime.adapter import RuntimeAdapter
 
 router = APIRouter(prefix="/aios", tags=["ai-os-mvp"])
 
@@ -18,6 +19,15 @@ class AIResponse(BaseModel):
     text: str
     model: str
     provider: str
+
+
+class ExecRequest(BaseModel):
+    command: str
+
+
+class ExecResponse(BaseModel):
+    output: str
+    error: str | None = None
 
 
 @router.post("/ai", response_model=AIResponse)
@@ -39,6 +49,16 @@ async def aios_gateway(req: AIRequest):
         text = f"AI request failed: {exc}"
 
     return AIResponse(text=text, model=model_name, provider=provider_name)
+
+
+@router.post("/exec", response_model=ExecResponse)
+async def aios_exec(req: ExecRequest):
+    try:
+        output = await RuntimeAdapter.run_command(req.command)
+        return ExecResponse(output=output)
+    except Exception as exc:
+        logger.error("Exec failed: {}", exc)
+        return ExecResponse(output="", error=str(exc))
 
 
 @router.get("/health")

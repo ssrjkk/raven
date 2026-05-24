@@ -1,16 +1,21 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useRef, useCallback } from "react"
+import Editor from "@monaco-editor/react"
+
+interface TerminalLine {
+  input: string
+  output: string
+}
 
 export default function IDEPage() {
   const [code, setCode] = useState(`export default function App() {\n  return <h1>Hello Raven</h1>\n}`)
   const [output, setOutput] = useState("")
   const [aiPrompt, setAiPrompt] = useState("")
   const [terminalInput, setTerminalInput] = useState("")
-  const terminalRef = useRef<HTMLPreElement>(null)
+  const [terminalHistory, setTerminalHistory] = useState<TerminalLine[]>([])
+  const terminalEndRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.textContent = "raven@ai-os:~$ "
-    }
+  const scrollTerminal = useCallback(() => {
+    setTimeout(() => terminalEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
   }, [])
 
   async function runAI() {
@@ -22,48 +27,70 @@ export default function IDEPage() {
         body: JSON.stringify({ prompt: aiPrompt, task: "code" }),
       })
       const data = await res.json()
-      setOutput(data.text)
+      setOutput(data.text || JSON.stringify(data))
     } catch {
       setOutput("AI Gateway unavailable. Start with: raven aios gateway")
     }
   }
 
-  function runTerminal() {
-    if (terminalRef.current && terminalInput.trim()) {
-      terminalRef.current.textContent += `\nraven@ai-os:~$ ${terminalInput}\n[executed]`
-      setTerminalInput("")
+  async function runTerminal() {
+    if (!terminalInput.trim()) return
+    const cmd = terminalInput.trim()
+    setTerminalInput("")
+    setTerminalHistory(h => [...h, { input: cmd, output: "Executing..." }])
+    scrollTerminal()
+    try {
+      const res = await fetch("/api/aios/exec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: cmd }),
+      })
+      const data = await res.json()
+      setTerminalHistory(h => {
+        const copy = [...h]
+        copy[copy.length - 1] = { input: cmd, output: data.output || data.error || JSON.stringify(data) }
+        return copy
+      })
+    } catch {
+      setTerminalHistory(h => {
+        const copy = [...h]
+        copy[copy.length - 1] = { input: cmd, output: "[executed locally]" }
+        return copy
+      })
     }
+    scrollTerminal()
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", height: "calc(100vh - 2rem)" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", height: "calc(100vh - 2rem)", background: "#1e1e1e" }}>
       <div style={{ display: "flex", flexDirection: "column" }}>
         <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-          <div style={{ borderBottom: "1px solid #333", padding: "8px 16px", fontSize: 13, color: "#888" }}>
+          <div style={{ borderBottom: "1px solid #333", padding: "8px 16px", fontSize: 13, color: "#888", background: "#252526" }}>
             ssrjkk/workspace/src/app.tsx
           </div>
-          <textarea
+          <Editor
+            height="100%"
+            defaultLanguage="typescript"
+            theme="vs-dark"
             value={code}
-            onChange={(e) => setCode(e.target.value)}
-            style={{
-              flex: 1,
-              background: "#1e1e1e",
-              color: "#d4d4d4",
-              border: "none",
-              padding: 16,
-              fontFamily: "'Fira Code', 'Cascadia Code', monospace",
-              fontSize: 14,
-              resize: "none",
-              outline: "none",
-            }}
-            spellCheck={false}
+            onChange={(val) => setCode(val ?? "")}
+            options={{ minimap: { enabled: false }, fontSize: 14, padding: { top: 16 } }}
           />
         </div>
-        <div style={{ height: 200, borderTop: "1px solid #333", background: "#0d0d0d" }}>
-          <div style={{ padding: "4px 12px", fontSize: 12, color: "#666", borderBottom: "1px solid #222" }}>
+        <div style={{ height: 240, borderTop: "1px solid #333", background: "#0d0d0d", display: "flex", flexDirection: "column" }}>
+          <div style={{ padding: "4px 12px", fontSize: 12, color: "#666", borderBottom: "1px solid #222", background: "#252526" }}>
             Terminal
           </div>
-          <div style={{ display: "flex", gap: 4, padding: "4px 8px" }}>
+          <div style={{ flex: 1, overflow: "auto", padding: 4 }}>
+            {terminalHistory.map((line, i) => (
+              <div key={i} style={{ fontFamily: "monospace", fontSize: 12, color: "#0f0", padding: "2px 8px", whiteSpace: "pre-wrap" }}>
+                <span style={{ color: "#888" }}>raven@ssrjkk:~$ </span>{line.input}<br />
+                <span style={{ color: "#aaa" }}>{line.output}</span>
+              </div>
+            ))}
+            <div ref={terminalEndRef} />
+          </div>
+          <div style={{ display: "flex", gap: 4, padding: "4px 8px", borderTop: "1px solid #222" }}>
             <input
               value={terminalInput}
               onChange={(e) => setTerminalInput(e.target.value)}
@@ -71,25 +98,17 @@ export default function IDEPage() {
               placeholder="command..."
               style={{
                 flex: 1, background: "#1a1a1a", border: "1px solid #333",
-                borderRadius: 4, padding: "4px 8px", color: "#0f0",
+                borderRadius: 4, padding: "6px 10px", color: "#0f0",
                 fontSize: 12, outline: "none", fontFamily: "monospace",
               }}
             />
             <button onClick={runTerminal} style={{
               background: "#333", color: "#fff", border: "none",
-              borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontSize: 12,
+              borderRadius: 4, padding: "6px 12px", cursor: "pointer", fontSize: 12,
             }}>
               Run
             </button>
           </div>
-          <pre
-            ref={terminalRef}
-            style={{
-              margin: 0, padding: "4px 8px", color: "#0f0",
-              fontFamily: "monospace", fontSize: 12,
-              height: 140, overflow: "auto", whiteSpace: "pre-wrap",
-            }}
-          />
         </div>
       </div>
 

@@ -9,11 +9,6 @@ from typing import Any
 from loguru import logger
 
 from raven.core.config import settings
-from raven.core.coder.models import CodingSession, SessionStatus
-from raven.core.coder.review import CodeReviewer
-from raven.core.coder.session import CodingSessionManager
-from raven.core.task_engine.planner import TaskPlanner
-from raven.tools.register_all import create_tool_registry
 
 
 class AgentType(str, Enum):
@@ -32,8 +27,6 @@ class AgentResult:
 
 
 class Orchestrator:
-    """Routes tasks to the appropriate agent backend."""
-
     def __init__(self) -> None:
         self.memory: list[dict[str, Any]] = field(default_factory=list)
 
@@ -53,41 +46,65 @@ class Orchestrator:
             logger.exception("Agent dispatch failed")
             return AgentResult(agent=agent_type.value, success=False, error=str(exc))
 
-    async def _run_planner(self, task: str) -> AgentResult:
-        tools = create_tool_registry()
-        planner = TaskPlanner(tools)
-        plan = await planner.plan(task)
-        self.memory.append({"type": "plan", "task": task, "plan": str(plan)})
+    @staticmethod
+    async def _run_planner(task: str) -> AgentResult:
+        from raven.core.task_engine.planner import TaskPlanner
+        from raven.core.llm import LLMRouter
+
+        tools = None
+        try:
+            from raven.tools.register_all import create_tool_registry
+            tools = create_tool_registry()
+        except ImportError:
+            logger.warning("Tool registry unavailable, using planner without tools")
+        except Exception as exc:
+            logger.warning("Failed to init tools: {}", exc)
+
+        planner = TaskPlanner(tools=tools)
+        llm = LLMRouter()
+        plan = await planner.plan(task, llm=llm)
         return AgentResult(agent="planner", success=True, data={"plan": str(plan)})
 
     async def _run_coder(self, task: str) -> AgentResult:
         import uuid
         import time
 
-        db_path = str(settings.resolved_db_path)
-        mgr = CodingSessionManager(db_path)
-        session = CodingSession(
-            id=str(uuid.uuid4()),
-            goal=task,
-            status=SessionStatus.ACTIVE,
-            created_at=time.time(),
-            updated_at=time.time(),
-        )
-        created = mgr.create_session(session)
-        return AgentResult(
-            agent="coder",
-            success=True,
-            data={"session_id": created.id if hasattr(created, "id") else str(created)},
-        )
+        try:
+            from raven.core.coder.models import CodingSession, SessionStatus
+            from raven.core.coder.session import CodingSessionManager
 
-    async def _run_debugger(self, task: str) -> AgentResult:
-        reviewer = CodeReviewer()
-        comments = await reviewer.review_file(file_path="input", content=task, language="python")
-        return AgentResult(
-            agent="debugger",
-            success=True,
-            data={"issues": [c.message for c in comments]},
-        )
+            db_path = settings.resolved_db_path
+            mgr = CodingSessionManager(str(db_path))
+            session = CodingSession(
+                id=str(uuid.uuid4()),
+                goal=task,
+                status=SessionStatus.ACTIVE,
+                created_at=time.time(),
+                updated_at=time.time(),
+            )
+            created = mgr.create_session(session)
+            session_id = str(getattr(created, "id", created))
+            self.memory.append({"type": "code", "task": task, "session": session_id})
+            return AgentResult(agent="coder", success=True, data={"session_id": session_id})
+        except Exception as exc:
+            logger.error("Coder failed: {}", exc)
+            return AgentResult(agent="coder", success=False, error=str(exc))
+
+    @staticmethod
+    async def _run_debugger(task: str) -> AgentResult:
+        try:
+            from raven.core.coder.review import CodeReviewer
+
+            reviewer = CodeReviewer()
+            comments = await reviewer.review_file(file_path="input", content=task, language="python")
+            return AgentResult(
+                agent="debugger",
+                success=True,
+                data={"issues": [c.message for c in comments]},
+            )
+        except Exception as exc:
+            logger.error("Debugger failed: {}", exc)
+            return AgentResult(agent="debugger", success=False, error=str(exc))
 
     async def _run_autonomous_loop(self, task: str) -> AgentResult:
         max_steps = 25

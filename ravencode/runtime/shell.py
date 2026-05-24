@@ -7,10 +7,6 @@ import subprocess
 
 from loguru import logger
 
-from raven.plugins.files import plugin as files_plugin
-from raven.core.rag.retriever import Retriever
-from raven.core.config import settings
-
 
 class ShellExecutor:
     """Safe shell command execution with timeout and error handling."""
@@ -30,35 +26,45 @@ class ShellExecutor:
         except asyncio.TimeoutError:
             proc.kill()
             logger.warning("Command timed out after {}s: {}", timeout, cmd)
-            return f"Command timed out after {timeout}s"
+            raise TimeoutError(f"Command timed out after {timeout}s")
         except Exception as exc:
             logger.error("Command execution failed: {}", exc)
-            return f"Execution error: {exc}"
+            raise
 
         output = stdout.decode(errors="replace")
         error = stderr.decode(errors="replace")
         return output + error
 
     async def read_file(self, path: str) -> str:
+        from raven.plugins.files import plugin as files_plugin
+
         try:
             return await files_plugin.read(path)
         except Exception as exc:
             logger.error("Failed to read file {}: {}", path, exc)
-            return f"Error reading {path}: {exc}"
+            raise
 
     async def write_file(self, path: str, content: str) -> str:
+        from raven.plugins.files import plugin as files_plugin
+
         try:
             return await files_plugin.write(path, content)
         except Exception as exc:
             logger.error("Failed to write file {}: {}", path, exc)
-            return f"Error writing {path}: {exc}"
+            raise
 
     async def search_codebase(self, query: str, k: int = 5) -> list[str]:
+        from raven.core.rag.retriever import Retriever
+        from raven.core.config import settings
+
         try:
-            db_path = str(settings.resolved_db_path) if hasattr(settings, "resolved_db_path") else "data/rag"
-            retriever = Retriever(db_path=db_path)
+            db_path = settings.resolved_db_path
+        except AttributeError:
+            db_path = "data/rag"
+        try:
+            retriever = Retriever(db_path=str(db_path))
             results = await retriever.retrieve(query, k=k)
             return [r.get("text", str(r)) for r in results]
         except Exception as exc:
             logger.error("Search failed: {}", exc)
-            return [f"Search error: {exc}"]
+            raise

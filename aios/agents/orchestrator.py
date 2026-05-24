@@ -34,10 +34,12 @@ class Orchestrator:
 
     async def _run_planner(self, task: str) -> dict[str, Any]:
         from raven.core.task_engine.planner import TaskPlanner
+        from raven.core.llm import LLMRouter
         from raven.tools.register_all import create_tool_registry
         tools = create_tool_registry()
         planner = TaskPlanner(tools)
-        plan = await planner.plan(task)
+        llm = LLMRouter()
+        plan = await planner.plan(task, llm=llm)
         self.memory.append({"type": "plan", "task": task, "plan": plan})
         return {"agent": "planner", "plan": plan}
 

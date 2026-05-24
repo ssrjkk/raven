@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from loguru import logger
 
 from raven.core.config import settings
-from raven.core.llm import LLMRouter
 
 
 @dataclass
@@ -19,15 +18,18 @@ class AIResponse:
 
 
 class AIOSClient:
-    """Client for interacting with the Raven AI gateway."""
-
     def __init__(self, base_url: str | None = None) -> None:
         self.base_url = base_url or f"http://localhost:{settings.web_port}"
-        self._llm: LLMRouter | None = None
+        self._llm = None
 
-    def _get_llm(self) -> LLMRouter:
+    def _get_llm(self):
         if self._llm is None:
-            self._llm = LLMRouter()
+            try:
+                from raven.core.llm import LLMRouter
+                self._llm = LLMRouter()
+            except Exception as exc:
+                logger.warning("LLMRouter unavailable (API keys missing?): {}", exc)
+                self._llm = None
         return self._llm
 
     async def ask(
@@ -36,8 +38,13 @@ class AIOSClient:
         task: str = "code",
         model: str | None = None,
     ) -> AIResponse:
-        """Send a prompt to the AI and get a response."""
         llm = self._get_llm()
+        if llm is None:
+            return AIResponse(
+                text="AI backend unavailable. Configure API keys in .env and restart.",
+                model=model or "none",
+                provider="none",
+            )
 
         provider_map = {
             "architecture": "anthropic",
@@ -58,15 +65,7 @@ class AIOSClient:
             )
             content = response.content if hasattr(response, "content") else str(response)
 
-            return AIResponse(
-                text=content,
-                model=model_name,
-                provider=provider,
-            )
+            return AIResponse(text=content, model=model_name, provider=provider)
         except Exception as exc:
             logger.error("AI request failed: {}", exc)
-            return AIResponse(
-                text=f"Request failed: {exc}",
-                model=model_name,
-                provider=provider,
-            )
+            return AIResponse(text=f"Request failed: {exc}", model=model_name, provider=provider)
