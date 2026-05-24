@@ -40,7 +40,7 @@ export default function IDEPage() {
       <div style={{ display: "flex", flexDirection: "column" }}>
         <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
           <div style={{ borderBottom: "1px solid #333", padding: "8px 16px", fontSize: 13, color: "#888" }}>
-            raven-ai/workspace/src/app.tsx
+            ssrjkk/workspace/src/app.tsx
           </div>
           <textarea
             value={code}

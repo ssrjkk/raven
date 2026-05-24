@@ -195,6 +195,14 @@ a = Analysis(
         "aios.agents.orchestrator",
         "aios.runtime",
         "aios.runtime.adapter",
+        # RavenCode high-level API
+        "ravencode",
+        "ravencode.api",
+        "ravencode.api.client",
+        "ravencode.agents",
+        "ravencode.agents.orchestrator",
+        "ravencode.runtime",
+        "ravencode.runtime.shell",
         # Third-party hidden imports
         "pkg_resources",
         "pkgutil",

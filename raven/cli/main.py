@@ -516,6 +516,66 @@ def exec(cmd: str):
     asyncio.run(_run())
 
 
+# ── RavenCode (High-Level API) ────────────────────────────────────
+
+
+@cli.group()
+def ravencode():
+    """RavenCode — Autonomous AI engineering framework"""
+
+
+@ravencode.command()
+@click.argument("prompt")
+@click.option("--task", default="code", help="Task type: code, architecture, fast, debug, refactor")
+def ask(prompt: str, task: str):
+    """Ask RavenCode AI a question"""
+    import asyncio
+    from ravencode.api.client import AIOSClient
+
+    async def _run():
+        client = AIOSClient()
+        result = await client.ask(prompt, task=task)
+        click.echo(f"[{result.provider}/{result.model}]")
+        click.echo(result.text)
+
+    asyncio.run(_run())
+
+
+@ravencode.command()
+@click.argument("task")
+@click.option("--agent", default="autonomous", type=click.Choice(["planner", "coder", "debugger", "autonomous"]))
+def agent_run(task: str, agent: str):
+    """Run an agent task"""
+    import asyncio
+    from ravencode.agents.orchestrator import Orchestrator, AgentType
+
+    async def _run():
+        orch = Orchestrator()
+        result = await orch.dispatch(task, AgentType(agent))
+        if result.success:
+            click.echo(f"Agent: {result.agent}")
+            click.echo(f"Result: {result.data}")
+        else:
+            click.echo(f"Error: {result.error}")
+
+    asyncio.run(_run())
+
+
+@ravencode.command()
+@click.argument("cmd")
+def shell(cmd: str):
+    """Execute a shell command"""
+    import asyncio
+    from ravencode.runtime.shell import ShellExecutor
+
+    async def _run():
+        executor = ShellExecutor()
+        result = await executor.run(cmd)
+        click.echo(result)
+
+    asyncio.run(_run())
+
+
 # ── Core Commands ─────────────────────────────────────────────────
 
 

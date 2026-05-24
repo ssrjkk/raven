@@ -73,7 +73,7 @@ export default function Sidebar({ sessions, currentSession, onSelect, onNew }: S
           <div>Email: ray013lefe@gmail.com</div>
         </div>
         <div className="text-[10px] text-gray-700 text-center">
-          Raven AI v0.1.0
+          Raven AI v0.2.0
         </div>
       </div>
     </aside>

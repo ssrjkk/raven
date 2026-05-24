@@ -19,6 +19,10 @@ MODULES = [
     "aios.api.bridge",
     "aios.agents.orchestrator",
     "aios.runtime.adapter",
+    "ravencode",
+    "ravencode.api.client",
+    "ravencode.agents.orchestrator",
+    "ravencode.runtime.shell",
 ]
 
 failed = []

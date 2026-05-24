@@ -24,6 +24,4 @@ jobs:
         run: python scripts/test_imports.py
 
       - name: Lint
-        run: |
-          pip install ruff
-          ruff check raven/ aios/ --quiet
+        run: ruff check raven/ aios/ ravencode/ --quiet

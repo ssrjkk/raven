@@ -1,11 +1,7 @@
-"""
-Bridge between Raven FastAPI backend and the AI-OS-MVP Fastify Gateway.
-
-Exposes Raven's agent capabilities as a JSON API for the web IDE and desktop.
-"""
-
 from fastapi import APIRouter
 from pydantic import BaseModel
+from loguru import logger
+
 from raven.core.llm import LLMRouter
 from raven.core.config import settings
 
@@ -26,28 +22,23 @@ class AIResponse(BaseModel):
 
 @router.post("/ai", response_model=AIResponse)
 async def aios_gateway(req: AIRequest):
-    """AI Gateway endpoint — routes to Raven's LLM."""
     llm = LLMRouter()
-    provider_name = "openrouter"
-
-    if req.task == "architecture":
-        provider_name = "anthropic"
-    elif req.task == "fast":
-        provider_name = "openai"
-
+    provider_map = {"architecture": "anthropic", "fast": "openai"}
+    provider_name = provider_map.get(req.task, "openrouter")
     model_name = req.model or settings.default_model
 
-    response = await llm.complete(
-        messages=[{"role": "user", "content": req.prompt}],
-        model=model_name,
-        provider=provider_name,
-    )
+    try:
+        response = await llm.complete(
+            messages=[{"role": "user", "content": req.prompt}],
+            model=model_name,
+            provider=provider_name,
+        )
+        text = response.content if hasattr(response, "content") else str(response)
+    except Exception as exc:
+        logger.error("AI gateway request failed: {}", exc)
+        text = f"AI request failed: {exc}"
 
-    return AIResponse(
-        text=response.content if hasattr(response, 'content') else str(response),
-        model=model_name,
-        provider=provider_name,
-    )
+    return AIResponse(text=text, model=model_name, provider=provider_name)
 
 
 @router.get("/health")

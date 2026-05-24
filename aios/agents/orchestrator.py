@@ -1,11 +1,7 @@
-"""
-Agent Orchestrator — dispatches tasks to Raven's agent subsystems.
-
-Routes tasks to planner, coder, debugger, or autonomous loop.
-"""
-
 from enum import Enum
 from typing import Any
+from loguru import logger
+
 from raven.core.config import settings
 
 
@@ -17,21 +13,24 @@ class AgentType(Enum):
 
 
 class Orchestrator:
-    """Routes tasks to the right Raven agent backend."""
-
     def __init__(self):
         self.memory: list[dict[str, Any]] = []
 
     async def dispatch(self, task: str, agent_type: AgentType) -> dict[str, Any]:
-        if agent_type == AgentType.PLANNER:
-            return await self._run_planner(task)
-        elif agent_type == AgentType.CODER:
-            return await self._run_coder(task)
-        elif agent_type == AgentType.DEBUGGER:
-            return await self._run_debugger(task)
-        elif agent_type == AgentType.AUTONOMOUS:
-            return await self._run_autonomous_loop(task)
-        return {"error": f"Unknown agent type: {agent_type}"}
+        try:
+            dispatch_map = {
+                AgentType.PLANNER: self._run_planner,
+                AgentType.CODER: self._run_coder,
+                AgentType.DEBUGGER: self._run_debugger,
+                AgentType.AUTONOMOUS: self._run_autonomous_loop,
+            }
+            handler = dispatch_map.get(agent_type)
+            if handler is None:
+                return {"error": f"Unknown agent type: {agent_type}"}
+            return await handler(task)
+        except Exception as exc:
+            logger.exception("Agent dispatch failed")
+            return {"agent": agent_type.value, "error": str(exc)}
 
     async def _run_planner(self, task: str) -> dict[str, Any]:
         from raven.core.task_engine.planner import TaskPlanner
@@ -47,8 +46,12 @@ class Orchestrator:
         from raven.core.coder.models import CodingSession, SessionStatus
         import time
         import uuid
-        db_path = str(settings.resolved_db_path)
-        coder = CodingSessionManager(db_path)
+
+        try:
+            db_path = settings.resolved_db_path
+        except AttributeError:
+            db_path = "data/sessions.db"
+        coder = CodingSessionManager(str(db_path))
         session = CodingSession(
             id=str(uuid.uuid4()),
             goal=task,
@@ -57,8 +60,9 @@ class Orchestrator:
             updated_at=time.time(),
         )
         created = coder.create_session(session)
-        self.memory.append({"type": "code", "task": task, "session": created.id if hasattr(created, 'id') else str(created)})
-        return {"agent": "coder", "session_id": created.id if hasattr(created, 'id') else str(created)}
+        session_id = str(getattr(created, "id", created))
+        self.memory.append({"type": "code", "task": task, "session": session_id})
+        return {"agent": "coder", "session_id": session_id}
 
     async def _run_debugger(self, task: str) -> dict[str, Any]:
         from raven.core.coder.review import CodeReviewer
