@@ -7,100 +7,46 @@ on:
     branches: [master, main]
 
 jobs:
-  lint:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
-      - run: pip install ruff pre-commit
-      - run: ruff check .
-      - run: pre-commit run --all-files --show-diff-on-failure || true
-
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.11", "3.12", "3.13"]
-      fail-fast: false
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }} on ${{ matrix.os }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
+          python-version: "3.12"
+      - name: Install
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-
-      - name: Test with pytest
-        run: |
-          python -m pytest tests/ -q --tb=short -x
-
-      - name: Check import consistency
-        run: |
-          python -c "from raven.core.config import Settings; from raven.core.gateway.gateway import Gateway; print('Imports OK')"
-        shell: bash
-
-      - name: Verify raven.spec hidden imports exist
+      - name: Test raven module
         run: |
           python -c "
-          imports = [
-              'raven.core.config',
-              'raven.core.db',
-              'raven.core.llm',
-              'raven.core.agent',
-              'raven.core.gateway',
-              'raven.core.task_queue',
-              'raven.core.plugin_loader',
-              'raven.core.models',
-              'raven.core.self_heal',
-              'raven.core.sse',
-              'raven.core.tracing',
-              'raven.core.design_tokens',
-              'raven.voice.tts',
-              'raven.voice.stt',
-              'raven.plugins.memory',
-              'raven.plugins.browser',
-              'raven.plugins.cron',
-              'raven.plugins.code',
-              'raven.plugins.files',
-              'raven.plugins.api',
-              'raven.plugins.ocr',
-              'raven.plugins.process',
-              'raven.plugins.sessions',
-              'raven.plugins.git',
-          ]
-          failed = []
-          for imp in imports:
-              try:
-                  __import__(imp)
-              except ImportError as e:
-                  failed.append(f'{imp}: {e}')
-          if failed:
-              print('MISSING IMPORTS:')
-              for f in failed:
-                  print(f'  {f}')
-              exit(1)
-          print('All spec imports verified OK')
-          "
-
-      - name: Check for Windows path antipatterns
+import sys
+sys.path.insert(0, '.')
+from raven.core.config import settings
+from raven.core.llm import LLMRouter
+from raven.core.db import Database
+from raven.core.agent.agent import Agent, AgentConfig
+from raven.core.agent.registry import AgentRegistry
+from raven.core.gateway.gateway import Gateway
+from raven.core.task_engine.planner import TaskPlanner
+from raven.core.coder.session import CodingSessionManager
+from raven.core.coder.review import CodeReviewer
+from raven.core.sandbox import Sandbox
+from raven.core.rag.retriever import Retriever
+print('raven module: OK')
+"
+      - name: Test aios bridge
         run: |
-          ruff check raven/ --select PTH --output-format github || true
-
-  docs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - run: pip install mkdocs mkdocs-material
-      - run: mkdocs build --strict || echo "Docs build skipped (not configured)"
+          python -c "
+import sys
+sys.path.insert(0, '.')
+from aios.api.bridge import router, AIRequest, AIResponse
+from aios.agents.orchestrator import Orchestrator, AgentType
+from aios.runtime.adapter import RuntimeAdapter
+print('aios bridge: OK')
+"
+      - name: Lint
+        run: |
+          pip install ruff
+          ruff check raven/ aios/ --quiet

@@ -6,7 +6,6 @@ Routes tasks to planner, coder, debugger, or autonomous loop.
 
 from enum import Enum
 from typing import Any
-from pathlib import Path
 from raven.core.config import settings
 
 
@@ -46,7 +45,8 @@ class Orchestrator:
     async def _run_coder(self, task: str) -> dict[str, Any]:
         from raven.core.coder.session import CodingSessionManager
         from raven.core.coder.models import CodingSession, SessionStatus
-        import time, uuid
+        import time
+        import uuid
         db_path = str(settings.resolved_db_path)
         coder = CodingSessionManager(db_path)
         session = CodingSession(
