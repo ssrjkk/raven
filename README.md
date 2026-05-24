@@ -258,10 +258,7 @@ raven-ai/
 │   ├── agents/                 # multi-agent система
 │   ├── runtime/                # terminal, fs, docker
 │   └── repo/                   # индексер, AST, embeddings
-├── .opencode/agents/           # opencode агенты
-│   ├── raven.md                # основной агент
-│   └── ravencode.md            # гибридный агент
-└── opencode.json               # opencode конфиг
+└── aios/                       # AI-OS-MVP bridge
 ```
 
 ### Быстрый старт AI-OS-MVP
@@ -280,13 +277,6 @@ raven aios exec "npm run dev"
 cd web && npm install && npm run dev
 # Открой http://localhost:5173/ide
 ```
-
-### Агенты
-
-| Agent | Описание |
-|-------|----------|
-| `raven` | Автономный AI engineering agent |
-| `ravencode` | Гибридный агент для автономной разработки |
 
 ---
 
