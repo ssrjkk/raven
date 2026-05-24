@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Raven AI — AI-OS-MVP",
+        "title": "Raven AI",
         "width": 1400,
         "height": 900,
         "resizable": true,

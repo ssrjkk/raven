@@ -1,14 +1,13 @@
 """
 Bridge between Raven FastAPI backend and the AI-OS-MVP Fastify Gateway.
 
-Exposes Raven's agent capabilities as a Fastify-compatible JSON API
-so the Next.js IDE and Tauri desktop can consume them.
+Exposes Raven's agent capabilities as a JSON API for the web IDE and desktop.
 """
 
 from fastapi import APIRouter
 from pydantic import BaseModel
-from raven.core.agent.agent import Agent
 from raven.core.llm import LLMRouter
+from raven.core.config import settings
 
 router = APIRouter(prefix="/aios", tags=["ai-os-mvp"])
 
@@ -17,7 +16,6 @@ class AIRequest(BaseModel):
     prompt: str
     task: str = "code"
     model: str | None = None
-    context: list[str] | None = None
 
 
 class AIResponse(BaseModel):
@@ -28,21 +26,30 @@ class AIResponse(BaseModel):
 
 @router.post("/ai", response_model=AIResponse)
 async def aios_gateway(req: AIRequest):
-    """AI Gateway endpoint — routes to Raven's LLM router."""
+    """AI Gateway endpoint — routes to Raven's LLM."""
     llm = LLMRouter()
-    provider, model = llm.resolve(req.task, req.model)
+    provider_name = "openrouter"
 
-    agent = Agent(model=model, provider=provider)
-    result = await agent.run(req.prompt)
+    if req.task == "architecture":
+        provider_name = "anthropic"
+    elif req.task == "fast":
+        provider_name = "openai"
+
+    model_name = req.model or settings.default_model
+
+    response = await llm.complete(
+        messages=[{"role": "user", "content": req.prompt}],
+        model=model_name,
+        provider=provider_name,
+    )
 
     return AIResponse(
-        text=result,
-        model=model,
-        provider=provider,
+        text=response.content if hasattr(response, 'content') else str(response),
+        model=model_name,
+        provider=provider_name,
     )
 
 
 @router.get("/health")
 async def aios_health():
-    """Health check for AI-OS-MVP bridge."""
     return {"status": "ok", "module": "ai-os-mvp", "version": "0.1.0"}

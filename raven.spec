@@ -187,6 +187,14 @@ a = Analysis(
         # TUI
         "raven.tui",
         "raven.tui.app",
+        # AI-OS-MVP bridge
+        "aios",
+        "aios.api",
+        "aios.api.bridge",
+        "aios.agents",
+        "aios.agents.orchestrator",
+        "aios.runtime",
+        "aios.runtime.adapter",
         # Third-party hidden imports
         "pkg_resources",
         "pkgutil",

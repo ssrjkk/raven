@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Session } from "../api/client";
 
 interface SidebarProps {
@@ -8,20 +9,18 @@ interface SidebarProps {
 }
 
 const channelIcon: Record<string, string> = {
-  telegram: "✈",
-  discord: "♦",
-  webchat: "◉",
+  telegram: "T",
+  discord: "D",
+  webchat: "W",
   slack: "#",
-  matrix: "◈",
+  matrix: "M",
 };
 
 export default function Sidebar({ sessions, currentSession, onSelect, onNew }: SidebarProps) {
   return (
     <aside className="w-72 bg-gray-900/80 border-r border-gray-800/50 flex flex-col">
       <div className="p-4 border-b border-gray-800/50 flex items-center justify-between">
-        <h1 className="text-lg font-bold flex items-center gap-2">
-          <span>🐦</span> Raven
-        </h1>
+        <h1 className="text-lg font-bold">Raven</h1>
         <button
           onClick={onNew}
           className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-gray-800 transition"
@@ -46,7 +45,7 @@ export default function Sidebar({ sessions, currentSession, onSelect, onNew }: S
                 : "text-gray-400 hover:text-gray-200 hover:bg-gray-800/50"
               }`}
           >
-            <span className="text-base">{channelIcon[s.channel] || "◉"}</span>
+            <span className="text-xs font-mono w-5 text-center">{channelIcon[s.channel] || "?"}</span>
             <span className="truncate flex-1 text-left font-mono text-xs">
               {s.id.split(":").slice(0, 2).join(":").slice(-24)}
             </span>
@@ -62,12 +61,17 @@ export default function Sidebar({ sessions, currentSession, onSelect, onNew }: S
         )}
       </div>
       <div className="p-3 border-t border-gray-800/50 space-y-1">
-        <a
-          href="/ide"
+        <Link
+          to="/ide"
           className="block text-center text-[11px] text-violet-400 hover:text-violet-300 transition font-medium"
         >
-          🚀 Open AI-OS IDE
-        </a>
+          Open AI-OS IDE
+        </Link>
+        <div className="text-[10px] text-gray-600 text-center space-y-1">
+          <div>Telegram: @ssrjkk</div>
+          <div>GitHub: github.com/ssrjkk</div>
+          <div>Email: ray013lefe@gmail.com</div>
+        </div>
         <div className="text-[10px] text-gray-700 text-center">
           Raven AI v0.1.0
         </div>

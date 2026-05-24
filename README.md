@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>🐦 Raven AI</h1>
+  <h1>Raven AI</h1>
   <p><i>Персональный ИИ-помощник корпоративного уровня. 12 каналов. Механизм задач. Мониторы. Помощник по программированию. База знаний RAG. Веб-панель управления.</i></p>
 
   <a href="#features">Features</a> •
@@ -225,7 +225,8 @@ raven-ai/
   <p>
     <a href="https://github.com/ssrjkk/raven">GitHub</a> •
     <a href="https://github.com/ssrjkk">Telegram</a> •
-    <a href="mailto:ray013lefe@gmail.com">ray013lefe@gmail.com</a>
+    <a href="mailto:ray013lefe@gmail.com">ray013lefe@gmail.com</a> •
+<a href="https://t.me/ssrjkk">@ssrjkk</a>
   </p>
   <p>
     Есть идея или баг? → <a href="https://github.com/ssrjkk/raven/issues">Откройте issue</a>
@@ -233,26 +234,26 @@ raven-ai/
   <p>
     Хотите внести вклад? → <a href="https://github.com/ssrjkk/raven/pulls">Pull Request</a>
   </p>
-  <p><i>Built with ❤️ for developers who need their personal AI 24/7</i></p>
+  <p><i>Built for developers who need their personal AI 24/7</i></p>
 </div>
 
 ---
 
-## 🔥 AI-OS-MVP — Hybrid Architecture
+## AI-OS-MVP — Hybrid Architecture
 
 Raven AI теперь работает в гибридной архитектуре **AI-OS-MVP**:
 
 ```
 raven-ai/
-├── 🧠 aios/                    # AI-OS-MVP bridge (Python ↔ TS)
-│   ├── api/bridge.py           # Fastify-совместимый AI Gateway
-│   ├── agents/orchestrator.py  # Оркестратор агентов
-│   └── runtime/adapter.py      # Единый рантайм
-├── 🌐 web/                     # Web IDE (React 19 + Monaco)
-│   └── src/pages/IDE.tsx       # Cursor-like IDE с терминалом
-├── 🖥 desktop/                  # Electron desktop
-├── 🖥 desktop-tauri/            # Tauri desktop (Rust)
-├── 📦 packages/                # TypeScript packages
+├── aios/                       # AI-OS-MVP bridge (Python)
+│   ├── api/bridge.py           # AI Gateway endpoint
+│   ├── agents/orchestrator.py  # Agent orchestrator
+│   └── runtime/adapter.py      # Unified runtime
+├── web/                        # Web IDE (React 19)
+│   └── src/pages/IDE.tsx       # IDE with editor + terminal
+├── desktop/                    # Electron desktop
+├── desktop-tauri/              # Tauri desktop (Rust)
+├── packages/                   # TypeScript packages
 │   ├── ai-core/                # AI роутер + провайдеры
 │   ├── agents/                 # multi-agent система
 │   ├── runtime/                # terminal, fs, docker
