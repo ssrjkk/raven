@@ -2,11 +2,13 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from loguru import logger
 
-from raven.core.llm import LLMRouter
-from raven.core.config import settings
+from ravencode.api.client import AIOSClient
+from ravencode.agents.orchestrator import Orchestrator
 from aios.runtime.adapter import RuntimeAdapter
 
 router = APIRouter(prefix="/aios", tags=["ai-os-mvp"])
+_orch = Orchestrator()
+_client = AIOSClient()
 
 
 class AIRequest(BaseModel):
@@ -32,23 +34,8 @@ class ExecResponse(BaseModel):
 
 @router.post("/ai", response_model=AIResponse)
 async def aios_gateway(req: AIRequest):
-    llm = LLMRouter()
-    provider_map = {"architecture": "anthropic", "fast": "openai"}
-    provider_name = provider_map.get(req.task, "openrouter")
-    model_name = req.model or settings.default_model
-
-    try:
-        response = await llm.complete(
-            messages=[{"role": "user", "content": req.prompt}],
-            model=model_name,
-            provider=provider_name,
-        )
-        text = response.content if hasattr(response, "content") else str(response)
-    except Exception as exc:
-        logger.error("AI gateway request failed: {}", exc)
-        text = f"AI request failed: {exc}"
-
-    return AIResponse(text=text, model=model_name, provider=provider_name)
+    result = await _client.ask(prompt=req.prompt, task=req.task, model=req.model)
+    return AIResponse(text=result.text, model=result.model, provider=result.provider)
 
 
 @router.post("/exec", response_model=ExecResponse)

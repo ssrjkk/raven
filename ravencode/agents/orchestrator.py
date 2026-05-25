@@ -1,5 +1,3 @@
-"""Agent orchestrator with planning, coding, debugging, and autonomous execution."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -7,8 +5,6 @@ from enum import Enum
 from typing import Any
 
 from loguru import logger
-
-from raven.core.config import settings
 
 
 class AgentType(str, Enum):
@@ -46,22 +42,27 @@ class Orchestrator:
             logger.exception("Agent dispatch failed")
             return AgentResult(agent=agent_type.value, success=False, error=str(exc))
 
-    @staticmethod
-    async def _run_planner(task: str) -> AgentResult:
+    async def _run_planner(self, task: str) -> AgentResult:
         from raven.core.task_engine.planner import TaskPlanner
-        from raven.core.llm import LLMRouter
 
         tools = None
         try:
             from raven.tools.register_all import create_tool_registry
             tools = create_tool_registry()
         except ImportError:
-            logger.warning("Tool registry unavailable, using planner without tools")
+            logger.warning("Tool registry unavailable")
         except Exception as exc:
-            logger.warning("Failed to init tools: {}", exc)
+            logger.warning("Tool registry init failed: {}", exc)
 
-        planner = TaskPlanner(tools=tools)
-        llm = LLMRouter()
+        llm = None
+        try:
+            from raven.core.llm import LLMRouter
+            llm = LLMRouter()
+        except Exception as exc:
+            logger.error("LLM unavailable (no API keys?): {}", exc)
+            return AgentResult(agent="planner", success=False, error=f"LLM unavailable: {exc}")
+
+        planner = TaskPlanner(tools=tools) if tools else TaskPlanner(tools=[])
         plan = await planner.plan(task, llm=llm)
         return AgentResult(agent="planner", success=True, data={"plan": str(plan)})
 
@@ -72,6 +73,7 @@ class Orchestrator:
         try:
             from raven.core.coder.models import CodingSession, SessionStatus
             from raven.core.coder.session import CodingSessionManager
+            from raven.core.config import settings
 
             db_path = settings.resolved_db_path
             mgr = CodingSessionManager(str(db_path))
@@ -111,7 +113,9 @@ class Orchestrator:
         results = []
         for step in range(max_steps):
             result = await self._run_planner(f"{task} (step {step + 1})")
-            results.append(result.data if result.success else result.error)
+            if not result.success:
+                return AgentResult(agent="autonomous", success=False, error=result.error)
+            results.append(result.data)
             if len(results) > 1 and results[-1] == results[-2]:
                 break
         return AgentResult(
