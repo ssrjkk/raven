@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from fastapi import HTTPException
 from pydantic import ValidationError
 import pytest
 

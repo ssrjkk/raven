@@ -1,6 +1,5 @@
 import asyncio
 
-import pytest
 
 from raven.core.health import HealthRegistry
 

@@ -4,7 +4,6 @@ Tests API compatibility between consumer and provider services.
 Run: pytest tests/contract/ --pact-provider=<name>
 """
 
-import json
 import os
 from pathlib import Path
 

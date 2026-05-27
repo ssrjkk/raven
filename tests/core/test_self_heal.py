@@ -1,6 +1,6 @@
 import asyncio
 
-from raven.core.self_heal import HEAL_INTERVAL, MAX_RESTART_ATTEMPTS, SelfHealer, ServiceStatus
+from raven.core.self_heal import MAX_RESTART_ATTEMPTS, SelfHealer, ServiceStatus
 
 
 class TestServiceStatus:
