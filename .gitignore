@@ -36,3 +36,7 @@ desktop-tauri/node_modules/
 desktop-tauri/dist/
 desktop-tauri/src-tauri/target/
 packages/*/node_modules/
+
+# Test artifacts
+.coverage
+tmp_test_secrets/
