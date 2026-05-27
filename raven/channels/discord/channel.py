@@ -62,26 +62,33 @@ class DiscordChannel(BaseChannel):
 
         @self._bot.event
         async def on_ready():
+            bot = self._bot
+            tree = self._tree
+            if bot is None or tree is None:
+                return
             self._ready = True
-            await self._tree.sync()
+            await tree.sync()
             logger.info("Discord channel started as {} ({} slash commands synced)",
-                        self._bot.user, len(self._tree.get_commands()))
-            await self._bot.change_presence(activity=discord.Game(name="/help | Raven AI"))
+                        bot.user, len(tree.get_commands()))
+            await bot.change_presence(activity=discord.Game(name="/help | Raven AI"))
 
         @self._bot.event
         async def on_message(msg: discord.Message):
-            if msg.author == self._bot.user:
+            bot = self._bot
+            if bot is None:
+                return
+            if msg.author == bot.user:
                 return
             if msg.content.startswith("/"):
-                await self._bot.process_commands(msg)
+                await bot.process_commands(msg)
                 return
             is_dm = isinstance(msg.channel, discord.DMChannel)
-            is_mention = self._bot.user in msg.mentions if self._bot.user else False
+            is_mention = bot.user in msg.mentions if bot.user else False
             if is_dm or is_mention:
                 user_id = str(msg.author.id)
                 channel_id = str(msg.channel.id) if not is_dm else f"dm_{user_id}"
                 if self._handler:
-                    clean_text = msg.content.replace(f"<@{self._bot.user.id}>", "").strip() if self._bot.user else msg.content
+                    clean_text = msg.content.replace(f"<@{bot.user.id}>", "").strip() if bot.user else msg.content
                     async with msg.channel.typing():
                         event = IncomingMessage(
                             channel="discord",
@@ -208,7 +215,7 @@ class DiscordChannel(BaseChannel):
                 await self._handler(event)
             await interaction.followup.send(f"⏰ Routine command: {action}", ephemeral=True)
 
-    async def stop(self):
+    async def stop(self) -> None:
         if self._bot:
             await self._bot.close()
             logger.info("Discord channel stopped")

@@ -38,6 +38,7 @@ class Gateway:
         self.registry = AgentRegistry(db, self.llm, plugin_loader.tools)
         self.sandbox = Sandbox()
         self._skill_dirs: list[str] = []
+        self._monitor_engine: Any = None
 
     def register_channel(self, channel: BaseChannel):
         self.channels[channel.channel_id] = channel
@@ -248,9 +249,9 @@ class Gateway:
                 await self._send(event.channel, event.session_id, "You have no monitors configured.")
                 return True
             lines = ["📊 Your Monitors:"]
-            for m in monitors[:10]:
-                icon = {"active": "🟢", "paused": "⏸", "error": "🔴"}.get(m.status.value, "❓")
-                lines.append(f"  {icon} {m.name} [{m.type.value}] every {m.interval_seconds}s")
+            for mon in monitors[:10]:
+                icon = {"active": "🟢", "paused": "⏸", "error": "🔴"}.get(mon.status.value, "❓")
+                lines.append(f"  {icon} {mon.name} [{mon.type.value}] every {mon.interval_seconds}s")
             await self._send(event.channel, event.session_id, "\n".join(lines))
             return True
 
@@ -280,9 +281,9 @@ class Gateway:
             from raven.core.task_engine.runner import TaskRunner
             from raven.tools.register_all import create_tool_registry
             tools = create_tool_registry()
-            store = TaskStore(self.db.db_path)
+            task_store = TaskStore(self.db.db_path)
             planner = TaskPlanner(tools)
-            runner = TaskRunner(store, tools)
+            runner = TaskRunner(task_store, tools)
             try:
                 task = await planner.plan(text, self.llm, user_id=event.user_id, channel=event.channel)
                 await self._send(event.channel, event.session_id,
@@ -558,12 +559,12 @@ class Gateway:
                 await self._send(event.channel, event.session_id, "No monitors configured.")
                 return
             lines = ["📊 Your Monitors:"]
-            for m in monitors[:10]:
-                icon = {"active": "🟢", "paused": "⏸", "error": "🔴"}.get(m.status.value, "❓")
+            for mon in monitors[:10]:
+                icon = {"active": "🟢", "paused": "⏸", "error": "🔴"}.get(mon.status.value, "❓")
                 last = ""
-                if m.last_check:
-                    last = f" {'✅' if m.last_check.status == 'up' else '❌'}"
-                lines.append(f"  {icon} {m.id[:8]} {m.name} [{m.type.value}] every {m.interval_seconds}s{last}")
+                if mon.last_check:
+                    last = f" {'✅' if mon.last_check.status == 'up' else '❌'}"
+                lines.append(f"  {icon} {mon.id[:8]} {mon.name} [{mon.type.value}] every {mon.interval_seconds}s{last}")
             await self._send(event.channel, event.session_id, "\n".join(lines))
 
         elif sub == "add":
@@ -688,13 +689,13 @@ class Gateway:
         elif sub == "start" and args:
             goal = " ".join(args)
             project = str(Path.cwd())
-            session = CodingSession(user_id=event.user_id, channel=event.channel, goal=goal, project_path=project)
-            mgr.create_session(session)
+            new_session = CodingSession(user_id=event.user_id, channel=event.channel, goal=goal, project_path=project)
+            mgr.create_session(new_session)
             await self._send(event.channel, event.session_id,
-                f"💻 Coding session started: {session.id[:8]}\n"
+                f"💻 Coding session started: {new_session.id[:8]}\n"
                 f"Goal: {goal}\n"
                 f"Project: {project}\n"
-                f"Use /code status {session.id[:8]} to check")
+                f"Use /code status {new_session.id[:8]} to check")
 
         elif sub == "status" and args:
             session = mgr.get_session(args[0])
@@ -739,10 +740,10 @@ class Gateway:
                 await self._send(event.channel, event.session_id, "No routines configured.")
                 return
             lines = ["⏰ Your Routines:"]
-            for r in routines[:10]:
-                icon = {"active": "🟢", "paused": "⏸", "error": "🔴"}.get(r.status.value, "❓")
-                last = f" last: {r.last_run_status}" if r.last_run_status else ""
-                lines.append(f"  {icon} {r.id[:8]} {r.name} [{r.action.value}] {r.schedule}{last}")
+            for rt in routines[:10]:
+                icon = {"active": "🟢", "paused": "⏸", "error": "🔴"}.get(rt.status.value, "❓")
+                last = f" last: {rt.last_run_status}" if rt.last_run_status else ""
+                lines.append(f"  {icon} {rt.id[:8]} {rt.name} [{rt.action.value}] {rt.schedule}{last}")
             await self._send(event.channel, event.session_id, "\n".join(lines))
 
         elif sub == "add":

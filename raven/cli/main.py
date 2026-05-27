@@ -101,18 +101,18 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     feishu = FeishuChannel()
     line = LINECChannel()
 
-    telegram.on_message(gateway.handle_message)
-    discord.on_message(gateway.handle_message)
-    webchat.on_message(gateway.handle_message)
-    slack.on_message(gateway.handle_message)
-    whatsapp.on_message(gateway.handle_message)
-    matrix.on_message(gateway.handle_message)
-    googlechat.on_message(gateway.handle_message)
-    sig_ch.on_message(gateway.handle_message)
-    irc.on_message(gateway.handle_message)
-    teams.on_message(gateway.handle_message)
-    feishu.on_message(gateway.handle_message)
-    line.on_message(gateway.handle_message)
+    await telegram.on_message(gateway.handle_message)
+    await discord.on_message(gateway.handle_message)
+    await webchat.on_message(gateway.handle_message)
+    await slack.on_message(gateway.handle_message)
+    await whatsapp.on_message(gateway.handle_message)
+    await matrix.on_message(gateway.handle_message)
+    await googlechat.on_message(gateway.handle_message)
+    await sig_ch.on_message(gateway.handle_message)
+    await irc.on_message(gateway.handle_message)
+    await teams.on_message(gateway.handle_message)
+    await feishu.on_message(gateway.handle_message)
+    await line.on_message(gateway.handle_message)
 
     gateway.register_channel(telegram)
     gateway.register_channel(discord)
@@ -1294,15 +1294,16 @@ def monitor_add(name: str, mon_type: str, target: str, interval: int, conditions
         if len(parts) == 2:
             op_str = "!=" if "!" in c else "=" if "=" in c else ">" if ">" in c else "<"
             op_map = {"=": ConditionOperator.EQ, "!=": ConditionOperator.NE, ">": ConditionOperator.GT, "<": ConditionOperator.LT}
-            val = parts[1]
+            raw_val: str = parts[1]
+            parsed_val: int | float | str = raw_val
             try:
-                val = int(val)
+                parsed_val = int(raw_val)
             except ValueError:
                 try:
-                    val = float(val)
+                    parsed_val = float(raw_val)
                 except ValueError:
                     pass
-            parsed_conditions.append(Condition(metric=parts[0].strip(), operator=op_map.get(op_str, ConditionOperator.EQ), value=val))
+            parsed_conditions.append(Condition(metric=parts[0].strip(), operator=op_map.get(op_str, ConditionOperator.EQ), value=parsed_val))
 
     monitor = Monitor(
         name=name,
@@ -1317,8 +1318,8 @@ def monitor_add(name: str, mon_type: str, target: str, interval: int, conditions
     store.save_monitor(monitor)
     console.print(f"[green]Monitor '{name}' ({monitor.id[:8]}) added[/green]")
     if parsed_conditions:
-        for c in parsed_conditions:
-            console.print(f"  ⚡ Condition: {c.metric} {c.operator.value} {c.value}")
+        for cond in parsed_conditions:
+            console.print(f"  ⚡ Condition: {cond.metric} {cond.operator.value} {cond.value}")
 
 
 @monitor.command("remove")
@@ -1586,7 +1587,7 @@ def routine_add(name: str, action: str, schedule: str, description: str, user: s
         trigger = RoutineTrigger.SCHEDULED
 
     routine = Routine(
-        name=name, description=description,
+        name=name,
         action=RoutineAction(action), trigger=trigger,
         schedule=schedule, status=RoutineStatus.ACTIVE,
         user_id=user, channel=channel,

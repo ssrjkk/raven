@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import time
+from contextlib import contextmanager
 from typing import Any, Callable, Generator
 
 from loguru import logger
@@ -72,6 +73,7 @@ def get_tracer(name: str = "raven"):
     return _NoopTracer()
 
 
+@contextmanager
 def trace_llm_call(model: str, **attributes: Any) -> Generator[Any, None, None]:
     tracer = get_tracer("raven.llm")
     span_name = f"llm.{model}"

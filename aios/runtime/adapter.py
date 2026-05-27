@@ -16,7 +16,6 @@ class RuntimeAdapter:
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            shell=shell,
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
@@ -54,7 +53,8 @@ class RuntimeAdapter:
         try:
             db_path = settings.resolved_db_path
         except AttributeError:
-            db_path = "data/rag"
+            from pathlib import Path
+            db_path = Path("data/rag")
         retriever = Retriever(db_path=str(db_path))
         results = await retriever.retrieve(query, k=5)
         return [r.get("text", str(r)) for r in results]

@@ -193,9 +193,10 @@ class SecurityAudit:
     def _check_pii_redaction(self):
         c = self._add("pii_redaction", "PII redaction is active on external content", "medium")
         try:
-            from raven.core.security.context_filter import _PII_PATTERNS
-            if _PII_PATTERNS:
-                c.ok(f"PII redaction active: {len(_PII_PATTERNS)} patterns")
+            from raven.core.security.context_filter import PIIEngine
+            patterns = PIIEngine._build_patterns()
+            if patterns:
+                c.ok(f"PII redaction active: {len(patterns)} patterns")
             else:
                 c.fail("No PII patterns configured")
         except ImportError:

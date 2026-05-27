@@ -48,5 +48,13 @@ npm run dev
 ## Changes
 - Run `python scripts/test_imports.py` before commit
 - Run `ruff check raven/ aios/ ravencode/` before commit
-- Run `python -m pytest tests/` before commit
+- Run `python -m mypy raven/ aios/ ravencode/ --ignore-missing-imports` before commit (target: 0 errors)
+- Run `python -m pytest tests/ -q` before commit
 - Never commit secrets or .env files
+
+## Fixes applied (May 2026)
+- **30+ real mypy bugs fixed**: missing awaits, wrong types, abstract class instantiation, None guards, shadowed variables
+- **`@contextmanager` fix**: `trace_llm_call` now works correctly as a sync context manager
+- **`marked` → `react-markdown`**: frontend MessageBubble now uses existing dependency, no `dangerouslySetInnerHTML`
+- **`EnterpriseChannel` inheritance**: fixed to inherit from `BaseChannel` instead of `ABC`
+- **`_PII_PATTERNS` import**: fixed missing attribute reference in security_audit.py

@@ -72,7 +72,11 @@ class TelegramChannel(BaseChannel):
         self._app.add_handler(CallbackQueryHandler(self._on_callback))
         await self._app.initialize()
         await self._app.start()
-        await self._app.updater.start_polling()
+        updater = self._app.updater
+        if updater is None:
+            logger.warning("Telegram updater not available, skipping polling")
+            return
+        await updater.start_polling()
         logger.info("Telegram channel started")
 
     async def stop(self):
@@ -240,6 +244,8 @@ class TelegramChannel(BaseChannel):
             await query.edit_message_text(f"Unknown action: {data}")
 
     async def _cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.message is None:
+            return
         await update.message.reply_text(TELEGRAM_HELP, reply_markup=build_menu_keyboard())
 
     async def _cmd_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -256,7 +262,11 @@ class TelegramChannel(BaseChannel):
         await self._incoming(update, f"/pair {code}")
 
     async def _cmd_reset(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.message is None:
+            return
         await update.message.reply_text("Session reset.")
 
     async def _cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.message is None:
+            return
         await update.message.reply_text(TELEGRAM_HELP, reply_markup=build_menu_keyboard())

@@ -60,7 +60,8 @@ class ShellExecutor:
         try:
             db_path = settings.resolved_db_path
         except AttributeError:
-            db_path = "data/rag"
+            from pathlib import Path
+            db_path = Path("data/rag")
         try:
             retriever = Retriever(db_path=str(db_path))
             results = await retriever.retrieve(query, k=k)

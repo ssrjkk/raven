@@ -36,32 +36,17 @@ def test_get_tracer_returns_tracer():
 
 
 def test_trace_llm_call_context():
-    gen = trace_llm_call("gpt-4", prompt="hello")
-    try:
-        span = next(gen)
+    with trace_llm_call("gpt-4", prompt="hello") as span:
         assert span is not None
         span.set_attribute("test", "value")
-    except StopIteration:
-        pass
-    finally:
-        try:
-            next(gen)
-        except StopIteration:
-            pass
 
 
 def test_trace_llm_call_exception():
-    gen = trace_llm_call("test-model")
     try:
-        next(gen)
-        raise ValueError("oops")
+        with trace_llm_call("test-model"):
+            raise ValueError("oops")
     except ValueError:
         pass
-    finally:
-        try:
-            next(gen)
-        except StopIteration:
-            pass
 
 
 async def _dummy_tool(x: int) -> int:

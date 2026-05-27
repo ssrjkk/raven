@@ -84,7 +84,7 @@ class IRCChannel(EnterpriseChannel):
             nick, target, text = m.group(1), m.group(2), m.group(3)
             if nick != self._nick and text and self._handler:
                 self._stats["received"] += 1
-                asyncio.create_task(self._handler(IncomingMessage(
+                asyncio.ensure_future(self._handler(IncomingMessage(
                     channel="irc",
                     user_id=nick,
                     session_id=f"irc:{target}:{nick}",

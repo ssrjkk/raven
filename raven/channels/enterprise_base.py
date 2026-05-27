@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import time
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Awaitable, Callable
 
 from loguru import logger
 
+from raven.channels.base import BaseChannel
 from raven.core.audit import AuditEventType, audit_logger
 from raven.core.http_client import client_manager
 from raven.core.metrics import metrics
@@ -39,7 +40,7 @@ class RateLimiter:
             self._lock.release()
 
 
-class EnterpriseChannel(ABC):
+class EnterpriseChannel(BaseChannel):
     channel_id: str = ""
 
     def __init__(self):

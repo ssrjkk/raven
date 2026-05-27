@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from loguru import logger
 
 from raven.core.config import settings
+
+if TYPE_CHECKING:
+    from raven.core.llm import LLMRouter
 
 
 @dataclass
@@ -20,7 +24,7 @@ class AIResponse:
 class AIOSClient:
     def __init__(self, base_url: str | None = None) -> None:
         self.base_url = base_url or f"http://localhost:{settings.web_port}"
-        self._llm = None
+        self._llm: LLMRouter | None = None
 
     def _get_llm(self):
         if self._llm is None:

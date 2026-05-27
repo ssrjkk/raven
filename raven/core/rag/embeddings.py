@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 from loguru import logger
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
 
 
 class EmbeddingEngine:
     def __init__(self, provider: str = "openai", model: str | None = None):
         self.provider = provider
         self.model = model
-        self._local_model = None
+        self._local_model: SentenceTransformer | None = None
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         if self.provider == "openai":

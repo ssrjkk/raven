@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { marked } from "marked";
+import ReactMarkdown from "react-markdown";
 import { MessageData } from "../api/client";
 
 interface MessageBubbleProps {
@@ -48,6 +47,5 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
 }
 
 function MarkdownContent({ content }: { content: string }) {
-  const html = marked.parse(content) as string;
-  return <div dangerouslySetInnerHTML={{ __html: html }} />;
+  return <ReactMarkdown>{content}</ReactMarkdown>;
 }

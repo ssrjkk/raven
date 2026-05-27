@@ -141,7 +141,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         from raven.core.monitor.store import MonitorStore
         gateway = get_gateway_fn()
         store = MonitorStore(gateway.db.db_path)
-        engine = MonitorEngine(store, send_fn=lambda cid, txt: logger.info("Alert[{}]: {}", cid, txt))
+        engine = MonitorEngine(store, send_fn=lambda cid, txt: logger.info("Alert[{}]: {}", cid, txt))  # type: ignore[no-untyped-call]
         alert_text = await engine.check_now(monitor_id)
         return {"ok": True, "alert": alert_text}
 
@@ -309,16 +309,18 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
 
         async def event_generator():
             from collections import deque
-            buf = deque(maxlen=50)
+            buf: deque[str] = deque(maxlen=50)
             while True:
-                for handler in logger._core.handlers.values():
-                    if hasattr(handler, "stream") and hasattr(handler.stream, "getvalue"):
-                        try:
-                            new_lines = handler.stream.getvalue().splitlines()
-                            for line in new_lines:
-                                buf.append(line)
-                        except Exception:
-                            pass
+                log_core = getattr(logger, "_core", None)
+                if log_core:
+                    for handler in log_core.handlers.values():
+                        if hasattr(handler, "stream") and hasattr(handler.stream, "getvalue"):
+                            try:
+                                new_lines = handler.stream.getvalue().splitlines()
+                                for line in new_lines:
+                                    buf.append(line)
+                            except Exception:
+                                pass
                 if buf:
                     while buf:
                         line = buf.popleft()
@@ -348,7 +350,7 @@ AUTH_ENABLED = False
 _auth_store = None
 
 
-def init_auth_routes(app, db_path: str):
+def init_auth_routes(app, db_path: str) -> None:
     global AUTH_ENABLED, _auth_store
     from raven.core.auth.store import AuthStore
     from raven.core.auth.tokens import token_manager

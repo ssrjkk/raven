@@ -18,7 +18,7 @@ class MonitorEngine:
     def __init__(
         self,
         store_or_path: MonitorStore | str | Path,
-        send_fn: Callable[[str], Any] | None = None,
+        send_fn: Callable[[str, str], Any] | None = None,
     ):
         if isinstance(store_or_path, MonitorStore):
             self._store = store_or_path
@@ -33,7 +33,7 @@ class MonitorEngine:
     def from_db(cls, db_path: str, send_fn: Callable | None = None) -> MonitorEngine:
         return cls(db_path, send_fn=send_fn)
 
-    def bind_send(self, send_fn: Callable[[str], Any]):
+    def bind_send(self, send_fn: Callable[[str, str], Any]):
         self._send_fn = send_fn
 
     def register_handler(self, monitor_type: str, handler: Callable):

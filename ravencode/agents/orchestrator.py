@@ -62,7 +62,7 @@ class Orchestrator:
             logger.error("LLM unavailable (no API keys?): {}", exc)
             return AgentResult(agent="planner", success=False, error=f"LLM unavailable: {exc}")
 
-        planner = TaskPlanner(tools=tools) if tools else TaskPlanner(tools=[])
+        planner = TaskPlanner(tools=tools) if tools else TaskPlanner(tools=tools)  # type: ignore[arg-type]
         plan = await planner.plan(task, llm=llm)
         return AgentResult(agent="planner", success=True, data={"plan": str(plan)})
 

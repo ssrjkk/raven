@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Callable
 
 import httpx
 from loguru import logger
@@ -49,7 +49,7 @@ async def _stream_sse(
     headers: dict,
     done_marker: str = "[DONE]",
     data_prefix: str = "data: ",
-    extract_token: callable = lambda c: c.get("choices", [{}])[0].get("delta", {}).get("content", ""),
+    extract_token: Callable[[dict], str] = lambda c: c.get("choices", [{}])[0].get("delta", {}).get("content", ""),
 ) -> AsyncIterator[str]:
     async with client.stream("POST", url, json=body, headers=headers) as resp:
         resp.raise_for_status()
@@ -78,7 +78,7 @@ def _parse_openai_response(data: dict) -> LLMResponse:
 
 class LLMProvider(ABC):
     @abstractmethod
-    async def complete_stream(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> AsyncIterator[str]: ...
+    def complete_stream(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> AsyncIterator[str]: ...
     @abstractmethod
     async def complete(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> LLMResponse: ...
     async def cleanup(self):
@@ -274,14 +274,14 @@ class LLMRouter:
                 "ollama": OllamaProvider,
                 "openai": OpenAIProvider,
             }
-            self._providers[key] = mapping[key]()
+            self._providers[key] = mapping[key]()  # type: ignore[abstract]
         return self._providers[key]
 
     async def complete_stream(self, messages: list[dict], model: str | None = None, tools: list[dict] | None = None) -> AsyncIterator[str]:
         model = model or settings.default_model
         provider = self._get_provider(model)
         metrics.inc("llm_stream_start", {"model": model, "provider": type(provider).__name__})
-        async with trace_llm_call(model=model):
+        with trace_llm_call(model=model):
             async for token in provider.complete_stream(messages, model, tools):
                 yield token
 
@@ -291,7 +291,7 @@ class LLMRouter:
         last_exc = None
         for attempt in range(max(1, settings.llm_retry_max)):
             try:
-                async with trace_llm_call(model=model):
+                with trace_llm_call(model=model):
                     resp = await provider.complete(messages, model, tools)
                 metrics.inc("llm_complete", {"model": model, "status": "ok"})
                 return resp

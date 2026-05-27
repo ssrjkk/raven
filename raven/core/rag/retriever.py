@@ -28,7 +28,7 @@ class Retriever:
             meta = {k: v for k, v in chunk.items() if k != "text"}
             items.append((doc_id, text, meta))
         if items:
-            await self.store.upsert_batch(items)
+            await self.store.upsert_batch(items)  # type: ignore[arg-type]
             logger.info("Indexed {} chunks ({})", len(items), prefix or "root")
 
     async def retrieve(self, query: str, k: int = 5, filter_meta: dict | None = None) -> list[dict[str, Any]]:
