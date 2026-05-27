@@ -180,11 +180,14 @@ services:
   gateway:
     build:
       context: ./services/gateway
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     env_file: ./deploy/env/gateway.env
     volumes:
       - gateway_data:/data
+    environment:
+      - SERVICE_PORT=8000
     healthcheck: *default-healthcheck
     <<: *svc-resources
     logging: *default-logging
@@ -198,11 +201,14 @@ services:
   auth:
     build:
       context: ./services/auth
+      dockerfile: Dockerfile
     ports:
       - "8001:8001"
     env_file: ./deploy/env/auth.env
     volumes:
       - auth_data:/data
+    environment:
+      - SERVICE_PORT=8001
     healthcheck: *default-healthcheck
     <<: *svc-resources
     logging: *default-logging
@@ -213,12 +219,15 @@ services:
 
   agent-core:
     build:
-      context: ./services/agent-core
+      context: .
+      dockerfile: services/agent-core/Dockerfile
     ports:
       - "8002:8002"
     env_file: ./deploy/env/agent-core.env
     volumes:
       - agent_data:/data
+    environment:
+      - SERVICE_PORT=8002
     healthcheck: *default-healthcheck
     deploy:
       resources:
@@ -239,11 +248,14 @@ services:
   monitor-engine:
     build:
       context: ./services/monitor-engine
+      dockerfile: Dockerfile
     ports:
       - "8003:8003"
     env_file: ./deploy/env/monitor-engine.env
     volumes:
       - monitor_data:/data
+    environment:
+      - SERVICE_PORT=8003
     healthcheck: *default-healthcheck
     <<: *svc-resources
     logging: *default-logging
@@ -254,12 +266,15 @@ services:
 
   rag-service:
     build:
-      context: ./services/rag-service
+      context: .
+      dockerfile: services/rag-service/Dockerfile
     ports:
       - "8004:8004"
     env_file: ./deploy/env/rag-service.env
     volumes:
       - rag_data:/data
+    environment:
+      - SERVICE_PORT=8004
     healthcheck: *default-healthcheck
     deploy:
       resources:
@@ -279,13 +294,16 @@ services:
 
   task-engine:
     build:
-      context: ./services/task-engine
+      context: .
+      dockerfile: services/task-engine/Dockerfile
     ports:
       - "8005:8005"
     env_file: ./deploy/env/task-engine.env
     volumes:
       - task_data:/data
       - ./deploy/task-policy.yaml:/etc/task-engine/policy.yaml:ro
+    environment:
+      - SERVICE_PORT=8005
     healthcheck: *default-healthcheck
     <<: *svc-resources
     logging: *default-logging
@@ -296,12 +314,15 @@ services:
 
   code-service:
     build:
-      context: ./services/code-service
+      context: .
+      dockerfile: services/code-service/Dockerfile
     ports:
       - "8006:8006"
     env_file: ./deploy/env/code-service.env
     volumes:
       - code_data:/data
+    environment:
+      - SERVICE_PORT=8006
     healthcheck: *default-healthcheck
     <<: *svc-resources
     logging: *default-logging

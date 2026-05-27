@@ -264,7 +264,7 @@ cd web && npm install && npm run dev
   </p>
   <p>
     <a href="https://github.com/ssrjkk/raven">GitHub</a> •
-    <a href="https://github.com/ssrjkk">Telegram</a> •
+    <a href="https://t.me/ssrjkk">Telegram</a> •
     <a href="mailto:ray013lefe@gmail.com">ray013lefe@gmail.com</a> •
 <a href="https://t.me/ssrjkk">@ssrjkk</a>
   </p>

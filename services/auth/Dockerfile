@@ -1,19 +1,11 @@
-FROM python:3.14-slim AS builder
-WORKDIR /app
-RUN pip install --no-cache-dir grpcio-tools
-COPY services/proto /app/services/proto
-RUN python -m grpc_tools.protoc -I/services/proto \
-  --python_out=/app --grpc_python_out=/app \
-  /app/services/proto/auth/v1/auth.proto
+FROM golang:1.22-alpine AS builder
+WORKDIR /build
+COPY . .
+RUN go mod tidy
+RUN CGO_ENABLED=0 GOOS=linux go build -o /auth .
 
-FROM python:3.14-slim
-WORKDIR /app
-RUN pip install --no-cache-dir fastapi uvicorn[standard] pydantic>=2 aiosqlite \
-  grpcio opentelemetry-api opentelemetry-sdk \
-  nats-py loguru
-COPY --from=builder /app /app
-COPY services/auth/ /app/services/auth/
-COPY services/observability_sdk/ /app/services/observability_sdk/
-ENV PYTHONPATH=/app
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata sqlite-libs
+COPY --from=builder /auth /auth
 EXPOSE 8001
-CMD ["uvicorn", "services.auth.main:app", "--host", "0.0.0.0", "--port", "8001"]
+ENTRYPOINT ["/auth"]
