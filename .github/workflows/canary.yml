@@ -1,0 +1,148 @@
+name: Canary Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "deploy/**"
+      - "docker-compose.micro.yml"
+
+env:
+  REGISTRY: ghcr.io
+  REPO_OWNER: ${{ github.repository_owner }}
+  CANARY_TRAFFIC_PERCENT: 10
+  PROMOTE_TIMEOUT_MIN: 15
+
+jobs:
+  lint-test:
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  build:
+    needs: [lint-test]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - gateway
+          - auth
+          - agent-core
+          - monitor-engine
+          - rag-service
+          - task-engine
+          - code-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/${{ matrix.service }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=canary
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: services/${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+  canary-deploy:
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment: canary
+    strategy:
+      matrix:
+        service:
+          - gateway
+          - auth
+          - agent-core
+          - monitor-engine
+          - rag-service
+          - task-engine
+          - code-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy canary
+        run: |
+          echo "Deploying ${{ matrix.service }} canary (${{ env.CANARY_TRAFFIC_PERCENT }}% traffic)"
+          docker pull ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/${{ matrix.service }}:canary
+          docker tag ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/${{ matrix.service }}:canary ${{ matrix.service }}:canary
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 12); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ matrix.service }}:8000/health 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "${{ matrix.service }} canary is healthy"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "${{ matrix.service }} canary failed health check"
+          exit 1
+
+      - name: Run smoke tests
+        run: |
+          python -m pytest tests/services/test_proto_contracts.py -v
+
+  promote:
+    needs: [canary-deploy]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Tag canary as stable
+        run: |
+          for svc in gateway auth agent-core monitor-engine rag-service task-engine code-service; do
+            docker tag ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/$svc:canary ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/$svc:stable
+            docker push ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/$svc:stable
+          done
+
+      - name: Deploy stable
+        run: |
+          docker compose -f docker-compose.micro.yml pull
+          docker compose -f docker-compose.micro.yml up -d --remove-orphans
+
+      - name: Post-deploy validation
+        run: |
+          for svc in gateway auth agent-core monitor-engine rag-service task-engine code-service; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$svc:8000/health 2>/dev/null || echo "000")
+            if [ "$STATUS" != "200" ]; then
+              echo "::error::$svc failed post-deploy health check"
+              exit 1
+            fi
+          done
+          echo "All services healthy"
+
+  rollback:
+    if: failure()
+    needs: [promote]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Rollback to previous stable
+        run: |
+          for svc in gateway auth agent-core monitor-engine rag-service task-engine code-service; do
+            docker pull ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/$svc:previous-stable 2>/dev/null || true
+            docker tag ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/$svc:previous-stable ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/$svc:stable 2>/dev/null || true
+          done
+          docker compose -f docker-compose.micro.yml up -d --remove-orphans
+          echo "Rollback complete"

@@ -1,0 +1,90 @@
+groups:
+  - name: raven_services
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          rate(http_requests_total{status=~"5.."}[5m])
+          /
+          rate(http_requests_total[5m]) > 0.01
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "{{ $labels.service }} error rate >1%"
+          description: "Service {{ $labels.service }} has {{ $value | humanizePercentage }} error rate over 5m"
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1.0
+        for: 3m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "{{ $labels.service }} p95 latency >1s"
+          description: "Service {{ $labels.service }} p95 latency is {{ $value }}s"
+
+      - alert: ServiceDown
+        expr: |
+          up{job=~"gateway|auth|agent-core|monitor-engine|rag-service|task-engine|code-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "{{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} has been unreachable for >1m"
+
+      - alert: HighMemoryUsage
+        expr: |
+          process_resident_memory_bytes / 1024 / 1024 > 400
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "{{ $labels.service }} memory >400MB"
+          description: "Service {{ $labels.service }} using {{ $value | humanize1024 }}"
+
+      - alert: NATSJetStreamLag
+        expr: |
+          nats_jetstream_consumer_pending > 1000
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "NATS consumer lag >1000 on {{ $labels.stream }}/{{ $labels.consumer }}"
+
+      - alert: FailedHealthCheck
+        expr: |
+          probe_success{job=~"gateway|auth|agent-core|monitor-engine|rag-service|task-engine|code-service"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "{{ $labels.job }} health check failed"
+
+      - alert: SAGACompensation
+        expr: |
+          rate(saga_compensation_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "SAGA compensation triggered"
+          description: "{{ $value }} SAGA compensations in last 5m"
+
+      - alert: OutboxBacklog
+        expr: |
+          outbox_pending_count > 50
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Outbox backlog >50 events"
+          description: "{{ $value }} pending outbox events across all services"

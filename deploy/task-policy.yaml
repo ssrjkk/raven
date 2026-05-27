@@ -1,0 +1,59 @@
+name: "Raven tool execution policy"
+version: "1.0"
+
+allowed_tools:
+  - name: "bash"
+    allowed: true
+    timeout_seconds: 30
+    allowed_commands:
+      - "python"
+      - "pip"
+      - "git"
+      - "ls"
+      - "cat"
+      - "echo"
+      - "mkdir"
+      - "cp"
+      - "mv"
+      - "rm"
+    denied_commands:
+      - "rm -rf /"
+      - "sudo"
+      - "chmod 777"
+
+  - name: "file_read"
+    allowed: true
+    max_size_mb: 10
+
+  - name: "file_write"
+    allowed: true
+    max_size_mb: 5
+    allowed_extensions:
+      - ".py"
+      - ".js"
+      - ".ts"
+      - ".json"
+      - ".yaml"
+      - ".yml"
+      - ".md"
+      - ".txt"
+      - ".env"
+
+  - name: "network"
+    allowed: true
+    blocked_hosts:
+      - "169.254.169.254"
+      - "metadata.google.internal"
+      - "localhost:2375"
+    allowed_domains:
+      - "api.openai.com"
+      - "api.anthropic.com"
+      - "api.github.com"
+      - "pypi.org"
+      - "files.pythonhosted.org"
+
+denied_tools:
+  - "docker.sock"
+  - "kubectl exec"
+  - "ssh"
+  - "scp"

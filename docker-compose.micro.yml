@@ -6,373 +6,321 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
-x-otel: &otel-env
-  OTEL_SERVICE_NAME: ""
-  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
-  OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
-  OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
-  OTEL_TRACES_SAMPLER_ARG: "0.1"
+x-healthcheck: &default-healthcheck
+  interval: 15s
+  timeout: 5s
+  retries: 3
+  start_period: 10s
+
+x-resources: &svc-resources
+  deploy:
+    resources:
+      limits:
+        cpus: "0.5"
+        memory: "256M"
+      reservations:
+        cpus: "0.1"
+        memory: "64M"
 
 services:
-  # ── Gateway & Routing ────────────────────────────────────────
   traefik:
-    image: traefik:v3.1
-    command:
-      - "--api.dashboard=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
+    image: traefik:v3.1-alpine
     ports:
       - "80:80"
       - "443:443"
       - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`traefik.localhost`)"
-      - "traefik.http.routers.dashboard.service=api@internal"
-    networks:
-      - raven-net
+      - ./deploy/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.file.filename=/etc/traefik/dynamic.yml"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "128M"
+    logging: *default-logging
+    restart: unless-stopped
 
-  # ── Message Broker ────────────────────────────────────────────
   nats:
     image: nats:2.10-alpine
-    command: ["-js", "-sd", "/data", "-m", "8222"]
     ports:
       - "4222:4222"
       - "8222:8222"
     volumes:
-      - nats-data:/data
+      - ./deploy/nats/nats.conf:/etc/nats/nats.conf:ro
+      - nats_data:/data
+    command: ["--config", "/etc/nats/nats.conf"]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8222/healthz || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 3
-    networks:
-      - raven-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "256M"
+    logging: *default-logging
+    restart: unless-stopped
 
-  # ── Observability Stack ───────────────────────────────────────
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.112.0
-    command: ["--config=/etc/otel-collector.yml"]
-    volumes:
-      - ./deploy/observability/otel-collector.yml:/etc/otel-collector.yml:ro
-    ports:
-      - "4317:4317"
-      - "4318:4318"
-    depends_on:
-      - tempo
-      - loki
-    networks:
-      - raven-net
-
-  tempo:
-    image: grafana/tempo:2.6.1
-    command: ["-config.file=/etc/tempo.yml"]
-    volumes:
-      - ./deploy/observability/tempo.yml:/etc/tempo.yml:ro
-      - tempo-data:/tmp/tempo
-    ports:
-      - "3200:3200"
-    networks:
-      - raven-net
-
-  loki:
-    image: grafana/loki:3.2.0
-    command: ["-config.file=/etc/loki/loki.yml"]
-    volumes:
-      - ./deploy/observability/loki.yml:/etc/loki/loki.yml:ro
-      - loki-data:/loki
-    ports:
-      - "3100:3100"
-    networks:
-      - raven-net
-
-  prometheus:
-    image: prom/prometheus:v2.54.0
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
-      - "--web.console.templates=/usr/share/prometheus/consoles"
-    volumes:
-      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus-data:/prometheus
-    ports:
-      - "9090:9090"
-    networks:
-      - raven-net
-
-  grafana:
-    image: grafana/grafana:11.2.0
-    environment:
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-    volumes:
-      - ./deploy/observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
-    ports:
-      - "3000:3000"
-    depends_on:
-      - prometheus
-      - tempo
-      - loki
-    networks:
-      - raven-net
-
-  # ── Vector Database ────────────────────────────────────────────
   qdrant:
-    image: qdrant/qdrant:1.12.0
-    volumes:
-      - qdrant-data:/qdrant/storage
+    image: qdrant/qdrant:v1.10-alpine
     ports:
       - "6333:6333"
       - "6334:6334"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-    networks:
-      - raven-net
-
-  # ── Auth Service ──────────────────────────────────────────────
-  auth:
-    build:
-      context: .
-      dockerfile: services/auth/Dockerfile
-    environment:
-      <<: *otel-env
-      OTEL_SERVICE_NAME: "auth"
-      SERVICE_PORT: "8001"
-      DB_PATH: "/data/auth.db"
-      NATS_URL: "nats://nats:4222"
     volumes:
-      - auth-data:/data
-    ports:
-      - "8001:8001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 15s
-      timeout: 3s
-      retries: 3
-    depends_on:
-      nats:
-        condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.auth.rule=Host(`auth.localhost`)"
-      - "traefik.http.services.auth.loadbalancer.server.port=8001"
-    networks:
-      - raven-net
+      - qdrant_data:/qdrant/storage
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "512M"
     logging: *default-logging
+    restart: unless-stopped
 
-  # ── Gateway Service ────────────────────────────────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.107-alpine
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./deploy/observability/otel-collector.yml:/etc/otel/config.yml:ro
+    command: ["--config", "/etc/otel/config.yml"]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.3"
+          memory: "128M"
+    logging: *default-logging
+    restart: unless-stopped
+    depends_on:
+      tempo:
+        condition: service_started
+      loki:
+        condition: service_started
+
+  tempo:
+    image: grafana/tempo:2.6-alpine
+    ports:
+      - "3200:3200"
+      - "4317"
+      - "4318"
+    volumes:
+      - ./deploy/observability/tempo.yml:/etc/tempo/config.yml:ro
+      - tempo_data:/tmp/tempo
+    command: ["-config.file=/etc/tempo/config.yml"]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "256M"
+    logging: *default-logging
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.1-alpine
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./deploy/observability/loki.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+    command: ["-config.file=/etc/loki/config.yml"]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "256M"
+    logging: *default-logging
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.53-alpine
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "512M"
+    logging: *default-logging
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.1-alpine
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./deploy/observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./deploy/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    deploy:
+      resources:
+        limits:
+          cpus: "0.3"
+          memory: "256M"
+    logging: *default-logging
+    restart: unless-stopped
+
   gateway:
     build:
-      context: .
-      dockerfile: services/gateway/Dockerfile
-    environment:
-      <<: *otel-env
-      OTEL_SERVICE_NAME: "gateway"
-      SERVICE_PORT: "8000"
-      DB_PATH: "/data/gateway.db"
-      NATS_URL: "nats://nats:4222"
-      AUTH_GRPC_ADDR: "auth:8001"
-    volumes:
-      - gateway-data:/data
+      context: ./services/gateway
     ports:
       - "8000:8000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 15s
-      timeout: 3s
-      retries: 3
+    env_file: ./deploy/env/gateway.env
+    volumes:
+      - gateway_data:/data
+    healthcheck: *default-healthcheck
+    <<: *svc-resources
+    logging: *default-logging
+    restart: unless-stopped
     depends_on:
       nats:
         condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.gateway.rule=Host(`gateway.localhost`)"
-      - "traefik.http.services.gateway.loadbalancer.server.port=8000"
-    networks:
-      - raven-net
-    logging: *default-logging
+      auth:
+        condition: service_started
 
-  # ── Agent Core Service ─────────────────────────────────────────
+  auth:
+    build:
+      context: ./services/auth
+    ports:
+      - "8001:8001"
+    env_file: ./deploy/env/auth.env
+    volumes:
+      - auth_data:/data
+    healthcheck: *default-healthcheck
+    <<: *svc-resources
+    logging: *default-logging
+    restart: unless-stopped
+    depends_on:
+      nats:
+        condition: service_healthy
+
   agent-core:
     build:
-      context: .
-      dockerfile: services/agent-core/Dockerfile
-    environment:
-      <<: *otel-env
-      OTEL_SERVICE_NAME: "agent-core"
-      SERVICE_PORT: "8002"
-      NATS_URL: "nats://nats:4222"
-      RAG_GRPC_ADDR: "rag-service:8004"
-      TASK_GRPC_ADDR: "task-engine:8005"
-      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
-      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
-      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+      context: ./services/agent-core
     ports:
       - "8002:8002"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
-      interval: 15s
-      timeout: 3s
-      retries: 3
+    env_file: ./deploy/env/agent-core.env
+    volumes:
+      - agent_data:/data
+    healthcheck: *default-healthcheck
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "512M"
+        reservations:
+          cpus: "0.2"
+          memory: "128M"
+    logging: *default-logging
+    restart: unless-stopped
     depends_on:
       nats:
         condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.agent-core.rule=Host(`agent.localhost`)"
-      - "traefik.http.services.agent-core.loadbalancer.server.port=8002"
-    networks:
-      - raven-net
-    logging: *default-logging
+      rag-service:
+        condition: service_started
 
-  # ── Monitor Engine Service ─────────────────────────────────────
   monitor-engine:
     build:
-      context: .
-      dockerfile: services/monitor-engine/Dockerfile
-    environment:
-      <<: *otel-env
-      OTEL_SERVICE_NAME: "monitor-engine"
-      SERVICE_PORT: "8003"
-      DB_PATH: "/data/monitor.db"
-      NATS_URL: "nats://nats:4222"
-    volumes:
-      - monitor-data:/data
+      context: ./services/monitor-engine
     ports:
       - "8003:8003"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
-      interval: 15s
-      timeout: 3s
-      retries: 3
+    env_file: ./deploy/env/monitor-engine.env
+    volumes:
+      - monitor_data:/data
+    healthcheck: *default-healthcheck
+    <<: *svc-resources
+    logging: *default-logging
+    restart: unless-stopped
     depends_on:
       nats:
         condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.monitor.rule=Host(`monitor.localhost`)"
-      - "traefik.http.services.monitor.loadbalancer.server.port=8003"
-    networks:
-      - raven-net
-    logging: *default-logging
 
-  # ── RAG Service ─────────────────────────────────────────────────
   rag-service:
     build:
-      context: .
-      dockerfile: services/rag-service/Dockerfile
-    environment:
-      <<: *otel-env
-      OTEL_SERVICE_NAME: "rag-service"
-      SERVICE_PORT: "8004"
-      DB_PATH: "/data/rag.db"
-      NATS_URL: "nats://nats:4222"
-      QDRANT_URL: "http://qdrant:6333"
-    volumes:
-      - rag-data:/data
+      context: ./services/rag-service
     ports:
       - "8004:8004"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
-      interval: 15s
-      timeout: 3s
-      retries: 3
+    env_file: ./deploy/env/rag-service.env
+    volumes:
+      - rag_data:/data
+    healthcheck: *default-healthcheck
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "1G"
+        reservations:
+          cpus: "0.2"
+          memory: "256M"
+    logging: *default-logging
+    restart: unless-stopped
     depends_on:
-      qdrant:
-        condition: service_healthy
       nats:
         condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.rag.rule=Host(`rag.localhost`)"
-      - "traefik.http.services.rag.loadbalancer.server.port=8004"
-    networks:
-      - raven-net
-    logging: *default-logging
+      qdrant:
+        condition: service_started
 
-  # ── Task Engine Service ─────────────────────────────────────────
   task-engine:
     build:
-      context: .
-      dockerfile: services/task-engine/Dockerfile
-    environment:
-      <<: *otel-env
-      OTEL_SERVICE_NAME: "task-engine"
-      SERVICE_PORT: "8005"
-      DB_PATH: "/data/task.db"
-      NATS_URL: "nats://nats:4222"
-    volumes:
-      - task-data:/data
+      context: ./services/task-engine
     ports:
       - "8005:8005"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
-      interval: 15s
-      timeout: 3s
-      retries: 3
+    env_file: ./deploy/env/task-engine.env
+    volumes:
+      - task_data:/data
+      - ./deploy/task-policy.yaml:/etc/task-engine/policy.yaml:ro
+    healthcheck: *default-healthcheck
+    <<: *svc-resources
+    logging: *default-logging
+    restart: unless-stopped
     depends_on:
       nats:
         condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.task.rule=Host(`task.localhost`)"
-      - "traefik.http.services.task.loadbalancer.server.port=8005"
-    networks:
-      - raven-net
-    logging: *default-logging
 
-  # ── Code Service ────────────────────────────────────────────────
   code-service:
     build:
-      context: .
-      dockerfile: services/code-service/Dockerfile
-    environment:
-      <<: *otel-env
-      OTEL_SERVICE_NAME: "code-service"
-      SERVICE_PORT: "8006"
-      DB_PATH: "/data/code.db"
-      NATS_URL: "nats://nats:4222"
-    volumes:
-      - code-data:/data
+      context: ./services/code-service
     ports:
       - "8006:8006"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
-      interval: 15s
-      timeout: 3s
-      retries: 3
+    env_file: ./deploy/env/code-service.env
+    volumes:
+      - code_data:/data
+    healthcheck: *default-healthcheck
+    <<: *svc-resources
+    logging: *default-logging
+    restart: unless-stopped
     depends_on:
       nats:
         condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.code.rule=Host(`code.localhost`)"
-      - "traefik.http.services.code.loadbalancer.server.port=8006"
-    networks:
-      - raven-net
-    logging: *default-logging
 
 volumes:
-  nats-data:
-  qdrant-data:
-  tempo-data:
-  loki-data:
-  prometheus-data:
-  auth-data:
-  gateway-data:
-  monitor-data:
-  rag-data:
-  task-data:
-  code-data:
-
-networks:
-  raven-net:
-    driver: bridge
+  nats_data:
+  qdrant_data:
+  tempo_data:
+  loki_data:
+  prometheus_data:
+  grafana_data:
+  gateway_data:
+  auth_data:
+  agent_data:
+  monitor_data:
+  rag_data:
+  task_data:
+  code_data:
