@@ -1,0 +1,59 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "otel-collector"
+    static_configs:
+      - targets: ["otel-collector:8889"]
+        labels:
+          service: otel-collector
+
+  - job_name: "nats"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["nats:8222"]
+        labels:
+          service: nats
+
+  - job_name: "gateway"
+    static_configs:
+      - targets: ["gateway:8000"]
+        labels:
+          service: gateway
+
+  - job_name: "auth"
+    static_configs:
+      - targets: ["auth:8001"]
+        labels:
+          service: auth
+
+  - job_name: "agent-core"
+    static_configs:
+      - targets: ["agent-core:8002"]
+        labels:
+          service: agent-core
+
+  - job_name: "monitor-engine"
+    static_configs:
+      - targets: ["monitor-engine:8003"]
+        labels:
+          service: monitor-engine
+
+  - job_name: "rag-service"
+    static_configs:
+      - targets: ["rag-service:8004"]
+        labels:
+          service: rag-service
+
+  - job_name: "task-engine"
+    static_configs:
+      - targets: ["task-engine:8005"]
+        labels:
+          service: task-engine
+
+  - job_name: "code-service"
+    static_configs:
+      - targets: ["code-service:8006"]
+        labels:
+          service: code-service

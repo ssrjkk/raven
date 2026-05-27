@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from loguru import logger
+from pydantic import BaseModel, Field, field_validator
 
 from raven.core.audit import AuditEventType, audit_logger
 from raven.core.config import settings
@@ -12,6 +14,93 @@ from raven.core.health import health
 from raven.core.jobs import job_manager
 from raven.core.metrics import metrics
 from raven.core.secrets import secrets
+
+
+# --- Pydantic request models with validation ---
+
+class MonitorConditionRequest(BaseModel):
+    metric: str = Field(default="", max_length=100)
+    operator: str = Field(default="=", pattern=r"^(=|>|<|>=|<=|!=|contains|matches)$")
+    value: float | str | None = None
+
+
+_SSRF_BLOCKED_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "[::1]", "169.254.169.254", "metadata.google.internal"}
+
+
+def _check_ssrf(target: str) -> str:
+    if target.startswith("http://") or target.startswith("https://"):
+        parsed = urlparse(target)
+        if parsed.hostname and parsed.hostname.lower() in _SSRF_BLOCKED_HOSTS:
+            raise ValueError(f"SSRF protection: target host '{parsed.hostname}' is forbidden")
+    return target
+
+
+class MonitorCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100, pattern=r"^[\w\-\s]+$")
+    type: Literal["http", "price", "rss", "file", "process"] = "http"
+    target: str = Field(..., min_length=1, max_length=500)
+    interval_seconds: int = Field(default=300, ge=10, le=86400)
+    status: str = Field(default="active", pattern=r"^(active|paused)$")
+    conditions: list[MonitorConditionRequest] = Field(default_factory=list)
+    user_id: str = Field(default="", max_length=100)
+    channel: str = Field(default="", max_length=100)
+    cooldown_minutes: int = Field(default=30, ge=0, le=1440)
+    config: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("target")
+    @classmethod
+    def validate_target(cls, v: str) -> str:
+        return _check_ssrf(v)
+
+
+class MonitorUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    type: Literal["http", "price", "rss", "file", "process"] | None = None
+    target: str | None = Field(default=None, min_length=1, max_length=500)
+    interval_seconds: int | None = Field(default=None, ge=10, le=86400)
+    status: str | None = Field(default=None, pattern=r"^(active|paused)$")
+    conditions: list[MonitorConditionRequest] | None = None
+    user_id: str | None = Field(default=None, max_length=100)
+    channel: str | None = Field(default=None, max_length=100)
+    cooldown_minutes: int | None = Field(default=None, ge=0, le=1440)
+    config: dict[str, Any] | None = None
+
+    @field_validator("target")
+    @classmethod
+    def validate_target(cls, v: str | None) -> str | None:
+        if v is not None:
+            return _check_ssrf(v)
+        return v
+
+
+class ConfigUpdateRequest(BaseModel):
+    key: str = Field(..., min_length=1, max_length=100, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+    value: str = Field(..., min_length=1, max_length=5000)
+
+
+class SecretRequest(BaseModel):
+    value: str = Field(..., min_length=1, max_length=10000)
+
+
+class AuthLoginRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=100)
+    password: str = Field(..., min_length=1, max_length=256)
+
+
+class AuthRegisterRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=100, pattern=r"^[\w@\.\-]+$")
+    password: str = Field(..., min_length=6, max_length=256)
+    display_name: str | None = Field(default=None, max_length=100)
+
+
+class AuthUpdateRoleRequest(BaseModel):
+    role: Literal["admin", "user", "viewer", "banned"]
+
+
+class SSEPushRequest(BaseModel):
+    event: str = Field(default="message", max_length=100)
+    data: dict[str, Any] = Field(default_factory=dict)
+    session: str | None = Field(default=None, max_length=100)
 
 
 def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> APIRouter:
@@ -55,36 +144,33 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         }
 
     @router.post("/monitors")
-    async def admin_monitor_create(body: dict[str, Any]):
+    async def admin_monitor_create(body: MonitorCreateRequest):
         gateway = get_gateway_fn()
         from raven.core.monitor.models import Condition, ConditionOperator, Monitor, MonitorStatus, MonitorType
         from raven.core.monitor.store import MonitorStore
         store = MonitorStore(gateway.db.db_path)
-        conditions = []
-        for c in body.get("conditions", []):
-            conditions.append(Condition(
-                metric=c.get("metric", ""),
-                operator=ConditionOperator(c.get("operator", "=")),
-                value=c.get("value"),
-            ))
+        conditions = [
+            Condition(metric=c.metric, operator=ConditionOperator(c.operator), value=c.value)
+            for c in body.conditions
+        ]
         monitor = Monitor(
-            name=body.get("name", ""),
-            type=MonitorType(body.get("type", "http")),
-            target=body.get("target", ""),
-            interval_seconds=body.get("interval_seconds", 300),
-            status=MonitorStatus(body.get("status", "active")),
+            name=body.name,
+            type=MonitorType(body.type),
+            target=body.target,
+            interval_seconds=body.interval_seconds,
+            status=MonitorStatus(body.status),
             conditions=conditions,
-            user_id=body.get("user_id", ""),
-            channel=body.get("channel", ""),
-            cooldown_minutes=body.get("cooldown_minutes", 30),
-            config=body.get("config", {}),
+            user_id=body.user_id,
+            channel=body.channel,
+            cooldown_minutes=body.cooldown_minutes,
+            config=body.config,
         )
         store.save_monitor(monitor)
         audit_logger.log(AuditEventType.COMMAND, "admin", "monitor.create", detail={"monitor_id": monitor.id})
         return {"ok": True, "id": monitor.id}
 
     @router.put("/monitors/{monitor_id}")
-    async def admin_monitor_update(monitor_id: str, body: dict[str, Any]):
+    async def admin_monitor_update(monitor_id: str, body: MonitorUpdateRequest):
         gateway = get_gateway_fn()
         from raven.core.monitor.models import Condition, ConditionOperator, MonitorStatus, MonitorType
         from raven.core.monitor.store import MonitorStore
@@ -92,32 +178,28 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         existing = store.load_monitor(monitor_id)
         if not existing:
             raise HTTPException(404, "Monitor not found")
-        if "name" in body:
-            existing.name = body["name"]
-        if "type" in body:
-            existing.type = MonitorType(body["type"])
-        if "target" in body:
-            existing.target = body["target"]
-        if "interval_seconds" in body:
-            existing.interval_seconds = body["interval_seconds"]
-        if "status" in body:
-            existing.status = MonitorStatus(body["status"])
-        if "user_id" in body:
-            existing.user_id = body["user_id"]
-        if "channel" in body:
-            existing.channel = body["channel"]
-        if "cooldown_minutes" in body:
-            existing.cooldown_minutes = body["cooldown_minutes"]
-        if "config" in body:
-            existing.config = body["config"]
-        if "conditions" in body:
+        if body.name is not None:
+            existing.name = body.name
+        if body.type is not None:
+            existing.type = MonitorType(body.type)
+        if body.target is not None:
+            existing.target = body.target
+        if body.interval_seconds is not None:
+            existing.interval_seconds = body.interval_seconds
+        if body.status is not None:
+            existing.status = MonitorStatus(body.status)
+        if body.user_id is not None:
+            existing.user_id = body.user_id
+        if body.channel is not None:
+            existing.channel = body.channel
+        if body.cooldown_minutes is not None:
+            existing.cooldown_minutes = body.cooldown_minutes
+        if body.config is not None:
+            existing.config = body.config
+        if body.conditions is not None:
             existing.conditions = [
-                Condition(
-                    metric=c.get("metric", ""),
-                    operator=ConditionOperator(c.get("operator", "=")),
-                    value=c.get("value"),
-                )
-                for c in body["conditions"]
+                Condition(metric=c.metric, operator=ConditionOperator(c.operator), value=c.value)
+                for c in body.conditions
             ]
         store.save_monitor(existing)
         audit_logger.log(AuditEventType.COMMAND, "admin", "monitor.update", detail={"monitor_id": monitor_id})
@@ -258,11 +340,8 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         return {"keys": secrets.list_keys()}
 
     @router.post("/secrets/{key}")
-    async def admin_set_secret(key: str, body: dict):
-        value = body.get("value", "")
-        if not value:
-            raise HTTPException(400, "value required")
-        secrets.set(key, value)
+    async def admin_set_secret(key: str, body: SecretRequest):
+        secrets.set(key, body.value)
         audit_logger.sensitive("secrets.set", "admin", key, True)
         return {"ok": True}
 
@@ -332,15 +411,11 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         return StreamingResponse(event_generator(), media_type="text/event-stream")
 
     @router.post("/config/key")
-    async def admin_update_config_key(body: dict):
-        key = body.get("key", "")
-        value = body.get("value", "")
-        if not key or not value:
-            raise HTTPException(400, "key and value required")
+    async def admin_update_config_key(body: ConfigUpdateRequest):
         from raven.core.config_store import config_store
-        config_store.set(key, value)
+        config_store.set(body.key, body.value)
         config_store.save()
-        audit_logger.log(AuditEventType.COMMAND, "admin", "config.update", detail={"key": key})
+        audit_logger.log(AuditEventType.COMMAND, "admin", "config.update", detail={"key": body.key})
         return {"ok": True}
 
     return router
@@ -358,10 +433,8 @@ def init_auth_routes(app, db_path: str) -> None:
     store = AuthStore(db_path)
 
     @app.post("/api/auth/login")
-    async def auth_login(body: dict):
-        username = body.get("username", "")
-        password = body.get("password", "")
-        user = await store.authenticate(username, password)
+    async def auth_login(body: AuthLoginRequest):
+        user = await store.authenticate(body.username, body.password)
         if not user:
             from fastapi import HTTPException
             raise HTTPException(401, "Invalid credentials")
@@ -369,17 +442,12 @@ def init_auth_routes(app, db_path: str) -> None:
         return {"token": token, "user_id": user.id, "role": user.role.value, "username": user.username}
 
     @app.post("/api/auth/register")
-    async def auth_register(body: dict):
-        username = body.get("username", "")
-        password = body.get("password", "")
-        display = body.get("display_name", username)
-        if not username or not password:
-            from fastapi import HTTPException
-            raise HTTPException(400, "username and password required")
-        existing = await store.get_user(username)
+    async def auth_register(body: AuthRegisterRequest):
+        display = body.display_name or body.username
+        existing = await store.get_user(body.username)
         if existing:
             raise HTTPException(409, "Username already exists")
-        user = await store.create_user(username, password, display_name=display)
+        user = await store.create_user(body.username, body.password, display_name=display)
         token = token_manager.create_token(user.id, user.role.value)
         return {"token": token, "user_id": user.id, "role": user.role.value, "username": user.username}
 
@@ -406,12 +474,12 @@ def init_auth_routes(app, db_path: str) -> None:
         ]
 
     @app.post("/api/auth/users/{username}/role")
-    async def auth_update_role(username: str, body: dict):
-        new_role = body.get("role", "")
-        if new_role not in ("admin", "user", "viewer", "banned"):
-            from fastapi import HTTPException
-            raise HTTPException(400, f"Invalid role: {new_role}")
-        await store.update_role(username, new_role)
+    async def auth_update_role(username: str, body: AuthUpdateRoleRequest):
+        from fastapi import HTTPException
+        try:
+            await store.update_role(username, body.role)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
         return {"ok": True}
 
     @app.post("/api/auth/users/{username}/deactivate")
@@ -429,12 +497,12 @@ def init_auth_routes(app, db_path: str) -> None:
         return StreamingResponse(event_generator(), media_type="text/event-stream")
 
     @app.post("/api/stream/push")
-    async def sse_push(body: dict):
+    async def sse_push(body: SSEPushRequest):
         from raven.core.sse import sse_stream
         await sse_stream.push(
-            event=body.get("event", "message"),
-            data=body.get("data", {}),
-            session_id=body.get("session"),
+            event=body.event,
+            data=body.data,
+            session_id=body.session,
         )
         return {"ok": True}
 

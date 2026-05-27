@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package channel.v1;
+
+option go_package = "github.com/ssrjkk/raven/services/proto/channel/v1;channelv1";
+
+service MessageService {
+  rpc RouteMessage(RouteMessageRequest) returns (RouteMessageResponse);
+  rpc BroadcastMessage(BroadcastMessageRequest) returns (BroadcastMessageResponse);
+}
+
+service SessionService {
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+  rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
+  rpc CompactSession(CompactSessionRequest) returns (CompactSessionResponse);
+  rpc DeleteSession(DeleteSessionRequest) returns (DeleteSessionResponse);
+}
+
+message RouteMessageRequest {
+  string channel = 1;
+  string user_id = 2;
+  string text = 3;
+  string session_id = 4;
+  map<string, string> metadata = 5;
+  string idempotency_key = 6;
+}
+
+message RouteMessageResponse {
+  string message_id = 1;
+  string session_id = 2;
+  bool accepted = 3;
+}
+
+message BroadcastMessageRequest {
+  string channel = 1;
+  string session_id = 2;
+  string text = 3;
+  string correlation_id = 4;
+}
+
+message BroadcastMessageResponse {
+  bool delivered = 1;
+}
+
+message CreateSessionRequest {
+  string channel = 1;
+  string user_id = 2;
+  string idempotency_key = 3;
+}
+
+message CreateSessionResponse {
+  string session_id = 1;
+  bool created = 2;
+}
+
+message GetSessionRequest {
+  string session_id = 1;
+}
+
+message GetSessionResponse {
+  string session_id = 1;
+  string channel = 2;
+  string user_id = 3;
+  bool active = 4;
+  int32 message_count = 5;
+}
+
+message CompactSessionRequest {
+  string session_id = 1;
+}
+
+message CompactSessionResponse {
+  bool ok = 1;
+  string summary = 2;
+}
+
+message DeleteSessionRequest {
+  string session_id = 1;
+}
+
+message DeleteSessionResponse {
+  bool ok = 1;
+}

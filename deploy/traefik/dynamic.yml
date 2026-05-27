@@ -1,0 +1,207 @@
+# Traefik Dynamic Configuration
+# Path: deploy/traefik/dynamic.yml
+# Injected via docker-compose as a volume mount
+
+http:
+  middlewares:
+    # ── Security Middlewares ──────────────────────────────────
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1m
+        sourceCriterion:
+          requestHeader:
+            pattern: "X-Forwarded-For"
+            name: "X-Forwarded-For"
+
+    cors:
+      headers:
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        accessControlAllowOriginList:
+          - "*"
+        accessControlMaxAge: 86400
+        accessControlAllowCredentials: true
+        accessControlAllowHeaders:
+          - "Authorization"
+          - "Content-Type"
+          - "X-Idempotency-Key"
+          - "X-Correlation-Id"
+
+    security-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+
+    # ── Correlation ID injection ──────────────────────────────
+    correlation-id:
+      headers:
+        customRequestHeaders:
+          X-Correlation-Id: "{{ .Req.Header.Get \"X-Correlation-Id\" | default (uuid) }}"
+
+    compression:
+      compress:
+        excludedContentTypes:
+          - "text/event-stream"
+          - "application/octet-stream"
+
+    # ── Retry / Timeout ──────────────────────────────────────
+    retry:
+      retry:
+        attempts: 3
+        initialInterval: 500ms
+
+    circuit-breaker:
+      circuitBreaker:
+        expression: "NetworkErrorRatio() > 0.1 || LatencyAtQuantileMS(50.0) > 1000"
+        checkPeriod: 10s
+        fallbackDuration: 30s
+        recoveryDuration: 10s
+
+    # ── Combined chain ───────────────────────────────────────
+    chain-public:
+      chain:
+        middlewares:
+          - rate-limit
+          - cors
+          - security-headers
+          - correlation-id
+          - compression
+
+    chain-internal:
+      chain:
+        middlewares:
+          - correlation-id
+          - retry
+          - circuit-breaker
+
+  routers:
+    gateway-router:
+      rule: "Host(`api.raven.local`) && PathPrefix(`/api/v1/channels`, `/api/v1/webhooks`)"
+      entryPoints:
+        - web
+      middlewares:
+        - chain-public
+      service: gateway-service
+
+    auth-router:
+      rule: "Host(`api.raven.local`) && PathPrefix(`/api/v1/auth`)"
+      entryPoints:
+        - web
+      middlewares:
+        - chain-public
+      service: auth-service
+
+    mon-router:
+      rule: "Host(`api.raven.local`) && PathPrefix(`/api/v1/monitors`)"
+      entryPoints:
+        - web
+      middlewares:
+        - chain-public
+      service: monitor-service
+
+    rag-router:
+      rule: "Host(`api.raven.local`) && PathPrefix(`/api/v1/rag`)"
+      entryPoints:
+        - web
+      middlewares:
+        - chain-public
+      service: rag-service
+
+    task-router:
+      rule: "Host(`api.raven.local`) && PathPrefix(`/api/v1/tasks`)"
+      entryPoints:
+        - web
+      middlewares:
+        - chain-public
+      service: task-service
+
+    code-router:
+      rule: "Host(`api.raven.local`) && PathPrefix(`/api/v1/code`)"
+      entryPoints:
+        - web
+      middlewares:
+        - chain-public
+      service: code-service
+
+    grpc-router:
+      rule: "Host(`grpc.raven.local`)"
+      entryPoints:
+        - web
+      middlewares:
+        - chain-internal
+      service: grpc-internal
+      protocol: h2c
+
+  services:
+    gateway-service:
+      loadBalancer:
+        servers:
+          - url: "http://gateway:8000"
+        passHostHeader: true
+        healthCheck:
+          path: "/health"
+          interval: "15s"
+          timeout: "3s"
+
+    auth-service:
+      loadBalancer:
+        servers:
+          - url: "http://auth:8001"
+        passHostHeader: true
+        healthCheck:
+          path: "/health"
+          interval: "15s"
+
+    monitor-service:
+      loadBalancer:
+        servers:
+          - url: "http://monitor-engine:8003"
+        passHostHeader: true
+        healthCheck:
+          path: "/health"
+          interval: "15s"
+
+    rag-service:
+      loadBalancer:
+        servers:
+          - url: "http://rag-service:8004"
+        passHostHeader: true
+        healthCheck:
+          path: "/health"
+          interval: "15s"
+
+    task-service:
+      loadBalancer:
+        servers:
+          - url: "http://task-engine:8005"
+        passHostHeader: true
+        healthCheck:
+          path: "/health"
+          interval: "15s"
+
+    code-service:
+      loadBalancer:
+        servers:
+          - url: "http://code-service:8006"
+        passHostHeader: true
+        healthCheck:
+          path: "/health"
+          interval: "15s"
+
+    grpc-internal:
+      loadBalancer:
+        servers:
+          - url: "h2c://agent-core:8002"
+        passHostHeader: true
+        healthCheck:
+          path: "/health"
+          interval: "15s"
+          protocol: h2c

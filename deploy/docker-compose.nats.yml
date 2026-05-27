@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - ./nats/nats.conf:/etc/nats/nats.conf:ro
+      - nats_data:/data
+    command:
+      - "--config"
+      - "/etc/nats/nats.conf"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8222/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  nats-init:
+    image: nats:2.10-alpine
+    depends_on:
+      nats:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - |
+        sleep 2
+        echo "NATS is ready"
+    restart: "no"
+
+volumes:
+  nats_data:

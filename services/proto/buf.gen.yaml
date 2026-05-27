@@ -1,0 +1,20 @@
+version: v2
+managed:
+  enabled: true
+  strategies:
+    default:
+      inputs:
+        - module: .
+plugins:
+  - remote: buf.build/protocolbuffers/java:v25.3
+    out: gen/java
+  - remote: buf.build/grpc/java:v1.60.1
+    out: gen/java
+  - local: protoc-gen-openapi
+    out: gen/openapi
+    opt: version=3.1.0
+  - local: protoc-gen-python
+    out: gen/python
+  - local: protoc-gen-python-grpc
+    out: gen/python
+    opt: no_grpc

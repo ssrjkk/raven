@@ -77,6 +77,7 @@ class JobManager:
             job = self._jobs.get(job_id)
             if job and job._task and not job._task.done():
                 job._task.cancel()
+                job.status = JobStatus.CANCELLED
                 return True
         return False
 
