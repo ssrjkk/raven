@@ -20,7 +20,7 @@
     <img src="https://img.shields.io/badge/channels-12-8A2BE2" alt="Channels">
   </a>
   <a href="https://github.com/ssrjkk/raven">
-    <img src="https://img.shields.io/badge/tests-438_passing-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-616_passing-brightgreen" alt="Tests">
   </a>
   <a href="https://github.com/ssrjkk/raven">
     <img src="https://img.shields.io/badge/security-hardened-blueviolet" alt="Security">
@@ -235,7 +235,6 @@ raven-ai/
 │   ├── agents/                 # multi-agent система
 │   ├── runtime/                # terminal, fs, docker
 │   └── repo/                   # индексер, AST, embeddings
-└── aios/                       # AI-OS-MVP bridge
 ```
 
 ### Быстрый старт AI-OS-MVP
@@ -254,9 +253,6 @@ raven aios exec "npm run dev"
 cd web && npm install && npm run dev
 # Открой http://localhost:5173/ide
 ```
-
----
-
 
 ---
 
