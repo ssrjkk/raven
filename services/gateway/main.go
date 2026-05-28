@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,7 +20,6 @@ import (
 	"github.com/rs/cors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -117,17 +117,15 @@ func (g *Gateway) Routes() http.Handler {
 	})
 	mux.Handle("GET /metrics", promhttp.Handler())
 
-	mux.HandleFunc("POST /api/v1/auth/login", g.proxyTo("http://auth:8001/api/v1/auth/login"))
-	mux.HandleFunc("POST /api/v1/auth/register", g.proxyTo("http://auth:8001/api/v1/auth/register"))
-	mux.HandleFunc("POST /api/v1/auth/validate", g.proxyTo("http://auth:8001/api/v1/auth/validate"))
-	mux.HandleFunc("GET /api/v1/monitors", g.proxyTo("http://monitor-engine:8003/api/v1/monitors"))
-	mux.HandleFunc("POST /api/v1/monitors", g.proxyTo("http://monitor-engine:8003/api/v1/monitors"))
-	mux.HandleFunc("GET /api/v1/rag/search", g.proxyTo("http://rag-service:8004/api/v1/rag/search"))
-	mux.HandleFunc("POST /api/v1/rag/index", g.proxyTo("http://rag-service:8004/api/v1/rag/index"))
-	mux.HandleFunc("POST /api/v1/tasks", g.proxyTo("http://task-engine:8005/api/v1/tasks"))
-	mux.HandleFunc("GET /api/v1/tasks/{id}", g.proxyTo("http://task-engine:8005/api/v1/tasks"))
-	mux.HandleFunc("POST /api/v1/code/execute", g.proxyTo("http://code-service:8006/api/v1/code/execute"))
-	mux.HandleFunc("POST /api/v1/agent/chat", g.proxyTo("http://agent-core:8002/api/v1/agent/chat"))
+	mux.HandleFunc("POST /api/v1/auth/", g.proxyTo("http://auth:8001"))
+	mux.HandleFunc("GET /api/v1/monitors", g.proxyTo("http://monitor-engine:8003"))
+	mux.HandleFunc("POST /api/v1/monitors", g.proxyTo("http://monitor-engine:8003"))
+	mux.HandleFunc("DELETE /api/v1/monitors/", g.proxyTo("http://monitor-engine:8003"))
+	mux.HandleFunc("GET /api/v1/rag/", g.proxyTo("http://rag-service:8004"))
+	mux.HandleFunc("POST /api/v1/rag/", g.proxyTo("http://rag-service:8004"))
+	mux.HandleFunc("/api/v1/tasks/", g.proxyTo("http://task-engine:8005"))
+	mux.HandleFunc("POST /api/v1/code/", g.proxyTo("http://code-service:8006"))
+	mux.HandleFunc("/api/v1/agent/", g.proxyTo("http://agent-core:8002"))
 
 	return otelhttp.NewHandler(g.metricsMiddleware(g.loggingMiddleware(mux)), "gateway")
 }
@@ -157,9 +155,13 @@ func (g *Gateway) metricsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (g *Gateway) proxyTo(target string) http.HandlerFunc {
+func (g *Gateway) proxyTo(base string) http.HandlerFunc {
 	client := &http.Client{Timeout: 30 * time.Second}
 	return func(w http.ResponseWriter, r *http.Request) {
+		target := base + r.URL.Path
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
 		req, _ := http.NewRequestWithContext(r.Context(), r.Method, target, r.Body)
 		req.Header = r.Header.Clone()
 		resp, err := client.Do(req)
@@ -173,7 +175,7 @@ func (g *Gateway) proxyTo(target string) http.HandlerFunc {
 			w.Header()[k] = v
 		}
 		w.WriteHeader(resp.StatusCode)
-		json.NewEncoder(w).Encode(json.RawMessage{})
+		io.Copy(w, resp.Body)
 	}
 }
 

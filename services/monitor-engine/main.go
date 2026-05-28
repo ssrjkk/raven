@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
+	_ "modernc.org/sqlite"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -86,7 +87,7 @@ func NewMonitorEngine() *MonitorEngine {
 
 func (m *MonitorEngine) InitDB(path string) error {
 	var err error
-	m.db, err = sql.Open("sqlite3", path+"?_journal_mode=WAL")
+	m.db, err = sql.Open("sqlite", path+"?_journal_mode=WAL")
 	if err != nil {
 		return fmt.Errorf("sqlite: %w", err)
 	}

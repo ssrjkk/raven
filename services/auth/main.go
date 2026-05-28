@@ -28,6 +28,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+	_ "modernc.org/sqlite"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -106,7 +107,7 @@ func NewAuthService(jwtSecret string) *AuthService {
 
 func (s *AuthService) InitDB(path string) error {
 	var err error
-	s.db, err = sql.Open("sqlite3", path+"?_journal_mode=WAL&_busy_timeout=5000")
+	s.db, err = sql.Open("sqlite", path+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return fmt.Errorf("sqlite open: %w", err)
 	}

@@ -16,18 +16,32 @@ started_at = 0.0
 ALLOWED_EXTENSIONS = {".py", ".js", ".ts", ".rs", ".go", ".java", ".cpp", ".h"}
 SANDBOX_TIMEOUT = int(os.environ.get("SANDBOX_TIMEOUT", "30"))
 MAX_OUTPUT_SIZE = 1024 * 100
+NATS_URL = os.environ.get("NATS_URL", "")
 
 
 @app.on_event("startup")
 async def startup():
     global started_at
     started_at = time.time()
-    logger.info("code-service started (timeout={}s, allowed={})", SANDBOX_TIMEOUT, ALLOWED_EXTENSIONS)
+    logger.info(
+        "code-service started (timeout={}s, allowed={})",
+        SANDBOX_TIMEOUT,
+        ALLOWED_EXTENSIONS,
+    )
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    logger.info("code-service shutdown")
 
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "service": "code-service", "uptime": round(time.time() - started_at, 1)}
+    return {
+        "status": "healthy",
+        "service": "code-service",
+        "uptime": round(time.time() - started_at, 1),
+    }
 
 
 @app.get("/ready")
@@ -44,11 +58,17 @@ async def metrics():
 async def execute_code(request: dict):
     code = request.get("code", "")
     language = request.get("language", "python").lower()
+
+    if not code.strip():
+        raise HTTPException(status_code=400, detail="Empty code")
+
     runner = {
         "python": ["python3", "-c", code],
         "python3": ["python3", "-c", code],
         "js": ["node", "-e", code],
         "node": ["node", "-e", code],
+        "bash": ["bash", "-c", code],
+        "sh": ["sh", "-c", code],
     }.get(language)
 
     if not runner:
@@ -69,6 +89,12 @@ async def execute_code(request: dict):
                     proc.communicate(), timeout=SANDBOX_TIMEOUT
                 )
                 elapsed = time.monotonic() - start
+                logger.info(
+                    "Code executed: lang={} exit={} dur={:.0f}ms",
+                    language,
+                    proc.returncode,
+                    elapsed * 1000,
+                )
                 return {
                     "stdout": stdout.decode()[:MAX_OUTPUT_SIZE],
                     "stderr": stderr.decode()[:MAX_OUTPUT_SIZE],

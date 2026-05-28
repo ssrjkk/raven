@@ -37,6 +37,10 @@ desktop-tauri/dist/
 desktop-tauri/src-tauri/target/
 packages/*/node_modules/
 
+# Go build artifacts
+services/*/bin/
+*.exe
+
 # Test artifacts
 .coverage
 tmp_test_secrets/

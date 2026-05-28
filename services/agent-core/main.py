@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 import uuid
 
 import uvicorn
@@ -8,24 +9,25 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
 
-from .llm_router import LLMRouter
-from .nats_client import NATSClient
+from llm_router import LLMRouter
+from nats_client import NATSClient
 
 app = FastAPI(title="Agent Core", version="1.0.0")
 llm = LLMRouter()
 nats = NATSClient()
-
 started_at = 0.0
 
 
 @app.on_event("startup")
 async def startup():
     global started_at
-    import time
     started_at = time.time()
     nats_url = os.environ.get("NATS_URL", "nats://nats:4222")
-    await nats.connect(nats_url)
-    logger.info("agent-core started, NATS={}", nats_url)
+    try:
+        await nats.connect(nats_url)
+        logger.info("agent-core started, NATS connected to {}", nats_url)
+    except Exception as e:
+        logger.warning("agent-core started without NATS: {}", e)
 
 
 @app.on_event("shutdown")
@@ -37,20 +39,30 @@ async def shutdown():
 
 @app.get("/health")
 async def health():
-    import time
-    return {"status": "healthy", "service": "agent-core", "uptime": round(time.time() - started_at, 1)}
+    return {
+        "status": "healthy",
+        "service": "agent-core",
+        "uptime": round(time.time() - started_at, 1),
+    }
 
 
 @app.get("/ready")
 async def ready():
     if not nats.connected:
-        return JSONResponse(status_code=503, content={"status": "not ready", "reason": "NATS disconnected"})
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not ready", "reason": "NATS disconnected"},
+        )
     return {"status": "ready"}
 
 
 @app.get("/metrics")
 async def metrics():
-    return {"llm_calls": llm._metrics, "nats_connected": nats.connected}
+    return {
+        "llm_calls": llm._metrics,
+        "nats_connected": nats.connected,
+        "uptime_seconds": round(time.time() - started_at, 1),
+    }
 
 
 @app.post("/api/v1/agent/chat")
@@ -60,10 +72,23 @@ async def chat(request: dict, raw_request: Request):
     if isinstance(messages, str):
         messages = [{"role": "user", "content": messages}]
 
-    result = await llm.chat(messages, session_id=session_id)
+    logger.info("Chat request: session={} messages={}", session_id, len(messages))
+
+    try:
+        result = await llm.chat(messages, session_id=session_id)
+    except Exception as e:
+        logger.error("LLM chat failed: {}", e)
+        return JSONResponse(
+            status_code=502, content={"error": "LLM request failed", "detail": str(e)}
+        )
+
     result["session_id"] = session_id
 
-    await nats.publish("agent.response", {"session_id": session_id, "response": result["response"]})
+    if nats.connected:
+        await nats.publish(
+            "agent.response", {"session_id": session_id, "response": result["response"]}
+        )
+
     return result
 
 

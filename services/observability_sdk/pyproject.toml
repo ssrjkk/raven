@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "observability-sdk"
+version = "0.1.0"
+description = "Shared observability patterns: circuit breaker, outbox, idempotency, retry, saga"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+fastapi = ["fastapi>=0.115.0"]

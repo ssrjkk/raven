@@ -34,6 +34,33 @@ jobs:
         run: mypy --strict --ignore-missing-imports raven/ services/
         continue-on-error: true
 
+  go-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Go mod tidy
+        run: |
+          for svc in gateway auth monitor-engine; do
+            cd services/$svc && go mod tidy && cd ../..
+          done
+
+      - name: Go build
+        run: |
+          for svc in gateway auth monitor-engine; do
+            cd services/$svc && go build ./... && cd ../..
+          done
+
+      - name: Go vet
+        run: |
+          for svc in gateway auth monitor-engine; do
+            cd services/$svc && go vet ./... && cd ../..
+          done
+
   test-monolith:
     runs-on: ubuntu-latest
     steps:
@@ -78,10 +105,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set build context
+        id: ctx
+        run: |
+          if [[ "${{ matrix.service }}" =~ ^(gateway|auth|monitor-engine)$ ]]; then
+            echo "context=services/${{ matrix.service }}" >> $GITHUB_OUTPUT
+            echo "dockerfile=services/${{ matrix.service }}/Dockerfile" >> $GITHUB_OUTPUT
+          else
+            echo "context=." >> $GITHUB_OUTPUT
+            echo "dockerfile=services/${{ matrix.service }}/Dockerfile" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: services/${{ matrix.service }}
+          context: ${{ steps.ctx.outputs.context }}
+          dockerfile: ${{ steps.ctx.outputs.dockerfile }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}:latest
