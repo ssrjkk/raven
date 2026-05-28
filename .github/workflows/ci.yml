@@ -41,7 +41,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: "1.26"
 
       - name: Go mod tidy
         run: |
@@ -60,6 +60,10 @@ jobs:
           for svc in gateway auth monitor-engine; do
             cd services/$svc && go vet ./... && cd ../..
           done
+
+      - name: Show Go module versions
+        run: |
+          head -5 services/gateway/go.mod services/auth/go.mod services/monitor-engine/go.mod
 
   test-monolith:
     runs-on: ubuntu-latest
