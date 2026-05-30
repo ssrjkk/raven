@@ -30,6 +30,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	_ "modernc.org/sqlite"
 	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc"
 )
 
 type AuthService struct {
@@ -40,6 +41,8 @@ type AuthService struct {
 	logger  *slog.Logger
 	started time.Time
 	mu      sync.RWMutex
+
+	grpcServer *grpc.Server
 
 	httpRequests *prometheus.CounterVec
 	httpDuration *prometheus.HistogramVec
@@ -316,16 +319,22 @@ func main() {
 	}
 
 	port := envOr("SERVICE_PORT", "8001")
+	grpcPort := envOr("GRPC_PORT", "9001")
+
 	server := &http.Server{
 		Addr:    ":" + port,
 		Handler: svc.Routes(),
+	}
+
+	if err := svc.startGRPC(grpcPort); err != nil {
+		logger.Warn("gRPC server unavailable", "error", err)
 	}
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		logger.Info("auth starting", "port", port)
+		logger.Info("auth starting", "http_port", port, "grpc_port", grpcPort)
 		server.ListenAndServe()
 	}()
 
@@ -333,6 +342,9 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	logger.Info("shutting down")
+	if svc.grpcServer != nil {
+		svc.grpcServer.GracefulStop()
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	server.Shutdown(ctx)

@@ -98,7 +98,36 @@ func (m *MonitorEngine) InitDB(path string) error {
 		last_status TEXT DEFAULT 'unknown', last_duration_ms REAL DEFAULT 0,
 		created_at TEXT DEFAULT (datetime('now'))
 	)`)
+	if err != nil {
+		return err
+	}
+	_, err = m.db.Exec(`CREATE INDEX IF NOT EXISTS idx_monitors_created ON monitors(created_at)`)
+	if err != nil {
+		return err
+	}
+	_, err = m.db.Exec(`CREATE INDEX IF NOT EXISTS idx_monitors_status ON monitors(last_status)`)
+	if err != nil {
+		return err
+	}
+
+	go m.cleanupOldMonitors(24 * time.Hour)
 	return err
+}
+
+func (m *MonitorEngine) cleanupOldMonitors(ttl time.Duration) {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+	for range ticker.C {
+		cutoff := time.Now().Add(-ttl).Format("2006-01-02 15:04:05")
+		res, err := m.db.Exec("DELETE FROM monitors WHERE created_at < ?", cutoff)
+		if err != nil {
+			m.logger.Warn("cleanup error", "error", err)
+			continue
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			m.logger.Info("cleaned old monitors", "count", n)
+		}
+	}
 }
 
 func (m *MonitorEngine) InitNATS(url string) error {

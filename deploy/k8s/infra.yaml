@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats
+  namespace: raven
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nats
+  template:
+    metadata:
+      labels:
+        app: nats
+    spec:
+      containers:
+        - name: nats
+          image: nats:2.10-alpine
+          args: ["-js", "--store_dir", "/data"]
+          ports:
+            - containerPort: 4222
+              name: client
+            - containerPort: 8222
+              name: http
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats
+  namespace: raven
+spec:
+  selector:
+    app: nats
+  ports:
+    - name: client
+      port: 4222
+      targetPort: 4222
+    - name: http
+      port: 8222
+      targetPort: 8222
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: raven
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.118.0
+          ports:
+            - containerPort: 4317
+              name: grpc
+            - containerPort: 8888
+              name: metrics
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: raven
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: grpc
+      port: 4317
+      targetPort: 4317
+    - name: metrics
+      port: 8888
+      targetPort: 8888
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qdrant
+  namespace: raven
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qdrant
+  template:
+    metadata:
+      labels:
+        app: qdrant
+    spec:
+      containers:
+        - name: qdrant
+          image: qdrant/qdrant:v1.13.0
+          ports:
+            - containerPort: 6333
+              name: http
+            - containerPort: 6334
+              name: grpc
+          volumeMounts:
+            - name: data
+              mountPath: /qdrant/storage
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant
+  namespace: raven
+spec:
+  selector:
+    app: qdrant
+  ports:
+    - name: http
+      port: 6333
+      targetPort: 6333
+    - name: grpc
+      port: 6334
+      targetPort: 6334

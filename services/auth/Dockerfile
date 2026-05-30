@@ -1,11 +1,14 @@
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /build
-COPY . .
-RUN go mod tidy
-RUN CGO_ENABLED=0 GOOS=linux go build -o /auth .
+
+COPY services/proto/go services/proto/go
+COPY services/auth services/auth
+
+WORKDIR /build/services/auth
+RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -o /auth .
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata
 COPY --from=builder /auth /auth
-EXPOSE 8001
+EXPOSE 8001 9001
 ENTRYPOINT ["/auth"]

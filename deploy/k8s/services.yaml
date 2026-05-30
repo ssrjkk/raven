@@ -1,0 +1,153 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: raven
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      containers:
+        - name: gateway
+          image: raven/gateway:latest
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: SERVICE_PORT
+              value: "8000"
+            - name: NATS_URL
+              value: "nats://nats:4222"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "otel-collector:4317"
+            - name: AUTH_GRPC_TARGET
+              value: "auth:9001"
+            - name: RATE_LIMIT_PER_MIN
+              value: "200"
+            - name: RATE_LIMIT_BURST
+              value: "20"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: raven
+spec:
+  selector:
+    app: gateway
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth
+  namespace: raven
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth
+  template:
+    metadata:
+      labels:
+        app: auth
+    spec:
+      containers:
+        - name: auth
+          image: raven/auth:latest
+          ports:
+            - containerPort: 8001
+              name: http
+            - containerPort: 9001
+              name: grpc
+          env:
+            - name: SERVICE_PORT
+              value: "8001"
+            - name: GRPC_PORT
+              value: "9001"
+            - name: DB_PATH
+              value: "/data/auth.db"
+            - name: NATS_URL
+              value: "nats://nats:4222"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "otel-collector:4317"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secret
+                  key: jwt-secret
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            grpc:
+              port: 9001
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            grpc:
+              port: 9001
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 300m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth
+  namespace: raven
+spec:
+  selector:
+    app: auth
+  ports:
+    - name: http
+      port: 8001
+      targetPort: 8001
+    - name: grpc
+      port: 9001
+      targetPort: 9001
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: auth-secret
+  namespace: raven
+stringData:
+  jwt-secret: "change-me-in-production"

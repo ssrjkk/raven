@@ -27,11 +27,20 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 )
 
+type contextKey string
+
+const (
+	contextUserID contextKey = "user_id"
+	contextRole   contextKey = "role"
+)
+
 type Gateway struct {
-	nc      *nats.Conn
-	js      jetstream.JetStream
-	logger  *slog.Logger
-	started time.Time
+	nc         *nats.Conn
+	js         jetstream.JetStream
+	logger     *slog.Logger
+	started    time.Time
+	authClient *AuthClient
+	rateLimiter *RateLimiter
 
 	httpRequests *prometheus.CounterVec
 	httpDuration *prometheus.HistogramVec
@@ -117,17 +126,44 @@ func (g *Gateway) Routes() http.Handler {
 	})
 	mux.Handle("GET /metrics", promhttp.Handler())
 
-	mux.HandleFunc("POST /api/v1/auth/", g.proxyTo("http://auth:8001"))
-	mux.HandleFunc("GET /api/v1/monitors", g.proxyTo("http://monitor-engine:8003"))
-	mux.HandleFunc("POST /api/v1/monitors", g.proxyTo("http://monitor-engine:8003"))
-	mux.HandleFunc("DELETE /api/v1/monitors/", g.proxyTo("http://monitor-engine:8003"))
-	mux.HandleFunc("GET /api/v1/rag/", g.proxyTo("http://rag-service:8004"))
-	mux.HandleFunc("POST /api/v1/rag/", g.proxyTo("http://rag-service:8004"))
-	mux.HandleFunc("/api/v1/tasks/", g.proxyTo("http://task-engine:8005"))
-	mux.HandleFunc("POST /api/v1/code/", g.proxyTo("http://code-service:8006"))
-	mux.HandleFunc("/api/v1/agent/", g.proxyTo("http://agent-core:8002"))
+	mux.HandleFunc("POST /api/v1/auth/register", g.proxyTo("http://auth:8001"))
+	mux.HandleFunc("POST /api/v1/auth/login", g.proxyTo("http://auth:8001"))
+	mux.HandleFunc("POST /api/v1/auth/validate", g.proxyTo("http://auth:8001"))
 
-	return otelhttp.NewHandler(g.metricsMiddleware(g.loggingMiddleware(mux)), "gateway")
+	mux.Handle("GET /api/v1/monitors", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://monitor-engine:8003"))))
+	mux.Handle("POST /api/v1/monitors", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://monitor-engine:8003"))))
+	mux.Handle("DELETE /api/v1/monitors/", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://monitor-engine:8003"))))
+	mux.Handle("GET /api/v1/rag/", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://rag-service:8004"))))
+	mux.Handle("POST /api/v1/rag/", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://rag-service:8004"))))
+	mux.Handle("/api/v1/tasks/", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://task-engine:8005"))))
+	mux.Handle("POST /api/v1/code/", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://code-service:8006"))))
+	mux.Handle("/api/v1/agent/", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://agent-core:8002"))))
+
+	rateLimited := g.rateLimitMiddleware(g.metricsMiddleware(g.loggingMiddleware(mux)))
+	return otelhttp.NewHandler(rateLimited, "gateway")
+}
+
+func (g *Gateway) authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if g.authClient == nil {
+			writeError(w, http.StatusBadGateway, ErrAuthUnavailable, "auth unavailable")
+			return
+		}
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" || len(authHeader) < 7 || authHeader[:7] != "Bearer " {
+			writeError(w, http.StatusUnauthorized, ErrUnauthorized, "missing or invalid authorization header")
+			return
+		}
+		token := authHeader[7:]
+		userID, role, err := g.authClient.ValidateToken(r.Context(), token)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, ErrUnauthorized, "invalid or expired token")
+			return
+		}
+		ctx := context.WithValue(r.Context(), contextUserID, userID)
+		ctx = context.WithValue(ctx, contextRole, role)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func (g *Gateway) loggingMiddleware(next http.Handler) http.Handler {
@@ -167,7 +203,7 @@ func (g *Gateway) proxyTo(base string) http.HandlerFunc {
 		resp, err := client.Do(req)
 		if err != nil {
 			g.logger.Error("proxy error", "target", target, "error", err)
-			http.Error(w, `{"error":"upstream unreachable"}`, http.StatusBadGateway)
+			writeError(w, http.StatusBadGateway, ErrUpstream, "upstream unreachable")
 			return
 		}
 		defer resp.Body.Close()
@@ -195,7 +231,22 @@ func main() {
 
 	natsURL := envOr("NATS_URL", "nats://nats:4222")
 	otelEndpoint := envOr("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317")
+	authGRPCTarget := envOr("AUTH_GRPC_TARGET", "auth:9001")
 	port := envOr("SERVICE_PORT", "8000")
+
+	authClient, err := NewAuthClient(authGRPCTarget, logger)
+	if err != nil {
+		logger.Warn("auth gRPC unavailable, running without auth", "error", err)
+	} else {
+		gateway.authClient = authClient
+		defer authClient.Close()
+	}
+
+	rateLimit := envOr("RATE_LIMIT_PER_MIN", "100")
+	rateLimitBurst := envOr("RATE_LIMIT_BURST", "10")
+	rl := NewRateLimiter(parseInt(rateLimit, 100), parseInt(rateLimitBurst, 10))
+	gateway.rateLimiter = rl
+	defer rl.Stop()
 
 	if err := gateway.InitNATS(natsURL); err != nil {
 		logger.Warn("NATS not available, running without messaging", "error", err)
@@ -208,7 +259,16 @@ func main() {
 		defer tp.Shutdown(context.Background())
 	}
 
-	handler := cors.AllowAll().Handler(gateway.Routes())
+	allowedOrigins := envOr("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000")
+	origins := splitCSV(allowedOrigins)
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins:   origins,
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Idempotency-Key"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	})
+	handler := corsHandler.Handler(gateway.Routes())
 	server := &http.Server{
 		Addr:         ":" + port,
 		Handler:      handler,
@@ -247,4 +307,33 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func parseInt(s string, defaultVal int) int {
+	if s == "" {
+		return defaultVal
+	}
+	var v int
+	_, err := fmt.Sscanf(s, "%d", &v)
+	if err != nil {
+		return defaultVal
+	}
+	return v
+}
+
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var result []string
+	start := 0
+	for i := 0; i <= len(s); i++ {
+		if i == len(s) || s[i] == ',' {
+			if i > start {
+				result = append(result, s[start:i])
+			}
+			start = i + 1
+		}
+	}
+	return result
 }

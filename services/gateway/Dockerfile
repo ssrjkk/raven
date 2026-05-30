@@ -1,8 +1,11 @@
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /build
-COPY . .
-RUN go mod tidy
-RUN CGO_ENABLED=0 GOOS=linux go build -o /gateway .
+
+COPY services/proto/go services/proto/go
+COPY services/gateway services/gateway
+
+WORKDIR /build/services/gateway
+RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -o /gateway .
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata

@@ -65,6 +65,23 @@ jobs:
         run: |
           head -5 services/gateway/go.mod services/auth/go.mod services/monitor-engine/go.mod
 
+  proto-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          version: "1.50.0"
+
+      - name: Buf lint
+        working-directory: services/proto
+        run: buf lint
+
+      - name: Buf breaking
+        working-directory: services/proto
+        run: buf breaking --against '../../.git#branch=main' || true
+
   test-monolith:
     runs-on: ubuntu-latest
     steps:
@@ -113,7 +130,7 @@ jobs:
         id: ctx
         run: |
           if [[ "${{ matrix.service }}" =~ ^(gateway|auth|monitor-engine)$ ]]; then
-            echo "context=services/${{ matrix.service }}" >> $GITHUB_OUTPUT
+            echo "context=." >> $GITHUB_OUTPUT
             echo "dockerfile=services/${{ matrix.service }}/Dockerfile" >> $GITHUB_OUTPUT
           else
             echo "context=." >> $GITHUB_OUTPUT
@@ -150,3 +167,24 @@ jobs:
 
       - name: Cleanup
         run: docker compose -f deploy/docker-compose.nats.yml down
+
+  k6-smoke:
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Start services
+        run: |
+          docker compose -f deploy/docker-compose.yml up -d auth gateway monitor-engine
+          sleep 10
+
+      - name: Run k6 smoke test
+        run: k6 run --vus 5 --duration 30s tests/load/scenario.js
+        env:
+          AUTH_BASE: http://localhost:8001
+          GATEWAY_BASE: http://localhost:8000
+          MONITOR_BASE: http://localhost:8003
