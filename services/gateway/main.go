@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -32,6 +33,7 @@ type contextKey string
 const (
 	contextUserID contextKey = "user_id"
 	contextRole   contextKey = "role"
+	contextReqID  contextKey = "req_id"
 )
 
 type Gateway struct {
@@ -40,6 +42,7 @@ type Gateway struct {
 	logger     *slog.Logger
 	started    time.Time
 	authClient *AuthClient
+	authCB     *CircuitBreaker
 	rateLimiter *RateLimiter
 
 	httpRequests *prometheus.CounterVec
@@ -139,7 +142,7 @@ func (g *Gateway) Routes() http.Handler {
 	mux.Handle("POST /api/v1/code/", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://code-service:8006"))))
 	mux.Handle("/api/v1/agent/", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://agent-core:8002"))))
 
-	rateLimited := g.rateLimitMiddleware(g.metricsMiddleware(g.loggingMiddleware(mux)))
+	rateLimited := g.rateLimitMiddleware(g.metricsMiddleware(g.requestIDMiddleware(g.loggingMiddleware(mux))))
 	return otelhttp.NewHandler(rateLimited, "gateway")
 }
 
@@ -147,6 +150,10 @@ func (g *Gateway) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if g.authClient == nil {
 			writeError(w, http.StatusBadGateway, ErrAuthUnavailable, "auth unavailable")
+			return
+		}
+		if g.authCB != nil && !g.authCB.Allow() {
+			writeError(w, http.StatusBadGateway, ErrAuthUnavailable, "auth circuit open")
 			return
 		}
 		authHeader := r.Header.Get("Authorization")
@@ -157,11 +164,29 @@ func (g *Gateway) authMiddleware(next http.Handler) http.Handler {
 		token := authHeader[7:]
 		userID, role, err := g.authClient.ValidateToken(r.Context(), token)
 		if err != nil {
+			if g.authCB != nil {
+				g.authCB.Failure()
+			}
 			writeError(w, http.StatusUnauthorized, ErrUnauthorized, "invalid or expired token")
 			return
 		}
+		if g.authCB != nil {
+			g.authCB.Success()
+		}
 		ctx := context.WithValue(r.Context(), contextUserID, userID)
 		ctx = context.WithValue(ctx, contextRole, role)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (g *Gateway) requestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get("X-Request-ID")
+		if id == "" {
+			id = uuid.New().String()[:8]
+		}
+		w.Header().Set("X-Request-ID", id)
+		ctx := context.WithValue(r.Context(), contextReqID, id)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -170,13 +195,12 @@ func (g *Gateway) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: 200}
+		reqID, _ := r.Context().Value(contextReqID).(string)
 		next.ServeHTTP(sw, r)
 		g.logger.Info("request",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", sw.status,
-			"duration_ms", time.Since(start).Milliseconds(),
-			"remote", r.RemoteAddr,
+			"method", r.Method, "path", r.URL.Path,
+			"status", sw.status, "duration_ms", time.Since(start).Milliseconds(),
+			"req_id", reqID, "remote", r.RemoteAddr,
 		)
 	})
 }
@@ -198,8 +222,26 @@ func (g *Gateway) proxyTo(base string) http.HandlerFunc {
 		if r.URL.RawQuery != "" {
 			target += "?" + r.URL.RawQuery
 		}
-		req, _ := http.NewRequestWithContext(r.Context(), r.Method, target, r.Body)
+
+		ctx := r.Context()
+		if _, ok := ctx.Deadline(); !ok {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, 25*time.Second)
+			defer cancel()
+		}
+
+		body := r.Body
+		if r.Body != nil {
+			defer r.Body.Close()
+		}
+
+		req, err := http.NewRequestWithContext(ctx, r.Method, target, body)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, ErrUpstream, "invalid upstream request")
+			return
+		}
 		req.Header = r.Header.Clone()
+
 		resp, err := client.Do(req)
 		if err != nil {
 			g.logger.Error("proxy error", "target", target, "error", err)
@@ -207,11 +249,14 @@ func (g *Gateway) proxyTo(base string) http.HandlerFunc {
 			return
 		}
 		defer resp.Body.Close()
+
 		for k, v := range resp.Header {
 			w.Header()[k] = v
 		}
 		w.WriteHeader(resp.StatusCode)
-		io.Copy(w, resp.Body)
+		if _, err := io.Copy(w, resp.Body); err != nil {
+			g.logger.Error("proxy copy error", "target", target, "error", err)
+		}
 	}
 }
 
@@ -239,6 +284,7 @@ func main() {
 		logger.Warn("auth gRPC unavailable, running without auth", "error", err)
 	} else {
 		gateway.authClient = authClient
+		gateway.authCB = NewCircuitBreaker(3, 30*time.Second)
 		defer authClient.Close()
 	}
 
@@ -264,7 +310,7 @@ func main() {
 	corsHandler := cors.New(cors.Options{
 		AllowedOrigins:   origins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Idempotency-Key"},
+		AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Request-ID", "X-Idempotency-Key"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	})

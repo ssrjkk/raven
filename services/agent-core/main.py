@@ -13,6 +13,8 @@ from llm_router import LLMRouter
 from nats_client import NATSClient
 
 app = FastAPI(title="Agent Core", version="1.0.0")
+if not os.environ.get("LLM_API_KEY"):
+    logger.warning("LLM_API_KEY not set — LLM calls will fail")
 llm = LLMRouter()
 nats = NATSClient()
 started_at = 0.0

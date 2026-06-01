@@ -11,4 +11,5 @@ FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata
 COPY --from=builder /auth /auth
 EXPOSE 8001 9001
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 CMD wget -qO- http://localhost:8001/health || exit 1
 ENTRYPOINT ["/auth"]

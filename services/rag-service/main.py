@@ -30,7 +30,7 @@ def _embed(text: str) -> list[float]:
     for n in range(2, 5):
         for i in range(len(text) - n + 1):
             ng = text[i : i + n]
-            idx = int(hashlib.md5(ng.encode()).hexdigest()[:8], 16) % 256
+            idx = int(hashlib.md5(ng.encode(), usedforsecurity=False).hexdigest()[:8], 16) % 256
             ngram_counts[idx] = ngram_counts.get(idx, 0) + 1
     vec = np.zeros(VECTOR_SIZE, dtype=np.float32)
     for idx, count in ngram_counts.items():

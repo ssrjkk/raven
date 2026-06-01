@@ -10,12 +10,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	pb "github.com/ssrjkk/raven/services/proto/go/auth/v1"
-	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -51,8 +48,7 @@ func unaryInterceptor(logger *slog.Logger) grpc.UnaryServerInterceptor {
 
 type grpcAuthServer struct {
 	pb.UnimplementedAuthServiceServer
-	db     *sql.DB
-	jwtKey []byte
+	svc    *AuthService
 	logger *slog.Logger
 }
 
@@ -77,8 +73,7 @@ func (s *AuthService) startGRPC(port string) error {
 
 	s.grpcServer = grpc.NewServer(opts...)
 	pb.RegisterAuthServiceServer(s.grpcServer, &grpcAuthServer{
-		db:     s.db,
-		jwtKey: s.jwtKey,
+		svc:    s,
 		logger: s.logger,
 	})
 	healthSrv := health.NewServer()
@@ -93,76 +88,52 @@ func (s *AuthService) startGRPC(port string) error {
 	return nil
 }
 
-func (s *grpcAuthServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
-	var id, username, password, role string
-	err := s.db.QueryRow(
-		"SELECT id, username, password, role FROM users WHERE username = ?",
-		req.Username,
-	).Scan(&id, &username, &password, &role)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, status.Error(codes.Unauthenticated, "invalid credentials")
-	}
+func (g *grpcAuthServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
+	tokenStr, user, err := g.svc.login(ctx, req.Username, req.Password)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "database error")
+		if err.Error() == "invalid credentials" {
+			return nil, status.Error(codes.Unauthenticated, "invalid credentials")
+		}
+		return nil, status.Error(codes.Internal, "login failed")
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(password), []byte(req.Password)); err != nil {
-		return nil, status.Error(codes.Unauthenticated, "invalid credentials")
-	}
-	expires := time.Now().Add(24 * time.Hour)
-	claims := jwt.MapClaims{"sub": id, "role": role, "exp": expires.Unix()}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenStr, _ := token.SignedString(s.jwtKey)
-
 	return &pb.LoginResponse{
 		Token:    tokenStr,
-		UserId:   id,
-		Role:     role,
-		Username: username,
+		UserId:   user.ID,
+		Role:     user.Role,
+		Username: user.Username,
 	}, nil
 }
 
-func (s *grpcAuthServer) Register(ctx context.Context, req *pb.RegisterRequest) (*pb.RegisterResponse, error) {
-	if len(req.Username) < 3 || len(req.Password) < 8 {
-		return nil, status.Error(codes.InvalidArgument, "username min 3, password min 8")
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+func (g *grpcAuthServer) Register(ctx context.Context, req *pb.RegisterRequest) (*pb.RegisterResponse, error) {
+	user, err := g.svc.register(ctx, req.Username, req.Password)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "bcrypt error")
-	}
-	id := uuid.New().String()
-	_, err = s.db.Exec(
-		"INSERT INTO users (id, username, password, role) VALUES (?, ?, ?, 'user')",
-		id, req.Username, string(hash),
-	)
-	if err != nil {
+		if err.Error() == "username min 3, password min 8" {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
 		return nil, status.Error(codes.AlreadyExists, "username already exists")
 	}
-	s.logger.Info("gRPC user registered", "user_id", id, "username", req.Username)
-	return &pb.RegisterResponse{UserId: id, Role: "user", Username: req.Username}, nil
+	return &pb.RegisterResponse{UserId: user.ID, Role: user.Role, Username: user.Username}, nil
 }
 
-func (s *grpcAuthServer) ValidateToken(ctx context.Context, req *pb.ValidateTokenRequest) (*pb.ValidateTokenResponse, error) {
-	token, err := jwt.Parse(req.Token, func(t *jwt.Token) (interface{}, error) {
-		return s.jwtKey, nil
-	})
-	if err != nil || !token.Valid {
+func (g *grpcAuthServer) ValidateToken(ctx context.Context, req *pb.ValidateTokenRequest) (*pb.ValidateTokenResponse, error) {
+	claims, err := g.svc.validateToken(req.Token)
+	if err != nil {
 		return &pb.ValidateTokenResponse{Valid: false}, nil
 	}
-	claims := token.Claims.(jwt.MapClaims)
 	return &pb.ValidateTokenResponse{
 		Valid:  true,
-		UserId: claims["sub"].(string),
-		Role:   claims["role"].(string),
+		UserId: claims.UserID,
+		Role:   claims.Role,
 	}, nil
 }
 
-func (s *grpcAuthServer) CheckPermission(ctx context.Context, req *pb.CheckPermissionRequest) (*pb.CheckPermissionResponse, error) {
+func (g *grpcAuthServer) CheckPermission(ctx context.Context, req *pb.CheckPermissionRequest) (*pb.CheckPermissionResponse, error) {
 	return &pb.CheckPermissionResponse{Allowed: req.Role == "user" || req.Role == "admin"}, nil
 }
 
-func (s *grpcAuthServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetUserResponse, error) {
+func (g *grpcAuthServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetUserResponse, error) {
 	var id, username, role string
-	err := s.db.QueryRow(
+	err := g.svc.db.QueryRowContext(ctx,
 		"SELECT id, username, role FROM users WHERE id = ?", req.UserId,
 	).Scan(&id, &username, &role)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -171,19 +142,13 @@ func (s *grpcAuthServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*
 	if err != nil {
 		return nil, status.Error(codes.Internal, "database error")
 	}
-	return &pb.GetUserResponse{
-		UserId:   id,
-		Username: username,
-		Role:     role,
-	}, nil
+	return &pb.GetUserResponse{UserId: id, Username: username, Role: role}, nil
 }
 
-func (s *grpcAuthServer) UpdateRole(ctx context.Context, req *pb.UpdateRoleRequest) (*pb.UpdateRoleResponse, error) {
-	_, err := s.db.Exec("UPDATE users SET role = ? WHERE id = ?", req.Role, req.UserId)
+func (g *grpcAuthServer) UpdateRole(ctx context.Context, req *pb.UpdateRoleRequest) (*pb.UpdateRoleResponse, error) {
+	_, err := g.svc.db.ExecContext(ctx, "UPDATE users SET role = ? WHERE id = ?", req.Role, req.UserId)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "update failed")
 	}
 	return &pb.UpdateRoleResponse{Ok: true}, nil
 }
-
-
