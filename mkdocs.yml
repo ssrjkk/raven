@@ -1,5 +1,5 @@
 site_name: Raven AI
-site_url: https://raven.ai
+site_url: https://ssrjkk.github.io/raven
 site_description: Personal AI Assistant — Any Channel. Any Platform.
 repo_url: https://github.com/ssrjkk/raven
 repo_name: ssrjkk/raven
@@ -22,22 +22,8 @@ nav:
   - Getting Started: getting-started.md
   - Channels:
     - Overview: channels/overview.md
-    - Telegram: channels/telegram.md
-    - Discord: channels/discord.md
-    - Slack: channels/slack.md
-    - WhatsApp: channels/whatsapp.md
   - Core Concepts:
     - Architecture: concepts/architecture.md
-    - Agents: concepts/agents.md
-    - Sessions: concepts/sessions.md
-    - Tools: concepts/tools.md
-  - Security:
-    - Overview: security/overview.md
-    - DM Policies: security/dm-policies.md
-    - Audit: security/audit.md
-    - Sandboxing: security/sandboxing.md
-  - CLI Reference: cli.md
-  - API Reference: api.md
   - Configuration: configuration.md
   - Development: development.md
 

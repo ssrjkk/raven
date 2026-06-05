@@ -26,7 +26,7 @@ By participating, you agree to maintain a respectful and inclusive environment f
 #### Setup
 
 ```bash
-git clone https://github.com/yourusername/raven
+git clone https://github.com/ssrjkk/raven
 cd raven
 pip install -e ".[dev]"
 ```
@@ -38,29 +38,17 @@ pip install -e ".[dev]"
 ruff check .
 
 # Type check
-ruff check . 
+mypy raven/ --strict --ignore-missing-imports
 
 # Test
 pytest tests/ -q --tb=short
 
 # Test with coverage
 pytest tests/ --cov=raven --cov-report=term-missing
+
+# Build web
+cd web && npm install && npm run build
 ```
-
-#### Pre-commit
-
-We use pre-commit hooks to ensure code quality:
-
-```bash
-pip install pre-commit
-pre-commit install
-```
-
-Hooks will run automatically on `git commit`. They check:
-- Ruff linting
-- Trailing whitespace
-- File endings
-- YAML/JSON validity
 
 #### Guidelines
 
@@ -85,19 +73,19 @@ Hooks will run automatically on `git commit`. They check:
 
 ```
 raven/
-├── channels/          # Messaging channel implementations
-├── cli/               # CLI commands (Click-based)
-├── core/              # Core logic (LLM, config, security, etc.)
-├── plugins/           # Plugin tools (files, code, browser, etc.)
-├── tools/             # Built-in tool registry
-├── tui/               # Textual TUI dashboard
-└── routines/          # Automated routine engine
-
-tests/                 # Test suite (pytest)
-web/                   # React web frontend
-docs/                  # Documentation (MkDocs)
-deploy/                # Deployment configs
-scripts/               # Setup scripts
+├── raven/             # Core Python package (agent, auth, gateway, LLM, RAG, etc.)
+├── services/          # Microservices (Go: gateway/auth/monitor-engine; Python: agent-core/rag/task/code)
+├── channels/          # 12 messaging channels (Telegram, Discord, Slack, etc.)
+├── web/               # React 19 + Vite + Tailwind dashboard
+├── aios/              # AI-OS-MVP bridge
+├── daemon/            # Rust system daemon
+├── ravencode/         # Python API for AI agents
+├── packages/          # TypeScript shared packages
+├── plugins/           # 10 plugin tools
+├── deploy/            # Docker, K8s, observability configs
+├── tests/             # Test suite (pytest)
+├── docs/              # MkDocs documentation
+└── scripts/           # Setup and build scripts
 ```
 
 ## Development Channels
@@ -107,7 +95,7 @@ scripts/               # Setup scripts
 
 ## Getting Help
 
-- Open a [Discussion](https://github.com/yourusername/raven/discussions)
+- Open a [Discussion](https://github.com/ssrjkk/raven/discussions)
 - Join our community chat (if available)
 
 ## License
