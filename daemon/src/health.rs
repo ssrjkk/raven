@@ -102,7 +102,7 @@ async fn check_memory() -> bool {
 }
 
 async fn check_disk() -> bool {
-    let disk = sysinfo::Disks::new_with_refined_list();
+    let disk = sysinfo::Disks::new();
     for d in &disk {
         let avail_pct = d.available_space() as f64 / d.total_space() as f64 * 100.0;
         if avail_pct < 5.0 {

@@ -5,6 +5,38 @@ All notable changes to Raven AI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-06-05
+
+### Added
+- Web frontend: Login page, 404 page, Toast notification system, loading skeletons
+- Auth flow: ProtectedRoute wrapper, Bearer token management, 401 auto-redirect
+- CI: web-build job for frontend build/lint
+- `.env.example`: NATS, JWT, OTEL, Qdrant, LLM API key, and 15+ new configuration variables
+- `tokens.schema.json` design token schema with `$schema` validation
+- TypeScript base config (`packages/package.json`, `web/tsconfig.json` extends)
+
+### Fixed
+- All 4 Python service Dockerfiles: `python:3.14-alpine` → `python:3.13-alpine`
+- CI Python version: 3.14 → 3.13; added `pip install -e .` for lint/test jobs
+- Rust daemon: `Disks::new_with_refined_list()` → `Disks::new()` (deprecated API)
+- Rust daemon: cross-platform `stop_daemon` with Windows taskkill support
+- Go module version: `go 1.25.0` → `go 1.26` in monitor-engine
+- pyproject.toml: removed `daemon/` from wheel packages (Rust code, not Python)
+- Dependency version sync across `requirements.txt`, `pyproject.toml`, `monolith-requirements.txt`
+
+### Enhanced
+- Frontend: converted IDE.tsx inline styles to Tailwind; Tailwind-safe grid in CanvasViewer
+- Frontend: exponential backoff WebSocket reconnection with unmount guard
+- Frontend: optimized Vite config (manualChunks, sourcemap, chunkSizeWarningLimit)
+- Frontend: SEO meta tags, CSP headers, preconnect for Google Fonts in index.html
+- Frontend: tool messages visible, system messages not truncated in Chat view
+- Frontend: auto-scroll to new messages in Chat
+
+### Removed
+- Dead Sidebar.tsx component (unused)
+- Duplicate CSS variables from index.css (now sourced from tokens.json via ThemeContext)
+- Unused `react-syntax-highlighter` / `@types/react-syntax-highlighter` dependencies
+
 ## [Unreleased]
 
 ### Added

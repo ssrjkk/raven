@@ -56,7 +56,7 @@ pub async fn get_system_info() -> Result<SystemInfo> {
 
     let mut disk_total = 0u64;
     let mut disk_used = 0u64;
-    for disk in Disks::new_with_refined_list() {
+    for disk in Disks::new() {
         disk_total += disk.total_space();
         disk_used += disk.total_space() - disk.available_space();
     }
@@ -105,13 +105,25 @@ pub async fn get_status() -> Result<DaemonStatus> {
 }
 
 pub async fn stop_daemon() -> Result<()> {
-    let pid_str = std::fs::read_to_string("/var/run/ravend.pid")?;
+    let pid_path = if cfg!(target_family = "unix") {
+        "/var/run/ravend.pid"
+    } else {
+        "C:\\ProgramData\\ravend\\ravend.pid"
+    };
+    let pid_str = std::fs::read_to_string(pid_path)?;
     let pid: u32 = pid_str.trim().parse()?;
+    #[cfg(target_family = "unix")]
     nix::sys::signal::kill(
         nix::unistd::Pid::from_raw(pid as i32),
         nix::sys::signal::Signal::SIGTERM,
     )?;
-    std::fs::remove_file("/var/run/ravend.pid")?;
+    #[cfg(target_family = "windows")]
+    {
+        std::process::Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/F"])
+            .status()?;
+    }
+    std::fs::remove_file(pid_path)?;
     println!("Daemon {} stopped", pid);
     Ok(())
 }
