@@ -10,6 +10,9 @@
   <a href="#license">License</a>
 
 
+  <a href="https://github.com/ssrjkk/raven/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=master&label=CI&logo=github" alt="CI">
+  </a>
   <a href="https://github.com/ssrjkk/raven">
     <img src="https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white" alt="Python">
   </a>
@@ -162,35 +165,48 @@ raven security audit --fix     Авто-исправление проблем
 ## Architecture
 
 ```
-raven-ai/
-├── core/
-│   ├── agent/          ReAct-агент, multi-agent registry, workspace prompts
-│   ├── gateway/        Маршрутизация сообщений, сессии, команды
-│   ├── auth/           Аутентификация, RBAC (4 роли, 16 пермишенов), API-токены
-│   ├── rag/            Векторное хранилище, embeddings, чанкинг, retriever
-│   ├── task_engine/    Планировщик, исполнитель, хранилище задач
-│   ├── monitor/        HTTP, price, RSS, file, process мониторы + условия
-│   ├── security/       ToolPolicyEvaluator, ContextVisibility, sanitize_external_content, SecurityAudit
-│   ├── coder/          Индексатор, парсер AST, ревьюер, менеджер сессий
-│   ├── routine/        Движок рутин, хранилище (бриффинги, email, файлы)
-│   ├── admin_api.py    REST API (каналы, агенты, конфиг, секреты, задачи, аудит)
-│   ├── audit.py        Структурированный JSON audit-лог (20 типов событий)
-│   ├── circuit_breaker.py  Closed → Open → Half-Open с метриками
-│   ├── errors.py       20 типизированных ErrorCode + авто-классификация
-│   ├── llm.py          Маршрутизация: OpenRouter, Anthropic, OpenAI, Ollama
-│   ├── failover.py     Weighted-взвешенный failover с circuit breaker
-│   ├── sandbox.py      Изоляция: direct, subprocess, Docker
-│   ├── plugins/        Система плагинов с capability-based sandbox
-│   └── middleware.py   Rate limit, auth, request ID, error handler
-├── channels/           12 enterprise-каналов
-├── web/                React 19 + Vite + Tailwind дашборд
-├── plugins/            10 плагинов (browser, code, cron, files, git...)
-├── tools/              file, shell, notify, browser
-├── routines/           briefing, email, file organizer
-├── monitors/           http, price, rss, file, process
+raven/
+├── raven/                      # Основной Python-пакет
+│   ├── agent/                  ReAct-агент, multi-agent registry, workspace prompts
+│   ├── gateway/                Маршрутизация сообщений, сессии, команды
+│   ├── auth/                   Аутентификация, RBAC (4 роли, 16 пермишенов), API-токены
+│   ├── rag/                    Векторное хранилище, embeddings, чанкинг, retriever
+│   ├── task_engine/            Планировщик, исполнитель, хранилище задач
+│   ├── monitor/                HTTP, price, RSS, file, process мониторы + условия
+│   ├── security/               ToolPolicyEvaluator, ContextVisibility, sanitize_external_content, SecurityAudit
+│   ├── coder/                  Индексатор, парсер AST, ревьюер, менеджер сессий
+│   ├── routine/                Движок рутин, хранилище (бриффинги, email, файлы)
+│   ├── admin_api.py            REST API (каналы, агенты, конфиг, секреты, задачи, аудит)
+│   ├── audit.py                Структурированный JSON audit-лог (20 типов событий)
+│   ├── circuit_breaker.py      Closed → Open → Half-Open с метриками
+│   ├── errors.py               20 типизированных ErrorCode + авто-классификация
+│   ├── llm.py                  Маршрутизация: OpenRouter, Anthropic, OpenAI, Ollama
+│   ├── failover.py             Weighted-взвешенный failover с circuit breaker
+│   ├── sandbox.py              Изоляция: direct, subprocess, Docker
+│   ├── plugins/                Система плагинов с capability-based sandbox
+│   └── middleware.py           Rate limit, auth, request ID, error handler
+├── services/                   # Микросервисы (Go/Python)
+│   ├── gateway/                Go API gateway
+│   ├── auth/                   Go auth service
+│   ├── monitor-engine/         Go monitor engine
+│   ├── agent-core/             Python agent microservice
+│   ├── rag-service/            Python RAG microservice
+│   ├── task-engine/            Python task engine microservice
+│   ├── code-service/           Python code service microservice
+│   └── proto/                  Protobuf definitions + Go stubs
+├── channels/                   12 enterprise-каналов
+├── web/                        React 19 + Vite + Tailwind дашборд
+├── aios/                       AI-OS-MVP bridge (Python)
+├── daemon/                     Rust-демон для системных метрик
+├── plugins/                    10 плагинов (browser, code, cron, files, git...)
+├── tools/                      file, shell, notify, browser
+├── routines/                   briefing, email, file organizer
+├── monitors/                   http, price, rss, file, process
+├── packages/                   TypeScript-пакеты (ai-core, agents, runtime, repo)
+├── deploy/                     Docker Compose, K8s, Traefik, observability
 ├── workspace/
-│   └── skills/         crypto, briefing, web_search (SKILL.md)
-└── .github/            GitHub Actions CI (pytest + ruff, 3.11-3.13)
+│   └── skills/                 crypto, briefing, web_search (SKILL.md)
+└── .github/                    GitHub Actions CI (pytest + ruff, 3.11-3.13)
 ```
 
 ---

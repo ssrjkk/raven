@@ -50,7 +50,7 @@ packages = ["raven", "aios", "ravencode"]
 
 [tool.mypy]
 strict = true
-exclude = ["channels/"]
+# exclude = ["channels/"]  # TODO: add type hints to channels and re-enable
 disallow_untyped_defs = false
 ignore_missing_imports = true
 

@@ -1,0 +1,69 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      python-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+    groups:
+      npm-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: "gomod"
+    directories:
+      - "/services/gateway"
+      - "/services/auth"
+      - "/services/monitor-engine"
+      - "/services/proto/go"
+    schedule:
+      interval: "weekly"
+    groups:
+      go-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: "cargo"
+    directory: "/daemon"
+    schedule:
+      interval: "weekly"
+    groups:
+      rust-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: "cargo"
+    directory: "/desktop-tauri/src-tauri"
+    schedule:
+      interval: "weekly"
+    groups:
+      tauri-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: "docker"
+    directories:
+      - "/"
+      - "/services/agent-core"
+      - "/services/rag-service"
+      - "/services/task-engine"
+      - "/services/code-service"
+      - "/services/gateway"
+      - "/services/auth"
+      - "/services/monitor-engine"
+    schedule:
+      interval: "weekly"
+    groups:
+      docker-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions-deps:
+        patterns: ["*"]

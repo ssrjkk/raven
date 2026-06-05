@@ -2,7 +2,7 @@ name: Canary Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - "services/**"
       - "deploy/**"
@@ -45,6 +45,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set build context
+        id: ctx
+        run: |
+          if [[ "${{ matrix.service }}" =~ ^(agent-core|rag-service|task-engine|code-service)$ ]]; then
+            echo "context=." >> $GITHUB_OUTPUT
+          else
+            echo "context=services/${{ matrix.service }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -57,7 +66,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: services/${{ matrix.service }}
+          context: ${{ steps.ctx.outputs.context }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
@@ -89,8 +98,17 @@ jobs:
 
       - name: Health check
         run: |
+          case "${{ matrix.service }}" in
+            gateway) PORT=8000 ;;
+            auth) PORT=8001 ;;
+            agent-core) PORT=8002 ;;
+            monitor-engine) PORT=8003 ;;
+            rag-service) PORT=8004 ;;
+            task-engine) PORT=8005 ;;
+            code-service) PORT=8006 ;;
+          esac
           for i in $(seq 1 12); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ matrix.service }}:8000/health 2>/dev/null || echo "000")
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ matrix.service }}:$PORT/health 2>/dev/null || echo "000")
             if [ "$STATUS" = "200" ]; then
               echo "${{ matrix.service }} canary is healthy"
               exit 0
