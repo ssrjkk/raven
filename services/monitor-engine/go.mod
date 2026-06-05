@@ -1,6 +1,6 @@
 module github.com/ssrjkk/raven/services/monitor-engine
 
-go 1.26
+go 1.26.3
 
 require (
 	github.com/google/uuid v1.6.0
