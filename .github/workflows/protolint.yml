@@ -28,4 +28,4 @@ jobs:
       - uses: bufbuild/buf-breaking-action@v1
         with:
           input: "services/proto"
-          against: "https://github.com/${GITHUB_REPOSITORY}.git#branch=main,ref=refs/heads/main,subdir=services/proto"
+           against: "https://github.com/${GITHUB_REPOSITORY}.git#branch=master,ref=refs/heads/master,subdir=services/proto"
