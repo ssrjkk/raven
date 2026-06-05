@@ -87,15 +87,53 @@ export interface WsMessage {
   session_id: string;
 }
 
+export interface AuthData {
+  token: string;
+  user: { id: string; role: string };
+}
+
 const BASE = "";
 
+function getToken(): string | null {
+  return localStorage.getItem("raven_token");
+}
+
+export function setToken(token: string) {
+  localStorage.setItem("raven_token", token);
+}
+
+export function clearToken() {
+  localStorage.removeItem("raven_token");
+}
+
+export function isAuthenticated(): boolean {
+  return !!getToken();
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
-  if (!res.ok) throw new Error(`API ${path}: ${res.status}`);
-  return res.json();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = getToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      headers,
+      signal: controller.signal,
+      ...init,
+    });
+    if (res.status === 401) {
+      clearToken();
+      window.location.href = "/login";
+      throw new Error("Unauthorized");
+    }
+    if (!res.ok) throw new Error(`API ${path}: ${res.status}`);
+    return res.json();
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export const api = {
@@ -119,4 +157,8 @@ export const api = {
   codeSessions: () => request<CodingSessionData[]>("/api/code/list"),
   config: () => request<Record<string, string>>("/api/admin/config"),
   shutdown: () => request<{ ok: boolean }>("/api/shutdown", { method: "POST" }),
+  login: (username: string, password: string) =>
+    request<AuthData>("/api/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  register: (username: string, password: string) =>
+    request<AuthData>("/api/auth/register", { method: "POST", body: JSON.stringify({ username, password }) }),
 };

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { api, ChannelInfo } from "../api/client";
+import { useToast } from "../components/Toast";
 
 interface LogEntry {
   timestamp: string;
@@ -21,10 +22,13 @@ export default function Admin() {
   const [runningAudit, setRunningAudit] = useState(false);
   const [modelKey, setModelKey] = useState("");
   const [keyFeedback, setKeyFeedback] = useState<{ok: boolean; msg: string} | null>(null);
+  const [channelsLoading, setChannelsLoading] = useState(true);
   const logEnd = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
-    api.channels().then(setChannels).catch(() => {});
+    api.channels().then(setChannels).catch(() => toast("Failed to load channels", "error"))
+      .finally(() => setChannelsLoading(false));
     const interval = setInterval(() => {
       api.channels().then(setChannels).catch(() => {});
     }, 10000);
@@ -45,7 +49,9 @@ export default function Admin() {
         }
       } catch {}
     };
-    es.onerror = () => {};
+    es.onerror = () => {
+      toast("Log stream disconnected", "error");
+    };
     return () => es.close();
   }, []);
 
@@ -57,8 +63,13 @@ export default function Admin() {
       if (res.ok) {
         const data = await res.json();
         setAudit(data.checks || []);
+        toast("Security audit complete", "success");
+      } else {
+        toast("Audit failed", "error");
       }
-    } catch {}
+    } catch {
+      toast("Audit request failed", "error");
+    }
     setRunningAudit(false);
   }
 
@@ -72,12 +83,14 @@ export default function Admin() {
       });
       if (res.ok) {
         setKeyFeedback({ ok: true, msg: "Key updated successfully" });
+        toast("API key updated", "success");
       } else {
         const err = await res.text();
         setKeyFeedback({ ok: false, msg: `Update failed: ${err}` });
       }
     } catch (e) {
       setKeyFeedback({ ok: false, msg: `Network error: ${e}` });
+      toast("Failed to update key", "error");
     }
   }
 
@@ -88,21 +101,27 @@ export default function Admin() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
           <h2 className="text-sm font-semibold text-gray-300 mb-3">Channels</h2>
-          <div className="space-y-2">
-            {channels.map((ch) => (
-              <div key={ch.id} className="flex items-center justify-between py-2 px-3 bg-gray-800/30 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${ch.ready ? "bg-green-400" : "bg-red-400"}`} />
-                  <span className="text-sm text-gray-200">{ch.id}</span>
-                  <span className="text-[10px] text-gray-500">{ch.type}</span>
+          {channelsLoading ? (
+            <div className="space-y-2 animate-pulse">
+              {[1, 2, 3].map((i) => <div key={i} className="h-10 bg-gray-800/50 rounded-lg" />)}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {channels.map((ch) => (
+                <div key={ch.id} className="flex items-center justify-between py-2 px-3 bg-gray-800/30 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${ch.ready ? "bg-green-400" : "bg-red-400"}`} />
+                    <span className="text-sm text-gray-200">{ch.id}</span>
+                    <span className="text-[10px] text-gray-500">{ch.type}</span>
+                  </div>
+                  <span className="text-xs text-gray-500">
+                    sent:{ch.stats?.sent ?? 0} failed:{ch.stats?.failed ?? 0}
+                  </span>
                 </div>
-                <span className="text-xs text-gray-500">
-                  sent:{ch.stats?.sent ?? 0} failed:{ch.stats?.failed ?? 0}
-                </span>
-              </div>
-            ))}
-            {channels.length === 0 && <p className="text-sm text-gray-500">No channels registered</p>}
-          </div>
+              ))}
+              {channels.length === 0 && <p className="text-sm text-gray-500">No channels registered</p>}
+            </div>
+          )}
         </div>
 
         <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">

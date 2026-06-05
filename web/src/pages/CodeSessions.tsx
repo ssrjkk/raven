@@ -1,13 +1,33 @@
 import { useState, useEffect } from "react";
 import { api, CodingSessionData } from "../api/client";
+import { useToast } from "../components/Toast";
 
 export default function CodeSessions() {
   const [sessions, setSessions] = useState<CodingSessionData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => { load(); }, []);
 
   async function load() {
-    try { setSessions(await api.codeSessions()); } catch {}
+    try {
+      setSessions(await api.codeSessions());
+    } catch {
+      toast("Failed to load code sessions", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Code Sessions</h1>
+        <div className="space-y-2 animate-pulse">
+          {[1, 2].map((i) => <div key={i} className="h-16 bg-gray-900/60 rounded-xl" />)}
+        </div>
+      </div>
+    );
   }
 
   return (

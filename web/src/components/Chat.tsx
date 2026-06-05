@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { api, Session, MessageData } from "../api/client";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { useToast } from "./Toast";
 import MessageBubble from "./MessageBubble";
 
 export default function Chat() {
@@ -10,6 +11,11 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+
+  const scrollToBottom = () => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   const onWsMessage = useCallback((data: { type: string; role: string; content: string; session_id: string }) => {
     if (data.type === "message") {
@@ -18,11 +24,13 @@ export default function Chat() {
         { id: crypto.randomUUID(), role: data.role as "assistant", content: data.content, created_at: new Date().toISOString() },
       ]);
       setLoading(false);
+      setTimeout(scrollToBottom, 50);
     }
   }, []);
 
   const { connected, send } = useWebSocket(onWsMessage);
 
+  useEffect(() => { scrollToBottom(); }, [messages]);
   useEffect(() => { loadSessions(); }, []);
   useEffect(() => { if (currentSession) loadMessages(); }, [currentSession]);
 
@@ -31,7 +39,9 @@ export default function Chat() {
       const list = await api.sessions();
       setSessions(list);
       if (!currentSession && list.length > 0) setCurrentSession(list[0].id);
-    } catch {}
+    } catch {
+      toast("Failed to load sessions", "error");
+    }
   }
 
   async function loadMessages() {
@@ -39,7 +49,9 @@ export default function Chat() {
     try {
       const msgs = await api.sessionMessages(currentSession);
       setMessages(msgs);
-    } catch {}
+    } catch {
+      toast("Failed to load messages", "error");
+    }
   }
 
   async function sendMessage() {
@@ -52,6 +64,7 @@ export default function Chat() {
     send(input, sessionId);
     setInput("");
     setLoading(true);
+    setTimeout(scrollToBottom, 50);
   }
 
   async function newSession() {
@@ -63,7 +76,9 @@ export default function Chat() {
       ]);
       setCurrentSession(s.id);
       setMessages([]);
-    } catch {}
+    } catch {
+      toast("Failed to create session", "error");
+    }
   }
 
   return (

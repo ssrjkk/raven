@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Raven Design Tokens Schema",
+  "type": "object",
+  "required": ["colors", "spacing", "typography", "border-radius", "shadow", "z-index"],
+  "properties": {
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "colors": {
+      "type": "object",
+      "properties": {
+        "bg": { "type": "object" },
+        "surface": { "type": "object" },
+        "accent": { "type": "object" },
+        "text": { "type": "object" },
+        "border": { "type": "object" },
+        "status": { "type": "object" }
+      }
+    },
+    "spacing": { "type": "object" },
+    "typography": {
+      "type": "object",
+      "properties": {
+        "font-family": { "type": "object" },
+        "font-size": { "type": "object" },
+        "font-weight": { "type": "object" },
+        "line-height": { "type": "object" }
+      }
+    },
+    "border-radius": { "type": "object" },
+    "shadow": { "type": "object" },
+    "animation": { "type": "object" },
+    "z-index": { "type": "object" }
+  }
+}

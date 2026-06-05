@@ -13,15 +13,22 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   if (isSystem) {
     return (
       <div className="flex justify-center">
-        <div className="bg-gray-800/30 border border-gray-700/30 rounded-lg px-3 py-1.5 text-xs text-gray-500 max-w-[60%] text-center">
-          {message.content.slice(0, 100)}
+        <div className="bg-gray-800/30 border border-gray-700/30 rounded-lg px-3 py-1.5 text-xs text-gray-500 max-w-[80%] text-center">
+          {message.content}
         </div>
       </div>
     );
   }
 
   if (isTool) {
-    return null;
+    return (
+      <div className="flex justify-start">
+        <div className="bg-gray-900/40 border border-gray-700/20 rounded-lg px-3 py-2 text-xs text-gray-500 max-w-[80%] font-mono">
+          <span className="text-[10px] text-gray-600 uppercase tracking-wider block mb-1">Tool Output</span>
+          <pre className="whitespace-pre-wrap">{message.content.slice(0, 500)}</pre>
+        </div>
+      </div>
+    );
   }
 
   return (

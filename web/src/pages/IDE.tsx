@@ -62,10 +62,10 @@ export default function IDEPage() {
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", height: "calc(100vh - 2rem)", background: "#1e1e1e" }}>
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-          <div style={{ borderBottom: "1px solid #333", padding: "8px 16px", fontSize: 13, color: "#888", background: "#252526" }}>
+    <div className="grid grid-cols-[1fr_320px] h-[calc(100vh-2rem)] bg-[#1e1e1e]">
+      <div className="flex flex-col">
+        <div className="flex-1 flex flex-col">
+          <div className="border-b border-[#333] px-4 py-2 text-xs text-gray-500 bg-[#252526]">
             ssrjkk/workspace/src/app.tsx
           </div>
           <Editor
@@ -77,73 +77,60 @@ export default function IDEPage() {
             options={{ minimap: { enabled: false }, fontSize: 14, padding: { top: 16 } }}
           />
         </div>
-        <div style={{ height: 240, borderTop: "1px solid #333", background: "#0d0d0d", display: "flex", flexDirection: "column" }}>
-          <div style={{ padding: "4px 12px", fontSize: 12, color: "#666", borderBottom: "1px solid #222", background: "#252526" }}>
+        <div className="h-60 border-t border-[#333] bg-[#0d0d0d] flex flex-col">
+          <div className="px-3 py-1 text-xs text-gray-500 border-b border-[#222] bg-[#252526]">
             Terminal
           </div>
-          <div style={{ flex: 1, overflow: "auto", padding: 4 }}>
+          <div className="flex-1 overflow-auto p-1">
             {terminalHistory.map((line, i) => (
-              <div key={i} style={{ fontFamily: "monospace", fontSize: 12, color: "#0f0", padding: "2px 8px", whiteSpace: "pre-wrap" }}>
-                <span style={{ color: "#888" }}>raven@ssrjkk:~$ </span>{line.input}<br />
-                <span style={{ color: "#aaa" }}>{line.output}</span>
+              <div key={i} className="font-mono text-xs text-green-500 px-2 py-0.5 whitespace-pre-wrap">
+                <span className="text-gray-500">raven@ssrjkk:~$ </span>{line.input}<br />
+                <span className="text-gray-400">{line.output}</span>
               </div>
             ))}
             <div ref={terminalEndRef} />
           </div>
-          <div style={{ display: "flex", gap: 4, padding: "4px 8px", borderTop: "1px solid #222" }}>
+          <div className="flex gap-1 px-2 py-1 border-t border-[#222]">
             <input
               value={terminalInput}
               onChange={(e) => setTerminalInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && runTerminal()}
               placeholder="command..."
-              style={{
-                flex: 1, background: "#1a1a1a", border: "1px solid #333",
-                borderRadius: 4, padding: "6px 10px", color: "#0f0",
-                fontSize: 12, outline: "none", fontFamily: "monospace",
-              }}
+              className="flex-1 bg-[#1a1a1a] border border-[#333] rounded px-2.5 py-1.5 text-green-500 text-xs outline-none font-mono"
             />
-            <button onClick={runTerminal} style={{
-              background: "#333", color: "#fff", border: "none",
-              borderRadius: 4, padding: "6px 12px", cursor: "pointer", fontSize: 12,
-            }}>
+            <button onClick={runTerminal}
+              className="bg-gray-700 hover:bg-gray-600 text-white border-none rounded px-3 py-1.5 cursor-pointer text-xs font-medium transition">
               Run
             </button>
           </div>
         </div>
       </div>
 
-      <div style={{ borderLeft: "1px solid #333", display: "flex", flexDirection: "column", background: "#0d0d0d" }}>
-        <div style={{ padding: 12, borderBottom: "1px solid #333" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>AI Agent</div>
-          <div style={{ fontSize: 11, color: "#666" }}>Autonomous Mode</div>
+      <div className="border-l border-[#333] flex flex-col bg-[#0d0d0d]">
+        <div className="p-3 border-b border-[#333]">
+          <div className="text-sm font-semibold mb-1">AI Agent</div>
+          <div className="text-xs text-gray-500">Autonomous Mode</div>
         </div>
 
-        <div style={{ flex: 1, padding: 12, overflow: "auto" }}>
+        <div className="flex-1 p-3 overflow-auto">
           {output && (
-            <div style={{
-              background: "#1a1a2e", borderRadius: 8, padding: 12,
-              fontSize: 13, lineHeight: 1.5, color: "#ccc", whiteSpace: "pre-wrap",
-            }}>
+            <div className="bg-[#1a1a2e] rounded-lg p-3 text-sm leading-relaxed text-gray-300 whitespace-pre-wrap">
               {output}
             </div>
           )}
         </div>
 
-        <div style={{ padding: 12, borderTop: "1px solid #333" }}>
-          <div style={{ display: "flex", gap: 8 }}>
+        <div className="p-3 border-t border-[#333]">
+          <div className="flex gap-2">
             <input
               value={aiPrompt}
               onChange={(e) => setAiPrompt(e.target.value)}
               placeholder="Ask AI to build anything..."
-              style={{
-                flex: 1, background: "#1e1e1e", border: "1px solid #333",
-                borderRadius: 8, padding: "8px 12px", color: "#fff",
-                fontSize: 13, outline: "none",
-              }}
+              className="flex-1 bg-[#1e1e1e] border border-[#333] rounded-lg px-3 py-2 text-gray-100 text-sm outline-none"
               onKeyDown={(e) => e.key === "Enter" && runAI()}
             />
             <button onClick={runAI}
-              style={{ background: "#fff", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 600, cursor: "pointer", fontSize: 13 }}>
+              className="bg-white hover:bg-gray-200 text-black border-none rounded-lg px-4 py-2 font-semibold cursor-pointer text-sm transition">
               Run
             </button>
           </div>

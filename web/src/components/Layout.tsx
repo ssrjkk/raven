@@ -1,4 +1,5 @@
-import { NavLink, Outlet, Link } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { clearToken } from "../api/client";
 
 const nav = [
   { to: "/", label: "Dashboard" },
@@ -13,6 +14,13 @@ const nav = [
 ];
 
 export default function Layout() {
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    clearToken();
+    navigate("/login");
+  }
+
   return (
     <div className="flex h-screen">
       <aside className="w-56 bg-gray-900/90 border-r border-gray-800/50 flex flex-col flex-shrink-0">
@@ -39,7 +47,11 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="p-3 border-t border-gray-800/50 space-y-1">
+        <div className="p-3 border-t border-gray-800/50 space-y-2">
+          <button onClick={handleLogout}
+            className="w-full text-center text-xs text-gray-500 hover:text-red-400 transition font-medium">
+            Sign Out
+          </button>
           <div className="text-[10px] text-gray-600 text-center space-y-1">
             <div>Telegram: @ssrjkk</div>
             <div>GitHub: github.com/ssrjkk</div>

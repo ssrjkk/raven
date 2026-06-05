@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 interface ComponentDef {
   id: string;
@@ -13,7 +13,7 @@ interface CanvasState {
   events: { component_id: string; action: string; data: unknown; timestamp: number }[];
 }
 
-function renderComponent(node: ComponentDef, onAction: (id: string, action: string, data?: Record<string, unknown>) => void): JSX.Element {
+function renderComponent(node: ComponentDef, onAction: (id: string, action: string, data?: Record<string, unknown>) => void): ReactNode {
   const { id, type, props, children } = node;
   const childNodes = children?.map((c) => renderComponent(c, onAction)) ?? [];
 
@@ -50,12 +50,13 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
       );
 
     case "input":
+      const label = props.label as string | undefined;
       return (
         <div key={id} className="flex flex-col gap-1">
-          {props.label && <label className="text-xs text-gray-500">{props.label as string}</label>}
+          {label && <label className="text-xs text-gray-500">{label}</label>}
           <input
             name={props.name as string}
-            placeholder={props.placeholder as string || ""}
+            placeholder={(props.placeholder as string) || ""}
             defaultValue={props.defaultValue as string}
             type={(props.inputType as string) || "text"}
             className="bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-violet-500/50"
@@ -64,9 +65,10 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
       );
 
     case "select":
+      const selectLabel = props.label as string | undefined;
       return (
         <div key={id} className="flex flex-col gap-1">
-          {props.label && <label className="text-xs text-gray-500">{props.label as string}</label>}
+          {selectLabel && <label className="text-xs text-gray-500">{selectLabel}</label>}
           <select
             name={props.name as string}
             defaultValue={props.defaultValue as string}
@@ -80,9 +82,10 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
       );
 
     case "card":
+      const title = props.title as string | undefined;
       return (
         <div key={id} className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4 space-y-3" style={props.style as Record<string, string> || {}}>
-          {props.title && <h3 className="text-sm font-semibold text-gray-200">{props.title as string}</h3>}
+          {title && <h3 className="text-sm font-semibold text-gray-200">{title}</h3>}
           {childNodes}
         </div>
       );
@@ -149,8 +152,9 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
       );
 
     case "columns":
+      const cols = children?.length || 2;
       return (
-        <div key={id} className={`grid gap-4 ${`grid-cols-${children?.length || 2}`}`}>
+        <div key={id} className="grid gap-4" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
           {childNodes.map((child, i) => <div key={i}>{child}</div>)}
         </div>
       );
@@ -197,7 +201,7 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
   }
 }
 
-export default function CanvasViewer({ sessionId }: { sessionId: string }) {
+export default function CanvasViewer({ sessionId, className }: { sessionId: string; className?: string }) {
   const [canvas, setCanvas] = useState<CanvasState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const ws = useRef<WebSocket | null>(null);
@@ -244,7 +248,7 @@ export default function CanvasViewer({ sessionId }: { sessionId: string }) {
   }
 
   return (
-    <div className="space-y-3 p-3 bg-gray-950/50 rounded-xl border border-gray-800/30">
+    <div className={`space-y-3 p-3 bg-gray-950/50 rounded-xl border border-gray-800/30 ${className || ""}`}>
       <div className="flex items-center justify-between">
         <span className="text-[10px] text-gray-700 font-mono uppercase tracking-wider">Live Canvas</span>
         <span className="text-[10px] text-gray-600">{canvas.session_id.slice(0, 16)}</span>

@@ -1,20 +1,43 @@
 import { useState, useEffect } from "react";
 import { api, MonitorData } from "../api/client";
+import { useToast } from "../components/Toast";
 
 export default function Monitors() {
   const [monitors, setMonitors] = useState<MonitorData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => { load(); }, []);
 
   async function load() {
-    try { setMonitors(await api.monitors()); } catch {}
+    try {
+      setMonitors(await api.monitors());
+    } catch {
+      toast("Failed to load monitors", "error");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function toggle(action: string, id: string) {
     try {
       await api.monitorToggle(action, id);
+      toast(`Monitor ${action}ed`, "success");
       await load();
-    } catch {}
+    } catch {
+      toast("Failed to toggle monitor", "error");
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Monitors</h1>
+        <div className="space-y-2 animate-pulse">
+          {[1, 2].map((i) => <div key={i} className="h-20 bg-gray-900/60 rounded-xl" />)}
+        </div>
+      </div>
+    );
   }
 
   return (

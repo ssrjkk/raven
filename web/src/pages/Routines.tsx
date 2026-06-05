@@ -1,20 +1,43 @@
 import { useState, useEffect } from "react";
 import { api, RoutineData } from "../api/client";
+import { useToast } from "../components/Toast";
 
 export default function Routines() {
   const [routines, setRoutines] = useState<RoutineData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => { load(); }, []);
 
   async function load() {
-    try { setRoutines(await api.routines()); } catch {}
+    try {
+      setRoutines(await api.routines());
+    } catch {
+      toast("Failed to load routines", "error");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function toggle(action: string, id: string) {
     try {
       await api.routineToggle(action, id);
+      toast(`Routine ${action}ed`, "success");
       await load();
-    } catch {}
+    } catch {
+      toast("Failed to toggle routine", "error");
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Routines</h1>
+        <div className="space-y-2 animate-pulse">
+          {[1, 2].map((i) => <div key={i} className="h-20 bg-gray-900/60 rounded-xl" />)}
+        </div>
+      </div>
+    );
   }
 
   return (

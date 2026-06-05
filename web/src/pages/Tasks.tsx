@@ -1,15 +1,24 @@
 import { useState, useEffect } from "react";
 import { api, TaskData } from "../api/client";
+import { useToast } from "../components/Toast";
 
 export default function Tasks() {
   const [tasks, setTasks] = useState<TaskData[]>([]);
   const [goal, setGoal] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => { load(); }, []);
 
   async function load() {
-    try { setTasks(await api.tasks()); } catch {}
+    try {
+      setTasks(await api.tasks());
+    } catch {
+      toast("Failed to load tasks", "error");
+    } finally {
+      setPageLoading(false);
+    }
   }
 
   async function runTask() {
@@ -18,16 +27,33 @@ export default function Tasks() {
     try {
       await api.taskRun(goal);
       setGoal("");
+      toast("Task started", "success");
       await load();
-    } catch (e) { alert(String(e)); }
+    } catch {
+      toast("Failed to start task", "error");
+    }
     setLoading(false);
   }
 
   async function cancelTask(id: string) {
     try {
       await api.taskCancel(id);
+      toast("Task cancelled", "info");
       await load();
-    } catch {}
+    } catch {
+      toast("Failed to cancel task", "error");
+    }
+  }
+
+  if (pageLoading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Tasks</h1>
+        <div className="space-y-2 animate-pulse">
+          {[1, 2].map((i) => <div key={i} className="h-24 bg-gray-900/60 rounded-xl" />)}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -65,12 +91,12 @@ export default function Tasks() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-500">{t.status}</span>
-                  {t.status === "pending" || t.status === "running" ? (
+                  {(t.status === "pending" || t.status === "running") && (
                     <button onClick={() => cancelTask(t.id)}
                       className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-900/20 transition">
                       Cancel
                     </button>
-                  ) : null}
+                  )}
                 </div>
               </div>
               {t.steps.length > 0 && (

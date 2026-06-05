@@ -1,19 +1,22 @@
 import { useState, useEffect } from "react";
 import { api, HealthData, MetricsSnapshot, StatusData } from "../api/client";
+import { useToast } from "../components/Toast";
 
 export default function Dashboard() {
   const [status, setStatus] = useState<StatusData | null>(null);
   const [health, setHealth] = useState<HealthData | null>(null);
   const [metrics, setMetrics] = useState<MetricsSnapshot>({});
   const [sys, setSys] = useState<{ channels: number; agents: number; running: boolean; version: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     Promise.all([
-      api.status().then(setStatus).catch(() => {}),
+      api.status().then(setStatus).catch(() => toast("Failed to load status", "error")),
       api.health().then(setHealth).catch(() => {}),
       api.metrics().then(setMetrics).catch(() => {}),
       api.systemStatus().then(setSys).catch(() => {}),
-    ]);
+    ]).finally(() => setLoading(false));
   }, []);
 
   const metricCards = [
@@ -22,6 +25,22 @@ export default function Dashboard() {
     { label: "Plugins", value: status?.plugins ?? "—" },
     { label: "Model", value: status?.model?.split("/").pop() ?? "—" },
   ];
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4 animate-pulse">
+              <div className="h-3 bg-gray-800 rounded w-16 mb-3" />
+              <div className="h-8 bg-gray-800 rounded w-12" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
