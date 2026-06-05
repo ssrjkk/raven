@@ -7,7 +7,7 @@ COPY services/gateway services/gateway
 WORKDIR /build/services/gateway
 RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -o /gateway .
 
-FROM alpine:3.20
+FROM alpine:3.23
 RUN apk add --no-cache ca-certificates tzdata
 COPY --from=builder /gateway /gateway
 EXPOSE 8000

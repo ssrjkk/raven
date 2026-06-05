@@ -6,7 +6,7 @@ COPY services/monitor-engine services/monitor-engine
 WORKDIR /build/services/monitor-engine
 RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -o /monitor-engine .
 
-FROM alpine:3.20
+FROM alpine:3.23
 RUN apk add --no-cache ca-certificates tzdata
 COPY --from=builder /monitor-engine /monitor-engine
 EXPOSE 8003

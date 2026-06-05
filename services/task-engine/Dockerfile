@@ -1,10 +1,10 @@
-FROM python:3.13-alpine AS builder
+FROM python:3.14-alpine AS builder
 WORKDIR /app
 RUN pip install --no-cache-dir fastapi uvicorn[standard]
 COPY services/observability_sdk/ /app/services/observability_sdk/
 RUN pip install --no-cache-dir /app/services/observability_sdk
 
-FROM python:3.13-alpine
+FROM python:3.14-alpine
 WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 COPY services/task-engine/ .

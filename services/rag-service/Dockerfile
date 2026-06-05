@@ -1,7 +1,7 @@
-FROM python:3.13-alpine AS builder
+FROM python:3.14-alpine AS builder
 RUN pip install --no-cache-dir fastapi uvicorn[standard] httpx
 
-FROM python:3.13-alpine
+FROM python:3.14-alpine
 WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 COPY services/rag-service/ .
