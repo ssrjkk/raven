@@ -8,11 +8,11 @@ description = "Raven AI — low-level system daemon"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-reqwest = { version = "0.12", features = ["json"] }
-sysinfo = "0.31"
+reqwest = { version = "0.13", features = ["json"] }
+sysinfo = "0.39"
 clap = { version = "4", features = ["derive"] }
 log = "0.4"
 env_logger = "0.11"
 anyhow = "1"
-axum = "0.7"
-nix = { version = "0.29", features = ["signal"] }
+axum = "0.8"
+nix = { version = "0.31", features = ["signal"] }
