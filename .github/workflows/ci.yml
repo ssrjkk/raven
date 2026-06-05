@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master, develop]
+    branches: [main, develop]
   pull_request:
-    branches: [master]
+    branches: [main]
 
 env:
   PYTHON_VERSION: "3.13"
@@ -81,7 +81,7 @@ jobs:
 
       - name: Buf breaking
         working-directory: services/proto
-        run: buf breaking --against '../../.git#branch=master' || true
+        run: buf breaking --against '../../.git#branch=main' || true
 
   test-monolith:
     runs-on: ubuntu-latest
@@ -144,7 +144,7 @@ jobs:
         with:
           context: ${{ steps.ctx.outputs.context }}
           dockerfile: ${{ steps.ctx.outputs.dockerfile }}
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}:latest
             ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}:${{ env.IMAGE_TAG }}

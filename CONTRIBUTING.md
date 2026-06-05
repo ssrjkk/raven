@@ -66,7 +66,7 @@ cd web && npm install && npm run build
 4. Run lint and tests
 5. Commit with a clear message
 6. Push to your fork
-7. Open a Pull Request against `master`
+7. Open a Pull Request against `main`
 8. Respond to review feedback
 
 ### 4. Project Structure
@@ -91,7 +91,7 @@ raven/
 ## Development Channels
 
 - **stable**: Released versions from PyPI
-- **dev**: `master` branch — may be unstable
+- **dev**: `main` branch — may be unstable
 
 ## Getting Help
 

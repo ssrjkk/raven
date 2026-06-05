@@ -11,7 +11,7 @@
 
 
   <a href="https://github.com/ssrjkk/raven/actions/workflows/ci.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=master&label=CI&logo=github" alt="CI">
+    <img src="https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=main&label=CI&logo=github" alt="CI">
   </a>
   <a href="https://github.com/ssrjkk/raven">
     <img src="https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white" alt="Python">
