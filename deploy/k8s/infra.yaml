@@ -130,3 +130,198 @@ spec:
     - name: grpc
       port: 6334
       targetPort: 6334
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tempo
+  namespace: raven
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tempo
+  template:
+    metadata:
+      labels:
+        app: tempo
+    spec:
+      containers:
+        - name: tempo
+          image: grafana/tempo:2.6-alpine
+          ports:
+            - containerPort: 3200
+              name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempo
+  namespace: raven
+spec:
+  selector:
+    app: tempo
+  ports:
+    - name: http
+      port: 3200
+      targetPort: 3200
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  namespace: raven
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loki
+  template:
+    metadata:
+      labels:
+        app: loki
+    spec:
+      containers:
+        - name: loki
+          image: grafana/loki:3.1-alpine
+          ports:
+            - containerPort: 3100
+              name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: raven
+spec:
+  selector:
+    app: loki
+  ports:
+    - name: http
+      port: 3100
+      targetPort: 3100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: raven
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.53-alpine
+          ports:
+            - containerPort: 9090
+              name: http
+          args:
+            - "--storage.tsdb.retention.time=30d"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: raven
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: raven
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.1-alpine
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "admin"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: raven
+spec:
+  selector:
+    app: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traefik
+  namespace: raven
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traefik
+  template:
+    metadata:
+      labels:
+        app: traefik
+    spec:
+      containers:
+        - name: traefik
+          image: traefik:v3.1-alpine
+          ports:
+            - containerPort: 80
+              name: web
+            - containerPort: 443
+              name: websecure
+            - containerPort: 8080
+              name: dashboard
+          args:
+            - "--api.insecure=true"
+            - "--providers.kubernetescrd=true"
+            - "--entrypoints.web.address=:80"
+            - "--entrypoints.websecure.address=:443"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik
+  namespace: raven
+spec:
+  selector:
+    app: traefik
+  ports:
+    - name: web
+      port: 80
+      targetPort: 80
+    - name: websecure
+      port: 443
+      targetPort: 443
+    - name: dashboard
+      port: 8080
+      targetPort: 8080

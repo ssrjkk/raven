@@ -19,7 +19,6 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
@@ -43,6 +42,7 @@ require (
 )
 
 require (
+	github.com/google/uuid v1.6.0
 	github.com/ssrjkk/raven/services/proto/go v0.0.0
 	google.golang.org/grpc v1.81.1
 )

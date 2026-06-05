@@ -1,0 +1,29 @@
+name: Extension
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "extension/**"
+  pull_request:
+    paths:
+      - "extension/**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package extension
+        working-directory: extension
+        run: |
+          mkdir -p dist
+          cp -r manifest.json src icons dist/
+          cd dist && zip -r ../raven-extension.zip .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: raven-extension
+          path: extension/raven-extension.zip

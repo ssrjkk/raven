@@ -34,7 +34,6 @@ require (
 	github.com/prometheus/common v0.55.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/rs/cors v1.11.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.29.0 // indirect
 	go.opentelemetry.io/otel/metric v1.43.0 // indirect
@@ -52,6 +51,7 @@ require (
 )
 
 require (
+	github.com/rs/cors v1.11.0
 	github.com/ssrjkk/raven/services/proto/go v0.0.0
 	google.golang.org/grpc v1.81.1
 )

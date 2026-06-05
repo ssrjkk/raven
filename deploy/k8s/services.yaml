@@ -151,3 +151,296 @@ metadata:
   namespace: raven
 stringData:
   jwt-secret: "change-me-in-production"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-core
+  namespace: raven
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent-core
+  template:
+    metadata:
+      labels:
+        app: agent-core
+    spec:
+      containers:
+        - name: agent-core
+          image: raven/agent-core:latest
+          ports:
+            - containerPort: 8002
+              name: http
+          env:
+            - name: SERVICE_PORT
+              value: "8002"
+            - name: DB_PATH
+              value: "/data/agent.db"
+            - name: NATS_URL
+              value: "nats://nats:4222"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+            - name: LLM_MODEL
+              value: "gpt-4"
+            - name: RAG_GRPC_URL
+              value: "rag-service:8004"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            limits:
+              cpu: 1
+              memory: 512Mi
+            requests:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-core
+  namespace: raven
+spec:
+  selector:
+    app: agent-core
+  ports:
+    - name: http
+      port: 8002
+      targetPort: 8002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitor-engine
+  namespace: raven
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: monitor-engine
+  template:
+    metadata:
+      labels:
+        app: monitor-engine
+    spec:
+      containers:
+        - name: monitor-engine
+          image: raven/monitor-engine:latest
+          ports:
+            - containerPort: 8003
+              name: http
+          env:
+            - name: SERVICE_PORT
+              value: "8003"
+            - name: DB_PATH
+              value: "/data/monitor.db"
+            - name: NATS_URL
+              value: "nats://nats:4222"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources:
+            limits:
+              cpu: 300m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: monitor-engine
+  namespace: raven
+spec:
+  selector:
+    app: monitor-engine
+  ports:
+    - name: http
+      port: 8003
+      targetPort: 8003
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-service
+  namespace: raven
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rag-service
+  template:
+    metadata:
+      labels:
+        app: rag-service
+    spec:
+      containers:
+        - name: rag-service
+          image: raven/rag-service:latest
+          ports:
+            - containerPort: 8004
+              name: http
+          env:
+            - name: SERVICE_PORT
+              value: "8004"
+            - name: DB_PATH
+              value: "/data/rag.db"
+            - name: QDRANT_URL
+              value: "http://qdrant:6333"
+            - name: QDRANT_COLLECTION
+              value: "raven_docs"
+            - name: NATS_URL
+              value: "nats://nats:4222"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            limits:
+              cpu: 1
+              memory: 1Gi
+            requests:
+              cpu: 200m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-service
+  namespace: raven
+spec:
+  selector:
+    app: rag-service
+  ports:
+    - name: http
+      port: 8004
+      targetPort: 8004
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: task-engine
+  namespace: raven
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: task-engine
+  template:
+    metadata:
+      labels:
+        app: task-engine
+    spec:
+      containers:
+        - name: task-engine
+          image: raven/task-engine:latest
+          ports:
+            - containerPort: 8005
+              name: http
+          env:
+            - name: SERVICE_PORT
+              value: "8005"
+            - name: DB_PATH
+              value: "/data/task.db"
+            - name: NATS_URL
+              value: "nats://nats:4222"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: task-engine
+  namespace: raven
+spec:
+  selector:
+    app: task-engine
+  ports:
+    - name: http
+      port: 8005
+      targetPort: 8005
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: code-service
+  namespace: raven
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: code-service
+  template:
+    metadata:
+      labels:
+        app: code-service
+    spec:
+      containers:
+        - name: code-service
+          image: raven/code-service:latest
+          ports:
+            - containerPort: 8006
+              name: http
+          env:
+            - name: SERVICE_PORT
+              value: "8006"
+            - name: DB_PATH
+              value: "/data/code.db"
+            - name: NATS_URL
+              value: "nats://nats:4222"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8006
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: code-service
+  namespace: raven
+spec:
+  selector:
+    app: code-service
+  ports:
+    - name: http
+      port: 8006
+      targetPort: 8006
