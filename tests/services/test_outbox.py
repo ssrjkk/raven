@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+import time
 
 import pytest
 
@@ -63,6 +64,7 @@ class TestOutboxStore:
     def test_clean_expired(self, db_path):
         store = OutboxStore(db_path=db_path, service_name="test")
         store.enqueue("test.old", {"old": True})
+        time.sleep(0.01)
         store.clean_expired(max_age_hours=0)
         pending = store.fetch_pending()
         assert len(pending) == 0
