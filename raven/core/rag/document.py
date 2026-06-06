@@ -31,9 +31,12 @@ class DocumentChunker:
                     **(metadata or {}),
                 }
             )
-            start = end - self.overlap
-            if start >= len(text):
+            if end >= len(text):
                 break
+            next_start = end - self.overlap
+            if next_start <= start:
+                next_start = end
+            start = next_start
         return chunks
 
     def chunk_file(self, file_path: str | Path, metadata: dict[str, Any] | None = None) -> list[dict[str, Any]]:

@@ -23,7 +23,7 @@
     <img src="https://img.shields.io/badge/channels-12-8A2BE2" alt="Channels">
   </a>
   <a href="https://github.com/ssrjkk/raven">
-    <img src="https://img.shields.io/badge/tests-827_passing-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-913_passing-brightgreen" alt="Tests">
   </a>
   <a href="https://github.com/ssrjkk/raven">
     <img src="https://img.shields.io/badge/security-hardened-blueviolet" alt="Security">
