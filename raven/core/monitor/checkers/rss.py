@@ -24,6 +24,7 @@ async def check_rss(monitor: Monitor) -> str | None:
     url = monitor.config.get("target", monitor.target)
     try:
         import feedparser
+
         raw = await client_manager.get(url)
         if isinstance(raw, dict):
             raw_text = str(raw)

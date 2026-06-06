@@ -42,11 +42,14 @@ class ConversationMemory:
         now = time.time()
         conn = await self._get_conn()
         try:
-            await conn.execute("""
+            await conn.execute(
+                """
                 INSERT INTO conversation_memories (id, session_id, summary, topics, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET summary=excluded.summary, topics=excluded.topics, updated_at=excluded.updated_at
-            """, (session_id, session_id, summary, json.dumps(topics or []), now, now))
+            """,
+                (session_id, session_id, summary, json.dumps(topics or []), now, now),
+            )
             await conn.commit()
         finally:
             await conn.close()
@@ -57,7 +60,7 @@ class ConversationMemory:
                 {"type": "conversation_summary", "session_id": session_id, "topics": json.dumps(topics or [])},
             )
 
-    async def get_summary(self, session_id: str) -> dict | None:
+    async def get_summary(self, session_id: str) -> dict[str, Any] | None:
         conn = await self._get_conn()
         try:
             async with conn.execute("SELECT * FROM conversation_memories WHERE session_id = ?", (session_id,)) as c:

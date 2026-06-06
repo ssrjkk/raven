@@ -22,29 +22,35 @@ async def env_list() -> str:
 
 
 def register_env_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="env_get",
-        description="Get the value of an environment variable",
-        parameters={
-            "name": {"type": "string", "description": "Variable name", "required": True},
-        },
-        handler=env_get,
-        category="system",
-    ))
-    registry.register(ToolSpec(
-        name="env_set",
-        description="Set an environment variable for the current session",
-        parameters={
-            "name": {"type": "string", "description": "Variable name", "required": True},
-            "value": {"type": "string", "description": "Variable value", "required": True},
-        },
-        handler=env_set,
-        category="system",
-    ))
-    registry.register(ToolSpec(
-        name="env_list",
-        description="List all environment variables (first 50)",
-        parameters={},
-        handler=env_list,
-        category="system",
-    ))
+    registry.register(
+        ToolSpec(
+            name="env_get",
+            description="Get the value of an environment variable",
+            parameters={
+                "name": {"type": "string", "description": "Variable name", "required": True},
+            },
+            handler=env_get,
+            category="system",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="env_set",
+            description="Set an environment variable for the current session",
+            parameters={
+                "name": {"type": "string", "description": "Variable name", "required": True},
+                "value": {"type": "string", "description": "Variable value", "required": True},
+            },
+            handler=env_set,
+            category="system",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="env_list",
+            description="List all environment variables (first 50)",
+            parameters={},
+            handler=env_list,
+            category="system",
+        )
+    )

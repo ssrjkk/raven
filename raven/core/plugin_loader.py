@@ -11,9 +11,16 @@ from loguru import logger
 from raven.core.models import PluginTool
 
 
-def _type_to_json_schema(tp: Any) -> dict:
+def _type_to_json_schema(tp: Any) -> dict[str, Any]:
     if isinstance(tp, str):
-        _type_map = {"str": "string", "int": "integer", "float": "number", "bool": "boolean", "list": "array", "dict": "object"}
+        _type_map = {
+            "str": "string",
+            "int": "integer",
+            "float": "number",
+            "bool": "boolean",
+            "list": "array",
+            "dict": "object",
+        }
         return {"type": _type_map.get(tp, "string")}
     origin = getattr(tp, "__origin__", None)
     if origin is list or origin is set:
@@ -35,11 +42,11 @@ def _type_to_json_schema(tp: Any) -> dict:
 def func_to_tool(func: Callable[..., Any]) -> PluginTool:
     sig = inspect.signature(func)
     doc = inspect.getdoc(func) or ""
-    desc_lines = doc.strip().split("\n")
+    desc_lines = doc.strip().split("\n") if doc.strip() else []
     first = desc_lines[0] if desc_lines else func.__name__
     description = re.split(r"\s*(?:Args|Returns|Example):", first, maxsplit=1)[0].strip() or first
 
-    parameters = {"type": "object", "properties": {}, "required": []}
+    parameters: dict[str, Any] = {"type": "object", "properties": {}, "required": []}
     for name, param in sig.parameters.items():
         if name == "self" or name == "cls":
             continue
@@ -65,7 +72,7 @@ def func_to_tool(func: Callable[..., Any]) -> PluginTool:
     )
 
 
-def _tool_to_openai_format(tool: PluginTool) -> dict:
+def _tool_to_openai_format(tool: PluginTool) -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
@@ -133,7 +140,7 @@ class PluginLoader:
     def get_tool(self, name: str) -> PluginTool | None:
         return self._tools.get(name)
 
-    def to_openai_tools(self) -> list[dict]:
+    def to_openai_tools(self) -> list[dict[str, Any]]:
         return [_tool_to_openai_format(t) for t in self._tools.values()]
 
     def clear(self):

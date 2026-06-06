@@ -10,18 +10,22 @@ import argparse
 import os
 
 SERVICES = [
-    {"name": "channels",   "flag": "FF_use_channels_service",  "shadow": "FF_shadow_channels"},
-    {"name": "monitor",    "flag": "FF_use_monitor_service",   "shadow": "FF_shadow_monitor"},
-    {"name": "rag",        "flag": "FF_use_rag_service",       "shadow": "FF_shadow_rag"},
-    {"name": "code",       "flag": "FF_use_code_service",      "shadow": "FF_shadow_code"},
-    {"name": "task",       "flag": "FF_use_task_service",      "shadow": "FF_shadow_task"},
-    {"name": "agent",      "flag": "FF_use_agent_service",     "shadow": "FF_shadow_agent"},
-    {"name": "auth",       "flag": "FF_use_auth_service",      "shadow": "FF_shadow_auth"},
+    {"name": "channels", "flag": "FF_use_channels_service", "shadow": "FF_shadow_channels"},
+    {"name": "monitor", "flag": "FF_use_monitor_service", "shadow": "FF_shadow_monitor"},
+    {"name": "rag", "flag": "FF_use_rag_service", "shadow": "FF_shadow_rag"},
+    {"name": "code", "flag": "FF_use_code_service", "shadow": "FF_shadow_code"},
+    {"name": "task", "flag": "FF_use_task_service", "shadow": "FF_shadow_task"},
+    {"name": "agent", "flag": "FF_use_agent_service", "shadow": "FF_shadow_agent"},
+    {"name": "auth", "flag": "FF_use_auth_service", "shadow": "FF_shadow_auth"},
 ]
 
 
 def promote(service_name: str | None, shadow_first: bool = True):
-    targets = SERVICES if service_name is None or service_name == "all" else [s for s in SERVICES if s["name"] == service_name]
+    targets = (
+        SERVICES
+        if service_name is None or service_name == "all"
+        else [s for s in SERVICES if s["name"] == service_name]
+    )
 
     if not targets:
         print(f"Unknown service: {service_name}")

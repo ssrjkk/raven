@@ -58,7 +58,7 @@ class SpeechToText:
         model_name = kwargs.get("model", self.config.model)
         model = whisper.load_model(model_name)
         result = model.transcribe(audio_path, language=self.config.language)
-        text = result.get("text", "").strip()
+        text: str = result.get("text", "").strip()
         logger.info("Whisper transcription ({} chars): {}", len(text), text[:80])
         return text
 
@@ -72,7 +72,7 @@ class SpeechToText:
         with sr.AudioFile(audio_path) as source:
             audio = recognizer.record(source)
         try:
-            text = recognizer.recognize_google(audio, language=self.config.language)
+            text: str = recognizer.recognize_google(audio, language=self.config.language)
             logger.info("Google STT ({} chars): {}", len(text), text[:80])
             return text
         except sr.UnknownValueError:
@@ -98,7 +98,7 @@ class SpeechToText:
         recognizer = speechsdk.SpeechRecognizer(speech_config=config, audio_config=audio_input)
         result = recognizer.recognize_once()
         if result.reason == speechsdk.ResultReason.RecognizedSpeech:
-            text = result.text.strip()
+            text: str = result.text.strip()
             logger.info("Azure STT ({} chars): {}", len(text), text[:80])
             return text
         logger.warning("Azure STT failed: {}", result.reason)
@@ -126,7 +126,7 @@ class SpeechToText:
             rec.AcceptWaveform(data)
         wf.close()
         result = json.loads(rec.FinalResult())
-        text = result.get("text", "").strip()
+        text: str = result.get("text", "").strip()
         logger.info("Vosk transcription ({} chars): {}", len(text), text[:80])
         return text
 

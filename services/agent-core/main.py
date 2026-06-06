@@ -80,16 +80,12 @@ async def chat(request: dict, raw_request: Request):
         result = await llm.chat(messages, session_id=session_id)
     except Exception as e:
         logger.error("LLM chat failed: {}", e)
-        return JSONResponse(
-            status_code=502, content={"error": "LLM request failed", "detail": str(e)}
-        )
+        return JSONResponse(status_code=502, content={"error": "LLM request failed", "detail": str(e)})
 
     result["session_id"] = session_id
 
     if nats.connected:
-        await nats.publish(
-            "agent.response", {"session_id": session_id, "response": result["response"]}
-        )
+        await nats.publish("agent.response", {"session_id": session_id, "response": result["response"]})
 
     return result
 

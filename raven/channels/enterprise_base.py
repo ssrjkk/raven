@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from abc import abstractmethod
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 from loguru import logger
 
@@ -53,16 +53,13 @@ class EnterpriseChannel(BaseChannel):
         self._loop: asyncio.AbstractEventLoop | None = None
 
     @abstractmethod
-    async def _start(self):
-        ...
+    async def _start(self): ...
 
     @abstractmethod
-    async def _stop(self):
-        ...
+    async def _stop(self): ...
 
     @abstractmethod
-    async def _send_message(self, session_id: str, message: Message):
-        ...
+    async def _send_message(self, session_id: str, message: Message): ...
 
     async def start(self):
         self._loop = asyncio.get_running_loop()
@@ -103,10 +100,12 @@ class EnterpriseChannel(BaseChannel):
     async def health_check(self) -> bool:
         return self._ready
 
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, Any]:
         return {**self._stats, "channel": self.channel_id}
 
-    async def _post(self, url: str, json: dict, headers: dict | None = None, timeout: float = 15.0) -> dict:
+    async def _post(
+        self, url: str, json: dict[str, Any], headers: dict[str, Any] | None = None, timeout: float = 15.0
+    ) -> dict[str, Any]:
         return await client_manager.post(url, json=json, headers=headers or {}, timeout=timeout)
 
     async def _retry_call(self, fn, max_retries: int = 3, base_delay: float = 1.0):
@@ -117,18 +116,28 @@ class EnterpriseChannel(BaseChannel):
             except Exception as e:
                 last_ex = e
                 if attempt < max_retries - 1:
-                    wait = base_delay * (2 ** attempt)
+                    wait = base_delay * (2**attempt)
                     logger.warning("[{}] retry {}/{} after {}s: {}", self.channel_id, attempt + 1, max_retries, wait, e)
                     await asyncio.sleep(wait)
         raise last_ex  # type: ignore
 
     def _audit_send(self, session_id: str, message: Message):
         user_id = session_id.split(":")[1] if ":" in session_id else session_id
-        audit_logger.log(AuditEventType.MESSAGE_SENT, f"channel:{self.channel_id}", user_id,
-                         detail={"length": len(message.content)}, channel=self.channel_id)
+        audit_logger.log(
+            AuditEventType.MESSAGE_SENT,
+            f"channel:{self.channel_id}",
+            user_id,
+            detail={"length": len(message.content)},
+            channel=self.channel_id,
+        )
         metrics.inc(f"channel.{self.channel_id}.sent", {"channel": self.channel_id})
 
     def _audit_receive(self, user_id: str, text: str):
-        audit_logger.log(AuditEventType.MESSAGE_RECEIVED, user_id, f"channel:{self.channel_id}",
-                         detail={"length": len(text)}, channel=self.channel_id)
+        audit_logger.log(
+            AuditEventType.MESSAGE_RECEIVED,
+            user_id,
+            f"channel:{self.channel_id}",
+            detail={"length": len(text)},
+            channel=self.channel_id,
+        )
         metrics.inc(f"channel.{self.channel_id}.received", {"channel": self.channel_id})

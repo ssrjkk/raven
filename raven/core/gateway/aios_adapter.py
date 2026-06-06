@@ -18,12 +18,13 @@ class AIOSAdapter:
 
     def get_bridge_router(self) -> APIRouter:
         from aios.api.bridge import router
+
         return router
 
     # ── AI-OS-MVP Agent (aios.agents.orchestrator) ─────────────────
 
     async def run_agent(self, task: str, agent: str) -> dict[str, Any]:
-        from aios.agents.orchestrator import AgentType, Orchestrator
+        from aios.agents.orchestrator import AgentType, Orchestrator  # type: ignore[attr-defined]
 
         orch = Orchestrator()
         agent_type = AgentType(agent) if agent in [e.value for e in AgentType] else AgentType.AUTONOMOUS

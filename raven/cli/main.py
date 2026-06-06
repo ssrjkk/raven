@@ -4,7 +4,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import click
 from loguru import logger
@@ -83,6 +83,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     console.print(Panel.fit(f"[bold green]Loaded {len(plugin_loader.tools)} tools from plugins[/bold green]"))
 
     from raven.plugins.sessions import plugin as sessions_plugin
+
     sessions_plugin.init(gateway.db)
 
     settings.validate()
@@ -165,6 +166,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     web_dist = Path(__file__).parent.parent.parent / "web" / "dist"
     if web_dist.is_dir():
         from fastapi.staticfiles import StaticFiles
+
         api_app.mount("/dashboard", StaticFiles(directory=str(web_dist), html=True), name="dashboard")
         logger.info("Web dashboard mounted from {}", web_dist)
     else:
@@ -205,10 +207,15 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         monitors = eng.list_monitors()
         return [
             {
-                "id": m.id, "name": m.name, "type": m.type.value,
-                "target": m.target, "interval_seconds": m.interval_seconds,
+                "id": m.id,
+                "name": m.name,
+                "type": m.type.value,
+                "target": m.target,
+                "interval_seconds": m.interval_seconds,
                 "status": m.status.value,
-                "last_check": {"status": m.last_check.status, "checked_at": m.last_check.checked_at} if m.last_check else None,
+                "last_check": {"status": m.last_check.status, "checked_at": m.last_check.checked_at}
+                if m.last_check
+                else None,
             }
             for m in monitors
         ]
@@ -227,9 +234,13 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         eng: RoutineEngine = api_app.state.routine_engine
         return [
             {
-                "id": r.id, "name": r.name, "action": r.action.value,
-                "schedule": r.schedule, "trigger": r.trigger.value,
-                "status": r.status.value, "last_run_status": r.last_run_status,
+                "id": r.id,
+                "name": r.name,
+                "action": r.action.value,
+                "schedule": r.schedule,
+                "trigger": r.trigger.value,
+                "status": r.status.value,
+                "last_run_status": r.last_run_status,
             }
             for r in eng._store.list_routines()
         ]
@@ -246,11 +257,14 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     @api_app.get("/api/task/list")
     async def api_task_list():
         from raven.core.task_engine.store import TaskStore
+
         store = TaskStore(settings.resolved_db_path)
         tasks = store.list_tasks()
         return [
             {
-                "id": t.id, "goal": t.goal, "status": t.status.value,
+                "id": t.id,
+                "goal": t.goal,
+                "status": t.status.value,
                 "steps": [
                     {"order": s.order, "description": s.description, "tool": s.tool, "status": s.status.value}
                     for s in t.steps
@@ -261,14 +275,16 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         ]
 
     @api_app.post("/api/task/run")
-    async def api_task_run(body: dict):
+    async def api_task_run(body: dict[str, Any]):
         from raven.core.task_engine.store import TaskStore
         from raven.core.task_engine.planner import TaskPlanner
         from raven.core.task_engine.runner import TaskRunner
         from raven.tools.register_all import create_tool_registry
+
         goal = body.get("goal", "")
         if not goal:
             from fastapi import HTTPException
+
             raise HTTPException(400, "goal required")
         tools = create_tool_registry()
         store = TaskStore(settings.resolved_db_path)
@@ -284,6 +300,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         from raven.core.task_engine.store import TaskStore
         from raven.core.task_engine.runner import TaskRunner
         from raven.tools.register_all import create_tool_registry
+
         tools = create_tool_registry()
         store = TaskStore(settings.resolved_db_path)
         runner = TaskRunner(store, tools)
@@ -293,12 +310,16 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     @api_app.get("/api/code/list")
     async def api_code_sessions():
         from raven.core.coder.session import CodingSessionManager
+
         mgr = CodingSessionManager(settings.resolved_db_path)
         sessions = mgr.list_sessions()
         return [
             {
-                "id": s.id, "goal": s.goal, "status": s.status.value,
-                "project_path": s.project_path, "files": len(s.files) if hasattr(s, "files") else 0,
+                "id": s.id,
+                "goal": s.goal,
+                "status": s.status.value,
+                "project_path": s.project_path,
+                "files": len(s.files) if hasattr(s, "files") else 0,
             }
             for s in sessions
         ]
@@ -322,6 +343,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     @api_app.get("/api/metrics/prometheus")
     async def api_metrics_prometheus():
         from fastapi.responses import PlainTextResponse
+
         return PlainTextResponse(metrics.prometheus())
 
     @api_app.post("/api/shutdown")
@@ -344,9 +366,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         logger.info("Raven API call: action={}", body.action)
         audit_logger.log(AuditEventType.COMMAND, "api", "raven", detail={"action": body.action})
         try:
-            session = await gateway.db.get_or_create_session(
-                f"vscode:{body.action}:default", "vscode", "vscode_user"
-            )
+            session = await gateway.db.get_or_create_session(f"vscode:{body.action}:default", "vscode", "vscode_user")
             agent_obj = gateway.registry.create_agent(session)
             full = ""
             async for token in agent_obj.run(f"{body.action}:\n{body.code[:2000]}\n\nContext: {body.context[:500]}"):
@@ -402,7 +422,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             logger.warning("Shutdown timed out, forcing exit")
             os._exit(1)
 
-    async def _shutdown(gw: Gateway, sv_task: asyncio.Task):
+    async def _shutdown(gw: Gateway, sv_task: asyncio.Task[None]):
         try:
             await asyncio.wait_for(monitor_engine.stop(), timeout=5)
         except Exception:
@@ -586,12 +606,13 @@ def start(daemon: bool, port: Optional[int], stateless: bool):
     if stateless:
         for agent_conf in gateway.registry._configs.values():
             agent_conf.stateless = True
-    console.print(Panel.fit(
-        "[bold blue]🐦 Raven AI[/bold blue]\n"
-        f"[dim]Web UI: http://localhost:{web_port}[/dim]\n"
-        f"[dim]Model: {settings.default_model}[/dim]"
-        + ("\n[dim]Mode: stateless[/dim]" if stateless else "")
-    ))
+    console.print(
+        Panel.fit(
+            "[bold blue]🐦 Raven AI[/bold blue]\n"
+            f"[dim]Web UI: http://localhost:{web_port}[/dim]\n"
+            f"[dim]Model: {settings.default_model}[/dim]" + ("\n[dim]Mode: stateless[/dim]" if stateless else "")
+        )
+    )
     asyncio.run(_run_gateway(gateway, web_port))
 
 
@@ -599,6 +620,7 @@ def start(daemon: bool, port: Optional[int], stateless: bool):
 def stop():
     """Stop the Raven AI gateway"""
     import httpx
+
     try:
         resp = httpx.post(f"http://localhost:{settings.web_port}/api/shutdown", timeout=5)
         if resp.status_code == 200:
@@ -614,6 +636,7 @@ def stop():
 @cli.command()
 def status():
     """Show status of all channels and plugins"""
+
     async def _status():
         db = Database(settings.resolved_db_path)
         await db.connect()
@@ -621,6 +644,7 @@ def status():
         await db.disconnect()
 
         import httpx
+
         api_ok = False
         try:
             r = httpx.get(f"http://localhost:{settings.web_port}/api/status", timeout=3)
@@ -657,7 +681,12 @@ def doctor():
     checks.append(("Python", sys.version))
     checks.append(("DB Path", str(settings.resolved_db_path)))
 
-    has_any_key = bool(cfg.get("openrouter_api_key") or cfg.get("anthropic_api_key") or cfg.get("openai_api_key") or cfg.get("ollama_base_url"))
+    has_any_key = bool(
+        cfg.get("openrouter_api_key")
+        or cfg.get("anthropic_api_key")
+        or cfg.get("openai_api_key")
+        or cfg.get("ollama_base_url")
+    )
     checks.append(("LLM Provider", "✅ Configured" if has_any_key else "⚠️  No provider configured"))
 
     provider_names = []
@@ -685,6 +714,7 @@ def doctor():
 
     try:
         import pywin32  # noqa: F401
+
         checks.append(("Windows Service", "✅ pywin32 available"))
     except ImportError:
         if sys.platform == "win32":
@@ -694,6 +724,7 @@ def doctor():
 
     try:
         import playwright  # noqa: F401
+
         checks.append(("Playwright", "✅ Installed"))
     except ImportError:
         checks.append(("Playwright", "⚠️  Not installed (browser plugin limited)"))
@@ -701,6 +732,7 @@ def doctor():
     api_ok = False
     try:
         import httpx
+
         r = httpx.get(f"http://localhost:{settings.web_port}/api/status", timeout=3)
         api_ok = r.is_success
     except Exception:
@@ -722,6 +754,7 @@ def doctor():
 def onboard():
     """Interactive setup wizard"""
     from raven.cli.onboard import onboard as _onboard_async
+
     asyncio.run(_onboard_async())
 
 
@@ -752,6 +785,7 @@ def service():
 def service_install():
     """Install Raven as a service (Windows/Systemd/Launchd)"""
     from raven.cli.service import service_install as _install
+
     _install()
 
 
@@ -759,6 +793,7 @@ def service_install():
 def service_start():
     """Start the Raven service"""
     from raven.cli.service import service_start as _start
+
     _start()
 
 
@@ -766,6 +801,7 @@ def service_start():
 def service_stop():
     """Stop the Raven service"""
     from raven.cli.service import service_stop as _stop
+
     _stop()
 
 
@@ -773,6 +809,7 @@ def service_stop():
 def service_status():
     """Show Raven service status"""
     from raven.cli.service import service_status as _status
+
     _status()
 
 
@@ -780,6 +817,7 @@ def service_status():
 def service_remove():
     """Remove the Raven service"""
     from raven.cli.service import service_remove as _remove
+
     _remove()
 
 
@@ -787,6 +825,7 @@ def service_remove():
 def service_restart():
     """Restart the Raven service"""
     from raven.cli.service import service_restart as _restart
+
     _restart()
 
 
@@ -795,19 +834,26 @@ def service_restart():
 def update(dry_run: bool):
     """Check for and apply updates via pip"""
     import subprocess
+
     console.print("[bold]Checking for Raven updates...[/bold]")
     try:
         result = subprocess.run(
             [sys.executable, "-m", "pip", "install", "--upgrade", "--dry-run", "raven-agent"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         if "Would install" in result.stdout or "Requirement already satisfied" not in result.stdout:
-            console.print("[yellow]Update available[/yellow]" if not dry_run else "[green]Run without --dry-run to update[/green]")
+            console.print(
+                "[yellow]Update available[/yellow]" if not dry_run else "[green]Run without --dry-run to update[/green]"
+            )
             if not dry_run:
                 console.print("[bold]Updating...[/bold]")
                 upg = subprocess.run(
                     [sys.executable, "-m", "pip", "install", "--upgrade", "raven-agent"],
-                    capture_output=True, text=True, timeout=120,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
                 )
                 if upg.returncode == 0:
                     console.print("[green]✅ Update complete![/green]")
@@ -829,6 +875,7 @@ def pairing():
 @pairing.command("list")
 def pairing_list():
     """List pending pairing requests"""
+
     async def _list():
         db = Database(settings.resolved_db_path)
         await db.connect()
@@ -852,6 +899,7 @@ def pairing_list():
 @click.argument("code")
 def pairing_approve(code: str):
     """Approve a user by pairing code"""
+
     async def _approve():
         db = Database(settings.resolved_db_path)
         await db.connect()
@@ -874,12 +922,17 @@ def message():
 
 
 @message.command("send")
-@click.option("--channel", required=True, help="Target channel (telegram, discord, webchat, slack, whatsapp, matrix, googlechat, signal, irc, teams, feishu, line)")
+@click.option(
+    "--channel",
+    required=True,
+    help="Target channel (telegram, discord, webchat, slack, whatsapp, matrix, googlechat, signal, irc, teams, feishu, line)",
+)
 @click.option("--user", required=True, help="User ID")
 @click.option("--text", required=True, help="Message text")
 @click.option("--session", default=None, help="Session ID (optional)")
 def msg_send(channel: str, user: str, text: str, session: Optional[str]):
     """Send a message to a user via Raven AI"""
+
     async def _send():
         db = Database(settings.resolved_db_path)
         await db.connect()
@@ -928,10 +981,22 @@ def models_list():
     table.add_column("Provider", style="cyan")
     table.add_column("Status")
     table.add_column("Default")
-    table.add_row("OpenRouter", "✅" if settings.openrouter_api_key else "❌", "✓" if settings.default_model.startswith("openrouter/") else "")
-    table.add_row("Anthropic", "✅" if settings.anthropic_api_key else "❌", "✓" if settings.default_model.startswith("claude") else "")
+    table.add_row(
+        "OpenRouter",
+        "✅" if settings.openrouter_api_key else "❌",
+        "✓" if settings.default_model.startswith("openrouter/") else "",
+    )
+    table.add_row(
+        "Anthropic",
+        "✅" if settings.anthropic_api_key else "❌",
+        "✓" if settings.default_model.startswith("claude") else "",
+    )
     table.add_row("OpenAI", "✅" if settings.openai_api_key else "❌", "")
-    table.add_row("Ollama", "✅" if settings.ollama_base_url else "❌", "✓" if settings.default_model.startswith("ollama/") else "")
+    table.add_row(
+        "Ollama",
+        "✅" if settings.ollama_base_url else "❌",
+        "✓" if settings.default_model.startswith("ollama/") else "",
+    )
     console.print(table)
     console.print(f"\nDefault model: [bold]{settings.default_model}[/bold]")
 
@@ -967,6 +1032,7 @@ def plugins_list():
 @click.argument("session_id")
 def history(session_id: str):
     """View message history for a session"""
+
     async def _history():
         db = Database(settings.resolved_db_path)
         await db.connect()
@@ -979,6 +1045,7 @@ def history(session_id: str):
             role_color = {"user": "green", "assistant": "blue", "system": "yellow", "tool": "magenta"}
             color = role_color.get(m.role, "white")
             console.print(f"[{color}][{m.role}][/{color}] {m.content[:200]}")
+
     asyncio.run(_history())
 
 
@@ -991,11 +1058,13 @@ def db():
 @click.option("--target", default=None, type=int, help="Target migration version")
 def db_migrate(target: Optional[int]):
     """Run pending database migrations"""
+
     async def _migrate():
         db = Database(settings.resolved_db_path)
         await db.connect()
         await db.disconnect()
         console.print("[green]Migrations complete[/green]")
+
     asyncio.run(_migrate())
 
 
@@ -1004,6 +1073,7 @@ def db_migrate(target: Optional[int]):
 def db_backup(output: Optional[str]):
     """Backup the database"""
     import shutil
+
     src = settings.resolved_db_path
     if not src.exists():
         console.print("[red]Database file not found[/red]")
@@ -1016,12 +1086,14 @@ def db_backup(output: Optional[str]):
 @db.command("version")
 def db_version():
     """Show current database schema version"""
+
     async def _version():
         db = Database(settings.resolved_db_path)
         await db.connect()
         version = await db.migrator.get_current_version()
         await db.disconnect()
         console.print(f"Database schema version: [bold]{version}[/bold]")
+
     asyncio.run(_version())
 
 
@@ -1032,6 +1104,7 @@ def db_version():
 @click.option("--thinking", default=None, help="Thinking level: low, medium, high")
 def agent(message: str, agent_id: str, channel: str, thinking: Optional[str]):
     """Send a message to the Raven AI agent and get a response"""
+
     async def _agent():
         db = Database(settings.resolved_db_path)
         await db.connect()
@@ -1041,6 +1114,7 @@ def agent(message: str, agent_id: str, channel: str, thinking: Optional[str]):
             if pdir.is_dir() and pdir.name != "__pycache__":
                 plugin_loader.load_from_dir(pdir)
         from raven.plugins.sessions import plugin as sessions_plugin
+
         sessions_plugin.init(db)
         llm = LLMRouter()
         registry = AgentRegistry(db, llm, plugin_loader.tools)
@@ -1055,6 +1129,7 @@ def agent(message: str, agent_id: str, channel: str, thinking: Optional[str]):
         if full.strip():
             console.print(full)
         await db.disconnect()
+
     asyncio.run(_agent())
 
 
@@ -1070,6 +1145,7 @@ def task():
 def task_list(user: Optional[str], status: Optional[str], limit: int):
     """List tasks"""
     from raven.core.task_engine.store import TaskStore
+
     store = TaskStore(settings.resolved_db_path)
     tasks = store.list_tasks(user_id=user, status=status, limit=limit)
     if not tasks:
@@ -1083,8 +1159,12 @@ def task_list(user: Optional[str], status: Optional[str], limit: int):
     table.add_column("Created")
     for t in tasks:
         status_icon = {
-            "pending": "⏳", "running": "🔄", "completed": "✅",
-            "failed": "❌", "cancelled": "🚫", "paused": "⏸",
+            "pending": "⏳",
+            "running": "🔄",
+            "completed": "✅",
+            "failed": "❌",
+            "cancelled": "🚫",
+            "paused": "⏸",
         }
         icon = status_icon.get(t.status.value, "❓")
         done = sum(1 for s in t.steps if s.status.value == "completed")
@@ -1099,19 +1179,26 @@ def task_list(user: Optional[str], status: Optional[str], limit: int):
 def task_show(task_id: str):
     """Show detailed task info"""
     from raven.core.task_engine.store import TaskStore
+
     store = TaskStore(settings.resolved_db_path)
     t = store.load_task(task_id)
     if not t:
         console.print(f"[red]Task not found: {task_id}[/red]")
         return
-    console.print(Panel.fit(f"[bold]Task: {t.id}[/bold]\n"
-                            f"[cyan]Goal:[/cyan] {t.goal}\n"
-                            f"[cyan]Status:[/cyan] {t.status.value}\n"
-                            f"[cyan]Steps:[/cyan] {len(t.steps)}\n"
-                            f"[cyan]Created:[/cyan] {__import__('time').ctime(t.created_at)}"))
+    console.print(
+        Panel.fit(
+            f"[bold]Task: {t.id}[/bold]\n"
+            f"[cyan]Goal:[/cyan] {t.goal}\n"
+            f"[cyan]Status:[/cyan] {t.status.value}\n"
+            f"[cyan]Steps:[/cyan] {len(t.steps)}\n"
+            f"[cyan]Created:[/cyan] {__import__('time').ctime(t.created_at)}"
+        )
+    )
     for i, step in enumerate(t.steps):
-        icon = {"pending": "⏳", "running": "🔄", "completed": "✅", "failed": "❌", "cancelled": "🚫"}.get(step.status.value, "❓")
-        console.print(f"  {icon} Step {i+1}: {step.description} [dim]({step.tool})[/dim]")
+        icon = {"pending": "⏳", "running": "🔄", "completed": "✅", "failed": "❌", "cancelled": "🚫"}.get(
+            step.status.value, "❓"
+        )
+        console.print(f"  {icon} Step {i + 1}: {step.description} [dim]({step.tool})[/dim]")
         if step.error:
             console.print(f"     [red]Error: {step.error}[/red]")
 
@@ -1144,7 +1231,7 @@ def task_run(goal: str, user: str, channel: str):
 
         console.print(f"[green]Plan:[/green] {task.plan_summary or goal}")
         for i, step in enumerate(task.steps):
-            console.print(f"  {i+1}. {step.description} [dim]({step.tool})[/dim]")
+            console.print(f"  {i + 1}. {step.description} [dim]({step.tool})[/dim]")
 
         await runner.submit(task)
         console.print(f"[green]Task {task.id[:8]} submitted, running...[/green]")
@@ -1179,6 +1266,7 @@ def task_cancel(task_id: str):
             console.print(f"[yellow]Task {task_id[:8]} cancelled[/yellow]")
         else:
             console.print(f"[red]Task not found or already finished: {task_id}[/red]")
+
     asyncio.run(_cancel())
 
 
@@ -1207,6 +1295,7 @@ def task_retry(task_id: str):
         store.save_task(task)
         await runner.submit(task)
         console.print(f"[green]Task {task_id[:8]} retry submitted[/green]")
+
     asyncio.run(_retry())
 
 
@@ -1215,6 +1304,7 @@ def task_retry(task_id: str):
 def task_logs(task_id: str):
     """Show step details for a task"""
     from raven.core.task_engine.store import TaskStore
+
     store = TaskStore(settings.resolved_db_path)
     t = store.load_task(task_id)
     if not t:
@@ -1242,6 +1332,7 @@ def monitor():
 def monitor_list(user: Optional[str], status: Optional[str]):
     """List all monitors"""
     from raven.core.monitor.store import MonitorStore
+
     store = MonitorStore(settings.resolved_db_path)
     monitors = store.list_monitors(user_id=user, status=status)
     if not monitors:
@@ -1260,8 +1351,9 @@ def monitor_list(user: Optional[str], status: Optional[str]):
         last = ""
         if m.last_check:
             last = f"{'✅' if m.last_check.status == 'up' else '❌'} {m.last_check.checked_at:.0f}s ago"
-        table.add_row(m.id[:8], m.name, m.type.value, m.target[:40],
-                      f"{m.interval_seconds}s", f"{icon} {m.status.value}", last)
+        table.add_row(
+            m.id[:8], m.name, m.type.value, m.target[:40], f"{m.interval_seconds}s", f"{icon} {m.status.value}", last
+        )
     console.print(table)
 
 
@@ -1279,10 +1371,25 @@ def monitor_add(name: str, mon_type: str, target: str, interval: int, conditions
 
     parsed_conditions = []
     for c in conditions:
-        parts = c.split("!", 1) if "!" in c else c.split("=", 1) if "=" in c else c.split(">", 1) if ">" in c else c.split("<", 1) if "<" in c else [c, ""]
+        parts = (
+            c.split("!", 1)
+            if "!" in c
+            else c.split("=", 1)
+            if "=" in c
+            else c.split(">", 1)
+            if ">" in c
+            else c.split("<", 1)
+            if "<" in c
+            else [c, ""]
+        )
         if len(parts) == 2:
             op_str = "!=" if "!" in c else "=" if "=" in c else ">" if ">" in c else "<"
-            op_map = {"=": ConditionOperator.EQ, "!=": ConditionOperator.NE, ">": ConditionOperator.GT, "<": ConditionOperator.LT}
+            op_map = {
+                "=": ConditionOperator.EQ,
+                "!=": ConditionOperator.NE,
+                ">": ConditionOperator.GT,
+                "<": ConditionOperator.LT,
+            }
             raw_val: str = parts[1]
             parsed_val: int | float | str = raw_val
             try:
@@ -1292,7 +1399,9 @@ def monitor_add(name: str, mon_type: str, target: str, interval: int, conditions
                     parsed_val = float(raw_val)
                 except ValueError:
                     pass
-            parsed_conditions.append(Condition(metric=parts[0].strip(), operator=op_map.get(op_str, ConditionOperator.EQ), value=parsed_val))
+            parsed_conditions.append(
+                Condition(metric=parts[0].strip(), operator=op_map.get(op_str, ConditionOperator.EQ), value=parsed_val)
+            )
 
     monitor = Monitor(
         name=name,
@@ -1316,6 +1425,7 @@ def monitor_add(name: str, mon_type: str, target: str, interval: int, conditions
 def monitor_remove(monitor_id: str):
     """Remove a monitor"""
     from raven.core.monitor.store import MonitorStore
+
     store = MonitorStore(settings.resolved_db_path)
     m = store.load_monitor(monitor_id)
     if not m:
@@ -1331,6 +1441,7 @@ def monitor_pause(monitor_id: str):
     """Pause a monitor"""
     from raven.core.monitor.models import MonitorStatus
     from raven.core.monitor.store import MonitorStore
+
     store = MonitorStore(settings.resolved_db_path)
     m = store.load_monitor(monitor_id)
     if not m:
@@ -1346,6 +1457,7 @@ def monitor_resume(monitor_id: str):
     """Resume a paused monitor"""
     from raven.core.monitor.models import MonitorStatus
     from raven.core.monitor.store import MonitorStore
+
     store = MonitorStore(settings.resolved_db_path)
     m = store.load_monitor(monitor_id)
     if not m:
@@ -1361,6 +1473,7 @@ def monitor_resume(monitor_id: str):
 def monitor_logs(monitor_id: str, limit: int):
     """Show check history for a monitor"""
     from raven.core.monitor.store import MonitorStore
+
     store = MonitorStore(settings.resolved_db_path)
     m = store.load_monitor(monitor_id)
     if not m:
@@ -1398,6 +1511,7 @@ def code_index(path: str, max_files: int):
     """Index a codebase for context-aware assistance"""
     from raven.core.coder.indexer import CodeIndexer
     from pathlib import Path
+
     p = Path(path).expanduser().resolve()
     if not p.is_dir():
         console.print(f"[red]Not a directory: {p}[/red]")
@@ -1471,7 +1585,12 @@ def code_review(path: str, language: str):
     table.add_column("Suggestion", style="dim")
     for c in comments:
         severity_colors = {"critical": "red", "warning": "yellow", "suggestion": "blue", "praise": "green"}
-        table.add_row(str(c.line), f"[{severity_colors.get(c.severity.value, 'white')}]{c.severity.value}[/]", c.message, c.suggestion)
+        table.add_row(
+            str(c.line),
+            f"[{severity_colors.get(c.severity.value, 'white')}]{c.severity.value}[/]",
+            c.message,
+            c.suggestion,
+        )
     console.print(table)
 
 
@@ -1500,17 +1619,22 @@ def code_start(goal: str, project: str, user: str):
 def code_status(session_id: str):
     """Show coding session status"""
     from raven.core.coder.session import CodingSessionManager
+
     mgr = CodingSessionManager(settings.resolved_db_path)
     session = mgr.get_session(session_id)
     if not session:
         console.print(f"[red]Session not found: {session_id}[/red]")
         return
-    console.print(Panel.fit(f"[bold]Coding Session: {session.id}[/bold]\n"
-                            f"[cyan]Goal:[/cyan] {session.goal}\n"
-                            f"[cyan]Project:[/cyan] {session.project_path}\n"
-                            f"[cyan]Status:[/cyan] {session.status.value}\n"
-                            f"[cyan]Files:[/cyan] {len(session.files)}\n"
-                            f"[cyan]Messages:[/cyan] {len(session.history)}"))
+    console.print(
+        Panel.fit(
+            f"[bold]Coding Session: {session.id}[/bold]\n"
+            f"[cyan]Goal:[/cyan] {session.goal}\n"
+            f"[cyan]Project:[/cyan] {session.project_path}\n"
+            f"[cyan]Status:[/cyan] {session.status.value}\n"
+            f"[cyan]Files:[/cyan] {len(session.files)}\n"
+            f"[cyan]Messages:[/cyan] {len(session.history)}"
+        )
+    )
 
 
 @code.command("end")
@@ -1519,6 +1643,7 @@ def code_end(session_id: str):
     """End a coding session"""
     from raven.core.coder.models import SessionStatus
     from raven.core.coder.session import CodingSessionManager
+
     mgr = CodingSessionManager(settings.resolved_db_path)
     session = mgr.get_session(session_id)
     if not session:
@@ -1539,6 +1664,7 @@ def routine():
 def routine_list(user: Optional[str]):
     """List configured routines"""
     from raven.core.routine.store import RoutineStore
+
     store = RoutineStore(settings.resolved_db_path)
     routines = store.list_routines(user_id=user)
     if not routines:
@@ -1560,7 +1686,9 @@ def routine_list(user: Optional[str]):
 
 @routine.command("add")
 @click.option("--name", required=True, help="Routine name")
-@click.option("--action", required=True, type=click.Choice(["send_briefing", "send_message", "check_email", "organize_files"]))
+@click.option(
+    "--action", required=True, type=click.Choice(["send_briefing", "send_message", "check_email", "organize_files"])
+)
 @click.option("--schedule", default="0 7 * * *", help="Cron expression or HH:MM or interval seconds")
 @click.option("--description", default="", help="Description")
 @click.option("--user", default="cli", help="User ID")
@@ -1577,9 +1705,12 @@ def routine_add(name: str, action: str, schedule: str, description: str, user: s
 
     routine = Routine(
         name=name,
-        action=RoutineAction(action), trigger=trigger,
-        schedule=schedule, status=RoutineStatus.ACTIVE,
-        user_id=user, channel=channel,
+        action=RoutineAction(action),
+        trigger=trigger,
+        schedule=schedule,
+        status=RoutineStatus.ACTIVE,
+        user_id=user,
+        channel=channel,
     )
     store = RoutineStore(settings.resolved_db_path)
     store.save_routine(routine)
@@ -1594,6 +1725,7 @@ def routine_add(name: str, action: str, schedule: str, description: str, user: s
 def routine_remove(routine_id: str):
     """Remove a routine"""
     from raven.core.routine.store import RoutineStore
+
     store = RoutineStore(settings.resolved_db_path)
     r = store.load_routine(routine_id)
     if not r:
@@ -1609,6 +1741,7 @@ def routine_pause(routine_id: str):
     """Pause a routine"""
     from raven.core.routine.models import RoutineStatus
     from raven.core.routine.store import RoutineStore
+
     store = RoutineStore(settings.resolved_db_path)
     r = store.load_routine(routine_id)
     if not r:
@@ -1624,6 +1757,7 @@ def routine_resume(routine_id: str):
     """Resume a paused routine"""
     from raven.core.routine.models import RoutineStatus
     from raven.core.routine.store import RoutineStore
+
     store = RoutineStore(settings.resolved_db_path)
     r = store.load_routine(routine_id)
     if not r:
@@ -1638,6 +1772,7 @@ def routine_resume(routine_id: str):
 def routine_logs(routine_id: str):
     """Show execution logs for a routine"""
     from raven.core.routine.store import RoutineStore
+
     store = RoutineStore(settings.resolved_db_path)
     logs = store.get_logs(routine_id)
     if not logs:
@@ -1692,6 +1827,7 @@ def devices_list():
 def tui():
     """Launch the Textual TUI dashboard"""
     import sys
+
     extra_path = Path("D:/PythonPackages")
     if extra_path.is_dir() and str(extra_path) not in sys.path:
         sys.path.insert(0, str(extra_path))

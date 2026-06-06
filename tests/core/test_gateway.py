@@ -15,7 +15,15 @@ def mock_db():
     db = AsyncMock(spec=Database)
     db.connect = AsyncMock()
     db.disconnect = AsyncMock()
-    db.find_or_create_user = AsyncMock(return_value={"id": "telegram:u1", "channel": "telegram", "external_id": "u1", "is_allowed": 1, "pairing_code": None})
+    db.find_or_create_user = AsyncMock(
+        return_value={
+            "id": "telegram:u1",
+            "channel": "telegram",
+            "external_id": "u1",
+            "is_allowed": 1,
+            "pairing_code": None,
+        }
+    )
     db.get_or_create_session = AsyncMock()
     db.save_message = AsyncMock()
     return db
@@ -62,7 +70,9 @@ class TestGateway:
         assert gateway.db.find_or_create_user.called
 
     async def test_handle_message_closed_policy(self, gateway):
-        gateway.db.find_or_create_user = AsyncMock(return_value={"id": "test:u1", "channel": "test", "external_id": "u1", "is_allowed": 0})
+        gateway.db.find_or_create_user = AsyncMock(
+            return_value={"id": "test:u1", "channel": "test", "external_id": "u1", "is_allowed": 0}
+        )
         channel = AsyncMock()
         channel.channel_id = "test"
         gateway.register_channel(channel)
@@ -74,7 +84,9 @@ class TestGateway:
             channel.send.assert_called_once()
 
     async def test_handle_message_pairing(self, gateway):
-        gateway.db.find_or_create_user = AsyncMock(return_value={"id": "test:u1", "channel": "test", "external_id": "u1", "is_allowed": 0})
+        gateway.db.find_or_create_user = AsyncMock(
+            return_value={"id": "test:u1", "channel": "test", "external_id": "u1", "is_allowed": 0}
+        )
         channel = AsyncMock()
         channel.channel_id = "test"
         gateway.register_channel(channel)

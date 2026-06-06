@@ -75,6 +75,7 @@ class TestWebChatChannel:
 
     def test_index_html(self):
         from raven.channels.webchat.channel import INDEX_HTML
+
         assert "Raven AI" in INDEX_HTML
         assert "alpinejs" in INDEX_HTML
 

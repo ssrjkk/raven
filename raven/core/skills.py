@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 
 from loguru import logger
 
@@ -18,11 +18,11 @@ class Skill:
     async def execute(self, *args, **kwargs) -> str | None:
         if self._handler:
             if asyncio.iscoroutinefunction(self._handler):
-                return await self._handler(*args, **kwargs)
-            return self._handler(*args, **kwargs)
+                return await self._handler(*args, **kwargs)  # type: ignore[no-any-return]
+            return self._handler(*args, **kwargs)  # type: ignore[no-any-return]
         return None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
@@ -67,10 +67,10 @@ class SkillsRegistry:
     def list(self) -> list[Skill]:
         return list(self._skills.values())
 
-    def list_names(self) -> list[str]:
+    def list_names(self) -> List[str]:
         return list(self._skills.keys())
 
-    def active_prompts(self, names: list[str]) -> str:
+    def active_prompts(self, names: List[str]) -> str:
         parts = []
         for name in names:
             skill = self.get(name)

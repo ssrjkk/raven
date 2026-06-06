@@ -11,7 +11,7 @@ class DocumentChunker:
         self.chunk_size = chunk_size
         self.overlap = overlap
 
-    def chunk_text(self, text: str, source: str = "", metadata: dict | None = None) -> list[dict[str, Any]]:
+    def chunk_text(self, text: str, source: str = "", metadata: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         chunks = []
         start = 0
         while start < len(text):
@@ -22,19 +22,21 @@ class DocumentChunker:
                 if break_at != -1 and break_at > self.chunk_size // 2:
                     chunk_text = chunk_text[:break_at]
                     end = start + break_at
-            chunks.append({
-                "text": chunk_text.strip(),
-                "source": source,
-                "chunk_start": start,
-                "chunk_end": end,
-                **(metadata or {}),
-            })
+            chunks.append(
+                {
+                    "text": chunk_text.strip(),
+                    "source": source,
+                    "chunk_start": start,
+                    "chunk_end": end,
+                    **(metadata or {}),
+                }
+            )
             start = end - self.overlap
             if start >= len(text):
                 break
         return chunks
 
-    def chunk_file(self, file_path: str | Path, metadata: dict | None = None) -> list[dict[str, Any]]:
+    def chunk_file(self, file_path: str | Path, metadata: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         p = Path(file_path)
         if not p.is_file():
             logger.warning("File not found: {}", p)
@@ -54,9 +56,38 @@ class DocumentChunker:
                 return self._read_pdf(path)
             elif suffix in (".md", ".mdx"):
                 return path.read_text(encoding="utf-8", errors="replace")
-            elif suffix in (".txt", ".py", ".js", ".ts", ".rs", ".go", ".java", ".c", ".cpp", ".h", ".hpp",
-                            ".rb", ".php", ".swift", ".kt", ".scala", ".r", ".sql", ".sh", ".yaml", ".yml",
-                            ".toml", ".ini", ".cfg", ".conf", ".json", ".xml", ".html", ".css", ".scss"):
+            elif suffix in (
+                ".txt",
+                ".py",
+                ".js",
+                ".ts",
+                ".rs",
+                ".go",
+                ".java",
+                ".c",
+                ".cpp",
+                ".h",
+                ".hpp",
+                ".rb",
+                ".php",
+                ".swift",
+                ".kt",
+                ".scala",
+                ".r",
+                ".sql",
+                ".sh",
+                ".yaml",
+                ".yml",
+                ".toml",
+                ".ini",
+                ".cfg",
+                ".conf",
+                ".json",
+                ".xml",
+                ".html",
+                ".css",
+                ".scss",
+            ):
                 return path.read_text(encoding="utf-8", errors="replace")
             else:
                 try:
@@ -70,6 +101,7 @@ class DocumentChunker:
     def _read_pdf(self, path: Path) -> str:
         try:
             import pypdf
+
             reader = pypdf.PdfReader(str(path))
             return "\n".join(page.extract_text() or "" for page in reader.pages)
         except ImportError:
@@ -79,7 +111,9 @@ class DocumentChunker:
             logger.warning("Failed to parse PDF {}: {}", path, e)
             return ""
 
-    def chunk_directory(self, dir_path: str | Path, glob_pattern: str = "**/*", metadata: dict | None = None) -> list[dict[str, Any]]:
+    def chunk_directory(
+        self, dir_path: str | Path, glob_pattern: str = "**/*", metadata: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         p = Path(dir_path)
         if not p.is_dir():
             logger.warning("Directory not found: {}", p)

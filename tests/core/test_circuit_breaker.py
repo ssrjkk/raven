@@ -14,6 +14,7 @@ class TestCircuitBreaker:
     async def test_call_success(self):
         async def ok():
             return "ok"
+
         cb = CircuitBreaker("test")
         result = await cb.call(ok)
         assert result == "ok"
@@ -39,8 +40,10 @@ class TestCircuitBreaker:
         with pytest.raises(ValueError):
             await cb.call(fail)
         assert cb.state == "open"
+
         async def ok():
             return "ok"
+
         with pytest.raises(CircuitBreakerOpenError):
             await cb.call(ok)
 
@@ -55,8 +58,10 @@ class TestCircuitBreaker:
         assert cb.state == "open"
 
         await asyncio.sleep(0.02)
+
         async def recovered():
             return "recovered"
+
         result = await cb.call(recovered)
         assert result == "recovered"
         assert cb.state == "closed"
@@ -86,8 +91,10 @@ class TestCircuitBreaker:
             await cb.call(fail)
 
         await asyncio.sleep(0.02)
+
         async def ok_fn():
             return "ok"
+
         result = await cb.call(ok_fn)
         assert result == "ok"
         assert cb.state == "closed"

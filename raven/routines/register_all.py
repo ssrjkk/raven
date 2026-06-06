@@ -1,9 +1,13 @@
+from __future__ import annotations
+
+from typing import Any
+
 from raven.core.routine.engine import RoutineEngine
 from raven.core.routine.models import Routine, RoutineAction, RoutineStatus, RoutineTrigger
 
 
 def register_all_routines(engine: RoutineEngine):
-    examples = [
+    examples: list[dict[str, Any]] = [
         {
             "name": "Morning Briefing",
             "action": RoutineAction.SEND_BRIEFING,

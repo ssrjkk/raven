@@ -49,7 +49,7 @@ class MonitorCheck:
     checked_at: float | None = None
     response_time_ms: float | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "monitor_id": self.monitor_id,
@@ -96,7 +96,7 @@ class Monitor:
         elapsed = (datetime.now().timestamp() - self.last_check.checked_at) / 60
         return elapsed >= self.cooldown_minutes
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
@@ -116,11 +116,13 @@ class Monitor:
                 "response_time_ms": self.last_check.response_time_ms,
                 "triggered": self.last_check.triggered,
                 "error": self.last_check.error,
-            } if self.last_check else None,
+            }
+            if self.last_check
+            else None,
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> Monitor:
+    def from_dict(cls, data: dict[str, Any]) -> Monitor:
         m = cls(
             id=data.get("id", uuid.uuid4().hex[:16]),
             name=data.get("name", ""),

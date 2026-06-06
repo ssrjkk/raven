@@ -14,7 +14,7 @@ class TaskRunner:
     def __init__(self, store: TaskStore, tools: ToolRegistry):
         self._store = store
         self._tools = tools
-        self._running: dict[str, asyncio.Task] = {}
+        self._running: dict[str, asyncio.Task[None]] = {}
         self._cancel_events: dict[str, asyncio.Event] = {}
 
     async def submit(self, task: Task) -> Task:

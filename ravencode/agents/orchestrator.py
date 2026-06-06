@@ -48,6 +48,7 @@ class Orchestrator:
         tools = None
         try:
             from raven.tools.register_all import create_tool_registry
+
             tools = create_tool_registry()
         except ImportError:
             logger.warning("Tool registry unavailable")
@@ -57,6 +58,7 @@ class Orchestrator:
         llm = None
         try:
             from raven.core.llm import LLMRouter
+
             llm = LLMRouter()
         except Exception as exc:
             logger.error("LLM unavailable (no API keys?): {}", exc)

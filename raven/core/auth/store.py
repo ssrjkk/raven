@@ -67,7 +67,8 @@ class AuthStore:
             if not row:
                 return None
             return User(
-                id=row["id"], username=row["username"],
+                id=row["id"],
+                username=row["username"],
                 display_name=row["display_name"] or "",
                 role=Role(row["role"]),
                 password_hash=row["password_hash"] or "",
@@ -85,7 +86,8 @@ class AuthStore:
             if not row:
                 return None
             return User(
-                id=row["id"], username=row["username"],
+                id=row["id"],
+                username=row["username"],
                 display_name=row["display_name"] or "",
                 role=Role(row["role"]),
                 password_hash=row["password_hash"] or "",
@@ -111,8 +113,13 @@ class AuthStore:
             async with conn.execute("SELECT * FROM auth_users ORDER BY created_at DESC") as c:
                 rows = await c.fetchall()
             return [
-                User(id=r["id"], username=r["username"], display_name=r["display_name"] or "",
-                     role=Role(r["role"]), is_active=bool(r["is_active"]))
+                User(
+                    id=r["id"],
+                    username=r["username"],
+                    display_name=r["display_name"] or "",
+                    role=Role(r["role"]),
+                    is_active=bool(r["is_active"]),
+                )
                 for r in rows
             ]
         finally:
@@ -122,7 +129,9 @@ class AuthStore:
         now = time.time()
         conn = await self._conn()
         try:
-            await conn.execute("UPDATE auth_users SET role = ?, updated_at = ? WHERE username = ?", (role, now, username))
+            await conn.execute(
+                "UPDATE auth_users SET role = ?, updated_at = ? WHERE username = ?", (role, now, username)
+            )
             await conn.commit()
         finally:
             await conn.close()
@@ -132,7 +141,9 @@ class AuthStore:
         pwd_hash = hash_password(password)
         conn = await self._conn()
         try:
-            await conn.execute("UPDATE auth_users SET password_hash = ?, updated_at = ? WHERE username = ?", (pwd_hash, now, username))
+            await conn.execute(
+                "UPDATE auth_users SET password_hash = ?, updated_at = ? WHERE username = ?", (pwd_hash, now, username)
+            )
             await conn.commit()
         finally:
             await conn.close()
@@ -141,7 +152,10 @@ class AuthStore:
         now = time.time()
         conn = await self._conn()
         try:
-            await conn.execute("UPDATE auth_users SET is_active = ?, updated_at = ? WHERE username = ?", (1 if active else 0, now, username))
+            await conn.execute(
+                "UPDATE auth_users SET is_active = ?, updated_at = ? WHERE username = ?",
+                (1 if active else 0, now, username),
+            )
             await conn.commit()
         finally:
             await conn.close()

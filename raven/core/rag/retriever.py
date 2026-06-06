@@ -9,15 +9,18 @@ from raven.core.rag.vector_store import VectorStore
 
 
 class Retriever:
-    def __init__(self, vector_store: VectorStore | None = None, engine: EmbeddingEngine | None = None, db_path: str = "data/rag"):
+    def __init__(
+        self, vector_store: VectorStore | None = None, engine: EmbeddingEngine | None = None, db_path: str = "data/rag"
+    ):
         if vector_store:
             self.store = vector_store
         else:
             eng = engine or EmbeddingEngine(provider="local")
             from pathlib import Path
+
             self.store = VectorStore(Path(db_path), eng)
 
-    async def index_text(self, doc_id: str, text: str, metadata: dict | None = None):
+    async def index_text(self, doc_id: str, text: str, metadata: dict[str, Any] | None = None):
         await self.store.upsert(doc_id, text, metadata)
 
     async def index_chunks(self, chunks: list[dict[str, Any]], prefix: str = ""):
@@ -31,7 +34,7 @@ class Retriever:
             await self.store.upsert_batch(items)  # type: ignore[arg-type]
             logger.info("Indexed {} chunks ({})", len(items), prefix or "root")
 
-    async def retrieve(self, query: str, k: int = 5, filter_meta: dict | None = None) -> list[dict[str, Any]]:
+    async def retrieve(self, query: str, k: int = 5, filter_meta: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         return await self.store.search(query, k=k, filter_meta=filter_meta)
 
     async def retrieve_context(self, query: str, k: int = 5, max_tokens: int = 3000) -> str:

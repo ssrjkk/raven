@@ -18,6 +18,7 @@ from raven.core.secrets import secrets
 
 # --- Pydantic request models with validation ---
 
+
 class MonitorConditionRequest(BaseModel):
     metric: str = Field(default="", max_length=100)
     operator: str = Field(default="=", pattern=r"^(=|>|<|>=|<=|!=|contains|matches)$")
@@ -112,16 +113,26 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     async def admin_monitors_list(user_id: str | None = None):
         gateway = get_gateway_fn()
         from raven.core.monitor.store import MonitorStore
+
         store = MonitorStore(gateway.db.db_path)
         monitors = store.list_monitors(user_id=user_id)
         return [
             {
-                "id": m.id, "name": m.name, "type": m.type.value,
-                "target": m.target, "interval_seconds": m.interval_seconds,
+                "id": m.id,
+                "name": m.name,
+                "type": m.type.value,
+                "target": m.target,
+                "interval_seconds": m.interval_seconds,
                 "status": m.status.value,
-                "last_check": {"status": m.last_check.status, "checked_at": m.last_check.checked_at} if m.last_check else None,
-                "conditions": [{"metric": c.metric, "operator": c.operator.value, "value": c.value} for c in m.conditions],
-                "user_id": m.user_id, "channel": m.channel, "cooldown_minutes": m.cooldown_minutes,
+                "last_check": {"status": m.last_check.status, "checked_at": m.last_check.checked_at}
+                if m.last_check
+                else None,
+                "conditions": [
+                    {"metric": c.metric, "operator": c.operator.value, "value": c.value} for c in m.conditions
+                ],
+                "user_id": m.user_id,
+                "channel": m.channel,
+                "cooldown_minutes": m.cooldown_minutes,
             }
             for m in monitors
         ]
@@ -130,17 +141,25 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     async def admin_monitor_get(monitor_id: str):
         gateway = get_gateway_fn()
         from raven.core.monitor.store import MonitorStore
+
         store = MonitorStore(gateway.db.db_path)
         m = store.load_monitor(monitor_id)
         if not m:
             raise HTTPException(404, "Monitor not found")
         return {
-            "id": m.id, "name": m.name, "type": m.type.value,
-            "target": m.target, "interval_seconds": m.interval_seconds,
+            "id": m.id,
+            "name": m.name,
+            "type": m.type.value,
+            "target": m.target,
+            "interval_seconds": m.interval_seconds,
             "status": m.status.value,
-            "last_check": {"status": m.last_check.status, "checked_at": m.last_check.checked_at} if m.last_check else None,
+            "last_check": {"status": m.last_check.status, "checked_at": m.last_check.checked_at}
+            if m.last_check
+            else None,
             "conditions": [{"metric": c.metric, "operator": c.operator.value, "value": c.value} for c in m.conditions],
-            "user_id": m.user_id, "channel": m.channel, "cooldown_minutes": m.cooldown_minutes,
+            "user_id": m.user_id,
+            "channel": m.channel,
+            "cooldown_minutes": m.cooldown_minutes,
         }
 
     @router.post("/monitors")
@@ -148,10 +167,10 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         gateway = get_gateway_fn()
         from raven.core.monitor.models import Condition, ConditionOperator, Monitor, MonitorStatus, MonitorType
         from raven.core.monitor.store import MonitorStore
+
         store = MonitorStore(gateway.db.db_path)
         conditions = [
-            Condition(metric=c.metric, operator=ConditionOperator(c.operator), value=c.value)
-            for c in body.conditions
+            Condition(metric=c.metric, operator=ConditionOperator(c.operator), value=c.value) for c in body.conditions
         ]
         monitor = Monitor(
             name=body.name,
@@ -174,6 +193,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         gateway = get_gateway_fn()
         from raven.core.monitor.models import Condition, ConditionOperator, MonitorStatus, MonitorType
         from raven.core.monitor.store import MonitorStore
+
         store = MonitorStore(gateway.db.db_path)
         existing = store.load_monitor(monitor_id)
         if not existing:
@@ -209,6 +229,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     async def admin_monitor_delete(monitor_id: str):
         gateway = get_gateway_fn()
         from raven.core.monitor.store import MonitorStore
+
         store = MonitorStore(gateway.db.db_path)
         m = store.load_monitor(monitor_id)
         if not m:
@@ -221,9 +242,10 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     async def admin_monitor_check_now(monitor_id: str):
         from raven.core.monitor.engine import MonitorEngine
         from raven.core.monitor.store import MonitorStore
+
         gateway = get_gateway_fn()
         store = MonitorStore(gateway.db.db_path)
-        engine = MonitorEngine(store, send_fn=lambda cid, txt: logger.info("Alert[{}]: {}", cid, txt))  # type: ignore[no-untyped-call]
+        engine = MonitorEngine(store, send_fn=lambda cid, txt: logger.info("Alert[{}]: {}", cid, txt))
         alert_text = await engine.check_now(monitor_id)
         return {"ok": True, "alert": alert_text}
 
@@ -258,6 +280,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     @router.get("/metrics/prometheus")
     async def admin_metrics_prometheus():
         from fastapi.responses import PlainTextResponse
+
         return PlainTextResponse(metrics.prometheus())
 
     @router.get("/channels")
@@ -388,6 +411,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
 
         async def event_generator():
             from collections import deque
+
             buf: deque[str] = deque(maxlen=50)
             while True:
                 log_core = getattr(logger, "_core", None)
@@ -413,6 +437,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     @router.post("/config/key")
     async def admin_update_config_key(body: ConfigUpdateRequest):
         from raven.core.config_store import config_store
+
         config_store.set(body.key, body.value)
         config_store.save()
         audit_logger.log(AuditEventType.COMMAND, "admin", "config.update", detail={"key": body.key})
@@ -432,16 +457,17 @@ def init_auth_routes(app, db_path: str) -> None:
 
     store = AuthStore(db_path)
 
-    @app.post("/api/auth/login")
+    @app.post("/api/auth/login")  # type: ignore[untyped-decorator]
     async def auth_login(body: AuthLoginRequest):
         user = await store.authenticate(body.username, body.password)
         if not user:
             from fastapi import HTTPException
+
             raise HTTPException(401, "Invalid credentials")
         token = token_manager.create_token(user.id, user.role.value)
         return {"token": token, "user_id": user.id, "role": user.role.value, "username": user.username}
 
-    @app.post("/api/auth/register")
+    @app.post("/api/auth/register")  # type: ignore[untyped-decorator]
     async def auth_register(body: AuthRegisterRequest):
         display = body.display_name or body.username
         existing = await store.get_user(body.username)
@@ -451,54 +477,64 @@ def init_auth_routes(app, db_path: str) -> None:
         token = token_manager.create_token(user.id, user.role.value)
         return {"token": token, "user_id": user.id, "role": user.role.value, "username": user.username}
 
-    @app.get("/api/auth/me")
+    @app.get("/api/auth/me")  # type: ignore[untyped-decorator]
     async def auth_me(request: Request):
         return {
             "user_id": getattr(request.state, "user_id", "anonymous"),
             "role": getattr(request.state, "user_role", "anonymous"),
         }
 
-    @app.post("/api/auth/logout")
+    @app.post("/api/auth/logout")  # type: ignore[untyped-decorator]
     async def auth_logout(request: Request):
         token = request.headers.get("Authorization", "").replace("Bearer ", "")
         if token:
             token_manager.revoke_token(token)
         return {"ok": True}
 
-    @app.get("/api/auth/users")
+    @app.get("/api/auth/users")  # type: ignore[untyped-decorator]
     async def auth_list_users(request: Request):
         users = await store.list_users()
         return [
-            {"id": u.id, "username": u.username, "display_name": u.display_name, "role": u.role.value, "is_active": u.is_active}
+            {
+                "id": u.id,
+                "username": u.username,
+                "display_name": u.display_name,
+                "role": u.role.value,
+                "is_active": u.is_active,
+            }
             for u in users
         ]
 
-    @app.post("/api/auth/users/{username}/role")
+    @app.post("/api/auth/users/{username}/role")  # type: ignore[untyped-decorator]
     async def auth_update_role(username: str, body: AuthUpdateRoleRequest):
         from fastapi import HTTPException
+
         try:
             await store.update_role(username, body.role)
         except ValueError as e:
             raise HTTPException(400, str(e))
         return {"ok": True}
 
-    @app.post("/api/auth/users/{username}/deactivate")
+    @app.post("/api/auth/users/{username}/deactivate")  # type: ignore[untyped-decorator]
     async def auth_deactivate_user(username: str):
         await store.set_active(username, False)
         token_manager.revoke_user_tokens(f"user:{username}")
         return {"ok": True}
 
-    @app.get("/api/stream")
+    @app.get("/api/stream")  # type: ignore[untyped-decorator]
     async def sse_stream(request: Request, session: str = "default"):
         from raven.core.sse import sse_stream
+
         async def event_generator():
             async for chunk in sse_stream.stream(session):
                 yield chunk
+
         return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-    @app.post("/api/stream/push")
+    @app.post("/api/stream/push")  # type: ignore[untyped-decorator]
     async def sse_push(body: SSEPushRequest):
         from raven.core.sse import sse_stream
+
         await sse_stream.push(
             event=body.event,
             data=body.data,

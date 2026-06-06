@@ -9,7 +9,6 @@ from raven.core.rag.retriever import Retriever
 
 
 class RuntimeAdapter:
-
     @staticmethod
     async def run_command(cmd: str, shell: bool = True) -> str:
         proc = await asyncio.create_subprocess_shell(
@@ -44,6 +43,7 @@ class RuntimeAdapter:
     @staticmethod
     async def create_sandbox(image: str = "python:3.12") -> dict[str, Any]:
         from raven.core.sandbox import Sandbox, SandboxConfig
+
         config = SandboxConfig(mode="subprocess", docker_image=image)
         sandbox = Sandbox(config)
         return {"sandbox": sandbox, "mode": config.mode, "image": image}
@@ -54,6 +54,7 @@ class RuntimeAdapter:
             db_path = settings.resolved_db_path
         except AttributeError:
             from pathlib import Path
+
             db_path = Path("data/rag")
         retriever = Retriever(db_path=str(db_path))
         results = await retriever.retrieve(query, k=5)

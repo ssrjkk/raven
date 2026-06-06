@@ -31,7 +31,7 @@ async def test_irc_handle_message():
     c._ready = True
     await c.handle_message("user1", "#raven", "hello")
     handler.assert_awaited_once()
-    event = handler.await_args[0][0]
+    event = handler.await_args[0][0]  # type: ignore[index]
     assert event.channel == "irc"
     assert event.user_id == "user1"
     assert event.text == "hello"

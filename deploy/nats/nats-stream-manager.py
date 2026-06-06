@@ -197,4 +197,6 @@ if __name__ == "__main__":
     if args.command == "validate":
         validate_file(args.path)
     else:
-        asyncio.run(globals()[args.command.replace("-", "_")](**{k: v for k, v in vars(args).items() if k != "command"}))
+        asyncio.run(
+            globals()[args.command.replace("-", "_")](**{k: v for k, v in vars(args).items() if k != "command"})
+        )

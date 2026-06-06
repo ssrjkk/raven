@@ -18,6 +18,7 @@ class TestRavencodeApiClient:
         mock_llm_cls.return_value = mock_llm
 
         import asyncio
+
         r = asyncio.run(AIOSClient().ask("hi", task="code"))
         assert isinstance(r, AIResponse)
         assert r.text == "hello"
@@ -32,6 +33,7 @@ class TestRavencodeApiClient:
         mock_llm_cls.return_value = mock_llm
 
         import asyncio
+
         r = asyncio.run(AIOSClient().ask("hi"))
         assert isinstance(r, AIResponse)
         assert "API down" in r.text
@@ -40,11 +42,11 @@ class TestRavencodeApiClient:
         r = AIResponse(text="ok", model="gpt4", provider="openai")
         assert r.usage is None
 
-    @patch("raven.core.llm.LLMRouter",
-           side_effect=RuntimeError("no API keys"))
+    @patch("raven.core.llm.LLMRouter", side_effect=RuntimeError("no API keys"))
     @patch("ravencode.api.client.settings")
     def test_degraded_no_llm(self, mock_settings, mock_llm_cls):
         import asyncio
+
         r = asyncio.run(AIOSClient().ask("hi"))
         assert "unavailable" in r.text
 
@@ -52,12 +54,14 @@ class TestRavencodeApiClient:
 class TestRavencodeInit:
     def test_lazy_imports(self):
         from ravencode import AIOSClient, Orchestrator, ShellExecutor
+
         assert AIOSClient is not None
         assert Orchestrator is not None
         assert ShellExecutor is not None
 
     def test_all_exported(self):
         import ravencode
+
         assert "AIOSClient" in ravencode.__all__
         assert "Orchestrator" in ravencode.__all__
         assert "ShellExecutor" in ravencode.__all__
@@ -66,11 +70,13 @@ class TestRavencodeInit:
 class TestRavencodeAgentResult:
     def test_defaults(self):
         from ravencode.agents.orchestrator import AgentResult
+
         r = AgentResult(agent="test", success=True)
         assert r.error is None
         assert r.data is None
 
     def test_with_error(self):
         from ravencode.agents.orchestrator import AgentResult
+
         r = AgentResult(agent="test", success=False, error="fail")
         assert r.error == "fail"

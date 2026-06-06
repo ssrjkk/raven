@@ -52,7 +52,7 @@ class AuditEntry:
     hash: str = ""
     signature: str = ""
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
             "timestamp": self.timestamp,
             "event_id": self.event_id,
@@ -70,7 +70,7 @@ class AuditEntry:
         return d
 
     @classmethod
-    def from_dict(cls, d: dict) -> AuditEntry:
+    def from_dict(cls, d: dict[str, Any]) -> AuditEntry:
         return cls(
             timestamp=d.get("timestamp", 0.0),
             event_id=d.get("event_id", ""),
@@ -160,12 +160,12 @@ class AuditLogger:
         if last_line:
             try:
                 entry = json.loads(last_line)
-                return entry.get("hash", "0" * 64)
+                return entry.get("hash", "0" * 64)  # type: ignore[no-any-return]
             except (json.JSONDecodeError, KeyError):
                 pass
         return "0" * 64
 
-    def _compute_hash(self, entry_dict: dict) -> str:
+    def _compute_hash(self, entry_dict: dict[str, Any]) -> str:
         payload = json.dumps(entry_dict, sort_keys=True, default=str).encode()
         return hashlib.sha256(payload).hexdigest()
 
@@ -174,7 +174,8 @@ class AuditLogger:
             return ""
         try:
             from cryptography.hazmat.primitives.asymmetric import ed25519
-            private_key = ed25519.Ed25519PrivateKey.from_private_bytes(self._signing_key)
+
+            private_key = ed25519.Ed25519PrivateKey.from_private_bytes(self._signing_key or b"")
             sig = private_key.sign(payload)
             return sig.hex()
         except Exception as e:
@@ -222,9 +223,7 @@ class AuditLogger:
             entry.hash = self._compute_hash(
                 {k: v for k, v in entry.to_dict().items() if k not in ("prev_hash", "hash", "signature")}
             )
-            entry.signature = self._compute_signature(
-                json.dumps(entry.to_dict(), sort_keys=True, default=str).encode()
-            )
+            entry.signature = self._compute_signature(json.dumps(entry.to_dict(), sort_keys=True, default=str).encode())
             self._prev_hash = entry.hash
 
         line = json.dumps(entry.to_dict(), default=str)
@@ -246,7 +245,9 @@ class AuditLogger:
                 self._write_checkpoint(entry)
                 self._entries_since_checkpoint = 0
 
-    async def alog(self, event_type: AuditEventType | str, actor: str, target: str = "", detail: Any = None, channel: str = ""):
+    async def alog(
+        self, event_type: AuditEventType | str, actor: str, target: str = "", detail: Any = None, channel: str = ""
+    ):
         self.log(event_type, actor, target, detail, channel)
 
     def sensitive(self, event_type: str, actor: str, target: str, outcome: bool):
@@ -275,7 +276,7 @@ class AuditLogger:
                 count += 1
         return count
 
-    def recent(self, limit: int = 20) -> list[dict]:
+    def recent(self, limit: int = 20) -> list[dict[str, Any]]:
         if not self._path.exists():
             return []
         with self._path.open() as f:
@@ -363,10 +364,10 @@ class AuditLogger:
             "rotations": self._rotated_count,
         }
 
-    def verify_chain(self) -> list[dict]:
+    def verify_chain(self) -> list[dict[str, Any]]:
         if not self._path.exists():
             return [{"valid": True, "entries": 0}]
-        errors: list[dict] = []
+        errors: list[dict[str, Any]] = []
         prev_hash = "0" * 64
         entry_count = 0
         with self._path.open() as f:
@@ -380,38 +381,44 @@ class AuditLogger:
                     if not expected_hash:
                         continue
                     content = {k: v for k, v in entry.items() if k not in ("hash", "signature", "prev_hash")}
-                    actual_hash = hashlib.sha256(
-                        json.dumps(content, sort_keys=True, default=str).encode()
-                    ).hexdigest()
+                    actual_hash = hashlib.sha256(json.dumps(content, sort_keys=True, default=str).encode()).hexdigest()
                     if actual_hash != expected_hash:
-                        errors.append({
-                            "line": i, "error": "hash_mismatch",
-                            "event_id": entry.get("event_id"),
-                            "expected": expected_hash,
-                            "actual": actual_hash,
-                        })
+                        errors.append(
+                            {
+                                "line": i,
+                                "error": "hash_mismatch",
+                                "event_id": entry.get("event_id"),
+                                "expected": expected_hash,
+                                "actual": actual_hash,
+                            }
+                        )
                     pe = entry.get("prev_hash", "0" * 64)
                     if pe != prev_hash:
-                        errors.append({
-                            "line": i, "error": "chain_break",
-                            "event_id": entry.get("event_id"),
-                            "expected_prev": prev_hash,
-                            "actual_prev": pe,
-                        })
+                        errors.append(
+                            {
+                                "line": i,
+                                "error": "chain_break",
+                                "event_id": entry.get("event_id"),
+                                "expected_prev": prev_hash,
+                                "actual_prev": pe,
+                            }
+                        )
                     prev_hash = entry.get("hash", "0" * 64)
                 except json.JSONDecodeError:
                     errors.append({"line": i, "error": "parse_error"})
         return errors or [{"valid": True, "entries": entry_count, "lines_scanned": i}]
 
-    def verify_signatures(self) -> list[dict]:
+    def verify_signatures(self) -> list[dict[str, Any]]:
         if not self._use_signing or not self._path.exists():
             return [{"valid": True, "note": "signing not enabled"}]
         try:
-            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-            public_key = Ed25519PublicKey.from_private_bytes(self._signing_key)
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+            private_key = Ed25519PrivateKey.from_private_bytes(self._signing_key or b"")
+            public_key = private_key.public_key()
         except Exception:
             return [{"valid": False, "note": "cannot derive public key"}]
-        errors: list[dict] = []
+        errors: list[dict[str, Any]] = []
         with self._path.open() as f:
             for i, line in enumerate(f, 1):
                 try:
@@ -426,10 +433,13 @@ class AuditLogger:
                     try:
                         public_key.verify(bytes.fromhex(sig_hex), payload)
                     except Exception:
-                        errors.append({
-                            "line": i, "error": "signature_mismatch",
-                            "event_id": entry.get("event_id"),
-                        })
+                        errors.append(
+                            {
+                                "line": i,
+                                "error": "signature_mismatch",
+                                "event_id": entry.get("event_id"),
+                            }
+                        )
                 except json.JSONDecodeError:
                     pass
         return errors or [{"valid": True, "signatures_verified": True}]
@@ -448,10 +458,17 @@ class AuditLogger:
         writer = csv.writer(output)
         writer.writerow(["timestamp", "event_id", "event", "actor", "target", "channel", "detail"])
         for e in entries:
-            writer.writerow([
-                e.timestamp, e.event_id, e.event, e.actor, e.target, e.channel,
-                json.dumps(e.detail, default=str) if e.detail else "",
-            ])
+            writer.writerow(
+                [
+                    e.timestamp,
+                    e.event_id,
+                    e.event,
+                    e.actor,
+                    e.target,
+                    e.channel,
+                    json.dumps(e.detail, default=str) if e.detail else "",
+                ]
+            )
         result = output.getvalue()
         if output_path:
             Path(output_path).write_text(result, encoding="utf-8")
@@ -460,6 +477,7 @@ class AuditLogger:
     def get_rotated_logs(self) -> list[Path]:
         pattern = str(self._path) + ".*.log"
         import glob
+
         paths = [Path(p) for p in glob.glob(pattern)]
         return sorted(paths, key=lambda p: p.stat().st_mtime if p.exists() else 0)
 

@@ -18,7 +18,7 @@ class VectorStore:
         self.db_path.mkdir(parents=True, exist_ok=True)
         self.engine = embedding_engine or EmbeddingEngine(provider="local")
         self._vectors: dict[str, np.ndarray] = {}
-        self._metadata: dict[str, dict] = {}
+        self._metadata: dict[str, dict[str, Any]] = {}
         self._load()
 
     def _vectors_path(self) -> Path:
@@ -50,7 +50,7 @@ class VectorStore:
         with self._metadata_path().open("w") as f:
             json.dump(self._metadata, f, default=str)
 
-    async def upsert(self, doc_id: str, text: str, metadata: dict | None = None):
+    async def upsert(self, doc_id: str, text: str, metadata: dict[str, Any] | None = None):
         vecs = await self.engine.embed([text])
         self._vectors[doc_id] = np.array(vecs[0], dtype=np.float32)
         self._metadata[doc_id] = {
@@ -60,7 +60,7 @@ class VectorStore:
         }
         self._save()
 
-    async def upsert_batch(self, items: list[tuple[str, str, dict | None]]):
+    async def upsert_batch(self, items: list[tuple[str, str, dict[str, Any] | None]]):
         texts = [item[1] for item in items]
         vecs = await self.engine.embed(texts)
         for i, (doc_id, text, meta) in enumerate(items):
@@ -77,7 +77,7 @@ class VectorStore:
         self._metadata.pop(doc_id, None)
         self._save()
 
-    async def search(self, query: str, k: int = 5, filter_meta: dict | None = None) -> list[dict[str, Any]]:
+    async def search(self, query: str, k: int = 5, filter_meta: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         if not self._vectors:
             return []
         query_vecs = await self.engine.embed([query])
@@ -95,12 +95,14 @@ class VectorStore:
             if filter_meta:
                 if not all(meta.get(k) == v for k, v in filter_meta.items()):
                     continue
-            results.append({
-                "id": doc_id,
-                "text": meta.get("text", ""),
-                "score": float(sims[idx]),
-                "metadata": meta,
-            })
+            results.append(
+                {
+                    "id": doc_id,
+                    "text": meta.get("text", ""),
+                    "score": float(sims[idx]),
+                    "metadata": meta,
+                }
+            )
         return results
 
     def count(self) -> int:
@@ -109,7 +111,7 @@ class VectorStore:
     def list_ids(self) -> list[str]:
         return list(self._vectors.keys())
 
-    def get_metadata(self, doc_id: str) -> dict | None:
+    def get_metadata(self, doc_id: str) -> dict[str, Any] | None:
         return self._metadata.get(doc_id)
 
     def clear(self):

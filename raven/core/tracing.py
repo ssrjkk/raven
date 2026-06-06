@@ -12,6 +12,7 @@ try:
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+
     HAS_OTEL = True
 except ImportError:
     HAS_OTEL = False
@@ -60,6 +61,7 @@ def setup_tracing(
     if endpoint:
         try:
             from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+
             provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint)))
         except ImportError:
             logger.warning("OTLP exporter not installed. Install: opentelemetry-exporter-otlp-proto-http")
@@ -92,8 +94,8 @@ def trace_llm_call(model: str, **attributes: Any) -> Generator[Any, None, None]:
             span.set_attribute("llm.duration_ms", round(duration * 1000, 1))
 
 
-def trace_tool_call(tool_name: str | None = None) -> Callable:
-    def decorator(func: Callable) -> Callable:
+def trace_tool_call(tool_name: str | None = None) -> Callable[..., Any]:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         name = tool_name or func.__name__
 
         @functools.wraps(func)

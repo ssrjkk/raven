@@ -21,6 +21,7 @@ def mock_db():
 def mock_llm():
     llm = AsyncMock()
     from raven.core.llm import LLMResponse
+
     llm.complete = AsyncMock(return_value=LLMResponse(content="Hello from Raven!", finish_reason="stop"))
     return llm
 
@@ -34,7 +35,10 @@ def session():
 def tools():
     async def ping() -> str:
         return "pong"
-    return [PluginTool(name="ping", description="Ping test", parameters={"type": "object", "properties": {}}, handler=ping)]
+
+    return [
+        PluginTool(name="ping", description="Ping test", parameters={"type": "object", "properties": {}}, handler=ping)
+    ]
 
 
 @pytest.fixture
@@ -54,11 +58,14 @@ class TestAgent:
     async def test_run_with_tool(self, session, tools, mock_db):
         llm = AsyncMock()
         from raven.core.llm import LLMResponse, ToolCall
-        llm.complete = AsyncMock(return_value=LLMResponse(
-            content="",
-            tool_calls=[ToolCall(id="call1", name="ping", arguments={})],
-            finish_reason="tool_calls",
-        ))
+
+        llm.complete = AsyncMock(
+            return_value=LLMResponse(
+                content="",
+                tool_calls=[ToolCall(id="call1", name="ping", arguments={})],
+                finish_reason="tool_calls",
+            )
+        )
 
         config = AgentConfig(max_tool_rounds=3, use_memory=False)
         agent = Agent(session=session, tools=tools, db=mock_db, llm=llm, config=config)
@@ -68,10 +75,14 @@ class TestAgent:
     async def test_tool_execution(self, agent, session, tools, mock_db, mock_llm):
         from raven.core.llm import ToolCall
         from raven.core.security.tool_policy import ToolPolicyEvaluator
+
         agent = Agent(
-            session=session, tools=tools, db=mock_db, llm=mock_llm,
+            session=session,
+            tools=tools,
+            db=mock_db,
+            llm=mock_llm,
             config=AgentConfig(max_tool_rounds=3, use_memory=False),
-            tool_policy=ToolPolicyEvaluator("full", "", ""),
+            tool_policy=ToolPolicyEvaluator("full", "", ""),  # type: ignore[arg-type]
         )
         tc = ToolCall(id="call1", name="ping", arguments={})
         result = await agent._execute_tool(tc)
@@ -80,6 +91,7 @@ class TestAgent:
 
     async def test_tool_execution_unknown(self, agent):
         from raven.core.llm import ToolCall
+
         tc = ToolCall(id="call1", name="nonexistent", arguments={})
         result = await agent._execute_tool(tc)
         assert "error" in result

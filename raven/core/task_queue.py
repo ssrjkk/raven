@@ -5,7 +5,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 from loguru import logger
 
@@ -25,7 +25,7 @@ class Task:
         self,
         id: str,
         name: str,
-        payload: dict,
+        payload: dict[str, Any],
         status: TaskStatus = TaskStatus.PENDING,
         created_at: str | None = None,
         result: str | None = None,
@@ -39,7 +39,7 @@ class Task:
         self.result = result
         self.error = error
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
@@ -51,7 +51,7 @@ class Task:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Task":
+    def from_dict(cls, d: dict[str, Any]) -> "Task":
         return cls(
             id=d["id"],
             name=d["name"],
@@ -72,14 +72,14 @@ class TaskQueue:
         self.max_concurrent = max_concurrent
         self._handlers: dict[str, JobHandler] = {}
         self._queue: asyncio.Queue[Task] = asyncio.Queue()
-        self._workers: list[asyncio.Task] = []
+        self._workers: list[asyncio.Task[None]] = []
         self._running = False
 
     def register(self, name: str, handler: JobHandler):
         self._handlers[name] = handler
         logger.info("Registered task handler: {}", name)
 
-    async def enqueue(self, name: str, payload: dict | None = None) -> Task:
+    async def enqueue(self, name: str, payload: dict[str, Any] | None = None) -> Task:
         task = Task(
             id=uuid.uuid4().hex,
             name=name,

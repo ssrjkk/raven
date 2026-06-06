@@ -51,17 +51,24 @@ class RetryPolicy:
                 if attempt < self.max_retries:
                     delay = min(self.base_delay * (self.multiplier**attempt), self.max_delay)
                     import random
+
                     jitter_amount = delay * self.jitter
                     actual_delay = delay + random.uniform(-jitter_amount, jitter_amount)
                     logger.warning(
                         "[retry] {} failed (attempt {}/{}): {} — retrying in {:.1f}s",
-                        operation_name, attempt + 1, self.max_retries, e, actual_delay,
+                        operation_name,
+                        attempt + 1,
+                        self.max_retries,
+                        e,
+                        actual_delay,
                     )
                     await asyncio.sleep(max(actual_delay, 0.1))
                 else:
                     logger.error(
                         "[retry] {} failed after {} attempts: {}",
-                        operation_name, self.max_retries, e,
+                        operation_name,
+                        self.max_retries,
+                        e,
                     )
 
         raise last_exception  # type: ignore[misc]

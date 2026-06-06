@@ -11,12 +11,14 @@ class TestHealthRegistry:
     def test_register(self):
         async def check():
             return True
+
         self.reg.register("db", check)
         assert "db" in self.reg._checks
 
     async def test_check_all_ok(self):
         async def ok():
             return True
+
         self.reg.register("svc1", ok)
         self.reg.register("svc2", ok)
         result = await self.reg.check_all()
@@ -77,6 +79,7 @@ class TestHealthRegistry:
     async def test_check_liveness(self):
         async def ok():
             return True
+
         self.reg.register("svc", ok)
         result = await self.reg.check_liveness()
         assert "status" in result
@@ -84,6 +87,7 @@ class TestHealthRegistry:
     async def test_check_readiness(self):
         async def ok():
             return True
+
         self.reg.register("svc", ok)
         result = await self.reg.check_readiness()
         assert result["status"] == "ok"
@@ -91,6 +95,7 @@ class TestHealthRegistry:
     async def test_check_readiness_skips_noncritical(self):
         async def ok():
             return True
+
         self.reg.register("noncrit", ok, critical=False)
         result = await self.reg.check_readiness()
         assert "noncrit" not in result["checks"]
@@ -98,6 +103,7 @@ class TestHealthRegistry:
     async def test_check_readiness_with_failure(self):
         async def fail():
             return False
+
         self.reg.register("crit", fail)
         result = await self.reg.check_readiness()
         assert result["status"] == "degraded"

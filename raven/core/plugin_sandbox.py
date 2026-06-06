@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import Any
 
 from loguru import logger
 
@@ -52,7 +53,7 @@ class PluginSandbox:
             return [c.value for c in Capability]
         return list(allowed)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "global_deny": list(self._global_deny),
             "per_plugin": {k: list(v) for k, v in self._per_plugin.items()},

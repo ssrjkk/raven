@@ -16,7 +16,7 @@ def _get_conn(db_path: str) -> sqlite3.Connection:
     if not hasattr(_local, "conn") or _local.conn is None:
         _local.conn = sqlite3.connect(db_path)
         _local.conn.row_factory = sqlite3.Row
-    return _local.conn
+    return _local.conn  # type: ignore[no-any-return]
 
 
 SCHEMA = """
@@ -55,10 +55,16 @@ class CodingSessionManager:
                (id, user_id, channel, goal, project_path, files, status, history, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                session.id, session.user_id, session.channel, session.goal,
+                session.id,
+                session.user_id,
+                session.channel,
+                session.goal,
                 session.project_path,
-                json.dumps(session.files), session.status.value,
-                json.dumps(session.history), session.created_at, session.updated_at,
+                json.dumps(session.files),
+                session.status.value,
+                json.dumps(session.history),
+                session.created_at,
+                session.updated_at,
             ),
         )
         conn.commit()
@@ -90,9 +96,13 @@ class CodingSessionManager:
             """UPDATE coding_sessions SET goal=?, project_path=?, files=?, status=?, history=?,
                updated_at=? WHERE id=?""",
             (
-                session.goal, session.project_path,
-                json.dumps(session.files), session.status.value,
-                json.dumps(session.history), time.time(), session.id,
+                session.goal,
+                session.project_path,
+                json.dumps(session.files),
+                session.status.value,
+                json.dumps(session.history),
+                time.time(),
+                session.id,
             ),
         )
         conn.commit()

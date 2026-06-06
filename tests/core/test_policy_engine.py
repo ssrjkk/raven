@@ -15,6 +15,7 @@ from raven.core.security.policy_engine import (
 
 # ─── ConditionNode from_dict ─────────────────────────────────────────
 
+
 def test_from_dict_empty():
     node = ConditionNode.from_dict({})
     assert node.op == Op.TRUE
@@ -86,6 +87,7 @@ def test_from_dict_primitive_false():
 
 
 # ─── ConditionNode evaluate ──────────────────────────────────────────
+
 
 def test_rule_match_exact():
     rule = Rule("test", {"tool": "ping", "profile": "full"}, "allow", 50)
@@ -194,16 +196,23 @@ def test_rule_match_pattern():
 
 
 def test_rule_complex_nested():
-    rule = Rule("test", {
-        "and": [
-            {"role": {"$in": ["admin", "moderator"]}},
-            {"action": "delete"},
-            {"or": [
-                {"resource": "users"},
-                {"resource": "posts"},
-            ]},
-        ]
-    }, "allow", 100)
+    rule = Rule(
+        "test",
+        {
+            "and": [
+                {"role": {"$in": ["admin", "moderator"]}},
+                {"action": "delete"},
+                {
+                    "or": [
+                        {"resource": "users"},
+                        {"resource": "posts"},
+                    ]
+                },
+            ]
+        },
+        "allow",
+        100,
+    )
     assert rule.evaluate({"role": "admin", "action": "delete", "resource": "users"})
     assert rule.evaluate({"role": "moderator", "action": "delete", "resource": "posts"})
     assert not rule.evaluate({"role": "user", "action": "delete", "resource": "users"})
@@ -223,6 +232,7 @@ def test_rule_dot_path_resolution():
 
 
 # ─── Rule.trace ──────────────────────────────────────────────────────
+
 
 def test_rule_trace_matched():
     rule = Rule("deny-exec", {"tool": "exec"}, "deny", 100)
@@ -245,12 +255,17 @@ def test_rule_trace_not_matched():
 
 
 def test_rule_trace_complex():
-    rule = Rule("complex", {
-        "and": [
-            {"role": "admin"},
-            {"or": [{"tool": "delete"}, {"tool": "create"}]},
-        ]
-    }, "allow", 100)
+    rule = Rule(
+        "complex",
+        {
+            "and": [
+                {"role": "admin"},
+                {"or": [{"tool": "delete"}, {"tool": "create"}]},
+            ]
+        },
+        "allow",
+        100,
+    )
     matched, trace = rule.evaluate_traced({"role": "admin", "tool": "delete"})
     assert matched
     assert len(trace.steps) >= 1
@@ -261,40 +276,49 @@ def test_rule_trace_complex():
 
 # ─── RuleSet ─────────────────────────────────────────────────────────
 
+
 def test_ruleset_priority():
-    rs = RuleSet([
-        Rule("allow-all", {}, "allow", 0),
-        Rule("deny-exec", {"tool": "exec"}, "deny", 100),
-    ])
+    rs = RuleSet(
+        [
+            Rule("allow-all", {}, "allow", 0),
+            Rule("deny-exec", {"tool": "exec"}, "deny", 100),
+        ]
+    )
     effect, name = rs.evaluate({"tool": "exec"})
     assert effect == "deny"
     assert name == "deny-exec"
 
 
 def test_ruleset_priority_allow():
-    rs = RuleSet([
-        Rule("deny-exec", {"tool": "exec"}, "deny", 100),
-        Rule("allow-specific", {"tool": "exec", "role": "admin"}, "allow", 200),
-    ])
+    rs = RuleSet(
+        [
+            Rule("deny-exec", {"tool": "exec"}, "deny", 100),
+            Rule("allow-specific", {"tool": "exec", "role": "admin"}, "allow", 200),
+        ]
+    )
     effect, name = rs.evaluate({"tool": "exec", "role": "admin"})
     assert effect == "allow"
     assert name == "allow-specific"
 
 
 def test_ruleset_no_match():
-    rs = RuleSet([
-        Rule("deny-exec", {"tool": "exec"}, "deny", 100),
-    ])
+    rs = RuleSet(
+        [
+            Rule("deny-exec", {"tool": "exec"}, "deny", 100),
+        ]
+    )
     effect, name = rs.evaluate({"tool": "ping"})
     assert effect is None
     assert name is None
 
 
 def test_ruleset_disabled_rule():
-    rs = RuleSet([
-        Rule("deny-exec", {"tool": "exec"}, "deny", 100, enabled=False),
-        Rule("allow-all", {}, "allow", 0),
-    ])
+    rs = RuleSet(
+        [
+            Rule("deny-exec", {"tool": "exec"}, "deny", 100, enabled=False),
+            Rule("allow-all", {}, "allow", 0),
+        ]
+    )
     effect, name = rs.evaluate({"tool": "exec"})
     assert effect == "allow"
     assert name == "allow-all"
@@ -309,11 +333,14 @@ def test_ruleset_add_rule():
 
 # ─── RuleSet.evaluate_detailed ───────────────────────────────────────
 
+
 def test_ruleset_evaluate_detailed_match():
-    rs = RuleSet([
-        Rule("deny-exec", {"tool": "exec"}, "deny", 100),
-        Rule("allow-all", {}, "allow", 0),
-    ])
+    rs = RuleSet(
+        [
+            Rule("deny-exec", {"tool": "exec"}, "deny", 100),
+            Rule("allow-all", {}, "allow", 0),
+        ]
+    )
     decision = rs.evaluate_detailed({"tool": "exec"})
     assert decision.effect == "deny"
     assert decision.rule_name == "deny-exec"
@@ -322,9 +349,11 @@ def test_ruleset_evaluate_detailed_match():
 
 
 def test_ruleset_evaluate_detailed_no_match():
-    rs = RuleSet([
-        Rule("deny-exec", {"tool": "exec"}, "deny", 100),
-    ])
+    rs = RuleSet(
+        [
+            Rule("deny-exec", {"tool": "exec"}, "deny", 100),
+        ]
+    )
     decision = rs.evaluate_detailed({"tool": "ping"})
     assert decision.effect is None
     assert decision.rule_name is None
@@ -332,10 +361,12 @@ def test_ruleset_evaluate_detailed_no_match():
 
 
 def test_ruleset_evaluate_detailed_disabled_rule_skipped():
-    rs = RuleSet([
-        Rule("deny-exec", {"tool": "exec"}, "deny", 100, enabled=False),
-        Rule("allow-all", {}, "allow", 0),
-    ])
+    rs = RuleSet(
+        [
+            Rule("deny-exec", {"tool": "exec"}, "deny", 100, enabled=False),
+            Rule("allow-all", {}, "allow", 0),
+        ]
+    )
     decision = rs.evaluate_detailed({"tool": "exec"})
     assert decision.effect == "allow"
     assert decision.rule_name == "allow-all"
@@ -343,13 +374,17 @@ def test_ruleset_evaluate_detailed_disabled_rule_skipped():
 
 # ─── PolicyEngine ────────────────────────────────────────────────────
 
+
 def test_policy_engine_load_json():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-        json.dump({
-            "rules": [
-                {"name": "deny-exec", "condition": {"tool": "exec"}, "effect": "deny", "priority": 100},
-            ],
-        }, f)
+        json.dump(
+            {
+                "rules": [
+                    {"name": "deny-exec", "condition": {"tool": "exec"}, "effect": "deny", "priority": 100},
+                ],
+            },
+            f,
+        )
         f.flush()
         engine = PolicyEngine()
         rs = engine.load_ruleset("test", f.name)
@@ -361,20 +396,23 @@ def test_policy_engine_load_json():
 
 def test_policy_engine_load_json_with_all_fields():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-        json.dump({
-            "rules": [
-                {
-                    "name": "complex-rule",
-                    "condition": {"role": {"$in": ["admin", "moderator"]}},
-                    "effect": "allow",
-                    "priority": 50,
-                    "description": "Allow admins and moderators",
-                    "tags": ["admin", "moderator"],
-                    "enabled": True,
-                    "metadata": {"source": "config"},
-                },
-            ],
-        }, f)
+        json.dump(
+            {
+                "rules": [
+                    {
+                        "name": "complex-rule",
+                        "condition": {"role": {"$in": ["admin", "moderator"]}},
+                        "effect": "allow",
+                        "priority": 50,
+                        "description": "Allow admins and moderators",
+                        "tags": ["admin", "moderator"],
+                        "enabled": True,
+                        "metadata": {"source": "config"},
+                    },
+                ],
+            },
+            f,
+        )
         f.flush()
         engine = PolicyEngine()
         rs = engine.load_ruleset("test", f.name)
@@ -483,7 +521,7 @@ def test_condition_node_repr():
 
 
 def test_rule_evaluate_exception_safe():
-    class ExplodingDict(dict):
+    class ExplodingDict(dict):  # type: ignore[type-arg]
         def get(self, key, default=None):
             raise RuntimeError("boom")
 

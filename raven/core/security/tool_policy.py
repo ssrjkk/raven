@@ -51,6 +51,7 @@ class ToolPolicyEvaluator:
     def is_tool_allowed(self, tool_name: str) -> bool:
         try:
             from raven.core.security.policy_engine import policy_engine
+
             rs = policy_engine.get_ruleset("tools")
             if rs is not None and len(rs.rules) > 0:
                 if not policy_engine.check("tools", {"tool": tool_name, "profile": self.profile, "action": "call"}):
@@ -86,7 +87,10 @@ class ToolPolicyEvaluator:
 
         try:
             from raven.core.security.policy_engine import policy_engine
-            allowed = policy_engine.check("exec", {"tool": tool_name, "args": args, "exec_security": self.exec_security.value})
+
+            allowed = policy_engine.check(
+                "exec", {"tool": tool_name, "args": args, "exec_security": self.exec_security.value}
+            )
             if not allowed:
                 return False, "exec denied by policy engine"
         except ImportError:
@@ -123,7 +127,7 @@ class ToolPolicyEvaluator:
 
         return True, None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "profile": self.profile,
             "deny": list(self._deny),

@@ -25,7 +25,7 @@ class TokenManager:
         data = self._tokens.get(token)
         if not data:
             return None
-        if time.time() > data["expires_at"]:
+        if time.time() >= data["expires_at"]:
             self.revoke_token(token)
             return None
         return data
@@ -40,7 +40,7 @@ class TokenManager:
 
     def clean_expired(self):
         now = time.time()
-        to_remove = [t for t, d in self._tokens.items() if now > d["expires_at"]]
+        to_remove = [t for t, d in self._tokens.items() if now >= d["expires_at"]]
         for t in to_remove:
             self._tokens.pop(t, None)
         if to_remove:

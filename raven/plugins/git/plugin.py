@@ -56,7 +56,8 @@ async def git_pull(path: str = ".", remote: str = "origin", branch: str = "") ->
 async def _run_git(args: str, repo_path: str) -> str:
     try:
         proc = await asyncio.create_subprocess_exec(
-            "git", *shlex.split(args),
+            "git",
+            *shlex.split(args),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=Path(repo_path).resolve() if repo_path != "." else None,

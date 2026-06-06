@@ -24,7 +24,7 @@ def _get_conn(db_path: str) -> sqlite3.Connection:
     if not hasattr(_local, "conn") or _local.conn is None:
         _local.conn = sqlite3.connect(db_path)
         _local.conn.row_factory = sqlite3.Row
-    return _local.conn
+    return _local.conn  # type: ignore[no-any-return]
 
 
 SCHEMA = """
@@ -74,10 +74,9 @@ class MonitorStore:
         config = dict(monitor.config)
         config["target"] = monitor.target
         config_json = json.dumps(config)
-        conditions_json = json.dumps([
-            {"metric": c.metric, "operator": c.operator.value, "value": c.value}
-            for c in monitor.conditions
-        ])
+        conditions_json = json.dumps(
+            [{"metric": c.metric, "operator": c.operator.value, "value": c.value} for c in monitor.conditions]
+        )
         notify_json = json.dumps(monitor.notify_channels or [])
         conn.execute(
             """INSERT OR REPLACE INTO monitors
@@ -85,10 +84,17 @@ class MonitorStore:
                 interval_seconds, notify_channels, status, user_id, channel, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                monitor.id, monitor.name, monitor.type.value,
-                config_json, conditions_json, monitor.cooldown_minutes,
-                monitor.interval_seconds, notify_json,
-                monitor.status.value, monitor.user_id, monitor.channel,
+                monitor.id,
+                monitor.name,
+                monitor.type.value,
+                config_json,
+                conditions_json,
+                monitor.cooldown_minutes,
+                monitor.interval_seconds,
+                notify_json,
+                monitor.status.value,
+                monitor.user_id,
+                monitor.channel,
                 monitor.created_at or time.time(),
             ),
         )
@@ -96,9 +102,7 @@ class MonitorStore:
 
     def load_monitor(self, monitor_id: str) -> Monitor | None:
         conn = self._conn()
-        row = conn.execute(
-            "SELECT * FROM monitors WHERE id = ?", (monitor_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM monitors WHERE id = ?", (monitor_id,)).fetchone()
         if not row:
             return None
         return self._row_to_monitor(row)
@@ -121,7 +125,7 @@ class MonitorStore:
             params.append(status)
         parts.append("ORDER BY created_at DESC")
         rows = conn.execute(" ".join(parts), params).fetchall()
-        return [self._row_to_monitor(r) for r in rows if r]
+        return [m for r in rows if (m := self._row_to_monitor(r)) is not None]
 
     def list_active(self) -> list[Monitor]:
         return self.list_monitors(status="active")
@@ -162,8 +166,13 @@ class MonitorStore:
                (monitor_id, status, checked_at, response_time_ms, triggered, result, error)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (
-                check.monitor_id, check.status, check.checked_at or time.time(),
-                check.response_time_ms, int(check.triggered), result_json, check.error,
+                check.monitor_id,
+                check.status,
+                check.checked_at or time.time(),
+                check.response_time_ms,
+                int(check.triggered),
+                result_json,
+                check.error,
             ),
         )
         conn.execute(
@@ -194,11 +203,13 @@ class MonitorStore:
             conditions_raw = json.loads(row["condition"]) if row["condition"] else []
             conditions = []
             for c in conditions_raw:
-                conditions.append(Condition(
-                    metric=c["metric"],
-                    operator=ConditionOperator(c.get("operator", "=")),
-                    value=c["value"],
-                ))
+                conditions.append(
+                    Condition(
+                        metric=c["metric"],
+                        operator=ConditionOperator(c.get("operator", "=")),
+                        value=c["value"],
+                    )
+                )
             notify = json.loads(row["notify_channels"]) if row["notify_channels"] else []
 
             m = Monitor(

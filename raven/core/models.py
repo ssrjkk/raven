@@ -14,10 +14,10 @@ class Message(BaseModel):
     channel: str = ""
     role: Literal["user", "assistant", "system", "tool"]
     content: str
-    metadata: dict = {}
+    metadata: dict[str, Any] = {}
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "session_id": self.session_id,
@@ -43,7 +43,7 @@ class Session(BaseModel):
 class PluginTool(BaseModel):
     name: str
     description: str
-    parameters: dict
+    parameters: dict[str, Any]
     handler: Callable[..., Any]
 
     model_config = {"arbitrary_types_allowed": True}
@@ -54,12 +54,12 @@ class IncomingMessage(BaseModel):
     user_id: str
     session_id: str = ""
     text: str
-    metadata: dict = {}
+    metadata: dict[str, Any] = {}
 
 
 class LLMResponse(BaseModel):
     content: str
-    tool_calls: list[dict] = []
+    tool_calls: list[dict[str, Any]] = []
     finish_reason: str = "stop"
 
 

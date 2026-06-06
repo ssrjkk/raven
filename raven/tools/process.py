@@ -8,10 +8,12 @@ from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 async def process_list() -> str:
     import os
+
     if os.name == "nt":
         proc = await asyncio.create_subprocess_shell(
             "tasklist /FO CSV /NH",
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
         stdout, _ = await proc.communicate()
         lines = stdout.decode("utf-8", errors="replace").splitlines()[:50]
@@ -19,7 +21,8 @@ async def process_list() -> str:
     else:
         proc = await asyncio.create_subprocess_shell(
             "ps aux --sort=-%mem | head -50",
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
         stdout, _ = await proc.communicate()
         return stdout.decode("utf-8", errors="replace")
@@ -27,8 +30,10 @@ async def process_list() -> str:
 
 async def process_kill(pid: int) -> str:
     import signal as sig_mod
+
     try:
         import os
+
         os.kill(pid, sig_mod.SIGTERM)
         return f"Process {pid} terminated"
     except ProcessLookupError:
@@ -38,20 +43,24 @@ async def process_kill(pid: int) -> str:
 
 
 def register_process_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="process_list",
-        description="List running processes",
-        parameters={},
-        handler=process_list,
-        category="system",
-        timeout=15,
-    ))
-    registry.register(ToolSpec(
-        name="process_kill",
-        description="Kill a process by PID",
-        parameters={
-            "pid": {"type": "integer", "description": "Process ID to kill", "required": True},
-        },
-        handler=process_kill,
-        category="system",
-    ))
+    registry.register(
+        ToolSpec(
+            name="process_list",
+            description="List running processes",
+            parameters={},
+            handler=process_list,
+            category="system",
+            timeout=15,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="process_kill",
+            description="Kill a process by PID",
+            parameters={
+                "pid": {"type": "integer", "description": "Process ID to kill", "required": True},
+            },
+            handler=process_kill,
+            category="system",
+        )
+    )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from loguru import logger
 
@@ -21,6 +22,7 @@ async def _ensure_db():
             return _collection
         try:
             import chromadb
+
             _client = chromadb.Client()
             _collection = _client.get_or_create_collection("raven_memory")
             return _collection
@@ -30,7 +32,7 @@ async def _ensure_db():
 
 
 # In-memory fallback
-_fallback: dict[str, list[dict]] = {}
+_fallback: dict[str, list[dict[str, Any]]] = {}
 
 
 async def remember(key: str, value: str) -> str:
@@ -53,14 +55,15 @@ async def recall(key: str) -> str:
         try:
             result = collection.get(ids=[key])
             docs = result.get("documents", [])
-            if docs and docs[0]:
+            if docs and isinstance(docs[0], str):
                 return docs[0][:2000]
         except Exception:
             pass
     if key in _fallback:
         items = _fallback[key]
         if items:
-            return items[0].get("document", "")[:2000]
+            val: str = items[0].get("document", "")
+            return val[:2000]
     return f"Nothing found for '{key}'"
 
 

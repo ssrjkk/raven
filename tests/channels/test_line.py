@@ -30,17 +30,19 @@ async def test_line_handle_webhook():
     await c.on_message(handler)
     await c.start()
     body = {
-        "events": [{
-            "type": "message",
-            "replyToken": "r1",
-            "source": {"userId": "u1"},
-            "message": {"type": "text", "text": "hello line"},
-        }]
+        "events": [
+            {
+                "type": "message",
+                "replyToken": "r1",
+                "source": {"userId": "u1"},
+                "message": {"type": "text", "text": "hello line"},
+            }
+        ]
     }
     result = await c.handle_webhook(body)
     assert result
     handler.assert_awaited_once()
-    event = handler.await_args[0][0]
+    event = handler.await_args[0][0]  # type: ignore[index]
     assert event.channel == "line"
     assert event.text == "hello line"
 
@@ -52,11 +54,13 @@ async def test_line_handle_webhook_non_text():
     await c.on_message(handler)
     await c.start()
     body = {
-        "events": [{
-            "type": "message",
-            "source": {"userId": "u1"},
-            "message": {"type": "image"},
-        }]
+        "events": [
+            {
+                "type": "message",
+                "source": {"userId": "u1"},
+                "message": {"type": "image"},
+            }
+        ]
     }
     result = await c.handle_webhook(body)
     assert not result

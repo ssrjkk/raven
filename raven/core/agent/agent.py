@@ -61,6 +61,7 @@ class Agent:
     def _init_tool_policy(self):
         from raven.core.config import settings, _DEFAULT_TOOLS_DENY
         from raven.core.security.tool_policy import ExecAskMode, ExecSecurity, ToolPolicyEvaluator
+
         deny_raw = settings.tools_deny
         deny_list = [d.strip() for d in deny_raw.split(",") if d.strip()] if deny_raw else list(_DEFAULT_TOOLS_DENY)
         allow_raw = settings.tools_allow
@@ -84,6 +85,7 @@ class Agent:
         workspace = self.config.workspace
         if workspace:
             from pathlib import Path
+
             ws = Path(workspace)
             for fname in ("SOUL.md", "AGENTS.md", "TOOLS.md"):
                 fp = ws / fname
@@ -93,7 +95,7 @@ class Agent:
                         base += f"\n\n---\n[{fname}]\n{content}"
         return base
 
-    def _tool_schemas(self) -> list[dict]:
+    def _tool_schemas(self) -> list[dict[str, Any]]:
         return [
             {
                 "type": "function",
@@ -106,21 +108,18 @@ class Agent:
             for t in self.tools
         ]
 
-    async def _load_history(self) -> list[dict]:
+    async def _load_history(self) -> list[dict[str, Any]]:
         msgs = await self.db.get_session_messages(self.session.id, limit=self.config.max_history)
-        history: list[dict] = []
+        history: list[dict[str, Any]] = []
         for m in msgs:
-            entry: dict = {"role": m.role, "content": m.content}
+            entry: dict[str, Any] = {"role": m.role, "content": m.content}
             history.append(entry)
         return history
 
-    async def _compress(self, messages: list[dict]) -> list[dict]:
+    async def _compress(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if len(messages) <= 6:
             return messages
-        conversation = "\n".join(
-            f"{m['role']}: {(m.get('content') or '')[:200]}"
-            for m in messages[:-4]
-        )
+        conversation = "\n".join(f"{m['role']}: {(m.get('content') or '')[:200]}" for m in messages[:-4])
         prompt = [
             {"role": "system", "content": "Summarize the key points of this conversation concisely in 2-3 sentences."},
             {"role": "user", "content": f"Summarize:\n{conversation}"},
@@ -173,7 +172,7 @@ class Agent:
             if recall_context is None:
                 recall_context = await self._get_recall_context(user_message)
 
-        messages: list[dict] = [{"role": "system", "content": self._build_system_prompt()}]
+        messages: list[dict[str, Any]] = [{"role": "system", "content": self._build_system_prompt()}]
         if recall_context:
             messages.append({"role": "system", "content": f"Relevant memories:\n{recall_context}"})
 
@@ -195,7 +194,9 @@ class Agent:
 
             if resp.tool_calls:
                 tool_used = True
-                messages.append({"role": "assistant", "content": content, "tool_calls": [tc.to_dict() for tc in resp.tool_calls]})
+                messages.append(
+                    {"role": "assistant", "content": content, "tool_calls": [tc.to_dict() for tc in resp.tool_calls]}
+                )
                 for tc in resp.tool_calls:
                     tool_result = await self._execute_tool(tc)
                     messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(tool_result)})
@@ -215,13 +216,17 @@ class Agent:
                 yield token
 
         if not self.config.stateless:
-            user_msg = Message(session_id=self.session.id, channel=self.session.channel, role="user", content=user_message)
-            assistant_msg = Message(session_id=self.session.id, channel=self.session.channel, role="assistant", content=final_content)
+            user_msg = Message(
+                session_id=self.session.id, channel=self.session.channel, role="user", content=user_message
+            )
+            assistant_msg = Message(
+                session_id=self.session.id, channel=self.session.channel, role="assistant", content=final_content
+            )
             await self.db.save_message(user_msg)
             await self.db.save_message(assistant_msg)
             await self._auto_memory(user_message, final_content)
 
-    async def _execute_tool(self, tc: ToolCall) -> dict:
+    async def _execute_tool(self, tc: ToolCall) -> dict[str, Any]:
         tool = self._tool_map.get(tc.name)
         if not tool:
             logger.warning("Unknown tool: {}", tc.name)
@@ -241,6 +246,6 @@ class Agent:
             logger.error("Tool {} error: {}", tc.name, e)
             return {"error": str(e)[:500]}
 
-    async def simple_complete(self, messages: list[dict]) -> AsyncIterator[str]:
+    async def simple_complete(self, messages: list[dict[str, Any]]) -> AsyncIterator[str]:
         async for token in self.llm.complete_stream(messages):
             yield token

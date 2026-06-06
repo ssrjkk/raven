@@ -31,6 +31,7 @@ class EmbeddingEngine:
             return await self._embed_local(texts)
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=30) as c:
                 resp = await c.post(
                     "https://api.openai.com/v1/embeddings",
@@ -51,10 +52,11 @@ class EmbeddingEngine:
         try:
             if self._local_model is None:
                 from sentence_transformers import SentenceTransformer
+
                 model_name = self.model or "all-MiniLM-L6-v2"
                 self._local_model = SentenceTransformer(model_name)
             emb = self._local_model.encode(texts, show_progress_bar=False)
-            return emb.tolist()
+            return emb.tolist()  # type: ignore[no-any-return]
         except ImportError:
             return [np.random.rand(384).tolist() for _ in texts]
         except Exception as e:
@@ -65,7 +67,9 @@ class EmbeddingEngine:
     def _get_openai_key() -> str:
         try:
             from raven.core.config import settings
+
             return settings.openai_api_key or ""
         except Exception:
             import os
+
             return os.environ.get("OPENAI_API_KEY", "")

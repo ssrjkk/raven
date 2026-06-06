@@ -24,26 +24,34 @@ async def http_post(url: str, body: str = "", content_type: str = "application/j
 
 
 def register_http_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="http_get",
-        description="Fetch a URL and return its content",
-        parameters={
-            "url": {"type": "string", "description": "URL to fetch", "required": True},
-            "headers": {"type": "string", "description": "Optional headers, one per line (Key: Value)", "required": False},
-        },
-        handler=http_get,
-        category="web",
-        timeout=30,
-    ))
-    registry.register(ToolSpec(
-        name="http_post",
-        description="POST data to a URL",
-        parameters={
-            "url": {"type": "string", "description": "Target URL", "required": True},
-            "body": {"type": "string", "description": "Request body", "required": False},
-            "content_type": {"type": "string", "description": "Content-Type header", "required": False},
-        },
-        handler=http_post,
-        category="web",
-        timeout=30,
-    ))
+    registry.register(
+        ToolSpec(
+            name="http_get",
+            description="Fetch a URL and return its content",
+            parameters={
+                "url": {"type": "string", "description": "URL to fetch", "required": True},
+                "headers": {
+                    "type": "string",
+                    "description": "Optional headers, one per line (Key: Value)",
+                    "required": False,
+                },
+            },
+            handler=http_get,
+            category="web",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="http_post",
+            description="POST data to a URL",
+            parameters={
+                "url": {"type": "string", "description": "Target URL", "required": True},
+                "body": {"type": "string", "description": "Request body", "required": False},
+                "content_type": {"type": "string", "description": "Content-Type header", "required": False},
+            },
+            handler=http_post,
+            category="web",
+            timeout=30,
+        )
+    )

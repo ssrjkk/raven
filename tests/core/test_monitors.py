@@ -23,6 +23,7 @@ from raven.core.monitor.store import MonitorStore
 @pytest.fixture(autouse=True)
 def _clear_cache():
     import raven.core.monitor.store as ms
+
     ms._local.conn = None
 
 
@@ -298,12 +299,16 @@ class TestCheckNow:
 class TestCooldown:
     async def test_cooldown_suppresses_notification(self, store: MonitorStore):
         sent: list[str] = []
+
         async def send_fn(channel: str, text: str):
             sent.append(f"{channel}:{text}")
+
         engine = MonitorEngine(store, send_fn=send_fn)
         handler = AsyncMock(return_value="alert")
         engine.register_handler("http", handler)
-        m = Monitor(name="test", type=MonitorType.HTTP, target="https://example.com", cooldown_minutes=60, channel="test_ch")
+        m = Monitor(
+            name="test", type=MonitorType.HTTP, target="https://example.com", cooldown_minutes=60, channel="test_ch"
+        )
         store.save_monitor(m)
         await engine.check_now(m.id)
         first_count = len(sent)
@@ -312,12 +317,16 @@ class TestCooldown:
 
     async def test_no_cooldown_allows_notification(self, store: MonitorStore):
         sent: list[str] = []
+
         async def send_fn(channel: str, text: str):
             sent.append(f"{channel}:{text}")
+
         engine = MonitorEngine(store, send_fn=send_fn)
         handler = AsyncMock(return_value="alert")
         engine.register_handler("http", handler)
-        m = Monitor(name="test", type=MonitorType.HTTP, target="https://example.com", cooldown_minutes=0, channel="test_ch")
+        m = Monitor(
+            name="test", type=MonitorType.HTTP, target="https://example.com", cooldown_minutes=0, channel="test_ch"
+        )
         store.save_monitor(m)
         await engine.check_now(m.id)
         assert len(sent) >= 1
@@ -326,6 +335,7 @@ class TestCooldown:
 class TestCheckerSignatures:
     async def test_price_checker_returns_str_or_none(self):
         from raven.core.monitor.checkers.price import check_price
+
         m = Monitor(name="test-price", type=MonitorType.PRICE, target="nonexistentcoinxyz")
         try:
             result = await check_price(m)
@@ -335,6 +345,7 @@ class TestCheckerSignatures:
 
     async def test_http_checker_returns_str_or_none(self):
         from raven.core.monitor.checkers.http_check import check_http
+
         m = Monitor(name="test-http", type=MonitorType.HTTP, target="https://invalid.example.test")
         try:
             result = await check_http(m)
@@ -344,6 +355,7 @@ class TestCheckerSignatures:
 
     async def test_rss_checker_returns_str_or_none(self):
         from raven.core.monitor.checkers.rss import check_rss
+
         m = Monitor(name="test-rss", type=MonitorType.RSS, target="https://invalid.example.test/rss")
         try:
             result = await check_rss(m)
@@ -359,5 +371,6 @@ class TestEngineFromDb:
 
     def test_engine_with_path_creates_store(self, db_path: str):
         from pathlib import Path
+
         engine = MonitorEngine(Path(db_path))
         assert engine._store is not None

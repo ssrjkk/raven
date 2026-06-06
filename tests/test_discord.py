@@ -35,6 +35,7 @@ async def test_start_with_deps(channel):
             with patch("raven.channels.discord.channel.discord.Intents"):
                 with patch("raven.channels.discord.channel.commands.Bot") as MockBot:
                     mock_bot = MagicMock()
+                    mock_bot.start = AsyncMock(return_value=None)
                     MockBot.return_value = mock_bot
                     with patch("raven.channels.discord.channel.app_commands.CommandTree"):
                         channel._token = "fake_token"
@@ -96,5 +97,6 @@ async def test_channel_id(channel):
 async def test_build_embed():
     if HAS_DISCORD:
         from raven.channels.discord.channel import build_embed
+
         embed = build_embed("Test", "Description", "info", [("Key", "Value", True)])
         assert embed is not None

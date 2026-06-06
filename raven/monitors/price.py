@@ -23,12 +23,18 @@ async def check_price(monitor: Monitor) -> dict[str, Any]:
 
 async def _check_coingecko(symbol: str, monitor: Monitor) -> dict[str, Any]:
     coin_map = {
-        "bitcoin": "bitcoin", "btc": "bitcoin",
-        "ethereum": "ethereum", "eth": "ethereum",
-        "solana": "solana", "sol": "solana",
-        "cardano": "cardano", "ada": "cardano",
-        "ripple": "ripple", "xrp": "ripple",
-        "dogecoin": "dogecoin", "doge": "dogecoin",
+        "bitcoin": "bitcoin",
+        "btc": "bitcoin",
+        "ethereum": "ethereum",
+        "eth": "ethereum",
+        "solana": "solana",
+        "sol": "solana",
+        "cardano": "cardano",
+        "ada": "cardano",
+        "ripple": "ripple",
+        "xrp": "ripple",
+        "dogecoin": "dogecoin",
+        "doge": "dogecoin",
     }
     coin_id = coin_map.get(symbol, symbol)
     url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd"

@@ -29,11 +29,14 @@ async def test_googlechat_handle_webhook():
     c = GoogleChatChannel()
     await c.on_message(handler)
     await c.start()
-    body = {"message": {"text": "hi", "sender": {"name": "users/123", "email": "a@b.com"}}, "space": {"name": "spaces/abc"}}
+    body = {
+        "message": {"text": "hi", "sender": {"name": "users/123", "email": "a@b.com"}},
+        "space": {"name": "spaces/abc"},
+    }
     result = await c.handle_webhook(body)
     assert result
     handler.assert_awaited_once()
-    event = handler.await_args[0][0]
+    event = handler.await_args[0][0]  # type: ignore[index]
     assert event.channel == "googlechat"
     assert event.text == "hi"
 

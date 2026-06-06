@@ -32,6 +32,7 @@ class TestAiosGatewayE2E:
     @patch("aios.api.bridge._client")
     def test_ai_endpoint(self, mock_client, client):
         from ravencode.api.client import AIResponse
+
         mock_client.ask = AsyncMock(return_value=AIResponse(text="hello world", model="gpt4", provider="openai"))
 
         resp = client.post("/aios/ai", json={"prompt": "hi", "task": "code"})
@@ -43,6 +44,7 @@ class TestAiosGatewayE2E:
     @patch("aios.api.bridge._client")
     def test_ai_endpoint_degraded(self, mock_client, client):
         from ravencode.api.client import AIResponse
+
         mock_client.ask = AsyncMock(return_value=AIResponse(text="unavailable", model="none", provider="none"))
 
         resp = client.post("/aios/ai", json={"prompt": "hi", "task": "code"})

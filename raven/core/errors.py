@@ -34,7 +34,7 @@ class AppError(Exception):
         self.retryable = retryable
         super().__init__(self.message)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {"code": self.code.value, "message": self.message, "detail": self.detail, "retryable": self.retryable}
 
 

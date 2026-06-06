@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from raven.channels.enterprise_base import EnterpriseChannel
 from raven.core.config import settings
 from raven.core.models import IncomingMessage, Message
@@ -14,7 +16,7 @@ class TeamsChannel(EnterpriseChannel):
     async def _stop(self):
         pass
 
-    async def handle_webhook(self, body: dict) -> bool:
+    async def handle_webhook(self, body: dict[str, Any]) -> bool:
         if not self._handler or not self._ready:
             return False
         text = body.get("text", "")
@@ -23,13 +25,15 @@ class TeamsChannel(EnterpriseChannel):
         if not text or not from_id:
             return False
         self._stats["received"] += 1
-        await self._handler(IncomingMessage(
-            channel="teams",
-            user_id=from_id,
-            session_id=f"teams:{conversation}:{from_id}",
-            text=text,
-            metadata={"conversation_id": conversation},
-        ))
+        await self._handler(
+            IncomingMessage(
+                channel="teams",
+                user_id=from_id,
+                session_id=f"teams:{conversation}:{from_id}",
+                text=text,
+                metadata={"conversation_id": conversation},
+            )
+        )
         return True
 
     async def _send_message(self, session_id: str, message: Message):

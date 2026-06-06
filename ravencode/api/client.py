@@ -30,6 +30,7 @@ class AIOSClient:
         if self._llm is None:
             try:
                 from raven.core.llm import LLMRouter
+
                 self._llm = LLMRouter()
             except Exception as exc:
                 logger.warning("LLMRouter unavailable (API keys missing?): {}", exc)

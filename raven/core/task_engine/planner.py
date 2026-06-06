@@ -47,20 +47,22 @@ class TaskPlanner:
     async def plan(self, goal: str, llm: LLMRouter, task_id: str = "", user_id: str = "", channel: str = "") -> Task:
         prompt = self._build_prompt(goal)
         response = ""
-        async for token in llm.ask(prompt):
+        async for token in llm.ask(prompt):  # type: ignore[attr-defined]
             response += token
 
         plan_data = self._parse_response(response)
 
         steps: list[TaskStep] = []
         for i, s in enumerate(plan_data.get("steps", [])):
-            steps.append(TaskStep(
-                task_id=task_id,
-                order=i,
-                description=s.get("description", ""),
-                tool=s.get("tool", ""),
-                params=s.get("params", {}),
-            ))
+            steps.append(
+                TaskStep(
+                    task_id=task_id,
+                    order=i,
+                    description=s.get("description", ""),
+                    tool=s.get("tool", ""),
+                    params=s.get("params", {}),
+                )
+            )
 
         return Task(
             id=task_id,
@@ -75,8 +77,7 @@ class TaskPlanner:
 
     def _build_prompt(self, goal: str) -> str:
         tools_list = "\n".join(
-            f"- {t.name}: {t.description} (params: {json.dumps(t.parameters)})"
-            for t in self._tools.list()
+            f"- {t.name}: {t.description} (params: {json.dumps(t.parameters)})" for t in self._tools.list()
         )
         return PLANNER_PROMPT.format(tools_list=tools_list, goal=goal)
 
@@ -84,7 +85,7 @@ class TaskPlanner:
         try:
             start = text.index("{")
             end = text.rindex("}") + 1
-            return json.loads(text[start:end])
+            return json.loads(text[start:end])  # type: ignore[no-any-return]
         except (ValueError, json.JSONDecodeError):
             logger.warning("Planner: failed to parse LLM response, returning default")
             return {

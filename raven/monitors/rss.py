@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
-
 import httpx
 
+from typing import Any
 from raven.core.monitor.models import Monitor
 
 
@@ -15,25 +14,30 @@ async def check_rss(monitor: Monitor) -> dict[str, Any]:
     posts = []
     try:
         import xml.etree.ElementTree as ET
+
         root = ET.fromstring(content)
 
         namespaces = {"": "", "atom": "http://www.w3.org/2005/Atom"}
-        ns = {}
+        ns: dict[str, Any] = {}
         for event, elem in ET.iterparse(monitor.target, events=("start-ns",)):
             if event == "start-ns":
                 prefix, uri = elem
-                ns[prefix or "default"] = uri
+                ns[str(prefix or "default")] = uri
 
         items = root.findall(".//item") or root.findall(".//atom:entry", namespaces)
         for item in items[:20]:
             title = _find_text(item, "title", ns)
             link = _find_text(item, "link", ns)
-            pubdate = _find_text(item, "pubDate", ns) or _find_text(item, "updated", ns) or _find_text(item, "published", ns)
-            posts.append({
-                "title": title or "(no title)",
-                "link": link or "",
-                "published": pubdate or "",
-            })
+            pubdate = (
+                _find_text(item, "pubDate", ns) or _find_text(item, "updated", ns) or _find_text(item, "published", ns)
+            )
+            posts.append(
+                {
+                    "title": title or "(no title)",
+                    "link": link or "",
+                    "published": pubdate or "",
+                }
+            )
 
         last_build = _find_text(root, "lastBuildDate", ns) or _find_text(root, "updated", ns) or ""
 
@@ -48,19 +52,19 @@ async def check_rss(monitor: Monitor) -> dict[str, Any]:
         return {"error": f"RSS parse failed: {e}", "feed_count": 0}
 
 
-def _find_text(parent, tag, namespaces: dict) -> str | None:
+def _find_text(parent, tag, namespaces: dict[str, str]) -> str | None:
     for ns_prefix, ns_uri in namespaces.items():
         if ns_prefix:
             prefixed = f"{{{ns_uri}}}{tag}"
             elem = parent.find(prefixed)
             if elem is not None and elem.text:
-                return elem.text
+                return elem.text  # type: ignore[no-any-return]
     if namespaces.get("default"):
         prefixed = f"{{{namespaces['default']}}}{tag}"
         elem = parent.find(prefixed)
         if elem is not None and elem.text:
-            return elem.text
+            return elem.text  # type: ignore[no-any-return]
     elem = parent.find(tag)
     if elem is not None:
-        return elem.text
+        return elem.text  # type: ignore[no-any-return]
     return None

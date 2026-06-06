@@ -26,12 +26,20 @@ class ToolCall:
     def __repr__(self):
         return f"ToolCall(id={self.id}, name={self.name})"
 
-    def to_dict(self) -> dict:
-        return {"id": self.id, "type": "function", "function": {"name": self.name, "arguments": json.dumps(self.arguments)}}
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "type": "function",
+            "function": {"name": self.name, "arguments": json.dumps(self.arguments)},
+        }
 
     @classmethod
-    def from_openai(cls, tc: dict) -> "ToolCall":
-        args = json.loads(tc["function"]["arguments"]) if isinstance(tc["function"]["arguments"], str) else tc["function"]["arguments"]
+    def from_openai(cls, tc: dict[str, Any]) -> "ToolCall":
+        args = (
+            json.loads(tc["function"]["arguments"])
+            if isinstance(tc["function"]["arguments"], str)
+            else tc["function"]["arguments"]
+        )
         return cls(id=tc["id"], name=tc["function"]["name"], arguments=args)
 
 
@@ -45,17 +53,19 @@ class LLMResponse:
 async def _stream_sse(
     client: httpx.AsyncClient,
     url: str,
-    body: dict,
-    headers: dict,
+    body: dict[str, Any],
+    headers: dict[str, Any],
     done_marker: str = "[DONE]",
     data_prefix: str = "data: ",
-    extract_token: Callable[[dict], str] = lambda c: c.get("choices", [{}])[0].get("delta", {}).get("content", ""),
+    extract_token: Callable[[dict[str, Any]], str] = lambda c: (
+        c.get("choices", [{}])[0].get("delta", {}).get("content", "")
+    ),
 ) -> AsyncIterator[str]:
     async with client.stream("POST", url, json=body, headers=headers) as resp:
         resp.raise_for_status()
         async for line in resp.aiter_lines():
             if line.startswith(data_prefix):
-                data = line[len(data_prefix):]
+                data = line[len(data_prefix) :]
                 if data.strip() == done_marker:
                     break
                 try:
@@ -67,7 +77,7 @@ async def _stream_sse(
                     continue
 
 
-def _parse_openai_response(data: dict) -> LLMResponse:
+def _parse_openai_response(data: dict[str, Any]) -> LLMResponse:
     choice = data["choices"][0]
     msg = choice["message"]
     content = msg.get("content", "") or ""
@@ -78,9 +88,13 @@ def _parse_openai_response(data: dict) -> LLMResponse:
 
 class LLMProvider(ABC):
     @abstractmethod
-    def complete_stream(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> AsyncIterator[str]: ...
+    def complete_stream(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> AsyncIterator[str]: ...
     @abstractmethod
-    async def complete(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> LLMResponse: ...
+    async def complete(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> LLMResponse: ...
     async def cleanup(self):
         pass
 
@@ -94,7 +108,7 @@ class OpenRouterProvider(LLMProvider):
     async def cleanup(self):
         await self.http.aclose()
 
-    async def _headers(self) -> dict:
+    async def _headers(self) -> dict[str, Any]:
         return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -102,14 +116,18 @@ class OpenRouterProvider(LLMProvider):
             "X-Title": "Raven AI",
         }
 
-    async def complete_stream(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> AsyncIterator[str]:
+    async def complete_stream(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> AsyncIterator[str]:
         body = {"model": model.replace("openrouter/", ""), "messages": messages, "stream": True}
         if tools:
             body["tools"] = tools
         async for token in _stream_sse(self.http, f"{self.base_url}/chat/completions", body, await self._headers()):
             yield token
 
-    async def complete(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> LLMResponse:
+    async def complete(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> LLMResponse:
         model_name = model.replace("openrouter/", "")
         body = {"model": model_name, "messages": messages}
         if tools:
@@ -127,22 +145,37 @@ class OpenAIProvider(LLMProvider):
     async def cleanup(self):
         await self.http.aclose()
 
-    async def complete_stream(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> AsyncIterator[str]:
+    async def complete_stream(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> AsyncIterator[str]:
         body = {"model": model, "messages": messages, "stream": True}
         if tools:
             body["tools"] = tools
-        async for token in _stream_sse(self.http, "https://api.openai.com/v1/chat/completions", body, {
-            "Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json",
-        }):
+        async for token in _stream_sse(
+            self.http,
+            "https://api.openai.com/v1/chat/completions",
+            body,
+            {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+        ):
             yield token
 
-    async def complete(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> LLMResponse:
+    async def complete(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> LLMResponse:
         body = {"model": model, "messages": messages}
         if tools:
             body["tools"] = tools
-        resp = await self.http.post("https://api.openai.com/v1/chat/completions", json=body, headers={
-            "Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json",
-        })
+        resp = await self.http.post(
+            "https://api.openai.com/v1/chat/completions",
+            json=body,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+        )
         resp.raise_for_status()
         return _parse_openai_response(resp.json())
 
@@ -155,7 +188,9 @@ class AnthropicProvider(LLMProvider):
     async def cleanup(self):
         await self.http.aclose()
 
-    def _build_body(self, messages: list[dict], model: str, stream: bool, tools: list[dict] | None = None) -> dict:
+    def _build_body(
+        self, messages: list[dict[str, Any]], model: str, stream: bool, tools: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
         body = {
             "model": model,
             "messages": [m for m in messages if m["role"] != "system"],
@@ -167,19 +202,28 @@ class AnthropicProvider(LLMProvider):
             body["tools"] = tools
         return body
 
-    def _headers(self) -> dict:
+    def _headers(self) -> dict[str, Any]:
         return {"x-api-key": self.api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"}
 
-    async def complete_stream(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> AsyncIterator[str]:
+    async def complete_stream(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> AsyncIterator[str]:
         body = self._build_body(messages, model, True, tools)
         async for token in _stream_sse(
-            self.http, "https://api.anthropic.com/v1/messages", body, self._headers(),
+            self.http,
+            "https://api.anthropic.com/v1/messages",
+            body,
+            self._headers(),
             done_marker="",
-            extract_token=lambda c: c.get("delta", {}).get("text", "") if c.get("type") == "content_block_delta" else "",
+            extract_token=lambda c: (
+                c.get("delta", {}).get("text", "") if c.get("type") == "content_block_delta" else ""
+            ),
         ):
             yield token
 
-    async def complete(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> LLMResponse:
+    async def complete(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> LLMResponse:
         body = self._build_body(messages, model, False, tools)
         resp = await self.http.post("https://api.anthropic.com/v1/messages", json=body, headers=self._headers())
         resp.raise_for_status()
@@ -188,11 +232,13 @@ class AnthropicProvider(LLMProvider):
         tool_calls_raw = [b for b in data.get("content", []) if b.get("type") == "tool_use"]
         tool_calls = []
         for tc in tool_calls_raw:
-            tool_calls.append(ToolCall(
-                id=tc.get("id", ""),
-                name=tc.get("name", ""),
-                arguments=tc.get("input", {}),
-            ))
+            tool_calls.append(
+                ToolCall(
+                    id=tc.get("id", ""),
+                    name=tc.get("name", ""),
+                    arguments=tc.get("input", {}),
+                )
+            )
         return LLMResponse(content=content, tool_calls=tool_calls, finish_reason="stop")
 
 
@@ -204,7 +250,9 @@ class OllamaProvider(LLMProvider):
     async def cleanup(self):
         await self.http.aclose()
 
-    async def complete_stream(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> AsyncIterator[str]:
+    async def complete_stream(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> AsyncIterator[str]:
         model_name = model.replace("ollama/", "")
         body = {"model": model_name, "messages": messages, "stream": True}
         async with self.http.stream("POST", f"{self.base_url}/api/chat", json=body) as resp:
@@ -221,7 +269,9 @@ class OllamaProvider(LLMProvider):
                     except json.JSONDecodeError:
                         continue
 
-    async def complete(self, messages: list[dict], model: str, tools: list[dict] | None = None) -> LLMResponse:
+    async def complete(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> LLMResponse:
         model_name = model.replace("ollama/", "")
         body = {"model": model_name, "messages": messages, "stream": False}
         if tools:
@@ -234,11 +284,13 @@ class OllamaProvider(LLMProvider):
         tool_calls = []
         for tc in tool_calls_raw:
             func = tc.get("function", tc)
-            tool_calls.append(ToolCall(
-                id=tc.get("id", ""),
-                name=func.get("name", ""),
-                arguments=func.get("arguments", {}),
-            ))
+            tool_calls.append(
+                ToolCall(
+                    id=tc.get("id", ""),
+                    name=func.get("name", ""),
+                    arguments=func.get("arguments", {}),
+                )
+            )
         return LLMResponse(content=content, tool_calls=tool_calls, finish_reason="stop")
 
 
@@ -277,7 +329,9 @@ class LLMRouter:
             self._providers[key] = mapping[key]()  # type: ignore[abstract]
         return self._providers[key]
 
-    async def complete_stream(self, messages: list[dict], model: str | None = None, tools: list[dict] | None = None) -> AsyncIterator[str]:
+    async def complete_stream(
+        self, messages: list[dict[str, Any]], model: str | None = None, tools: list[dict[str, Any]] | None = None
+    ) -> AsyncIterator[str]:
         model = model or settings.default_model
         provider = self._get_provider(model)
         metrics.inc("llm_stream_start", {"model": model, "provider": type(provider).__name__})
@@ -285,7 +339,9 @@ class LLMRouter:
             async for token in provider.complete_stream(messages, model, tools):
                 yield token
 
-    async def complete(self, messages: list[dict], model: str | None = None, tools: list[dict] | None = None) -> LLMResponse:
+    async def complete(
+        self, messages: list[dict[str, Any]], model: str | None = None, tools: list[dict[str, Any]] | None = None
+    ) -> LLMResponse:
         model = model or settings.default_model
         provider = self._get_provider(model)
         last_exc = None
@@ -299,8 +355,14 @@ class LLMRouter:
                 last_exc = e
                 metrics.inc("llm_complete", {"model": model, "status": "retry"})
                 if attempt < settings.llm_retry_max - 1:
-                    delay = settings.llm_retry_delay * (2 ** attempt)
-                    logger.warning("LLM call failed (attempt {}/{}): {}, retrying in {}s", attempt + 1, settings.llm_retry_max, e, delay)
+                    delay = settings.llm_retry_delay * (2**attempt)
+                    logger.warning(
+                        "LLM call failed (attempt {}/{}): {}, retrying in {}s",
+                        attempt + 1,
+                        settings.llm_retry_max,
+                        e,
+                        delay,
+                    )
                     await asyncio.sleep(delay)
                 else:
                     logger.error("LLM call failed after {} attempts: {}", settings.llm_retry_max, e)

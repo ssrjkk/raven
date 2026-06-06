@@ -6,6 +6,7 @@ import sys
 import uuid
 from contextvars import ContextVar
 from pathlib import Path
+from typing import Any, Callable
 
 from loguru import logger
 
@@ -47,6 +48,7 @@ def setup_logging(log_file: str | Path | None = None, level: str = "INFO", json_
     log_path = Path(log_file) if log_file else None
     file_path = os.environ.get("RAVEN_LOG_FILE")
 
+    fmt: str | Callable[[Any], str]
     if json_format or os.environ.get("RAVEN_JSON_LOG"):
         fmt = _serialize
     else:
@@ -58,6 +60,12 @@ def setup_logging(log_file: str | Path | None = None, level: str = "INFO", json_
     if log_target:
         log_target.parent.mkdir(parents=True, exist_ok=True)
         logger.add(str(log_target), level="DEBUG", format=_serialize, rotation="100 MB", retention="30 days")
-        logger.add(str(log_target.with_suffix(".err.log")), level="WARNING", format=_serialize, rotation="100 MB", retention="90 days")
+        logger.add(
+            str(log_target.with_suffix(".err.log")),
+            level="WARNING",
+            format=_serialize,
+            rotation="100 MB",
+            retention="90 days",
+        )
 
     logger.info("Logging initialized", extra={"json_format": json_format, "level": log_level})

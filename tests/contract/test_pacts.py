@@ -33,14 +33,16 @@ class TestGatewayAuthContract:
             version="1.0.0",
         )
         expected = {"status": "healthy", "service": "auth"}
-        (pact
-         .given("auth service is running")
-         .upon_receiving("a health check request")
-         .with_request("GET", "/health")
-         .will_respond_with(200, body=Like(expected)))
+        (
+            pact.given("auth service is running")
+            .upon_receiving("a health check request")
+            .with_request("GET", "/health")
+            .will_respond_with(200, body=Like(expected))
+        )
 
         with pact:
             import httpx
+
             result = httpx.get("http://localhost:8001/health")
             assert result.status_code == 200
             assert result.json()["service"] == "auth"
@@ -52,16 +54,17 @@ class TestGatewayAuthContract:
         )
         token = Term(r"^[A-Za-z0-9\-_.]+\.[A-Za-z0-9\-_.]+\.[A-Za-z0-9\-_.]+$", "valid.jwt.token")
         expected = {"valid": True, "user_id": "user-123", "role": "admin"}
-        (pact
-         .given("a valid JWT token exists")
-         .upon_receiving("a token validation request")
-         .with_request("POST", "/api/v1/auth/validate", body={"token": token})
-         .will_respond_with(200, body=Like(expected)))
+        (
+            pact.given("a valid JWT token exists")
+            .upon_receiving("a token validation request")
+            .with_request("POST", "/api/v1/auth/validate", body={"token": token})
+            .will_respond_with(200, body=Like(expected))
+        )
 
         with pact:
             import httpx
-            result = httpx.post("http://localhost:8001/api/v1/auth/validate",
-                                json={"token": "valid.jwt.token"})
+
+            result = httpx.post("http://localhost:8001/api/v1/auth/validate", json={"token": "valid.jwt.token"})
             assert result.status_code == 200
             assert result.json()["valid"] is True
 
@@ -76,14 +79,15 @@ class TestGatewayAgentContract:
         )
         request_body = {"session_id": "sess-1", "message": "Hello"}
         expected = {"response": "Hi there!", "session_id": "sess-1"}
-        (pact
-         .given("agent-core is ready")
-         .upon_receiving("a message for processing")
-         .with_request("POST", "/api/v1/agent/chat", body=Like(request_body))
-         .will_respond_with(200, body=Like(expected)))
+        (
+            pact.given("agent-core is ready")
+            .upon_receiving("a message for processing")
+            .with_request("POST", "/api/v1/agent/chat", body=Like(request_body))
+            .will_respond_with(200, body=Like(expected))
+        )
 
         with pact:
             import httpx
-            result = httpx.post("http://localhost:8002/api/v1/agent/chat",
-                                json=request_body)
+
+            result = httpx.post("http://localhost:8002/api/v1/agent/chat", json=request_body)
             assert result.status_code == 200

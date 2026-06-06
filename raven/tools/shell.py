@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+from typing import Any, cast
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
@@ -31,14 +32,14 @@ async def shell_command(command: str, timeout: int = 30) -> str:
 async def python_code(code: str, timeout: int = 15) -> str:
     try:
         import ast
-        tree = ast.parse(code)
-        last_expr = None
-        if tree.body and isinstance(tree.body[-1], ast.Expr):
-            last_expr = tree.body.pop()
-        compiled = compile(tree, "<sandbox>", "exec", flags=ast.PyCF_ONLY_AST)
-        compiled = compile(compiled, "<sandbox>", "exec")
 
-        ns: dict = {}
+        tree = ast.parse(code)
+        last_expr: ast.Expr | None = None
+        if tree.body and isinstance(tree.body[-1], ast.Expr):
+            last_expr = cast(ast.Expr, tree.body.pop())
+        compiled = compile(tree, "<sandbox>", "exec")
+
+        ns: dict[str, Any] = {}
         exec(compiled, ns)
 
         if last_expr:
@@ -51,25 +52,29 @@ async def python_code(code: str, timeout: int = 15) -> str:
 
 
 def register_shell_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="shell",
-        description="Execute a shell command and return output",
-        parameters={
-            "command": {"type": "string", "description": "Command to execute", "required": True},
-            "timeout": {"type": "integer", "description": "Timeout in seconds", "required": False},
-        },
-        handler=shell_command,
-        category="system",
-        timeout=60,
-    ))
-    registry.register(ToolSpec(
-        name="python",
-        description="Execute Python code and return the result (safe sandbox)",
-        parameters={
-            "code": {"type": "string", "description": "Python code to execute", "required": True},
-            "timeout": {"type": "integer", "description": "Timeout in seconds", "required": False},
-        },
-        handler=python_code,
-        category="system",
-        timeout=30,
-    ))
+    registry.register(
+        ToolSpec(
+            name="shell",
+            description="Execute a shell command and return output",
+            parameters={
+                "command": {"type": "string", "description": "Command to execute", "required": True},
+                "timeout": {"type": "integer", "description": "Timeout in seconds", "required": False},
+            },
+            handler=shell_command,
+            category="system",
+            timeout=60,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="python",
+            description="Execute Python code and return the result (safe sandbox)",
+            parameters={
+                "code": {"type": "string", "description": "Python code to execute", "required": True},
+                "timeout": {"type": "integer", "description": "Timeout in seconds", "required": False},
+            },
+            handler=python_code,
+            category="system",
+            timeout=30,
+        )
+    )

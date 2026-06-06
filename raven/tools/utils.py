@@ -16,19 +16,23 @@ async def get_timestamp() -> str:
 
 
 def register_util_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="wait",
-        description="Pause execution for a given number of seconds",
-        parameters={
-            "seconds": {"type": "number", "description": "Seconds to wait", "required": False},
-        },
-        handler=wait_for,
-        category="utility",
-    ))
-    registry.register(ToolSpec(
-        name="get_timestamp",
-        description="Get the current date and time",
-        parameters={},
-        handler=get_timestamp,
-        category="utility",
-    ))
+    registry.register(
+        ToolSpec(
+            name="wait",
+            description="Pause execution for a given number of seconds",
+            parameters={
+                "seconds": {"type": "number", "description": "Seconds to wait", "required": False},
+            },
+            handler=wait_for,
+            category="utility",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="get_timestamp",
+            description="Get the current date and time",
+            parameters={},
+            handler=get_timestamp,
+            category="utility",
+        )
+    )

@@ -14,6 +14,7 @@ async def send_briefing(routine: Routine) -> str:
     if config.get("include_tasks", True):
         from raven.core.task_engine.store import TaskStore
         from raven.core.config import settings
+
         store = TaskStore(settings.resolved_db_path)
         pending = store.count_tasks(user_id=routine.user_id, status="pending")
         running = store.count_tasks(user_id=routine.user_id, status="running")
@@ -24,6 +25,7 @@ async def send_briefing(routine: Routine) -> str:
     if config.get("include_monitors", True):
         from raven.core.monitor.store import MonitorStore
         from raven.core.config import settings
+
         mstore = MonitorStore(settings.resolved_db_path)
         monitors = mstore.list_monitors(user_id=routine.user_id)
         up = sum(1 for m in monitors if m.last_check and m.last_check.status == "up")
@@ -40,9 +42,11 @@ async def send_briefing(routine: Routine) -> str:
     if config.get("include_news", False):
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=10) as c:
                 resp = await c.get("https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml")
                 import xml.etree.ElementTree as ET
+
                 root = ET.fromstring(resp.content)
                 items = root.findall(".//item")[:5]
                 lines.append("📰 Top News:")
@@ -61,10 +65,12 @@ async def send_briefing(routine: Routine) -> str:
 
     if channel == "telegram":
         from raven.core.config import settings
+
         token = settings.telegram_bot_token
         if token:
             try:
                 from telegram import Bot
+
                 bot = Bot(token=token)
                 await bot.send_message(chat_id=routine.user_id, text=message[:4000])
             except Exception as e:
@@ -81,10 +87,12 @@ async def send_message(routine: Routine) -> str:
     channel = routine.channel or "telegram"
     if channel == "telegram":
         from raven.core.config import settings
+
         token = settings.telegram_bot_token
         if token:
             try:
                 from telegram import Bot
+
                 bot = Bot(token=token)
                 await bot.send_message(chat_id=routine.user_id, text=text[:4000])
                 return f"Message sent: {text[:100]}"
@@ -123,7 +131,7 @@ async def check_email(routine: Routine) -> str:
             status, data = mail.fetch(mid, "(RFC822)")
             if status != "OK":
                 continue
-            raw = email_lib.message_from_bytes(data[0][1])
+            raw = email_lib.message_from_bytes(data[0][1])  # type: ignore[index, arg-type]
             subj = raw.get("Subject", "(no subject)")
             if subj:
                 decoded, charset = decode_header(subj)[0]

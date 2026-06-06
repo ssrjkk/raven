@@ -24,7 +24,7 @@ class TestMessage:
 
     def test_message_invalid_role(self):
         with pytest.raises(ValidationError):
-            Message(session_id="s1", role="invalid", content="x")
+            Message(session_id="s1", role="invalid", content="x")  # type: ignore[arg-type]
 
     def test_message_to_dict(self):
         msg = Message(session_id="s1", role="user", content="hello")

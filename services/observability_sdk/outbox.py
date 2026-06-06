@@ -10,7 +10,6 @@ from threading import local as thread_local
 from typing import Any
 
 
-
 class OutboxStore:
     """Transactional Outbox pattern implementation.
 
@@ -62,9 +61,7 @@ class OutboxStore:
         headers: dict[str, str] | None = None,
     ):
         key = idempotency_key or str(uuid.uuid4())
-        existing = self._conn.execute(
-            "SELECT id FROM outbox WHERE idempotency_key = ?", (key,)
-        ).fetchone()
+        existing = self._conn.execute("SELECT id FROM outbox WHERE idempotency_key = ?", (key,)).fetchone()
         if existing:
             return existing[0]
 

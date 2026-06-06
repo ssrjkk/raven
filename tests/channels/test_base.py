@@ -14,4 +14,4 @@ class TestBaseChannel:
 
     def test_channel_id_not_set(self):
         with pytest.raises(TypeError):
-            BaseChannel()
+            BaseChannel()  # type: ignore[abstract]

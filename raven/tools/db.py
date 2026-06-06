@@ -32,13 +32,15 @@ async def db_query(query: str, db_path: str = "data/raven.db") -> str:
 
 
 def register_db_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="db_query",
-        description="Execute a SQL query on the Raven database",
-        parameters={
-            "query": {"type": "string", "description": "SQL query to execute", "required": True},
-            "db_path": {"type": "string", "description": "Path to SQLite database", "required": False},
-        },
-        handler=db_query,
-        category="data",
-    ))
+    registry.register(
+        ToolSpec(
+            name="db_query",
+            description="Execute a SQL query on the Raven database",
+            parameters={
+                "query": {"type": "string", "description": "SQL query to execute", "required": True},
+                "db_path": {"type": "string", "description": "Path to SQLite database", "required": False},
+            },
+            handler=db_query,
+            category="data",
+        )
+    )

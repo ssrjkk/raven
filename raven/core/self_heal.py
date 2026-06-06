@@ -36,7 +36,7 @@ class ServiceStatus:
 class SelfHealer:
     def __init__(self):
         self._services: dict[str, tuple[ServiceStatus, Callable[[], Any], Callable[[], Any]]] = {}
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
 
     def register(self, name: str, health_check: Callable[[], Any], restart: Callable[[], Any]):
         self._services[name] = (ServiceStatus(name), health_check, restart)
@@ -74,7 +74,13 @@ class SelfHealer:
                 if status.needs_restart:
                     status.restart_attempts += 1
                     backoff = BACKOFF_BASE * (2 ** (status.restart_attempts - 1))
-                    logger.info("Restarting {} (attempt {}/{}, backoff {}s)", name, status.restart_attempts, MAX_RESTART_ATTEMPTS, backoff)
+                    logger.info(
+                        "Restarting {} (attempt {}/{}, backoff {}s)",
+                        name,
+                        status.restart_attempts,
+                        MAX_RESTART_ATTEMPTS,
+                        backoff,
+                    )
                     try:
                         await restart_fn() if asyncio.iscoroutinefunction(restart_fn) else restart_fn()
                         status.alive = True
@@ -84,7 +90,7 @@ class SelfHealer:
 
             await asyncio.sleep(HEAL_INTERVAL)
 
-    def status_report(self) -> dict[str, dict]:
+    def status_report(self) -> dict[str, Any]:
         return {
             name: {
                 "alive": s.alive,

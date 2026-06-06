@@ -38,23 +38,29 @@ async def test_whatsapp_handle_webhook_text():
     await channel.on_message(handler)
     await channel.start()
     body = {
-        "entry": [{
-            "changes": [{
-                "value": {
-                    "messages": [{
-                        "from": "12345",
-                        "id": "msg1",
-                        "type": "text",
-                        "text": {"body": "Hello WhatsApp"},
-                    }]
-                }
-            }]
-        }]
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "messages": [
+                                {
+                                    "from": "12345",
+                                    "id": "msg1",
+                                    "type": "text",
+                                    "text": {"body": "Hello WhatsApp"},
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        ]
     }
     result = await channel.handle_webhook(body)
     assert result
     handler.assert_awaited_once()
-    event: IncomingMessage = handler.await_args[0][0]
+    event: IncomingMessage = handler.await_args[0][0]  # type: ignore[index]
     assert event.channel == "whatsapp"
     assert event.user_id == "12345"
     assert event.text == "Hello WhatsApp"
@@ -67,17 +73,23 @@ async def test_whatsapp_handle_webhook_no_text():
     await channel.on_message(handler)
     await channel.start()
     body = {
-        "entry": [{
-            "changes": [{
-                "value": {
-                    "messages": [{
-                        "from": "12345",
-                        "id": "msg2",
-                        "type": "image",
-                    }]
-                }
-            }]
-        }]
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "messages": [
+                                {
+                                    "from": "12345",
+                                    "id": "msg2",
+                                    "type": "image",
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        ]
     }
     result = await channel.handle_webhook(body)
     assert not result

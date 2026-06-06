@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from raven.channels.enterprise_base import EnterpriseChannel
 from raven.core.config import settings
 from raven.core.models import IncomingMessage, Message
@@ -15,7 +17,7 @@ class WhatsAppChannel(EnterpriseChannel):
     async def _stop(self):
         pass
 
-    async def handle_webhook(self, body: dict) -> bool:
+    async def handle_webhook(self, body: dict[str, Any]) -> bool:
         if not self._handler or not self._ready:
             return False
         handled = False
@@ -27,13 +29,15 @@ class WhatsAppChannel(EnterpriseChannel):
                         text = msg["text"].get("body", "")
                         if from_id and text:
                             self._stats["received"] += 1
-                            await self._handler(IncomingMessage(
-                                channel="whatsapp",
-                                user_id=from_id,
-                                session_id=f"whatsapp:{from_id}",
-                                text=text,
-                                metadata={"msg_id": msg.get("id", ""), "from": from_id},
-                            ))
+                            await self._handler(
+                                IncomingMessage(
+                                    channel="whatsapp",
+                                    user_id=from_id,
+                                    session_id=f"whatsapp:{from_id}",
+                                    text=text,
+                                    metadata={"msg_id": msg.get("id", ""), "from": from_id},
+                                )
+                            )
                             handled = True
         return handled
 

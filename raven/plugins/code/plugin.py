@@ -38,7 +38,8 @@ async def run_python(code: str, timeout: int = 30) -> str:
 
         t = min(timeout, SANDBOX_TIMEOUT)
         proc = await asyncio.create_subprocess_exec(
-            sys.executable, script_path,
+            sys.executable,
+            script_path,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
@@ -48,7 +49,7 @@ async def run_python(code: str, timeout: int = 30) -> str:
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=t)
         except asyncio.TimeoutError:
-            await proc.kill()
+            proc.kill()
             return f"Execution timed out after {t}s"
 
         result = ""
@@ -66,6 +67,7 @@ async def run_python(code: str, timeout: int = 30) -> str:
     finally:
         if tmpdir and Path(tmpdir).exists():
             import shutil
+
             try:
                 shutil.rmtree(tmpdir)
             except Exception:
@@ -90,11 +92,7 @@ async def review_code(code: str, language: str = "auto") -> str:
 
     if not issues:
         issues.append("✅ No obvious issues found (basic scan)")
-    return (
-        f"## Code Review — {language}\n\n"
-        + "\n".join(issues)
-        + f"\n\n```\n{code[:1500]}\n```"
-    )
+    return f"## Code Review — {language}\n\n" + "\n".join(issues) + f"\n\n```\n{code[:1500]}\n```"
 
 
 async def suggest_edit(code: str, goal: str) -> str:
@@ -120,13 +118,18 @@ async def explain_code(code: str, detail: str = "high") -> str:
         f"## Code Explanation ({detail} level)\n\n"
         + (f"**{len(lines)} lines, ~{len(code)} chars**\n\n" if detail == "high" else "")
         + f"```\n{code[:2000]}\n```\n\n"
-        + ("\n".join(f"`{i+1}` | {line.strip()}" for i, line in enumerate(lines[:30]) if line.strip()) if detail == "low" else "Overview only.")
+        + (
+            "\n".join(f"`{i + 1}` | {line.strip()}" for i, line in enumerate(lines[:30]) if line.strip())
+            if detail == "low"
+            else "Overview only."
+        )
     )
 
 
 async def find_issues(code: str) -> str:
     """Find potential bugs, vulnerabilities, and anti-patterns. Args: code (str): Code to analyze"""
     import ast
+
     issues = []
     try:
         tree = ast.parse(code)
@@ -134,7 +137,11 @@ async def find_issues(code: str) -> str:
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                 if node.func.attr in ("eval", "exec", "compile"):
                     issues.append(f"Line {node.lineno}: Dangerous dynamic code execution")
-                if node.func.attr == "input" and isinstance(node.func.value, ast.Name) and node.func.value.id == "builtins":
+                if (
+                    node.func.attr == "input"
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "builtins"
+                ):
                     issues.append(f"Line {node.lineno}: Unsafe input() — use with caution")
             if isinstance(node, ast.Try) and len(node.handlers) == 1:
                 h = node.handlers[0]

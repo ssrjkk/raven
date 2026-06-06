@@ -11,6 +11,7 @@ try:
     from cryptography.fernet import Fernet
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC as PBKDF2
+
     HAS_CRYPTO = True
 except ImportError:
     HAS_CRYPTO = False
@@ -64,7 +65,7 @@ class SecretsManager:
             return ciphertext
         f = Fernet(key)
         try:
-            return f.decrypt(ciphertext[len(_MARKER):].encode()).decode()
+            return f.decrypt(ciphertext[len(_MARKER) :].encode()).decode()
         except Exception as e:
             logger.error("Secrets decryption failed: {}", e)
             return ciphertext

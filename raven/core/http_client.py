@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 import httpx
 from loguru import logger
@@ -20,7 +21,9 @@ class HTTPClientPool:
             cls._instance = HTTPClientPool()
         return cls._instance
 
-    async def get_client(self, base_url: str = "", timeout: float = 15.0, max_connections: int = 50) -> httpx.AsyncClient:
+    async def get_client(
+        self, base_url: str = "", timeout: float = 15.0, max_connections: int = 50
+    ) -> httpx.AsyncClient:
         key = f"{base_url}|{timeout}"
         async with self._lock:
             if key not in self._clients or self._clients[key].is_closed:
@@ -56,13 +59,15 @@ class ClientManager:
         client = await self._pool.get_client()
         return await client.request(method, url, **kwargs)
 
-    async def post(self, url: str, json: dict | None = None, headers: dict | None = None, timeout: float = 15.0) -> dict:
+    async def post(
+        self, url: str, json: dict[str, Any] | None = None, headers: dict[str, Any] | None = None, timeout: float = 15.0
+    ) -> dict[str, Any]:
         client = await self._pool.get_client(timeout=timeout)
         resp = await client.post(url, json=json, headers=headers or {})
         resp.raise_for_status()
         return resp.json() if resp.content else {}
 
-    async def get(self, url: str, headers: dict | None = None, timeout: float = 15.0) -> dict:
+    async def get(self, url: str, headers: dict[str, Any] | None = None, timeout: float = 15.0) -> dict[str, Any]:
         client = await self._pool.get_client(timeout=timeout)
         resp = await client.get(url, headers=headers or {})
         resp.raise_for_status()

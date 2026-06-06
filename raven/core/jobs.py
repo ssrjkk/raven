@@ -30,7 +30,7 @@ class Job:
         self.created_at = time.monotonic()
         self.started_at: float = 0.0
         self.finished_at: float = 0.0
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
 
     @property
     def duration(self) -> float:
@@ -84,21 +84,25 @@ class JobManager:
     def get(self, job_id: str) -> Job | None:
         return self._jobs.get(job_id)
 
-    def list(self, status: str | None = None, limit: int = 50) -> list[dict]:
+    def list(self, status: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
         result = []
         for job in sorted(self._jobs.values(), key=lambda j: j.created_at, reverse=True):
             if status and job.status.value != status:
                 continue
-            result.append({
-                "id": job.id, "name": job.name, "status": job.status.value,
-                "duration": round(job.duration, 3),
-                "error": job.error,
-            })
+            result.append(
+                {
+                    "id": job.id,
+                    "name": job.name,
+                    "status": job.status.value,
+                    "duration": round(job.duration, 3),
+                    "error": job.error,
+                }
+            )
             if len(result) >= limit:
                 break
         return result
 
-    async def health_check(self) -> dict:
+    async def health_check(self) -> dict[str, Any]:
         async with self._lock:
             active = sum(1 for j in self._jobs.values() if j.status == JobStatus.RUNNING)
             failed = sum(1 for j in self._jobs.values() if j.status == JobStatus.FAILED)

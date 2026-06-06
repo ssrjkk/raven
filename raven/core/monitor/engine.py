@@ -25,18 +25,18 @@ class MonitorEngine:
         else:
             self._store = MonitorStore(str(store_or_path))
         self._send_fn = send_fn
-        self._tasks: dict[str, asyncio.Task] = {}
+        self._tasks: dict[str, asyncio.Task[None]] = {}
         self._running = False
-        self._handlers: dict[str, Callable] = {}
+        self._handlers: dict[str, Callable[..., Any]] = {}
 
     @classmethod
-    def from_db(cls, db_path: str, send_fn: Callable | None = None) -> MonitorEngine:
+    def from_db(cls, db_path: str, send_fn: Callable[..., Any] | None = None) -> MonitorEngine:
         return cls(db_path, send_fn=send_fn)
 
     def bind_send(self, send_fn: Callable[[str, str], Any]):
         self._send_fn = send_fn
 
-    def register_handler(self, monitor_type: str, handler: Callable):
+    def register_handler(self, monitor_type: str, handler: Callable[..., Any]):
         self._handlers[monitor_type] = handler
 
     async def start(self):
@@ -151,14 +151,14 @@ class MonitorEngine:
             )
             monitor.last_check = CheckResult(
                 status=status,
-                checked_at=check.checked_at,
+                checked_at=check.checked_at or time.time(),
                 response_time_ms=elapsed,
                 triggered=triggered,
                 error=None,
             )
             self._store.save_check(check)
 
-            return alert_text
+            return alert_text  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.error("Monitor {} check failed: {}", monitor.id, e)
@@ -173,7 +173,7 @@ class MonitorEngine:
             )
             monitor.last_check = CheckResult(
                 status="error",
-                checked_at=check.checked_at,
+                checked_at=check.checked_at or time.time(),
                 response_time_ms=check.response_time_ms,
                 triggered=False,
                 error=str(e),
@@ -190,17 +190,31 @@ class MonitorEngine:
         return None
 
     async def _check_process(self, monitor: Monitor) -> str | None:
-        import subprocess
         import sys
 
         name = monitor.config.get("target", monitor.target)
+        if not name:
+            return "No process name configured"
         if sys.platform == "win32":
-            cmd = f'tasklist /FI "IMAGENAME eq {name}" 2>NUL'
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
-            running = name.lower() in result.stdout.lower()
+            proc = await asyncio.create_subprocess_exec(
+                "tasklist",
+                "/FI",
+                f"IMAGENAME eq {name}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+            running = name.lower() in stdout.decode("utf-8", errors="replace").lower()
         else:
-            result = subprocess.run(["pgrep", "-f", name], capture_output=True, timeout=10)
-            running = result.returncode == 0
+            proc = await asyncio.create_subprocess_exec(
+                "pgrep",
+                "-f",
+                name,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+            running = proc.returncode == 0
         if not running:
             return f"🔴 Process not running: {name}"
         return None

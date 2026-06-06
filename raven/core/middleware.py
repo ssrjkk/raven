@@ -151,6 +151,7 @@ async def input_sanitize_middleware(request: Request, call_next):
                 return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
             if isinstance(body, dict):
                 MAX_DEPTH = 10
+
                 def _check_depth(obj, depth=0):
                     if depth > MAX_DEPTH:
                         raise ValueError("Max depth exceeded")
@@ -162,6 +163,7 @@ async def input_sanitize_middleware(request: Request, call_next):
                     elif isinstance(obj, list):
                         for item in obj:
                             _check_depth(item, depth + 1)
+
                 try:
                     _check_depth(body)
                 except ValueError as e:

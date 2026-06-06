@@ -52,17 +52,17 @@ class TestTaskQueue:
     @pytest.mark.asyncio
     async def test_enqueue(self):
         db = MockDB()
-        q = TaskQueue(db)
+        q = TaskQueue(db)  # type: ignore[arg-type]
         task = await q.enqueue("test", {"x": 1})
         assert task.name == "test"
         assert task.payload == {"x": 1}
         assert task.status == TaskStatus.PENDING
-        assert (("task_queue", task.id) in db.store)
+        assert ("task_queue", task.id) in db.store
 
     @pytest.mark.asyncio
     async def test_register_and_run(self):
         db = MockDB()
-        q = TaskQueue(db, max_concurrent=1)
+        q = TaskQueue(db, max_concurrent=1)  # type: ignore[arg-type]
 
         handler = AsyncMock(return_value="done")
         q.register("test_job", handler)
@@ -79,7 +79,7 @@ class TestTaskQueue:
     @pytest.mark.asyncio
     async def test_no_handler(self):
         db = MockDB()
-        q = TaskQueue(db, max_concurrent=1)
+        q = TaskQueue(db, max_concurrent=1)  # type: ignore[arg-type]
         task = await q.enqueue("nonexistent")
         await q.start()
         await asyncio.sleep(0.05)
@@ -92,17 +92,17 @@ class TestTaskQueue:
     @pytest.mark.asyncio
     async def test_cancel_pending(self):
         db = MockDB()
-        q = TaskQueue(db)
+        q = TaskQueue(db)  # type: ignore[arg-type]
         task = await q.enqueue("test")
         cancelled = await q.cancel(task.id)
         assert cancelled
 
         stored = await q.get_task(task.id)
-        assert stored.status == TaskStatus.CANCELLED
+        assert stored.status == TaskStatus.CANCELLED  # type: ignore[union-attr]
 
     @pytest.mark.asyncio
     async def test_cancel_nonexistent(self):
         db = MockDB()
-        q = TaskQueue(db)
+        q = TaskQueue(db)  # type: ignore[arg-type]
         cancelled = await q.cancel("no_such_task")
         assert not cancelled

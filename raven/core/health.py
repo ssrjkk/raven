@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 
 @dataclass
@@ -23,10 +23,12 @@ class HealthRegistry:
         self._checks: dict[str, HealthCheck] = {}
         self._lock = asyncio.Lock()
 
-    def register(self, name: str, check: Callable[[], Awaitable[bool | str]], timeout: float = 5.0, critical: bool = True):
+    def register(
+        self, name: str, check: Callable[[], Awaitable[bool | str]], timeout: float = 5.0, critical: bool = True
+    ):
         self._checks[name] = HealthCheck(name=name, check=check, timeout=timeout, critical=critical)
 
-    async def check_all(self) -> dict:
+    async def check_all(self) -> dict[str, Any]:
         results = {}
         all_ok = True
         async with self._lock:
@@ -56,10 +58,10 @@ class HealthRegistry:
                     all_ok = False
         return {"status": "ok" if all_ok else "degraded", "checks": results, "timestamp": time.time()}
 
-    async def check_liveness(self) -> dict:
+    async def check_liveness(self) -> dict[str, Any]:
         return await self.check_all()
 
-    async def check_readiness(self) -> dict:
+    async def check_readiness(self) -> dict[str, Any]:
         results = {}
         all_ok = True
         async with self._lock:

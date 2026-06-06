@@ -29,12 +29,12 @@ def gateway():
     gw.registry = MagicMock()
     gw.registry.plugins = {}
     gw.channels = {"telegram": AsyncMock(), "webchat": AsyncMock()}
-    gw.sandbox = None
+    gw.sandbox = None  # type: ignore[assignment]
     gw._monitor_engine = MagicMock()
-    gw._routine_engine = MagicMock()
-    gw._task_runner = MagicMock()
-    gw._skills = {}
-    gw._plugins_loaded = False
+    gw._routine_engine = MagicMock()  # type: ignore[attr-defined]
+    gw._task_runner = MagicMock()  # type: ignore[attr-defined]
+    gw._skills = {}  # type: ignore[attr-defined]
+    gw._plugins_loaded = False  # type: ignore[attr-defined]
     return gw
 
 

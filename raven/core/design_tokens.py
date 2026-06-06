@@ -8,7 +8,7 @@ _TOKENS_PATH = Path(__file__).parent.parent.parent / "web" / "src" / "design" / 
 
 
 class DesignTokens:
-    def __init__(self, data: dict | None = None):
+    def __init__(self, data: dict[str, Any] | None = None):
         self._data = data or {}
 
     @classmethod
@@ -54,7 +54,7 @@ class DesignTokens:
         lines.append("}")
         return "\n".join(lines)
 
-    def _flatten(self, obj: dict, prefix: str, lines: list[str]):
+    def _flatten(self, obj: dict[str, Any], prefix: str, lines: list[str]):
         for key, val in obj.items():
             name = f"{prefix}-{key}" if prefix else key
             if isinstance(val, dict):
@@ -62,7 +62,7 @@ class DesignTokens:
             else:
                 lines.append(f"  {name}: {val};")
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return dict(self._data)
 
     @property
@@ -70,11 +70,11 @@ class DesignTokens:
         return str(self._data.get("version", ""))
 
     @property
-    def colors(self) -> dict:
+    def colors(self) -> dict[str, Any]:
         return dict(self._data.get("colors", {}))
 
     @property
-    def spacing_map(self) -> dict:
+    def spacing_map(self) -> dict[str, Any]:
         return dict(self._data.get("spacing", {}))
 
 

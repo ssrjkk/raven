@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from typing import Any
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -36,7 +37,7 @@ async def _test_telegram_token(token: str) -> str | None:
         app = TelegramChannel._build_test_app(token)
         me = await app.bot.get_me()
         await app.shutdown()
-        return me.username
+        return me.username  # type: ignore[no-any-return]
     except Exception:
         return None
 
@@ -51,7 +52,7 @@ def _get_noninteractive() -> bool:
     return "--non-interactive" in sys.argv or "--yes" in sys.argv
 
 
-async def _prompt_llm(config: dict) -> dict:
+async def _prompt_llm(config: dict[str, Any]) -> dict[str, Any]:
     console.print(Rule(style="bold blue"))
     console.print(Panel.fit("[bold]🧠 LLM Provider[/bold]", border_style="blue"))
     console.print(
@@ -90,7 +91,7 @@ async def _prompt_llm(config: dict) -> dict:
     return config
 
 
-async def _prompt_telegram(config: dict) -> dict:
+async def _prompt_telegram(config: dict[str, Any]) -> dict[str, Any]:
     console.print(Rule(style="bold green"))
     console.print(Panel.fit("[bold]📱 Telegram Bot[/bold]", border_style="green"))
     console.print(Markdown(TELEGRAM_HELP))
@@ -110,7 +111,7 @@ async def _prompt_telegram(config: dict) -> dict:
     return config
 
 
-async def _prompt_channels(config: dict) -> dict:
+async def _prompt_channels(config: dict[str, Any]) -> dict[str, Any]:
     console.print(Rule(style="bold yellow"))
     console.print(Panel.fit("[bold]🔌 Additional Channels[/bold]", border_style="yellow"))
     console.print("You can configure more channels now or later via [bold]raven onboard[/bold]")
@@ -128,7 +129,7 @@ async def _prompt_channels(config: dict) -> dict:
     return config
 
 
-async def _prompt_security(config: dict) -> dict:
+async def _prompt_security(config: dict[str, Any]) -> dict[str, Any]:
     console.print(Rule(style="bold red"))
     console.print(Panel.fit("[bold]🔒 Security Settings[/bold]", border_style="red"))
 
@@ -146,7 +147,7 @@ async def _prompt_security(config: dict) -> dict:
     return config
 
 
-async def _prompt_port(config: dict) -> dict:
+async def _prompt_port(config: dict[str, Any]) -> dict[str, Any]:
     port_str = Prompt.ask("Web UI port", default="18888")
     try:
         config["web_port"] = int(port_str)
@@ -155,7 +156,7 @@ async def _prompt_port(config: dict) -> dict:
     return config
 
 
-def _show_summary(config: dict) -> None:
+def _show_summary(config: dict[str, Any]) -> None:
     console.print(Rule(style="bold green"))
     console.print(Panel.fit("[bold green]✅ Configuration Summary[/bold green]", border_style="green"))
 
@@ -178,19 +179,24 @@ def _show_summary(config: dict) -> None:
 
 async def onboard() -> None:
     console.print()
-    console.print(Panel.fit(
-        Text.from_markup("[bold cyan]🐦 Raven AI[/bold cyan] [dim]v0.3.0[/dim]\n"
-                         "[green]Your 24/7 personal AI assistant[/green]"),
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            Text.from_markup(
+                "[bold cyan]🐦 Raven AI[/bold cyan] [dim]v0.3.0[/dim]\n[green]Your 24/7 personal AI assistant[/green]"
+            ),
+            border_style="cyan",
+        )
+    )
     console.print()
-    console.print("This wizard will help you configure Raven in about 2 minutes.\n"
-                  "You can change any setting later by running [bold]raven onboard[/bold] again.\n"
-                  "Press [bold]Ctrl+C[/bold] at any time to cancel.")
+    console.print(
+        "This wizard will help you configure Raven in about 2 minutes.\n"
+        "You can change any setting later by running [bold]raven onboard[/bold] again.\n"
+        "Press [bold]Ctrl+C[/bold] at any time to cancel."
+    )
     console.print()
 
     config_store.load()
-    config: dict = {}
+    config: dict[str, Any] = {}
 
     config = await _prompt_llm(config)
     config = await _prompt_telegram(config)
@@ -209,19 +215,21 @@ async def onboard() -> None:
         await _test_send(config)
 
     console.print()
-    console.print(Panel.fit(
-        "[bold green]Setup complete![/bold green]\n\n"
-        "Next steps:\n"
-        "  [bold]raven start[/bold]         Launch Raven\n"
-        "  [bold]raven status[/bold]        Check status\n"
-        "  [bold]raven doctor[/bold]        Diagnose issues\n"
-        "  [bold]raven service install[/bold]  Install as Windows service\n\n"
-        "Run [bold]raven --help[/bold] for all commands",
-        border_style="green",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold green]Setup complete![/bold green]\n\n"
+            "Next steps:\n"
+            "  [bold]raven start[/bold]         Launch Raven\n"
+            "  [bold]raven status[/bold]        Check status\n"
+            "  [bold]raven doctor[/bold]        Diagnose issues\n"
+            "  [bold]raven service install[/bold]  Install as Windows service\n\n"
+            "Run [bold]raven --help[/bold] for all commands",
+            border_style="green",
+        )
+    )
 
 
-async def _test_send(config: dict) -> None:
+async def _test_send(config: dict[str, Any]) -> None:
     console.print("[dim]Sending test message to your Telegram...[/dim]")
     try:
         token = config.get("telegram_bot_token", "")

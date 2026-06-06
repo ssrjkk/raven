@@ -28,13 +28,13 @@ class FakeDB:
 async def test_generic_webhook_text_field():
     db = FakeDB()
     handler = AsyncMock()
-    router = create_webhook_router(db, handler)
+    router = create_webhook_router(db, handler)  # type: ignore[arg-type]
     body = {"text": "hello"}
     req = FakeRequest(headers={"X-Webhook-Source": "github"})
-    resp = await router.routes[0].endpoint(body, req)
+    resp = await router.routes[0].endpoint(body, req)  # type: ignore[attr-defined]
     assert resp["ok"] is True
     handler.assert_awaited_once()
-    event = handler.await_args[0][0]
+    event = handler.await_args[0][0]  # type: ignore[index]
     assert event.channel == "webhook"
     assert "hello" in event.text
     assert "<<<EXTERNAL_UNTRUSTED_CONTENT>>>" in event.text
@@ -44,12 +44,12 @@ async def test_generic_webhook_text_field():
 async def test_generic_webhook_message_field():
     db = FakeDB()
     handler = AsyncMock()
-    router = create_webhook_router(db, handler)
+    router = create_webhook_router(db, handler)  # type: ignore[arg-type]
     body = {"message": "world"}
     req = FakeRequest(headers={"X-Webhook-Source": "test"})
-    resp = await router.routes[0].endpoint(body, req)
+    resp = await router.routes[0].endpoint(body, req)  # type: ignore[attr-defined]
     assert resp["ok"] is True
-    event = handler.await_args[0][0]
+    event = handler.await_args[0][0]  # type: ignore[index]
     assert "world" in event.text
     assert "<<<EXTERNAL_UNTRUSTED_CONTENT>>>" in event.text
 
@@ -58,12 +58,13 @@ async def test_generic_webhook_message_field():
 async def test_generic_webhook_no_text():
     db = FakeDB()
     handler = AsyncMock()
-    router = create_webhook_router(db, handler)
+    router = create_webhook_router(db, handler)  # type: ignore[arg-type]
     body = {"not_text": ""}
     req = FakeRequest()
     from fastapi import HTTPException
+
     with pytest.raises(HTTPException) as exc:
-        await router.routes[0].endpoint(body, req)
+        await router.routes[0].endpoint(body, req)  # type: ignore[attr-defined]
     assert exc.value.status_code == 400
 
 
@@ -71,10 +72,10 @@ async def test_generic_webhook_no_text():
 async def test_slack_url_verification():
     db = FakeDB()
     handler = AsyncMock()
-    router = create_webhook_router(db, handler)
+    router = create_webhook_router(db, handler)  # type: ignore[arg-type]
     body = {"type": "url_verification", "challenge": "abc123"}
     req = FakeRequest()
-    resp = await router.routes[1].endpoint(body, req)
+    resp = await router.routes[1].endpoint(body, req)  # type: ignore[attr-defined]
     assert resp == {"challenge": "abc123"}
 
 
@@ -82,10 +83,10 @@ async def test_slack_url_verification():
 async def test_slack_events_no_channel():
     db = FakeDB()
     handler = AsyncMock()
-    router = create_webhook_router(db, handler)
+    router = create_webhook_router(db, handler)  # type: ignore[arg-type]
     body = {"type": "event_callback", "event": {"type": "message", "user": "U1", "text": "hi", "channel": "C1"}}
     req = FakeRequest()
-    resp = await router.routes[1].endpoint(body, req)
+    resp = await router.routes[1].endpoint(body, req)  # type: ignore[attr-defined]
     assert resp["ok"] is True
 
 
@@ -93,8 +94,8 @@ async def test_slack_events_no_channel():
 async def test_whatsapp_verify():
     db = FakeDB()
     handler = AsyncMock()
-    router = create_webhook_router(db, handler)
+    router = create_webhook_router(db, handler)  # type: ignore[arg-type]
     req = FakeRequest()
     req.query_params = {"hub.mode": "subscribe", "hub.verify_token": "wrong_token", "hub.challenge": "123"}
     with pytest.raises(Exception):
-        await router.routes[3].endpoint(req)
+        await router.routes[3].endpoint(req)  # type: ignore[attr-defined]

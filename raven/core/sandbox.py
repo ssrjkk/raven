@@ -70,7 +70,8 @@ class Sandbox:
             for key in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
                 env.pop(key, None)
         proc = await asyncio.create_subprocess_exec(
-            sys.executable, script,
+            sys.executable,
+            script,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
@@ -144,6 +145,7 @@ class Sandbox:
     async def cleanup(self):
         if self._tmpdir:
             import shutil
+
             try:
                 shutil.rmtree(self._tmpdir)
             except Exception:

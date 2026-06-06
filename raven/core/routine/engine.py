@@ -15,15 +15,15 @@ from raven.core.routine.store import RoutineStore
 class RoutineEngine:
     def __init__(self, store: RoutineStore):
         self._store = store
-        self._tasks: dict[str, asyncio.Task] = {}
+        self._tasks: dict[str, asyncio.Task[None]] = {}
         self._running = False
-        self._handlers: dict[str, Callable] = {}
+        self._handlers: dict[str, Callable[..., Any]] = {}
         self._gateway_ref: Any = None
 
     def bind_gateway(self, gateway: Any):
         self._gateway_ref = gateway
 
-    def register_handler(self, action: str, handler: Callable):
+    def register_handler(self, action: str, handler: Callable[..., Any]):
         self._handlers[action] = handler
 
     async def start(self):

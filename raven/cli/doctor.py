@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from rich.console import Console
 from rich.panel import Panel
+from typing import Any
 
 console = Console()
 
 
-def _render_security_audit(results: list, fix: bool = False):
+def _render_security_audit(results: list[Any], fix: bool = False):
     failed = [r for r in results if not r.passed]
 
     if not failed:
@@ -32,9 +33,11 @@ def _auto_fix(check):
     name = check.name
     if name == "secret_key_prod":
         import uuid
+
         new_key = uuid.uuid4().hex
         console.print(f"  [green]→ AUTO-FIX: WEB_SECRET_KEY set to {new_key[:16]}...[/green]")
         from raven.core.config_store import config_store
+
         config_store._data.setdefault("web_secret_key", new_key)
         config_store.save()
     elif name == "dm_policy":

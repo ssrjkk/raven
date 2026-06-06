@@ -1,4 +1,5 @@
 """Entry point for Windows Service — called by pywin32's ServiceFramework."""
+
 import sys
 import os
 

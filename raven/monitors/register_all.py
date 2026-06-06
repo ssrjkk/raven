@@ -1,9 +1,13 @@
+from __future__ import annotations
+
+from typing import Any
+
 from raven.core.monitor.engine import MonitorEngine
 from raven.core.monitor.models import Monitor, MonitorStatus, MonitorType
 
 
 def register_all_monitors(engine: MonitorEngine):
-    examples = [
+    examples: list[dict[str, Any]] = [
         {
             "name": "Raven AI Status",
             "type": MonitorType.HTTP,

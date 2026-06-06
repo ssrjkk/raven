@@ -1,4 +1,3 @@
-
 from raven.core.auth.tokens import TokenManager
 
 

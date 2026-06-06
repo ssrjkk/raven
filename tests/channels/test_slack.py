@@ -29,7 +29,9 @@ async def test_slack_handle_event_bot_message():
     channel = SlackChannel()
     await channel.on_message(handler)
     channel._ready = True
-    await channel.handle_event({"type": "message", "subtype": "bot_message", "user": "U1", "text": "hi", "channel": "C1"})
+    await channel.handle_event(
+        {"type": "message", "subtype": "bot_message", "user": "U1", "text": "hi", "channel": "C1"}
+    )
     handler.assert_not_awaited()
 
 
@@ -41,7 +43,7 @@ async def test_slack_handle_event_message():
     channel._ready = True
     await channel.handle_event({"type": "message", "user": "U1", "text": "hello", "channel": "C1", "ts": "123.456"})
     handler.assert_awaited_once()
-    event: IncomingMessage = handler.await_args[0][0]
+    event: IncomingMessage = handler.await_args[0][0]  # type: ignore[index]
     assert event.channel == "slack"
     assert event.user_id == "U1"
     assert event.text == "hello"

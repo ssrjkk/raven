@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from raven.channels.enterprise_base import EnterpriseChannel
 from raven.core.config import settings
 from raven.core.models import IncomingMessage, Message
@@ -15,7 +17,7 @@ class LINECChannel(EnterpriseChannel):
     async def _stop(self):
         pass
 
-    async def handle_webhook(self, body: dict) -> bool:
+    async def handle_webhook(self, body: dict[str, Any]) -> bool:
         if not self._handler or not self._ready:
             return False
         for ev in body.get("events", []):
@@ -27,13 +29,15 @@ class LINECChannel(EnterpriseChannel):
                     text = message.get("text", "")
                     if user_id and text:
                         self._stats["received"] += 1
-                        await self._handler(IncomingMessage(
-                            channel="line",
-                            user_id=user_id,
-                            session_id=f"line:{user_id}",
-                            text=text,
-                            metadata={"reply_token": ev.get("replyToken", "")},
-                        ))
+                        await self._handler(
+                            IncomingMessage(
+                                channel="line",
+                                user_id=user_id,
+                                session_id=f"line:{user_id}",
+                                text=text,
+                                metadata={"reply_token": ev.get("replyToken", "")},
+                            )
+                        )
                         return True
         return False
 

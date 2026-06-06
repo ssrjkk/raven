@@ -46,10 +46,27 @@ LANGUAGE_MAP: dict[str, str] = {
 }
 
 IGNORE_DIRS = {
-    ".git", "__pycache__", "node_modules", ".venv", "venv",
-    ".tox", ".eggs", "eggs", ".mypy_cache", ".ruff_cache",
-    ".pytest_cache", "dist", "build", ".idea", ".vscode",
-    ".bzr", ".hg", ".svn", "target", "bin", "obj",
+    ".git",
+    "__pycache__",
+    "node_modules",
+    ".venv",
+    "venv",
+    ".tox",
+    ".eggs",
+    "eggs",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".pytest_cache",
+    "dist",
+    "build",
+    ".idea",
+    ".vscode",
+    ".bzr",
+    ".hg",
+    ".svn",
+    "target",
+    "bin",
+    "obj",
 }
 
 
@@ -155,36 +172,56 @@ class CodeIndexer:
             for node in ast.walk(tree):
                 if isinstance(node, ast.ClassDef):
                     doc = ast.get_docstring(node) or ""
-                    symbols.append(CodeSymbol(
-                        name=node.name, kind=SymbolKind.CLASS,
-                        line=node.lineno or 0, column=node.col_offset or 0,
-                        docstring=doc[:200],
-                    ))
+                    symbols.append(
+                        CodeSymbol(
+                            name=node.name,
+                            kind=SymbolKind.CLASS,
+                            line=node.lineno or 0,
+                            column=node.col_offset or 0,
+                            docstring=doc[:200],
+                        )
+                    )
                     for item in node.body:
                         if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                             sig = f"def {item.name}({', '.join(a.arg for a in item.args.args if a.arg != 'self')})"
                             doc = ast.get_docstring(item) or ""
-                            symbols.append(CodeSymbol(
-                                name=f"{node.name}.{item.name}", kind=SymbolKind.METHOD,
-                                line=item.lineno or 0, column=item.col_offset or 0,
-                                docstring=doc[:200], signature=sig,
-                            ))
+                            symbols.append(
+                                CodeSymbol(
+                                    name=f"{node.name}.{item.name}",
+                                    kind=SymbolKind.METHOD,
+                                    line=item.lineno or 0,
+                                    column=item.col_offset or 0,
+                                    docstring=doc[:200],
+                                    signature=sig,
+                                )
+                            )
                 elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    if not any(isinstance(p, ast.ClassDef) for p in ast.walk(tree) if hasattr(p, 'body') and node in p.body):
+                    if not any(
+                        isinstance(p, ast.ClassDef) for p in ast.walk(tree) if hasattr(p, "body") and node in p.body
+                    ):
                         sig = f"def {node.name}({', '.join(a.arg for a in node.args.args)})"
                         doc = ast.get_docstring(node) or ""
-                        symbols.append(CodeSymbol(
-                            name=node.name, kind=SymbolKind.FUNCTION,
-                            line=node.lineno or 0, column=node.col_offset or 0,
-                            docstring=doc[:200], signature=sig,
-                        ))
+                        symbols.append(
+                            CodeSymbol(
+                                name=node.name,
+                                kind=SymbolKind.FUNCTION,
+                                line=node.lineno or 0,
+                                column=node.col_offset or 0,
+                                docstring=doc[:200],
+                                signature=sig,
+                            )
+                        )
                 elif isinstance(node, ast.Assign):
                     for target in node.targets:
                         if isinstance(target, ast.Name) and target.id.isupper():
-                            symbols.append(CodeSymbol(
-                                name=target.id, kind=SymbolKind.CONSTANT,
-                                line=node.lineno or 0, column=node.col_offset or 0,
-                            ))
+                            symbols.append(
+                                CodeSymbol(
+                                    name=target.id,
+                                    kind=SymbolKind.CONSTANT,
+                                    line=node.lineno or 0,
+                                    column=node.col_offset or 0,
+                                )
+                            )
         except SyntaxError:
             pass
         return symbols

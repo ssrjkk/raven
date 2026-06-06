@@ -26,13 +26,13 @@ import sys
 import time
 
 STEPS = [
-    {"name": "channels",  "desc": "Channels adapters (Telegram, Discord, Matrix)",  "risk": "Low"},
-    {"name": "monitor",   "desc": "Monitor engine (stateless workers)",              "risk": "Low"},
-    {"name": "rag",       "desc": "RAG service (vector DB isolation)",               "risk": "Medium"},
-    {"name": "code",      "desc": "Code service (sandboxed execution)",              "risk": "Medium"},
-    {"name": "task",      "desc": "Task engine (tool policy boundary)",              "risk": "Medium"},
-    {"name": "auth",      "desc": "Auth service (JWT, RBAC isolation)",              "risk": "High"},
-    {"name": "agent",     "desc": "Agent core (LLM routing, state management)",      "risk": "High"},
+    {"name": "channels", "desc": "Channels adapters (Telegram, Discord, Matrix)", "risk": "Low"},
+    {"name": "monitor", "desc": "Monitor engine (stateless workers)", "risk": "Low"},
+    {"name": "rag", "desc": "RAG service (vector DB isolation)", "risk": "Medium"},
+    {"name": "code", "desc": "Code service (sandboxed execution)", "risk": "Medium"},
+    {"name": "task", "desc": "Task engine (tool policy boundary)", "risk": "Medium"},
+    {"name": "auth", "desc": "Auth service (JWT, RBAC isolation)", "risk": "High"},
+    {"name": "agent", "desc": "Agent core (LLM routing, state management)", "risk": "High"},
 ]
 
 

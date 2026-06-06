@@ -1,4 +1,5 @@
 """CI import verification script."""
+
 import sys
 import importlib
 

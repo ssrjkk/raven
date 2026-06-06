@@ -108,13 +108,16 @@ class WebChatChannel(BaseChannel):
                     action = msg.get("action", "")
                     if action == "render":
                         from raven.core.canvas import CanvasComponent
+
                         comp_data = msg.get("component", {})
                         if comp_data:
+
                             def _from_dict(d):
                                 c = CanvasComponent(d["type"], d.get("props"))
                                 for child in d.get("children", []):
                                     c.add_child(_from_dict(child))
                                 return c
+
                             comp = _from_dict(comp_data)
                             session.render(comp)
                             await websocket.send_json({"type": "canvas_rendered", "session_id": session.session_id})
@@ -123,8 +126,10 @@ class WebChatChannel(BaseChannel):
                         await websocket.send_json({"type": "props_updated"})
                     elif action == "action":
                         result = canvas_manager.handle_action(
-                            session.session_id, msg.get("component_id", ""),
-                            msg.get("action_name", ""), msg.get("data"),
+                            session.session_id,
+                            msg.get("component_id", ""),
+                            msg.get("action_name", ""),
+                            msg.get("data"),
                         )
                         await websocket.send_json({"type": "action_result", "result": result})
                     elif action == "get_state":
@@ -161,12 +166,14 @@ class WebChatChannel(BaseChannel):
         client_id = parts[1] if len(parts) >= 2 else None
         if client_id and client_id in self._connections:
             try:
-                await self._connections[client_id].send_json({
-                    "type": "message",
-                    "role": "assistant",
-                    "content": message.content,
-                    "session_id": session_id,
-                })
+                await self._connections[client_id].send_json(
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": message.content,
+                        "session_id": session_id,
+                    }
+                )
             except Exception as e:
                 logger.error("WebChat send failed: {}", e)
 

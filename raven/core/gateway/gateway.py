@@ -46,6 +46,7 @@ class Gateway:
 
     def load_skills(self, skills_path: str | None = None):
         from pathlib import Path
+
         paths = [skills_path] if skills_path else []
         base = Path(__file__).parent.parent.parent
         ws = base / "workspace" / "skills"
@@ -59,7 +60,9 @@ class Gateway:
 
     async def start(self):
         self.registry.setup_defaults()
-        logger.info("Starting gateway with {} channels, {} agents", len(self.channels), len(self.registry.list_agents()))
+        logger.info(
+            "Starting gateway with {} channels, {} agents", len(self.channels), len(self.registry.list_agents())
+        )
         self._running = True
         for cid, channel in self.channels.items():
             try:
@@ -87,13 +90,17 @@ class Gateway:
             try:
                 monitors_info = ""
                 from raven.core.monitor.store import MonitorStore
+
                 store = MonitorStore(self.db.db_path)
                 monitors = store.list_monitors(user_id=user_id)
                 if monitors:
-                    statuses = [f"{m.name}[{m.type.value}]:{'🟢' if m.status.value == 'active' else '⏸'}" for m in monitors[:5]]
+                    statuses = [
+                        f"{m.name}[{m.type.value}]:{'🟢' if m.status.value == 'active' else '⏸'}" for m in monitors[:5]
+                    ]
                     monitors_info = "Monitors: " + ", ".join(statuses)
 
                 from raven.core.task_engine.store import TaskStore
+
                 tstore = TaskStore(self.db.db_path)
                 tasks = tstore.list_tasks(user_id=user_id, limit=5)
                 tasks_info = ""
@@ -148,8 +155,10 @@ class Gateway:
 
     def _register_channel_heal(self):
         for cid, channel in self.channels.items():
+
             async def _check(ch=channel):
                 return await ch.health_check() if hasattr(ch, "health_check") else True
+
             async def _restart(ch=channel, cid=cid):
                 try:
                     await ch.stop()
@@ -157,6 +166,7 @@ class Gateway:
                     logger.info("Self-heal restarted channel {}", cid)
                 except Exception as e:
                     logger.error("Self-heal restart failed for {}: {}", cid, e)
+
             self_healer.register(f"channel:{cid}", _check, _restart)
         if self.channels:
             self_healer.start()
@@ -200,14 +210,16 @@ class Gateway:
             metrics.inc("message_errors", {"channel": event.channel})
             await self._send(event.channel, event.session_id, f"Sorry, an error occurred: {str(e)[:200]}")
 
-    def _apply_context_filter(self, event, user: dict, text: str) -> str:
+    def _apply_context_filter(self, event, user: dict[str, Any], text: str) -> str:
         from raven.core.config import settings
+
         visibility = ContextVisibility(settings.context_visibility)
         is_allowlisted = bool(user.get("is_allowed")) or settings.dm_policy == "open"
         return filter_context_by_visibility(text, visibility, is_allowlisted, user.get("id", ""))
 
     async def _handle_intent(self, event: IncomingMessage) -> bool:
         import re
+
         text = event.text.strip().lower()
 
         price_pattern = re.compile(
@@ -220,6 +232,7 @@ class Gateway:
             coin = m.group(1) or m.group(2) or m.group(3)
             from raven.core.monitor.checkers.price import check_price
             from raven.core.monitor.models import Monitor, MonitorType
+
             pseudo = Monitor(
                 name="intent-price",
                 type=MonitorType.PRICE,
@@ -243,6 +256,7 @@ class Gateway:
         )
         if monitor_pattern.search(text):
             from raven.core.monitor.store import MonitorStore
+
             store = MonitorStore(self.db.db_path)
             monitors = store.list_monitors(user_id=event.user_id)
             if not monitors:
@@ -261,6 +275,7 @@ class Gateway:
         )
         if briefing_pattern.search(text):
             from raven.core.skills import skills_registry
+
             briefing = skills_registry.get("morning_briefing")
             if briefing:
                 result = await briefing.execute(event.user_id, event.channel)
@@ -280,14 +295,14 @@ class Gateway:
             from raven.core.task_engine.planner import TaskPlanner
             from raven.core.task_engine.runner import TaskRunner
             from raven.tools.register_all import create_tool_registry
+
             tools = create_tool_registry()
             task_store = TaskStore(self.db.db_path)
             planner = TaskPlanner(tools)
             runner = TaskRunner(task_store, tools)
             try:
                 task = await planner.plan(text, self.llm, user_id=event.user_id, channel=event.channel)
-                await self._send(event.channel, event.session_id,
-                    f"📋 Task planned: {task.plan_summary or text[:80]}")
+                await self._send(event.channel, event.session_id, f"📋 Task planned: {task.plan_summary or text[:80]}")
                 await runner.submit(task)
                 asyncio.create_task(runner.wait(task.id, timeout=600))
             except Exception as e:
@@ -296,12 +311,13 @@ class Gateway:
 
         return False
 
-    async def _is_user_allowed(self, event: IncomingMessage, user: dict) -> bool:
+    async def _is_user_allowed(self, event: IncomingMessage, user: dict[str, Any]) -> bool:
         policy = settings.dm_policy
         allow_from_raw = settings.channel_allow_from
         if allow_from_raw:
             try:
                 import json
+
                 allow_map = json.loads(allow_from_raw)
                 channel_rules = allow_map.get(event.channel, [])
                 if channel_rules and "*" not in channel_rules and event.user_id not in channel_rules:
@@ -331,7 +347,11 @@ class Gateway:
             code = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
             await self.db.find_or_create_user(event.channel, event.user_id)
             await self.db.set_pairing_code(f"{event.channel}:{event.user_id}", code)
-            await self._send(event.channel, event.session_id, f"Welcome! Your pairing code is: `{code}`\nPlease send `/pair {code}` to authorize.")
+            await self._send(
+                event.channel,
+                event.session_id,
+                f"Welcome! Your pairing code is: `{code}`\nPlease send `/pair {code}` to authorize.",
+            )
             metrics.inc("pairing_codes_sent", {"channel": event.channel})
             return False
 
@@ -343,10 +363,12 @@ class Gateway:
         args = text.split()[1:] if len(text.split()) > 1 else []
 
         if cmd == "/status":
-            await self._send(event.channel, event.session_id,
+            await self._send(
+                event.channel,
+                event.session_id,
                 f"Raven AI is running.\nChannels: {', '.join(self.channels.keys())}\n"
                 f"Agents: {len(self.registry.list_agents())}\n"
-                f"Skills: {len(skills_registry.list_names())}"
+                f"Skills: {len(skills_registry.list_names())}",
             )
             return True
 
@@ -372,15 +394,17 @@ class Gateway:
                 return True
             history_text = "\n".join(f"{m.role}: {m.content[:200]}" for m in msgs)
             summary = ""
-            async for token in agent.simple_complete([
-                {"role": "system", "content": "Summarize this conversation concisely in 2-3 sentences."},
-                {"role": "user", "content": f"Summarize:\n{history_text}"},
-            ]):
+            async for token in agent.simple_complete(
+                [
+                    {"role": "system", "content": "Summarize this conversation concisely in 2-3 sentences."},
+                    {"role": "user", "content": f"Summarize:\n{history_text}"},
+                ]
+            ):
                 summary += token
             if summary.strip():
-                await self.db.replace_session_messages(session.id, [
-                    {"role": "system", "content": f"[Session compacted: {summary[:500]}]"}
-                ])
+                await self.db.replace_session_messages(
+                    session.id, [{"role": "system", "content": f"[Session compacted: {summary[:500]}]"}]
+                )
             await self._send(event.channel, event.session_id, f"Session compacted.\nSummary: {summary[:300]}")
             return True
 
@@ -460,28 +484,32 @@ class Gateway:
             return True
 
         if cmd == "/help":
-            await self._send(event.channel, event.session_id, (
-                "Commands:\n"
-                "/status - Show bot status\n"
-                "/new - Start fresh conversation\n"
-                "/reset - Reset session\n"
-                "/task <goal> - Plan and execute a task\n"
-                "/monitor list - List your monitors\n"
-                "/monitor add <type> <target> - Add monitor\n"
-                "/code index [path] - Index codebase\n"
-                "/code search <query> - Search code\n"
-                "/code review <file> - Review file\n"
-                "/code start <goal> - Start coding session\n"
-                "/routine list - List routines\n"
-                "/routine add <action> <sched> - Add routine\n"
-                "/voice tts <text> - Text-to-speech synthesis\n"
-                "/voice providers - List TTS providers\n"
-                "/compact - Summarize conversation\n"
-                "/think <low|medium|high> - Set thinking level\n"
-                "/skills - List loaded skills\n"
-                "/help - Show this help\n"
-                "/pair <code> - Authorize with pairing code"
-            ))
+            await self._send(
+                event.channel,
+                event.session_id,
+                (
+                    "Commands:\n"
+                    "/status - Show bot status\n"
+                    "/new - Start fresh conversation\n"
+                    "/reset - Reset session\n"
+                    "/task <goal> - Plan and execute a task\n"
+                    "/monitor list - List your monitors\n"
+                    "/monitor add <type> <target> - Add monitor\n"
+                    "/code index [path] - Index codebase\n"
+                    "/code search <query> - Search code\n"
+                    "/code review <file> - Review file\n"
+                    "/code start <goal> - Start coding session\n"
+                    "/routine list - List routines\n"
+                    "/routine add <action> <sched> - Add routine\n"
+                    "/voice tts <text> - Text-to-speech synthesis\n"
+                    "/voice providers - List TTS providers\n"
+                    "/compact - Summarize conversation\n"
+                    "/think <low|medium|high> - Set thinking level\n"
+                    "/skills - List loaded skills\n"
+                    "/help - Show this help\n"
+                    "/pair <code> - Authorize with pairing code"
+                ),
+            )
             return True
 
         if cmd == "/skills":
@@ -504,6 +532,7 @@ class Gateway:
     def _clean_text(self, channel: str, text: str) -> str:
         if channel == "discord":
             import re
+
             text = re.sub(r"<@!?\d+>", "", text).strip()
         return text
 
@@ -520,9 +549,11 @@ class Gateway:
 
         try:
             task = await planner.plan(goal, self.llm, user_id=event.user_id, channel=event.channel)
-            await self._send(event.channel, event.session_id,
+            await self._send(
+                event.channel,
+                event.session_id,
                 f"📋 Plan: {task.plan_summary or goal}\n"
-                + "\n".join(f"  {i+1}. {s.description}" for i, s in enumerate(task.steps[:10]))
+                + "\n".join(f"  {i + 1}. {s.description}" for i, s in enumerate(task.steps[:10])),
             )
             await runner.submit(task)
             task = await runner.wait(task.id, timeout=600)
@@ -536,13 +567,11 @@ class Gateway:
                 msg = "✅ Task completed!\n" + "\n".join(results[:10])
                 await self._send(event.channel, event.session_id, msg)
             elif task.status.value == "failed":
-                await self._send(event.channel, event.session_id,
-                    f"❌ Task failed: {task.error or 'Unknown error'}")
+                await self._send(event.channel, event.session_id, f"❌ Task failed: {task.error or 'Unknown error'}")
             elif task.status.value == "cancelled":
                 await self._send(event.channel, event.session_id, "🚫 Task cancelled")
             else:
-                await self._send(event.channel, event.session_id,
-                    f"Task status: {task.status.value}")
+                await self._send(event.channel, event.session_id, f"Task status: {task.status.value}")
         except Exception as e:
             logger.error("Task execution error: {}", e)
             await self._send(event.channel, event.session_id, f"❌ Task error: {e}")
@@ -569,17 +598,22 @@ class Gateway:
 
         elif sub == "add":
             if len(args) < 2:
-                await self._send(event.channel, event.session_id,
+                await self._send(
+                    event.channel,
+                    event.session_id,
                     "Usage: /monitor add <type> <target> [name]\n"
-                    "Types: http <url>, price <symbol>, rss <url>, file <path>, process <name>")
+                    "Types: http <url>, price <symbol>, rss <url>, file <path>, process <name>",
+                )
                 return
             mtype = args[0].lower()
             target = args[1]
             name = " ".join(args[2:]) if len(args) > 2 else f"{mtype}:{target[:30]}"
 
             type_map = {
-                "http": MonitorType.HTTP, "price": MonitorType.PRICE,
-                "rss": MonitorType.RSS, "file": MonitorType.FILE,
+                "http": MonitorType.HTTP,
+                "price": MonitorType.PRICE,
+                "rss": MonitorType.RSS,
+                "file": MonitorType.FILE,
                 "process": MonitorType.PROCESS,
             }
             if mtype not in type_map:
@@ -587,13 +621,18 @@ class Gateway:
                 return
 
             monitor = Monitor(
-                name=name, type=type_map[mtype], target=target,
-                interval_seconds=300, status=MonitorStatus.ACTIVE,
-                user_id=event.user_id, channel=event.channel,
+                name=name,
+                type=type_map[mtype],
+                target=target,
+                interval_seconds=300,
+                status=MonitorStatus.ACTIVE,
+                user_id=event.user_id,
+                channel=event.channel,
             )
             store.save_monitor(monitor)
-            await self._send(event.channel, event.session_id,
-                f"✅ Monitor '{name}' ({monitor.id[:8]}) added. Checks every 5min.")
+            await self._send(
+                event.channel, event.session_id, f"✅ Monitor '{name}' ({monitor.id[:8]}) added. Checks every 5min."
+            )
 
         elif sub == "remove" and args:
             m = store.load_monitor(args[0])
@@ -620,7 +659,9 @@ class Gateway:
             await self._send(event.channel, event.session_id, f"▶️ Monitor '{m.name}' resumed.")
 
         else:
-            await self._send(event.channel, event.session_id,
+            await self._send(
+                event.channel,
+                event.session_id,
                 "📊 Monitor commands:\n"
                 "  /monitor list\n"
                 "  /monitor add http <url>\n"
@@ -630,7 +671,8 @@ class Gateway:
                 "  /monitor add process <name>\n"
                 "  /monitor remove <id>\n"
                 "  /monitor pause <id>\n"
-                "  /monitor resume <id>")
+                "  /monitor resume <id>",
+            )
 
     async def _handle_code_cmd(self, event: IncomingMessage, sub: str, args: list[str]) -> None:
         from raven.core.coder.models import CodingSession, SessionStatus
@@ -648,8 +690,7 @@ class Gateway:
             indexer.index(max_files=2000)
             summary = indexer.summary()
             langs = ", ".join(f"{k}:{v}" for k, v in summary.get("languages", {}).items())
-            await self._send(event.channel, event.session_id,
-                f"Indexed {summary['files']} files\nLanguages: {langs}")
+            await self._send(event.channel, event.session_id, f"Indexed {summary['files']} files\nLanguages: {langs}")
 
         elif sub == "search" and args:
             query = " ".join(args)
@@ -691,23 +732,29 @@ class Gateway:
             project = str(Path.cwd())
             new_session = CodingSession(user_id=event.user_id, channel=event.channel, goal=goal, project_path=project)
             mgr.create_session(new_session)
-            await self._send(event.channel, event.session_id,
+            await self._send(
+                event.channel,
+                event.session_id,
                 f"💻 Coding session started: {new_session.id[:8]}\n"
                 f"Goal: {goal}\n"
                 f"Project: {project}\n"
-                f"Use /code status {new_session.id[:8]} to check")
+                f"Use /code status {new_session.id[:8]} to check",
+            )
 
         elif sub == "status" and args:
             session = mgr.get_session(args[0])
             if not session:
                 await self._send(event.channel, event.session_id, f"Session not found: {args[0]}")
                 return
-            await self._send(event.channel, event.session_id,
+            await self._send(
+                event.channel,
+                event.session_id,
                 f"💻 Session: {session.id[:8]}\n"
                 f"Goal: {session.goal}\n"
                 f"Status: {session.status.value}\n"
                 f"Files: {len(session.files)}\n"
-                f"Messages: {len(session.history)}")
+                f"Messages: {len(session.history)}",
+            )
 
         elif sub == "end" and args:
             session = mgr.get_session(args[0])
@@ -719,14 +766,17 @@ class Gateway:
             await self._send(event.channel, event.session_id, f"Session {args[0][:8]} ended.")
 
         else:
-            await self._send(event.channel, event.session_id,
+            await self._send(
+                event.channel,
+                event.session_id,
                 "💻 Code commands:\n"
                 "  /code index [path] - Index a codebase\n"
                 "  /code search <query> - Search indexed code\n"
                 "  /code review <file> - Review a file\n"
                 "  /code start <goal> - Start coding session\n"
                 "  /code status <id> - Session status\n"
-                "  /code end <id> - End session")
+                "  /code end <id> - End session",
+            )
 
     async def _handle_routine_cmd(self, event: IncomingMessage, sub: str, args: list[str]) -> None:
         from raven.core.routine.models import Routine, RoutineAction, RoutineStatus, RoutineTrigger
@@ -748,10 +798,13 @@ class Gateway:
 
         elif sub == "add":
             if len(args) < 2:
-                await self._send(event.channel, event.session_id,
+                await self._send(
+                    event.channel,
+                    event.session_id,
                     "Usage: /routine add <action> <schedule> [name]\n"
                     "Actions: send_briefing, send_message, check_email, organize_files\n"
-                    "Schedule: HH:MM, cron, or interval_seconds")
+                    "Schedule: HH:MM, cron, or interval_seconds",
+                )
                 return
             action = args[0].lower()
             schedule = args[1]
@@ -777,13 +830,20 @@ class Gateway:
                     trigger = RoutineTrigger.SCHEDULED
 
             routine = Routine(
-                name=name, action=action_map[action], trigger=trigger,
-                schedule=schedule, status=RoutineStatus.ACTIVE,
-                user_id=event.user_id, channel=event.channel,
+                name=name,
+                action=action_map[action],
+                trigger=trigger,
+                schedule=schedule,
+                status=RoutineStatus.ACTIVE,
+                user_id=event.user_id,
+                channel=event.channel,
             )
             store.save_routine(routine)
-            await self._send(event.channel, event.session_id,
-                f"⏰ Routine '{name}' ({routine.id[:8]}) added. {trigger.value}: {schedule}")
+            await self._send(
+                event.channel,
+                event.session_id,
+                f"⏰ Routine '{name}' ({routine.id[:8]}) added. {trigger.value}: {schedule}",
+            )
 
         elif sub == "remove" and args:
             r = store.load_routine(args[0])
@@ -810,13 +870,16 @@ class Gateway:
             await self._send(event.channel, event.session_id, f"▶️ Routine '{r.name}' resumed.")
 
         else:
-            await self._send(event.channel, event.session_id,
+            await self._send(
+                event.channel,
+                event.session_id,
                 "⏰ Routine commands:\n"
                 "  /routine list\n"
                 "  /routine add <action> <schedule> [name]\n"
                 "  /routine remove <id>\n"
                 "  /routine pause <id>\n"
-                "  /routine resume <id>")
+                "  /routine resume <id>",
+            )
 
     async def _handle_voice_cmd(self, event: IncomingMessage, sub: str, args: list[str]) -> None:
         if sub == "tts":
@@ -825,6 +888,7 @@ class Gateway:
                 await self._send(event.channel, event.session_id, "Usage: /voice tts <text>")
                 return
             from raven.voice import TextToSpeech
+
             tts = TextToSpeech()
             try:
                 output = await asyncio.get_event_loop().run_in_executor(None, tts.synthesize, text)
@@ -834,12 +898,15 @@ class Gateway:
 
         elif sub == "providers":
             from raven.voice import TTSProvider
+
             providers = [p.value for p in TTSProvider]
-            await self._send(event.channel, event.session_id,
-                "🔊 TTS Providers:\n" + "\n".join(f"  • {p}" for p in providers))
+            await self._send(
+                event.channel, event.session_id, "🔊 TTS Providers:\n" + "\n".join(f"  • {p}" for p in providers)
+            )
 
         else:
-            await self._send(event.channel, event.session_id,
-                "🔊 Voice commands:\n"
-                "  /voice tts <text> - Synthesize speech\n"
-                "  /voice providers - List TTS providers")
+            await self._send(
+                event.channel,
+                event.session_id,
+                "🔊 Voice commands:\n  /voice tts <text> - Synthesize speech\n  /voice providers - List TTS providers",
+            )

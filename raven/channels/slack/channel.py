@@ -4,6 +4,7 @@ import hashlib
 import hmac
 
 from loguru import logger
+from typing import Any
 
 from raven.channels.enterprise_base import EnterpriseChannel
 from raven.core.config import settings
@@ -12,6 +13,7 @@ from raven.core.models import IncomingMessage, Message
 try:
     from slack_sdk.errors import SlackApiError
     from slack_sdk.web.async_client import AsyncWebClient
+
     HAS_SLACK_SDK = True
 except ImportError:
     HAS_SLACK_SDK = False
@@ -38,7 +40,7 @@ class SlackChannel(EnterpriseChannel):
         expected = "v0=" + hmac.new(self._signing_secret.encode(), basestring, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, signature)
 
-    async def handle_event(self, event: dict, team_id: str | None = None):
+    async def handle_event(self, event: dict[str, Any], team_id: str | None = None):
         if not self._handler or not self._ready:
             return
         msg_type = event.get("type", "")
@@ -48,13 +50,15 @@ class SlackChannel(EnterpriseChannel):
             channel = event.get("channel", "")
             if user and text and not event.get("bot_id") and event.get("subtype") != "bot_message":
                 self._stats["received"] += 1
-                await self._handler(IncomingMessage(
-                    channel="slack",
-                    user_id=user,
-                    session_id=f"slack:{channel}:{user}",
-                    text=text,
-                    metadata={"channel": channel, "team_id": team_id or ""},
-                ))
+                await self._handler(
+                    IncomingMessage(
+                        channel="slack",
+                        user_id=user,
+                        session_id=f"slack:{channel}:{user}",
+                        text=text,
+                        metadata={"channel": channel, "team_id": team_id or ""},
+                    )
+                )
 
     async def _send_message(self, session_id: str, message: Message):
         if not self._client:

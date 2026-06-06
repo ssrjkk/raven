@@ -17,19 +17,24 @@ class Database:
         self._conn: aiosqlite.Connection | None = None
         self.migrator = Migrator(db_path)
 
+    @property
+    def conn(self) -> aiosqlite.Connection:
+        assert self._conn is not None, "Database not connected"
+        return self._conn
+
     async def connect(self):
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = await aiosqlite.connect(str(self.db_path))
-        self._conn.row_factory = aiosqlite.Row
-        await self._conn.execute("PRAGMA journal_mode=WAL")
-        await self._conn.execute("PRAGMA foreign_keys=ON")
-        await self._conn.execute("PRAGMA busy_timeout=5000")
-        await self._conn.execute("PRAGMA synchronous=NORMAL")
+        self.conn.row_factory = aiosqlite.Row
+        await self.conn.execute("PRAGMA journal_mode=WAL")
+        await self.conn.execute("PRAGMA foreign_keys=ON")
+        await self.conn.execute("PRAGMA busy_timeout=5000")
+        await self.conn.execute("PRAGMA synchronous=NORMAL")
         await self._migrate()
 
     async def _migrate(self):
         await self.migrator.migrate()
-        async with self._conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name") as c:
+        async with self.conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name") as c:
             rows = await c.fetchall()
             existing = {r[0] for r in rows}
 
@@ -102,18 +107,18 @@ class Database:
         }
         for name, ddl in tables.items():
             if name not in existing:
-                await self._conn.execute(ddl)
-        await self._conn.commit()
+                await self.conn.execute(ddl)
+        await self.conn.commit()
 
     async def disconnect(self):
         if self._conn:
-            await self._conn.close()
+            await self.conn.close()
             self._conn = None
 
-    async def get_or_create_session(self, session_id: str, channel: str, user_id: str, agent_id: str = "default") -> Session:
-        async with self._conn.execute(
-            "SELECT * FROM sessions WHERE id = ?", (session_id,)
-        ) as c:
+    async def get_or_create_session(
+        self, session_id: str, channel: str, user_id: str, agent_id: str = "default"
+    ) -> Session:
+        async with self.conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)) as c:
             row = await c.fetchone()
         if row:
             try:
@@ -128,84 +133,112 @@ class Database:
                 agent_id=row["agent_id"] or "default",
                 agent_skills=skills,
                 system_prompt=row["system_prompt"],
-                created_at=datetime.fromisoformat(row["created_at"]) if isinstance(row["created_at"], str) else datetime.now(timezone.utc),
-                updated_at=datetime.fromisoformat(row["updated_at"]) if isinstance(row["updated_at"], str) else datetime.now(timezone.utc),
+                created_at=datetime.fromisoformat(row["created_at"])
+                if isinstance(row["created_at"], str)
+                else datetime.now(timezone.utc),
+                updated_at=datetime.fromisoformat(row["updated_at"])
+                if isinstance(row["updated_at"], str)
+                else datetime.now(timezone.utc),
             )
         now = datetime.now(timezone.utc)
-        session = Session(id=session_id, channel=channel, user_id=user_id, agent_id=agent_id, created_at=now, updated_at=now)
-        await self._conn.execute(
-            "INSERT INTO sessions (id, channel, user_id, agent_id, agent_skills, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (session.id, session.channel, session.user_id, session.agent_id, json.dumps(session.agent_skills), session.created_at.isoformat(), session.updated_at.isoformat()),
+        session = Session(
+            id=session_id, channel=channel, user_id=user_id, agent_id=agent_id, created_at=now, updated_at=now
         )
-        await self._conn.commit()
+        await self.conn.execute(
+            "INSERT INTO sessions (id, channel, user_id, agent_id, agent_skills, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                session.id,
+                session.channel,
+                session.user_id,
+                session.agent_id,
+                json.dumps(session.agent_skills),
+                session.created_at.isoformat(),
+                session.updated_at.isoformat(),
+            ),
+        )
+        await self.conn.commit()
         return session
 
     async def save_message(self, msg: Message):
-        await self._conn.execute(
+        await self.conn.execute(
             "INSERT OR IGNORE INTO messages (id, session_id, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?)",
             (msg.id, msg.session_id, msg.role, msg.content, json.dumps(msg.metadata), msg.created_at.isoformat()),
         )
-        await self._conn.execute(
+        await self.conn.execute(
             "UPDATE sessions SET updated_at = ? WHERE id = ?",
             (datetime.now(timezone.utc).isoformat(), msg.session_id),
         )
-        await self._conn.commit()
+        await self.conn.commit()
 
     async def get_session_messages(self, session_id: str, limit: int = 50) -> list[Message]:
-        async with self._conn.execute(
+        async with self.conn.execute(
             "SELECT * FROM messages WHERE session_id = ? ORDER BY created_at DESC LIMIT ?",
             (session_id, limit),
         ) as c:
             rows = await c.fetchall()
         result = []
-        for row in reversed(rows):
-            result.append(Message(
-                id=row["id"],
-                session_id=row["session_id"],
-                role=row["role"],
-                content=row["content"],
-                metadata=json.loads(row["metadata"]) if row["metadata"] else {},
-                created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.now(timezone.utc),
-            ))
+        for row in reversed(list(rows)):
+            result.append(
+                Message(
+                    id=row["id"],
+                    session_id=row["session_id"],
+                    role=row["role"],
+                    content=row["content"],
+                    metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+                    created_at=datetime.fromisoformat(row["created_at"])
+                    if row["created_at"]
+                    else datetime.now(timezone.utc),
+                )
+            )
         return result
 
-    async def find_or_create_user(self, channel: str, external_id: str, display_name: str | None = None) -> dict[str, Any]:
+    async def find_or_create_user(
+        self, channel: str, external_id: str, display_name: str | None = None
+    ) -> dict[str, Any]:
         user_id = f"{channel}:{external_id}"
-        async with self._conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)) as c:
+        async with self.conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)) as c:
             row = await c.fetchone()
         if row:
             return dict(row)
-        await self._conn.execute(
+        await self.conn.execute(
             "INSERT INTO users (id, channel, external_id, display_name) VALUES (?, ?, ?, ?)",
             (user_id, channel, external_id, display_name),
         )
-        await self._conn.commit()
-        return {"id": user_id, "channel": channel, "external_id": external_id, "display_name": display_name, "is_allowed": 0}
+        await self.conn.commit()
+        return {
+            "id": user_id,
+            "channel": channel,
+            "external_id": external_id,
+            "display_name": display_name,
+            "is_allowed": 0,
+        }
 
     async def set_user_allowed(self, user_id: str, allowed: bool = True):
-        await self._conn.execute("UPDATE users SET is_allowed = ? WHERE id = ?", (1 if allowed else 0, user_id))
-        await self._conn.commit()
+        await self.conn.execute("UPDATE users SET is_allowed = ? WHERE id = ?", (1 if allowed else 0, user_id))
+        await self.conn.commit()
 
     async def set_pairing_code(self, user_id: str, code: str):
-        await self._conn.execute("UPDATE users SET pairing_code = ? WHERE id = ?", (code, user_id))
-        await self._conn.commit()
+        await self.conn.execute("UPDATE users SET pairing_code = ? WHERE id = ?", (code, user_id))
+        await self.conn.commit()
 
     async def get_user_by_pairing_code(self, code: str) -> dict[str, Any] | None:
-        async with self._conn.execute("SELECT * FROM users WHERE pairing_code = ?", (code,)) as c:
+        async with self.conn.execute("SELECT * FROM users WHERE pairing_code = ?", (code,)) as c:
             row = await c.fetchone()
         return dict(row) if row else None
 
     async def get_pending_pairing_users(self) -> list[dict[str, Any]]:
-        async with self._conn.execute("SELECT * FROM users WHERE pairing_code IS NOT NULL AND is_allowed = 0") as c:
+        async with self.conn.execute("SELECT * FROM users WHERE pairing_code IS NOT NULL AND is_allowed = 0") as c:
             rows = await c.fetchall()
         return [dict(r) for r in rows]
 
     async def get_sessions(self, channel: str | None = None) -> list[Session]:
         if channel:
-            async with self._conn.execute("SELECT * FROM sessions WHERE channel = ? ORDER BY updated_at DESC", (channel,)) as c:
+            async with self.conn.execute(
+                "SELECT * FROM sessions WHERE channel = ? ORDER BY updated_at DESC", (channel,)
+            ) as c:
                 rows = await c.fetchall()
         else:
-            async with self._conn.execute("SELECT * FROM sessions ORDER BY updated_at DESC") as c:
+            async with self.conn.execute("SELECT * FROM sessions ORDER BY updated_at DESC") as c:
                 rows = await c.fetchall()
         result = []
         for r in rows:
@@ -214,35 +247,45 @@ class Database:
                 skills = json.loads(skills_val) if skills_val and skills_val != "[]" else []
             except (IndexError, KeyError):
                 skills = []
-            result.append(Session(
-                id=r["id"], channel=r["channel"], user_id=r["user_id"],
-                agent_id=r["agent_id"] or "default",
-                agent_skills=skills,
-                system_prompt=r["system_prompt"],
-                created_at=datetime.fromisoformat(r["created_at"]) if r["created_at"] else datetime.now(timezone.utc),
-                updated_at=datetime.fromisoformat(r["updated_at"]) if r["updated_at"] else datetime.now(timezone.utc),
-            ))
+            result.append(
+                Session(
+                    id=r["id"],
+                    channel=r["channel"],
+                    user_id=r["user_id"],
+                    agent_id=r["agent_id"] or "default",
+                    agent_skills=skills,
+                    system_prompt=r["system_prompt"],
+                    created_at=datetime.fromisoformat(r["created_at"])
+                    if r["created_at"]
+                    else datetime.now(timezone.utc),
+                    updated_at=datetime.fromisoformat(r["updated_at"])
+                    if r["updated_at"]
+                    else datetime.now(timezone.utc),
+                )
+            )
         return result
 
     async def save_plugin_state(self, plugin_id: str, key: str, value: str):
-        await self._conn.execute(
+        await self.conn.execute(
             "INSERT OR REPLACE INTO plugin_state (plugin_id, key, value) VALUES (?, ?, ?)",
             (plugin_id, key, value),
         )
-        await self._conn.commit()
+        await self.conn.commit()
 
     async def get_plugin_state(self, plugin_id: str, key: str) -> str | None:
-        async with self._conn.execute("SELECT value FROM plugin_state WHERE plugin_id = ? AND key = ?", (plugin_id, key)) as c:
+        async with self.conn.execute(
+            "SELECT value FROM plugin_state WHERE plugin_id = ? AND key = ?", (plugin_id, key)
+        ) as c:
             row = await c.fetchone()
         return row["value"] if row else None
 
     async def delete_session(self, session_id: str):
-        await self._conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
-        await self._conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
-        await self._conn.commit()
+        await self.conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+        await self.conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        await self.conn.commit()
 
-    async def replace_session_messages(self, session_id: str, new_messages: list[dict]):
-        await self._conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+    async def replace_session_messages(self, session_id: str, new_messages: list[dict[str, Any]]):
+        await self.conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
         for msg in new_messages:
             m = Message(
                 session_id=session_id,
@@ -250,17 +293,17 @@ class Database:
                 role=msg.get("role", "system"),
                 content=msg.get("content", ""),
             )
-            await self._conn.execute(
+            await self.conn.execute(
                 "INSERT INTO messages (id, session_id, channel, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (m.id, m.session_id, m.channel, m.role, m.content, m.metadata, m.created_at.isoformat()),
             )
-        await self._conn.commit()
+        await self.conn.commit()
 
     async def health_check(self) -> bool:
         if not self._conn:
             return False
         try:
-            async with self._conn.execute("SELECT 1") as c:
+            async with self.conn.execute("SELECT 1") as c:
                 await c.fetchone()
             return True
         except Exception:

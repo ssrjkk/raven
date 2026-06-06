@@ -14,7 +14,7 @@ class ConfigWatcher:
         self._check_interval = check_interval
         self._last_mtime: float = 0.0
         self._listeners: list[Callable[[], None]] = []
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
         self._running = False
 
     def on_change(self, fn: Callable[[], None]):

@@ -33,14 +33,22 @@ class Role(str, enum.Enum):
 ROLE_PERMISSIONS: dict[Role, list[Permission]] = {
     Role.ADMIN: list(Permission),
     Role.USER: [
-        Permission.CHAT, Permission.TASK_RUN, Permission.TASK_LIST,
-        Permission.MONITOR_READ, Permission.MONITOR_WRITE,
-        Permission.ROUTINE_READ, Permission.ROUTINE_WRITE,
-        Permission.CODE_READ, Permission.CODE_WRITE,
+        Permission.CHAT,
+        Permission.TASK_RUN,
+        Permission.TASK_LIST,
+        Permission.MONITOR_READ,
+        Permission.MONITOR_WRITE,
+        Permission.ROUTINE_READ,
+        Permission.ROUTINE_WRITE,
+        Permission.CODE_READ,
+        Permission.CODE_WRITE,
     ],
     Role.VIEWER: [
-        Permission.CHAT, Permission.TASK_LIST,
-        Permission.MONITOR_READ, Permission.ROUTINE_READ, Permission.CODE_READ,
+        Permission.CHAT,
+        Permission.TASK_LIST,
+        Permission.MONITOR_READ,
+        Permission.ROUTINE_READ,
+        Permission.CODE_READ,
     ],
     Role.BANNED: [],
 }

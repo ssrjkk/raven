@@ -5,6 +5,7 @@ import asyncio
 
 def _ensure_raven_env() -> None:
     from raven.core.config_store import config_store
+
     config_store.load()
     config_store.apply_to_env()
 

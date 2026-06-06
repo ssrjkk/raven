@@ -93,19 +93,27 @@ class TestMonitorCreateRequest:
     def test_interval_too_low(self):
         with pytest.raises(ValidationError):
             MonitorCreateRequest(
-                name="Test", type="http", target="https://example.com", interval_seconds=1,
+                name="Test",
+                type="http",
+                target="https://example.com",
+                interval_seconds=1,
             )
 
     def test_interval_too_high(self):
         with pytest.raises(ValidationError):
             MonitorCreateRequest(
-                name="Test", type="http", target="https://example.com", interval_seconds=999999,
+                name="Test",
+                type="http",
+                target="https://example.com",
+                interval_seconds=999999,
             )
 
     def test_invalid_name_characters(self):
         with pytest.raises(ValidationError):
             MonitorCreateRequest(
-                name="<script>alert(1)</script>", type="http", target="https://example.com",
+                name="<script>alert(1)</script>",
+                type="http",
+                target="https://example.com",
             )
 
 

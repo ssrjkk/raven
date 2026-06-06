@@ -19,6 +19,7 @@ async def _async_gen(items):
 @pytest.fixture(autouse=True)
 def _clear_cache():
     import raven.core.task_engine.store as ts
+
     ts._local.conn = None
 
 
@@ -35,25 +36,31 @@ def store(db_path: str) -> TaskStore:
 @pytest.fixture
 def registry() -> ToolRegistry:
     r = ToolRegistry()
-    r.register(ToolSpec(
-        name="web_search",
-        description="Search the web",
-        parameters={"query": {"type": "string"}},
-        handler=AsyncMock(return_value="search results"),
-    ))
-    r.register(ToolSpec(
-        name="get_weather",
-        description="Get weather for location",
-        parameters={"location": {"type": "string"}},
-        handler=AsyncMock(return_value="sunny 25C"),
-    ))
-    r.register(ToolSpec(
-        name="slow_tool",
-        description="Slow tool for timeout testing",
-        parameters={},
-        handler=AsyncMock(side_effect=lambda: asyncio.sleep(3600)),
-        timeout=1,
-    ))
+    r.register(
+        ToolSpec(
+            name="web_search",
+            description="Search the web",
+            parameters={"query": {"type": "string"}},
+            handler=AsyncMock(return_value="search results"),
+        )
+    )
+    r.register(
+        ToolSpec(
+            name="get_weather",
+            description="Get weather for location",
+            parameters={"location": {"type": "string"}},
+            handler=AsyncMock(return_value="sunny 25C"),
+        )
+    )
+    r.register(
+        ToolSpec(
+            name="slow_tool",
+            description="Slow tool for timeout testing",
+            parameters={},
+            handler=AsyncMock(side_effect=lambda: asyncio.sleep(3600)),
+            timeout=1,
+        )
+    )
     return r
 
 
@@ -164,9 +171,11 @@ class TestTaskPlanner:
     @patch("raven.core.task_engine.planner.LLMRouter")
     async def test_plan_parses_response(self, mock_llm_cls):
         mock_llm = MagicMock()
-        mock_llm.ask = lambda prompt: _async_gen([
-            '{"summary": "test plan", "steps": [{"description": "search", "tool": "web_search", "params": {"query": "x"}}]}'
-        ])
+        mock_llm.ask = lambda prompt: _async_gen(
+            [
+                '{"summary": "test plan", "steps": [{"description": "search", "tool": "web_search", "params": {"query": "x"}}]}'
+            ]
+        )
         from raven.core.task_engine.planner import TaskPlanner
 
         planner = TaskPlanner(ToolRegistry())

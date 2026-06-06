@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from loguru import logger
 
@@ -16,7 +17,7 @@ class MatrixChannel(EnterpriseChannel):
         self._homeserver = settings.matrix_homeserver.rstrip("/") if settings.matrix_homeserver else ""
         self._token = settings.matrix_access_token or ""
         self._sync_token = ""
-        self._sync_task: asyncio.Task | None = None
+        self._sync_task: asyncio.Task[None] | None = None
         self._rooms: dict[str, str] = {}
 
     async def _stop(self):
@@ -26,13 +27,15 @@ class MatrixChannel(EnterpriseChannel):
 
     async def _matrix_get(self, path: str):
         import httpx
+
         async with httpx.AsyncClient(base_url=self._homeserver, timeout=15) as client:
             resp = await client.get(path, headers={"Authorization": f"Bearer {self._token}"})
             resp.raise_for_status()
             return resp.json()
 
-    async def _matrix_post(self, path: str, json_body: dict):
+    async def _matrix_post(self, path: str, json_body: dict[str, Any]):
         import httpx
+
         async with httpx.AsyncClient(base_url=self._homeserver, timeout=15) as client:
             resp = await client.post(path, json=json_body, headers={"Authorization": f"Bearer {self._token}"})
             resp.raise_for_status()
@@ -67,22 +70,24 @@ class MatrixChannel(EnterpriseChannel):
                     self._stats["reconnects"] += 1
                     await asyncio.sleep(5)
 
-    async def _handle_room_events(self, room_id: str, room_data: dict):
+    async def _handle_room_events(self, room_id: str, room_data: dict[str, Any]):
         for event in room_data.get("timeline", {}).get("events", []):
             if event.get("type") == "m.room.message" and event.get("content", {}).get("msgtype") == "m.text":
                 sender = event.get("sender", "")
                 body = event.get("content", {}).get("body", "")
                 if sender and body and self._handler:
                     self._stats["received"] += 1
-                    await self._handler(IncomingMessage(
-                        channel="matrix",
-                        user_id=sender,
-                        session_id=f"matrix:{room_id}:{sender}",
-                        text=body,
-                        metadata={"room_id": room_id, "event_id": event.get("event_id", "")},
-                    ))
+                    await self._handler(
+                        IncomingMessage(
+                            channel="matrix",
+                            user_id=sender,
+                            session_id=f"matrix:{room_id}:{sender}",
+                            text=body,
+                            metadata={"room_id": room_id, "event_id": event.get("event_id", "")},
+                        )
+                    )
 
-    async def handle_event(self, event: dict, room_id: str):
+    async def handle_event(self, event: dict[str, Any], room_id: str):
         if not self._handler or not self._ready:
             return
         if event.get("type") == "m.room.message" and event.get("content", {}).get("msgtype") == "m.text":
@@ -90,13 +95,15 @@ class MatrixChannel(EnterpriseChannel):
             body = event.get("content", {}).get("body", "")
             if sender and body:
                 self._stats["received"] += 1
-                await self._handler(IncomingMessage(
-                    channel="matrix",
-                    user_id=sender,
-                    session_id=f"matrix:{room_id}:{sender}",
-                    text=body,
-                    metadata={"room_id": room_id, "event_id": event.get("event_id", "")},
-                ))
+                await self._handler(
+                    IncomingMessage(
+                        channel="matrix",
+                        user_id=sender,
+                        session_id=f"matrix:{room_id}:{sender}",
+                        text=body,
+                        metadata={"room_id": room_id, "event_id": event.get("event_id", "")},
+                    )
+                )
                 return True
         return False
 
@@ -107,7 +114,10 @@ class MatrixChannel(EnterpriseChannel):
         room_id = parts[1] if len(parts) >= 2 else None
         if not room_id:
             return
-        await self._matrix_post(f"/_matrix/client/v3/rooms/{room_id}/send/m.room.message", {
-            "msgtype": "m.text",
-            "body": message.content[:4000],
-        })
+        await self._matrix_post(
+            f"/_matrix/client/v3/rooms/{room_id}/send/m.room.message",
+            {
+                "msgtype": "m.text",
+                "body": message.content[:4000],
+            },
+        )

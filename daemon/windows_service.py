@@ -74,6 +74,7 @@ class RavenWindowsService:
     def status():
         _ensure_pywin32()
         import win32serviceutil
+
         try:
             status = win32serviceutil.QueryServiceStatus(SERVICE_NAME)
             state_map = {

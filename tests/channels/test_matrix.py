@@ -39,7 +39,7 @@ async def test_matrix_handle_event():
     result = await channel.handle_event(event, "!room:matrix.org")
     assert result
     handler.assert_awaited_once()
-    ev: IncomingMessage = handler.await_args[0][0]
+    ev: IncomingMessage = handler.await_args[0][0]  # type: ignore[index]
     assert ev.channel == "matrix"
     assert ev.user_id == "@user:matrix.org"
     assert ev.text == "Hello Matrix"

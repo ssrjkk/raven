@@ -4,7 +4,15 @@ from __future__ import annotations
 import pytest
 
 from raven.core.coder.indexer import CodeIndexer
-from raven.core.coder.models import CodeFile, CodeSymbol, CodingSession, ReviewComment, ReviewSeverity, SessionStatus, SymbolKind
+from raven.core.coder.models import (
+    CodeFile,
+    CodeSymbol,
+    CodingSession,
+    ReviewComment,
+    ReviewSeverity,
+    SessionStatus,
+    SymbolKind,
+)
 from raven.core.coder.review import CodeReviewer
 from raven.core.coder.session import CodingSessionManager
 
@@ -228,6 +236,7 @@ class TestCodingSessionManager:
     @pytest.mark.asyncio
     async def test_list_sessions_by_user(self, tmp_path):
         from raven.core.coder.session import _local
+
         _local.conn = None
         db_path = str(tmp_path / "coder_user.db")
         manager = CodingSessionManager(db_path)

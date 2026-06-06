@@ -51,7 +51,7 @@ class Routine:
     config: dict[str, Any] = field(default_factory=dict)
     created_at: float | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
@@ -68,7 +68,7 @@ class Routine:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> Routine:
+    def from_dict(cls, data: dict[str, Any]) -> Routine:
         return cls(
             id=data.get("id", uuid.uuid4().hex[:16]),
             name=data.get("name", ""),

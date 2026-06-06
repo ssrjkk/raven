@@ -28,7 +28,7 @@ async def run(command: str, timeout: int = 30, shell: bool = False) -> str:
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except asyncio.TimeoutError:
-            await proc.kill()
+            proc.kill()
             return f"Command timed out after {timeout}s"
 
         result = ""
@@ -48,6 +48,7 @@ async def run(command: str, timeout: int = 30, shell: bool = False) -> str:
 async def run_python(code: str, timeout: int = 15) -> str:
     """Run Python code in a subprocess. Args: code (str): Python code, timeout (int): Max execution time"""
     import shlex
+
     return await run(f"{sys.executable} -c {shlex.quote(code)}", timeout=timeout, shell=True)
 
 
@@ -68,7 +69,7 @@ async def list_processes(filter: str = "") -> str:
 async def kill(pid: int, force: bool = False) -> str:
     """Kill a process by PID. Args: pid (int): Process ID, force (bool): Force kill (SIGKILL)"""
     try:
-        sig = signal.SIGKILL if force else signal.SIGTERM
+        sig = getattr(signal, "SIGKILL", signal.SIGTERM) if force else signal.SIGTERM
         os.kill(pid, sig)
         return f"Process {pid} {'forcefully ' if force else ''}terminated"
     except ProcessLookupError:

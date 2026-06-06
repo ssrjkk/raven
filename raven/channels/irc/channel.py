@@ -84,25 +84,31 @@ class IRCChannel(EnterpriseChannel):
             nick, target, text = m.group(1), m.group(2), m.group(3)
             if nick != self._nick and text and self._handler:
                 self._stats["received"] += 1
-                asyncio.ensure_future(self._handler(IncomingMessage(
-                    channel="irc",
-                    user_id=nick,
-                    session_id=f"irc:{target}:{nick}",
-                    text=text,
-                    metadata={"channel": target, "server": self._server},
-                )))
+                asyncio.ensure_future(
+                    self._handler(
+                        IncomingMessage(
+                            channel="irc",
+                            user_id=nick,
+                            session_id=f"irc:{target}:{nick}",
+                            text=text,
+                            metadata={"channel": target, "server": self._server},
+                        )
+                    )
+                )
 
     async def handle_message(self, nick: str, channel: str, text: str):
         if not self._handler or not self._ready or nick == self._nick:
             return
         self._stats["received"] += 1
-        await self._handler(IncomingMessage(
-            channel="irc",
-            user_id=nick,
-            session_id=f"irc:{channel}:{nick}",
-            text=text,
-            metadata={"channel": channel, "server": self._server},
-        ))
+        await self._handler(
+            IncomingMessage(
+                channel="irc",
+                user_id=nick,
+                session_id=f"irc:{channel}:{nick}",
+                text=text,
+                metadata={"channel": channel, "server": self._server},
+            )
+        )
 
     async def _send_message(self, session_id: str, message: Message):
         parts = session_id.split(":")

@@ -61,6 +61,7 @@ async def _ensure_browser():
             return _context
         try:
             from playwright.async_api import async_playwright
+
             p = await async_playwright().start()
             _browser = p
             _context = await p.chromium.launch(headless=True)
@@ -96,7 +97,7 @@ async def browse(url: str) -> str:
             page = await browser.new_page()
             try:
                 await page.goto(url, timeout=15000, wait_until="domcontentloaded")
-                content = await page.evaluate("document.body.innerText")
+                content: str = await page.evaluate("document.body.innerText")
                 return content[:4000]
             finally:
                 await page.close()
@@ -129,6 +130,7 @@ async def screenshot(url: str) -> str:
         try:
             await page.goto(url, timeout=15000, wait_until="domcontentloaded")
             import base64
+
             screenshot_bytes = await page.screenshot(full_page=False)
             b64 = base64.b64encode(screenshot_bytes).decode()
             return f"![Screenshot](data:image/png;base64,{b64})"

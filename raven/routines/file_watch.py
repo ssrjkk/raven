@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import shutil
+from typing import Any
 
 from raven.core.routine.models import Routine
 
@@ -42,7 +43,7 @@ async def organize_files(routine: Routine) -> str:
     return f"No files to organize in {base.name}"
 
 
-def _default_rules() -> list[dict]:
+def _default_rules() -> list[dict[str, Any]]:
     return [
         {"pattern": "*.pdf", "dest": "~/Documents/PDFs"},
         {"pattern": "*.jpg", "dest": "~/Pictures"},

@@ -88,6 +88,7 @@ class SagaStep:
 
 # ── Example: User Registration Saga ────────────────────────────
 
+
 class UserRegistrationSaga(Saga):
     """Example SAGA: register user → create default monitors → send welcome.
 

@@ -34,9 +34,9 @@ class Op(str, Enum):
     TRUE = "true"
 
 
-def _resolve(input_data: dict, path: str) -> Any:
+def _resolve(input_data: dict[str, Any], path: str) -> Any:
     parts = path.split(".")
-    current = input_data
+    current: Any = input_data
     for part in parts:
         if isinstance(current, dict):
             current = current.get(part)
@@ -52,13 +52,13 @@ class ConditionNode:
     value: Any = None
     children: list[ConditionNode] = field(default_factory=list)
 
-    def evaluate(self, input_data: dict) -> bool:
+    def evaluate(self, input_data: dict[str, Any]) -> bool:
         try:
             return self._evaluate(input_data)
         except Exception:
             return False
 
-    def _evaluate(self, input_data: dict) -> bool:
+    def _evaluate(self, input_data: dict[str, Any]) -> bool:
         if self.op == Op.TRUE:
             return True
 
@@ -74,9 +74,9 @@ class ConditionNode:
         actual = _resolve(input_data, self.path)
 
         if self.op == Op.EQ:
-            return actual == self.value
+            return actual == self.value  # type: ignore[no-any-return]
         if self.op == Op.NEQ:
-            return actual != self.value
+            return actual != self.value  # type: ignore[no-any-return]
         if self.op == Op.GT:
             return actual is not None and actual > self.value
         if self.op == Op.GTE:
@@ -199,13 +199,13 @@ class Rule:
     def __init__(
         self,
         name: str,
-        condition: dict | ConditionNode,
+        condition: dict[str, Any] | ConditionNode,
         effect: str,
         priority: int = 0,
         description: str = "",
         tags: list[str] | None = None,
         enabled: bool = True,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         self.name = name
         self._condition = condition if isinstance(condition, ConditionNode) else ConditionNode.from_dict(condition)
@@ -216,16 +216,16 @@ class Rule:
         self.enabled = enabled
         self.metadata = metadata or {}
 
-    def evaluate(self, input_data: dict) -> bool:
+    def evaluate(self, input_data: dict[str, Any]) -> bool:
         return self._condition.evaluate(input_data)
 
-    def evaluate_traced(self, input_data: dict) -> tuple[bool, EvaluationTrace]:
+    def evaluate_traced(self, input_data: dict[str, Any]) -> tuple[bool, EvaluationTrace]:
         trace = EvaluationTrace(rule_name=self.name, effect=self.effect, matched=False)
         result = self._eval_with_trace(self._condition, input_data, trace.steps)
         trace.matched = result
         return result, trace
 
-    def _eval_with_trace(self, node: ConditionNode, input_data: dict, steps: list[TraceStep]) -> bool:
+    def _eval_with_trace(self, node: ConditionNode, input_data: dict[str, Any], steps: list[TraceStep]) -> bool:
         step = TraceStep(condition=node, result=False)
         result = node.evaluate(input_data)
         step.result = result
@@ -240,7 +240,7 @@ class Rule:
         steps.append(step)
         return result
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "effect": self.effect,
@@ -273,7 +273,7 @@ class RuleSet:
         self.name = name
         self.rules = sorted(rules or [], key=lambda r: r.priority, reverse=True)
 
-    def evaluate(self, input_data: dict) -> tuple[str | None, str | None]:
+    def evaluate(self, input_data: dict[str, Any]) -> tuple[str | None, str | None]:
         for rule in self.rules:
             if not rule.enabled:
                 continue
@@ -281,7 +281,7 @@ class RuleSet:
                 return rule.effect, rule.name
         return None, None
 
-    def evaluate_detailed(self, input_data: dict) -> RuleDecision:
+    def evaluate_detailed(self, input_data: dict[str, Any]) -> RuleDecision:
         traces: list[EvaluationTrace] = []
         for rule in self.rules:
             if not rule.enabled:
@@ -296,7 +296,7 @@ class RuleSet:
         self.rules.append(rule)
         self.rules.sort(key=lambda r: r.priority, reverse=True)
 
-    def to_dict(self) -> list[dict]:
+    def to_dict(self) -> list[dict[str, Any]]:
         return [r.to_dict() for r in self.rules]
 
 
@@ -324,6 +324,7 @@ class PolicyEngine:
         if filepath.suffix in (".yaml", ".yml"):
             try:
                 import yaml
+
                 data = yaml.safe_load(raw)
             except ImportError:
                 rules = self._parse_simple(raw)
@@ -336,16 +337,18 @@ class PolicyEngine:
 
         rules = []
         for item in data if isinstance(data, list) else data.get("rules", []):
-            rules.append(Rule(
-                name=item.get("name", "unnamed"),
-                condition=item.get("condition", {}),
-                effect=item.get("effect", "deny"),
-                priority=item.get("priority", 0),
-                description=item.get("description", ""),
-                tags=item.get("tags", []),
-                enabled=item.get("enabled", True),
-                metadata=item.get("metadata", {}),
-            ))
+            rules.append(
+                Rule(
+                    name=item.get("name", "unnamed"),
+                    condition=item.get("condition", {}),
+                    effect=item.get("effect", "deny"),
+                    priority=item.get("priority", 0),
+                    description=item.get("description", ""),
+                    tags=item.get("tags", []),
+                    enabled=item.get("enabled", True),
+                    metadata=item.get("metadata", {}),
+                )
+            )
 
         rs = RuleSet(rules, name=name)
         with self._lock:
@@ -361,19 +364,19 @@ class PolicyEngine:
         with self._lock:
             return self._rulesets.get(name)
 
-    def evaluate(self, ruleset_name: str, input_data: dict) -> tuple[str | None, str | None]:
+    def evaluate(self, ruleset_name: str, input_data: dict[str, Any]) -> tuple[str | None, str | None]:
         rs = self.get_ruleset(ruleset_name)
         if rs is None:
             rs = self.load_ruleset(ruleset_name)
         return rs.evaluate(input_data)
 
-    def evaluate_detailed(self, ruleset_name: str, input_data: dict) -> RuleDecision:
+    def evaluate_detailed(self, ruleset_name: str, input_data: dict[str, Any]) -> RuleDecision:
         rs = self.get_ruleset(ruleset_name)
         if rs is None:
             rs = self.load_ruleset(ruleset_name)
         return rs.evaluate_detailed(input_data)
 
-    def check(self, ruleset: str, input_data: dict) -> bool:
+    def check(self, ruleset: str, input_data: dict[str, Any]) -> bool:
         effect, _ = self.evaluate(ruleset, input_data)
         return effect != "deny"
 
@@ -410,7 +413,7 @@ class PolicyEngine:
                 pass
 
     def _parse_simple(self, text: str) -> list[Rule]:
-        rules = []
+        rules: list[Rule] = []
         for line in text.splitlines():
             line = line.strip()
             if not line or line.startswith("#") or line.startswith("//"):
@@ -430,7 +433,7 @@ class PolicyEngine:
                 rules.append(Rule(name=name or f"rule_{len(rules)}", condition=condition, effect=effect))
         return rules
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         with self._lock:
             return {name: rs.to_dict() for name, rs in self._rulesets.items()}
 

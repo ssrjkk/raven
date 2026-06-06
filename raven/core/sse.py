@@ -58,10 +58,10 @@ class SSEStream:
     def __init__(self, max_queue: int = 512, backpressure: Backpressure = Backpressure.DROP):
         self._max_queue = max_queue
         self._backpressure = backpressure
-        self._queues: dict[str, asyncio.Queue] = {}
+        self._queues: dict[str, asyncio.Queue[Any]] = {}
         self._sessions: dict[str, SessionInfo] = {}
         self._cleanup_interval = 60.0
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
         self._total_pushed = 0
         self._total_dropped = 0
 
@@ -77,7 +77,7 @@ class SSEStream:
     def total_dropped(self) -> int:
         return self._total_dropped
 
-    def subscribe(self, session_id: str) -> asyncio.Queue:
+    def subscribe(self, session_id: str) -> asyncio.Queue[Any]:
         if session_id not in self._queues:
             self._queues[session_id] = asyncio.Queue(maxsize=self._max_queue)
             self._sessions[session_id] = SessionInfo(created_at=time.time(), last_get=time.time())
@@ -101,7 +101,7 @@ class SSEStream:
     def get_session_info(self, session_id: str) -> SessionInfo | None:
         return self._sessions.get(session_id)
 
-    def list_sessions(self) -> dict[str, dict]:
+    def list_sessions(self) -> dict[str, dict[str, Any]]:
         now = time.time()
         return {
             sid: {
@@ -130,7 +130,7 @@ class SSEStream:
     async def broadcast(self, event: str, data: Any):
         await self.push(event, data)
 
-    async def _push_to_queue(self, q: asyncio.Queue, payload: SSEEvent, session_id: str):
+    async def _push_to_queue(self, q: asyncio.Queue[Any], payload: SSEEvent, session_id: str):
         if self._backpressure == Backpressure.DROP:
             try:
                 await asyncio.wait_for(q.put(payload), timeout=0.1)
@@ -185,7 +185,8 @@ class SSEStream:
                 await asyncio.sleep(self._cleanup_interval)
                 now = time.time()
                 stale = [
-                    sid for sid, info in list(self._sessions.items())
+                    sid
+                    for sid, info in list(self._sessions.items())
                     if now - info.last_get > idle_timeout and sid in self._queues and self._queues[sid].empty()
                 ]
                 for sid in stale:

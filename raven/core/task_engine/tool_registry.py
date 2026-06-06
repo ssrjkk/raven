@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from typing import Any, List, Awaitable, Callable
 
 from pydantic import BaseModel, Field
 
@@ -15,7 +15,7 @@ class ToolSpec(BaseModel):
     category: str = "general"
     timeout: int = 60
 
-    def to_llm_tool(self) -> dict:
+    def to_llm_tool(self) -> dict[str, Any]:
         return {
             "type": "function",
             "function": {
@@ -51,7 +51,7 @@ class ToolRegistry:
             return [t for t in self._tools.values() if t.category == category]
         return list(self._tools.values())
 
-    def to_llm_tools(self) -> list[dict]:
+    def to_llm_tools(self) -> List[dict[str, Any]]:
         return [t.to_llm_tool() for t in self._tools.values()]
 
     async def call(self, name: str, **params: Any) -> Any:

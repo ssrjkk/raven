@@ -99,7 +99,7 @@ class Settings(BaseSettings):
             return base / p
         return p
 
-    def validate(self):
+    def validate(self) -> bool:  # type: ignore[override]
         errors = []
         if self.dm_policy not in ("pairing", "open", "closed"):
             errors.append(f"DM_POLICY must be 'pairing', 'open', or 'closed', got '{self.dm_policy}'")

@@ -25,10 +25,12 @@ async def check_process(monitor: Monitor) -> dict[str, Any]:
 
 async def _is_process_running(name: str, exact: bool) -> bool:
     import os
+
     if os.name == "nt":
         proc = await asyncio.create_subprocess_shell(
             f'tasklist /FI "IMAGENAME eq {name}" /NH',
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
         stdout, _ = await proc.communicate()
         output = stdout.decode("utf-8", errors="replace")
@@ -37,12 +39,14 @@ async def _is_process_running(name: str, exact: bool) -> bool:
         if exact:
             proc = await asyncio.create_subprocess_shell(
                 f"pgrep -x '{name}'",
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
         else:
             proc = await asyncio.create_subprocess_shell(
                 f"pgrep -f '{name}'",
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
         stdout, _ = await proc.communicate()
         return bool(stdout.decode("utf-8", errors="replace").strip())

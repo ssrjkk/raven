@@ -13,6 +13,7 @@ from raven.core.routine.store import RoutineStore
 @pytest.fixture(autouse=True)
 def _clear_cache():
     import raven.core.routine.store as rs
+
     rs._local.conn = None
 
 
@@ -47,7 +48,12 @@ class TestRoutineStore:
 
     def test_list_active(self, store: RoutineStore):
         a = Routine(name="active-r", action=RoutineAction.SEND_MESSAGE, trigger=RoutineTrigger.MANUAL)
-        b = Routine(name="paused-r", action=RoutineAction.SEND_MESSAGE, trigger=RoutineTrigger.MANUAL, status=RoutineStatus.PAUSED)
+        b = Routine(
+            name="paused-r",
+            action=RoutineAction.SEND_MESSAGE,
+            trigger=RoutineTrigger.MANUAL,
+            status=RoutineStatus.PAUSED,
+        )
         store.save_routine(a)
         store.save_routine(b)
         active = store.list_active()

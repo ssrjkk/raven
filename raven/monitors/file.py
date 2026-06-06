@@ -50,11 +50,13 @@ async def _check_directory(path: Path, pattern: str) -> dict[str, Any]:
     for f in files[:200]:
         if f.is_file():
             stat = f.stat()
-            result["files"].append({
-                "name": f.name,
-                "size": stat.st_size,
-                "modified": stat.st_mtime,
-            })
+            result["files"].append(
+                {
+                    "name": f.name,
+                    "size": stat.st_size,
+                    "modified": stat.st_mtime,
+                }
+            )
             result["total_size"] += stat.st_size
 
     return result

@@ -13,6 +13,7 @@ try:
     import discord
     from discord import app_commands
     from discord.ext import commands
+
     HAS_DISCORD = True
 except ImportError:
     HAS_DISCORD = False
@@ -26,7 +27,9 @@ COLORS = {
 }
 
 
-def build_embed(title: str, description: str = "", color: str = "info", fields: list[tuple] | None = None) -> discord.Embed:
+def build_embed(
+    title: str, description: str = "", color: str = "info", fields: list[tuple[str, str, bool]] | None = None
+) -> discord.Embed:
     embed = discord.Embed(
         title=title[:256],
         description=description[:4096],
@@ -68,8 +71,7 @@ class DiscordChannel(BaseChannel):
                 return
             self._ready = True
             await tree.sync()
-            logger.info("Discord channel started as {} ({} slash commands synced)",
-                        bot.user, len(tree.get_commands()))
+            logger.info("Discord channel started as {} ({} slash commands synced)", bot.user, len(tree.get_commands()))
             await bot.change_presence(activity=discord.Game(name="/help | Raven AI"))
 
         @self._bot.event
@@ -100,7 +102,7 @@ class DiscordChannel(BaseChannel):
                         await self._handler(event)
 
         @self._bot.command(name="chat")
-        async def chat_cmd(ctx: commands.Context, *, text: str):
+        async def chat_cmd(ctx: commands.Context[commands.Bot], *, text: str):
             async with ctx.typing():
                 user_id = str(ctx.author.id)
                 channel_id = str(ctx.channel.id)
@@ -115,11 +117,11 @@ class DiscordChannel(BaseChannel):
                     await self._handler(event)
 
         @self._bot.command(name="reset")
-        async def reset_cmd(ctx: commands.Context):
+        async def reset_cmd(ctx: commands.Context[commands.Bot]):
             await ctx.reply("Session reset.")
 
         @self._bot.command(name="status")
-        async def status_cmd(ctx: commands.Context):
+        async def status_cmd(ctx: commands.Context[commands.Bot]):
             embed = build_embed(
                 "Raven AI Status",
                 "Personal AI Assistant",
@@ -246,7 +248,7 @@ class DiscordChannel(BaseChannel):
                     try:
                         user = await self._bot.fetch_user(int(user_id))
                         if user:
-                            channel = user
+                            channel = user  # type: ignore[assignment]
                     except Exception:
                         pass
             if channel:
@@ -260,10 +262,10 @@ class DiscordChannel(BaseChannel):
                             content[:4096],
                             color=metadata.get("embed_color", "info"),
                         )
-                        await channel.send(embed=embed)
+                        await channel.send(embed=embed)  # type: ignore[union-attr]
                     else:
                         if len(content) > 1900:
                             content = content[:1900] + "..."
-                        await channel.send(content)
+                        await channel.send(content)  # type: ignore[union-attr]
                 except Exception as e:
                     logger.error("Discord send failed: {}", e)

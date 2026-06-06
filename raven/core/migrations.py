@@ -23,6 +23,7 @@ def register(version: int, description: str, sql: str | None = None):
         m = Migration(version, description, sql, fn)
         _MIGRATIONS.append(m)
         return fn
+
     return wrapper
 
 
@@ -40,6 +41,7 @@ class Migrator:
 
     async def get_current_version(self):
         import aiosqlite
+
         conn = await aiosqlite.connect(str(self.db_path))
         try:
             await conn.execute(MIGRATIONS_TABLE)
@@ -52,6 +54,7 @@ class Migrator:
 
     async def migrate(self, target: int | None = None):
         import aiosqlite
+
         current = await self.get_current_version()
         pending = sorted([m for m in _MIGRATIONS if m.version > current], key=lambda m: m.version)
         if target:

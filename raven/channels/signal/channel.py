@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from raven.channels.enterprise_base import EnterpriseChannel
 from raven.core.config import settings
 from raven.core.models import IncomingMessage, Message
@@ -15,7 +17,7 @@ class SignalChannel(EnterpriseChannel):
     async def _stop(self):
         self._client = None
 
-    async def handle_webhook(self, body: dict) -> bool:
+    async def handle_webhook(self, body: dict[str, Any]) -> bool:
         if not self._handler or not self._ready:
             return False
         envelope = body.get("envelope", {})
@@ -25,13 +27,15 @@ class SignalChannel(EnterpriseChannel):
         if not source or not text:
             return False
         self._stats["received"] += 1
-        await self._handler(IncomingMessage(
-            channel="signal",
-            user_id=source,
-            session_id=f"signal:{source}",
-            text=text,
-            metadata={"source": source},
-        ))
+        await self._handler(
+            IncomingMessage(
+                channel="signal",
+                user_id=source,
+                session_id=f"signal:{source}",
+                text=text,
+                metadata={"source": source},
+            )
+        )
         return True
 
     async def _send_message(self, session_id: str, message: Message):
@@ -40,6 +44,7 @@ class SignalChannel(EnterpriseChannel):
         if not recipient:
             return
         import httpx
+
         async with httpx.AsyncClient(base_url=self._api_url, timeout=15) as client:
             resp = await client.post("/v2/send", json={"message": message.content[:3000], "recipient": recipient})
             resp.raise_for_status()

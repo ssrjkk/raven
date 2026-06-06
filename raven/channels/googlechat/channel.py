@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from raven.channels.enterprise_base import EnterpriseChannel
 from raven.core.config import settings
 from raven.core.models import IncomingMessage, Message
@@ -14,7 +16,7 @@ class GoogleChatChannel(EnterpriseChannel):
     async def _stop(self):
         pass
 
-    async def handle_webhook(self, body: dict) -> bool:
+    async def handle_webhook(self, body: dict[str, Any]) -> bool:
         if not self._handler or not self._ready:
             return False
         message = body.get("message", {})
@@ -25,13 +27,15 @@ class GoogleChatChannel(EnterpriseChannel):
         if not text or not user_id:
             return False
         self._stats["received"] += 1
-        await self._handler(IncomingMessage(
-            channel="googlechat",
-            user_id=user_id,
-            session_id=f"googlechat:{space}:{user_id}",
-            text=text,
-            metadata={"space": space},
-        ))
+        await self._handler(
+            IncomingMessage(
+                channel="googlechat",
+                user_id=user_id,
+                session_id=f"googlechat:{space}:{user_id}",
+                text=text,
+                metadata={"space": space},
+            )
+        )
         return True
 
     async def _send_message(self, session_id: str, message: Message):

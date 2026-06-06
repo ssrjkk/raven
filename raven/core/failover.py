@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+from typing import Any
 
 from loguru import logger
 
@@ -35,7 +36,7 @@ class ModelFailover:
             models.append(ModelConfig("ollama", "llama3", 0.5))
         self._models = models
 
-    async def complete(self, messages: list[dict], tools: list[dict] | None = None) -> LLMResponse:
+    async def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> LLMResponse:
         last_error = None
         for model_cfg in self._models:
             try:
@@ -51,7 +52,7 @@ class ModelFailover:
                 continue
         raise last_error or RuntimeError("All models exhausted")
 
-    async def complete_stream(self, messages: list[dict], tools: list[dict] | None = None):
+    async def complete_stream(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None):
         last_error = None
         for model_cfg in self._models:
             try:

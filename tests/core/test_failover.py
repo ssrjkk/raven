@@ -41,7 +41,7 @@ async def test_model_config_default_weight():
 @pytest.mark.asyncio
 async def test_failover_complete_empty_models():
     llm = FakeLLM()
-    f = ModelFailover(llm)
+    f = ModelFailover(llm)  # type: ignore[arg-type]
     f._models = []
     with pytest.raises(RuntimeError, match="All models exhausted"):
         await f.complete([{"role": "user", "content": "hi"}])
@@ -54,7 +54,7 @@ async def test_failover_fallback_on_error():
         "model-a": RuntimeError("fail"),
         "model-b": FakeResponse(content="ok"),
     }
-    f = ModelFailover(llm)
+    f = ModelFailover(llm)  # type: ignore[arg-type]
     f._models = [
         ModelConfig("p1", "model-a"),
         ModelConfig("p2", "model-b"),
@@ -71,7 +71,7 @@ async def test_failover_all_fail():
         "a": RuntimeError("err1"),
         "b": RuntimeError("err2"),
     }
-    f = ModelFailover(llm)
+    f = ModelFailover(llm)  # type: ignore[arg-type]
     f._models = [
         ModelConfig("p1", "a"),
         ModelConfig("p2", "b"),
@@ -86,7 +86,7 @@ async def test_failover_complete_empty_response():
     llm.results = {
         "m": FakeResponse(content="", tool_calls=[]),
     }
-    f = ModelFailover(llm)
+    f = ModelFailover(llm)  # type: ignore[arg-type]
     f._models = [ModelConfig("p", "m")]
     with pytest.raises(RuntimeError, match="All models exhausted"):
         await f.complete([{"role": "user", "content": "hi"}])
@@ -94,7 +94,7 @@ async def test_failover_complete_empty_response():
 
 def test_failover_pick_random():
     llm = FakeLLM()
-    f = ModelFailover(llm)
+    f = ModelFailover(llm)  # type: ignore[arg-type]
     f._models = [ModelConfig("p1", "a", 1.0), ModelConfig("p2", "b", 1.0)]
     mc = f.pick_random()
     assert mc.model in ("a", "b")
@@ -102,7 +102,7 @@ def test_failover_pick_random():
 
 def test_failover_pick_random_empty():
     llm = FakeLLM()
-    f = ModelFailover(llm)
+    f = ModelFailover(llm)  # type: ignore[arg-type]
     f._models = []
     with pytest.raises(RuntimeError, match="No models configured"):
         f.pick_random()

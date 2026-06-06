@@ -17,7 +17,7 @@ def _get_conn(db_path: str) -> sqlite3.Connection:
     if not hasattr(_local, "conn") or _local.conn is None:
         _local.conn = sqlite3.connect(db_path)
         _local.conn.row_factory = sqlite3.Row
-    return _local.conn
+    return _local.conn  # type: ignore[no-any-return]
 
 
 SCHEMA = """
@@ -80,10 +80,20 @@ class TaskStore:
                 scheduled_at, metadata)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                task.id, task.user_id, task.channel, task.goal, task.plan_summary,
-                task.status.value, task.priority.value, task.current_step_index,
-                task.result, task.error, task.created_at, task.updated_at,
-                task.scheduled_at, json.dumps(task.metadata, default=str),
+                task.id,
+                task.user_id,
+                task.channel,
+                task.goal,
+                task.plan_summary,
+                task.status.value,
+                task.priority.value,
+                task.current_step_index,
+                task.result,
+                task.error,
+                task.created_at,
+                task.updated_at,
+                task.scheduled_at,
+                json.dumps(task.metadata, default=str),
             ),
         )
         for step in task.steps:
@@ -93,10 +103,17 @@ class TaskStore:
                     status, result, error, started_at, completed_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    step.id, step.task_id, step.order, step.description, step.tool,
+                    step.id,
+                    step.task_id,
+                    step.order,
+                    step.description,
+                    step.tool,
                     json.dumps(step.params, default=str),
-                    step.status.value, json.dumps(step.result, default=str) if step.result is not None else None,
-                    step.error, step.started_at, step.completed_at,
+                    step.status.value,
+                    json.dumps(step.result, default=str) if step.result is not None else None,
+                    step.error,
+                    step.started_at,
+                    step.completed_at,
                 ),
             )
         conn.commit()
@@ -153,7 +170,10 @@ class TaskStore:
             (
                 step.status.value,
                 json.dumps(step.result, default=str) if step.result is not None else None,
-                step.error, step.started_at, step.completed_at, step.id,
+                step.error,
+                step.started_at,
+                step.completed_at,
+                step.id,
             ),
         )
         conn.commit()

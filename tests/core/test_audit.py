@@ -109,6 +109,7 @@ def test_audit_event_type_values():
 
 # ─── New tests ──────────────────────────────────────────────────────
 
+
 def test_audit_query_by_event():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
@@ -166,9 +167,11 @@ def test_audit_query_since():
         log_path = f.name
 
     import time
+
     logger = AuditLogger(log_path)
     logger.start()
     logger.log("before", "user")
+    time.sleep(0.01)
     mid = time.time()
     logger.log("after", "user")
     logger.stop()

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import time
 from functools import wraps
-from typing import Callable
-
+from typing import Any, Callable
 
 
 class MetricsCollector:
@@ -34,14 +33,14 @@ class MetricsCollector:
         parts = [f"{k}={v}" for k, v in sorted(labels.items())]
         return f"{name}{{{','.join(parts)}}}"
 
-    def snapshot(self) -> dict:
-        out = {}
+    def snapshot(self) -> dict[str, Any]:
+        out: dict[str, Any] = {}
         for k, v in self._counters.items():
             out[f"raven_{k}_total"] = v
         for k, vals in self._latencies.items():
             if vals:
                 out[f"raven_{k}_count"] = len(vals)
-                out[f"raven_{k}_sum"] = sum(vals)
+                out[f"raven_{k}_sum"] = sum(vals, 0.0)
                 out[f"raven_{k}_avg"] = sum(vals) / len(vals)
                 out[f"raven_{k}_max"] = max(vals)
                 out[f"raven_{k}_p99"] = sorted(vals)[int(len(vals) * 0.99)]
@@ -71,8 +70,8 @@ class MetricsCollector:
 metrics = MetricsCollector()
 
 
-def timed(name: str, labels: dict[str, str] | None = None) -> Callable:
-    def decorator(fn: Callable) -> Callable:
+def timed(name: str, labels: dict[str, str] | None = None) -> Callable[..., Any]:
+    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(fn)
         async def async_wrapper(*args, **kwargs):
             start = time.monotonic()
@@ -98,7 +97,9 @@ def timed(name: str, labels: dict[str, str] | None = None) -> Callable:
                 raise
 
         import asyncio
+
         if asyncio.iscoroutinefunction(fn):
             return async_wrapper
         return sync_wrapper
+
     return decorator

@@ -103,6 +103,7 @@ class TestContextFilter:
 class TestSecurityAudit:
     def test_audit_runs_all_checks(self):
         from raven.core.security.security_audit import SecurityAudit
+
         auditor = SecurityAudit()
         results = auditor.run_all(deep=False)
         assert len(results) >= 20
@@ -118,6 +119,7 @@ class TestSecurityAudit:
 
     def test_audit_deep_includes_extra(self):
         from raven.core.security.security_audit import SecurityAudit
+
         auditor = SecurityAudit()
         deep_results = auditor.run_all(deep=True)
         names = [r.name for r in deep_results]
@@ -128,6 +130,7 @@ class TestSecurityAudit:
 
     def test_audit_check_ok(self):
         from raven.core.security.security_audit import AuditCheck
+
         c = AuditCheck("test", "test check")
         c.ok("all good")
         assert c.passed
@@ -135,6 +138,7 @@ class TestSecurityAudit:
 
     def test_audit_check_fail(self):
         from raven.core.security.security_audit import AuditCheck
+
         c = AuditCheck("test", "test check")
         c.fail("something wrong")
         assert not c.passed
@@ -142,6 +146,7 @@ class TestSecurityAudit:
 
     def test_audit_check_fix_hint(self):
         from raven.core.security.security_audit import AuditCheck
+
         c = AuditCheck("test_fix", "test fix hint")
         assert c.fix_hint() is None
         c.fail("broken", fix_hint="do this to fix")
@@ -149,6 +154,7 @@ class TestSecurityAudit:
 
     def test_audit_check_to_dict_has_fix_hint(self):
         from raven.core.security.security_audit import AuditCheck
+
         c = AuditCheck("test_fix", "test fix hint")
         c.fail("broken", fix_hint="do this to fix")
         d = c.to_dict()
@@ -156,6 +162,7 @@ class TestSecurityAudit:
 
     def test_audit_runs_all_custom(self):
         from raven.core.security.security_audit import SecurityAudit
+
         auditor = SecurityAudit()
         results = auditor.run_all()
         non_empty_names = [r.name for r in results if r.name]

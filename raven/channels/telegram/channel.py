@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 from uuid import uuid4
 
 from loguru import logger
@@ -48,11 +48,11 @@ class TelegramChannel(BaseChannel):
 
     def __init__(self):
         self._token = settings.telegram_bot_token
-        self._app: Application | None = None
+        self._app: Application[Any, Any, Any, Any, Any, Any] | None = None
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
 
     @staticmethod
-    def _build_test_app(token: str) -> Application:
+    def _build_test_app(token: str) -> Application[Any, Any, Any, Any, Any, Any]:
         app = Application.builder().token(token).build()
         return app
 
@@ -106,13 +106,17 @@ class TelegramChannel(BaseChannel):
                 kb = build_menu_keyboard()
             try:
                 await self._app.bot.send_message(
-                    chat_id=int(chat_id), text=text,
-                    parse_mode="Markdown", reply_markup=kb,
+                    chat_id=int(chat_id),
+                    text=text,
+                    parse_mode="Markdown",
+                    reply_markup=kb,
                 )
             except Exception:
                 try:
                     await self._app.bot.send_message(
-                        chat_id=int(chat_id), text=text, reply_markup=kb,
+                        chat_id=int(chat_id),
+                        text=text,
+                        reply_markup=kb,
                     )
                 except Exception as e:
                     logger.error("Telegram send failed: {}", e)
@@ -122,7 +126,8 @@ class TelegramChannel(BaseChannel):
             return
         try:
             await self._app.bot.send_chat_action(
-                chat_id=chat_id, action="typing",
+                chat_id=chat_id,
+                action="typing",
             )
         except Exception:
             pass
@@ -131,7 +136,8 @@ class TelegramChannel(BaseChannel):
         if not self._app:
             return
         await self._app.bot.send_message(
-            chat_id=chat_id, text=text,
+            chat_id=chat_id,
+            text=text,
             reply_markup=build_menu_keyboard(),
         )
 
@@ -140,13 +146,17 @@ class TelegramChannel(BaseChannel):
             return
         try:
             await self._app.bot.edit_message_text(
-                chat_id=chat_id, message_id=message_id,
-                text=text, parse_mode="Markdown",
+                chat_id=chat_id,
+                message_id=message_id,
+                text=text,
+                parse_mode="Markdown",
             )
         except Exception:
             try:
                 await self._app.bot.edit_message_text(
-                    chat_id=chat_id, message_id=message_id, text=text,
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
                 )
             except Exception as e:
                 logger.error("Telegram edit failed: {}", e)
@@ -157,7 +167,9 @@ class TelegramChannel(BaseChannel):
     def _user_id(self, update: Update) -> str:
         return str(update.message.from_user.id) if update.message and update.message.from_user else "unknown"
 
-    async def _incoming(self, update: Update, text: str, session_id: str | None = None, extra_meta: dict | None = None):
+    async def _incoming(
+        self, update: Update, text: str, session_id: str | None = None, extra_meta: dict[str, Any] | None = None
+    ):
         if not self._handler:
             return
         chat_id = self._chat_id(update)
@@ -199,6 +211,7 @@ class TelegramChannel(BaseChannel):
 
         text = await transcribe_voice(file_path)
         from pathlib import Path
+
         try:
             Path(file_path).unlink()
         except Exception:
@@ -219,7 +232,8 @@ class TelegramChannel(BaseChannel):
 
         if data == "menu_new":
             await self._incoming(
-                update, "/new",
+                update,
+                "/new",
                 session_id=f"telegram:{self._chat_id(update)}:{uuid4().hex[:8]}",
                 extra_meta={"callback": data},
             )
@@ -253,7 +267,8 @@ class TelegramChannel(BaseChannel):
 
     async def _cmd_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await self._incoming(
-            update, "/new",
+            update,
+            "/new",
             session_id=f"telegram:{self._chat_id(update)}:{uuid4().hex[:8]}",
         )
 

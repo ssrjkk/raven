@@ -98,8 +98,10 @@ class TextToSpeech:
     def _synthesize_windows_sapi(self, text: str, output_path: str):
         try:
             import pythoncom
+
             pythoncom.CoInitialize()
             from win32com.client import Dispatch
+
             speaker = Dispatch("SAPI.SpVoice")
             stream = Dispatch("SAPI.SpFileStream")
             stream.Open(output_path, 3, False)
@@ -135,6 +137,7 @@ class TextToSpeech:
     def _list_elevenlabs_voices(self) -> list[dict[str, Any]]:
         try:
             from elevenlabs import voices
+
             return [{"id": v.voice_id, "name": v.name} for v in voices()]
         except ImportError:
             return []

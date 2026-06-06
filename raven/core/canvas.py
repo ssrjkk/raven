@@ -6,11 +6,29 @@ from uuid import uuid4
 
 from loguru import logger
 
-_COMPONENT_TYPES = frozenset({
-    "box", "text", "button", "input", "select", "table",
-    "chart", "card", "list", "image", "progress", "spacer",
-    "columns", "tabs", "icon", "badge", "code", "link", "chip",
-})
+_COMPONENT_TYPES = frozenset(
+    {
+        "box",
+        "text",
+        "button",
+        "input",
+        "select",
+        "table",
+        "chart",
+        "card",
+        "list",
+        "image",
+        "progress",
+        "spacer",
+        "columns",
+        "tabs",
+        "icon",
+        "badge",
+        "code",
+        "link",
+        "chip",
+    }
+)
 
 
 class CanvasComponent:
@@ -25,7 +43,7 @@ class CanvasComponent:
         self.children.append(child)
         return self
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "type": self.ctype,
@@ -34,7 +52,7 @@ class CanvasComponent:
         }
 
 
-def Box(props: dict | None = None, *children: CanvasComponent) -> CanvasComponent:
+def Box(props: dict[str, Any] | None = None, *children: CanvasComponent) -> CanvasComponent:
     c = CanvasComponent("box", props)
     for ch in children:
         c.add_child(ch)
@@ -56,12 +74,12 @@ def Input(name: str, label: str = "", placeholder: str = "", **props) -> CanvasC
     return CanvasComponent("input", p)
 
 
-def Select(name: str, options: list[dict], label: str = "", **props) -> CanvasComponent:
+def Select(name: str, options: list[dict[str, Any]], label: str = "", **props) -> CanvasComponent:
     p = {"name": name, "options": options, "label": label, **props}
     return CanvasComponent("select", p)
 
 
-def Table(headers: list[str], rows: list[list], **props) -> CanvasComponent:
+def Table(headers: list[str], rows: list[list[str]], **props) -> CanvasComponent:
     p = {"headers": headers, "rows": rows, **props}
     return CanvasComponent("table", p)
 
@@ -73,7 +91,7 @@ def Card(title: str, *children: CanvasComponent, **props) -> CanvasComponent:
     return c
 
 
-def Chart(data: list[dict], chart_type: str = "bar", **props) -> CanvasComponent:
+def Chart(data: list[dict[str, Any]], chart_type: str = "bar", **props) -> CanvasComponent:
     p = {"data": data, "chartType": chart_type, **props}
     return CanvasComponent("chart", p)
 
@@ -90,7 +108,7 @@ def Columns(*children: CanvasComponent, **props) -> CanvasComponent:
     return c
 
 
-def Tabs(tabs: list[dict], **props) -> CanvasComponent:
+def Tabs(tabs: list[dict[str, Any]], **props) -> CanvasComponent:
     p = {"tabs": tabs, **props}
     return CanvasComponent("tabs", p)
 
@@ -115,7 +133,7 @@ def Progress(value: float, max_val: float = 1.0, **props) -> CanvasComponent:
     return CanvasComponent("progress", p)
 
 
-def List(items: list[dict], **props) -> CanvasComponent:
+def List(items: list[dict[str, Any]], **props) -> CanvasComponent:
     p = {"items": items, **props}
     return CanvasComponent("list", p)
 
@@ -124,7 +142,7 @@ class CanvasSession:
     def __init__(self, session_id: str):
         self.session_id = session_id
         self.root: CanvasComponent | None = None
-        self.events: list[dict] = []
+        self.events: list[dict[str, Any]] = []
         self.created_at = time.time()
         self.updated_at = time.time()
 
@@ -132,7 +150,7 @@ class CanvasSession:
         self.root = component
         self.updated_at = time.time()
 
-    def update_props(self, component_id: str, props: dict):
+    def update_props(self, component_id: str, props: dict[str, Any]):
         def _walk(c: CanvasComponent) -> bool:
             if c.id == component_id:
                 c.props.update(props)
@@ -141,16 +159,17 @@ class CanvasSession:
                 if _walk(child):
                     return True
             return False
+
         if self.root:
             _walk(self.root)
         self.updated_at = time.time()
 
-    def push_event(self, event: dict):
+    def push_event(self, event: dict[str, Any]):
         self.events.append({**event, "timestamp": time.time()})
         if len(self.events) > 100:
             self.events.pop(0)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "session_id": self.session_id,
             "root": self.root.to_dict() if self.root else None,
@@ -181,16 +200,18 @@ class CanvasManager:
             session.render(component)
         return session
 
-    def handle_action(self, session_id: str, component_id: str, action: str, data: dict | None = None) -> dict | None:
+    def handle_action(
+        self, session_id: str, component_id: str, action: str, data: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
         session = self._sessions.get(session_id)
         if not session:
             return None
         session.push_event({"component_id": component_id, "action": action, "data": data or {}})
         if hasattr(session, "_action_handler"):
-            return session._action_handler(component_id, action, data or {})
+            return session._action_handler(component_id, action, data or {})  # type: ignore[no-any-return]
         return None
 
-    def list_sessions(self) -> list[dict]:
+    def list_sessions(self) -> list[dict[str, Any]]:
         now = time.time()
         active = []
         for sid, s in self._sessions.items():

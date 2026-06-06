@@ -46,57 +46,68 @@ async def file_delete(path: str) -> str:
         return f"Deleted {p}"
     elif p.is_dir():
         import shutil
+
         shutil.rmtree(p)
         return f"Deleted directory {p}"
     raise FileNotFoundError(f"Not found: {p}")
 
 
 def register_file_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="file_read",
-        description="Read the contents of a file",
-        parameters={
-            "path": {"type": "string", "description": "Path to the file", "required": True},
-        },
-        handler=file_read,
-        category="file",
-    ))
-    registry.register(ToolSpec(
-        name="file_write",
-        description="Write content to a file (overwrites existing)",
-        parameters={
-            "path": {"type": "string", "description": "Path to the file", "required": True},
-            "content": {"type": "string", "description": "Content to write", "required": True},
-        },
-        handler=file_write,
-        category="file",
-    ))
-    registry.register(ToolSpec(
-        name="file_append",
-        description="Append content to a file",
-        parameters={
-            "path": {"type": "string", "description": "Path to the file", "required": True},
-            "content": {"type": "string", "description": "Content to append", "required": True},
-        },
-        handler=file_append,
-        category="file",
-    ))
-    registry.register(ToolSpec(
-        name="file_list",
-        description="List files in a directory matching a glob pattern",
-        parameters={
-            "path": {"type": "string", "description": "Directory path", "required": False},
-            "pattern": {"type": "string", "description": "Glob pattern (e.g. *.py)", "required": False},
-        },
-        handler=file_list,
-        category="file",
-    ))
-    registry.register(ToolSpec(
-        name="file_delete",
-        description="Delete a file or directory",
-        parameters={
-            "path": {"type": "string", "description": "Path to delete", "required": True},
-        },
-        handler=file_delete,
-        category="file",
-    ))
+    registry.register(
+        ToolSpec(
+            name="file_read",
+            description="Read the contents of a file",
+            parameters={
+                "path": {"type": "string", "description": "Path to the file", "required": True},
+            },
+            handler=file_read,
+            category="file",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="file_write",
+            description="Write content to a file (overwrites existing)",
+            parameters={
+                "path": {"type": "string", "description": "Path to the file", "required": True},
+                "content": {"type": "string", "description": "Content to write", "required": True},
+            },
+            handler=file_write,
+            category="file",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="file_append",
+            description="Append content to a file",
+            parameters={
+                "path": {"type": "string", "description": "Path to the file", "required": True},
+                "content": {"type": "string", "description": "Content to append", "required": True},
+            },
+            handler=file_append,
+            category="file",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="file_list",
+            description="List files in a directory matching a glob pattern",
+            parameters={
+                "path": {"type": "string", "description": "Directory path", "required": False},
+                "pattern": {"type": "string", "description": "Glob pattern (e.g. *.py)", "required": False},
+            },
+            handler=file_list,
+            category="file",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="file_delete",
+            description="Delete a file or directory",
+            parameters={
+                "path": {"type": "string", "description": "Path to delete", "required": True},
+            },
+            handler=file_delete,
+            category="file",
+        )
+    )

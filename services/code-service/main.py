@@ -85,9 +85,7 @@ async def execute_code(request: dict):
                 env={"PATH": os.environ.get("PATH", "/usr/bin"), "HOME": tmpdir},
             )
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=SANDBOX_TIMEOUT
-                )
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=SANDBOX_TIMEOUT)
                 elapsed = time.monotonic() - start
                 logger.info(
                     "Code executed: lang={} exit={} dur={:.0f}ms",

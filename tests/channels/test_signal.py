@@ -33,7 +33,7 @@ async def test_signal_handle_webhook():
     result = await c.handle_webhook(body)
     assert result
     handler.assert_awaited_once()
-    event = handler.await_args[0][0]
+    event = handler.await_args[0][0]  # type: ignore[index]
     assert event.channel == "signal"
     assert event.text == "Hello Signal"
 

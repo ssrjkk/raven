@@ -8,6 +8,7 @@ class TestJob:
     def test_initial_state(self):
         async def fn():
             pass
+
         job = Job("test", fn)
         assert job.status == JobStatus.PENDING
         assert job.duration == 0.0
@@ -15,6 +16,7 @@ class TestJob:
     def test_duration_before_run(self):
         async def fn():
             pass
+
         job = Job("test", fn)
         assert job.duration == 0.0
 
@@ -37,7 +39,7 @@ class TestJob:
         job = Job("test", fn)
         await job.run()
         assert job.status == JobStatus.FAILED
-        assert "boom" in job.error
+        assert "boom" in job.error  # type: ignore[operator]
 
     async def test_run_cancelled(self):
         async def fn():
@@ -58,7 +60,7 @@ class TestJobManager:
 
         job = await self.mgr.submit("test", fn)
         assert job.name == "test"
-        await job._task
+        await job._task  # type: ignore[misc]
         assert job.status == JobStatus.COMPLETED
 
     async def test_submit_and_fail(self):
@@ -66,12 +68,13 @@ class TestJobManager:
             raise ValueError("fail")
 
         job = await self.mgr.submit("test", fn)
-        await job._task
+        await job._task  # type: ignore[misc]
         assert job.status == JobStatus.FAILED
 
     async def test_get_job(self):
         async def fn():
             pass
+
         job = await self.mgr.submit("test", fn)
         assert self.mgr.get(job.id) is job
         assert self.mgr.get("nonexistent") is None
@@ -90,10 +93,11 @@ class TestJobManager:
     async def test_list(self):
         async def fn():
             pass
+
         j1 = await self.mgr.submit("a", fn)
         j2 = await self.mgr.submit("b", fn)
-        await j1._task
-        await j2._task
+        await j1._task  # type: ignore[misc]
+        await j2._task  # type: ignore[misc]
         lst = self.mgr.list()
         assert len(lst) == 2
 
@@ -106,8 +110,8 @@ class TestJobManager:
 
         j1 = await self.mgr.submit("ok", ok)
         j2 = await self.mgr.submit("fail", fail)
-        await j1._task
-        await j2._task
+        await j1._task  # type: ignore[misc]
+        await j2._task  # type: ignore[misc]
         completed = self.mgr.list(status="completed")
         assert len(completed) == 1
         failed = self.mgr.list(status="failed")
@@ -116,6 +120,7 @@ class TestJobManager:
     async def test_list_limit(self):
         async def fn():
             pass
+
         for i in range(5):
             await self.mgr.submit(f"job-{i}", fn)
         assert len(self.mgr.list(limit=3)) == 3
@@ -123,6 +128,7 @@ class TestJobManager:
     async def test_health_check(self):
         async def fn():
             pass
+
         await self.mgr.submit("ok", fn)
         h = await self.mgr.health_check()
         assert h["total"] == 1

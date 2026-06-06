@@ -99,7 +99,8 @@ def detect_seccomp() -> bool:
         return False
     try:
         import seccomp
-        seccomp.Arch  # type: ignore
+
+        seccomp.Arch
         return True
     except ImportError:
         return False

@@ -45,6 +45,7 @@ async def test_sse_stream_push():
     stream = SSEStream()
     q = stream.subscribe("test-session")
     import asyncio
+
     await stream.push("test", {"key": "val"}, session_id="test-session")
     payload = await asyncio.wait_for(q.get(), timeout=1.0)
     assert payload.event == "test"
@@ -58,6 +59,7 @@ async def test_sse_stream_broadcast():
     q1 = stream.subscribe("s1")
     q2 = stream.subscribe("s2")
     import asyncio
+
     await stream.broadcast("broadcast", {"msg": "to all"})
     p1 = await asyncio.wait_for(q1.get(), timeout=1.0)
     p2 = await asyncio.wait_for(q2.get(), timeout=1.0)
@@ -134,7 +136,7 @@ def test_sse_session_info():
     assert info.created_at > 0
     assert info.last_get > 0
     stream._track_get("s1")
-    assert stream.get_session_info("s1").event_count >= 1
+    assert stream.get_session_info("s1").event_count >= 1  # type: ignore[union-attr]
     stream.unsubscribe("s1")
 
 
@@ -155,6 +157,7 @@ async def test_sse_backpressure_block():
     stream = SSEStream(max_queue=1, backpressure=Backpressure.BLOCK)
     q = stream.subscribe("s1")
     import asyncio
+
     await stream.push("a", {}, session_id="s1")
     consumed = await asyncio.wait_for(q.get(), timeout=0.5)
     assert consumed.event == "a"

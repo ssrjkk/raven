@@ -2,7 +2,12 @@ from __future__ import annotations
 
 
 from raven.core.security.context_filter import (
-    ContextVisibility, PIIEngine, analyze_pii, filter_context_by_visibility, mask_pii, redact_pii,
+    ContextVisibility,
+    PIIEngine,
+    analyze_pii,
+    filter_context_by_visibility,
+    mask_pii,
+    redact_pii,
     sanitize_external_content,
 )
 
@@ -84,6 +89,7 @@ def test_context_visibility_allowlist_quote_blocks():
 
 
 # ─── PIIEngine analysis ─────────────────────────────────────────────
+
 
 def test_analyze_email():
     finds = analyze_pii("Email: user@example.com")
@@ -179,6 +185,7 @@ def test_analyze_filter_by_type():
 
 # ─── PIIEngine mask ─────────────────────────────────────────────────
 
+
 def test_mask_email():
     result = mask_pii("Contact me at test@example.com")
     assert "@" not in result
@@ -206,6 +213,7 @@ def test_mask_no_pii():
 
 # ─── PIIEngine operators ────────────────────────────────────────────
 
+
 def test_redact_with_custom_operator():
     engine = PIIEngine()
     result = engine.redact("Email: user@test.com", operators={"email": "[REDACTED_EMAIL]"})
@@ -219,6 +227,7 @@ def test_redact_no_pii():
 
 
 # ─── PIIEngine presidio fallback ────────────────────────────────────
+
 
 def test_presidio_not_available():
     engine = PIIEngine()
@@ -235,6 +244,7 @@ def test_engine_to_dict():
 
 
 # ─── PIIEngine edge cases ───────────────────────────────────────────
+
 
 def test_empty_string():
     assert redact_pii("") == ""

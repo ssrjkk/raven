@@ -4,6 +4,7 @@ import time
 from httpx import AsyncClient
 from textual.app import App, ComposeResult
 from textual.screen import Screen
+from typing import Any
 from textual.widgets import Footer, Header, Label, RichLog, Static
 from textual.containers import Container, Horizontal
 
@@ -15,7 +16,7 @@ LOG_MAXLEN = 500
 class LogWidget(RichLog):
     def __init__(self):
         super().__init__(highlight=True, markup=True, max_lines=200)
-        self._log_buffer: set = set()
+        self._log_buffer: set[str] = set()
 
     def on_mount(self) -> None:
         self.set_interval(POLL_INTERVAL * 2, self._poll_logs)
@@ -35,7 +36,7 @@ class LogWidget(RichLog):
             pass
 
 
-class DashboardScreen(Screen):
+class DashboardScreen(Screen[Any]):
     def compose(self) -> ComposeResult:
         yield Header()
         with Container():
@@ -71,7 +72,7 @@ class DashboardScreen(Screen):
             self.query_one("#channels", Static).update("Channels: ?")
 
 
-class RavenTUI(App):
+class RavenTUI(App[Any]):
     TITLE = "Raven AI"
     SUB_TITLE = "v0.4.0"
 

@@ -16,7 +16,7 @@ def _get_conn(db_path: str) -> sqlite3.Connection:
     if not hasattr(_local, "conn") or _local.conn is None:
         _local.conn = sqlite3.connect(db_path)
         _local.conn.row_factory = sqlite3.Row
-    return _local.conn
+    return _local.conn  # type: ignore[no-any-return]
 
 
 SCHEMA = """
@@ -66,19 +66,25 @@ class RoutineStore:
                 user_id, channel, last_run_status, last_run_at, config, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                routine.id, routine.name, routine.action.value,
-                routine.trigger.value, routine.schedule, routine.status.value,
-                routine.user_id, routine.channel, routine.last_run_status,
-                routine.last_run_at, config_json, routine.created_at or time.time(),
+                routine.id,
+                routine.name,
+                routine.action.value,
+                routine.trigger.value,
+                routine.schedule,
+                routine.status.value,
+                routine.user_id,
+                routine.channel,
+                routine.last_run_status,
+                routine.last_run_at,
+                config_json,
+                routine.created_at or time.time(),
             ),
         )
         conn.commit()
 
     def load_routine(self, routine_id: str) -> Routine | None:
         conn = self._conn()
-        row = conn.execute(
-            "SELECT * FROM routines WHERE id = ?", (routine_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM routines WHERE id = ?", (routine_id,)).fetchone()
         if not row:
             return None
         return self._row_to_routine(row)
