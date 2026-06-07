@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from raven.voice import TextToSpeech, TTSConfig, TTSProvider, SpeechToText, STTConfig, STTProvider
 
 
@@ -17,14 +19,16 @@ def test_tts_custom_config():
 def test_tts_synthesize_system(tmp_path):
     config = TTSConfig(provider=TTSProvider.SYSTEM, cache_dir=str(tmp_path))
     tts = TextToSpeech(config)
-    output = tts.synthesize("Hello world")
+    with patch("raven.voice.tts.subprocess.run"):
+        output = tts.synthesize("Hello world")
     assert output.endswith(".wav")
 
 
 def test_tts_synthesize_elevenlabs_fallback(tmp_path):
     config = TTSConfig(provider=TTSProvider.ELEVENLABS, cache_dir=str(tmp_path))
     tts = TextToSpeech(config)
-    output = tts.synthesize("Hello world")
+    with patch("raven.voice.tts.subprocess.run"):
+        output = tts.synthesize("Hello world")
     assert output.endswith(".wav")
 
 
@@ -35,7 +39,8 @@ def test_tts_synthesize_edge_import_fallback(tmp_path):
         voice="en-US-AriaNeural",
     )
     tts = TextToSpeech(config)
-    output = tts.synthesize("Hello world")
+    with patch("raven.voice.tts.subprocess.run"):
+        output = tts.synthesize("Hello world")
     assert output.endswith(".wav") or output.endswith(".mp3")
 
 

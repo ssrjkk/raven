@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import pytest
 from click.testing import CliRunner
 
 from raven.cli.main import cli
+
+pytest.importorskip("textual")
 
 
 def test_tui_module_importable():

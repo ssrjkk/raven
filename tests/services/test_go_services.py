@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -11,7 +12,25 @@ import httpx
 import pytest
 
 GO_ROOT = Path(__file__).resolve().parent.parent.parent / "services"
-GO_BUILDER = "C:\\Program Files\\Go\\bin\\go.exe"
+
+
+def _find_go() -> str:
+    go = shutil.which("go")
+    if go:
+        return go
+    for candidate in [
+        "/usr/local/go/bin/go",
+        "/usr/lib/go/bin/go",
+        "/usr/bin/go",
+        "C:\\Program Files\\Go\\bin\\go.exe",
+        "C:\\Go\\bin\\go.exe",
+    ]:
+        if os.path.exists(candidate):
+            return candidate
+    return "go"
+
+
+GO_BUILDER = _find_go()
 
 
 def find_free_port() -> int:
@@ -21,8 +40,12 @@ def find_free_port() -> int:
 
 
 def build_go_service(name: str) -> Path:
+    if not os.path.exists(GO_BUILDER) and shutil.which("go") is None:
+        pytest.skip("Go compiler not found on PATH or common locations")
     svc_dir = GO_ROOT / name
-    out = svc_dir / "bin" / f"{name}.exe"
+    goos = "windows" if os.name == "nt" else "linux"
+    ext = ".exe" if goos == "windows" else ""
+    out = svc_dir / "bin" / f"{name}{ext}"
     try:
         out.parent.mkdir(parents=True, exist_ok=True)
     except Exception:

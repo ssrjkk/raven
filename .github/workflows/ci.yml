@@ -129,16 +129,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Set build context
         id: ctx
         run: |
-          if [[ "${{ matrix.service }}" =~ ^(gateway|auth|monitor-engine)$ ]]; then
-            echo "context=." >> $GITHUB_OUTPUT
-            echo "dockerfile=services/${{ matrix.service }}/Dockerfile" >> $GITHUB_OUTPUT
-          else
-            echo "context=." >> $GITHUB_OUTPUT
-            echo "dockerfile=services/${{ matrix.service }}/Dockerfile" >> $GITHUB_OUTPUT
-          fi
+          echo "context=." >> $GITHUB_OUTPUT
+          echo "dockerfile=services/${{ matrix.service }}/Dockerfile" >> $GITHUB_OUTPUT
 
       - name: Build and push
         uses: docker/build-push-action@v5
