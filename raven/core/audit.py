@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import hashlib
 import io
 import json
@@ -10,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from loguru import logger
 
@@ -92,25 +91,12 @@ class AuditEntry:
         return f"AuditEntry({self.event}, {self.actor}, {self.target})"
 
 
-@dataclass
-class ChainCheckpoint:
-    line: int
-    hash: str
-    timestamp: float
-    signature: str = ""
-
-
-AuditCallback = Callable[[AuditEntry], None]
-
-
 class AuditLogger:
     def __init__(
         self,
         log_path: str = "data/audit.log",
         signing_key: bytes | None = None,
         max_bytes: int = 0,
-        checkpoint_interval: int = 0,
-        on_event: AuditCallback | None = None,
     ):
         self._path = Path(log_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -120,9 +106,6 @@ class AuditLogger:
         self._signing_key = signing_key
         self._use_signing = signing_key is not None
         self._max_bytes = max_bytes
-        self._checkpoint_interval = checkpoint_interval
-        self._entries_since_checkpoint = 0
-        self._on_event = on_event
         self._rotated_count = 0
 
     def start(self):
@@ -131,9 +114,6 @@ class AuditLogger:
             self._prev_hash = self._last_entry_hash()
 
     def stop(self):
-        self._close_file()
-
-    def finalize(self):
         self._closed = True
         self._close_file()
 
@@ -231,50 +211,10 @@ class AuditLogger:
             self._file.write(line + "\n")
             self._file.flush()
 
-        logger.info("[audit] {} | {} | {} {}", entry.event, actor, target, detail or "")
-
-        if self._on_event:
-            try:
-                self._on_event(entry)
-            except Exception:
-                pass
-
-        if self._checkpoint_interval > 0:
-            self._entries_since_checkpoint += 1
-            if self._entries_since_checkpoint >= self._checkpoint_interval:
-                self._write_checkpoint(entry)
-                self._entries_since_checkpoint = 0
-
-    async def alog(
-        self, event_type: AuditEventType | str, actor: str, target: str = "", detail: Any = None, channel: str = ""
-    ):
-        self.log(event_type, actor, target, detail, channel)
+        logger.debug("[audit] {} | {} | {}", entry.event, actor, target)
 
     def sensitive(self, event_type: str, actor: str, target: str, outcome: bool):
         self.log(event_type, actor, target, {"sensitive": True, "outcome": outcome})
-
-    def _write_checkpoint(self, last_entry: AuditEntry):
-        if not self._file:
-            return
-        checkpoint = {
-            "type": "__checkpoint__",
-            "timestamp": time.time(),
-            "last_event_id": last_entry.event_id,
-            "last_hash": self._prev_hash,
-            "line": self._count_lines(),
-        }
-        line = json.dumps(checkpoint, default=str)
-        self._file.write(line + "\n")
-        self._file.flush()
-
-    def _count_lines(self) -> int:
-        if not self._path.exists():
-            return 0
-        count = 0
-        with self._path.open() as f:
-            for _ in f:
-                count += 1
-        return count
 
     def recent(self, limit: int = 20) -> list[dict[str, Any]]:
         if not self._path.exists():
@@ -443,43 +383,6 @@ class AuditLogger:
                 except json.JSONDecodeError:
                     pass
         return errors or [{"valid": True, "signatures_verified": True}]
-
-    def export_json(self, output_path: str | None = None) -> str:
-        entries = self.query(limit=10**9)
-        data = [e.to_dict() for e in entries]
-        result = json.dumps(data, indent=2, default=str)
-        if output_path:
-            Path(output_path).write_text(result, encoding="utf-8")
-        return result
-
-    def export_csv(self, output_path: str | None = None) -> str:
-        entries = self.query(limit=10**9)
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(["timestamp", "event_id", "event", "actor", "target", "channel", "detail"])
-        for e in entries:
-            writer.writerow(
-                [
-                    e.timestamp,
-                    e.event_id,
-                    e.event,
-                    e.actor,
-                    e.target,
-                    e.channel,
-                    json.dumps(e.detail, default=str) if e.detail else "",
-                ]
-            )
-        result = output.getvalue()
-        if output_path:
-            Path(output_path).write_text(result, encoding="utf-8")
-        return result
-
-    def get_rotated_logs(self) -> list[Path]:
-        pattern = str(self._path) + ".*.log"
-        import glob
-
-        paths = [Path(p) for p in glob.glob(pattern)]
-        return sorted(paths, key=lambda p: p.stat().st_mtime if p.exists() else 0)
 
 
 audit_logger = AuditLogger()

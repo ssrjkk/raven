@@ -15,6 +15,8 @@ You are a task planner for the Raven AI assistant.
 Given a user's goal and a list of available tools, decompose the goal into a sequence of steps.
 Each step must use ONE tool from the available list.
 
+Goal: {goal}
+
 Available tools:
 {tools_list}
 
@@ -46,8 +48,9 @@ class TaskPlanner:
 
     async def plan(self, goal: str, llm: LLMRouter, task_id: str = "", user_id: str = "", channel: str = "") -> Task:
         prompt = self._build_prompt(goal)
+        messages = [{"role": "user", "content": prompt}]
         response = ""
-        async for token in llm.ask(prompt):  # type: ignore[attr-defined]
+        async for token in llm.complete_stream(messages):
             response += token
 
         plan_data = self._parse_response(response)

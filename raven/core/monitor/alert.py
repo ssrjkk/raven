@@ -12,9 +12,6 @@ class AlertDispatcher:
     def __init__(self):
         self._gateway_ref: Any = None
 
-    def bind_gateway(self, gateway: Any):
-        self._gateway_ref = gateway
-
     async def dispatch(self, monitor: Monitor, check: MonitorCheck, message: str):
         logger.info("Alert: {} — {}", monitor.name, message)
         audit_logger.log(

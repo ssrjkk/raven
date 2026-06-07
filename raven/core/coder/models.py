@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import uuid
 from enum import Enum
 from typing import Any
@@ -52,8 +53,8 @@ class CodingSession(BaseModel):
     files: list[str] = Field(default_factory=list)
     status: SessionStatus = SessionStatus.ACTIVE
     history: list[dict[str, Any]] = Field(default_factory=list)
-    created_at: float = Field(default_factory=lambda: __import__("time").time())
-    updated_at: float = Field(default_factory=lambda: __import__("time").time())
+    created_at: float = Field(default_factory=lambda: time.time())
+    updated_at: float = Field(default_factory=lambda: time.time())
 
 
 class ReviewSeverity(str, Enum):

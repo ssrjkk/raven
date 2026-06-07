@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -152,7 +153,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     api_app.state.whatsapp_channel = whatsapp
     api_app.state.matrix_channel = matrix
     api_app.state.googlechat_channel = googlechat
-    api_app.state.signal_channel = signal
+    api_app.state.signal_channel = sig_ch
     api_app.state.irc_channel = irc
     api_app.state.teams_channel = teams
     api_app.state.feishu_channel = feishu
@@ -319,7 +320,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
                 "goal": s.goal,
                 "status": s.status.value,
                 "project_path": s.project_path,
-                "files": len(s.files) if hasattr(s, "files") else 0,
+                "files": len(s.files),
             }
             for s in sessions
         ]
@@ -380,8 +381,6 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     async def api_set_agent(session_id: str, body: AgentAssign):
         logger.info("Session {} → agent {}", session_id, body.agent_id)
         return {"ok": True, "session_id": session_id, "agent_id": body.agent_id}
-
-    stop_event = asyncio.Event()
 
     def shutdown_handler():
         logger.info("Shutdown signal received")
@@ -709,18 +708,17 @@ def doctor():
     checks.append(("Web Port", str(cfg.get("web_port", 18888))))
     checks.append(("Web Secret Key", "✅ Set" if cfg.get("web_secret_key") else "⚠️  Not set"))
 
-    has_crypto = __import__("importlib.util").util.find_spec("cryptography")
+    import importlib.util
+    has_crypto = importlib.util.find_spec("cryptography")
     checks.append(("Secrets Encryption", "✅ Available" if has_crypto else "⚠️  Install cryptography for secrets"))
 
     try:
-        import pywin32  # noqa: F401
+        import win32serviceutil  # noqa: F401
 
         checks.append(("Windows Service", "✅ pywin32 available"))
     except ImportError:
         if sys.platform == "win32":
             checks.append(("Windows Service", "⚠️  Install pywin32 for service support"))
-    except Exception:
-        pass
 
     try:
         import playwright  # noqa: F401
@@ -1168,7 +1166,7 @@ def task_list(user: Optional[str], status: Optional[str], limit: int):
         icon = status_icon.get(t.status.value, "❓")
         done = sum(1 for s in t.steps if s.status.value == "completed")
         total = len(t.steps)
-        created = __import__("time").strftime("%H:%M", __import__("time").localtime(t.created_at))
+        created = time.strftime("%H:%M", time.localtime(t.created_at))
         table.add_row(t.id[:8], t.goal[:60], f"{icon} {t.status.value}", f"{done}/{total}", created)
     console.print(table)
 
@@ -1190,7 +1188,7 @@ def task_show(task_id: str):
             f"[cyan]Goal:[/cyan] {t.goal}\n"
             f"[cyan]Status:[/cyan] {t.status.value}\n"
             f"[cyan]Steps:[/cyan] {len(t.steps)}\n"
-            f"[cyan]Created:[/cyan] {__import__('time').ctime(t.created_at)}"
+            f"[cyan]Created:[/cyan] {time.ctime(t.created_at)}"
         )
     )
     for i, step in enumerate(t.steps):
@@ -1285,11 +1283,12 @@ def task_retry(task_id: str):
         if not task:
             console.print(f"[red]Task not found: {task_id}[/red]")
             return
-        task.status = __import__("raven.core.task_engine.models", fromlist=["TaskStatus"]).TaskStatus.PENDING  # noqa
+        from raven.core.task_engine.models import TaskStatus
+        task.status = TaskStatus.PENDING
         task.error = None
         task.current_step_index = 0
         for step in task.steps:
-            step.status = __import__("raven.core.task_engine.models", fromlist=["TaskStatus"]).TaskStatus.PENDING
+            step.status = TaskStatus.PENDING
             step.error = None
         store.save_task(task)
         await runner.submit(task)
@@ -1489,7 +1488,7 @@ def monitor_logs(monitor_id: str, limit: int):
     table.add_column("Triggered")
     table.add_column("Error", style="red")
     for c in checks:
-        t = __import__("time").strftime("%H:%M:%S", __import__("time").localtime(c.checked_at))
+        t = time.strftime("%H:%M:%S", time.localtime(c.checked_at))
         icon = "✅" if c.status == "up" else "❌"
         ms = f"{c.response_time_ms:.0f}ms" if c.response_time_ms else ""
         trig = "🔔" if c.triggered else ""
@@ -1783,7 +1782,7 @@ def routine_logs(routine_id: str):
     table.add_column("Message", style="white")
     table.add_column("Duration", style="blue")
     for log in logs:
-        t = __import__("time").strftime("%H:%M:%S", __import__("time").localtime(log.created_at))
+        t = time.strftime("%H:%M:%S", time.localtime(log.created_at))
         icon = "✅" if log.status == "success" else "❌"
         ms = f"{log.duration_ms:.0f}ms"
         table.add_row(t, f"{icon} {log.status}", log.message[:80], ms)

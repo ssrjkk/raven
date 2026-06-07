@@ -41,7 +41,6 @@ class PIIPattern:
     category: str = "generic"
 
 
-_PII_REPLACEMENTS: dict[str, str] = {}
 _PII_CATEGORY_LABELS = {
     "credential": "[CREDENTIAL]",
     "personal": "[PERSONAL_INFO]",
@@ -54,13 +53,7 @@ _PII_CATEGORY_LABELS = {
 class PIIEngine:
     def __init__(self):
         self._patterns = self._build_patterns()
-        self._context_re = self._build_context_re()
-        self._nlp = None
         self._presidio_analyzer = None
-        self._presidio_anonymizer = None
-        global _PII_REPLACEMENTS
-        if not _PII_REPLACEMENTS:
-            _PII_REPLACEMENTS = {p.name: p.replacement for p in self._patterns}
 
     @staticmethod
     def _build_patterns() -> list[PIIPattern]:
@@ -350,24 +343,13 @@ class PIIEngine:
             ),
         ]
 
-    @staticmethod
-    def _build_context_re() -> re.Pattern[str]:
-        keywords = set()
-        for p in PIIEngine._build_patterns():
-            keywords.update(p.context_keywords)
-        if not keywords:
-            return re.compile(r"(?!)")
-        return re.compile(r"(?i)\b(?:" + "|".join(re.escape(k) for k in sorted(keywords)) + r")\b")
-
     def _try_init_presidio(self):
         if self._presidio_analyzer is not None:
             return
         try:
             from presidio_analyzer import AnalyzerEngine
-            from presidio_anonymizer import AnonymizerEngine
 
             self._presidio_analyzer = AnalyzerEngine()
-            self._presidio_anonymizer = AnonymizerEngine()
         except ImportError:
             pass
 
@@ -433,10 +415,11 @@ class PIIEngine:
         if operators and "mask" in operators:
             return self._apply_mask(text, finds, operators["mask"])
 
+        replacements = {p.name: p.replacement for p in self._patterns}
         result_parts: list[str] = []
         last_end = 0
         for f in finds:
-            label = _PII_REPLACEMENTS.get(f.entity_type) or _PII_CATEGORY_LABELS.get(
+            label = replacements.get(f.entity_type) or _PII_CATEGORY_LABELS.get(
                 self._category_for(f.entity_type), f"[{f.entity_type.upper()}]"
             )
             if operators and f.entity_type in operators:

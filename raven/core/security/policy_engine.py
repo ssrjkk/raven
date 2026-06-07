@@ -1,17 +1,11 @@
 from __future__ import annotations
 
-import hashlib
 import json
-import logging
 import re
-import threading
-import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
-
-logger = logging.getLogger(__name__)
 
 
 class Op(str, Enum):
@@ -179,22 +173,6 @@ _MAP_OP: dict[str, Op] = {
 }
 
 
-@dataclass
-class TraceStep:
-    condition: ConditionNode
-    result: bool
-    detail: str = ""
-    children: list[TraceStep] = field(default_factory=list)
-
-
-@dataclass
-class EvaluationTrace:
-    rule_name: str
-    effect: str
-    matched: bool
-    steps: list[TraceStep] = field(default_factory=list)
-
-
 class Rule:
     def __init__(
         self,
@@ -219,27 +197,6 @@ class Rule:
     def evaluate(self, input_data: dict[str, Any]) -> bool:
         return self._condition.evaluate(input_data)
 
-    def evaluate_traced(self, input_data: dict[str, Any]) -> tuple[bool, EvaluationTrace]:
-        trace = EvaluationTrace(rule_name=self.name, effect=self.effect, matched=False)
-        result = self._eval_with_trace(self._condition, input_data, trace.steps)
-        trace.matched = result
-        return result, trace
-
-    def _eval_with_trace(self, node: ConditionNode, input_data: dict[str, Any], steps: list[TraceStep]) -> bool:
-        step = TraceStep(condition=node, result=False)
-        result = node.evaluate(input_data)
-        step.result = result
-        step.detail = _fmt_trace(node, result)
-        if node.children:
-            for child in node.children:
-                child_step = TraceStep(condition=child, result=False)
-                child_result = child.evaluate(input_data)
-                child_step.result = child_result
-                child_step.detail = _fmt_trace(child, child_result)
-                step.children.append(child_step)
-        steps.append(step)
-        return result
-
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
@@ -249,23 +206,6 @@ class Rule:
             "tags": self.tags,
             "enabled": self.enabled,
         }
-
-
-def _fmt_trace(node: ConditionNode, result: bool) -> str:
-    if node.op == Op.TRUE:
-        return f"TRUE -> {result}"
-    if node.op in (Op.AND, Op.OR):
-        return f"{node.op.value.upper()} -> {result}"
-    if node.op == Op.NOT:
-        return f"NOT -> {result}"
-    return f"{node.path} {node.op.value}({node.value!r}) -> {result}"
-
-
-@dataclass
-class RuleDecision:
-    effect: str | None
-    rule_name: str | None
-    trace: list[EvaluationTrace] | None = None
 
 
 class RuleSet:
@@ -281,17 +221,6 @@ class RuleSet:
                 return rule.effect, rule.name
         return None, None
 
-    def evaluate_detailed(self, input_data: dict[str, Any]) -> RuleDecision:
-        traces: list[EvaluationTrace] = []
-        for rule in self.rules:
-            if not rule.enabled:
-                continue
-            matched, trace = rule.evaluate_traced(input_data)
-            traces.append(trace)
-            if matched:
-                return RuleDecision(effect=rule.effect, rule_name=rule.name, trace=traces)
-        return RuleDecision(effect=None, rule_name=None, trace=traces)
-
     def add_rule(self, rule: Rule):
         self.rules.append(rule)
         self.rules.sort(key=lambda r: r.priority, reverse=True)
@@ -304,34 +233,18 @@ class PolicyEngine:
     def __init__(self, rules_dir: str = "policy"):
         self._rules_dir = Path(rules_dir)
         self._rulesets: dict[str, RuleSet] = {}
-        self._lock = threading.RLock()
-        self._last_mtime: dict[str, float] = {}
-        self._checksums: dict[str, str] = {}
-        self._watcher_active = False
-        self._watcher_thread: threading.Thread | None = None
 
     def load_ruleset(self, name: str, path: str | None = None) -> RuleSet:
         filepath = Path(path or self._rules_dir / f"{name}.yaml")
         if not filepath.exists():
             filepath = Path(path or self._rules_dir / f"{name}.json")
         if not filepath.exists():
-            rs = RuleSet(name=name)
-            with self._lock:
-                self._rulesets[name] = rs
-            return rs
+            return RuleSet(name=name)
 
         raw = filepath.read_text(encoding="utf-8")
         if filepath.suffix in (".yaml", ".yml"):
-            try:
-                import yaml
-
-                data = yaml.safe_load(raw)
-            except ImportError:
-                rules = self._parse_simple(raw)
-                rs = RuleSet(rules, name=name)
-                with self._lock:
-                    self._rulesets[name] = rs
-                return rs
+            import yaml
+            data = yaml.safe_load(raw)
         else:
             data = json.loads(raw)
 
@@ -351,18 +264,11 @@ class PolicyEngine:
             )
 
         rs = RuleSet(rules, name=name)
-        with self._lock:
-            self._rulesets[name] = rs
-            self._checksums[name] = hashlib.sha256(raw.encode()).hexdigest()
-            try:
-                self._last_mtime[name] = filepath.stat().st_mtime
-            except OSError:
-                pass
+        self._rulesets[name] = rs
         return rs
 
     def get_ruleset(self, name: str) -> RuleSet | None:
-        with self._lock:
-            return self._rulesets.get(name)
+        return self._rulesets.get(name)
 
     def evaluate(self, ruleset_name: str, input_data: dict[str, Any]) -> tuple[str | None, str | None]:
         rs = self.get_ruleset(ruleset_name)
@@ -370,72 +276,12 @@ class PolicyEngine:
             rs = self.load_ruleset(ruleset_name)
         return rs.evaluate(input_data)
 
-    def evaluate_detailed(self, ruleset_name: str, input_data: dict[str, Any]) -> RuleDecision:
-        rs = self.get_ruleset(ruleset_name)
-        if rs is None:
-            rs = self.load_ruleset(ruleset_name)
-        return rs.evaluate_detailed(input_data)
-
     def check(self, ruleset: str, input_data: dict[str, Any]) -> bool:
         effect, _ = self.evaluate(ruleset, input_data)
         return effect != "deny"
 
-    def start_watcher(self, interval: float = 5.0):
-        if self._watcher_active:
-            return
-        self._watcher_active = True
-
-        def _watch():
-            while self._watcher_active:
-                self._reload_changed()
-                time.sleep(interval)
-
-        self._watcher_thread = threading.Thread(target=_watch, daemon=True)
-        self._watcher_thread.start()
-
-    def stop_watcher(self):
-        self._watcher_active = False
-        if self._watcher_thread:
-            self._watcher_thread.join(timeout=2.0)
-
-    def _reload_changed(self):
-        for name, last_mtime in list(self._last_mtime.items()):
-            filepath = self._rules_dir / f"{name}.yaml"
-            if not filepath.exists():
-                filepath = self._rules_dir / f"{name}.json"
-            if not filepath.exists():
-                continue
-            try:
-                current_mtime = filepath.stat().st_mtime
-                if current_mtime > last_mtime:
-                    self.load_ruleset(name)
-            except OSError:
-                pass
-
-    def _parse_simple(self, text: str) -> list[Rule]:
-        rules: list[Rule] = []
-        for line in text.splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or line.startswith("//"):
-                continue
-            if ":" in line:
-                parts = line.split(":", 1)
-                name = parts[0].strip()
-                rest = parts[1].strip()
-                if " " in rest:
-                    effect, cond_str = rest.split(" ", 1)
-                else:
-                    effect = rest
-                    cond_str = ""
-                condition = {}
-                if cond_str:
-                    condition = {"match": {"field": "tool", "pattern": cond_str}}
-                rules.append(Rule(name=name or f"rule_{len(rules)}", condition=condition, effect=effect))
-        return rules
-
     def to_dict(self) -> dict[str, Any]:
-        with self._lock:
-            return {name: rs.to_dict() for name, rs in self._rulesets.items()}
+        return {name: rs.to_dict() for name, rs in self._rulesets.items()}
 
 
 policy_engine = PolicyEngine()

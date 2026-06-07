@@ -59,9 +59,6 @@ class RateLimiter:
                 if now - self._blocked[key] > blocked_cutoff:
                     del self._blocked[key]
 
-    def is_blocked(self, key: str) -> bool:
-        return key in self._blocked
-
 
 rate_limiter = RateLimiter()
 

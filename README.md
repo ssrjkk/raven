@@ -23,7 +23,7 @@
     <img src="https://img.shields.io/badge/channels-12-8A2BE2" alt="Channels">
   </a>
   <a href="https://github.com/ssrjkk/raven">
-    <img src="https://img.shields.io/badge/tests-913_passing-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-580_passing-brightgreen" alt="Tests">
   </a>
   <a href="https://github.com/ssrjkk/raven">
     <img src="https://img.shields.io/badge/security-hardened-blueviolet" alt="Security">
@@ -169,22 +169,25 @@ raven/
 ├── raven/                      # Основной Python-пакет
 │   ├── agent/                  ReAct-агент, multi-agent registry, workspace prompts
 │   ├── gateway/                Маршрутизация сообщений, сессии, команды
-│   ├── auth/                   Аутентификация, RBAC (4 роли, 16 пермишенов), API-токены
-│   ├── rag/                    Векторное хранилище, embeddings, чанкинг, retriever
-│   ├── task_engine/            Планировщик, исполнитель, хранилище задач
-│   ├── monitor/                HTTP, price, RSS, file, process мониторы + условия
-│   ├── security/               ToolPolicyEvaluator, ContextVisibility, sanitize_external_content, SecurityAudit
-│   ├── coder/                  Индексатор, парсер AST, ревьюер, менеджер сессий
-│   ├── routine/                Движок рутин, хранилище (бриффинги, email, файлы)
-│   ├── admin_api.py            REST API (каналы, агенты, конфиг, секреты, задачи, аудит)
-│   ├── audit.py                Структурированный JSON audit-лог (20 типов событий)
-│   ├── circuit_breaker.py      Closed → Open → Half-Open с метриками
-│   ├── errors.py               20 типизированных ErrorCode + авто-классификация
-│   ├── llm.py                  Маршрутизация: OpenRouter, Anthropic, OpenAI, Ollama
-│   ├── failover.py             Weighted-взвешенный failover с circuit breaker
-│   ├── sandbox.py              Изоляция: direct, subprocess, Docker
+│   ├── core/
+│   │   ├── auth/               Аутентификация, RBAC (4 роли, 16 пермишенов), API-токены
+│   │   ├── security/           ToolPolicyEvaluator, PII redaction, SecurityAudit
+│   │   ├── task_engine/        Планировщик, исполнитель, хранилище задач
+│   │   ├── monitor/            HTTP, price, RSS, file, process мониторы + условия
+│   │   ├── coder/              Индексатор, парсер AST, ревьюер, менеджер сессий
+│   │   ├── routine/            Движок рутин, хранилище (бриффинги, email, файлы)
+│   │   ├── admin_api.py        REST API (каналы, агенты, конфиг, секреты, задачи, аудит)
+│   │   ├── audit.py            Структурированный JSON audit-лог (20 типов событий)
+│   │   ├── circuit_breaker.py  Closed → Open → Half-Open с метриками
+│   │   ├── errors.py           ErrorCode + AppError + авто-классификация
+│   │   ├── llm.py              Маршрутизация: OpenRouter, Anthropic, OpenAI, Ollama
+│   │   ├── sandbox.py          Изоляция: direct, subprocess, Docker
+│   │   └── middleware.py       Rate limit, auth, request ID, error handler
+│   ├── channels/               12 каналов (Telegram, Discord, Slack, WhatsApp, Matrix...)
 │   ├── plugins/                Система плагинов с capability-based sandbox
-│   └── middleware.py           Rate limit, auth, request ID, error handler
+│   ├── tools/                  file, shell, notify, db_query
+│   ├── cli/                    CLI на Click (start, stop, status, task, monitor...)
+│   └── tui/                    Терминальный интерфейс (Textual)
 ├── services/                   # Микросервисы (Go/Python)
 │   ├── gateway/                Go API gateway
 │   ├── auth/                   Go auth service
@@ -194,14 +197,10 @@ raven/
 │   ├── task-engine/            Python task engine microservice
 │   ├── code-service/           Python code service microservice
 │   └── proto/                  Protobuf definitions + Go stubs
-├── channels/                   12 enterprise-каналов
 ├── web/                        React 19 + Vite + Tailwind дашборд
 ├── aios/                       AI-OS-MVP bridge (Python)
 ├── daemon/                     Rust-демон для системных метрик
 ├── plugins/                    10 плагинов (browser, code, cron, files, git...)
-├── tools/                      file, shell, notify, browser
-├── routines/                   briefing, email, file organizer
-├── monitors/                   http, price, rss, file, process
 ├── packages/                   TypeScript-пакеты (ai-core, agents, runtime, repo)
 ├── deploy/                     Docker Compose, K8s, Traefik, observability
 ├── workspace/
@@ -223,7 +222,7 @@ raven/
 | **Frontend** | React 19, Vite, Tailwind CSS 4, react-router-dom |
 | **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, Graph API |
 | **Monitor Engine** | 5 типов (HTTP, price, RSS, file, process), ConditionEvaluator, AlertDispatcher |
-| **Routine Engine** | Интервальные и scheduled рутины с `_parse_cron`, логированием |
+| **Routine Engine** | Интервальные и scheduled рутины, логированием |
 | **Workspace Skills** | SKILL.md в `workspace/skills/`, авто-загрузка через SkillsRegistry |
 | **Observability** | Prometheus metrics, JSON audit, health checks, correlation IDs |
 | **Security** | Rate limiting, API auth, DM pairing, Fernet encryption, RBAC, plugin sandbox, ToolPolicyEvaluator (deny/allow), exec security policy, contextVisibility, workspace isolation, security audit CLI |
@@ -245,7 +244,6 @@ raven-ai/
 │   └── runtime/adapter.py      # Unified runtime
 ├── web/                        # Web IDE (React 19)
 │   └── src/pages/IDE.tsx       # IDE with editor + terminal
-├── desktop/                    # Electron desktop
 ├── desktop-tauri/              # Tauri desktop (Rust)
 ├── packages/                   # TypeScript packages
 │   ├── ai-core/                # AI роутер + провайдеры

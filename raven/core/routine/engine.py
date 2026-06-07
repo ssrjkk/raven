@@ -20,9 +20,6 @@ class RoutineEngine:
         self._handlers: dict[str, Callable[..., Any]] = {}
         self._gateway_ref: Any = None
 
-    def bind_gateway(self, gateway: Any):
-        self._gateway_ref = gateway
-
     def register_handler(self, action: str, handler: Callable[..., Any]):
         self._handlers[action] = handler
 

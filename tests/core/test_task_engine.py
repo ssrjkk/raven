@@ -171,7 +171,7 @@ class TestTaskPlanner:
     @patch("raven.core.task_engine.planner.LLMRouter")
     async def test_plan_parses_response(self, mock_llm_cls):
         mock_llm = MagicMock()
-        mock_llm.ask = lambda prompt: _async_gen(
+        mock_llm.complete_stream = lambda messages, model=None, tools=None: _async_gen(
             [
                 '{"summary": "test plan", "steps": [{"description": "search", "tool": "web_search", "params": {"query": "x"}}]}'
             ]
@@ -188,7 +188,7 @@ class TestTaskPlanner:
     @patch("raven.core.task_engine.planner.LLMRouter")
     async def test_plan_fallback_on_bad_json(self, mock_llm_cls):
         mock_llm = MagicMock()
-        mock_llm.ask = lambda prompt: _async_gen(["garbage response"])
+        mock_llm.complete_stream = lambda messages, model=None, tools=None: _async_gen(["garbage response"])
         from raven.core.task_engine.planner import TaskPlanner
 
         planner = TaskPlanner(ToolRegistry())

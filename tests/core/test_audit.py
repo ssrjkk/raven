@@ -216,23 +216,6 @@ def test_audit_stats_empty():
     Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_finalize_blocks_writes():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
-        log_path = f.name
-
-    logger = AuditLogger(log_path)
-    logger.start()
-    logger.log("test.event", "user")
-    logger.finalize()
-    logger.log("test.event", "user")
-    logger.stop()
-
-    entries = logger.recent()
-    assert len(entries) == 1
-
-    Path(log_path).unlink(missing_ok=True)
-
-
 def test_audit_rotation():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
@@ -243,46 +226,9 @@ def test_audit_rotation():
         logger.log("test.event", f"user{i}")
     logger.stop()
 
-    rotated = logger.get_rotated_logs()
     count_entries = len(logger.recent(limit=1000))
     assert count_entries >= 1
     assert logger._rotated_count >= 1
-
-    Path(log_path).unlink(missing_ok=True)
-    for p in rotated:
-        p.unlink(missing_ok=True)
-
-
-def test_audit_export_json():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
-        log_path = f.name
-
-    logger = AuditLogger(log_path)
-    logger.start()
-    logger.log("test.event", "user")
-    logger.stop()
-
-    exported = logger.export_json()
-    data = json.loads(exported)
-    assert len(data) == 1
-    assert data[0]["event"] == "test.event"
-
-    Path(log_path).unlink(missing_ok=True)
-
-
-def test_audit_export_csv():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
-        log_path = f.name
-
-    logger = AuditLogger(log_path)
-    logger.start()
-    logger.log("test.event", "user")
-    logger.stop()
-
-    exported = logger.export_csv()
-    assert "timestamp" in exported
-    assert "test.event" in exported
-    assert "user" in exported
 
     Path(log_path).unlink(missing_ok=True)
 
@@ -339,43 +285,8 @@ def test_audit_entry_timestamp_dt():
     assert dt.year >= 1970
 
 
-@pytest.mark.asyncio
-async def test_audit_alog():
-    import tempfile
-    from pathlib import Path
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
-        log_path = f.name
-
-    logger = AuditLogger(log_path)
-    logger.start()
-    await logger.alog("test.event", "user")
-    logger.stop()
-    entries = logger.recent()
-    assert len(entries) == 1
-    assert entries[0]["event"] == "test.event"
-    Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_on_event_callback():
-    callback_events = []
-
-    def cb(entry):
-        callback_events.append(entry.event)
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
-        log_path = f.name
-
-    logger = AuditLogger(log_path, on_event=cb)
-    logger.start()
-    logger.log("test.one", "user")
-    logger.log("test.two", "user")
-    logger.stop()
-
-    assert len(callback_events) == 2
-    assert callback_events == ["test.one", "test.two"]
-
-    Path(log_path).unlink(missing_ok=True)
 
 
 def test_audit_path_property():

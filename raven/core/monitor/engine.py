@@ -33,9 +33,6 @@ class MonitorEngine:
     def from_db(cls, db_path: str, send_fn: Callable[..., Any] | None = None) -> MonitorEngine:
         return cls(db_path, send_fn=send_fn)
 
-    def bind_send(self, send_fn: Callable[[str, str], Any]):
-        self._send_fn = send_fn
-
     def register_handler(self, monitor_type: str, handler: Callable[..., Any]):
         self._handlers[monitor_type] = handler
 

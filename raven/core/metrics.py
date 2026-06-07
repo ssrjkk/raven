@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import time
-from functools import wraps
-from typing import Any, Callable
+
+from typing import Any
 
 
 class MetricsCollector:
@@ -69,37 +69,3 @@ class MetricsCollector:
 
 metrics = MetricsCollector()
 
-
-def timed(name: str, labels: dict[str, str] | None = None) -> Callable[..., Any]:
-    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
-        @wraps(fn)
-        async def async_wrapper(*args, **kwargs):
-            start = time.monotonic()
-            try:
-                result = await fn(*args, **kwargs)
-                metrics.observe(name, time.monotonic() - start, labels)
-                return result
-            except Exception:
-                metrics.error(name, labels)
-                metrics.observe(name, time.monotonic() - start, labels)
-                raise
-
-        @wraps(fn)
-        def sync_wrapper(*args, **kwargs):
-            start = time.monotonic()
-            try:
-                result = fn(*args, **kwargs)
-                metrics.observe(name, time.monotonic() - start, labels)
-                return result
-            except Exception:
-                metrics.error(name, labels)
-                metrics.observe(name, time.monotonic() - start, labels)
-                raise
-
-        import asyncio
-
-        if asyncio.iscoroutinefunction(fn):
-            return async_wrapper
-        return sync_wrapper
-
-    return decorator

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
-from typing import Callable
 
 from loguru import logger
 
@@ -16,9 +15,6 @@ class ConfigWatcher:
         self._listeners: list[Callable[[], None]] = []
         self._task: asyncio.Task[None] | None = None
         self._running = False
-
-    def on_change(self, fn: Callable[[], None]):
-        self._listeners.append(fn)
 
     async def start(self):
         if self._env_path.exists():

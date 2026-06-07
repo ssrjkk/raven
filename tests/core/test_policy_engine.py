@@ -231,47 +231,7 @@ def test_rule_dot_path_resolution():
     assert not rule.evaluate({"args": {"path": "/tmp/file.txt"}})
 
 
-# ─── Rule.trace ──────────────────────────────────────────────────────
 
-
-def test_rule_trace_matched():
-    rule = Rule("deny-exec", {"tool": "exec"}, "deny", 100)
-    matched, trace = rule.evaluate_traced({"tool": "exec"})
-    assert matched
-    assert trace.rule_name == "deny-exec"
-    assert trace.effect == "deny"
-    assert len(trace.steps) > 0
-    last = trace.steps[-1]
-    assert last.result is True
-
-
-def test_rule_trace_not_matched():
-    rule = Rule("deny-exec", {"tool": "exec"}, "deny", 100)
-    matched, trace = rule.evaluate_traced({"tool": "ping"})
-    assert not matched
-    assert len(trace.steps) > 0
-    last = trace.steps[-1]
-    assert last.result is False
-
-
-def test_rule_trace_complex():
-    rule = Rule(
-        "complex",
-        {
-            "and": [
-                {"role": "admin"},
-                {"or": [{"tool": "delete"}, {"tool": "create"}]},
-            ]
-        },
-        "allow",
-        100,
-    )
-    matched, trace = rule.evaluate_traced({"role": "admin", "tool": "delete"})
-    assert matched
-    assert len(trace.steps) >= 1
-    root = trace.steps[0]
-    assert root.condition.op == Op.AND
-    assert len(root.children) >= 2
 
 
 # ─── RuleSet ─────────────────────────────────────────────────────────
@@ -331,45 +291,7 @@ def test_ruleset_add_rule():
     assert rs.rules[1].name == "allow-all"
 
 
-# ─── RuleSet.evaluate_detailed ───────────────────────────────────────
 
-
-def test_ruleset_evaluate_detailed_match():
-    rs = RuleSet(
-        [
-            Rule("deny-exec", {"tool": "exec"}, "deny", 100),
-            Rule("allow-all", {}, "allow", 0),
-        ]
-    )
-    decision = rs.evaluate_detailed({"tool": "exec"})
-    assert decision.effect == "deny"
-    assert decision.rule_name == "deny-exec"
-    assert decision.trace is not None
-    assert len(decision.trace) >= 1
-
-
-def test_ruleset_evaluate_detailed_no_match():
-    rs = RuleSet(
-        [
-            Rule("deny-exec", {"tool": "exec"}, "deny", 100),
-        ]
-    )
-    decision = rs.evaluate_detailed({"tool": "ping"})
-    assert decision.effect is None
-    assert decision.rule_name is None
-    assert decision.trace is not None
-
-
-def test_ruleset_evaluate_detailed_disabled_rule_skipped():
-    rs = RuleSet(
-        [
-            Rule("deny-exec", {"tool": "exec"}, "deny", 100, enabled=False),
-            Rule("allow-all", {}, "allow", 0),
-        ]
-    )
-    decision = rs.evaluate_detailed({"tool": "exec"})
-    assert decision.effect == "allow"
-    assert decision.rule_name == "allow-all"
 
 
 # ─── PolicyEngine ────────────────────────────────────────────────────
@@ -455,29 +377,7 @@ def test_policy_engine_missing_ruleset():
     assert result is None
 
 
-def test_policy_engine_evaluate_detailed():
-    engine = PolicyEngine()
-    rs = RuleSet([Rule("deny-exec", {"tool": "exec"}, "deny", 100)])
-    engine._rulesets["tools"] = rs
-    decision = engine.evaluate_detailed("tools", {"tool": "exec"})
-    assert decision.effect == "deny"
-    assert decision.rule_name == "deny-exec"
-    assert decision.trace is not None
 
-
-def test_policy_engine_watcher():
-    engine = PolicyEngine()
-    engine.start_watcher(interval=0.5)
-    assert engine._watcher_active
-    engine.stop_watcher()
-    assert not engine._watcher_active
-
-
-def test_parse_simple():
-    engine = PolicyEngine()
-    rules = engine._parse_simple("deny-exec: deny tool.*exec")
-    assert len(rules) >= 1
-    assert rules[0].effect == "deny"
 
 
 def test_policy_engine_to_dict():

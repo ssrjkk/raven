@@ -51,12 +51,6 @@ class TaskRunner:
             return True
         return False
 
-    async def resume(self, task_id: str) -> Task | None:
-        task = self._store.load_task(task_id)
-        if not task or task.status != TaskStatus.PAUSED:
-            return None
-        return await self.submit(task)
-
     async def wait(self, task_id: str, timeout: float | None = None) -> Task:
         runner = self._running.get(task_id)
         if runner:
