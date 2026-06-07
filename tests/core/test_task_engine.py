@@ -65,7 +65,7 @@ def registry() -> ToolRegistry:
 
 
 @pytest.fixture
-def task(monkeypatch) -> Task:
+def task() -> Task:
     t = Task(
         goal="test task",
         plan_summary="a simple test",

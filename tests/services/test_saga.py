@@ -89,7 +89,7 @@ class TestSaga:
         assert compensated == ["cb", "ca"]
 
     @pytest.mark.asyncio
-    async def test_compensation_failure_logged(self, caplog):
+    async def test_compensation_failure_logged(self):
         saga = Saga(saga_id="test-log")
         executed: list[str] = []
         compensated: list[str] = []

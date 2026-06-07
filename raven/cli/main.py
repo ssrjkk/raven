@@ -1101,8 +1101,7 @@ def db_version():
 @click.option("--message", required=True, help="Message to send to agent")
 @click.option("--agent", "agent_id", default="default", help="Agent ID to use")
 @click.option("--channel", default="cli", help="Channel to simulate")
-@click.option("--thinking", default=None, help="Thinking level: low, medium, high")
-def agent(message: str, agent_id: str, channel: str, thinking: Optional[str]):
+def agent(message: str, agent_id: str, channel: str):
     """Send a message to the Raven AI agent and get a response"""
 
     async def _agent():
