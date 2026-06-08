@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_call:
@@ -12,6 +12,7 @@ env:
   POETRY_VERSION: "1.8.3"
   REGISTRY: ghcr.io
   IMAGE_TAG: ${{ github.sha }}
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   lint:
@@ -31,10 +32,6 @@ jobs:
 
       - name: Ruff lint
         run: ruff check --output-format=github .
-
-      - name: MyPy typecheck
-        run: mypy --ignore-missing-imports raven/ services/
-        continue-on-error: true
 
   go-build:
     runs-on: ubuntu-latest

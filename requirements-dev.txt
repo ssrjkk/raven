@@ -1,5 +1,4 @@
---index-url https://pypi.org/simple/
--r requirements.txt
+-r monolith-requirements.txt
 pytest>=8.0
 pytest-asyncio>=0.24
 pytest-cov>=5.0

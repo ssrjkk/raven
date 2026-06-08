@@ -25,6 +25,9 @@
   <a href="https://github.com/ssrjkk/raven">
     <img src="https://img.shields.io/badge/tests-580_passing-brightgreen" alt="Tests">
   </a>
+  <a href="https://codecov.io/gh/ssrjkk/raven">
+    <img src="https://img.shields.io/codecov/c/github/ssrjkk/raven?logo=codecov" alt="Coverage">
+  </a>
   <a href="https://github.com/ssrjkk/raven">
     <img src="https://img.shields.io/badge/security-hardened-blueviolet" alt="Security">
   </a>

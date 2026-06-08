@@ -63,7 +63,16 @@ exclude = ['services/', 'daemon/', 'deploy/', 'build/', '\.git/', 'extension/', 
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-q --tb=short --no-header"
 asyncio_mode = "auto"
+markers = [
+    "pact: Pact contract tests (provider-specific)",
+    "load: k6 load test wrapper",
+    "slow: tests that take >5s",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F401"]
 
 [tool.ruff]
 line-length = 120

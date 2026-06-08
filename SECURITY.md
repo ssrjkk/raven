@@ -1,85 +1,85 @@
-# Security Policy
+# Политика безопасности
 
-## Supported Versions
+## Поддерживаемые версии
 
-| Version | Supported          |
-| ------- | ------------------ |
-| >= 0.3  | :white_check_mark: |
-| < 0.3   | :x:                |
+| Версия | Поддерживается |
+|--------|----------------|
+| >= 0.3 | :white_check_mark: |
+| < 0.3  | :x:             |
 
-## Reporting a Vulnerability
+## Сообщить об уязвимости
 
-We take the security of Raven AI seriously. If you believe you have found a security vulnerability, please report it to us as described below.
+Мы серьёзно относимся к безопасности Raven AI. Если вы нашли уязвимость, сообщите нам как можно скорее.
 
-**Please do not report security vulnerabilities through public GitHub issues.**
+**Не создавайте публичные GitHub issues для отчётов об уязвимостях.**
 
-Instead, report them via email to **security@raven.ai** (or the project maintainer's email).
+Вместо этого напишите на **ray013lefe@gmail.com** или в Telegram [@ssrjkk](https://t.me/ssrjkk).
 
-You should receive a response within 48 hours. If you do not, follow up via email to ensure we received your original message.
+Вы получите ответ в течение 48 часов. Если ответа нет — напишите повторно.
 
-### What to include
+### Что указать
 
-- Type of issue (e.g., buffer overflow, SQL injection, cross-site scripting, etc.)
-- Full paths of source file(s) related to the manifestation of the issue
-- The location of the affected source code (tag/branch/commit or direct URL)
-- Any special configuration required to reproduce the issue
-- Step-by-step instructions to reproduce the issue
-- Proof-of-concept or exploit code (if possible)
-- Impact of the issue, including how an attacker might exploit it
+- Тип уязвимости (напр., SQL-инъекция, XSS, подбор ключей)
+- Полные пути к исходным файлам, связанным с проблемой
+- Где находится уязвимый код (тег/ветка/коммит или прямая ссылка)
+- Особая конфигурация, необходимая для воспроизведения
+- Пошаговая инструкция для воспроизведения
+- PoC-код (если возможно)
+- Влияние: что злоумышленник может сделать
 
-## Security Model
+## Модель безопасности
 
-### DM Access Policy
+### Политика доступа DM
 
-By default, Raven uses a **pairing** policy:
-- Unknown senders receive a pairing code
-- The bot does not process their message until the code is approved
-- Approve with: `raven pairing approve <channel> <code>`
+По умолчанию Raven использует **парную** политику:
+- Неизвестные отправители получают код привязки
+- Бот не обрабатывает сообщение, пока код не подтверждён
+- Подтверждение: `raven pairing approve <channel> <code>`
 
-Available policies:
-- `pairing` (default) — pairing code required for new senders
-- `open` — all messages processed (must also configure `allowFrom`)
-- `closed` — only explicitly allowed senders
+Доступные политики:
+- `pairing` (по умолчанию) — код привязки для новых отправителей
+- `open` — все сообщения обрабатываются (требуется настройка `allowFrom`)
+- `closed` — только явно разрешённые отправители
 
-### Tool Execution Security
+### Безопасность выполнения инструментов
 
-- **exec_security**: `deny` (default), `ask`, or `full`
-- **workspace_only**: `true` (default) — restricts file access to workspace
-- **sandbox_mode**: `non-main` (default) — runs non-main sessions in sandboxes
-- **sandbox_backend**: `subprocess` (default), `docker`, or `none`
+- **exec_security**: `deny` (по умолчанию), `ask` или `full`
+- **workspace_only**: `true` (по умолчанию) — доступ к файлам только в workspace
+- **sandbox_mode**: `non-main` (по умолчанию) — изолированное выполнение
+- **sandbox_backend**: `subprocess` (по умолчанию), `docker` или `none`
 
-### Context Visibility
+### Видимость контекста
 
-- `all` (default) — full context visible
-- `allowlist` — only allowlisted domains visible
-- `allowlist_quote` — allowlisted domains visible, quotes shown as-is
+- `all` (по умолчанию) — полный контекст
+- `allowlist` — только разрешённые домены
+- `allowlist_quote` — разрешённые домены, цитаты как есть
 
-### Rate Limiting
+### Ограничение запросов
 
-- Default: 60 requests per 60-second window per IP
-- Burst multiplier: 1.5x before IP is temporarily blocked
-- Blocked IPs are released after 2x window
+- По умолчанию: 60 запросов в 60-секундное окно на IP
+- Burst-множитель: 1.5×, после чего IP временно блокируется
+- Заблокированные IP разблокируются через 2× окна
 
-## Security Audit
+## Аудит безопасности
 
-Run `raven security audit` to perform 23 standard checks and 8 deep checks including:
-- Secret key strength
-- API key configuration
-- File permissions
-- CORS configuration
-- HTTPS enforcement
-- Sandbox configuration
-- Session timeouts
-- Docker security
-- Dependency vulnerabilities
+Запустите `raven security audit` для 23 стандартных и 8 глубоких проверок:
+- Надёжность секретных ключей
+- Конфигурация API-ключей
+- Права доступа к файлам
+- Конфигурация CORS
+- Принудительный HTTPS
+- Конфигурация sandbox
+- Таймауты сессий
+- Безопасность Docker
+- Уязвимости зависимостей
 
-## Responsible Disclosure
+## Ответственное раскрытие
 
-We kindly ask that:
-- You give us a reasonable time to fix the issue before disclosing it publicly
-- You make a good faith effort to avoid privacy violations, destruction of data, and interruption of our service
-- You do not exploit a security issue you discover for any reason other than testing
+Пожалуйста:
+- Дайте нам разумное время на исправление перед публичным раскрытием
+- Не нарушайте приватность, не уничтожайте данные и не прерывайте работу сервиса
+- Не используйте найденную уязвимость в каких-либо целях, кроме тестирования
 
-## Recognition
+## Признание
 
-We believe in recognizing and thanking security researchers who help us keep our users safe. If you report a valid security issue, we will acknowledge your contribution in our release notes (unless you prefer to remain anonymous).
+Мы благодарим исследователей безопасности, которые помогают нам защищать пользователей. За валидный отчёт мы укажем вас в release notes (если вы не предпочитаете анонимность).

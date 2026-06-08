@@ -1,29 +1,29 @@
-# Contributing to Raven AI
+# Внесение вклада в Raven AI
 
-Thank you for your interest in contributing to Raven AI! We welcome contributions from everyone.
+Спасибо за интерес к Raven AI! Мы приветствуем вклад от всех желающих.
 
-## Code of Conduct
+## Кодекс поведения
 
-By participating, you agree to maintain a respectful and inclusive environment for all contributors.
+Участвуя в проекте, вы соглашаетесь поддерживать уважительную и инклюзивную атмосферу для всех участников.
 
-## How to Contribute
+## Как внести вклад
 
-### 1. Reporting Bugs
+### 1. Сообщить об ошибке
 
-- Check existing issues to avoid duplicates
-- Use the bug report template
-- Include: Python version, OS, steps to reproduce, expected vs actual behavior
-- Include relevant logs and configuration (redact secrets)
+- Проверьте существующие issues, чтобы избежать дубликатов
+- Используйте шаблон баг-репорта
+- Укажите: версию Python, ОС, шаги воспроизведения, ожидаемое и фактическое поведение
+- Приложите логи и конфигурацию (без секретов)
 
-### 2. Suggesting Features
+### 2. Предложить идею
 
-- Check existing issues and discussions
-- Describe the problem you're solving, not just your proposed solution
-- Explain how it benefits the project
+- Проверьте существующие issues и обсуждения
+- Опишите проблему, а не только своё решение
+- Объясните, как это помогает проекту
 
-### 3. Pull Requests
+### 3. Pull Request
 
-#### Setup
+#### Настройка
 
 ```bash
 git clone https://github.com/ssrjkk/raven
@@ -31,73 +31,73 @@ cd raven
 pip install -e ".[dev]"
 ```
 
-#### Development Loop
+#### Цикл разработки
 
 ```bash
-# Lint
+# Линтер
 ruff check .
 
-# Type check
+# Проверка типов
 mypy raven/ --strict --ignore-missing-imports
 
-# Test
+# Тесты
 pytest tests/ -q --tb=short
 
-# Test with coverage
+# Тесты с покрытием
 pytest tests/ --cov=raven --cov-report=term-missing
 
-# Build web
+# Сборка веб-интерфейса
 cd web && npm install && npm run build
 ```
 
-#### Guidelines
+#### Правила
 
-- **Code style**: Follow existing patterns; no comments unless necessary
-- **Tests**: Add tests for new features; ensure all tests pass
-- **Documentation**: Update docstrings and relevant docs
-- **Single responsibility**: One PR = one feature or bug fix
-- **Commit messages**: Concise, descriptive, present tense
+- **Стиль кода**: следуйте существующим паттернам; без лишних комментариев
+- **Тесты**: добавляйте тесты на новый функционал; убедитесь, что все тесты проходят
+- **Документация**: обновляйте docstring и соответствующие документы
+- **Единственная ответственность**: один PR = одна фича или один баг-фикс
+- **Сообщения коммитов**: краткие, описательные, в настоящем времени
 
-#### PR Process
+#### Процесс PR
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feat/amazing-feature`)
-3. Make your changes
-4. Run lint and tests
-5. Commit with a clear message
-6. Push to your fork
-7. Open a Pull Request against `main`
-8. Respond to review feedback
+1. Сделайте форк репозитория
+2. Создайте ветку для фичи (`git checkout -b feat/amazing-feature`)
+3. Внесите изменения
+4. Запустите линтер и тесты
+5. Сделайте коммит с понятным сообщением
+6. Запушьте в свой форк
+7. Откройте Pull Request в ветку `main`
+8. Ответьте на замечания в ревью
 
-### 4. Project Structure
+### 4. Структура проекта
 
 ```
 raven/
-├── raven/             # Core Python package (agent, auth, gateway, LLM, RAG, etc.)
-├── services/          # Microservices (Go: gateway/auth/monitor-engine; Python: agent-core/rag/task/code)
-├── channels/          # 12 messaging channels (Telegram, Discord, Slack, etc.)
-├── web/               # React 19 + Vite + Tailwind dashboard
+├── raven/             # Основной Python-пакет (agent, auth, gateway, LLM, RAG, ...)
+├── services/          # Микросервисы (Go: gateway/auth/monitor-engine; Python: agent-core/rag/task/code)
+├── channels/          # 12 каналов (Telegram, Discord, Slack, ...)
+├── web/               # React 19 + Vite + Tailwind дашборд
 ├── aios/              # AI-OS-MVP bridge
-├── daemon/            # Rust system daemon
-├── ravencode/         # Python API for AI agents
-├── packages/          # TypeScript shared packages
-├── plugins/           # 10 plugin tools
-├── deploy/            # Docker, K8s, observability configs
-├── tests/             # Test suite (pytest)
-├── docs/              # MkDocs documentation
-└── scripts/           # Setup and build scripts
+├── daemon/            # Rust-демон системных метрик
+├── ravencode/         # Python API для AI-агентов
+├── packages/          # TypeScript-пакеты
+├── plugins/           # 10 инструментов-плагинов
+├── deploy/            # Docker, K8s, observability
+├── tests/             # Тесты (pytest)
+├── docs/              # Документация MkDocs
+└── scripts/           # Скрипты установки и сборки
 ```
 
-## Development Channels
+## Каналы разработки
 
-- **stable**: Released versions from PyPI
-- **dev**: `main` branch — may be unstable
+- **stable**: Релизные версии из PyPI
+- **dev**: Ветка `main` — может быть нестабильной
 
-## Getting Help
+## Получить помощь
 
-- Open a [Discussion](https://github.com/ssrjkk/raven/discussions)
-- Join our community chat (if available)
+- Откройте [обсуждение](https://github.com/ssrjkk/raven/discussions)
+- Напишите в Telegram: [@ssrjkk](https://t.me/ssrjkk)
 
-## License
+## Лицензия
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+Внося вклад, вы соглашаетесь, что ваши изменения будут распространяться под лицензией MIT.
