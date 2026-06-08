@@ -1,8 +1,8 @@
 -r monolith-requirements.txt
 pytest>=8.0
 pytest-asyncio>=0.24
-pytest-cov>=5.0
-mypy>=2.1.0
+pytest-cov>=7.1.0
+mypy>=1.10
 ruff>=0.5
 discord.py>=2.3
 slack-sdk>=3.27
