@@ -159,8 +159,12 @@ jobs:
 
       - name: Setup NATS
         run: |
-          docker compose -f deploy/docker-compose.nats.yml up -d
+          docker version
+          docker compose version
+          docker compose -f deploy/docker-compose.nats.yml up -d 2>&1 || true
           sleep 5
+          docker ps -a
+          docker compose -f deploy/docker-compose.nats.yml logs nats||true
 
       - name: Verify streams
         run: |
@@ -168,7 +172,8 @@ jobs:
           python deploy/nats/nats-stream-manager.py verify
 
       - name: Cleanup
-        run: docker compose -f deploy/docker-compose.nats.yml down
+        if: always()
+        run: docker compose -f deploy/docker-compose.nats.yml down --volumes
 
   web-build:
     runs-on: ubuntu-latest
@@ -204,7 +209,10 @@ jobs:
 
       - name: Start services
         run: |
-          docker compose -f docker-compose.micro.yml up -d auth gateway monitor-engine
+          docker version
+          docker compose version
+          docker compose -f docker-compose.micro.yml up -d auth gateway monitor-engine 2>&1 || true
+          docker ps -a || true
           echo "Waiting for services..."
           for i in $(seq 1 15); do
             AUTH_OK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/health 2>/dev/null || echo "000")
@@ -224,3 +232,7 @@ jobs:
           AUTH_BASE: http://localhost:8001
           GATEWAY_BASE: http://localhost:8000
           MONITOR_BASE: http://localhost:8003
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.micro.yml down --volumes
