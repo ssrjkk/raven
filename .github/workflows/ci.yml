@@ -220,8 +220,8 @@ jobs:
           docker compose -f docker-compose.micro.yml up -d auth gateway monitor-engine 2>&1 || true
           docker ps -a || true
           docker compose -f docker-compose.micro.yml logs nats auth gateway monitor-engine || true
-          echo "Waiting for services..."
-          for i in $(seq 1 15); do
+          echo "Waiting for services (up to 2 minutes)..."
+          for i in $(seq 1 24); do
             AUTH_OK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/health 2>/dev/null || echo "000")
             GW_OK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health 2>/dev/null || echo "000")
             MON_OK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8003/health 2>/dev/null || echo "000")
@@ -229,7 +229,7 @@ jobs:
               echo "All services healthy"
               break
             fi
-            echo "Waiting... ($i)"
+            echo "Waiting... ($i/24) auth=$AUTH_OK gw=$GW_OK mon=$MON_OK"
             sleep 5
           done
 
