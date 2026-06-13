@@ -168,8 +168,12 @@ jobs:
 
       - name: Verify streams
         run: |
-          pip install nats-py
-          python deploy/nats/nats-stream-manager.py verify
+          pip install "nats-py>=2.9.0,<2.15.0"
+          for i in $(seq 1 10); do
+            python deploy/nats/nats-stream-manager.py verify && break
+            echo "Retry $i..."
+            sleep 3
+          done
 
       - name: Cleanup
         if: always()
@@ -208,11 +212,14 @@ jobs:
         uses: grafana/setup-k6-action@v1
 
       - name: Start services
+        env:
+          JWT_SECRET: ci-test-secret-key-not-for-production
         run: |
           docker version
           docker compose version
           docker compose -f docker-compose.micro.yml up -d auth gateway monitor-engine 2>&1 || true
           docker ps -a || true
+          docker compose -f docker-compose.micro.yml logs nats auth gateway monitor-engine || true
           echo "Waiting for services..."
           for i in $(seq 1 15); do
             AUTH_OK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/health 2>/dev/null || echo "000")
