@@ -217,9 +217,10 @@ jobs:
         run: |
           docker version
           docker compose version
+          docker compose -f docker-compose.micro.yml pull nats 2>&1 || true
+          docker compose -f docker-compose.micro.yml build auth gateway monitor-engine 2>&1 || true
           docker compose -f docker-compose.micro.yml up -d auth gateway monitor-engine 2>&1 || true
           docker ps -a || true
-          docker compose -f docker-compose.micro.yml logs nats auth gateway monitor-engine || true
           echo "Waiting for services (up to 2 minutes)..."
           for i in $(seq 1 24); do
             AUTH_OK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/health 2>/dev/null || echo "000")
@@ -232,6 +233,7 @@ jobs:
             echo "Waiting... ($i/24) auth=$AUTH_OK gw=$GW_OK mon=$MON_OK"
             sleep 5
           done
+          docker compose -f docker-compose.micro.yml logs --tail 20 nats auth gateway monitor-engine || true
 
       - name: Run k6 smoke test
         run: k6 run --vus 5 --duration 30s tests/load/scenario.js
