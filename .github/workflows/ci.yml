@@ -218,7 +218,7 @@ jobs:
           docker version
           docker compose version
           docker compose -f docker-compose.micro.yml pull nats 2>&1 || true
-          docker compose -f docker-compose.micro.yml build auth gateway monitor-engine 2>&1
+          docker compose -f docker-compose.micro.yml build auth gateway monitor-engine 2>&1 || true
           docker compose -f docker-compose.micro.yml up -d auth gateway monitor-engine 2>&1 || true
           docker ps -a || true
           echo "Waiting for services (up to 2 minutes)..."

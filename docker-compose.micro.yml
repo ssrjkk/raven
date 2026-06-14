@@ -177,8 +177,8 @@ services:
 
   gateway:
     build:
-      context: ./services/gateway
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/gateway/Dockerfile
     ports:
       - "8000:8000"
     env_file: ./deploy/env/gateway.env
@@ -198,8 +198,8 @@ services:
 
   auth:
     build:
-      context: ./services/auth
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/auth/Dockerfile
     ports:
       - "8001:8001"
     env_file: ./deploy/env/auth.env
@@ -245,8 +245,8 @@ services:
 
   monitor-engine:
     build:
-      context: ./services/monitor-engine
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/monitor-engine/Dockerfile
     ports:
       - "8003:8003"
     env_file: ./deploy/env/monitor-engine.env
