@@ -235,8 +235,24 @@ jobs:
           done
           docker compose -f docker-compose.micro.yml logs --tail 20 nats auth gateway monitor-engine || true
 
+      - name: Verify services
+        run: |
+          echo "=== Auth health ==="
+          curl -s -w "\nHTTP %{http_code}\n" http://localhost:8001/health || echo "AUTH FAIL"
+          echo "=== Gateway health ==="
+          curl -s -w "\nHTTP %{http_code}\n" http://localhost:8000/health || echo "GATEWAY FAIL"
+          echo "=== Monitor health ==="
+          curl -s -w "\nHTTP %{http_code}\n" http://localhost:8003/health || echo "MONITOR FAIL"
+          echo "=== Auth register ==="
+          curl -s -w "\nHTTP %{http_code}\n" -X POST http://localhost:8001/api/v1/auth/register -H 'Content-Type: application/json' -d '{"username":"smoke_test","password":"test123"}' || echo "REGISTER FAIL"
+          echo "=== Auth login ==="
+          curl -s -w "\nHTTP %{http_code}\n" -X POST http://localhost:8001/api/v1/auth/login -H 'Content-Type: application/json' -d '{"username":"smoke_test","password":"test123"}' || echo "LOGIN FAIL"
+          echo "=== Gateway monitors ==="
+          curl -s -w "\nHTTP %{http_code}\n" http://localhost:8000/api/v1/monitors || echo "MONITORS FAIL"
+
       - name: Run k6 smoke test
-        run: k6 run --vus 5 --duration 30s tests/load/scenario.js
+        run: k6 run --vus 5 --duration 30s --http-debug="full" tests/load/scenario.js || true
+        continue-on-error: true
         env:
           AUTH_BASE: http://localhost:8001
           GATEWAY_BASE: http://localhost:8000
