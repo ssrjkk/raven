@@ -2,8 +2,12 @@
   "__inputs": [],
   "__requires": [],
   "title": "Raven Services Overview",
-  "version": 1,
+  "version": 2,
   "editable": true,
+  "tags": ["raven", "microservices"],
+  "schemaVersion": 38,
+  "timezone": "browser",
+  "refresh": "30s",
   "panels": [
     {
       "title": "Service Health",
@@ -32,7 +36,7 @@
     {
       "title": "HTTP Request Rate (RPS)",
       "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 4},
       "targets": [
         {
           "expr": "sum(rate(http_requests_total[5m])) by (service)",
@@ -44,7 +48,7 @@
     {
       "title": "p95 Latency (ms)",
       "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 4},
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service)) * 1000",
@@ -54,9 +58,21 @@
       ]
     },
     {
+      "title": "gRPC Request Rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 4},
+      "targets": [
+        {
+          "expr": "sum(rate(grpc_requests_total[5m])) by (method, code)",
+          "legendFormat": "{{ method }} ({{ code }})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "title": "Error Rate (%)",
       "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 12},
       "targets": [
         {
           "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) by (service) / sum(rate(http_requests_total[5m])) by (service) * 100",
@@ -68,7 +84,7 @@
     {
       "title": "Memory Usage (MB)",
       "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 12},
       "targets": [
         {
           "expr": "process_resident_memory_bytes{job=~\"gateway|auth|agent-core|monitor-engine|rag-service|task-engine|code-service\"} / 1024 / 1024",
@@ -78,9 +94,21 @@
       ]
     },
     {
+      "title": "Circuit Breaker Trips",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 12},
+      "targets": [
+        {
+          "expr": "rate(circuit_breaker_tripped_total[5m])",
+          "legendFormat": "trips/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "title": "NATS Consumer Lag",
       "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 20},
       "targets": [
         {
           "expr": "nats_jetstream_consumer_pending",
@@ -90,9 +118,26 @@
       ]
     },
     {
+      "title": "Rate Limiter: Allowed vs Blocked",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 20},
+      "targets": [
+        {
+          "expr": "rate(rate_limiter_allowed_total[5m])",
+          "legendFormat": "allowed/s",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(rate_limiter_blocked_total[5m])",
+          "legendFormat": "blocked/s",
+          "refId": "B"
+        }
+      ]
+    },
+    {
       "title": "SAGA Compensations",
       "type": "stat",
-      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 20},
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 20},
       "targets": [
         {
           "expr": "rate(saga_compensation_total[5m])",
@@ -100,8 +145,35 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "title": "Trace Duration (p95)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(traces_span_duration_seconds_bucket[5m])) by (le, service_name)) * 1000",
+          "legendFormat": "{{ service_name }}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Active Monitors",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
+      "targets": [
+        {
+          "expr": "monitor_active_checks",
+          "legendFormat": "active",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(monitor_check_errors_total[5m])",
+          "legendFormat": "errors/s",
+          "refId": "B"
+        }
+      ]
     }
-  ],
-  "tags": ["raven", "microservices"],
-  "schemaVersion": 38
+  ]
 }

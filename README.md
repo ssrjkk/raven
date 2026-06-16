@@ -23,7 +23,7 @@
     <img src="https://img.shields.io/badge/channels-12-8A2BE2" alt="Channels">
   </a>
   <a href="https://github.com/ssrjkk/raven">
-    <img src="https://img.shields.io/badge/tests-580_passing-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-859_passing-brightgreen" alt="Tests">
   </a>
   <a href="https://codecov.io/gh/ssrjkk/raven">
     <img src="https://img.shields.io/codecov/c/github/ssrjkk/raven?logo=codecov" alt="Coverage">
@@ -167,6 +167,142 @@ raven security audit --fix     Авто-исправление проблем
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    subgraph Clients["Clients & Channels"]
+        TG[Telegram]
+        DC[Discord]
+        SL[Slack]
+        WA[WhatsApp]
+        WB[Web Dashboard\nReact 19 + Vite]
+        CLI[CLI / TUI]
+    end
+
+    subgraph Gateway["API Gateway Layer"]
+        GW["Gateway (Go)\n:8000"]
+        CB["Circuit Breaker"]
+        RL["Rate Limiter"]
+        AUTH["Auth Middleware\nJWT Validation"]
+    end
+
+    subgraph Services["Microservices"]
+        AS["Auth Service (Go)\n:8001 — JWT, SQLite, gRPC"]
+        AC["Agent Core (Python)\n:8002 — LLM Router"]
+        ME["Monitor Engine (Go)\n:8003 — SQLite, NATS"]
+        RS["RAG Service (Python)\n:8004 — Qdrant"]
+        TE["Task Engine (Python)\n:8005 — SQLite, Outbox, Saga"]
+        CS["Code Service (Python)\n:8006 — Sandbox"]
+    end
+
+    subgraph Observability["Observability Stack"]
+        OTEL["OTel Collector\n:4317 gRPC / :4318 HTTP"]
+        TEMPO["Tempo\nTrace Storage"]
+        LOKI["Loki\nLog Aggregation"]
+        PROM["Prometheus\n:9090"]
+        GRAF["Grafana\n:3000 — Dashboards"]
+    end
+
+    subgraph Messaging["Message Broker"]
+        NATS["NATS / JetStream\n:4222"]
+    end
+
+    subgraph Storage["Data Layer"]
+        SQLITE["SQLite\nAuth / Monitor / Task DBs"]
+        QDRANT["Qdrant\nVector Store :6333"]
+        FS[(File System\nWorkspace / Data)]
+    end
+
+    subgraph LLM["LLM Providers"]
+        OLLAMA["Ollama (Local)"]
+        OR["OpenRouter"]
+        ANTH["Anthropic"]
+        OPENAI["OpenAI"]
+    end
+
+    subgraph AgentSystem["Agent System"]
+        AGENT["ReAct Agent\nFSM States"]
+        TOOLS["Tool Registry\nPlugin System"]
+        MEM["Memory / Context"]
+    end
+
+    %% Client → Gateway
+    TG --> GW
+    DC --> GW
+    SL --> GW
+    WA --> GW
+    WB --> GW
+    CLI --> GW
+
+    %% Gateway internals
+    GW --> CB
+    CB --> RL
+    RL --> AUTH
+
+    %% Gateway → Services
+    AUTH --> AS
+    GW --> AC
+    GW --> ME
+    GW --> RS
+    GW --> TE
+    GW --> CS
+
+    %% Agent System
+    AC --> LLM
+    AC --> AGENT
+    AGENT --> TOOLS
+    AGENT --> MEM
+
+    %% LLM Failover Order
+    OLLAMA -.-> OR
+    OR -.-> ANTH
+    ANTH -.-> OPENAI
+
+    %% NATS pub/sub
+    AC -.->|agent.response| NATS
+    ME -.->|monitor.check.completed| NATS
+    TE -.->|task.events| NATS
+    AS -.->|auth.user.created| NATS
+
+    %% Observability
+    GW -->|traces/metrics| OTEL
+    AS -->|traces/metrics| OTEL
+    AC -->|traces/metrics| OTEL
+    ME -->|traces/metrics| OTEL
+    RS -->|traces/metrics| OTEL
+    TE -->|traces/metrics| OTEL
+    CS -->|traces/metrics| OTEL
+    WB -->|traces| OTEL
+
+    OTEL --> TEMPO
+    OTEL --> LOKI
+    PROM --> GW
+    PROM --> AS
+    PROM --> ME
+    PROM --> OTEL
+    GRAF --> PROM
+    GRAF --> TEMPO
+    GRAF --> LOKI
+
+    %% Storage
+    AS --> SQLITE
+    ME --> SQLITE
+    TE --> SQLITE
+    RS --> QDRANT
+    CS --> FS
+    AGENT --> FS
+
+    style Clients fill:#1a1a2e,stroke:#16213e
+    style Gateway fill:#0f3460,stroke:#1a1a2e
+    style Services fill:#16213e,stroke:#0f3460
+    style Observability fill:#1a1a3e,stroke:#2a2a5e
+    style Messaging fill:#2d1b69,stroke:#1a1a2e
+    style Storage fill:#1a3a2e,stroke:#16213e
+    style LLM fill:#3a1a1a,stroke:#2a0a0a
+    style AgentSystem fill:#1a2a3a,stroke:#0f3460
+```
+
+## Project Tree
+
 ```
 raven/
 ├── raven/                      # Основной Python-пакет
@@ -177,61 +313,52 @@ raven/
 │   │   ├── security/           ToolPolicyEvaluator, PII redaction, SecurityAudit
 │   │   ├── task_engine/        Планировщик, исполнитель, хранилище задач
 │   │   ├── monitor/            HTTP, price, RSS, file, process мониторы + условия
-│   │   ├── coder/              Индексатор, парсер AST, ревьюер, менеджер сессий
-│   │   ├── routine/            Движок рутин, хранилище (бриффинги, email, файлы)
-│   │   ├── admin_api.py        REST API (каналы, агенты, конфиг, секреты, задачи, аудит)
-│   │   ├── audit.py            Структурированный JSON audit-лог (20 типов событий)
-│   │   ├── circuit_breaker.py  Closed → Open → Half-Open с метриками
-│   │   ├── errors.py           ErrorCode + AppError + авто-классификация
-│   │   ├── llm.py              Маршрутизация: OpenRouter, Anthropic, OpenAI, Ollama
-│   │   ├── sandbox.py          Изоляция: direct, subprocess, Docker
-│   │   └── middleware.py       Rate limit, auth, request ID, error handler
-│   ├── channels/               12 каналов (Telegram, Discord, Slack, WhatsApp, Matrix...)
-│   ├── plugins/                Система плагинов с capability-based sandbox
-│   ├── tools/                  file, shell, notify, db_query
-│   ├── cli/                    CLI на Click (start, stop, status, task, monitor...)
-│   └── tui/                    Терминальный интерфейс (Textual)
-├── services/                   # Микросервисы (Go/Python)
-│   ├── gateway/                Go API gateway
-│   ├── auth/                   Go auth service
-│   ├── monitor-engine/         Go monitor engine
-│   ├── agent-core/             Python agent microservice
-│   ├── rag-service/            Python RAG microservice
-│   ├── task-engine/            Python task engine microservice
-│   ├── code-service/           Python code service microservice
-│   └── proto/                  Protobuf definitions + Go stubs
-├── web/                        React 19 + Vite + Tailwind дашборд
-├── aios/                       AI-OS-MVP bridge (Python)
-├── daemon/                     Rust-демон для системных метрик
-├── plugins/                    10 плагинов (browser, code, cron, files, git...)
-├── packages/                   TypeScript-пакеты (ai-core, agents, runtime, repo)
-├── deploy/                     Docker Compose, K8s, Traefik, observability
-├── workspace/
-│   └── skills/                 crypto, briefing, web_search (SKILL.md)
-└── .github/                    GitHub Actions CI (pytest + ruff, 3.11-3.13)
+│   │   ├── rag/                Embedding engine, chanking, vector store
+│   │   ├── llm.py              Провайдеры LLM (OpenAI, Anthropic, Ollama, OpenRouter) + failover
+│   │   ├── config.py           Pydantic Settings + YAML config
+│   │   └── admin_api.py        Admin REST API
+│   ├── channels/               12 каналов, message bus, CircuitBreakerChannel
+│   ├── cli/                    CLI (click + rich)
+│   ├── tools/                  Plugin-инструменты
+│   ├── tui/                    Terminal UI (textual)
+│   └── workspace/              Workspace manager, skills, plugin loader
+├── services/                   # Микросервисы (Go + Python)
+│   ├── gateway/                Go-шлюз (auth proxy, circuit breaker, rate limiter, metrics, gRPC)
+│   ├── auth/                   Go-сервис аутентификации (SQLite, JWT, gRPC, Redis rate limiter)
+│   ├── agent-core/             Python — LLM-роутер (Ollama/OpenAI/Anthropic), NATS pub/sub
+│   ├── monitor-engine/         Go-сервис мониторинга (SQLite, NATS, Prometheus)
+│   ├── rag-service/            Python — семантический поиск (Qdrant + in-memory fallback)
+│   ├── task-engine/            Python — планировщик (SQLite, NATS, idempotency, outbox, saga)
+│   ├── code-service/           Python — песочница кода (subprocess, NATS)
+│   └── proto/                  Protobuf-определения + сгенерированный Go-код
+├── web/                        React 19 + Vite + Tailwind dashboard
+├── deploy/                     Docker, k8s, systemd, Observability stack
+├── daemon/                     Rust-демон (ravend): сисметрики, управление процессами
+├── aios/                       AI-OS-MVP агентный фреймворк
+└── plugins/                    Пользовательские плагины
 ```
-
----
 
 ## Tech Stack
 
 | Слой | Технология |
 |------|-----------|
-| **Backend** | Python 3.11+, FastAPI, asyncio, SQLite |
-| **LLM** | OpenRouter / Anthropic / OpenAI / Ollama |
+| **Backend** | Python 3.13+, FastAPI, asyncio, SQLite (modernc.org/sqlite) |
+| **LLM** | Ollama (local) → OpenRouter → Anthropic → OpenAI (failover) |
 | **Memory** | SQLite + ChromaDB + numpy vector store |
-| **RAG** | OpenAI embeddings / sentence-transformers, cosine similarity |
-| **Auth** | PBKDF2, Bearer tokens, RBAC |
-| **Frontend** | React 19, Vite, Tailwind CSS 4, react-router-dom |
-| **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, Graph API |
-| **Monitor Engine** | 5 типов (HTTP, price, RSS, file, process), ConditionEvaluator, AlertDispatcher |
-| **Routine Engine** | Интервальные и scheduled рутины, логированием |
-| **Workspace Skills** | SKILL.md в `workspace/skills/`, авто-загрузка через SkillsRegistry |
-| **Observability** | Prometheus metrics, JSON audit, health checks, correlation IDs |
-| **Security** | Rate limiting, API auth, DM pairing, Fernet encryption, RBAC, plugin sandbox, ToolPolicyEvaluator (deny/allow), exec security policy, contextVisibility, workspace isolation, security audit CLI |
-| **Resilience** | Circuit breaker, retry, connection pooling, hot-reload |
-| **CI** | GitHub Actions (pytest, ruff lint, compile check) |
-| **Deploy** | Docker, docker-compose |
+| **RAG** | Qdrant vector store, fallback in-memory, n-gram embedding |
+| **Auth** | bcrypt, JWT (HS256), gRPC, RBAC (4 роли, 16 пермишенов) |
+| **Frontend** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
+| **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio |
+| **Message Broker** | NATS + JetStream (streams: agent.response, monitor.check.completed, task.events, auth.user.created) |
+| **Gateway** | Go 1.26 — circuit breaker, rate limiter, auth proxy, gRPC retry, OpenTelemetry |
+| **Auth Service** | Go 1.26 — SQLite, JWT, gRPC, token bucket rate limiter, OpenTelemetry |
+| **Monitor Engine** | Go 1.26 — HTTP health checks, SQLite, NATS events, Prometheus metrics |
+| **Resilience** | Circuit breaker, gRPC retry (exponential backoff), rate limiter, outbox pattern, saga pattern, idempotency |
+| **Observability** | OpenTelemetry (traces + metrics), Prometheus, Grafana (12 панелей), Loki, Tempo, health/ready probes |
+| **Security** | Rate limiting, JWT auth, DM pairing, Fernet encryption, RBAC, plugin sandbox, ToolPolicyEvaluator (deny/allow), exec security policy (deny/ask/full), contextVisibility, workspace isolation, security audit CLI |
+| **CI/CD** | GitHub Actions — parallel Go/Python/web lint + test + build, Allure TestOps, Docker buildx, Codecov, Playwright E2E, k6 load tests |
+| **Deploy** | Docker (multi-stage, distroless, non-root), docker-compose (microservice stack), Kubernetes manifests, systemd, launchd |
+| **Testing** | pytest (800+ tests, Allure reporting), Go table-driven tests, Vitest (React), Playwright (E2E), k6 (load) |
 
 ---
 

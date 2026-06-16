@@ -59,16 +59,27 @@ disallow_untyped_defs = false
 disallow_untyped_calls = false
 disallow_incomplete_defs = false
 ignore_missing_imports = true
-exclude = ['services/', 'daemon/', 'deploy/', 'build/', '\.git/', 'extension/', 'scripts/']
+warn_unused_ignores = true
+show_error_codes = true
+exclude = ['services/', 'daemon/', 'deploy/', 'build/', '\.git/', 'extension/', 'scripts/', 'tests/']
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --tb=short --no-header"
+addopts = "-q --tb=short --no-header --alluredir=allure-results"
 asyncio_mode = "auto"
+log_cli_level = "WARNING"
 markers = [
     "pact: Pact contract tests (provider-specific)",
     "load: k6 load test wrapper",
     "slow: tests that take >5s",
+    "unit: Fast unit tests with no external dependencies",
+    "integration: Tests requiring DB, NATS, or external services",
+    "e2e: Full end-to-end tests",
+    "async: Coroutine-based async tests",
+    "security: Security-oriented tests",
+    "rag: RAG/embedding pipeline tests",
+    "agent: Agent FSM tests",
+    "smoke: Quick smoke/sanity tests",
 ]
 
 

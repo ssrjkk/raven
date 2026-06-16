@@ -12,7 +12,13 @@ from loguru import logger
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
+try:
+    from opentelemetry_setup import setup_opentelemetry
+except ImportError:
+    def setup_opentelemetry(app=None, service_name=None): pass
+
 app = FastAPI(title="RAG Service", version="1.0.0")
+setup_opentelemetry(app, service_name="rag-service")
 
 VECTOR_SIZE = 384
 COLLECTION_NAME = "documents"
@@ -66,6 +72,8 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
+    from opentelemetry import trace
+    trace.get_tracer_provider().shutdown()
     logger.info("rag-service shutdown")
 
 

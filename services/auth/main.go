@@ -68,16 +68,14 @@ type TokenClaims struct {
 	Role   string
 }
 
-func NewAuthService(jwtSecret string) *AuthService {
+func NewAuthService(jwtSecret, secretFile string) *AuthService {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
+
 	key, err := hex.DecodeString(jwtSecret)
 	if len(key) == 0 || err != nil {
-		key = make([]byte, 32)
-		if _, err := rand.Read(key); err != nil {
-			logger.Error("failed to generate random key", "error", err)
-		}
+		key = loadOrGenerateKey(secretFile, logger)
 	}
 
 	return &AuthService{
@@ -164,7 +162,7 @@ func (s *AuthService) register(ctx context.Context, username, password string) (
 		return User{}, fmt.Errorf("insert: %w", err)
 	}
 	s.logger.Info("user registered", "user_id", id, "username", username)
-	if s.js != nil {
+	if s.js != nil && s.nc != nil && s.nc.IsConnected() {
 		evt, _ := json.Marshal(map[string]string{"user_id": id, "username": username})
 		if _, err := s.js.Publish(ctx, "auth.user.created", evt); err != nil {
 			s.logger.Warn("failed to publish auth.user.created", "error", err)
@@ -379,9 +377,38 @@ func (w *statusWriter) WriteHeader(status int) {
 	w.ResponseWriter.WriteHeader(status)
 }
 
+func loadOrGenerateKey(path string, logger *slog.Logger) []byte {
+	if data, err := os.ReadFile(path); err == nil && len(data) >= 32 {
+		return data
+	}
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		logger.Error("failed to generate random key", "error", err)
+		return key
+	}
+	if err := os.MkdirAll(dataDir(path), 0755); err == nil {
+		if err := os.WriteFile(path, key, 0600); err != nil {
+			logger.Warn("failed to persist JWT secret", "path", path, "error", err)
+		} else {
+			logger.Info("generated and persisted JWT secret", "path", path)
+		}
+	}
+	return key
+}
+
+func dataDir(path string) string {
+	for i := len(path) - 1; i >= 0; i-- {
+		if path[i] == '/' || path[i] == '\\' {
+			return path[:i]
+		}
+	}
+	return "/data"
+}
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	svc := NewAuthService(envOr("JWT_SECRET", ""))
+	secretFile := envOr("JWT_SECRET_FILE", "/data/jwt_secret.key")
+	svc := NewAuthService(envOr("JWT_SECRET", ""), secretFile)
 
 	if err := svc.InitDB(envOr("DB_PATH", "/data/auth.db")); err != nil {
 		logger.Error("db init failed", "error", err)

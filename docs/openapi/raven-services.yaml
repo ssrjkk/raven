@@ -1,0 +1,352 @@
+openapi: "3.1.0"
+info:
+  title: Raven AI — Microservice API
+  version: "1.0.0"
+  description: |
+    Enterprise-grade personal AI assistant.
+    Monolith API at :18888, microservices behind gateway at :8000.
+servers:
+  - url: http://localhost:18888/api
+    description: Monolith API
+  - url: http://localhost:8000/api/v1
+    description: Gateway (microservice mode)
+paths:
+  # ── Monolith ──────────────────────────────────────────
+  /status:
+    get:
+      summary: System status
+      tags: [Monolith]
+      responses:
+        "200":
+          description: Status payload
+  /sessions:
+    get:
+      summary: List sessions
+      tags: [Chat]
+      responses:
+        "200":
+          description: Session list
+    post:
+      summary: Create session
+      tags: [Chat]
+      responses:
+        "201":
+          description: Created session
+  /messages/{session_id}:
+    get:
+      summary: List messages for a session
+      tags: [Chat]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Message list
+  /health:
+    get:
+      summary: Health check
+      tags: [Infra]
+      responses:
+        "200":
+          description: Healthy
+  /health/ready:
+    get:
+      summary: Readiness probe
+      tags: [Infra]
+      responses:
+        "200":
+          description: Ready
+        "503":
+          description: Not ready
+  /metrics/prometheus:
+    get:
+      summary: Prometheus metrics
+      tags: [Infra]
+      responses:
+        "200":
+          description: Prometheus text format
+  /agents:
+    get:
+      summary: List agents
+      tags: [Agent]
+      responses:
+        "200":
+          description: Agent list
+  /shutdown:
+    post:
+      summary: Graceful shutdown
+      tags: [Admin]
+      responses:
+        "200":
+          description: Shutdown initiated
+
+  # ── Auth ──────────────────────────────────────────────
+  /auth/register:
+    post:
+      summary: Register new user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: { type: string, minLength: 3 }
+                password: { type: string, minLength: 8 }
+      responses:
+        "201": { description: User created }
+        "400": { description: Invalid input }
+        "409": { description: Username exists }
+  /auth/login:
+    post:
+      summary: Login
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: JWT token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  expires_at: { type: integer }
+                  user_id: { type: string }
+  /auth/validate:
+    post:
+      summary: Validate JWT
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token: { type: string }
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid: { type: boolean }
+                  user_id: { type: string }
+                  role: { type: string }
+
+  # ── Agent Core ────────────────────────────────────────
+  /agent/chat:
+    post:
+      summary: Chat with agent
+      tags: [Agent]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                session_id: { type: string }
+                message: { type: string }
+                messages: { type: array, items: { type: object } }
+      responses:
+        "200":
+          description: Agent response
+        "502":
+          description: LLM upstream error
+
+  # ── Monitors ──────────────────────────────────────────
+  /monitors:
+    get:
+      summary: List monitors
+      tags: [Monitor]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: Monitor list
+    post:
+      summary: Create monitor
+      tags: [Monitor]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                url: { type: string, format: uri }
+                interval_seconds: { type: integer, minimum: 10 }
+                timeout_seconds: { type: integer, minimum: 1 }
+      responses:
+        "201": { description: Monitor created }
+  /monitors/{id}:
+    delete:
+      summary: Delete monitor
+      tags: [Monitor]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Deleted }
+
+  # ── RAG ───────────────────────────────────────────────
+  /rag/index:
+    post:
+      summary: Index a document
+      tags: [RAG]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string }
+                content: { type: string }
+      responses:
+        "200": { description: Indexed }
+  /rag/search:
+    get:
+      summary: Semantic search
+      tags: [RAG]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 5 }
+      responses:
+        "200":
+          description: Search results
+
+  # ── Task Engine ───────────────────────────────────────
+  /tasks:
+    get:
+      summary: List tasks
+      tags: [Task]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: Task list
+    post:
+      summary: Create task
+      tags: [Task]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                goal: { type: string }
+      responses:
+        "201":
+          description: Task created
+  /tasks/{id}/cancel:
+    post:
+      summary: Cancel task
+      tags: [Task]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Cancelled }
+
+  # ── Code Service ──────────────────────────────────────
+  /code/execute:
+    post:
+      summary: Execute code in sandbox
+      tags: [Code]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                language: { type: string }
+                code: { type: string }
+      responses:
+        "200": { description: Execution result }
+
+  # ── Admin ─────────────────────────────────────────────
+  /admin/channels:
+    get:
+      summary: List channels
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: Channel list
+  /admin/config:
+    get:
+      summary: Get configuration
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: Config map
+  /admin/system/status:
+    get:
+      summary: System status
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: System status
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error: { type: string }
+        code: { type: string }
+        details: { type: string }
+    HealthResponse:
+      type: object
+      properties:
+        status: { type: string }
+        service: { type: string }
+        uptime: { type: number }
+    MessageData:
+      type: object
+      properties:
+        id: { type: string }
+        role: { type: string, enum: [user, assistant, system, tool] }
+        content: { type: string }
+        created_at: { type: string, format: date-time }

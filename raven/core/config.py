@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     dm_policy: str = "pairing"
     web_port: int = 18888
     web_secret_key: str = ""
-    web_cors_origins: str = "*"
+    web_cors_origins: str = "http://localhost:5173,http://localhost:3000,http://localhost:18888"
     rate_limit_max: int = 60
     rate_limit_window: int = 60
     json_log: bool = True
@@ -101,6 +101,8 @@ class Settings(BaseSettings):
 
     def validate(self) -> bool:  # type: ignore[override]
         errors = []
+        if not self.web_secret_key:
+            errors.append("WEB_SECRET_KEY must be set to a non-empty value")
         if self.dm_policy not in ("pairing", "open", "closed"):
             errors.append(f"DM_POLICY must be 'pairing', 'open', or 'closed', got '{self.dm_policy}'")
         if self.web_port < 1 or self.web_port > 65535:

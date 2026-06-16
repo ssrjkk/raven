@@ -44,3 +44,13 @@ services/*/bin/
 # Test artifacts
 .coverage
 tmp_test_secrets/
+allure-results*/
+allure-report/
+test-results*/
+web/test-results/
+web/playwright-report/
+web/playwright-results/
+web/coverage/
+*.coverage.out
+coverage.xml
+coverage.html

@@ -10,7 +10,13 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from loguru import logger
 
+try:
+    from opentelemetry_setup import setup_opentelemetry
+except ImportError:
+    def setup_opentelemetry(app=None, service_name=None): pass
+
 app = FastAPI(title="Code Service", version="1.0.0")
+setup_opentelemetry(app, service_name="code-service")
 started_at = 0.0
 
 ALLOWED_EXTENSIONS = {".py", ".js", ".ts", ".rs", ".go", ".java", ".cpp", ".h"}
@@ -32,6 +38,11 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
+    try:
+        from opentelemetry import trace
+        trace.get_tracer_provider().shutdown()
+    except Exception:
+        pass
     logger.info("code-service shutdown")
 
 

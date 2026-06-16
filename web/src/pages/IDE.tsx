@@ -37,13 +37,13 @@ export default function IDEPage() {
     if (!terminalInput.trim()) return
     const cmd = terminalInput.trim()
     setTerminalInput("")
-    setTerminalHistory(h => [...h, { input: cmd, output: "Executing..." }])
+    setTerminalHistory(h => [...h, { input: cmd, output: "Processing..." }])
     scrollTerminal()
     try {
-      const res = await fetch("/api/aios/exec", {
+      const res = await fetch("/api/v1/agent/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command: cmd }),
+        body: JSON.stringify({ command: cmd, context: "ide-terminal" }),
       })
       const data = await res.json()
       setTerminalHistory(h => {
@@ -54,7 +54,7 @@ export default function IDEPage() {
     } catch {
       setTerminalHistory(h => {
         const copy = [...h]
-        copy[copy.length - 1] = { input: cmd, output: "[executed locally]" }
+        copy[copy.length - 1] = { input: cmd, output: "[agent unavailable]" }
         return copy
       })
     }

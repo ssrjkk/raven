@@ -123,11 +123,9 @@ async def auth_middleware(request: Request, call_next):
         if session:
             request.state.user_role = session["role"]
             request.state.user_id = session["user_id"]
-        else:
-            secret_key = settings.web_secret_key
-            if secret_key and token == secret_key:
-                request.state.user_role = Role.ADMIN.value
-                request.state.user_id = "admin"
+        elif settings.web_secret_key and token == settings.web_secret_key:
+            request.state.user_role = Role.ADMIN.value
+            request.state.user_id = "admin"
 
     path = request.url.path
     for prefix, required_perm in PATH_PERMISSIONS.items():

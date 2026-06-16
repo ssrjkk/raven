@@ -12,7 +12,13 @@ from loguru import logger
 from llm_router import LLMRouter
 from nats_client import NATSClient
 
+try:
+    from opentelemetry_setup import setup_opentelemetry
+except ImportError:
+    def setup_opentelemetry(app=None, service_name=None): pass
+
 app = FastAPI(title="Agent Core", version="1.0.0")
+setup_opentelemetry(app, service_name="agent-core")
 if not os.environ.get("LLM_API_KEY"):
     logger.warning("LLM_API_KEY not set — LLM calls will fail")
 llm = LLMRouter()

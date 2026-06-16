@@ -5,6 +5,11 @@ from pathlib import Path
 from typing import Any
 
 
+ALLOWED_PROFILES = frozenset({"messaging", "minimal", "full"})
+
+MAX_PATH_DEPTH = 20
+
+
 class ExecSecurity(str, Enum):
     DENY = "deny"
     ASK = "ask"
@@ -15,6 +20,28 @@ class ExecAskMode(str, Enum):
     OFF = "off"
     ON_MISS = "on-miss"
     ALWAYS = "always"
+
+
+def _resolve_safe(path_str: str, root: Path | None = None) -> Path | None:
+    if not path_str or not path_str.strip():
+        return None
+    if "\x00" in path_str:
+        return None
+    try:
+        p = Path(path_str).resolve(strict=False)
+    except (RuntimeError, OSError):
+        return None
+    parts = p.parts
+    depth = sum(1 for part in parts if part not in ("/", "\\", "."))
+    if depth > MAX_PATH_DEPTH:
+        return None
+    if root is not None:
+        root_resolved = root.resolve()
+        try:
+            p.relative_to(root_resolved)
+        except ValueError:
+            return None
+    return p
 
 
 class ToolPolicyEvaluator:
@@ -28,13 +55,13 @@ class ToolPolicyEvaluator:
         workspace_only: bool = True,
         workspace_root: str | None = None,
     ):
-        self.profile = profile
+        self.profile = profile if profile in ALLOWED_PROFILES else "messaging"
         self._deny = set(deny or [])
         self._allow = set(allow or [])
         self.exec_security = exec_security
         self.exec_ask = exec_ask
         self.workspace_only = workspace_only
-        self._workspace_root = Path(workspace_root).resolve() if workspace_root else None
+        self._workspace_root = _resolve_safe(workspace_root) if workspace_root else None
 
         self._profiles: dict[str, set[str]] = {
             "messaging": {"file.read", "notify.send", "memory.search", "web.search"},
@@ -43,7 +70,10 @@ class ToolPolicyEvaluator:
         }
 
     def set_workspace_root(self, path: str | Path):
-        self._workspace_root = Path(path).resolve()
+        root = _resolve_safe(str(path)) if isinstance(path, Path) else _resolve_safe(path)
+        if root is None:
+            raise ValueError(f"Invalid workspace root: {path}")
+        self._workspace_root = root
 
     def _profile_tools(self) -> set[str]:
         return self._profiles.get(self.profile, set())
@@ -71,10 +101,13 @@ class ToolPolicyEvaluator:
     def check_path(self, path: str) -> bool:
         if not self.workspace_only or not self._workspace_root:
             return True
+        resolved = _resolve_safe(path, self._workspace_root)
+        if resolved is None:
+            return False
         try:
-            resolved = Path(path).resolve()
-            return str(resolved).startswith(str(self._workspace_root))
-        except Exception:
+            resolved.relative_to(self._workspace_root)
+            return True
+        except ValueError:
             return False
 
     async def check_exec(
@@ -101,9 +134,10 @@ class ToolPolicyEvaluator:
 
         if self.workspace_only:
             for k, v in args.items():
-                if isinstance(v, str) and ("/" in v or "\\" in v):
-                    if not self.check_path(v):
-                        return False, f"path '{v}' outside workspace root"
+                if isinstance(v, str):
+                    resolved = _resolve_safe(v, self._workspace_root)
+                    if resolved is None:
+                        return False, f"path '{v}' outside workspace root or invalid"
 
         if self.exec_security == ExecSecurity.FULL:
             return True, None

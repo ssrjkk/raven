@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -95,9 +96,23 @@ func (rl *RateLimiter) cleanup(interval time.Duration) {
 	}
 }
 
+func clientIP(r *http.Request) string {
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		if idx := strings.IndexByte(fwd, ','); idx >= 0 {
+			return strings.TrimSpace(fwd[:idx])
+		}
+		return strings.TrimSpace(fwd)
+	}
+	host := r.RemoteAddr
+	if idx := strings.LastIndexByte(host, ':'); idx >= 0 {
+		host = host[:idx]
+	}
+	return host
+}
+
 func (g *Gateway) rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		key := r.RemoteAddr
+		key := clientIP(r)
 		if userID, ok := r.Context().Value(contextUserID).(string); ok && userID != "" {
 			key = "user:" + userID
 		}

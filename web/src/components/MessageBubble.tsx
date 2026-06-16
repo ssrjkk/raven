@@ -1,4 +1,5 @@
 import ReactMarkdown from "react-markdown";
+import rehypeSanitize from "rehype-sanitize";
 import { MessageData } from "../api/client";
 
 interface MessageBubbleProps {
@@ -54,5 +55,5 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
 }
 
 function MarkdownContent({ content }: { content: string }) {
-  return <ReactMarkdown>{content}</ReactMarkdown>;
+  return <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{content}</ReactMarkdown>;
 }

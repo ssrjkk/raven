@@ -17,7 +17,13 @@ from loguru import logger
 from services.observability_sdk.idempotency import IdempotencyStore
 from services.observability_sdk.outbox import OutboxStore
 
+try:
+    from opentelemetry_setup import setup_opentelemetry
+except ImportError:
+    def setup_opentelemetry(app=None, service_name=None): pass
+
 app = FastAPI(title="Task Engine", version="1.0.0")
+setup_opentelemetry(app, service_name="task-engine")
 started_at = 0.0
 outbox: OutboxStore | None = None
 idempotency: IdempotencyStore | None = None

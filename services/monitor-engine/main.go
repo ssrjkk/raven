@@ -213,7 +213,18 @@ func (m *MonitorEngine) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/monitors", m.createMonitor)
 	mux.HandleFunc("DELETE /api/v1/monitors/{id}", m.deleteMonitor)
 
-	return otelhttp.NewHandler(m.metricsMiddleware(m.requestIDMiddleware(m.loggingMiddleware(mux))), "monitor-engine")
+	return otelhttp.NewHandler(m.metricsMiddleware(m.requestIDMiddleware(m.loggingMiddleware(m.authMiddleware(mux)))), "monitor-engine")
+}
+
+func (m *MonitorEngine) authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" || len(authHeader) < 7 || authHeader[:7] != "Bearer " {
+			writeMonitorError(w, http.StatusUnauthorized, "missing or invalid token")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (m *MonitorEngine) requestIDMiddleware(next http.Handler) http.Handler {
@@ -239,7 +250,6 @@ func (m *MonitorEngine) loggingMiddleware(next http.Handler) http.Handler {
 			"status", sw.status, "duration_ms", time.Since(start).Milliseconds(),
 			"req_id", reqID,
 		)
-		m.httpRequests.WithLabelValues(r.Method, r.URL.Path, fmt.Sprint(sw.status)).Inc()
 	})
 }
 
@@ -285,8 +295,10 @@ func (m *MonitorEngine) createMonitor(w http.ResponseWriter, r *http.Request) {
 	mon.Enabled = true
 	mon.LastStatus = "pending"
 
+	monPtr := &mon
+
 	m.checksMu.Lock()
-	m.checks[mon.ID] = &mon
+	m.checks[mon.ID] = monPtr
 	m.checksMu.Unlock()
 
 	if m.db != nil {
@@ -301,7 +313,7 @@ func (m *MonitorEngine) createMonitor(w http.ResponseWriter, r *http.Request) {
 	m.cancelMu.Lock()
 	m.cancels[mon.ID] = monCancel
 	m.cancelMu.Unlock()
-	go m.runCheck(monCtx, &mon)
+	go m.runCheck(monCtx, monPtr)
 
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, http.StatusCreated, mon)
@@ -371,12 +383,14 @@ func (m *MonitorEngine) runCheck(ctx context.Context, mon *Monitor) {
 			}
 		}
 
-		if m.js != nil {
+		if m.js != nil && m.nc.IsConnected() {
 			result, _ := json.Marshal(map[string]interface{}{
 				"monitor_id": mon.ID, "status": mon.LastStatus,
 				"duration_ms": mon.LastDurationMs, "timestamp": time.Now().Unix(),
 			})
-			m.js.Publish(ctx, "monitor.check.completed", result)
+			if _, err := m.js.Publish(ctx, "monitor.check.completed", result); err != nil {
+				m.logger.Warn("nats publish failed", "monitor_id", mon.ID, "error", err)
+			}
 		}
 
 		m.activeChecks.Dec()
@@ -408,15 +422,16 @@ func (m *MonitorEngine) loadChecks() {
 			continue
 		}
 		mon.Enabled = enabledInt == 1
+		monPtr := &mon
 		m.checksMu.Lock()
-		m.checks[mon.ID] = &mon
+		m.checks[mon.ID] = monPtr
 		m.checksMu.Unlock()
 
 		monCtx, monCancel := context.WithCancel(m.rootCtx)
 		m.cancelMu.Lock()
 		m.cancels[mon.ID] = monCancel
 		m.cancelMu.Unlock()
-		go m.runCheck(monCtx, &mon)
+		go m.runCheck(monCtx, monPtr)
 	}
 	if err := rows.Err(); err != nil {
 		m.logger.Error("rows iteration failed", "error", err)

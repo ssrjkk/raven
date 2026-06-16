@@ -12,7 +12,7 @@ class ContextVisibility(str, Enum):
     ALLOWLIST_QUOTE = "allowlist_quote"
 
 
-_ROLE_MARKERS = re.compile(r"<\|(?:im_start|im_end|system|user|assistant|tool)(?:\|.*?)?\||")
+_ROLE_MARKERS = re.compile(r"<\|(?:im_start|im_end|system|user|assistant|tool)(?:\|.*?)?\|>")
 _SYS_PROMPT_PATTERNS = re.compile(
     r"(you\s+are\s+(?:a|an)?\s*(?:helpful|expert|ai|assistant)|"
     r"system\s*(?:prompt|instruction|message)|"

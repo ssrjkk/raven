@@ -28,9 +28,17 @@ export function useWebSocket(onMessage: Handler) {
     ws.onerror = () => ws.close();
     ws.onmessage = (e) => {
       try {
-        const data = JSON.parse(e.data) as WsMessage;
-        handlerRef.current(data);
-      } catch { /* ignore */ }
+        const parsed = JSON.parse(e.data);
+        if (!parsed || typeof parsed !== "object") return;
+        if (typeof parsed.type !== "string" || typeof parsed.content !== "string") return;
+        const msg: WsMessage = {
+          type: parsed.type as WsMessage["type"],
+          role: String(parsed.role ?? "assistant"),
+          content: parsed.content.slice(0, 100000),
+          session_id: String(parsed.session_id ?? ""),
+        };
+        handlerRef.current(msg);
+      } catch { /* ignore malformed messages */ }
     };
     wsRef.current = ws;
   }, []);

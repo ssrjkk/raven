@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import textwrap
 from pathlib import Path
@@ -17,10 +18,17 @@ IS_MACOS = sys.platform == "darwin"
 
 def _find_raven() -> str:
     """Return the path to the 'raven' executable."""
-    which = os.popen("which raven 2>/dev/null || where raven 2>nul").read().strip()
-    if which:
-        return which
-    return sys.executable + " -m raven.cli.main"
+    try:
+        result = subprocess.run(
+            ["which", "raven"] if not IS_WINDOWS else ["where", "raven"],
+            capture_output=True, text=True, timeout=5,
+        )
+        path = result.stdout.strip()
+        if path:
+            return path
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    return f"{sys.executable} -m raven.cli.main"
 
 
 def _find_project_root() -> Path | None:
@@ -231,15 +239,27 @@ def _uninstall_launchd():
 
 
 def _run_python(module: str, *args: str):
-    cmd = f"{sys.executable} -m {module} {' '.join(args)}"
-    rc = os.system(cmd)
-    if rc != 0:
-        console.print(f"[yellow]Command exited with code {rc}: {cmd}[/yellow]")
+    cmd = [sys.executable, "-m", module, *args]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    if result.returncode != 0:
+        console.print(f"[yellow]Command failed ({result.returncode}): {' '.join(cmd)}[/yellow]")
+        if result.stderr:
+            console.print(f"[dim]{result.stderr.strip()}[/dim]")
 
 
 def _run_systemctl(action: str):
-    os.system(f"systemctl {action} raven.service")
+    result = subprocess.run(
+        ["systemctl", action, "raven.service"],
+        capture_output=True, text=True, timeout=30,
+    )
+    if result.returncode != 0:
+        console.print(f"[yellow]systemctl {action} failed: {result.stderr.strip()}[/yellow]")
 
 
 def _run_launchctl(action: str, target: str = "com.raven.ai"):
-    os.system(f"launchctl {action} {target}")
+    result = subprocess.run(
+        ["launchctl", action, target],
+        capture_output=True, text=True, timeout=15,
+    )
+    if result.returncode != 0 and action != "list":
+        console.print(f"[yellow]launchctl {action} {target} failed: {result.stderr.strip()}[/yellow]")

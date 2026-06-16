@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import uuid
 from enum import Enum, IntEnum
 from typing import Any
@@ -49,7 +50,7 @@ class Task(BaseModel):
     current_step_index: int = 0
     result: str | None = None
     error: str | None = None
-    created_at: float = Field(default_factory=lambda: __import__("time").time())
-    updated_at: float = Field(default_factory=lambda: __import__("time").time())
+    created_at: float = Field(default_factory=lambda: time.time())
+    updated_at: float = Field(default_factory=lambda: time.time())
     scheduled_at: float | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)

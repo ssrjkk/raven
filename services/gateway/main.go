@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -129,18 +130,20 @@ func (g *Gateway) Routes() http.Handler {
 	})
 	mux.Handle("GET /metrics", promhttp.Handler())
 
-	mux.HandleFunc("POST /api/v1/auth/register", g.proxyTo("http://auth:8001"))
-	mux.HandleFunc("POST /api/v1/auth/login", g.proxyTo("http://auth:8001"))
-	mux.HandleFunc("POST /api/v1/auth/validate", g.proxyTo("http://auth:8001"))
+	authEP := g.proxyTo()
+	mux.HandleFunc("POST /api/v1/auth/register", authEP)
+	mux.HandleFunc("POST /api/v1/auth/login", authEP)
+	mux.HandleFunc("POST /api/v1/auth/validate", authEP)
 
-	mux.Handle("GET /api/v1/monitors", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://monitor-engine:8003"))))
-	mux.Handle("POST /api/v1/monitors", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://monitor-engine:8003"))))
-	mux.Handle("DELETE /api/v1/monitors/", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://monitor-engine:8003"))))
-	mux.Handle("GET /api/v1/rag/", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://rag-service:8004"))))
-	mux.Handle("POST /api/v1/rag/", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://rag-service:8004"))))
-	mux.Handle("/api/v1/tasks/", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://task-engine:8005"))))
-	mux.Handle("POST /api/v1/code/", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://code-service:8006"))))
-	mux.Handle("/api/v1/agent/", g.authMiddleware(http.HandlerFunc(g.proxyTo("http://agent-core:8002"))))
+	authMw := g.authMiddleware(http.HandlerFunc(g.proxyTo()))
+	mux.Handle("GET /api/v1/monitors", authMw)
+	mux.Handle("POST /api/v1/monitors", authMw)
+	mux.Handle("DELETE /api/v1/monitors/", authMw)
+	mux.Handle("GET /api/v1/rag/", authMw)
+	mux.Handle("POST /api/v1/rag/", authMw)
+	mux.Handle("/api/v1/tasks/", authMw)
+	mux.Handle("POST /api/v1/code/", authMw)
+	mux.Handle("/api/v1/agent/", authMw)
 
 	rateLimited := g.rateLimitMiddleware(g.metricsMiddleware(g.requestIDMiddleware(g.loggingMiddleware(mux))))
 	return otelhttp.NewHandler(rateLimited, "gateway")
@@ -215,10 +218,41 @@ func (g *Gateway) metricsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (g *Gateway) proxyTo(base string) http.HandlerFunc {
+var allowedUpstreamPrefixes = []struct {
+	prefix string
+	base   string
+}{
+	{"POST /api/v1/auth/register", "http://auth:8001"},
+	{"POST /api/v1/auth/login", "http://auth:8001"},
+	{"POST /api/v1/auth/validate", "http://auth:8001"},
+	{"GET /api/v1/monitors", "http://monitor-engine:8003"},
+	{"POST /api/v1/monitors", "http://monitor-engine:8003"},
+	{"DELETE /api/v1/monitors/", "http://monitor-engine:8003"},
+	{"GET /api/v1/rag/", "http://rag-service:8004"},
+	{"POST /api/v1/rag/", "http://rag-service:8004"},
+	{"/api/v1/tasks/", "http://task-engine:8005"},
+	{"POST /api/v1/code/", "http://code-service:8006"},
+	{"/api/v1/agent/", "http://agent-core:8002"},
+}
+
+func (g *Gateway) resolveUpstream(method, path string) (string, bool) {
+	key := method + " " + path
+	for _, u := range allowedUpstreamPrefixes {
+		if strings.HasPrefix(key, u.prefix) || strings.HasPrefix(path, u.prefix) {
+			return u.base + path, true
+		}
+	}
+	return "", false
+}
+
+func (g *Gateway) proxyTo() http.HandlerFunc {
 	client := &http.Client{Timeout: 30 * time.Second}
 	return func(w http.ResponseWriter, r *http.Request) {
-		target := base + r.URL.Path
+		target, ok := g.resolveUpstream(r.Method, r.URL.Path)
+		if !ok {
+			writeError(w, http.StatusForbidden, ErrForbidden, "upstream not allowed for this path")
+			return
+		}
 		if r.URL.RawQuery != "" {
 			target += "?" + r.URL.RawQuery
 		}

@@ -52,13 +52,8 @@ export default function Layout() {
             className="w-full text-center text-xs text-gray-500 hover:text-red-400 transition font-medium">
             Sign Out
           </button>
-          <div className="text-[10px] text-gray-600 text-center space-y-1">
-            <div>Telegram: @ssrjkk</div>
-            <div>GitHub: github.com/ssrjkk</div>
-            <div>Email: ray013lefe@gmail.com</div>
-          </div>
           <div className="text-[10px] text-gray-700 text-center">
-            Raven AI v0.2.0
+            Raven AI v{import.meta.env.VITE_APP_VERSION || "0.2.0"}
           </div>
         </div>
       </aside>

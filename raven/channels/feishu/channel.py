@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 from loguru import logger
 from typing import Any
@@ -37,12 +38,12 @@ class FeishuChannel(EnterpriseChannel):
                 data = resp.json()
                 self._tenant_token = data.get("tenant_access_token", "")
                 expires_in = data.get("expire", 3600)
-                self._token_expires = __import__("time").time() + expires_in - 60
+                self._token_expires = time.time() + expires_in - 60
         except Exception as e:
             logger.error("[feishu] token refresh failed: {}", e)
 
     async def _ensure_token(self):
-        if self._app_id and self._app_secret and __import__("time").time() > self._token_expires:
+        if self._app_id and self._app_secret and time.time() > self._token_expires:
             await self._refresh_token()
 
     async def handle_webhook(self, body: dict[str, Any]) -> bool:
