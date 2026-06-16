@@ -56,7 +56,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/${{ matrix.service }}
           tags: |
@@ -64,7 +64,7 @@ jobs:
             type=raw,value=canary
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ${{ steps.ctx.outputs.context }}
           push: true
