@@ -25,15 +25,16 @@ class ModelFailover:
 
     def _build_models(self):
         models = []
+        if settings.ollama_base_url:
+            models.append(ModelConfig("ollama", "llama3", 1.0))
+            models.append(ModelConfig("ollama", "mistral", 0.8))
         if settings.openrouter_api_key:
             m = settings.default_model or "openrouter/openai/gpt-4o"
-            models.append(ModelConfig("openrouter", m, 1.0))
+            models.append(ModelConfig("openrouter", m, 0.7))
         if settings.anthropic_api_key:
-            models.append(ModelConfig("anthropic", "claude-sonnet-4-20250514", 0.8))
+            models.append(ModelConfig("anthropic", "claude-sonnet-4-20250514", 0.6))
         if settings.openai_api_key:
-            models.append(ModelConfig("openai", "gpt-4o", 0.7))
-        if settings.ollama_base_url:
-            models.append(ModelConfig("ollama", "llama3", 0.5))
+            models.append(ModelConfig("openai", "gpt-4o", 0.5))
         self._models = models
 
     async def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> LLMResponse:

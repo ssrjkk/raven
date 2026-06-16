@@ -7,7 +7,7 @@ from raven.core.config import settings
 
 class TestSettings:
     def test_default_model(self):
-        assert settings.default_model == "openrouter/openai/gpt-4o"
+        assert settings.default_model == "ollama/llama3"
 
     def test_web_port(self):
         assert isinstance(settings.web_port, int)

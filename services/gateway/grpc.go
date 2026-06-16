@@ -6,13 +6,16 @@ import (
 	"crypto/x509"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"time"
 
 	pb "github.com/ssrjkk/raven/services/proto/go/auth/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 type AuthClient struct {
@@ -21,8 +24,53 @@ type AuthClient struct {
 	logger *slog.Logger
 }
 
+func retryInterceptor(logger *slog.Logger, maxRetries int) grpc.UnaryClientInterceptor {
+	return func(
+		ctx context.Context,
+		method string,
+		req, reply interface{},
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		opts ...grpc.CallOption,
+	) error {
+		var lastErr error
+		for attempt := 0; attempt <= maxRetries; attempt++ {
+			if attempt > 0 {
+				delay := time.Duration(math.Pow(2, float64(attempt-1))) * 100 * time.Millisecond
+				if delay > 2*time.Second {
+					delay = 2 * time.Second
+				}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(delay):
+				}
+			}
+			err := invoker(ctx, method, req, reply, cc, opts...)
+			if err == nil {
+				return nil
+			}
+			st, ok := status.FromError(err)
+			if !ok {
+				return err
+			}
+			code := st.Code()
+			if code == codes.Unavailable || code == codes.DeadlineExceeded || code == codes.ResourceExhausted {
+				lastErr = err
+				logger.Warn("gRPC retry", "method", method, "attempt", attempt, "error", err)
+				continue
+			}
+			return err
+		}
+		return lastErr
+	}
+}
+
 func NewAuthClient(target string, logger *slog.Logger) (*AuthClient, error) {
-	dialOpts := []grpc.DialOption{grpc.WithTimeout(5 * time.Second)}
+	dialOpts := []grpc.DialOption{
+		grpc.WithUnaryInterceptor(retryInterceptor(logger, 2)),
+		grpc.WithIdleTimeout(30 * time.Second),
+	}
 
 	certFile := os.Getenv("GRPC_TLS_CERT")
 	caFile := os.Getenv("GRPC_TLS_CA")
@@ -42,7 +90,9 @@ func NewAuthClient(target string, logger *slog.Logger) (*AuthClient, error) {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
-	conn, err := grpc.NewClient(target, dialOpts...)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := grpc.DialContext(ctx, target, dialOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("grpc dial: %w", err)
 	}

@@ -1,27 +1,56 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import hashlib
+from functools import lru_cache
+from typing import Any
 
 import numpy as np
 from loguru import logger
 
-if TYPE_CHECKING:
+
+@lru_cache(maxsize=2048)
+def _embed_text_cached(model_name: str, text: str) -> bytes:
+    import pickle
     from sentence_transformers import SentenceTransformer
+
+    model = SentenceTransformer(model_name)
+    emb = model.encode([text], show_progress_bar=False)
+    return pickle.dumps(emb.tolist()[0])
 
 
 class EmbeddingEngine:
-    def __init__(self, provider: str = "openai", model: str | None = None):
-        self.provider = provider
+    def __init__(self, provider: str | None = None, model: str | None = None):
+        self.provider = provider or "local"
         self.model = model
-        self._local_model: SentenceTransformer | None = None
+        self._cache: dict[str, list[float]] = {}
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        if self.provider == "openai":
-            return await self._embed_openai(texts)
-        elif self.provider == "local":
-            return await self._embed_local(texts)
+        results: list[list[float]] = []
+        uncached: list[tuple[int, str]] = []
+        for i, t in enumerate(texts):
+            key = hashlib.sha256(t.encode()).hexdigest()
+            cached = self._cache.get(key)
+            if cached is not None:
+                results.append(cached)
+            else:
+                results.append([])
+                uncached.append((i, t))
+        if not uncached:
+            return results
+        uncached_texts = [t for _, t in uncached]
+        if self.provider == "local":
+            embeddings = await self._embed_local(uncached_texts)
         else:
-            return await self._embed_openai(texts)
+            embeddings = await self._embed_openai(uncached_texts)
+        for (idx, _), emb in zip(uncached, embeddings):
+            key = hashlib.sha256(texts[idx].encode()).hexdigest()
+            self._cache[key] = emb
+            results[idx] = emb
+        if len(self._cache) > 4096:
+            evict = list(self._cache.keys())[:2048]
+            for k in evict:
+                self._cache.pop(k, None)
+        return results
 
     async def _embed_openai(self, texts: list[str]) -> list[list[float]]:
         model = self.model or "text-embedding-3-small"
@@ -41,27 +70,28 @@ class EmbeddingEngine:
                 if resp.status_code == 200:
                     data = resp.json()
                     return [d["embedding"] for d in data["data"]]
-                else:
-                    logger.error("OpenAI embedding error: {} {}", resp.status_code, resp.text)
-                    return await self._embed_local(texts)
+                logger.error("OpenAI embedding error: {} {}", resp.status_code, resp.text)
+                return await self._embed_local(texts)
         except Exception as e:
             logger.error("OpenAI embedding failed: {}", e)
             return await self._embed_local(texts)
 
     async def _embed_local(self, texts: list[str]) -> list[list[float]]:
         try:
-            if self._local_model is None:
-                from sentence_transformers import SentenceTransformer
+            import pickle
 
-                model_name = self.model or "all-MiniLM-L6-v2"
-                self._local_model = SentenceTransformer(model_name)
-            emb = self._local_model.encode(texts, show_progress_bar=False)
-            return emb.tolist()  # type: ignore[no-any-return]
+            from sentence_transformers import SentenceTransformer
+
+            model_name = self.model or "all-MiniLM-L6-v2"
+            model = SentenceTransformer(model_name)
+            embeddings = model.encode(texts, show_progress_bar=False)
+            return embeddings.tolist()
         except ImportError:
-            return [np.random.rand(384).tolist() for _ in texts]
+            logger.warning("sentence-transformers not installed, returning zero vectors")
+            return [[0.0] * 384 for _ in texts]
         except Exception as e:
             logger.error("Local embedding failed: {}", e)
-            return [np.random.rand(384).tolist() for _ in texts]
+            return [[0.0] * 384 for _ in texts]
 
     @staticmethod
     def _get_openai_key() -> str:
@@ -73,3 +103,6 @@ class EmbeddingEngine:
             import os
 
             return os.environ.get("OPENAI_API_KEY", "")
+
+    def clear_cache(self):
+        self._cache.clear()

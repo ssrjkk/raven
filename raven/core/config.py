@@ -21,8 +21,8 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     anthropic_api_key: str = ""
     openai_api_key: str = ""
-    ollama_base_url: str = ""
-    default_model: str = "openrouter/openai/gpt-4o"
+    ollama_base_url: str = "http://localhost:11434"
+    default_model: str = "ollama/llama3"
 
     telegram_bot_token: str = ""
     discord_bot_token: str = ""

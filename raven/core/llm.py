@@ -318,7 +318,7 @@ class LLMRouter:
         elif model.startswith("gpt") or model.startswith("o1") or model.startswith("o3"):
             key = "openai"
         else:
-            key = "openrouter"
+            key = "ollama"
         if key not in self._providers:
             mapping = {
                 "openrouter": OpenRouterProvider,

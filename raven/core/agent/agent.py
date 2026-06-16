@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+from enum import Enum, auto
 from typing import Any, AsyncIterator
 
 from loguru import logger
@@ -8,6 +10,15 @@ from loguru import logger
 from raven.core.db import Database
 from raven.core.llm import LLMRouter, ToolCall
 from raven.core.models import Message, PluginTool, Session
+
+
+class AgentState(Enum):
+    INIT = auto()
+    THINK = auto()
+    TOOL_CALL = auto()
+    TOOL_RESULT = auto()
+    ERROR = auto()
+    DONE = auto()
 
 
 class AgentConfig:
@@ -110,11 +121,7 @@ class Agent:
 
     async def _load_history(self) -> list[dict[str, Any]]:
         msgs = await self.db.get_session_messages(self.session.id, limit=self.config.max_history)
-        history: list[dict[str, Any]] = []
-        for m in msgs:
-            entry: dict[str, Any] = {"role": m.role, "content": m.content}
-            history.append(entry)
-        return history
+        return [{"role": m.role, "content": m.content} for m in msgs]
 
     async def _compress(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if len(messages) <= 6:
@@ -163,16 +170,32 @@ class Agent:
             logger.debug("Recall error: {}", e)
             return None
 
+    def _detect_loop(self, history: list[dict[str, Any]]) -> bool:
+        tool_calls = [
+            m.get("tool_calls", [{}])[0].get("function", {}).get("name", "")
+            for m in history
+            if m.get("role") == "assistant" and m.get("tool_calls")
+        ]
+        if len(tool_calls) < 4:
+            return False
+        recent = tool_calls[-4:]
+        return len(set(recent)) == 1
+
     async def run(
         self,
         user_message: str,
         recall_context: str | None = None,
     ) -> AsyncIterator[str]:
+        state = AgentState.INIT
+        messages: list[dict[str, Any]] = [{"role": "system", "content": self._build_system_prompt()}]
+        tool_used = False
+        final_content = ""
+        consecutive_errors = 0
+        delay = 0.5
+
         if not self.config.stateless:
             if recall_context is None:
                 recall_context = await self._get_recall_context(user_message)
-
-        messages: list[dict[str, Any]] = [{"role": "system", "content": self._build_system_prompt()}]
         if recall_context:
             messages.append({"role": "system", "content": f"Relevant memories:\n{recall_context}"})
 
@@ -185,28 +208,64 @@ class Agent:
             messages = await self._compress(messages)
 
         schemas = self._tool_schemas() if self.tools else None
-        tool_used = False
-        final_content = ""
+        state = AgentState.THINK
 
         for round_i in range(self.config.max_tool_rounds):
-            resp = await self.llm.complete(messages, tools=schemas)
-            content = resp.content or ""
+            if state == AgentState.DONE:
+                break
+            if consecutive_errors >= 3:
+                logger.error("Agent: too many consecutive errors, aborting")
+                final_content = "I encountered repeated errors and could not complete the request."
+                break
 
-            if resp.tool_calls:
-                tool_used = True
-                messages.append(
-                    {"role": "assistant", "content": content, "tool_calls": [tc.to_dict() for tc in resp.tool_calls]}
-                )
-                for tc in resp.tool_calls:
-                    tool_result = await self._execute_tool(tc)
-                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(tool_result)})
-                    yield f"[{tc.name} → ok]\n"
-                continue
+            try:
+                if self._detect_loop(messages):
+                    logger.warning("Agent: detected tool call loop at round {}", round_i)
+                    messages.append({
+                        "role": "system",
+                        "content": "You are repeating the same tool call. Try a different approach or respond directly."
+                    })
 
-            final_content = content
-            break
+                resp = await self.llm.complete(messages, tools=schemas)
+                consecutive_errors = 0
+                delay = 0.5
+                content = resp.content or ""
+
+                if resp.tool_calls:
+                    state = AgentState.TOOL_CALL
+                    tool_used = True
+                    messages.append({
+                        "role": "assistant",
+                        "content": content,
+                        "tool_calls": [tc.to_dict() for tc in resp.tool_calls],
+                    })
+                    for tc in resp.tool_calls:
+                        tool_result = await self._execute_tool(tc)
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "content": json.dumps(tool_result),
+                        })
+                        yield f"[{tc.name} → ok]\n"
+                    state = AgentState.THINK
+                    continue
+
+                final_content = content
+                state = AgentState.DONE
+                break
+
+            except Exception as e:
+                state = AgentState.ERROR
+                consecutive_errors += 1
+                logger.error("Agent: LLM call failed (round {}/{}): {}", round_i + 1, self.config.max_tool_rounds, e)
+                if consecutive_errors < 3:
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, 8.0)
+                    continue
+                final_content = "An error occurred while processing your request. Please try again."
+                break
         else:
-            final_content = "I apologize, but I couldn't complete that request."
+            final_content = "I apologize, but I couldn't complete that request in the allotted steps."
 
         if final_content:
             yield final_content

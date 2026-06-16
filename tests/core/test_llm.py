@@ -82,7 +82,7 @@ class TestLLMRouter:
     def test_get_provider_fallback(self):
         router = LLMRouter()
         prov = router._get_provider("unknown/model")
-        assert prov.__class__.__name__ == "OpenRouterProvider"
+        assert prov.__class__.__name__ == "OllamaProvider"
 
     def test_get_provider_empty_default(self):
         router = LLMRouter()
