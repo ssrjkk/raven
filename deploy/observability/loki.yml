@@ -1,4 +1,6 @@
-auth_enabled: false
+auth_enabled: true
+multi_tenant_alertmanager:
+  enabled: false
 
 server:
   http_listen_port: 3100

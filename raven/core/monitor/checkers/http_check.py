@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from raven.core.http_client import client_manager
+from raven.core.security.ssrf import validate_url
 
 if TYPE_CHECKING:
     from raven.core.monitor.models import Monitor
@@ -10,6 +11,9 @@ if TYPE_CHECKING:
 
 async def check_http(monitor: Monitor) -> str | None:
     url = monitor.config.get("target", monitor.target)
+    error = validate_url(url)
+    if error:
+        return f"🔴 HTTP check blocked: {error}"
     method = monitor.config.get("method", "GET").upper()
     headers = monitor.config.get("headers", {})
     timeout = monitor.config.get("timeout", 15)

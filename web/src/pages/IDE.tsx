@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from "react"
 import Editor from "@monaco-editor/react"
+import { getToken } from "../api/client"
 
 interface TerminalLine {
   input: string
@@ -18,12 +19,17 @@ export default function IDEPage() {
     setTimeout(() => terminalEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
   }, [])
 
+  function authHeaders(): Record<string, string> {
+    const t = getToken()
+    return t ? { "Content-Type": "application/json", "Authorization": `Bearer ${t}` } : { "Content-Type": "application/json" }
+  }
+
   async function runAI() {
     setOutput("Thinking...")
     try {
       const res = await fetch("/api/aios/ai", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({ prompt: aiPrompt, task: "code" }),
       })
       const data = await res.json()
@@ -42,7 +48,7 @@ export default function IDEPage() {
     try {
       const res = await fetch("/api/v1/agent/execute", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({ command: cmd, context: "ide-terminal" }),
       })
       const data = await res.json()

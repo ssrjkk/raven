@@ -1,3 +1,11 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-admin
+  namespace: raven
+stringData:
+  password: ""  # MUST be set: echo -n $(openssl rand -base64 16) | kubectl create secret generic grafana-admin --namespace=raven --from-file=password=/dev/stdin
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -261,7 +269,10 @@ spec:
               name: http
           env:
             - name: GF_SECURITY_ADMIN_PASSWORD
-              value: "admin"
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: password
 ---
 apiVersion: v1
 kind: Service
@@ -302,10 +313,12 @@ spec:
             - containerPort: 8080
               name: dashboard
           args:
-            - "--api.insecure=true"
+            - "--api.dashboard=true"
+            - "--api.debug=false"
             - "--providers.kubernetescrd=true"
             - "--entrypoints.web.address=:80"
             - "--entrypoints.websecure.address=:443"
+            - "--entrypoints.traefik.address=:8080"
 ---
 apiVersion: v1
 kind: Service

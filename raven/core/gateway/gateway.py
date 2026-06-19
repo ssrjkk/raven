@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import random
+import re
+import secrets
 import string
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -13,18 +14,18 @@ from raven.core.config import settings
 if TYPE_CHECKING:
     from raven.channels.base import BaseChannel
 from raven.core.agent.registry import AgentRegistry
+from raven.core.audit import audit_logger
 from raven.core.db import Database
 from raven.core.failover import ModelFailover
 from raven.core.health import health
 from raven.core.llm import LLMRouter
-from raven.core.audit import audit_logger
 from raven.core.metrics import metrics
 from raven.core.models import IncomingMessage, Message
 from raven.core.plugin_loader import PluginLoader
 from raven.core.sandbox import Sandbox
+from raven.core.security.context_filter import ContextVisibility, filter_context_by_visibility
 from raven.core.self_heal import self_healer
 from raven.core.skills import Skill, skills_registry
-from raven.core.security.context_filter import ContextVisibility, filter_context_by_visibility
 
 
 class Gateway:
@@ -217,17 +218,30 @@ class Gateway:
         is_allowlisted = bool(user.get("is_allowed")) or settings.dm_policy == "open"
         return filter_context_by_visibility(text, visibility, is_allowlisted, user.get("id", ""))
 
-    async def _handle_intent(self, event: IncomingMessage) -> bool:
-        import re
+    _PRICE_PATTERN = re.compile(
+        r"(?:what(?:'s| is| are)?\s+)?(?:the\s+)?(?:price|rate|cost)\s+(?:of\s+)?(\w+)|"
+        r"(\w+)\s+(?:price|rate)(?:\s+now|\s+today)?$|"
+        r"how\s+much\s+is\s+(\w+)"
+    )
+    _MONITOR_PATTERN = re.compile(
+        r"(?:how\s+are\s+my\s+)?monitors?|"
+        r"(?:check|show|list)\s+(?:my\s+)?(?:monitors?|checks?)|"
+        r"(?:monitor|check)\s+(?:status|health)"
+    )
+    _BRIEFING_PATTERN = re.compile(
+        r"(?:good\s+)?morning(?:\s+briefing|\s+summary|\s+report)?$|"
+        r"(?:daily|morning)\s+(?:briefing|summary|update|report)"
+    )
+    _TASK_INTENT = re.compile(
+        r"(?:remind\s+(?:me|us)\s+(?:to|about|that))|"
+        r"(?:set\s+(?:a|an)?\s*(?:reminder|timer|task|alarm))|"
+        r"(?:schedule\s+(?:a|an)?\s*(?:reminder|task))"
+    )
 
+    async def _handle_intent(self, event: IncomingMessage) -> bool:
         text = event.text.strip().lower()
 
-        price_pattern = re.compile(
-            r"(?:what(?:'s| is| are)?\s+)?(?:the\s+)?(?:price|rate|cost)\s+(?:of\s+)?(\w+)|"
-            r"(\w+)\s+(?:price|rate)(?:\s+now|\s+today)?$|"
-            r"how\s+much\s+is\s+(\w+)"
-        )
-        m = price_pattern.search(text)
+        m = self._PRICE_PATTERN.search(text)
         if m:
             coin = m.group(1) or m.group(2) or m.group(3)
             from raven.core.monitor.checkers.price import check_price
@@ -243,18 +257,11 @@ class Gateway:
                 result = await check_price(pseudo)
                 if result:
                     await self._send(event.channel, event.session_id, result)
-                else:
-                    pass
-            except Exception:
-                pass
-            return True if m else False
+            except Exception as e:
+                logger.warning("Price intent failed: {}", e)
+            return True
 
-        monitor_pattern = re.compile(
-            r"(?:how\s+are\s+my\s+)?monitors?|"
-            r"(?:check|show|list)\s+(?:my\s+)?(?:monitors?|checks?)|"
-            r"(?:monitor|check)\s+(?:status|health)"
-        )
-        if monitor_pattern.search(text):
+        if self._MONITOR_PATTERN.search(text):
             from raven.core.monitor.store import MonitorStore
 
             store = MonitorStore(self.db.db_path)
@@ -269,11 +276,7 @@ class Gateway:
             await self._send(event.channel, event.session_id, "\n".join(lines))
             return True
 
-        briefing_pattern = re.compile(
-            r"(?:good\s+)?morning(?:\s+briefing|\s+summary|\s+report)?$|"
-            r"(?:daily|morning)\s+(?:briefing|summary|update|report)"
-        )
-        if briefing_pattern.search(text):
+        if self._BRIEFING_PATTERN.search(text):
             from raven.core.skills import skills_registry
 
             briefing = skills_registry.get("morning_briefing")
@@ -285,15 +288,10 @@ class Gateway:
             await self._send(event.channel, event.session_id, "Morning briefing skill not loaded.")
             return True
 
-        task_intent = re.compile(
-            r"(?:remind\s+(?:me|us)\s+(?:to|about|that))|"
-            r"(?:set\s+(?:a|an)?\s*(?:reminder|timer|task|alarm))|"
-            r"(?:schedule\s+(?:a|an)?\s*(?:reminder|task))"
-        )
-        if task_intent.search(text):
-            from raven.core.task_engine.store import TaskStore
+        if self._TASK_INTENT.search(text):
             from raven.core.task_engine.planner import TaskPlanner
             from raven.core.task_engine.runner import TaskRunner
+            from raven.core.task_engine.store import TaskStore
             from raven.tools.register_all import create_tool_registry
 
             tools = create_tool_registry()
@@ -327,8 +325,7 @@ class Gateway:
             except (json.JSONDecodeError, TypeError):
                 pass
 
-        if policy == "closed":
-            if not user.get("is_allowed"):
+        if policy == "closed" and not user.get("is_allowed"):
                 metrics.inc("messages_blocked", {"channel": event.channel, "reason": "policy_closed"})
                 await self._send(event.channel, event.session_id, "Access denied. You are not authorized.")
                 return False
@@ -344,7 +341,7 @@ class Gateway:
                     await self._send(event.channel, event.session_id, "You are now authorized!")
                     metrics.inc("pairing_approved", {"channel": event.channel})
                     return False
-            code = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            code = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
             await self.db.find_or_create_user(event.channel, event.user_id)
             await self.db.set_pairing_code(f"{event.channel}:{event.user_id}", code)
             await self._send(
@@ -675,11 +672,12 @@ class Gateway:
             )
 
     async def _handle_code_cmd(self, event: IncomingMessage, sub: str, args: list[str]) -> None:
-        from raven.core.coder.models import CodingSession, SessionStatus
-        from raven.core.coder.session import CodingSessionManager
-        from raven.core.coder.indexer import CodeIndexer
-        from raven.core.coder.review import CodeReviewer
         from pathlib import Path
+
+        from raven.core.coder.indexer import CodeIndexer
+        from raven.core.coder.models import CodingSession, SessionStatus
+        from raven.core.coder.review import CodeReviewer
+        from raven.core.coder.session import CodingSessionManager
 
         mgr = CodingSessionManager(self.db.db_path)
 

@@ -31,7 +31,7 @@ pub async fn serve(port: u16) -> Result<()> {
         .route("/info", get(handle_info))
         .with_state(state);
 
-    let addr = format!("0.0.0.0:{}", port);
+    let addr = format!("127.0.0.1:{}", port);
     log::info!("ravend listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;

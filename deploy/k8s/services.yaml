@@ -149,8 +149,10 @@ kind: Secret
 metadata:
   name: auth-secret
   namespace: raven
+  annotations:
+    "helm.sh/hook": pre-install
 stringData:
-  jwt-secret: "change-me-in-production"
+  jwt-secret: ""  # MUST be set via kubectl or env: echo -n $(openssl rand -hex 32) | kubectl create secret generic auth-secret --namespace=raven --from-file=jwt-secret=/dev/stdin
 ---
 apiVersion: apps/v1
 kind: Deployment

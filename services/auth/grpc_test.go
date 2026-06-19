@@ -13,7 +13,7 @@ import (
 
 func newTestAuthService(t *testing.T) *AuthService {
 	t.Helper()
-	svc := NewAuthService(envOr("JWT_SECRET", "test-secret-123456789012345678901234567890"))
+	svc := NewAuthService(envOr("JWT_SECRET", "test-secret-123456789012345678901234567890"), "")
 	db, err := sql.Open("sqlite", ":memory:?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		t.Fatalf("open :memory: db: %v", err)

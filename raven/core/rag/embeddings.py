@@ -1,21 +1,8 @@
 from __future__ import annotations
 
 import hashlib
-from functools import lru_cache
-from typing import Any
 
-import numpy as np
 from loguru import logger
-
-
-@lru_cache(maxsize=2048)
-def _embed_text_cached(model_name: str, text: str) -> bytes:
-    import pickle
-    from sentence_transformers import SentenceTransformer
-
-    model = SentenceTransformer(model_name)
-    emb = model.encode([text], show_progress_bar=False)
-    return pickle.dumps(emb.tolist()[0])
 
 
 class EmbeddingEngine:
@@ -42,7 +29,7 @@ class EmbeddingEngine:
             embeddings = await self._embed_local(uncached_texts)
         else:
             embeddings = await self._embed_openai(uncached_texts)
-        for (idx, _), emb in zip(uncached, embeddings):
+        for (idx, _), emb in zip(uncached, embeddings, strict=False):
             key = hashlib.sha256(texts[idx].encode()).hexdigest()
             self._cache[key] = emb
             results[idx] = emb
@@ -78,8 +65,6 @@ class EmbeddingEngine:
 
     async def _embed_local(self, texts: list[str]) -> list[list[float]]:
         try:
-            import pickle
-
             from sentence_transformers import SentenceTransformer
 
             model_name = self.model or "all-MiniLM-L6-v2"

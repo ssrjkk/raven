@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { api, ChannelInfo } from "../api/client";
+import { api, getToken, ChannelInfo } from "../api/client";
 import { useToast } from "../components/Toast";
 
 interface LogEntry {
@@ -58,8 +58,11 @@ export default function Admin() {
   async function runAudit() {
     setRunningAudit(true);
     setAudit([]);
+    const token = getToken();
+    const authHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) authHeaders["Authorization"] = `Bearer ${token}`;
     try {
-      const res = await fetch("/api/admin/security/audit");
+      const res = await fetch("/api/admin/security/audit", { headers: authHeaders });
       if (res.ok) {
         const data = await res.json();
         setAudit(data.checks || []);
@@ -74,11 +77,14 @@ export default function Admin() {
   }
 
   async function updateModelKey() {
+    const token = getToken();
+    const authHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) authHeaders["Authorization"] = `Bearer ${token}`;
     setKeyFeedback(null);
     try {
       const res = await fetch("/api/admin/config/key", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders,
         body: JSON.stringify({ key: "openrouter_api_key", value: modelKey }),
       });
       if (res.ok) {

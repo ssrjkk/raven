@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import pickle
 import time
 from pathlib import Path
 from typing import Any
@@ -11,18 +10,20 @@ from loguru import logger
 
 from raven.core.rag.embeddings import EmbeddingEngine
 
+_VECTORS_PATH = "vectors.json"
+
 
 class VectorStore:
     def __init__(self, db_path: Path | str, embedding_engine: EmbeddingEngine | None = None):
         self.db_path = Path(db_path)
         self.db_path.mkdir(parents=True, exist_ok=True)
         self.engine = embedding_engine or EmbeddingEngine(provider="local")
-        self._vectors: dict[str, np.ndarray] = {}
+        self._vectors: dict[str, list[float]] = {}
         self._metadata: dict[str, dict[str, Any]] = {}
         self._load()
 
     def _vectors_path(self) -> Path:
-        return self.db_path / "vectors.pkl"
+        return self.db_path / _VECTORS_PATH
 
     def _metadata_path(self) -> Path:
         return self.db_path / "metadata.json"
@@ -31,8 +32,9 @@ class VectorStore:
         vpath = self._vectors_path()
         if vpath.exists():
             try:
-                with vpath.open("rb") as f:
-                    self._vectors = pickle.load(f)
+                with vpath.open() as f:
+                    raw = json.load(f)
+                    self._vectors = {k: list(v) if isinstance(v, list) else [] for k, v in raw.items()}
             except Exception as e:
                 logger.warning("Failed to load vectors: {}", e)
         mpath = self._metadata_path()
@@ -44,15 +46,19 @@ class VectorStore:
             except Exception as e:
                 logger.warning("Failed to load metadata: {}", e)
 
+    def _as_np(self, vec: list[float]) -> np.ndarray:
+        return np.array(vec, dtype=np.float32)
+
     def _save(self):
-        with self._vectors_path().open("wb") as f:
-            pickle.dump(self._vectors, f)
+        serializable = {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in self._vectors.items()}
+        with self._vectors_path().open("w") as f:
+            json.dump(serializable, f)
         with self._metadata_path().open("w") as f:
             json.dump(self._metadata, f, default=str)
 
     async def upsert(self, doc_id: str, text: str, metadata: dict[str, Any] | None = None):
         vecs = await self.engine.embed([text])
-        self._vectors[doc_id] = np.array(vecs[0], dtype=np.float32)
+        self._vectors[doc_id] = list(self._as_np(vecs[0]))
         self._metadata[doc_id] = {
             "text": text[:1000],
             "timestamp": time.time(),
@@ -64,7 +70,7 @@ class VectorStore:
         texts = [item[1] for item in items]
         vecs = await self.engine.embed(texts)
         for i, (doc_id, text, meta) in enumerate(items):
-            self._vectors[doc_id] = np.array(vecs[i], dtype=np.float32)
+            self._vectors[doc_id] = list(self._as_np(vecs[i]))
             self._metadata[doc_id] = {
                 "text": text[:1000],
                 "timestamp": time.time(),
@@ -81,9 +87,9 @@ class VectorStore:
         if not self._vectors:
             return []
         query_vecs = await self.engine.embed([query])
-        query_vec = np.array(query_vecs[0], dtype=np.float32)
+        query_vec = self._as_np(query_vecs[0])
         ids = list(self._vectors.keys())
-        mat = np.array([self._vectors[i] for i in ids])
+        mat = np.array([self._as_np(self._vectors[i]) for i in ids])
         norms = np.linalg.norm(mat, axis=1) * np.linalg.norm(query_vec)
         sims = (mat @ query_vec) / (norms + 1e-10)
         top_k = min(k, len(ids))
@@ -92,8 +98,7 @@ class VectorStore:
         for idx in top_idx:
             doc_id = ids[idx]
             meta = self._metadata.get(doc_id, {})
-            if filter_meta:
-                if not all(meta.get(k) == v for k, v in filter_meta.items()):
+            if filter_meta and not all(meta.get(k) == v for k, v in filter_meta.items()):
                     continue
             results.append(
                 {

@@ -9,23 +9,23 @@ license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.34.0",
-    "httpx>=0.28.0",
-    "aiosqlite>=0.20.0",
-    "pydantic>=2.10.0",
-    "pydantic-settings>=2.7.0",
-    "loguru>=0.7.3",
-    "apscheduler>=3.10",
-    "playwright>=1.44",
-    "beautifulsoup4>=4.12",
-    "lxml>=5.2",
-    "feedparser>=6.0",
-    "click>=8.0",
-    "rich>=13.0",
-    "python-telegram-bot>=21.0",
-    "chromadb>=0.5.0",
-    "python-dotenv>=1.0",
+    "fastapi>=0.115.0,<1.0",
+    "uvicorn[standard]>=0.34.0,<1.0",
+    "httpx>=0.28.0,<1.0",
+    "aiosqlite>=0.20.0,<1.0",
+    "pydantic>=2.10.0,<3.0",
+    "pydantic-settings>=2.7.0,<3.0",
+    "loguru>=0.7.3,<1.0",
+    "apscheduler>=3.10,<4.0",
+    "playwright>=1.44,<2.0",
+    "beautifulsoup4>=4.12,<5.0",
+    "lxml>=5.2,<6.0",
+    "feedparser>=6.0,<7.0",
+    "click>=8.0,<9.0",
+    "rich>=13.0,<14.0",
+    "python-telegram-bot>=21.0,<22.0",
+    "chromadb>=0.5.0,<1.0",
+    "python-dotenv>=1.0,<2.0",
 ]
 
 [project.optional-dependencies]
@@ -37,9 +37,11 @@ service-win = ["pywin32>=306"]
 tui = ["textual>=1.0"]
 tracing = ["opentelemetry-api>=1.25", "opentelemetry-sdk>=1.25"]
 dev = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.24",
-    "ruff>=0.5",
+    "pytest>=8.0,<9.0",
+    "pytest-asyncio>=0.24,<1.0",
+    "ruff>=0.5,<1.0",
+    "mypy>=1.10,<2.0",
+    "pre-commit>=3.0,<5.0",
 ]
 all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,dev]"]
 
@@ -89,11 +91,11 @@ line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "S"]
 ignore = ["E501", "SIM108"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["F401", "ANN"]
+"tests/*" = ["F401", "ANN", "S101", "S102"]
 "*__init__.py" = ["F401"]
 
 [tool.ruff.format]

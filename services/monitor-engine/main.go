@@ -321,6 +321,13 @@ func (m *MonitorEngine) createMonitor(w http.ResponseWriter, r *http.Request) {
 
 func (m *MonitorEngine) deleteMonitor(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if id == "" {
+		id = r.URL.Query().Get("id")
+	}
+	if id == "" {
+		writeMonitorError(w, http.StatusBadRequest, "missing id")
+		return
+	}
 	m.checksMu.Lock()
 	delete(m.checks, id)
 	m.checksMu.Unlock()

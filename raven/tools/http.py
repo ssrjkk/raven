@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import httpx
 
+from raven.core.security.ssrf import validate_url
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 
 async def http_get(url: str, headers: str | None = None) -> str:
+    blocked = validate_url(url)
+    if blocked:
+        return f"[blocked] {blocked}"
     hdrs = {}
     if headers:
         for line in headers.split("\n"):
@@ -18,6 +22,9 @@ async def http_get(url: str, headers: str | None = None) -> str:
 
 
 async def http_post(url: str, body: str = "", content_type: str = "application/json") -> str:
+    blocked = validate_url(url)
+    if blocked:
+        return f"[blocked] {blocked}"
     async with httpx.AsyncClient(timeout=30) as c:
         resp = await c.post(url, content=body, headers={"Content-Type": content_type})
         return resp.text[:20000]

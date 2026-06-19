@@ -149,6 +149,19 @@ func (g *Gateway) Routes() http.Handler {
 	return otelhttp.NewHandler(rateLimited, "gateway")
 }
 
+func sanitizePath(path string) string {
+	if strings.HasPrefix(path, "/api/v1/") {
+		parts := strings.Split(path, "/")
+		for i, p := range parts {
+			if len(p) == 36 && strings.Count(p, "-") == 4 {
+				parts[i] = "{uuid}"
+			}
+		}
+		return strings.Join(parts, "/")
+	}
+	return path
+}
+
 func (g *Gateway) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if g.authClient == nil {
@@ -213,8 +226,9 @@ func (g *Gateway) metricsMiddleware(next http.Handler) http.Handler {
 		sw := &statusWriter{ResponseWriter: w, status: 200}
 		start := time.Now()
 		next.ServeHTTP(sw, r)
-		g.httpRequests.WithLabelValues(r.Method, r.URL.Path, fmt.Sprint(sw.status)).Inc()
-		g.httpDuration.WithLabelValues(r.Method, r.URL.Path).Observe(time.Since(start).Seconds())
+		sPath := sanitizePath(r.URL.Path)
+		g.httpRequests.WithLabelValues(r.Method, sPath, fmt.Sprint(sw.status)).Inc()
+		g.httpDuration.WithLabelValues(r.Method, sPath).Observe(time.Since(start).Seconds())
 	})
 }
 

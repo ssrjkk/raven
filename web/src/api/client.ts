@@ -94,20 +94,22 @@ export interface AuthData {
 
 const BASE = "";
 
-function getToken(): string | null {
-  return localStorage.getItem("raven_token");
+let _token: string | null = null;
+
+export function getToken(): string | null {
+  return _token;
 }
 
 export function setToken(token: string) {
-  localStorage.setItem("raven_token", token);
+  _token = token;
 }
 
 export function clearToken() {
-  localStorage.removeItem("raven_token");
+  _token = null;
 }
 
 export function isAuthenticated(): boolean {
-  return !!getToken();
+  return !!_token;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

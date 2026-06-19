@@ -13,7 +13,7 @@ try:
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC as PBKDF2
 
     HAS_CRYPTO = True
-except ImportError:
+except ImportError:  # pragma: no cover
     HAS_CRYPTO = False
 
 _KEY_FILE = "data/.secrets_key"

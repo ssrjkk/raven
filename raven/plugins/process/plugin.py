@@ -5,7 +5,6 @@ import os
 import signal
 import sys
 
-
 PLUGIN_NAME = "process"
 PLUGIN_DESCRIPTION = "Run, list, and manage system processes"
 
@@ -27,7 +26,7 @@ async def run(command: str, timeout: int = 30, shell: bool = False) -> str:
             )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             return f"Command timed out after {timeout}s"
 
@@ -47,18 +46,51 @@ async def run(command: str, timeout: int = 30, shell: bool = False) -> str:
 
 async def run_python(code: str, timeout: int = 15) -> str:
     """Run Python code in a subprocess. Args: code (str): Python code, timeout (int): Max execution time"""
-    import shlex
-
-    return await run(f"{sys.executable} -c {shlex.quote(code)}", timeout=timeout, shell=True)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-c", code,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except TimeoutError:
+            proc.kill()
+            return f"Command timed out after {timeout}s"
+        result = ""
+        if stdout:
+            result += stdout.decode("utf-8", errors="replace")
+        if stderr:
+            error_text = stderr.decode("utf-8", errors="replace")
+            if error_text.strip():
+                result += f"\n[stderr]\n{error_text}"
+        if proc.returncode is not None and proc.returncode != 0:
+            result += f"\n[exit code: {proc.returncode}]"
+        return result[:5000] or "(no output)"
+    except Exception as e:
+        return f"Error: {e}"
 
 
 async def list_processes(filter: str = "") -> str:
     """List running processes. Args: filter (str): Optional filter string (e.g. 'python')"""
     if sys.platform == "win32":
-        cmd = "tasklist /FO CSV /NH"
+        proc = await asyncio.create_subprocess_exec(
+            "tasklist", "/FO", "CSV", "/NH",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
     else:
-        cmd = "ps aux --sort=-%mem"
-    result = await run(cmd, timeout=10, shell=True)
+        proc = await asyncio.create_subprocess_exec(
+            "ps", "aux", "--sort=-%mem",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    try:
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+        result = stdout.decode("utf-8", errors="replace") if stdout else ""
+    except TimeoutError:
+        proc.kill()
+        return "Command timed out"
     if filter:
         lines = result.split("\n")
         filtered = [line for line in lines if filter.lower() in line.lower()]

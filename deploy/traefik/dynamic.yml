@@ -24,7 +24,9 @@ http:
           - DELETE
           - OPTIONS
         accessControlAllowOriginList:
-          - "*"
+          - "http://localhost:5173"
+          - "http://localhost:3000"
+          - "https://raven.local"
         accessControlMaxAge: 86400
         accessControlAllowCredentials: true
         accessControlAllowHeaders:

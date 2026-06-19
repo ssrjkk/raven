@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from raven.core.http_client import client_manager
+from raven.core.security.ssrf import validate_url
 
 if TYPE_CHECKING:
     from raven.core.monitor.models import Monitor
@@ -22,6 +23,9 @@ def _is_seen(monitor_id: str, guid: str) -> bool:
 
 async def check_rss(monitor: Monitor) -> str | None:
     url = monitor.config.get("target", monitor.target)
+    error = validate_url(url)
+    if error:
+        return f"🔴 RSS check blocked: {error}"
     try:
         import feedparser
 

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -101,7 +102,7 @@ func (s *AuthService) InitDB(path string) error {
 	if err != nil {
 		return fmt.Errorf("sqlite open: %w", err)
 	}
-	s.db.SetMaxOpenConns(1)
+	s.db.SetMaxOpenConns(4)
 	_, err = s.db.Exec(`CREATE TABLE IF NOT EXISTS users (
 		id TEXT PRIMARY KEY, username TEXT UNIQUE, password TEXT,
 		role TEXT DEFAULT 'user', created_at TEXT DEFAULT (datetime('now'))
@@ -337,15 +338,7 @@ func (s *AuthService) loggingMiddleware(next http.Handler) http.Handler {
 
 func (s *AuthService) rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := r.RemoteAddr
-		if idx := len(ip) - 1; idx >= 0 {
-			for i := len(ip) - 1; i >= 0; i-- {
-				if ip[i] == ':' {
-					ip = ip[:i]
-					break
-				}
-			}
-		}
+		ip := clientIP(r.RemoteAddr)
 		if !s.rateLimiter.Allow(ip) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Retry-After", "1")
@@ -384,7 +377,7 @@ func loadOrGenerateKey(path string, logger *slog.Logger) []byte {
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
 		logger.Error("failed to generate random key", "error", err)
-		return key
+		os.Exit(1)
 	}
 	if err := os.MkdirAll(dataDir(path), 0755); err == nil {
 		if err := os.WriteFile(path, key, 0600); err != nil {
@@ -483,6 +476,13 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func clientIP(remoteAddr string) string {
+	if idx := strings.LastIndexByte(remoteAddr, ':'); idx >= 0 {
+		remoteAddr = remoteAddr[:idx]
+	}
+	return remoteAddr
 }
 
 func splitCSV(s string) []string {

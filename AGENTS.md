@@ -58,3 +58,45 @@ npm run dev
 - **`marked` → `react-markdown`**: frontend MessageBubble now uses existing dependency, no `dangerouslySetInnerHTML`
 - **`EnterpriseChannel` inheritance**: fixed to inherit from `BaseChannel` instead of `ABC`
 - **`_PII_PATTERNS` import**: fixed missing attribute reference in security_audit.py
+
+## Fixes applied (Jun 2026)
+### Security — Python backend
+- **`vector_store.py`**: Replaced unsafe `pickle` deserialization with JSON; vectors stored as `vectors.json` (list of floats)
+- **`ssrf.py`**: New module guards against SSRF — blocks HTTP requests to private IP ranges (10/8, 172.16/12, 192.168/16, 127/8, ::1, fc00::/7, fe80::/10) and DNS-resolved private addresses
+- **`rss.py`, `http_check.py`**: Added `validate_url()` SSRF guard before any outbound HTTP request
+- **`shell.py`**: Removed `__import__` from restricted builtins (bypass vector); added AST-level `__import__` call detection; consolidated module name check in attribute access
+- **`gateway.py`**: Moved regex patterns to class-level constants (performance); fixed `except Exception: pass` → logged warning; removed `import re` from hot path
+- **`secrets.py`**: Added `# pragma: no cover` on fallback import path
+- **`embeddings.py`**: Removed unused `import pickle`
+
+### Security — TypeScript frontend
+- **`client.ts`**: JWT token moved from `localStorage` to in-memory module variable (prevents XSS token theft)
+- **`terminal.ts`**: Replaced `spawn(cmd, { shell: true })` with `spawn(cmd, args, { shell: false })` + command allowlist (prevents shell injection)
+- **`fs.ts`**: Added path traversal guard — all file ops constrained to `RAVEN_ALLOWED_FS` base directory via `guard()` function
+- **`CanvasViewer.tsx`**: Added auth header to canvas action fetch; replaced empty reconnect stub with actual delay
+- **`IDE.tsx`**: Replaced bare `fetch` calls with `authHeaders()` that include JWT Bearer token
+- **`Toast.tsx`**: Added `useRef` cleanup of all pending timers on unmount
+
+### Security — Go services
+- **`auth/main.go`**: `loadOrGenerateKey` now calls `os.Exit(1)` on crypto/rand failure (was returning zero key); added `clientIP()` helper using `strings.LastIndexByte` for proper IPv6 handling; added `strings` import; DB pool increased `SetMaxOpenConns(1)` → `4`
+- **`gateway/main.go`**: Added `sanitizePath()` for Prometheus label cardinality control (UUIDs → `{uuid}`); circuit breaker gRPC dial timeout already present (5s)
+
+### Security — Rust daemon
+- **`api.rs`**: Changed bind address `0.0.0.0` → `127.0.0.1` (daemon should only listen locally)
+- **`system.rs`**: PID file read now checks `!file_type().is_symlink()` to prevent symlink traversal
+- **`Cargo.toml`**: Added `[profile.release]` with `opt-level=3`, `lto=true`, `codegen-units=1`, `strip=true`
+- **`windows_service.py`**: Replaced `os.system()` with `subprocess.run()` using argument lists (prevents cmd injection)
+
+### Security — Infrastructure
+- **`traefik/dynamic.yml`**: CORS `Access-Control-Allow-Origin` changed from wildcard `*` to explicit origins (localhost:5173, localhost:3000, raven.local)
+- **`docker-compose.micro.yml`**: Traefik dashboard disabled (`--api.dashboard=false`, removed `--api.insecure=true`); Grafana admin password changed to use secret file
+- **`pyproject.toml`**: Added version upper bounds to all dependencies; added `ruff` security rules (`S`); added `mypy` and `pre-commit` to dev deps
+
+### Security — Phase 2 (Jun 2026)
+- **`tools/db.py`**: Restricted to SELECT-only queries (was allowing raw SQL execution, SQL injection risk)
+- **`tools/file.py`**: Added workspace confinement via `RAVEN_WORKSPACE` env var (default: `workspace/`); all file ops guard against path traversal with `_confine()` relative-to check
+- **`tools/http.py`**: Added SSRF guard using `validate_url()` from SSRF module before any outbound HTTP request
+- **`plugins/process/plugin.py`**: Replaced `shell=True` in `run_python` (was `shlex.quote` + `shell=True`) with `create_subprocess_exec(sys.executable, "-c", code)`; replaced `shell=True` in `list_processes` with `create_subprocess_exec("tasklist", ...)` / `create_subprocess_exec("ps", "aux", ...)`
+- **`tools/shell.py`**: Removed `getattr` from `_RESTRICTED_BUILTINS` (was a key component of sandbox escape via `().__class__.__bases__[0].__subclasses__()`)
+- **`Admin.tsx`**: Added JWT `Authorization` header to both `runAudit` and `updateModelKey` fetch calls (were unauthenticated)
+- **`CanvasViewer.tsx`**: Added URL scheme validation on `link` component — only `http://`, `https://`, `mailto:`, and `/`-relative URLs allowed (prevents `javascript:` XSS)

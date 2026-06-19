@@ -17,7 +17,7 @@ Remove:
 """  # noqa: E402
 
 import asyncio  # noqa: E402
-import os  # noqa: E402
+import subprocess  # noqa: E402
 import sys  # noqa: E402
 import threading  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -48,26 +48,26 @@ class RavenWindowsService:
     def install():
         _ensure_pywin32()
         script = _get_script_path()
-        os.system(f'{sys.executable} "{script}" install')
+        subprocess.run([sys.executable, script, "install"], check=True)
         print(f"Service '{SERVICE_NAME}' installed.")
 
     @staticmethod
     def start():
         _ensure_pywin32()
-        os.system(f"net start {SERVICE_NAME}")
+        subprocess.run(["net", "start", SERVICE_NAME], check=True)
         print(f"Service '{SERVICE_NAME}' start requested.")
 
     @staticmethod
     def stop():
         _ensure_pywin32()
-        os.system(f"net stop {SERVICE_NAME}")
+        subprocess.run(["net", "stop", SERVICE_NAME], check=True)
         print(f"Service '{SERVICE_NAME}' stop requested.")
 
     @staticmethod
     def remove():
         _ensure_pywin32()
         script = _get_script_path()
-        os.system(f'{sys.executable} "{script}" remove')
+        subprocess.run([sys.executable, script, "remove"], check=True)
         print(f"Service '{SERVICE_NAME}' removed.")
 
     @staticmethod

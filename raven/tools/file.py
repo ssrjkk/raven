@@ -1,26 +1,38 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
+_WORKSPACE = Path(os.environ.get("RAVEN_WORKSPACE", "data")).resolve()
+
+
+def _confine(path: str) -> Path:
+    p = Path(path).expanduser().resolve()
+    try:
+        p.relative_to(_WORKSPACE)
+    except ValueError:
+        raise PermissionError(f"Access denied: path outside workspace: {p}") from None
+    return p
+
 
 async def file_read(path: str) -> str:
-    p = Path(path).expanduser().resolve()
+    p = _confine(path)
     if not p.exists():
         raise FileNotFoundError(f"File not found: {p}")
     return p.read_text(encoding="utf-8", errors="replace")[:50000]
 
 
 async def file_write(path: str, content: str) -> str:
-    p = Path(path).expanduser().resolve()
+    p = _confine(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content, encoding="utf-8")
     return f"Written {len(content)} bytes to {p}"
 
 
 async def file_append(path: str, content: str) -> str:
-    p = Path(path).expanduser().resolve()
+    p = _confine(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("a", encoding="utf-8") as f:
         f.write(content)
@@ -28,7 +40,7 @@ async def file_append(path: str, content: str) -> str:
 
 
 async def file_list(path: str = ".", pattern: str = "*") -> str:
-    p = Path(path).expanduser().resolve()
+    p = _confine(path)
     if not p.exists():
         raise FileNotFoundError(f"Directory not found: {p}")
     items = []
@@ -40,7 +52,7 @@ async def file_list(path: str = ".", pattern: str = "*") -> str:
 
 
 async def file_delete(path: str) -> str:
-    p = Path(path).expanduser().resolve()
+    p = _confine(path)
     if p.is_file():
         p.unlink()
         return f"Deleted {p}"

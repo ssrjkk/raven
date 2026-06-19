@@ -7,7 +7,6 @@ from typing import Any, cast
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
-
 ALLOWED_COMMANDS = frozenset({
     "ls", "cat", "head", "tail", "echo", "pwd", "whoami", "date",
     "find", "grep", "wc", "sort", "uniq", "cut", "tr", "diff",
@@ -52,7 +51,7 @@ async def shell_command(command: str, timeout: int = 30) -> str:
         if proc.returncode != 0:
             output += f"\n[exit code: {proc.returncode}]"
         return output or "(no output)"
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         return f"[timeout after {timeout}s]"
 
@@ -62,7 +61,7 @@ _RESTRICTED_BUILTINS: dict[str, Any] = {
     "bool": bool, "bytearray": bytearray, "bytes": bytes, "chr": chr,
     "complex": complex, "dict": dict, "divmod": divmod, "enumerate": enumerate,
     "filter": filter, "float": float, "format": format, "frozenset": frozenset,
-    "getattr": getattr, "hasattr": hasattr, "hash": hash, "hex": hex,
+    "hasattr": hasattr, "hash": hash, "hex": hex,
     "id": id, "int": int, "isinstance": isinstance, "issubclass": issubclass,
     "iter": iter, "len": len, "list": list, "map": map, "max": max,
     "min": min, "next": next, "object": object, "oct": oct, "ord": ord,
@@ -72,8 +71,8 @@ _RESTRICTED_BUILTINS: dict[str, Any] = {
     "True": True, "False": False, "None": None,
     "Exception": Exception, "ValueError": ValueError, "TypeError": TypeError,
     "KeyError": KeyError, "IndexError": IndexError, "StopIteration": StopIteration,
-    "ValueError": ValueError, "RuntimeError": RuntimeError,
-    "__import__": __import__,  # needed for imports but restricted below
+    "RuntimeError": RuntimeError,
+    # __import__ explicitly excluded — blocked below at AST level
 }
 
 _DENIED_BUILTINS = frozenset({
@@ -93,14 +92,13 @@ async def python_code(code: str, timeout: int = 15) -> str:
                 func = node.func
                 if isinstance(func, ast.Name) and func.id in _DENIED_BUILTINS:
                     return f"[denied] use of '{func.id}' is not allowed"
-                if isinstance(func, ast.Attribute):
-                    if isinstance(func.value, ast.Name) and func.value.id == "os":
-                        return "[denied] 'os' module is not allowed"
-                    if isinstance(func.value, ast.Name) and func.value.id == "subprocess":
-                        return "[denied] 'subprocess' is not allowed"
-                    if isinstance(func.value, ast.Name) and func.value.id == "sys":
-                        return "[denied] 'sys' module is not allowed"
-            if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
+                if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) and func.value.id in ("os", "subprocess", "sys", "shutil", "ctypes", "socket"):
+                    return f"[denied] '{func.value.id}' module access is not allowed"
+                if isinstance(func, ast.Attribute) and func.attr == "__import__":
+                    return "[denied] __import__ is not allowed"
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "__import__":
+                return "[denied] __import__ is not allowed"
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
                 for alias in node.names:
                     if alias.name in ("os", "subprocess", "sys", "shutil", "ctypes", "socket"):
                         return f"[denied] import of '{alias.name}' is not allowed"
@@ -111,11 +109,11 @@ async def python_code(code: str, timeout: int = 15) -> str:
         compiled = compile(tree, "<sandbox>", "exec")
 
         ns: dict[str, Any] = {"__builtins__": _RESTRICTED_BUILTINS.copy()}
-        exec(compiled, ns)
+        exec(compiled, ns)  # noqa: S102
 
         if last_expr:
             compiled_expr = compile(ast.Expression(last_expr.value), "<sandbox>", "eval")
-            result = eval(compiled_expr, ns)
+            result = eval(compiled_expr, ns)  # noqa: S307
             return str(result) if result is not None else "(no return value)"
         return "(code executed, no return value)"
     except Exception as e:

@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { getToken } from "../api/client";
+
+
 
 interface ComponentDef {
   id: string;
@@ -159,13 +162,19 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
         </div>
       );
 
-    case "link":
+    case "link": {
+      const href = props.href as string;
+      const allowed = href.startsWith("http://") || href.startsWith("https://") || href.startsWith("mailto:") || href.startsWith("/");
+      if (!allowed) {
+        return <span key={id} className="text-gray-500 text-sm">{props.text as string} (blocked: {href.slice(0, 50)})</span>;
+      }
       return (
-        <a key={id} href={props.href as string} target="_blank" rel="noopener noreferrer"
+        <a key={id} href={href} target="_blank" rel="noopener noreferrer"
           className="text-violet-400 hover:text-violet-300 underline text-sm">
           {props.text as string}
         </a>
       );
+    }
 
     case "list":
       return (
@@ -220,17 +229,21 @@ export default function CanvasViewer({ sessionId, className }: { sessionId: stri
       }
     };
     sock.onerror = () => setError("Canvas connection lost");
-    sock.onclose = () => setTimeout(() => {
-      // reconnect
-    }, 3000);
+    sock.onclose = () => {
+      if (ws.current) return;
+      setTimeout(() => {
+        setCanvas(null);
+      }, 3000);
+    };
     ws.current = sock;
     return () => sock.close();
   }, [sessionId]);
 
   const onAction = useCallback((componentId: string, action: string, data?: Record<string, unknown>) => {
+    const token = getToken();
     fetch(`/api/canvas/action/${sessionId}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) },
       body: JSON.stringify({ component_id: componentId, action, data }),
     }).catch(() => {});
   }, [sessionId]);

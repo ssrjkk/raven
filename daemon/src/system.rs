@@ -93,9 +93,17 @@ pub async fn get_system_info() -> Result<SystemInfo> {
 }
 
 pub async fn get_status() -> Result<DaemonStatus> {
-    let pid = std::fs::read_to_string("/var/run/ravend.pid")
-        .ok()
-        .and_then(|s| s.trim().parse().ok());
+    let pid_path = if cfg!(target_family = "unix") {
+        "/var/run/ravend.pid"
+    } else {
+        "C:\\ProgramData\\ravend\\ravend.pid"
+    };
+    let pid = match std::fs::metadata(pid_path) {
+        Ok(m) if !m.file_type().is_symlink() => std::fs::read_to_string(pid_path)
+            .ok()
+            .and_then(|s| s.trim().parse().ok()),
+        _ => None,
+    };
 
     Ok(DaemonStatus {
         running: pid.is_some(),
