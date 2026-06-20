@@ -85,7 +85,7 @@ class CodingSessionManager:
             where = "user_id = ?"
             params.append(user_id)
         rows = conn.execute(
-            f"SELECT * FROM coding_sessions WHERE {where} ORDER BY created_at DESC LIMIT ?",
+            f"SELECT * FROM coding_sessions WHERE {where} ORDER BY created_at DESC LIMIT ?",  # noqa: S608
             (*params, limit),
         ).fetchall()
         return [self._row_to_session(r) for r in rows]

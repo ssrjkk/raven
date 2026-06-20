@@ -9,7 +9,6 @@ from typing import Any
 
 from raven.core.task_engine.models import Task, TaskPriority, TaskStatus, TaskStep
 
-
 _local = threading.local()
 
 
@@ -149,7 +148,7 @@ class TaskStore:
             params.append(status)
         clause = " AND ".join(where) if where else "1=1"
         rows = conn.execute(
-            f"SELECT * FROM tasks WHERE {clause} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            f"SELECT * FROM tasks WHERE {clause} ORDER BY created_at DESC LIMIT ? OFFSET ?",  # noqa: S608
             (*params, limit, offset),
         ).fetchall()
         return [self._row_to_task(r) for r in rows]
@@ -195,7 +194,7 @@ class TaskStore:
             where.append("status = ?")
             params.append(status)
         clause = " AND ".join(where) if where else "1=1"
-        row = conn.execute(f"SELECT COUNT(*) as cnt FROM tasks WHERE {clause}", params).fetchone()
+        row = conn.execute(f"SELECT COUNT(*) as cnt FROM tasks WHERE {clause}", params).fetchone()  # noqa: S608
         return row["cnt"] if row else 0
 
     def _row_to_task(self, row: sqlite3.Row) -> Task:

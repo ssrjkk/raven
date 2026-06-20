@@ -8,7 +8,6 @@ from pathlib import Path
 
 from rich.console import Console
 
-
 console = Console()
 
 IS_WINDOWS = sys.platform == "win32"

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from loguru import logger
 
@@ -45,12 +47,10 @@ class MonitorEngine:
 
     async def stop(self):
         self._running = False
-        for mid, task in list(self._tasks.items()):
+        for _mid, task in list(self._tasks.items()):
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
         self._tasks.clear()
         logger.info("MonitorEngine stopped")
 

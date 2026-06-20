@@ -1,13 +1,13 @@
 from raven.core.task_engine.tool_registry import ToolRegistry
-from raven.tools.http import register_http_tools
-from raven.tools.file import register_file_tools
-from raven.tools.shell import register_shell_tools
 from raven.tools.browser import register_browser_tools
-from raven.tools.utils import register_util_tools
-from raven.tools.process import register_process_tools
-from raven.tools.notify import register_notify_tools
 from raven.tools.db import register_db_tools
 from raven.tools.env import register_env_tools
+from raven.tools.file import register_file_tools
+from raven.tools.http import register_http_tools
+from raven.tools.notify import register_notify_tools
+from raven.tools.process import register_process_tools
+from raven.tools.shell import register_shell_tools
+from raven.tools.utils import register_util_tools
 
 
 def register_all_tools(registry: ToolRegistry) -> ToolRegistry:

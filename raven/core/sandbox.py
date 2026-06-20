@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import sys
 import tempfile
 from pathlib import Path
-
 
 SANDBOX_IMAGE = "python:3.12-slim"
 
@@ -79,11 +79,9 @@ class Sandbox:
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.config.timeout)
-        except asyncio.TimeoutError:
-            try:
+        except TimeoutError:
+            with contextlib.suppress(Exception):
                 proc.kill()
-            except Exception:
-                pass
             return "Execution timed out"
         result = ""
         if stdout:
@@ -137,19 +135,15 @@ class Sandbox:
             return f"Docker execution error: {e}"
         finally:
             if container:
-                try:
+                with contextlib.suppress(Exception):
                     container.remove(force=True)
-                except Exception:
-                    pass
 
     async def cleanup(self):
         if self._tmpdir:
             import shutil
 
-            try:
+            with contextlib.suppress(Exception):
                 shutil.rmtree(self._tmpdir)
-            except Exception:
-                pass
             self._tmpdir = None
 
 

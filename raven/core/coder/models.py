@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import time
 import uuid
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class SymbolKind(str, Enum):
+class SymbolKind(StrEnum):
     CLASS = "class"
     FUNCTION = "function"
     METHOD = "method"
@@ -38,7 +38,7 @@ class CodeSymbol(BaseModel):
     signature: str = ""
 
 
-class SessionStatus(str, Enum):
+class SessionStatus(StrEnum):
     ACTIVE = "active"
     PAUSED = "paused"
     COMPLETED = "completed"
@@ -57,7 +57,7 @@ class CodingSession(BaseModel):
     updated_at: float = Field(default_factory=lambda: time.time())
 
 
-class ReviewSeverity(str, Enum):
+class ReviewSeverity(StrEnum):
     CRITICAL = "critical"
     WARNING = "warning"
     SUGGESTION = "suggestion"

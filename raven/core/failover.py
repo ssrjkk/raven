@@ -71,4 +71,4 @@ class ModelFailover:
         if not self._models:
             raise RuntimeError("No models configured")
         weights = [m.weight for m in self._models]
-        return random.choices(self._models, weights=weights, k=1)[0]
+        return random.choices(self._models, weights=weights, k=1)[0]  # noqa: S311

@@ -3,13 +3,14 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from enum import Enum
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from enum import StrEnum
+from typing import Any
 
 from loguru import logger
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"

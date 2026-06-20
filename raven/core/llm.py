@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable
+from typing import Any
 
 import httpx
 from loguru import logger
@@ -34,7 +36,7 @@ class ToolCall:
         }
 
     @classmethod
-    def from_openai(cls, tc: dict[str, Any]) -> "ToolCall":
+    def from_openai(cls, tc: dict[str, Any]) -> ToolCall:
         args = (
             json.loads(tc["function"]["arguments"])
             if isinstance(tc["function"]["arguments"], str)
@@ -95,6 +97,7 @@ class LLMProvider(ABC):
     async def complete(
         self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
     ) -> LLMResponse: ...
+    @abstractmethod
     async def cleanup(self):
         pass
 
@@ -300,10 +303,8 @@ class LLMRouter:
 
     async def cleanup(self):
         for p in self._providers.values():
-            try:
+            with contextlib.suppress(Exception):
                 await p.cleanup()
-            except Exception:
-                pass
         self._providers.clear()
 
     def _get_provider(self, model: str) -> LLMProvider:

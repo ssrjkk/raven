@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import time
+from typing import Any
+
 from httpx import AsyncClient
 from textual.app import App, ComposeResult
-from textual.screen import Screen
-from typing import Any
-from textual.widgets import Footer, Header, Label, RichLog, Static
 from textual.containers import Container, Horizontal
+from textual.screen import Screen
+from textual.widgets import Footer, Header, Label, RichLog, Static
 
 API_BASE = "http://localhost:18888/api"
 POLL_INTERVAL = 3.0

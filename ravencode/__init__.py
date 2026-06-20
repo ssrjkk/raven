@@ -8,8 +8,8 @@ import importlib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ravencode.api.client import AIOSClient
     from ravencode.agents.orchestrator import Orchestrator
+    from ravencode.api.client import AIOSClient
     from ravencode.runtime.shell import ShellExecutor
 
 

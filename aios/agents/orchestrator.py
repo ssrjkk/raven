@@ -1,7 +1,9 @@
 from typing import Any
+
 from loguru import logger
 
-from ravencode.agents.orchestrator import Orchestrator as RavenCodeOrchestrator, AgentType
+from ravencode.agents.orchestrator import AgentType
+from ravencode.agents.orchestrator import Orchestrator as RavenCodeOrchestrator
 
 
 class Orchestrator:

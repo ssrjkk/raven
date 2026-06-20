@@ -1,6 +1,6 @@
 from raven.channels.base import BaseChannel
-from raven.channels.enterprise_base import EnterpriseChannel
 from raven.channels.discord.channel import DiscordChannel
+from raven.channels.enterprise_base import EnterpriseChannel
 from raven.channels.feishu.channel import FeishuChannel
 from raven.channels.googlechat.channel import GoogleChatChannel
 from raven.channels.irc.channel import IRCChannel

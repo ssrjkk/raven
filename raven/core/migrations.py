@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 from loguru import logger
@@ -29,10 +30,8 @@ def register(version: int, description: str, sql: str | None = None):
 
 @register(1, "Add agent_skills column to sessions")
 async def _migration_1(conn):
-    try:
+    with contextlib.suppress(Exception):
         await conn.execute("ALTER TABLE sessions ADD COLUMN agent_skills TEXT DEFAULT '[]'")
-    except Exception:
-        pass
 
 
 class Migrator:

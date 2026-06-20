@@ -3,8 +3,9 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from loguru import logger
 

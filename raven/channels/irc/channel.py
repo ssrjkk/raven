@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
 
 from loguru import logger
@@ -68,17 +69,14 @@ class IRCChannel(EnterpriseChannel):
                     self._stats["reconnects"] += 1
                     await asyncio.sleep(self._reconnect_delay)
                     self._reconnect_delay = min(self._reconnect_delay * 2, 60)
-                    try:
+                    with contextlib.suppress(Exception):
                         self._reader, self._writer = await asyncio.open_connection(self._server, self._port)
-                    except Exception:
-                        pass
 
     _PRIVMSG_RE = re.compile(r":(\S+)!\S+ PRIVMSG (\S+) :(.+)")
 
     def _handle_raw(self, line: str):
-        if line.startswith("PING"):
-            if self._writer:
-                self._writer.write(line.replace("PING", "PONG").encode() + b"\r\n")
+        if line.startswith("PING") and self._writer:
+            self._writer.write(line.replace("PING", "PONG").encode() + b"\r\n")
         m = self._PRIVMSG_RE.match(line)
         if m:
             nick, target, text = m.group(1), m.group(2), m.group(3)

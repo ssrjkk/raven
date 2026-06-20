@@ -15,18 +15,17 @@ class ShellExecutor:
 
     async def run(self, cmd: str, timeout: int | None = None) -> str:
         timeout = timeout or self.DEFAULT_TIMEOUT
-        proc = await asyncio.create_subprocess_shell(
+        proc = await asyncio.create_subprocess_shell(  # noqa: S604
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            shell=True,
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             logger.warning("Command timed out after {}s: {}", timeout, cmd)
-            raise TimeoutError(f"Command timed out after {timeout}s")
+            raise TimeoutError(f"Command timed out after {timeout}s") from None
         except Exception as exc:
             logger.error("Command execution failed: {}", exc)
             raise
@@ -54,8 +53,8 @@ class ShellExecutor:
             raise
 
     async def search_codebase(self, query: str, k: int = 5) -> list[str]:
-        from raven.core.rag.retriever import Retriever
         from raven.core.config import settings
+        from raven.core.rag.retriever import Retriever
 
         try:
             db_path = settings.resolved_db_path

@@ -72,10 +72,7 @@ class CanvasSession:
             if c.id == component_id:
                 c.props.update(props)
                 return True
-            for child in c.children:
-                if _walk(child):
-                    return True
-            return False
+            return any(_walk(child) for child in c.children)
 
         if self.root:
             _walk(self.root)

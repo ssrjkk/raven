@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from raven.core.auth.models import Permission, Role, ROLE_PERMISSIONS
+from raven.core.auth.models import ROLE_PERMISSIONS, Permission, Role
 
 
 class RBAC:

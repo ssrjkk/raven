@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import time
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from loguru import logger
 
 
-class Backpressure(str, Enum):
+class Backpressure(StrEnum):
     DROP = "drop"
     BLOCK = "block"
     THROTTLE = "throttle"
@@ -136,7 +137,7 @@ class SSEStream:
                 await asyncio.wait_for(q.put(payload), timeout=0.1)
                 self._total_pushed += 1
                 self._track_event_id(session_id, payload.id)
-            except (asyncio.TimeoutError, asyncio.QueueFull):
+            except (TimeoutError, asyncio.QueueFull):
                 self._total_dropped += 1
                 logger.warning("SSE queue full for session {}, dropping event {}", session_id, payload.event)
         elif self._backpressure == Backpressure.BLOCK:
@@ -158,7 +159,7 @@ class SSEStream:
                 await asyncio.wait_for(q.put(payload), timeout=0.5)
                 self._total_pushed += 1
                 self._track_event_id(session_id, payload.id)
-            except (asyncio.TimeoutError, asyncio.QueueFull):
+            except (TimeoutError, asyncio.QueueFull):
                 self._total_dropped += 1
 
     async def stream(self, session_id: str, last_event_id: str | None = None):
@@ -172,7 +173,7 @@ class SSEStream:
                     if last_event_id and payload.id <= last_event_id:
                         continue
                     yield payload.serialize()
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     yield SSEEvent("ping", {"time": time.time()}).serialize()
         except asyncio.CancelledError:
             pass
@@ -198,10 +199,8 @@ class SSEStream:
     async def stop(self):
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(TimeoutError, asyncio.CancelledError):
                 await asyncio.wait_for(self._task, timeout=2.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
-                pass
             self._task = None
         self._queues.clear()
         self._sessions.clear()

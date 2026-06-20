@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 
 @dataclass
@@ -46,7 +47,7 @@ class HealthRegistry:
                     else:
                         hc.last_status = True
                         hc.last_detail = str(result)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     hc.last_status = False
                     hc.last_detail = "timeout"
                 except Exception as e:

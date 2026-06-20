@@ -15,7 +15,6 @@ from raven.core.jobs import job_manager
 from raven.core.metrics import metrics
 from raven.core.secrets import secrets
 
-
 # --- Pydantic request models with validation ---
 
 
@@ -321,7 +320,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
             audit_logger.log(AuditEventType.CHANNEL_START, "admin", channel_id)
             return {"ok": True, "channel": channel_id}
         except Exception as e:
-            raise HTTPException(500, str(e))
+            raise HTTPException(500, str(e)) from e
 
     @router.get("/agents")
     async def admin_agents():
@@ -335,7 +334,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
             registry.setup_defaults()
             return {"ok": True, "agent": agent_id}
         except Exception as e:
-            raise HTTPException(500, str(e))
+            raise HTTPException(500, str(e)) from e
 
     @router.get("/sessions")
     async def admin_sessions(limit: int = 50, offset: int = 0):
@@ -407,6 +406,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         import asyncio
         import json
         import time
+
         from fastapi.responses import StreamingResponse
 
         async def event_generator():
@@ -512,7 +512,7 @@ def init_auth_routes(app, db_path: str) -> None:
         try:
             await store.update_role(username, body.role)
         except ValueError as e:
-            raise HTTPException(400, str(e))
+            raise HTTPException(400, str(e)) from e
         return {"ok": True}
 
     @app.post("/api/auth/users/{username}/deactivate")  # type: ignore[untyped-decorator]

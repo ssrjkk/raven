@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import click
 from loguru import logger
@@ -33,6 +34,7 @@ from raven.core.config import settings
 from raven.core.config_store import config_store
 from raven.core.config_watcher import ConfigWatcher
 from raven.core.db import Database
+from raven.core.gateway.aios_adapter import get_aios_adapter
 from raven.core.gateway.gateway import Gateway
 from raven.core.health import health
 from raven.core.http_client import client_manager
@@ -47,14 +49,13 @@ from raven.core.middleware import (
     request_id_middleware,
 )
 from raven.core.models import Message
-from raven.core.plugin_loader import PluginLoader
-from raven.core.secrets import secrets
-from raven.core.webhooks import create_webhook_router
-from raven.core.gateway.aios_adapter import get_aios_adapter
 from raven.core.monitor.engine import MonitorEngine
 from raven.core.monitor.store import MonitorStore
+from raven.core.plugin_loader import PluginLoader
 from raven.core.routine.engine import RoutineEngine
 from raven.core.routine.store import RoutineStore
+from raven.core.secrets import secrets
+from raven.core.webhooks import create_webhook_router
 from raven.monitors.register_all import register_all_monitors
 from raven.routines.register_all import register_all_routines
 
@@ -277,9 +278,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     @api_app.post("/api/task/run")
     async def api_task_run(body: dict[str, Any]):
-        from raven.core.task_engine.store import TaskStore
         from raven.core.task_engine.planner import TaskPlanner
         from raven.core.task_engine.runner import TaskRunner
+        from raven.core.task_engine.store import TaskStore
         from raven.tools.register_all import create_tool_registry
 
         goal = body.get("goal", "")
@@ -298,8 +299,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     @api_app.post("/api/task/{task_id}/cancel")
     async def api_task_cancel(task_id: str):
-        from raven.core.task_engine.store import TaskStore
         from raven.core.task_engine.runner import TaskRunner
+        from raven.core.task_engine.store import TaskStore
         from raven.tools.register_all import create_tool_registry
 
         tools = create_tool_registry()
@@ -388,10 +389,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
-        try:
+        with contextlib.suppress(NotImplementedError):
             loop.add_signal_handler(sig, shutdown_handler)
-        except NotImplementedError:
-            pass
 
     monitor_store = MonitorStore(settings.resolved_db_path)
     monitor_engine = MonitorEngine(monitor_store)
@@ -417,62 +416,40 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         shutdown_task = asyncio.create_task(_shutdown(gateway, server_task))
         try:
             await asyncio.wait_for(shutdown_task, timeout=30)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Shutdown timed out, forcing exit")
             os._exit(1)
 
     async def _shutdown(gw: Gateway, sv_task: asyncio.Task[None]):
-        try:
+        with contextlib.suppress(Exception):
             await asyncio.wait_for(monitor_engine.stop(), timeout=5)
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             await asyncio.wait_for(routine_engine.stop(), timeout=5)
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             await asyncio.wait_for(gw.llm.cleanup(), timeout=5)
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             await asyncio.wait_for(gw.stop(), timeout=10)
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             await asyncio.wait_for(gw.db.disconnect(), timeout=5)
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             await asyncio.wait_for(client_manager.close(), timeout=5)
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             await config_watcher.stop()
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             audit_logger.stop()
-        except Exception:
-            pass
         sv_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await sv_task
-        except asyncio.CancelledError:
-            pass
         logger.info("Shutdown complete")
 
     try:
         await run_all()
     except (KeyboardInterrupt, asyncio.CancelledError):
         logger.info("Interrupted, shutting down...")
-        try:
+        with contextlib.suppress(Exception):
             await asyncio.wait_for(gateway.stop(), timeout=10)
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             await asyncio.wait_for(gateway.db.disconnect(), timeout=5)
-        except Exception:
-            pass
 
 
 @click.group()
@@ -591,7 +568,7 @@ def shell(cmd: str):
 @click.option("--daemon", is_flag=True, help="Run as daemon process")
 @click.option("--port", default=None, type=int, help="Web UI port")
 @click.option("--stateless", is_flag=True, default=False, help="Run without memory/context persistence")
-def start(daemon: bool, port: Optional[int], stateless: bool):
+def start(daemon: bool, port: int | None, stateless: bool):
     """Start the Raven AI gateway"""
     setup_logging()
     if daemon:
@@ -766,8 +743,8 @@ def security():
 @click.option("--fix", is_flag=True, help="Auto-fix common issues")
 def security_audit(deep: bool, fix: bool):
     """Run comprehensive security audit checks"""
-    from raven.core.security.security_audit import SecurityAudit
     from raven.cli.doctor import _render_security_audit
+    from raven.core.security.security_audit import SecurityAudit
 
     auditor = SecurityAudit()
     results = auditor.run_all(deep=deep)
@@ -928,7 +905,7 @@ def message():
 @click.option("--user", required=True, help="User ID")
 @click.option("--text", required=True, help="Message text")
 @click.option("--session", default=None, help="Session ID (optional)")
-def msg_send(channel: str, user: str, text: str, session: Optional[str]):
+def msg_send(channel: str, user: str, text: str, session: str | None):
     """Send a message to a user via Raven AI"""
 
     async def _send():
@@ -1054,7 +1031,7 @@ def db():
 
 @db.command("migrate")
 @click.option("--target", default=None, type=int, help="Target migration version")
-def db_migrate(target: Optional[int]):
+def db_migrate(target: int | None):
     """Run pending database migrations"""
 
     async def _migrate():
@@ -1068,7 +1045,7 @@ def db_migrate(target: Optional[int]):
 
 @db.command("backup")
 @click.argument("output", default=None, required=False)
-def db_backup(output: Optional[str]):
+def db_backup(output: str | None):
     """Backup the database"""
     import shutil
 
@@ -1139,7 +1116,7 @@ def task():
 @click.option("--user", default=None, help="Filter by user ID")
 @click.option("--status", default=None, help="Filter by status (pending/running/completed/failed/cancelled)")
 @click.option("--limit", default=20, type=int, help="Max results")
-def task_list(user: Optional[str], status: Optional[str], limit: int):
+def task_list(user: str | None, status: str | None, limit: int):
     """List tasks"""
     from raven.core.task_engine.store import TaskStore
 
@@ -1206,11 +1183,11 @@ def task_show(task_id: str):
 @click.option("--channel", default="cli", help="Channel")
 def task_run(goal: str, user: str, channel: str):
     """Plan and execute a goal as a task"""
-    from raven.core.task_engine.store import TaskStore
-    from raven.core.task_engine.runner import TaskRunner
-    from raven.core.task_engine.planner import TaskPlanner
-    from raven.tools.register_all import create_tool_registry
     from raven.core.llm import LLMRouter
+    from raven.core.task_engine.planner import TaskPlanner
+    from raven.core.task_engine.runner import TaskRunner
+    from raven.core.task_engine.store import TaskStore
+    from raven.tools.register_all import create_tool_registry
 
     async def _run():
         tools = create_tool_registry()
@@ -1250,8 +1227,8 @@ def task_run(goal: str, user: str, channel: str):
 @click.argument("task_id")
 def task_cancel(task_id: str):
     """Cancel a running task"""
-    from raven.core.task_engine.store import TaskStore
     from raven.core.task_engine.runner import TaskRunner
+    from raven.core.task_engine.store import TaskStore
     from raven.tools.register_all import create_tool_registry
 
     async def _cancel():
@@ -1271,8 +1248,8 @@ def task_cancel(task_id: str):
 @click.argument("task_id")
 def task_retry(task_id: str):
     """Retry a failed task"""
-    from raven.core.task_engine.store import TaskStore
     from raven.core.task_engine.runner import TaskRunner
+    from raven.core.task_engine.store import TaskStore
     from raven.tools.register_all import create_tool_registry
 
     async def _retry():
@@ -1327,7 +1304,7 @@ def monitor():
 @monitor.command("list")
 @click.option("--user", default=None, help="Filter by user ID")
 @click.option("--status", default=None, help="Filter by status (active/paused)")
-def monitor_list(user: Optional[str], status: Optional[str]):
+def monitor_list(user: str | None, status: str | None):
     """List all monitors"""
     from raven.core.monitor.store import MonitorStore
 
@@ -1364,7 +1341,7 @@ def monitor_list(user: Optional[str], status: Optional[str]):
 @click.option("--user", default="cli", help="User ID")
 def monitor_add(name: str, mon_type: str, target: str, interval: int, conditions: tuple[str], user: str):
     """Add a new monitor"""
-    from raven.core.monitor.models import Condition, ConditionOperator, Monitor, MonitorType, MonitorStatus
+    from raven.core.monitor.models import Condition, ConditionOperator, Monitor, MonitorStatus, MonitorType
     from raven.core.monitor.store import MonitorStore
 
     parsed_conditions = []
@@ -1393,10 +1370,8 @@ def monitor_add(name: str, mon_type: str, target: str, interval: int, conditions
             try:
                 parsed_val = int(raw_val)
             except ValueError:
-                try:
+                with contextlib.suppress(ValueError):
                     parsed_val = float(raw_val)
-                except ValueError:
-                    pass
             parsed_conditions.append(
                 Condition(metric=parts[0].strip(), operator=op_map.get(op_str, ConditionOperator.EQ), value=parsed_val)
             )
@@ -1507,8 +1482,9 @@ def code():
 @click.option("--max-files", default=2000, type=int, help="Max files to index")
 def code_index(path: str, max_files: int):
     """Index a codebase for context-aware assistance"""
-    from raven.core.coder.indexer import CodeIndexer
     from pathlib import Path
+
+    from raven.core.coder.indexer import CodeIndexer
 
     p = Path(path).expanduser().resolve()
     if not p.is_dir():
@@ -1528,8 +1504,9 @@ def code_index(path: str, max_files: int):
 @click.argument("path", default=".", required=False)
 def code_search(query: str, path: str):
     """Search indexed codebase for symbols"""
-    from raven.core.coder.indexer import CodeIndexer
     from pathlib import Path
+
+    from raven.core.coder.indexer import CodeIndexer
 
     p = Path(path).expanduser().resolve()
     if not p.is_dir():
@@ -1557,8 +1534,9 @@ def code_search(query: str, path: str):
 @click.option("--language", default="", help="Programming language")
 def code_review(path: str, language: str):
     """Review a file for issues"""
-    from raven.core.coder.review import CodeReviewer
     from pathlib import Path
+
+    from raven.core.coder.review import CodeReviewer
 
     p = Path(path).expanduser().resolve()
     if not p.is_file():
@@ -1598,9 +1576,10 @@ def code_review(path: str, language: str):
 @click.option("--user", default="cli", help="User ID")
 def code_start(goal: str, project: str, user: str):
     """Start a coding session"""
+    from pathlib import Path
+
     from raven.core.coder.models import CodingSession
     from raven.core.coder.session import CodingSessionManager
-    from pathlib import Path
 
     p = Path(project).expanduser().resolve()
     session = CodingSession(user_id=user, goal=goal, project_path=str(p))
@@ -1659,7 +1638,7 @@ def routine():
 
 @routine.command("list")
 @click.option("--user", default=None, help="Filter by user ID")
-def routine_list(user: Optional[str]):
+def routine_list(user: str | None):
     """List configured routines"""
     from raven.core.routine.store import RoutineStore
 
@@ -1833,12 +1812,12 @@ def tui():
         from raven.tui.app import run as run_tui
     except ImportError:
         console.print("[red]Textual is not installed. Install with: pip install raven-agent[tui][/red]")
-        raise SystemExit(1)
+        raise SystemExit(1) from None
     try:
         run_tui()
     except Exception as e:
         console.print(f"[red]TUI error: {e}[/red]")
-        raise SystemExit(1)
+        raise SystemExit(1) from e
 
 
 if __name__ == "__main__":

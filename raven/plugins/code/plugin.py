@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import sys
 import tempfile
@@ -48,7 +49,7 @@ async def run_python(code: str, timeout: int = 30) -> str:
 
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=t)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             return f"Execution timed out after {t}s"
 
@@ -68,10 +69,8 @@ async def run_python(code: str, timeout: int = 30) -> str:
         if tmpdir and Path(tmpdir).exists():
             import shutil
 
-            try:
+            with contextlib.suppress(Exception):
                 shutil.rmtree(tmpdir)
-            except Exception:
-                pass
 
 
 async def review_code(code: str, language: str = "auto") -> str:

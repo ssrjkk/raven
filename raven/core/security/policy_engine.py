@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 
-class Op(str, Enum):
+class Op(StrEnum):
     EQ = "eq"
     NEQ = "neq"
     GT = "gt"

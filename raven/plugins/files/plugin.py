@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
-
 
 PLUGIN_NAME = "files"
 PLUGIN_DESCRIPTION = "Read, write, list, and manage files on the local filesystem"
 
-ALLOWED_ROOTS = [str(Path.home()), str(Path.cwd()), "/tmp"]
+ALLOWED_ROOTS = [str(Path.home()), str(Path.cwd()), tempfile.gettempdir()]
 
 
 def _check_path(path: str) -> Path:

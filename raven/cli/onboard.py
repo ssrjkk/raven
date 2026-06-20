@@ -255,7 +255,7 @@ async def _test_send(config: dict[str, Any]) -> None:
         try:
             await asyncio.wait_for(received.wait(), timeout=60)
             console.print(f"[green]✅ {result_text}[/green]")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             console.print("[yellow]No message received within 60s. Check your token.[/yellow]")
         finally:
             await channel.stop()

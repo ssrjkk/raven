@@ -2,25 +2,25 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class RoutineAction(str, Enum):
+class RoutineAction(StrEnum):
     SEND_BRIEFING = "send_briefing"
     SEND_MESSAGE = "send_message"
     CHECK_EMAIL = "check_email"
     ORGANIZE_FILES = "organize_files"
 
 
-class RoutineTrigger(str, Enum):
+class RoutineTrigger(StrEnum):
     MANUAL = "manual"
     SCHEDULED = "scheduled"
     INTERVAL = "interval"
     EVENT = "event"
 
 
-class RoutineStatus(str, Enum):
+class RoutineStatus(StrEnum):
     ACTIVE = "active"
     PAUSED = "paused"
     ERROR = "error"

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -135,12 +135,12 @@ class Database:
                 system_prompt=row["system_prompt"],
                 created_at=datetime.fromisoformat(row["created_at"])
                 if isinstance(row["created_at"], str)
-                else datetime.now(timezone.utc),
+                else datetime.now(UTC),
                 updated_at=datetime.fromisoformat(row["updated_at"])
                 if isinstance(row["updated_at"], str)
-                else datetime.now(timezone.utc),
+                else datetime.now(UTC),
             )
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         session = Session(
             id=session_id, channel=channel, user_id=user_id, agent_id=agent_id, created_at=now, updated_at=now
         )
@@ -166,7 +166,7 @@ class Database:
         )
         await self.conn.execute(
             "UPDATE sessions SET updated_at = ? WHERE id = ?",
-            (datetime.now(timezone.utc).isoformat(), msg.session_id),
+            (datetime.now(UTC).isoformat(), msg.session_id),
         )
         await self.conn.commit()
 
@@ -187,7 +187,7 @@ class Database:
                     metadata=json.loads(row["metadata"]) if row["metadata"] else {},
                     created_at=datetime.fromisoformat(row["created_at"])
                     if row["created_at"]
-                    else datetime.now(timezone.utc),
+                    else datetime.now(UTC),
                 )
             )
         return result
@@ -257,10 +257,10 @@ class Database:
                     system_prompt=r["system_prompt"],
                     created_at=datetime.fromisoformat(r["created_at"])
                     if r["created_at"]
-                    else datetime.now(timezone.utc),
+                    else datetime.now(UTC),
                     updated_at=datetime.fromisoformat(r["updated_at"])
                     if r["updated_at"]
-                    else datetime.now(timezone.utc),
+                    else datetime.now(UTC),
                 )
             )
         return result

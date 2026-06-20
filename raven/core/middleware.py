@@ -4,6 +4,7 @@ import asyncio
 import time
 import uuid
 from collections import defaultdict
+
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from loguru import logger
@@ -129,9 +130,8 @@ async def auth_middleware(request: Request, call_next):
 
     path = request.url.path
     for prefix, required_perm in PATH_PERMISSIONS.items():
-        if path.startswith(prefix):
-            if not rbac.has_permission(request.state.user_role, required_perm):
-                return JSONResponse(status_code=403, content={"error": "Forbidden", "required": required_perm.value})
+        if path.startswith(prefix) and not rbac.has_permission(request.state.user_role, required_perm):
+            return JSONResponse(status_code=403, content={"error": "Forbidden", "required": required_perm.value})
 
     return await call_next(request)
 
@@ -145,10 +145,10 @@ async def input_sanitize_middleware(request: Request, call_next):
             except Exception:
                 return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
             if isinstance(body, dict):
-                MAX_DEPTH = 10
+                max_depth = 10
 
                 def _check_depth(obj, depth=0):
-                    if depth > MAX_DEPTH:
+                    if depth > max_depth:
                         raise ValueError("Max depth exceeded")
                     if isinstance(obj, dict):
                         for k, v in obj.items():

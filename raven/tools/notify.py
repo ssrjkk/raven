@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 

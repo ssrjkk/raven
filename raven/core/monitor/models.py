@@ -3,11 +3,11 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class MonitorType(str, Enum):
+class MonitorType(StrEnum):
     HTTP = "http"
     PRICE = "price"
     RSS = "rss"
@@ -15,13 +15,13 @@ class MonitorType(str, Enum):
     PROCESS = "process"
 
 
-class MonitorStatus(str, Enum):
+class MonitorStatus(StrEnum):
     ACTIVE = "active"
     PAUSED = "paused"
     ERROR = "error"
 
 
-class ConditionOperator(str, Enum):
+class ConditionOperator(StrEnum):
     EQ = "="
     NE = "!="
     GT = ">"

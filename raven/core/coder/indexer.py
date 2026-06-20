@@ -132,9 +132,8 @@ class CodeIndexer:
         results = []
         try:
             for entry in self._root.rglob("*"):
-                if entry.is_file() and entry.suffix in LANGUAGE_MAP:
-                    if not any(part in IGNORE_DIRS for part in entry.relative_to(self._root).parts):
-                        results.append(entry)
+                if entry.is_file() and entry.suffix in LANGUAGE_MAP and not any(part in IGNORE_DIRS for part in entry.relative_to(self._root).parts):
+                    results.append(entry)
         except PermissionError:
             pass
         return sorted(results)

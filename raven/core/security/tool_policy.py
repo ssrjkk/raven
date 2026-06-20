@@ -1,22 +1,21 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
-
 
 ALLOWED_PROFILES = frozenset({"messaging", "minimal", "full"})
 
 MAX_PATH_DEPTH = 20
 
 
-class ExecSecurity(str, Enum):
+class ExecSecurity(StrEnum):
     DENY = "deny"
     ASK = "ask"
     FULL = "full"
 
 
-class ExecAskMode(str, Enum):
+class ExecAskMode(StrEnum):
     OFF = "off"
     ON_MISS = "on-miss"
     ALWAYS = "always"
@@ -83,9 +82,8 @@ class ToolPolicyEvaluator:
             from raven.core.security.policy_engine import policy_engine
 
             rs = policy_engine.get_ruleset("tools")
-            if rs is not None and len(rs.rules) > 0:
-                if not policy_engine.check("tools", {"tool": tool_name, "profile": self.profile, "action": "call"}):
-                    return False
+            if rs is not None and len(rs.rules) > 0 and not policy_engine.check("tools", {"tool": tool_name, "profile": self.profile, "action": "call"}):
+                return False
         except ImportError:
             pass
 
@@ -133,7 +131,7 @@ class ToolPolicyEvaluator:
             return False, "exec denied by policy (security=deny)"
 
         if self.workspace_only:
-            for k, v in args.items():
+            for _k, v in args.items():
                 if isinstance(v, str):
                     resolved = _resolve_safe(v, self._workspace_root)
                     if resolved is None:
@@ -152,11 +150,10 @@ class ToolPolicyEvaluator:
                         return False, "exec cancelled by user"
                 return True, None
             if self.exec_ask == ExecAskMode.ON_MISS:
-                if tool_name not in self._allow and tool_name not in self._profile_tools():
-                    if confirm_fn:
-                        confirmed = await confirm_fn(tool_name, args)
-                        if not confirmed:
-                            return False, "exec cancelled by user"
+                if tool_name not in self._allow and tool_name not in self._profile_tools() and confirm_fn:
+                    confirmed = await confirm_fn(tool_name, args)
+                    if not confirmed:
+                        return False, "exec cancelled by user"
                 return True, None
 
         return True, None

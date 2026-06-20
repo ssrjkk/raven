@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import Any
 
 from loguru import logger
@@ -71,10 +72,8 @@ async def forget(key: str) -> str:
     """Delete a memory. Args: key (str): Memory key to forget"""
     collection = await _ensure_db()
     if collection:
-        try:
+        with contextlib.suppress(Exception):
             collection.delete(ids=[key])
-        except Exception:
-            pass
     _fallback.pop(key, None)
     return f"Forgot '{key}'"
 

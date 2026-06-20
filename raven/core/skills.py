@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import builtins
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 from loguru import logger
 
@@ -67,10 +68,10 @@ class SkillsRegistry:
     def list(self) -> list[Skill]:
         return list(self._skills.values())
 
-    def list_names(self) -> List[str]:
+    def list_names(self) -> builtins.list[str]:
         return list(self._skills.keys())
 
-    def active_prompts(self, names: List[str]) -> str:
+    def active_prompts(self, names: builtins.list[str]) -> str:
         parts = []
         for name in names:
             skill = self.get(name)

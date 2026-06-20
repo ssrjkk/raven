@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 
 from loguru import logger
@@ -54,10 +55,8 @@ class TaskRunner:
     async def wait(self, task_id: str, timeout: float | None = None) -> Task:
         runner = self._running.get(task_id)
         if runner:
-            try:
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(runner, timeout=timeout)
-            except asyncio.TimeoutError:
-                pass
         return self._store.load_task(task_id) or Task(goal="")
 
     def get_task(self, task_id: str) -> Task | None:
@@ -112,7 +111,7 @@ class TaskRunner:
 
                     logger.info("Task {} step {} completed", task_id, i + 1)
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     step.status = TaskStatus.FAILED
                     step.error = f"Timeout ({spec.timeout}s)" if spec else "Timeout"
                     step.completed_at = time.time()

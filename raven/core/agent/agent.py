@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
 from enum import Enum, auto
-from typing import Any, AsyncIterator
+from typing import Any
 
 from loguru import logger
 
@@ -70,7 +71,7 @@ class Agent:
         self._tool_policy = tool_policy or self._init_tool_policy()
 
     def _init_tool_policy(self):
-        from raven.core.config import settings, _DEFAULT_TOOLS_DENY
+        from raven.core.config import _DEFAULT_TOOLS_DENY, settings
         from raven.core.security.tool_policy import ExecAskMode, ExecSecurity, ToolPolicyEvaluator
 
         deny_raw = settings.tools_deny
@@ -193,9 +194,8 @@ class Agent:
         consecutive_errors = 0
         delay = 0.5
 
-        if not self.config.stateless:
-            if recall_context is None:
-                recall_context = await self._get_recall_context(user_message)
+        if not self.config.stateless and recall_context is None:
+            recall_context = await self._get_recall_context(user_message)
         if recall_context:
             messages.append({"role": "system", "content": f"Relevant memories:\n{recall_context}"})
 

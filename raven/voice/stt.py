@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -10,7 +11,7 @@ from uuid import uuid4
 from loguru import logger
 
 
-class STTProvider(str, Enum):
+class STTProvider(StrEnum):
     WHISPER = "whisper"
     GOOGLE = "google"
     AZURE = "azure"
@@ -106,9 +107,10 @@ class SpeechToText:
 
     def _transcribe_vosk(self, audio_path: str, **kwargs: Any) -> str:
         try:
-            import vosk
-            import wave
             import json
+            import wave
+
+            import vosk
         except ImportError:
             logger.warning("vosk not installed")
             return ""
@@ -117,14 +119,13 @@ class SpeechToText:
             model = vosk.Model(lang=self.config.language)
         else:
             model = vosk.Model(model_path)
-        wf = wave.open(audio_path, "rb")
-        rec = vosk.KaldiRecognizer(model, wf.getframerate())
-        while True:
-            data = wf.readframes(4000)
-            if len(data) == 0:
-                break
-            rec.AcceptWaveform(data)
-        wf.close()
+        with wave.open(audio_path, "rb") as wf:
+            rec = vosk.KaldiRecognizer(model, wf.getframerate())
+            while True:
+                data = wf.readframes(4000)
+                if len(data) == 0:
+                    break
+                rec.AcceptWaveform(data)
         result = json.loads(rec.FinalResult())
         text: str = result.get("text", "").strip()
         logger.info("Vosk transcription ({} chars): {}", len(text), text[:80])
@@ -144,10 +145,8 @@ class SpeechToText:
         with open(temp, "wb") as f:
             f.write(audio.get_wav_data())
         text = self.transcribe(str(temp))
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(str(temp))
-        except OSError:
-            pass
         return text
 
 

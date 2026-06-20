@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import json
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 from uuid import uuid4
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -82,16 +83,15 @@ class WebChatChannel(BaseChannel):
                     msg_data = json.loads(data)
                     text = msg_data.get("text", "")
                     session_id = msg_data.get("session_id", session_id)
-                    if text:
-                        if self._handler:
-                            event = IncomingMessage(
-                                channel="webchat",
-                                user_id=client_id,
-                                session_id=session_id,
-                                text=text,
-                                metadata={"client_id": client_id},
-                            )
-                            await self._handler(event)
+                    if text and self._handler:
+                        event = IncomingMessage(
+                            channel="webchat",
+                            user_id=client_id,
+                            session_id=session_id,
+                            text=text,
+                            metadata={"client_id": client_id},
+                        )
+                        await self._handler(event)
             except WebSocketDisconnect:
                 pass
             finally:
@@ -146,10 +146,8 @@ class WebChatChannel(BaseChannel):
 
     async def stop(self):
         for ws in self._connections.values():
-            try:
+            with contextlib.suppress(Exception):
                 await ws.close()
-            except Exception:
-                pass
         self._connections.clear()
 
     async def connect(self):

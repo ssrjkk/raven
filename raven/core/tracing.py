@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import functools
 import time
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from typing import Any, Callable, Generator
+from typing import Any
 
 from loguru import logger
 

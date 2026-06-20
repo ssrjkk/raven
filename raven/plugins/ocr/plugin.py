@@ -25,7 +25,7 @@ async def ocr_image(image_path: str, language: str = "eng+rus") -> str:
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             return "OCR timed out after 30s"
         text = stdout.decode("utf-8", errors="replace").strip()
@@ -51,12 +51,12 @@ async def ocr_url(url: str, language: str = "eng+rus") -> str:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(url)
             resp.raise_for_status()
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-        tmp.write(resp.content)
-        tmp.close()
-        return await ocr_image(tmp.name, language)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+            tmp.write(resp.content)
+            tmp_path = tmp.name
+        return await ocr_image(tmp_path, language)
     except Exception as e:
         return f"OCR URL error: {e}"
     finally:
-        if tmp and Path(tmp.name).exists():
-            Path(tmp.name).unlink()
+        if tmp and Path(tmp_path).exists():
+            Path(tmp_path).unlink()

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+import contextlib
+from collections.abc import Awaitable, Callable
+from typing import Any
 from uuid import uuid4
 
 from loguru import logger
@@ -12,7 +14,6 @@ from raven.channels.base import BaseChannel
 from raven.channels.telegram.voice import download_voice, transcribe_voice
 from raven.core.config import settings
 from raven.core.models import IncomingMessage, Message
-
 
 TELEGRAM_HELP = (
     "Hello! I'm your Raven AI assistant.\n"
@@ -124,13 +125,11 @@ class TelegramChannel(BaseChannel):
     async def send_typing(self, chat_id: int):
         if not self._app:
             return
-        try:
+        with contextlib.suppress(Exception):
             await self._app.bot.send_chat_action(
                 chat_id=chat_id,
                 action="typing",
             )
-        except Exception:
-            pass
 
     async def send_menu(self, chat_id: int, text: str = "Choose an action:"):
         if not self._app:
@@ -212,10 +211,8 @@ class TelegramChannel(BaseChannel):
         text = await transcribe_voice(file_path)
         from pathlib import Path
 
-        try:
+        with contextlib.suppress(Exception):
             Path(file_path).unlink()
-        except Exception:
-            pass
 
         if text:
             await reply.edit_text(f"🎤 *Transcribed:* {text[:200]}")

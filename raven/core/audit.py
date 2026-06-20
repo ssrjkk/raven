@@ -7,14 +7,14 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
 
-class AuditEventType(str, Enum):
+class AuditEventType(StrEnum):
     MESSAGE_RECEIVED = "message.received"
     MESSAGE_SENT = "message.sent"
     USER_AUTH = "user.auth"

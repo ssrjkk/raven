@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from loguru import logger
 
 
-class AgentType(str, Enum):
+class AgentType(StrEnum):
     PLANNER = "planner"
     CODER = "coder"
     DEBUGGER = "debugger"
@@ -69,8 +69,8 @@ class Orchestrator:
         return AgentResult(agent="planner", success=True, data={"plan": str(plan)})
 
     async def _run_coder(self, task: str) -> AgentResult:
-        import uuid
         import time
+        import uuid
 
         try:
             from raven.core.coder.models import CodingSession, SessionStatus

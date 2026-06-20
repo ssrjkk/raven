@@ -23,7 +23,7 @@ class Permission(enum.Enum):
     SYSTEM_SHUTDOWN = "system:shutdown"
 
 
-class Role(str, enum.Enum):
+class Role(enum.StrEnum):
     ADMIN = "admin"
     USER = "user"
     VIEWER = "viewer"

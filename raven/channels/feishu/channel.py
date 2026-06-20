@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import time
+from typing import Any
 
 from loguru import logger
-from typing import Any
 
 from raven.channels.enterprise_base import EnterpriseChannel
 from raven.core.config import settings

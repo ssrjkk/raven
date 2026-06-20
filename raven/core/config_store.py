@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-
 CONFIG_DIR = Path.home() / ".raven"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from loguru import logger
 
 
-class Capability(str, Enum):
+class Capability(StrEnum):
     NETWORK = "network"
     FILESYSTEM = "filesystem"
     SHELL = "shell"

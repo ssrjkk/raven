@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class ErrorCode(str, Enum):
+class ErrorCode(StrEnum):
     CONFIG_MISSING = "config.missing"
     AUTH_DENIED = "auth.denied"
     RATE_LIMITED = "rate.limited"

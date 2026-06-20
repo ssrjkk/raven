@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class ContextVisibility(str, Enum):
+class ContextVisibility(StrEnum):
     ALL = "all"
     ALLOWLIST = "allowlist"
     ALLOWLIST_QUOTE = "allowlist_quote"

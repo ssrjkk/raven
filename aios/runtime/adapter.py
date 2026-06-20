@@ -1,11 +1,12 @@
 import asyncio
 import subprocess
 from typing import Any
+
 from loguru import logger
 
 from raven.core.config import settings
-from raven.plugins.files import plugin as files_plugin
 from raven.core.rag.retriever import Retriever
+from raven.plugins.files import plugin as files_plugin
 
 
 class RuntimeAdapter:
@@ -18,7 +19,7 @@ class RuntimeAdapter:
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             return "Command timed out after 120s"
         output = stdout.decode(errors="replace") + stderr.decode(errors="replace")

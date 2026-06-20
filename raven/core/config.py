@@ -5,7 +5,6 @@ from pathlib import Path
 from loguru import logger
 from pydantic_settings import BaseSettings
 
-
 _DEFAULT_TOOLS_DENY = [
     "group:automation",
     "group:runtime",

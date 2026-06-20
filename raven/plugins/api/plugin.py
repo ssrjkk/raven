@@ -35,7 +35,7 @@ def _validate_url(url: str) -> tuple[str, ValueError | None]:
             return url, ValueError(f"SSRF blocked: hostname {host}")
         try:
             addrs = socket.getaddrinfo(host, None)
-            for family, _, _, _, sockaddr in addrs:
+            for _family, _, _, _, sockaddr in addrs:
                 addr = sockaddr[0]
                 try:
                     ip = ipaddress.ip_address(addr)

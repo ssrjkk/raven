@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import time
 from abc import abstractmethod
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from loguru import logger
 

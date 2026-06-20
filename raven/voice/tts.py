@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import tempfile
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -11,7 +11,7 @@ from uuid import uuid4
 from loguru import logger
 
 
-class TTSProvider(str, Enum):
+class TTSProvider(StrEnum):
     ELEVENLABS = "elevenlabs"
     GTTS = "gtts"
     SYSTEM = "system"

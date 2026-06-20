@@ -3,16 +3,17 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any
 
 from loguru import logger
 
 from raven.core.db import Database
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     DONE = "done"
@@ -35,7 +36,7 @@ class Task:
         self.name = name
         self.payload = payload
         self.status = status
-        self.created_at = created_at or datetime.now(timezone.utc).isoformat()
+        self.created_at = created_at or datetime.now(UTC).isoformat()
         self.result = result
         self.error = error
 
@@ -51,7 +52,7 @@ class Task:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Task":
+    def from_dict(cls, d: dict[str, Any]) -> Task:
         return cls(
             id=d["id"],
             name=d["name"],
@@ -116,7 +117,7 @@ class TaskQueue:
         while self._running:
             try:
                 task = await asyncio.wait_for(self._queue.get(), timeout=1.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             handler = self._handlers.get(task.name)
             if not handler:

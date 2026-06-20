@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -42,7 +43,9 @@ async def download_voice(file_id: str, bot_token: str) -> str | None:
         async with httpx.AsyncClient(timeout=30) as c:
             resp = await c.get(url)
             if resp.status_code == 200:
-                tmp = Path(tempfile.mktemp(suffix=".oga"))
+                fd, tmp_path = tempfile.mkstemp(suffix=".oga")
+                os.close(fd)
+                tmp = Path(tmp_path)
                 tmp.write_bytes(resp.content)
                 return str(tmp)
     except Exception as e:
