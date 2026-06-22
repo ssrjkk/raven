@@ -75,7 +75,7 @@ jobs:
           done
       - name: Upload Go test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: go-test-results
           path: test-results-go-*.json
@@ -132,7 +132,7 @@ jobs:
           file: ./coverage.xml
       - name: Upload Allure results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: allure-results
           path: allure-results*/
@@ -165,7 +165,7 @@ jobs:
         working-directory: web
       - name: Upload Vitest results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vitest-results
           path: web/test-results/
@@ -200,7 +200,7 @@ jobs:
           PLAYWRIGHT_BASE_URL: http://localhost:5173
       - name: Upload Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: web/playwright-report/
