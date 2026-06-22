@@ -217,7 +217,6 @@ func TestMonitorList(t *testing.T) {
 }
 
 func TestHealthEndpoint(t *testing.T) {
-	svc := NewMonitorEngine()
 	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

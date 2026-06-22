@@ -221,7 +221,7 @@ func TestGRPCAuthServer(t *testing.T) {
 
 	t.Run("check permission user role", func(t *testing.T) {
 		resp, err := server.CheckPermission(context.Background(), &pb.CheckPermissionRequest{
-			UserId: "test", Role: "user", Resource: "monitors", Action: "read",
+			Role: "user",
 		})
 		if err != nil {
 			t.Fatalf("CheckPermission: %v", err)
@@ -233,7 +233,7 @@ func TestGRPCAuthServer(t *testing.T) {
 
 	t.Run("check permission admin role", func(t *testing.T) {
 		resp, _ := server.CheckPermission(context.Background(), &pb.CheckPermissionRequest{
-			UserId: "test", Role: "admin", Resource: "monitors", Action: "delete",
+			Role: "admin",
 		})
 		if !resp.Allowed {
 			t.Error("expected admin role to be allowed")

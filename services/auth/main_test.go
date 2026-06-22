@@ -76,7 +76,7 @@ func TestNewAuthService(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewAuthService(tt.jwtSecret)
+			svc := NewAuthService(tt.jwtSecret, "")
 			if svc == nil {
 				t.Fatal("NewAuthService returned nil")
 			}
