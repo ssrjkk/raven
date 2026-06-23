@@ -23,6 +23,7 @@ class WebChatChannel(BaseChannel):
         self._db = db
         self._app = FastAPI(title="Raven AI Web Chat")
         self._connections: dict[str, WebSocket] = {}
+        self._ready = False
         self._setup_routes()
 
     def _setup_routes(self):
@@ -142,6 +143,7 @@ class WebChatChannel(BaseChannel):
                 canvas_manager.delete_session(session.session_id)
 
     async def start(self):
+        self._ready = True
         logger.info("WebChat channel ready")
 
     async def stop(self):
@@ -151,7 +153,8 @@ class WebChatChannel(BaseChannel):
         self._connections.clear()
 
     async def connect(self):
-        pass
+        if not self._ready:
+            await self.start()
 
     async def disconnect(self):
         await self.stop()

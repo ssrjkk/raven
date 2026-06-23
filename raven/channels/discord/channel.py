@@ -223,7 +223,8 @@ class DiscordChannel(BaseChannel):
             logger.info("Discord channel stopped")
 
     async def connect(self):
-        pass
+        if not self._ready:
+            await self.start()
 
     async def disconnect(self):
         await self.stop()

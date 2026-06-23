@@ -51,6 +51,7 @@ class TelegramChannel(BaseChannel):
         self._token = settings.telegram_bot_token
         self._app: Application[Any, Any, Any, Any, Any, Any] | None = None
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
+        self._ready = False
 
     @staticmethod
     def _build_test_app(token: str) -> Application[Any, Any, Any, Any, Any, Any]:
@@ -78,6 +79,7 @@ class TelegramChannel(BaseChannel):
             logger.warning("Telegram updater not available, skipping polling")
             return
         await updater.start_polling()
+        self._ready = True
         logger.info("Telegram channel started")
 
     async def stop(self):
@@ -87,7 +89,8 @@ class TelegramChannel(BaseChannel):
             logger.info("Telegram channel stopped")
 
     async def connect(self):
-        pass
+        if not self._ready:
+            await self.start()
 
     async def disconnect(self):
         await self.stop()
