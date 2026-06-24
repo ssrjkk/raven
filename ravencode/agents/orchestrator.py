@@ -6,6 +6,8 @@ from typing import Any
 
 from loguru import logger
 
+from ravencode.runtime.agent_core import ReActAgent
+
 
 class AgentType(StrEnum):
     PLANNER = "planner"
@@ -20,11 +22,15 @@ class AgentResult:
     success: bool
     data: Any = None
     error: str | None = None
+    steps: int = 0
 
 
 class Orchestrator:
     def __init__(self) -> None:
         self.memory: list[dict[str, Any]] = field(default_factory=list)
+
+    def _build_agent(self, system_prompt: str | None = None) -> ReActAgent:
+        return ReActAgent(system_prompt=system_prompt)
 
     async def dispatch(self, task: str, agent_type: AgentType) -> AgentResult:
         try:
@@ -43,85 +49,41 @@ class Orchestrator:
             return AgentResult(agent=agent_type.value, success=False, error=str(exc))
 
     async def _run_planner(self, task: str) -> AgentResult:
-        from raven.core.task_engine.planner import TaskPlanner
-
-        tools = None
-        try:
-            from raven.tools.register_all import create_tool_registry
-
-            tools = create_tool_registry()
-        except ImportError:
-            logger.warning("Tool registry unavailable")
-        except Exception as exc:
-            logger.warning("Tool registry init failed: {}", exc)
-
-        llm = None
-        try:
-            from raven.core.llm import LLMRouter
-
-            llm = LLMRouter()
-        except Exception as exc:
-            logger.error("LLM unavailable (no API keys?): {}", exc)
-            return AgentResult(agent="planner", success=False, error=f"LLM unavailable: {exc}")
-
-        planner = TaskPlanner(tools=tools) if tools else TaskPlanner(tools=tools)  # type: ignore[arg-type]
-        plan = await planner.plan(task, llm=llm)
-        return AgentResult(agent="planner", success=True, data={"plan": str(plan)})
+        agent = self._build_agent(
+            system_prompt="You are a planning agent. Analyze the task and create a detailed step-by-step plan. "
+            "Use tools to explore the codebase and understand what needs to be done."
+        )
+        result = await agent.run(task)
+        return AgentResult(agent="planner", success=True, data={"plan": result}, steps=agent._context.message_count)
 
     async def _run_coder(self, task: str) -> AgentResult:
-        import time
-        import uuid
-
-        try:
-            from raven.core.coder.models import CodingSession, SessionStatus
-            from raven.core.coder.session import CodingSessionManager
-            from raven.core.config import settings
-
-            db_path = settings.resolved_db_path
-            mgr = CodingSessionManager(str(db_path))
-            session = CodingSession(
-                id=str(uuid.uuid4()),
-                goal=task,
-                status=SessionStatus.ACTIVE,
-                created_at=time.time(),
-                updated_at=time.time(),
-            )
-            created = mgr.create_session(session)
-            session_id = str(getattr(created, "id", created))
-            self.memory.append({"type": "code", "task": task, "session": session_id})
-            return AgentResult(agent="coder", success=True, data={"session_id": session_id})
-        except Exception as exc:
-            logger.error("Coder failed: {}", exc)
-            return AgentResult(agent="coder", success=False, error=str(exc))
+        agent = self._build_agent(
+            system_prompt="You are a coding agent. Write, edit, and refactor code. Always explore existing code "
+            "before making changes. Use read/glob/grep to understand the codebase first."
+        )
+        result = await agent.run(task)
+        return AgentResult(agent="coder", success=True, data={"code_result": result}, steps=agent._context.message_count)
 
     @staticmethod
     async def _run_debugger(task: str) -> AgentResult:
-        try:
-            from raven.core.coder.review import CodeReviewer
-
-            reviewer = CodeReviewer()
-            comments = await reviewer.review_file(file_path="input", content=task, language="python")
-            return AgentResult(
-                agent="debugger",
-                success=True,
-                data={"issues": [c.message for c in comments]},
-            )
-        except Exception as exc:
-            logger.error("Debugger failed: {}", exc)
-            return AgentResult(agent="debugger", success=False, error=str(exc))
+        agent = ReActAgent(
+            system_prompt="You are a debugging agent. Diagnose issues in code by examining file contents, "
+            "running tests, and analyzing error messages. Use bash to run tests when needed."
+        )
+        result = await agent.run(task)
+        return AgentResult(agent="debugger", success=True, data={"debug_result": result})
 
     async def _run_autonomous_loop(self, task: str) -> AgentResult:
-        max_steps = 25
-        results = []
-        for step in range(max_steps):
-            result = await self._run_planner(f"{task} (step {step + 1})")
-            if not result.success:
-                return AgentResult(agent="autonomous", success=False, error=result.error)
-            results.append(result.data)
-            if len(results) > 1 and results[-1] == results[-2]:
-                break
-        return AgentResult(
-            agent="autonomous",
-            success=True,
-            data={"steps_completed": len(results), "completed": True},
+        agent = self._build_agent()
+        result = await agent.run(task)
+        return AgentResult(agent="autonomous", success=True, data={"result": result}, steps=agent._context.message_count)
+
+    async def delegate(self, task: str, context: str | None = None) -> str:
+        agent = ReActAgent(
+            system_prompt=(
+                "You are a sub-agent handling a delegated task. Complete it efficiently and return the result. "
+                f"{'Context: ' + context if context else ''}"
+            ),
+            max_steps=15,
         )
+        return await agent.run(task)
