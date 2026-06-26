@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from raven.voice import TextToSpeech, TTSConfig, TTSProvider, SpeechToText, STTConfig, STTProvider
+from raven.voice import SpeechToText, STTConfig, STTProvider, TextToSpeech, TTSConfig, TTSProvider
 
 
 def test_tts_default_config():

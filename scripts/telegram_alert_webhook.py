@@ -9,10 +9,10 @@ Starts a Flask server on :9094. Configure AlertManager:
     - url: http://telegram-alerter:9094/alert
 """
 
-import os
-from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 import logging
+import os
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import httpx
 

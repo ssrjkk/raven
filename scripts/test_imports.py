@@ -1,7 +1,7 @@
 """CI import verification script."""
 
-import sys
 import importlib
+import sys
 
 sys.path.insert(0, ".")
 

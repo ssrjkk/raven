@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Generic, TypeVar
+
 from pydantic import BaseModel, Field
 
 T = TypeVar("T")
 
 
-class EventType(str, Enum):
+class EventType(StrEnum):
     # Message events
     MESSAGE_INBOUND = "message.inbound"
     MESSAGE_ROUTED = "message.routed"

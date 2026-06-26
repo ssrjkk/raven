@@ -1,7 +1,7 @@
 """Entry point for Windows Service — called by pywin32's ServiceFramework."""
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

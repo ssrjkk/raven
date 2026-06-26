@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import tempfile
@@ -13,10 +14,8 @@ from services.observability_sdk.outbox_poller import OutboxPoller
 def db_path():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         yield f.name
-    try:
+    with contextlib.suppress(OSError):
         os.unlink(f.name)
-    except OSError:
-        pass
 
 
 class TestOutboxStore:

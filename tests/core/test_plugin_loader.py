@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 import pytest
 
 from raven.core.plugin_loader import PluginLoader, func_to_tool

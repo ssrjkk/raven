@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from loguru import logger
 
@@ -45,9 +46,7 @@ class CircuitBreaker:
     @property
     def is_open(self) -> bool:
         if self._state == CircuitBreakerState.OPEN:
-            if time.monotonic() - self._last_failure_time >= self._recovery_timeout:
-                return False
-            return True
+            return not time.monotonic() - self._last_failure_time >= self._recovery_timeout
         return False
 
     async def call(self, fn: Callable[..., Awaitable[Any]], *args, **kwargs) -> Any:

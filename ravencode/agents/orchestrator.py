@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
 from loguru import logger
 
 from ravencode.runtime.agent_core import ReActAgent
+from ravencode.runtime.context import Conversation
 
 
 class AgentType(StrEnum):
@@ -27,10 +28,12 @@ class AgentResult:
 
 class Orchestrator:
     def __init__(self) -> None:
-        self.memory: list[dict[str, Any]] = field(default_factory=list)
+        pass
 
-    def _build_agent(self, system_prompt: str | None = None) -> ReActAgent:
-        return ReActAgent(system_prompt=system_prompt)
+    @staticmethod
+    def _build_agent(system_prompt: str | None = None, max_steps: int | None = None) -> ReActAgent:
+        conv = Conversation(system_prompt=system_prompt) if system_prompt else None
+        return ReActAgent(conversation=conv, max_steps=max_steps)
 
     async def dispatch(self, task: str, agent_type: AgentType) -> AgentResult:
         try:
@@ -54,7 +57,7 @@ class Orchestrator:
             "Use tools to explore the codebase and understand what needs to be done."
         )
         result = await agent.run(task)
-        return AgentResult(agent="planner", success=True, data={"plan": result}, steps=agent._context.message_count)
+        return AgentResult(agent="planner", success=True, data={"plan": result}, steps=agent.conversation.message_count)
 
     async def _run_coder(self, task: str) -> AgentResult:
         agent = self._build_agent(
@@ -62,13 +65,15 @@ class Orchestrator:
             "before making changes. Use read/glob/grep to understand the codebase first."
         )
         result = await agent.run(task)
-        return AgentResult(agent="coder", success=True, data={"code_result": result}, steps=agent._context.message_count)
+        return AgentResult(agent="coder", success=True, data={"code_result": result}, steps=agent.conversation.message_count)
 
     @staticmethod
     async def _run_debugger(task: str) -> AgentResult:
         agent = ReActAgent(
-            system_prompt="You are a debugging agent. Diagnose issues in code by examining file contents, "
-            "running tests, and analyzing error messages. Use bash to run tests when needed."
+            conversation=Conversation(
+                system_prompt="You are a debugging agent. Diagnose issues in code by examining file contents, "
+                "running tests, and analyzing error messages. Use bash to run tests when needed."
+            )
         )
         result = await agent.run(task)
         return AgentResult(agent="debugger", success=True, data={"debug_result": result})
@@ -76,14 +81,15 @@ class Orchestrator:
     async def _run_autonomous_loop(self, task: str) -> AgentResult:
         agent = self._build_agent()
         result = await agent.run(task)
-        return AgentResult(agent="autonomous", success=True, data={"result": result}, steps=agent._context.message_count)
+        return AgentResult(agent="autonomous", success=True, data={"result": result}, steps=agent.conversation.message_count)
 
-    async def delegate(self, task: str, context: str | None = None) -> str:
+    @staticmethod
+    async def delegate(task: str, context: str | None = None) -> str:
+        prompt = "You are a sub-agent handling a delegated task. Complete it efficiently and return the result."
+        if context:
+            prompt += f"\nContext: {context}"
         agent = ReActAgent(
-            system_prompt=(
-                "You are a sub-agent handling a delegated task. Complete it efficiently and return the result. "
-                f"{'Context: ' + context if context else ''}"
-            ),
+            conversation=Conversation(system_prompt=prompt),
             max_steps=15,
         )
         return await agent.run(task)

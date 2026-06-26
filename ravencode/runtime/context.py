@@ -1,85 +1,196 @@
 from __future__ import annotations
 
+import asyncio
 import json
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
-SYSTEM_PROMPT_TEMPLATE = """You are RavenCode, an autonomous AI engineering assistant with full access to tools.
+# ---------------------------------------------------------------------------
+# memory store
+# ---------------------------------------------------------------------------
 
-## Available tools
-{tool_descriptions}
+@dataclass
+class MemoryStore:
+    path: str = "data/ravencode_memory.json"
+    _data: dict[str, Any] = field(default_factory=dict)
+    _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
-## How to use tools
-The system will automatically detect when you want to use a tool and execute it.
-Just respond naturally — when you say "I'll read the file" or "let me search for X",
-the system handles it. You can also explicitly request a tool.
+    def __post_init__(self):
+        p = Path(self.path).expanduser().resolve()
+        if p.exists():
+            try:
+                self._data = json.loads(p.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                self._data = {}
 
-## Guidelines
-- Think step by step before acting
-- Use read/grep/glob to explore the codebase before making changes
-- Use edit for precise changes, write for new files
-- After completing the task, provide a clear summary of what was done
-- If you encounter errors, diagnose them using available tools
-- Use web_search and web_fetch to get current information when needed
-"""
+    async def get(self, key: str, default: Any = None) -> Any:
+        async with self._lock:
+            return self._data.get(key, default)
 
+    async def set(self, key: str, value: Any) -> None:
+        async with self._lock:
+            self._data[key] = value
+            await self._persist()
+
+    async def delete(self, key: str) -> None:
+        async with self._lock:
+            self._data.pop(key, None)
+            await self._persist()
+
+    async def clear(self) -> None:
+        async with self._lock:
+            self._data.clear()
+            await self._persist()
+
+    async def keys(self) -> list[str]:
+        async with self._lock:
+            return list(self._data.keys())
+
+    async def _persist(self) -> None:
+        p = Path(self.path).expanduser().resolve()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(
+            p.write_text,
+            json.dumps(self._data, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._data
+
+    def __getitem__(self, key: str) -> Any:
+        return self._data[key]
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        self._data[key] = value
+        asyncio.create_task(self._persist())
+
+    def __delitem__(self, key: str) -> None:
+        del self._data[key]
+        asyncio.create_task(self._persist())
+
+    def to_dict(self) -> dict[str, Any]:
+        return dict(self._data)
+
+
+# ---------------------------------------------------------------------------
+# system prompt loader
+# ---------------------------------------------------------------------------
+
+def load_system_prompt_from_file(path: str | Path | None = None) -> str | None:
+    candidates = [
+        Path(path).expanduser().resolve() if path else None,
+        Path.cwd() / "AGENTS.md",
+        Path.cwd() / ".opencode" / "AGENTS.md",
+        Path.home() / ".config" / "opencode" / "AGENTS.md",
+    ]
+    for c in candidates:
+        if c and c.is_file():
+            try:
+                return c.read_text(encoding="utf-8")
+            except OSError:
+                continue
+    return None
+
+
+# ---------------------------------------------------------------------------
+# conversation
+# ---------------------------------------------------------------------------
 
 class Conversation:
-    def __init__(self, system_prompt: str | None = None):
-        self.messages: list[dict[str, Any]] = []
-        self.max_tokens = 128_000
-        self._tool_defs: list[dict[str, Any]] = []
-        if system_prompt:
-            self.system_prompt = system_prompt
-        else:
-            self.system_prompt = SYSTEM_PROMPT_TEMPLATE
+    def __init__(
+        self,
+        system_prompt: str | None = None,
+        messages: list[dict[str, Any]] | None = None,
+        max_tokens: int = 128_000,
+        memory: MemoryStore | None = None,
+    ):
+        self.system_prompt = system_prompt or load_system_prompt_from_file() or self._default_system_prompt()
+        self.messages: list[dict[str, Any]] = messages or []
+        self.max_tokens = max_tokens
+        self.memory = memory or MemoryStore()
 
-    def set_tools(self, tool_defs: list[dict[str, Any]]) -> None:
-        self._tool_defs = tool_defs
-        descriptions = []
-        for td in tool_defs:
-            func = td.get("function", td)
-            params = func.get("parameters", {}).get("properties", {})
-            param_str = ", ".join(params.keys()) if params else "(no params)"
-            descriptions.append(f"- {func['name']}({param_str}): {func.get('description', '')[:100]}")
-        tool_block = "\n".join(descriptions)
-        self.system_prompt = SYSTEM_PROMPT_TEMPLATE.replace("{tool_descriptions}", tool_block)
-
-    def get_messages(self) -> list[dict[str, Any]]:
-        return [{"role": "system", "content": self.system_prompt}, *self.messages]
-
-    def add_user_message(self, content: str) -> None:
-        self.messages.append({"role": "user", "content": content})
-
-    def add_assistant_message(self, content: str, tool_calls: list[Any] | None = None) -> None:
-        msg: dict[str, Any] = {"role": "assistant", "content": content or ""}
-        if tool_calls:
-            msg["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)},
-                }
-                for tc in tool_calls
-            ]
-        self.messages.append(msg)
-
-    def add_tool_result(self, tool_call_id: str, result: str) -> None:
-        self.messages.append({
-            "role": "tool",
-            "tool_call_id": tool_call_id,
-            "content": result,
-        })
-
-    def trim_if_needed(self, reserve: int = 4_000) -> None:
-        if len(self.messages) <= 2:
-            return
-        estimated = sum(len(json.dumps(m)) for m in self.messages)
-        if estimated < self.max_tokens - reserve:
-            return
-        while len(self.messages) > 2 and estimated >= self.max_tokens - reserve:
-            removed = self.messages.pop(1)
-            estimated -= len(json.dumps(removed))
+        if not self.messages or self.messages[0].get("role") != "system":
+            self.messages.insert(0, {"role": "system", "content": self.system_prompt})
 
     @property
     def message_count(self) -> int:
-        return len(self.messages)
+        return max(0, len(self.messages) - 1)
+
+    # -------------------------------------------------------------------
+    # message management
+    # -------------------------------------------------------------------
+
+    def add_user_message(self, content: str) -> None:
+        self.messages.append({"role": "user", "content": content})
+        self._trim()
+
+    def add_assistant_message(self, content: str) -> None:
+        self.messages.append({"role": "assistant", "content": content})
+        self._trim()
+
+    def add_tool_result(self, tool_call_id: str, content: str) -> None:
+        self.messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": content})
+        self._trim()
+
+    def get_messages(self) -> list[dict[str, Any]]:
+        return self.messages
+
+    # -------------------------------------------------------------------
+    # trimming (rough token estimate)
+    # -------------------------------------------------------------------
+
+    def _estimate_tokens(self, text: str) -> int:
+        return len(text) // 4 + len(text.split())
+
+    def _total_tokens(self) -> int:
+        total = 0
+        for msg in self.messages:
+            if isinstance(msg.get("content"), str):
+                total += self._estimate_tokens(msg["content"])
+        return total
+
+    def _trim(self) -> None:
+        while len(self.messages) > 2 and self._total_tokens() > self.max_tokens:
+            self.messages.pop(1)
+
+    # -------------------------------------------------------------------
+    # serialization
+    # -------------------------------------------------------------------
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "system_prompt": self.system_prompt,
+            "messages": self.messages,
+            "max_tokens": self.max_tokens,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Conversation:
+        return cls(
+            system_prompt=data.get("system_prompt"),
+            messages=data.get("messages"),
+            max_tokens=data.get("max_tokens", 128_000),
+        )
+
+    @staticmethod
+    def _default_system_prompt() -> str:
+        return (
+            "You are Raven, an AI coding assistant.\n"
+            "You have access to tools for reading, writing, editing files, running commands, searching the web, "
+            "managing git, and delegating subtasks.\n"
+            "Always read before editing, show diffs before applying, and verify with tests or lint."
+        )
+
+
+# ---------------------------------------------------------------------------
+# factory
+# ---------------------------------------------------------------------------
+
+def create_conversation(
+    system_prompt: str | None = None,
+    memory_path: str | None = None,
+) -> Conversation:
+    memory = MemoryStore(path=memory_path) if memory_path else None
+    return Conversation(system_prompt=system_prompt, memory=memory)

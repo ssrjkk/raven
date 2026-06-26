@@ -1,7 +1,6 @@
-"""High-level AI client — streaming, multi-provider, tool support."""
-
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -34,23 +33,33 @@ _PROVIDER_ROUTING = {
 }
 
 
+class AIUnavailableError(RuntimeError):
+    """Raised when the AI backend cannot be reached."""
+
+
 class AIOSClient:
     def __init__(self, base_url: str | None = None) -> None:
         self.base_url = base_url or f"http://localhost:{settings.web_port}"
         self._llm: LLMRouter | None = None
 
-    def _get_llm(self):
+    def _get_llm(self) -> LLMRouter | None:
         if self._llm is None:
             try:
                 from raven.core.llm import LLMRouter
                 self._llm = LLMRouter()
             except Exception as exc:
-                logger.warning("LLMRouter unavailable (API keys missing?): {}", exc)
+                logger.warning("LLMRouter unavailable: {}", exc)
                 self._llm = None
         return self._llm
 
     def _pick_provider(self, task: str) -> str:
         return _PROVIDER_ROUTING.get(task, "openrouter")
+
+    def _require_llm(self) -> LLMRouter:
+        llm = self._get_llm()
+        if llm is None:
+            raise AIUnavailableError("AI backend unavailable. Configure API keys in .env and restart.")
+        return llm
 
     async def ask(
         self,
@@ -58,54 +67,59 @@ class AIOSClient:
         task: str = "code",
         model: str | None = None,
     ) -> AIResponse:
-        llm = self._get_llm()
-        if llm is None:
-            return AIResponse(
-                text="AI backend unavailable. Configure API keys in .env and restart.",
-                model=model or "none",
-                provider="none",
-            )
-        provider = self._pick_provider(task)
-        model_name = model or settings.default_model
         try:
-            response = await llm.complete(
+            return await self.ask_messages(
                 messages=[{"role": "user", "content": prompt}],
-                model=model_name,
+                task=task,
+                model=model,
             )
-            content = response.content if hasattr(response, "content") else str(response)
-            tool_calls_raw = getattr(response, "tool_calls", [])
-            tool_calls = [
-                {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
-                for tc in (tool_calls_raw or [])
-            ]
-            return AIResponse(
-                text=content,
-                model=model_name,
-                provider=provider,
-                tool_calls=tool_calls,
-            )
+        except AIUnavailableError as exc:
+            return AIResponse(text=str(exc), model=model or "none", provider="none")
         except Exception as exc:
             logger.error("AI request failed: {}", exc)
-            return AIResponse(text=f"Request failed: {exc}", model=model_name, provider=provider)
+            return AIResponse(text=f"Request failed: {exc}", model=model or "none", provider="none")
+
+    async def ask_messages(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        task: str = "code",
+        model: str | None = None,
+    ) -> AIResponse:
+        llm = self._require_llm()
+        provider = self._pick_provider(task)
+        model_name = model or settings.default_model
+        response = await llm.complete(messages=messages, tools=tools, model=model_name)
+        content = response.content if hasattr(response, "content") else str(response)
+        tool_calls_raw = getattr(response, "tool_calls", [])
+        tool_calls = [
+            {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+            for tc in (tool_calls_raw or [])
+        ]
+        return AIResponse(
+            text=content,
+            model=model_name,
+            provider=provider,
+            tool_calls=tool_calls,
+        )
 
     async def ask_stream(
         self,
-        prompt: str,
-        task: str = "code",
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
         model: str | None = None,
-    ):
-        """Stream tokens from the LLM. Yields strings."""
-        llm = self._get_llm()
-        if llm is None:
-            yield "AI backend unavailable. Configure API keys in .env and restart."
-            return
+    ) -> AsyncIterator[str]:
+        llm = self._require_llm()
         model_name = model or settings.default_model
-        try:
-            async for token in llm.complete_stream(
-                messages=[{"role": "user", "content": prompt}],
-                model=model_name,
-            ):
-                yield token
-        except Exception as exc:
-            logger.error("AI stream failed: {}", exc)
-            yield f"\n[error: {exc}]"
+        async for token in llm.complete_stream(messages=messages, tools=tools, model=model_name):
+            yield token
+
+
+async def ask_stream(
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None = None,
+    model: str | None = None,
+) -> AsyncIterator[str]:
+    client = AIOSClient()
+    async for token in client.ask_stream(messages=messages, tools=tools, model=model):
+        yield token

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 NATS_SUBJECTS = {
     # Message flow
     "MESSAGE_INBOUND": "messages.inbound.{channel}",

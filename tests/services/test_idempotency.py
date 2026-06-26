@@ -1,3 +1,4 @@
+import contextlib
 import os
 import tempfile
 
@@ -10,10 +11,8 @@ from services.observability_sdk.idempotency import IdempotencyStore
 def db_path():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         yield f.name
-    try:
+    with contextlib.suppress(OSError):
         os.unlink(f.name)
-    except OSError:
-        pass
 
 
 class TestIdempotencyStore:

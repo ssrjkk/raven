@@ -54,9 +54,9 @@ class Retriever:
         items = []
         for i, chunk in enumerate(chunks):
             doc_id = f"{prefix}:{i}" if prefix else str(i)
-            text = chunk["text"]
+            text: str = chunk.get("text", "")
             meta = {k: v for k, v in chunk.items() if k != "text"}
-            items.append((doc_id, text, meta))
+            items.append((doc_id, text, meta or None))
         if items:
             await self.store.upsert_batch(items)
             logger.info("Indexed {} chunks ({})", len(items), prefix or "root")

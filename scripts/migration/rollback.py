@@ -57,7 +57,7 @@ def rollback(service: str | None, check: bool = False):
         os.environ[svc["env"]] = "false"
 
     # Also disable all shadow flags
-    for flag, env in SHADOW_FLAGS.items():
+    for _flag, env in SHADOW_FLAGS.items():
         print(f"  Setting {env}=false")
         os.environ[env] = "false"
 

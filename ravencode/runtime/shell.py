@@ -1,9 +1,8 @@
-"""Shell execution, filesystem operations, and codebase search."""
-
 from __future__ import annotations
 
 import asyncio
 import fnmatch
+import shlex
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -18,8 +17,9 @@ class ShellExecutor:
 
     async def run(self, cmd: str, timeout: int | None = None) -> str:
         timeout = timeout or self.DEFAULT_TIMEOUT
-        proc = await asyncio.create_subprocess_shell(  # noqa: S604
-            cmd,
+        parts = shlex.split(cmd)
+        proc = await asyncio.create_subprocess_exec(
+            *parts,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
@@ -89,7 +89,8 @@ class ShellExecutor:
                 continue
             try:
                 text = p.read_text(encoding="utf-8", errors="replace")
-            except Exception:  # noqa: S112
+            except Exception:
+                logger.debug("Skipping unreadable file: {}", p)
                 continue
             for i, line in enumerate(text.splitlines(), 1):
                 if pattern in line:
@@ -103,15 +104,16 @@ class ShellExecutor:
         return results
 
     async def search_codebase(self, query: str, k: int = 5) -> list[str]:
+        from pathlib import Path as _Path
+
         from raven.core.config import settings
         from raven.core.rag.retriever import Retriever
         try:
-            db_path = settings.resolved_db_path
+            db_path = str(settings.resolved_db_path)
         except AttributeError:
-            from pathlib import Path as _Path
             db_path = str(_Path("data/rag"))
         try:
-            retriever = Retriever(db_path=str(db_path))
+            retriever = Retriever(db_path=db_path)
             results = await retriever.retrieve(query, k=k)
             return [r.get("text", str(r)) for r in results]
         except Exception as exc:

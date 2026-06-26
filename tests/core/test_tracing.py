@@ -7,9 +7,9 @@ from raven.core.tracing import (
     _NoopSpan,
     _NoopTracer,
     get_tracer,
+    setup_tracing,
     trace_llm_call,
     trace_tool_call,
-    setup_tracing,
 )
 
 

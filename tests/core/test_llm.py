@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 
-
 from raven.core.llm import LLMResponse, LLMRouter, ToolCall
 
 

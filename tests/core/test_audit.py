@@ -84,7 +84,7 @@ def test_audit_log_chain_tamper_detection():
     logger.log(AuditEventType.MESSAGE_SENT, "system")
     logger.stop()
 
-    with open(log_path, "r") as f:
+    with open(log_path) as f:
         lines = f.readlines()
     modified = lines[0].replace("system.startup", "tampered")
     with open(log_path, "w") as f:
@@ -149,7 +149,7 @@ def test_audit_query_limit():
 
     logger = AuditLogger(log_path)
     logger.start()
-    for i in range(20):
+    for _i in range(20):
         logger.log("test.event", "user")
     logger.stop()
 

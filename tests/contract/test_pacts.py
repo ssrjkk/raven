@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 import pytest
-from pact import Consumer, Provider, Like, Term
+from pact import Consumer, Like, Provider, Term
 
 PACT_DIR = Path("tests/contract/pacts")
 PACT_DIR.mkdir(parents=True, exist_ok=True)

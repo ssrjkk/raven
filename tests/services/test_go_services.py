@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import socket
@@ -46,10 +47,8 @@ def build_go_service(name: str) -> Path:
     goos = "windows" if os.name == "nt" else "linux"
     ext = ".exe" if goos == "windows" else ""
     out = svc_dir / "bin" / f"{name}{ext}"
-    try:
+    with contextlib.suppress(Exception):
         out.parent.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        pass
     result = subprocess.run(
         [GO_BUILDER, "build", "-o", str(out), "."],
         cwd=str(svc_dir),

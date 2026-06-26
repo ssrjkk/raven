@@ -146,12 +146,17 @@ def validate_file(path: str):
     errors = []
     for i, line in enumerate(content.splitlines(), 1):
         stripped = line.strip()
-        if stripped and not stripped.startswith("#"):
-            if "=" not in stripped and not stripped.endswith("{") and not stripped.endswith("}"):
-                if not any(kw in stripped for kw in ["include", "listen", "port", "host"]):
-                    if re.match(r"^\s*\w[\w_]*\s*:", stripped):
-                        continue
-                    errors.append(f"Line {i}: possible syntax issue — {stripped[:60]}")
+        if (
+            stripped
+            and not stripped.startswith("#")
+            and "=" not in stripped
+            and not stripped.endswith("{")
+            and not stripped.endswith("}")
+            and not any(kw in stripped for kw in ["include", "listen", "port", "host"])
+            and re.match(r"^\s*\w[\w_]*\s*:", stripped)
+        ):
+            continue
+        errors.append(f"Line {i}: possible syntax issue — {stripped[:60]}")
     if errors:
         print(f"⚠️  Found {len(errors)} potential issues in {path}:")
         for e in errors:

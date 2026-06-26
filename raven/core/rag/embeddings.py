@@ -70,7 +70,8 @@ class EmbeddingEngine:
             model_name = self.model or "all-MiniLM-L6-v2"
             model = SentenceTransformer(model_name)
             embeddings = model.encode(texts, show_progress_bar=False)
-            return embeddings.tolist()
+            result: list[list[float]] = embeddings.tolist()
+            return result
         except ImportError:
             logger.warning("sentence-transformers not installed, returning zero vectors")
             return [[0.0] * 384 for _ in texts]

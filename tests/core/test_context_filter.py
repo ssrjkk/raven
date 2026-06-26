@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 from raven.core.security.context_filter import (
     ContextVisibility,
     PIIEngine,

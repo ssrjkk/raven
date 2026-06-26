@@ -7,9 +7,8 @@ import uuid
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from loguru import logger
-
 from llm_router import LLMRouter
+from loguru import logger
 from nats_client import NATSClient
 
 try:

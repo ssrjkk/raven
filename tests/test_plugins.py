@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import inspect
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -121,6 +122,7 @@ class TestFilesPlugin:
 
     def _allow(self, tmp_path):
         from pathlib import Path
+
         from raven.plugins.files import plugin as p
 
         return patch.object(
@@ -500,10 +502,8 @@ class TestPluginLoader:
         plugins_dir = Path(__file__).parent.parent / "raven" / "plugins"
         for pdir in plugins_dir.iterdir():
             if pdir.is_dir() and pdir.name not in ("__pycache__", "cron"):
-                try:
+                with contextlib.suppress(Exception):
                     loader.load_from_dir(pdir)
-                except Exception:
-                    pass
         tool_names = [t.name for t in loader.tools]
         assert len(tool_names) >= 25
 
@@ -514,10 +514,8 @@ class TestPluginLoader:
         plugins_dir = Path(__file__).parent.parent / "raven" / "plugins"
         for pdir in plugins_dir.iterdir():
             if pdir.is_dir() and pdir.name not in ("__pycache__", "cron"):
-                try:
+                with contextlib.suppress(Exception):
                     loader.load_from_dir(pdir)
-                except Exception:
-                    pass
         openai_tools = loader.to_openai_tools()
         assert len(openai_tools) >= 25
         assert all(t["type"] == "function" for t in openai_tools)

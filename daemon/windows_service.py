@@ -22,7 +22,6 @@ import sys  # noqa: E402
 import threading  # noqa: E402
 from pathlib import Path  # noqa: E402
 
-
 SERVICE_NAME = "RavenAI"
 SERVICE_DISPLAY_NAME = "Raven AI Service"
 SERVICE_DESCRIPTION = "24/7 Personal AI Assistant — Telegram-first, multi-channel gateway"
@@ -95,8 +94,8 @@ class RavenWindowsService:
         """Entry point when service is started by SCM."""
         _ensure_pywin32()
         import servicemanager
-        import win32serviceutil
         import win32service
+        import win32serviceutil
 
         class RavenServiceImpl(win32serviceutil.ServiceFramework):
             _svc_name_ = SERVICE_NAME
@@ -107,11 +106,11 @@ class RavenWindowsService:
                 super().__init__(args)
                 self._stop_event = threading.Event()
 
-            def SvcStop(self):
+            def SvcStop(self):  # noqa: N802
                 self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
                 self._stop_event.set()
 
-            def SvcDoRun(self):
+            def SvcDoRun(self):  # noqa: N802
                 servicemanager.LogMsg(
                     servicemanager.EVENTLOG_INFORMATION_TYPE,
                     servicemanager.PYS_SERVICE_STARTED,

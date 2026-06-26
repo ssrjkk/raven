@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from loguru import logger
 
@@ -59,7 +60,7 @@ class Saga:
                         await self._compensate(completed)
                         raise SagaError(f"Step '{step.name}' failed: {e}", step.name, e) from e
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error("[saga/{}] timeout after {}s", self.saga_id, self._timeout)
             await self._compensate(completed)
             raise SagaError("Saga timeout", "timeout") from None

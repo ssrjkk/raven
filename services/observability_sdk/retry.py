@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Awaitable, Callable, TypeVar
+from collections.abc import Awaitable, Callable
+from typing import TypeVar
 
 from loguru import logger
 
@@ -50,10 +51,10 @@ class RetryPolicy:
                 last_exception = e
                 if attempt < self.max_retries:
                     delay = min(self.base_delay * (self.multiplier**attempt), self.max_delay)
-                    import random
+                    import secrets
 
                     jitter_amount = delay * self.jitter
-                    actual_delay = delay + random.uniform(-jitter_amount, jitter_amount)
+                    actual_delay = delay + secrets.randbelow(int(jitter_amount * 2) + 1) - jitter_amount
                     logger.warning(
                         "[retry] {} failed (attempt {}/{}): {} — retrying in {:.1f}s",
                         operation_name,

@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from raven.channels.discord.channel import DiscordChannel, HAS_DISCORD
+from raven.channels.discord.channel import HAS_DISCORD, DiscordChannel
 from raven.core.models import Message
 
 
@@ -22,10 +22,9 @@ async def test_start_no_discord(channel):
 
 @pytest.mark.asyncio
 async def test_start_no_token(channel):
-    with patch("raven.channels.discord.channel.HAS_DISCORD", True):
-        with patch.object(channel, "_token", None):
-            await channel.start()
-            assert not channel._ready
+    with patch("raven.channels.discord.channel.HAS_DISCORD", True), patch.object(channel, "_token", None):
+        await channel.start()
+        assert not channel._ready
 
 
 @pytest.mark.asyncio

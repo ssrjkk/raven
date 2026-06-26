@@ -9,7 +9,7 @@ pytest.importorskip("textual")
 
 
 def test_tui_module_importable():
-    from raven.tui.app import RavenTUI, DashboardScreen, LogWidget
+    from raven.tui.app import DashboardScreen, LogWidget, RavenTUI
 
     assert RavenTUI.TITLE == "Raven AI"
     assert DashboardScreen is not None

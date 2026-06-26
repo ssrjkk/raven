@@ -110,15 +110,15 @@ async def execute_code(request: dict):
                     "exit_code": proc.returncode,
                     "duration_ms": round(elapsed * 1000),
                 }
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
                 logger.warning("Code execution timed out ({}s): {}", SANDBOX_TIMEOUT, code[:80])
-                raise HTTPException(status_code=408, detail="Execution timed out")
+                raise HTTPException(status_code=408, detail="Execution timed out") from None
         except HTTPException:
             raise
         except Exception as e:
             logger.error("Code execution error: {}", e)
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 if __name__ == "__main__":

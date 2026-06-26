@@ -7,7 +7,7 @@ import sqlite3
 import time
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import uvicorn
@@ -30,7 +30,7 @@ idempotency: IdempotencyStore | None = None
 db_conn: sqlite3.Connection | None = None
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"

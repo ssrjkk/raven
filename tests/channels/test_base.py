@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 import pytest
 
 from raven.channels.base import BaseChannel

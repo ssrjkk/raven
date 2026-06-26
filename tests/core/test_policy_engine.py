@@ -12,7 +12,6 @@ from raven.core.security.policy_engine import (
     RuleSet,
 )
 
-
 # ─── ConditionNode from_dict ─────────────────────────────────────────
 
 

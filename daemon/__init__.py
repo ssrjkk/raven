@@ -13,9 +13,8 @@ def _ensure_raven_env() -> None:
 def run_gateway():
     _ensure_raven_env()
 
-    from raven.cli.main import create_gateway
+    from raven.cli.main import _run_gateway, create_gateway
     from raven.core.config import settings
-    from raven.cli.main import _run_gateway
 
     gateway = create_gateway()
     asyncio.run(_run_gateway(gateway, settings.web_port))

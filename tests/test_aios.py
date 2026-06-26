@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 import pytest
 
 from aios.agents.orchestrator import AgentType, Orchestrator  # type: ignore[attr-defined]
