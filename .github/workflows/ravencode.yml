@@ -1,0 +1,63 @@
+name: RavenCode Automation
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened, review_requested]
+  schedule:
+    - cron: '0 6 * * 1'  # every Monday 6am
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Custom prompt for ravencode'
+        required: false
+        type: string
+      event_type:
+        description: 'Event type override'
+        required: false
+        default: workflow_dispatch
+        type: string
+
+jobs:
+  ravencode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      statuses: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install ravencode
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run ravencode
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          RAVENCODE_GITHUB_EVENT: ${{ toJSON(github.event) }}
+          RAVENCODE_GITHUB_EVENT_NAME: ${{ github.event_name }}
+          RAVENCODE_REPO: ${{ github.repository }}
+          RAVENCODE_SHA: ${{ github.sha }}
+          RAVENCODE_REF: ${{ github.ref }}
+        run: |
+          python -m ravencode integrations github run --event-name "${{ github.event_name }}" --payload "$(echo '${{ toJSON(github.event) }}' | base64 -w0)"

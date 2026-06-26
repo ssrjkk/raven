@@ -1,0 +1,31 @@
+{
+  "agents": {
+    "security-audit": {
+      "system_prompt": "You are a security audit agent. Review code for vulnerabilities. Never modify files.",
+      "max_steps": 20,
+      "confirm_dangerous": false,
+      "diff_preview": false,
+      "proactive_scan": true,
+      "restricted_tools": ["write", "edit", "git_commit", "bash"],
+      "description": "Read-only code security review"
+    },
+    "documentation": {
+      "system_prompt": "You are a documentation agent. Write and update documentation files. Focus on clarity and completeness.",
+      "max_steps": 25,
+      "confirm_dangerous": true,
+      "diff_preview": true,
+      "proactive_scan": true,
+      "tools": ["read", "glob", "grep", "write", "edit", "think"],
+      "description": "Documentation writer and updater"
+    },
+    "code-reviewer": {
+      "system_prompt": "You are a code reviewer. Analyze pull requests and provide detailed feedback. Do not modify code.",
+      "max_steps": 15,
+      "confirm_dangerous": false,
+      "diff_preview": false,
+      "proactive_scan": true,
+      "restricted_tools": ["write", "edit", "git_commit", "git_add", "bash"],
+      "description": "Code review with no write access"
+    }
+  }
+}

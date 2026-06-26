@@ -1,0 +1,114 @@
+{
+  "model": "openrouter/anthropic/claude-sonnet-4",
+  "small_model": "openrouter/openai/gpt-4o-mini",
+  "temperature": 0.7,
+  "max_tokens": 4096,
+  "max_steps": 30,
+  "timeout": 120,
+  "plan_mode": false,
+  "auto_format": true,
+  "use_cache": true,
+  "confirm_dangerous": true,
+  "diff_preview": true,
+  "proactive_scan": true,
+  "workspace_path": "",
+  "theme": "opencode",
+  "format_on_save": true,
+
+  "providers": [
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "api_key": "{env:OPENROUTER_API_KEY}",
+      "base_url": "https://openrouter.ai/api/v1",
+      "models": ["openai/gpt-4o", "anthropic/claude-sonnet-4", "google/gemini-2.0-flash-001"]
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "api_key": "{env:ANTHROPIC_API_KEY}",
+      "base_url": "https://api.anthropic.com",
+      "models": ["claude-sonnet-4", "claude-3-haiku"]
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "api_key": "{env:OPENAI_API_KEY}",
+      "base_url": "https://api.openai.com/v1",
+      "models": ["gpt-4o", "gpt-4o-mini"]
+    },
+    {
+      "id": "ollama",
+      "name": "Ollama",
+      "base_url": "http://localhost:11434",
+      "models": ["llama3", "codellama", "mistral"]
+    },
+    {
+      "id": "azure",
+      "name": "Azure OpenAI",
+      "api_key": "{env:AZURE_OPENAI_API_KEY}",
+      "base_url": "{env:AZURE_OPENAI_ENDPOINT}",
+      "options": {"api_version": "{env:AZURE_OPENAI_API_VERSION}"},
+      "models": ["gpt-4o", "gpt-4o-mini"]
+    },
+    {
+      "id": "copilot",
+      "name": "GitHub Copilot",
+      "api_key": "{env:COPILOT_TOKEN}",
+      "models": ["gpt-4o-copilot"]
+    },
+    {
+      "id": "vertex",
+      "name": "Google Vertex AI",
+      "options": {
+        "project": "{env:VERTEX_AI_PROJECT}",
+        "location": "{env:VERTEX_AI_LOCATION}"
+      },
+      "models": ["gemini-2.0-flash-001", "gemini-2.0-pro-001"]
+    },
+    {
+      "id": "bedrock",
+      "name": "Amazon Bedrock",
+      "api_key": "{env:AWS_ACCESS_KEY_ID}",
+      "options": {
+        "secret_key": "{env:AWS_SECRET_ACCESS_KEY}",
+        "region": "{env:AWS_REGION}"
+      },
+      "models": ["claude-sonnet-4", "llama3-70b"]
+    }
+  ],
+
+  "permissions": [
+    {"tool": "bash", "action": "ask", "patterns": ["npm *", "pip *"]},
+    {"tool": "read", "action": "allow"},
+    {"tool": "write", "action": "ask"},
+    {"tool": "glob", "action": "allow"},
+    {"tool": "grep", "action": "allow"}
+  ],
+
+  "agents": [
+    {
+      "name": "security-audit",
+      "type": "subagent",
+      "description": "Audits code for security vulnerabilities",
+      "max_steps": 20
+    },
+    {
+      "name": "documentation",
+      "type": "subagent",
+      "description": "Writes and updates documentation",
+      "max_steps": 15
+    }
+  ],
+
+  "instructions": [
+    "AGENTS.md"
+  ],
+
+  "disabled_providers": [],
+  "enabled_providers": [],
+
+  "experimental": {
+    "background_subagents": false
+  }
+}

@@ -47,6 +47,7 @@ all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,dev]"]
 
 [project.scripts]
 raven = "raven.cli.main:cli"
+ravencode = "ravencode.cli.main:cli"
 
 [build-system]
 requires = ["hatchling"]

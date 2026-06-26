@@ -46,7 +46,20 @@ class AIOSClient:
         if self._llm is None:
             try:
                 from raven.core.llm import LLMRouter
-                self._llm = LLMRouter()
+                from ravencode.config.loader import get_config
+                cfg = get_config()
+                providers_config: dict[str, dict] = {}
+                for p in cfg.resolve_providers():
+                    overrides: dict[str, str] = {}
+                    if p.api_key:
+                        overrides["api_key"] = p.api_key
+                    if p.base_url:
+                        overrides["base_url"] = p.base_url
+                    if p.options:
+                        overrides.update(p.options)
+                    if overrides:
+                        providers_config[p.id] = overrides
+                self._llm = LLMRouter(providers_config=providers_config)
             except Exception as exc:
                 logger.warning("LLMRouter unavailable: {}", exc)
                 self._llm = None

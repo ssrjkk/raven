@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import difflib
 import fnmatch
 import shlex
@@ -10,6 +11,7 @@ from typing import Any
 from loguru import logger
 
 from raven.core.security.ssrf import validate_url
+from ravencode.runtime.undo import get_undo_manager
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -61,6 +63,11 @@ async def _safe_read(path: str, max_chars: int = 50_000) -> tuple[str, str]:
 
 async def _safe_write(path: str, content: str) -> None:
     p = _confine(path)
+    if p.is_file():
+        original = await asyncio.to_thread(p.read_text, encoding="utf-8", errors="replace")
+        get_undo_manager().record(str(p), original, content, "write")
+    else:
+        get_undo_manager().record(str(p), "", content, "write")
     await asyncio.to_thread(p.parent.mkdir, parents=True, exist_ok=True)
     await asyncio.to_thread(p.write_text, content, encoding="utf-8")
 
@@ -94,6 +101,7 @@ async def edit_file(path: str, old_string: str, new_string: str, preview: bool =
     new_content = content.replace(old_string, new_string, 1)
     if preview:
         return f"[diff for {path}]\n{_compute_diff(content, new_content, path)}"
+    get_undo_manager().record(str(_confine(path)), content, new_content, "edit")
     try:
         await _safe_write(path, new_content)
         return f"[ok] applied edit to {path}"
@@ -173,8 +181,12 @@ async def bash_exec(command: str, timeout: int = 30) -> str:
 async def web_search(query: str, num_results: int = 5) -> str:
     try:
         from duckduckgo_search import DDGS
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=num_results))
+
+        def _search() -> list[dict[str, str]]:
+            with DDGS() as ddgs:
+                return list(ddgs.text(query, max_results=num_results))
+
+        results = await asyncio.to_thread(_search)
         if not results:
             return "(no results)"
         return "\n\n".join(
@@ -206,22 +218,22 @@ async def think(reasoning: str) -> str:
     return f"[thinking: {reasoning}]"
 
 
-_TASK_DEPTH = 0
+_task_depth: contextvars.ContextVar[int] = contextvars.ContextVar("_task_depth", default=0)
 _MAX_TASK_DEPTH = 5
 
 
 async def task_delegate(description: str, context: str | None = None) -> str:
-    global _TASK_DEPTH
-    if _TASK_DEPTH >= _MAX_TASK_DEPTH:
+    depth = _task_depth.get()
+    if depth >= _MAX_TASK_DEPTH:
         return f"[error] max task delegation depth ({_MAX_TASK_DEPTH}) exceeded"
-    _TASK_DEPTH += 1
+    token = _task_depth.set(depth + 1)
     try:
         from ravencode.runtime.agent_core import ReActAgent
         sub = ReActAgent(max_steps=15)
         prompt = f"{context}\n\n{description}" if context else description
         return await sub.run(prompt)
     finally:
-        _TASK_DEPTH -= 1
+        _task_depth.reset(token)
 
 
 # ---------------------------------------------------------------------------
@@ -286,6 +298,125 @@ async def read_image(path: str) -> str:
     import base64
     data = base64.b64encode(p.read_bytes()[:500_000]).decode("ascii")
     return f"Image ({p.stat().st_size} bytes, {ext}): data:image/{ext[1:]};base64,{data}"
+
+
+# ---------------------------------------------------------------------------
+# undo / redo tools
+# ---------------------------------------------------------------------------
+
+async def undo_action() -> str:
+    result = get_undo_manager().undo()
+    return result or "[undo] nothing to undo"
+
+
+async def redo_action() -> str:
+    result = get_undo_manager().redo()
+    return result or "[redo] nothing to redo"
+
+
+# ---------------------------------------------------------------------------
+# checkpoint tools
+# ---------------------------------------------------------------------------
+
+async def checkpoint_save_tool(description: str = "") -> str:
+    from ravencode.runtime.checkpoints import get_checkpoint_manager
+    return await get_checkpoint_manager().save(description)
+
+
+async def checkpoint_restore_tool(cid: str) -> str:
+    from ravencode.runtime.checkpoints import get_checkpoint_manager
+    return await get_checkpoint_manager().restore(cid)
+
+
+async def checkpoint_list_tool() -> str:
+    from ravencode.runtime.checkpoints import get_checkpoint_manager
+    cps = get_checkpoint_manager().list()
+    if not cps:
+        return "(no checkpoints)"
+    return "\n".join(f"{cp['id']}: {cp['description']} ({cp['created']})" for cp in cps)
+
+
+# ---------------------------------------------------------------------------
+# LSP tools
+# ---------------------------------------------------------------------------
+
+async def lsp_completion_tool(path: str, line: int, col: int) -> str:
+    from ravencode.runtime.lsp import lsp_completion
+    return await lsp_completion(path, line, col)
+
+
+async def lsp_definition_tool(path: str, line: int, col: int) -> str:
+    from ravencode.runtime.lsp import lsp_definition
+    return await lsp_definition(path, line, col)
+
+
+async def lsp_references_tool(path: str, line: int, col: int) -> str:
+    from ravencode.runtime.lsp import lsp_references
+    return await lsp_references(path, line, col)
+
+
+async def lsp_hover_tool(path: str, line: int, col: int) -> str:
+    from ravencode.runtime.lsp import lsp_hover
+    return await lsp_hover(path, line, col)
+
+
+# ---------------------------------------------------------------------------
+# sandbox tools
+# ---------------------------------------------------------------------------
+
+async def sandbox_exec_tool(code: str, language: str = "python") -> str:
+    from ravencode.runtime.sandbox import get_sandbox
+    return await get_sandbox().run_code(code, language)
+
+
+# ---------------------------------------------------------------------------
+# smart diff tools
+# ---------------------------------------------------------------------------
+
+async def smart_edit_tool(path: str, old_text: str | None = None, new_text: str | None = None,
+                          insert_after: str | None = None, insert_before: str | None = None,
+                          append: bool = False) -> str:
+    from ravencode.runtime.diff import smart_edit
+    return smart_edit(path, old_text=old_text, new_text=new_text,
+                      insert_after=insert_after, insert_before=insert_before, append=append)
+
+
+async def patch_file_tool(path: str, diff_text: str) -> str:
+    from ravencode.runtime.diff import apply_patch
+    return apply_patch(path, diff_text)
+
+
+# ---------------------------------------------------------------------------
+# auto-format tools
+# ---------------------------------------------------------------------------
+
+async def format_file_tool(path: str) -> str:
+    from ravencode.runtime.formatters import format_file
+    return await format_file(path)
+
+
+async def format_files_tool(paths: list[str]) -> str:
+    from ravencode.runtime.formatters import format_files
+    return await format_files(paths)
+
+
+# ---------------------------------------------------------------------------
+# auto-git tools
+# ---------------------------------------------------------------------------
+
+async def auto_commit_tool(message: str | None = None, path: str | None = None) -> str:
+    from ravencode.runtime.autogit import auto_commit
+    return await auto_commit(path=path, message=message)
+
+
+async def load_skill(name: str) -> str:
+    from ravencode.runtime.skills import discover_skills
+    skills = discover_skills()
+    skill = skills.get(name)
+    if not skill:
+        available = ", ".join(sorted(skills))
+        return f"Skill '{name}' not found. Available: {available or '(none)'}"
+    return skill.instructions
 
 
 # ---------------------------------------------------------------------------
@@ -500,10 +631,215 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         },
         "handler": read_image,
     },
+    "undo": {
+        "name": "undo", "dangerous": False,
+        "description": "Undo the last file write or edit operation.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+        "handler": undo_action,
+    },
+    "redo": {
+        "name": "redo", "dangerous": False,
+        "description": "Redo the last undone file operation.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+        "handler": redo_action,
+    },
+    "checkpoint_save": {
+        "name": "checkpoint_save", "dangerous": False,
+        "description": "Save a snapshot of the workspace as a restore point.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "description": {"type": "string", "description": "Optional description", "default": ""},
+            },
+            "required": [],
+        },
+        "handler": checkpoint_save_tool,
+    },
+    "checkpoint_restore": {
+        "name": "checkpoint_restore", "dangerous": True,
+        "description": "Restore workspace files from a saved checkpoint.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "cid": {"type": "string", "description": "Checkpoint ID"},
+            },
+            "required": ["cid"],
+        },
+        "handler": checkpoint_restore_tool,
+    },
+    "checkpoint_list": {
+        "name": "checkpoint_list", "dangerous": False,
+        "description": "List all saved checkpoints.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+        "handler": checkpoint_list_tool,
+    },
+    "lsp_completion": {
+        "name": "lsp_completion", "dangerous": False,
+        "description": "Get code completion suggestions via LSP at a given file position.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path"},
+                "line": {"type": "integer", "description": "Line number (0-based)"},
+                "col": {"type": "integer", "description": "Column (0-based)"},
+            },
+            "required": ["path", "line", "col"],
+        },
+        "handler": lsp_completion_tool,
+    },
+    "lsp_definition": {
+        "name": "lsp_definition", "dangerous": False,
+        "description": "Find definition location of a symbol via LSP.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path"},
+                "line": {"type": "integer", "description": "Line number (0-based)"},
+                "col": {"type": "integer", "description": "Column (0-based)"},
+            },
+            "required": ["path", "line", "col"],
+        },
+        "handler": lsp_definition_tool,
+    },
+    "lsp_references": {
+        "name": "lsp_references", "dangerous": False,
+        "description": "Find all references to a symbol via LSP.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path"},
+                "line": {"type": "integer", "description": "Line number (0-based)"},
+                "col": {"type": "integer", "description": "Column (0-based)"},
+            },
+            "required": ["path", "line", "col"],
+        },
+        "handler": lsp_references_tool,
+    },
+    "lsp_hover": {
+        "name": "lsp_hover", "dangerous": False,
+        "description": "Get type info and documentation for a symbol via LSP.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path"},
+                "line": {"type": "integer", "description": "Line number (0-based)"},
+                "col": {"type": "integer", "description": "Column (0-based)"},
+            },
+            "required": ["path", "line", "col"],
+        },
+        "handler": lsp_hover_tool,
+    },
+    "sandbox_exec": {
+        "name": "sandbox_exec", "dangerous": True,
+        "description": "Execute code in a Docker sandbox (isolated environment). Language: python|javascript|bash.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "code": {"type": "string", "description": "Code to execute"},
+                "language": {"type": "string", "description": "Language (python, javascript, bash)", "default": "python"},
+            },
+            "required": ["code"],
+        },
+        "handler": sandbox_exec_tool,
+    },
+    "smart_edit": {
+        "name": "smart_edit", "dangerous": True,
+        "description": "Edit a file using smart modes: old_text+new_text (replace), insert_after/new_text+insert_before, or append.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path"},
+                "old_text": {"type": "string", "description": "Text to replace (exact match)", "default": None},
+                "new_text": {"type": "string", "description": "Replacement text", "default": None},
+                "insert_after": {"type": "string", "description": "Insert new_text after this string", "default": None},
+                "insert_before": {"type": "string", "description": "Insert new_text before this string", "default": None},
+                "append": {"type": "boolean", "description": "Append new_text to file", "default": False},
+            },
+            "required": ["path"],
+        },
+        "handler": smart_edit_tool,
+    },
+    "patch": {
+        "name": "patch", "dangerous": True,
+        "description": "Apply a unified diff/patch to a file.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path to patch"},
+                "diff_text": {"type": "string", "description": "Unified diff text"},
+            },
+            "required": ["path", "diff_text"],
+        },
+        "handler": patch_file_tool,
+    },
+    "format_file": {
+        "name": "format_file", "dangerous": False,
+        "description": "Auto-format a file using the appropriate formatter (ruff for .py, prettier for .ts/.js, etc.).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path to format"},
+            },
+            "required": ["path"],
+        },
+        "handler": format_file_tool,
+    },
+    "format_files": {
+        "name": "format_files", "dangerous": False,
+        "description": "Auto-format multiple files.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "paths": {"type": "array", "items": {"type": "string"}, "description": "File paths to format"},
+            },
+            "required": ["paths"],
+        },
+        "handler": format_files_tool,
+    },
+    "auto_commit": {
+        "name": "auto_commit", "dangerous": True,
+        "description": "Automatically stage all changes and create a smart commit message.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string", "description": "Optional custom commit message", "default": None},
+                "path": {"type": "string", "description": "Git repo path", "default": None},
+            },
+            "required": [],
+        },
+        "handler": auto_commit_tool,
+    },
+    "skill": {
+        "name": "skill", "dangerous": False,
+        "description": "Load a SKILL.md file for reusable instructions. Skills are discovered from .opencode/skills/, ~/.config/opencode/skills/, .claude/skills/, or .agents/skills/.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Name of the skill to load (without .md)"},
+            },
+            "required": ["name"],
+        },
+        "handler": load_skill,
+    },
 }
 
 
-def get_tool_definitions() -> list[dict[str, Any]]:
+_PLAN_MODE_DENIED = frozenset({"write", "edit", "bash", "task", "git_commit", "git_add", "checkpoint_restore", "redo"})
+
+
+def get_tool_definitions(plan_mode: bool = False) -> list[dict[str, Any]]:
     return [
         {
             "type": "function",
@@ -514,6 +850,7 @@ def get_tool_definitions() -> list[dict[str, Any]]:
             },
         }
         for t in MODULE_TOOLS.values()
+        if not plan_mode or t["name"] not in _PLAN_MODE_DENIED
     ]
 
 
@@ -526,6 +863,9 @@ async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
     tool = MODULE_TOOLS.get(name)
     if not tool:
         return f"[error] unknown tool: {name}"
+    perm = _get_permission_for_tool(name, arguments)
+    if not perm[0]:
+        return f"[denied] {perm[1]}"
     try:
         result = await tool["handler"](**arguments)
         if isinstance(result, list):
@@ -534,3 +874,19 @@ async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
     except Exception as exc:
         logger.exception("Tool {} failed", name)
         return f"[error] {name}: {exc}"
+
+
+_PERMISSION_CHECKER: Any = None
+
+
+def set_permission_checker(checker: Any) -> None:
+    global _PERMISSION_CHECKER
+    _PERMISSION_CHECKER = checker
+
+
+def _get_permission_for_tool(name: str, arguments: dict[str, Any]) -> tuple[bool, str]:
+    if _PERMISSION_CHECKER is not None:
+        result = _PERMISSION_CHECKER(name, arguments)
+        if isinstance(result, tuple) and len(result) == 2:
+            return (bool(result[0]), str(result[1]))
+    return True, ""

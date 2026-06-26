@@ -52,18 +52,41 @@ class TestRavencodeApiClient:
 
 class TestRavencodeInit:
     def test_lazy_imports(self):
-        from ravencode import AIOSClient, Orchestrator, ShellExecutor
+        from ravencode import (
+            AIOSClient, Orchestrator, ShellExecutor, AgentConfig, MemoryStore,
+            UndoManager, PermissionManager, Plugin, PluginRegistry, ResponseCache,
+            LSPClient, CheckpointManager, FileWatcher, MCPServer,
+            Sandbox, MultiAgentOrchestrator, SessionStore, auto_commit,
+            format_file, smart_edit, apply_patch,
+        )
 
         assert AIOSClient is not None
         assert Orchestrator is not None
         assert ShellExecutor is not None
+        assert AgentConfig is not None
+        assert MemoryStore is not None
+        assert UndoManager is not None
+        assert PermissionManager is not None
+        assert Plugin is not None
+        assert PluginRegistry is not None
+        assert ResponseCache is not None
+        assert LSPClient is not None
+        assert CheckpointManager is not None
+        assert FileWatcher is not None
+        assert MCPServer is not None
+        assert Sandbox is not None
+        assert MultiAgentOrchestrator is not None
+        assert SessionStore is not None
+        assert auto_commit is not None
+        assert format_file is not None
+        assert smart_edit is not None
+        assert apply_patch is not None
 
     def test_all_exported(self):
         import ravencode
 
-        assert "AIOSClient" in ravencode.__all__
-        assert "Orchestrator" in ravencode.__all__
-        assert "ShellExecutor" in ravencode.__all__
+        for name in ravencode.__all__:
+            assert hasattr(ravencode, name), f"Missing {name} in ravencode module"
 
 
 class TestRavencodeAgentResult:

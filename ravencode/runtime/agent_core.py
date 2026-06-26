@@ -1,18 +1,49 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import time
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Self
 
 from loguru import logger
 
-from ravencode.runtime.context import Conversation
+from ravencode.runtime.cache import get_cache
+from ravencode.runtime.context import Conversation, MemoryStore
+from ravencode.runtime.permissions import PermissionManager, default_deny_rules
 from ravencode.runtime.tools import (
     execute_tool,
     get_tool_definitions,
     is_dangerous,
+    set_permission_checker,
 )
+
+# ---------------------------------------------------------------------------
+# event system
+# ---------------------------------------------------------------------------
+
+@dataclass
+class AgentEvent:
+    type: str
+    data: dict[str, Any] = field(default_factory=dict)
+    timestamp: float = field(default_factory=time.time)
+
+
+class EventEmitter:
+    def __init__(self) -> None:
+        self._handlers: dict[str, list[Callable[[AgentEvent], Awaitable[None]]]] = {}
+
+    def on(self, event_type: str, handler: Callable[[AgentEvent], Awaitable[None]]) -> None:
+        self._handlers.setdefault(event_type, []).append(handler)
+
+    async def emit(self, event: AgentEvent) -> None:
+        for handler in self._handlers.get(event.type, []):
+            try:
+                await handler(event)
+            except Exception as exc:
+                logger.exception("Event handler failed for {}: {}", event.type, exc)
 
 # ---------------------------------------------------------------------------
 # config
@@ -30,6 +61,13 @@ class AgentConfig:
         structured_output: bool = False,
         memory_path: str | None = None,
         llm_timeout: int = 120,
+        event_emitter: EventEmitter | None = None,
+        on_step: Callable[[str, int], Awaitable[None]] | None = None,
+        on_message: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+        plan_mode: bool = False,
+        permissions: PermissionManager | None = None,
+        use_cache: bool = True,
+        auto_format: bool = True,
     ):
         self.max_steps = max_steps
         self.max_tool_retries = max_tool_retries
@@ -40,6 +78,13 @@ class AgentConfig:
         self.structured_output = structured_output
         self.memory_path = memory_path
         self.llm_timeout = llm_timeout
+        self.event_emitter = event_emitter
+        self.on_step = on_step
+        self.on_message = on_message
+        self.plan_mode = plan_mode
+        self.permissions = permissions
+        self.use_cache = use_cache
+        self.auto_format = auto_format
 
     @classmethod
     def safe(cls) -> Self:
@@ -70,11 +115,28 @@ class ReActAgent:
         self.config = config or AgentConfig()
         if max_steps is not None:
             self.config.max_steps = max_steps
-        self.conversation = conversation or Conversation(system_prompt=self._build_system_prompt())
+        if conversation is None:
+            memory = MemoryStore(path=self.config.memory_path) if self.config.memory_path else None
+            self.conversation = Conversation(system_prompt=self._build_system_prompt(), memory=memory)
+        else:
+            self.conversation = conversation
         self.llm_provider = llm_provider
         self.name = name
         self._lock = asyncio.Lock()
         self._aborted = False
+        self._task: asyncio.Task[Any] | None = None
+
+        self._init_permissions()
+
+    def _init_permissions(self) -> None:
+        if self.config.plan_mode:
+            denier = PermissionManager(rules=default_deny_rules())
+            set_permission_checker(lambda name, args: denier.is_allowed(name, args))
+        elif self.config.permissions is not None:
+            pm = self.config.permissions
+            set_permission_checker(lambda name, args: pm.is_allowed(name, args))
+        else:
+            set_permission_checker(lambda name, args: (True, ""))
 
     # -----------------------------------------------------------------------
     # system prompt
@@ -86,6 +148,12 @@ class ReActAgent:
         extras = []
         if self.config.structured_output:
             extras.append("You must respond with valid JSON only.")
+        if self.config.plan_mode:
+            extras.append(
+                "You are in PLAN MODE. You may ONLY read, search, and explore the codebase. "
+                "You MUST NOT write, edit, execute shell commands, or make any changes. "
+                "Create a detailed plan for the requested task."
+            )
         if self.config.proactive_scan:
             extras.append(
                 "Before taking action, first explore the project to find relevant files. "
@@ -115,15 +183,24 @@ class ReActAgent:
 
     def abort(self) -> None:
         self._aborted = True
+        if self._task is not None:
+            self._task.cancel()
 
     async def run(self, user_input: str) -> str:
+        self._task = asyncio.current_task()
         async with self._lock:
-            return await self._run_impl(user_input)
+            try:
+                return await self._run_impl(user_input)
+            except asyncio.CancelledError:
+                self._aborted = True
+                return "[aborted]"
 
     async def _run_impl(self, user_input: str) -> str:
         self.conversation.add_user_message(user_input)
         self._aborted = False
         step = 0
+
+        ee = self.config.event_emitter
 
         if self.config.proactive_scan:
             await self._proactive_scan(user_input)
@@ -131,6 +208,8 @@ class ReActAgent:
         while step < self.config.max_steps:
             step += 1
             if self._aborted:
+                if ee:
+                    await ee.emit(AgentEvent("done", {"reason": "aborted", "steps": step}))
                 return "[aborted]"
 
             messages = self.conversation.get_messages()
@@ -139,6 +218,14 @@ class ReActAgent:
             if not response.get("tool_calls"):
                 final = response.get("content", "") or ""
                 self.conversation.add_assistant_message(final)
+                if ee:
+                    await ee.emit(AgentEvent("message", {"role": "assistant", "content": final, "step": step}))
+                if self.config.on_step:
+                    await self.config.on_step(final, step)
+                if self.config.on_message:
+                    await self.config.on_message({"role": "assistant", "content": final})
+                if ee:
+                    await ee.emit(AgentEvent("done", {"reason": "complete", "steps": step}))
                 return final
 
             content = response.get("content", "") or ""
@@ -147,11 +234,14 @@ class ReActAgent:
             if content:
                 self.conversation.add_assistant_message(content)
 
+            if ee:
+                await ee.emit(AgentEvent("step_start", {"step": step, "content": content, "tool_calls": tool_calls}))
+
             for tc in tool_calls:
                 name = tc["function"]["name"]
                 raw = tc["function"]["arguments"]
+
                 try:
-                    import json
                     args = json.loads(raw) if isinstance(raw, str) else raw
                 except json.JSONDecodeError:
                     args = {"raw": raw}
@@ -159,17 +249,36 @@ class ReActAgent:
                 if not isinstance(args, dict):
                     args = {"value": str(args)}
 
+                if ee:
+                    await ee.emit(AgentEvent("tool_call", {"name": name, "args": args, "step": step}))
+
                 if await self._confirm_action(name, args):
                     result = await self._execute_with_retry(name, args)
                 else:
                     result = f"[user denied] {name} was not approved"
 
+                result_truncated = result[:10_000]
                 self.conversation.messages.append({
                     "role": "tool",
                     "tool_call_id": tc.get("id", ""),
-                    "content": result[:10_000],
+                    "content": result_truncated,
                 })
 
+                if ee:
+                    await ee.emit(AgentEvent("tool_result", {"name": name, "result": result_truncated, "step": step}))
+
+                if self.config.on_message:
+                    await self.config.on_message({
+                        "role": "tool",
+                        "tool_call_id": tc.get("id", ""),
+                        "content": result_truncated,
+                    })
+
+                if self.config.on_step:
+                    await self.config.on_step(f"[tool] {name}: {result_truncated[:200]}", step)
+
+        if ee:
+            await ee.emit(AgentEvent("done", {"reason": "max_steps", "steps": step}))
         return "[reached max steps]"
 
     # -----------------------------------------------------------------------
@@ -232,7 +341,19 @@ class ReActAgent:
                 result = await execute_tool(name, args)
                 if isinstance(result, list):
                     result = "\n".join(str(r) for r in result[:200])
-                return str(result)
+                final = str(result)
+
+                if self.config.auto_format and name in ("write", "edit", "smart_edit", "patch"):
+                    path = args.get("path", "")
+                    if path:
+                        try:
+                            from ravencode.runtime.formatters import format_file
+                            fmt_result = await format_file(path)
+                            if fmt_result and not fmt_result.startswith("[skipped"):
+                                logger.info("Auto-formatted: {}", fmt_result)
+                        except Exception:
+                            pass
+                return final
             except Exception as exc:
                 last_err = str(exc)
                 logger.warning("Tool call attempt {}/{} failed: {}", attempt + 1, self.config.max_tool_retries, exc)
@@ -251,7 +372,14 @@ class ReActAgent:
 
         from ravencode.api.client import ask_stream
 
-        tool_defs = get_tool_definitions()
+        tool_defs = get_tool_definitions(plan_mode=self.config.plan_mode)
+
+        cache = get_cache() if self.config.use_cache else None
+        if cache:
+            cached = cache.get(messages, tool_defs)
+            if cached is not None:
+                return self._parse_response(cached)
+
         full = ""
         try:
             async with asyncio.timeout(self.config.llm_timeout):
@@ -260,6 +388,8 @@ class ReActAgent:
         except TimeoutError:
             return {"content": "[error: LLM call timed out]", "tool_calls": []}
 
+        if cache:
+            cache.set(messages, full, tool_defs)
         return self._parse_response(full)
 
     def _parse_response(self, raw: str) -> dict[str, Any]:

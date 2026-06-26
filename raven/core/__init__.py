@@ -5,6 +5,9 @@ from raven.core.db import Database
 from raven.core.gateway.gateway import Gateway
 from raven.core.llm import (
     AnthropicProvider,
+    AzureProvider,
+    BedrockProvider,
+    CopilotProvider,
     LLMProvider,
     LLMResponse,
     LLMRouter,
@@ -12,6 +15,7 @@ from raven.core.llm import (
     OpenAIProvider,
     OpenRouterProvider,
     ToolCall,
+    VertexAIProvider,
 )
 from raven.core.models import IncomingMessage, Message, PluginTool, Session
 from raven.core.plugin_loader import PluginLoader
@@ -33,6 +37,10 @@ __all__ = [
     "AnthropicProvider",
     "OpenAIProvider",
     "OllamaProvider",
+    "AzureProvider",
+    "BedrockProvider",
+    "CopilotProvider",
+    "VertexAIProvider",
     "PluginLoader",
     "Gateway",
     "Agent",

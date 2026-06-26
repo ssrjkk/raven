@@ -1,0 +1,21 @@
+{
+  "name": "ravencode",
+  "displayName": "RavenCode",
+  "description": "AI coding assistant for RavenCode",
+  "version": "0.4.0",
+  "publisher": "raven",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "ravencode.ask", "title": "RavenCode: Ask AI Assistant" },
+      { "command": "ravencode.explain", "title": "RavenCode: Explain Selection" },
+      { "command": "ravencode.fix", "title": "RavenCode: Fix Issue" }
+    ],
+    "keybindings": [
+      { "command": "ravencode.ask", "key": "ctrl+shift+p", "mac": "cmd+shift+p" }
+    ]
+  }
+}

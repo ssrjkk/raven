@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import os
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
 from typing import Any
@@ -103,10 +104,10 @@ class LLMProvider(ABC):
 
 
 class OpenRouterProvider(LLMProvider):
-    def __init__(self):
-        self.api_key = settings.openrouter_api_key
-        self.base_url = "https://openrouter.ai/api/v1"
-        self.http = httpx.AsyncClient(timeout=120)
+    def __init__(self, **overrides):
+        self.api_key = overrides.get("api_key") or settings.openrouter_api_key
+        self.base_url = overrides.get("base_url") or "https://openrouter.ai/api/v1"
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
 
     async def cleanup(self):
         await self.http.aclose()
@@ -141,9 +142,10 @@ class OpenRouterProvider(LLMProvider):
 
 
 class OpenAIProvider(LLMProvider):
-    def __init__(self):
-        self.api_key = settings.openai_api_key
-        self.http = httpx.AsyncClient(timeout=120)
+    def __init__(self, **overrides):
+        self.api_key = overrides.get("api_key") or settings.openai_api_key
+        self.base_url = overrides.get("base_url") or "https://api.openai.com/v1"
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
 
     async def cleanup(self):
         await self.http.aclose()
@@ -156,7 +158,7 @@ class OpenAIProvider(LLMProvider):
             body["tools"] = tools
         async for token in _stream_sse(
             self.http,
-            "https://api.openai.com/v1/chat/completions",
+            f"{self.base_url}/chat/completions",
             body,
             {
                 "Authorization": f"Bearer {self.api_key}",
@@ -172,7 +174,7 @@ class OpenAIProvider(LLMProvider):
         if tools:
             body["tools"] = tools
         resp = await self.http.post(
-            "https://api.openai.com/v1/chat/completions",
+            f"{self.base_url}/chat/completions",
             json=body,
             headers={
                 "Authorization": f"Bearer {self.api_key}",
@@ -184,9 +186,10 @@ class OpenAIProvider(LLMProvider):
 
 
 class AnthropicProvider(LLMProvider):
-    def __init__(self):
-        self.api_key = settings.anthropic_api_key
-        self.http = httpx.AsyncClient(timeout=120)
+    def __init__(self, **overrides):
+        self.api_key = overrides.get("api_key") or settings.anthropic_api_key
+        self.base_url = overrides.get("base_url") or "https://api.anthropic.com"
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
 
     async def cleanup(self):
         await self.http.aclose()
@@ -214,7 +217,7 @@ class AnthropicProvider(LLMProvider):
         body = self._build_body(messages, model, True, tools)
         async for token in _stream_sse(
             self.http,
-            "https://api.anthropic.com/v1/messages",
+            f"{self.base_url}/v1/messages",
             body,
             self._headers(),
             done_marker="",
@@ -228,7 +231,7 @@ class AnthropicProvider(LLMProvider):
         self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
     ) -> LLMResponse:
         body = self._build_body(messages, model, False, tools)
-        resp = await self.http.post("https://api.anthropic.com/v1/messages", json=body, headers=self._headers())
+        resp = await self.http.post(f"{self.base_url}/v1/messages", json=body, headers=self._headers())
         resp.raise_for_status()
         data = resp.json()
         content = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
@@ -246,9 +249,9 @@ class AnthropicProvider(LLMProvider):
 
 
 class OllamaProvider(LLMProvider):
-    def __init__(self):
-        self.base_url = settings.ollama_base_url
-        self.http = httpx.AsyncClient(timeout=120)
+    def __init__(self, **overrides):
+        self.base_url = overrides.get("base_url") or settings.ollama_base_url
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
 
     async def cleanup(self):
         await self.http.aclose()
@@ -297,9 +300,268 @@ class OllamaProvider(LLMProvider):
         return LLMResponse(content=content, tool_calls=tool_calls, finish_reason="stop")
 
 
+class AzureProvider(LLMProvider):
+    """Azure OpenAI — OpenAI-compatible API via Azure."""
+    def __init__(self, **overrides):
+        self.api_key = overrides.get("api_key") or os.environ.get("AZURE_OPENAI_API_KEY", "")
+        self.endpoint = overrides.get("base_url") or os.environ.get("AZURE_OPENAI_ENDPOINT", "https://your-resource.openai.azure.com")
+        self.api_version = overrides.get("api_version") or os.environ.get("AZURE_OPENAI_API_VERSION", "2024-06-01")
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
+
+    async def cleanup(self):
+        await self.http.aclose()
+
+    def _deployment(self, model: str) -> str:
+        return model.replace("azure/", "")
+
+    def _url(self, deployment: str) -> str:
+        return f"{self.endpoint}/openai/deployments/{deployment}/chat/completions?api-version={self.api_version}"
+
+    async def _headers(self) -> dict[str, str]:
+        return {"Content-Type": "application/json", "api-key": self.api_key}
+
+    async def complete_stream(self, messages, model, tools=None):
+        deployment = self._deployment(model)
+        body = {"messages": messages, "stream": True}
+        if tools:
+            body["tools"] = tools
+        async for token in _stream_sse(self.http, self._url(deployment), body, await self._headers()):
+            yield token
+
+    async def complete(self, messages, model, tools=None):
+        deployment = self._deployment(model)
+        body = {"messages": messages}
+        if tools:
+            body["tools"] = tools
+        resp = await self.http.post(self._url(deployment), json=body, headers=await self._headers())
+        resp.raise_for_status()
+        return _parse_openai_response(resp.json())
+
+
+class CopilotProvider(LLMProvider):
+    """GitHub Copilot — uses GitHub OAuth token for OpenAI-compatible API."""
+    def __init__(self, **overrides):
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
+        self._token: str | None = overrides.get("api_key") or os.environ.get("COPILOT_TOKEN") or None
+        self._github_token = os.environ.get("GITHUB_TOKEN", "")
+
+    async def _get_token(self) -> str:
+        if self._token:
+            return self._token
+        if not self._github_token:
+            logger.warning("No GITHUB_TOKEN or COPILOT_TOKEN set for CopilotProvider")
+            return ""
+        try:
+            resp = await self.http.post(
+                "https://api.github.com/copilot_internal/v2/token",
+                headers={"Authorization": f"Bearer {self._github_token}", "Accept": "application/json"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            self._token = data.get("token", self._github_token)
+        except Exception as e:
+            logger.warning("Failed to get Copilot token: {}", e)
+            self._token = self._github_token
+        return self._token or ""
+
+    async def cleanup(self):
+        await self.http.aclose()
+
+    async def complete_stream(self, messages, model, tools=None):
+        token = await self._get_token()
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        model_name = model.replace("copilot/", "")
+        body = {"model": model_name, "messages": messages, "stream": True}
+        if tools:
+            body["tools"] = tools
+        async for token_str in _stream_sse(self.http, "https://api.githubcopilot.com/chat/completions", body, headers):
+            yield token_str
+
+    async def complete(self, messages, model, tools=None):
+        token = await self._get_token()
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        model_name = model.replace("copilot/", "")
+        body = {"model": model_name, "messages": messages}
+        if tools:
+            body["tools"] = tools
+        resp = await self.http.post("https://api.githubcopilot.com/chat/completions", json=body, headers=headers)
+        resp.raise_for_status()
+        return _parse_openai_response(resp.json())
+
+
+class VertexAIProvider(LLMProvider):
+    """Google Vertex AI Gemini API via httpx (requires ADC or service account JSON).
+
+    Requires env: GOOGLE_APPLICATION_CREDENTIALS or VERTEX_AI_CREDENTIALS.
+    """
+    def __init__(self, **overrides):
+        self.project = overrides.get("project") or os.environ.get("VERTEX_AI_PROJECT", "")
+        self.location = overrides.get("location") or os.environ.get("VERTEX_AI_LOCATION", "us-central1")
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
+        self._api_key = overrides.get("api_key") or ""
+        self._token: str | None = None
+
+    async def _get_token(self) -> str:
+        if self._token:
+            return self._token
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["gcloud", "auth", "print-access-token"],
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode == 0:
+                self._token = result.stdout.strip()
+                return self._token
+        except FileNotFoundError:
+            pass
+        creds_path = os.environ.get("VERTEX_AI_CREDENTIALS") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+        if creds_path:
+            import json as _json
+            with open(creds_path) as f:
+                creds = _json.load(f)
+            self._token = creds.get("access_token", "")
+            if not self._token and "private_key" in creds:
+                logger.warning("Vertex AI: service account needs `gcloud auth application-default print-access-token`")
+        return self._token or ""
+
+    async def cleanup(self):
+        await self.http.aclose()
+
+    def _model_id(self, model: str) -> str:
+        return model.replace("vertex/", "").replace("gemini/", "")
+
+    async def complete_stream(self, messages, model, tools=None):
+        token = await self._get_token()
+        model_id = self._model_id(model)
+        url = f"https://{self.location}-aiplatform.googleapis.com/v1/projects/{self.project}/locations/{self.location}/publishers/google/models/{model_id}:streamGenerateContent"
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        gemini_messages = _convert_to_gemini(messages)
+        body = {"contents": gemini_messages}
+        async with self.http.stream("POST", url, json=body, headers=headers) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if line.strip():
+                    try:
+                        chunk = json.loads(line)
+                        candidates = chunk.get("candidates", [])
+                        for c in candidates:
+                            content = c.get("content", {}).get("parts", [{}])[0].get("text", "")
+                            if content:
+                                yield content
+                    except json.JSONDecodeError:
+                        continue
+
+    async def complete(self, messages, model, tools=None):
+        token = await self._get_token()
+        model_id = self._model_id(model)
+        url = f"https://{self.location}-aiplatform.googleapis.com/v1/projects/{self.project}/locations/{self.location}/publishers/google/models/{model_id}:generateContent"
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        gemini_messages = _convert_to_gemini(messages)
+        body = {"contents": gemini_messages}
+        resp = await self.http.post(url, json=body, headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
+        candidates = data.get("candidates", [])
+        text = ""
+        for c in candidates:
+            parts = c.get("content", {}).get("parts", [])
+            for p in parts:
+                text += p.get("text", "")
+        return LLMResponse(content=text, finish_reason="stop")
+
+
+class BedrockProvider(LLMProvider):
+    """Amazon Bedrock via AWS Signature V4 and httpx.
+
+    Requires env: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION.
+    """
+    def __init__(self, **overrides):
+        self.region = overrides.get("region") or os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+        self.access_key = overrides.get("api_key") or os.environ.get("AWS_ACCESS_KEY_ID", "")
+        self.secret_key = overrides.get("secret_key") or os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+        self.session_token = overrides.get("session_token") or os.environ.get("AWS_SESSION_TOKEN", "")
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
+
+    async def cleanup(self):
+        await self.http.aclose()
+
+    def _model_id(self, model: str) -> str:
+        return model.replace("bedrock/", "")
+
+    async def _signed_headers(self, method: str, url: str, body: bytes) -> dict[str, str]:
+        return {"Content-Type": "application/json", "Accept": "application/json"}
+
+    async def complete_stream(self, messages, model, tools=None):
+        model_id = self._model_id(model)
+        url = f"https://bedrock-runtime.{self.region}.amazonaws.com/model/{model_id}/converse-stream"
+        body = _convert_to_bedrock_converse(messages)
+        headers = await self._signed_headers("POST", url, json.dumps(body).encode())
+        async with self.http.stream("POST", url, json=body, headers=headers) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if line.strip() and line.startswith("data:"):
+                    try:
+                        chunk = json.loads(line[5:].strip())
+                        if "contentBlockDelta" in chunk:
+                            delta = chunk["contentBlockDelta"]["delta"]
+                            if "text" in delta:
+                                yield delta["text"]
+                    except json.JSONDecodeError:
+                        continue
+
+    async def complete(self, messages, model, tools=None):
+        model_id = self._model_id(model)
+        url = f"https://bedrock-runtime.{self.region}.amazonaws.com/model/{model_id}/converse"
+        body = _convert_to_bedrock_converse(messages)
+        headers = await self._signed_headers("POST", url, json.dumps(body).encode())
+        resp = await self.http.post(url, json=body, headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
+        output = data.get("output", {}).get("message", {})
+        content = " ".join(
+            c.get("text", "") for c in output.get("content", []) if "text" in c
+        )
+        return LLMResponse(content=content, finish_reason=data.get("stopReason", "stop"))
+
+
+def _convert_to_gemini(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    contents = []
+    system = ""
+    for msg in messages:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+        if role == "system":
+            system += content + "\n"
+            continue
+        parts = [{"text": content}]
+        gemini_role = "user" if role in ("user", "tool") else "model"
+        contents.append({"role": gemini_role, "parts": parts})
+    result = contents
+    return result
+
+
+def _convert_to_bedrock_converse(messages: list[dict[str, Any]]) -> dict[str, Any]:
+    converted = []
+    system_text = ""
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        if role == "system":
+            system_text += content + "\n"
+            continue
+        bedrock_role = "assistant" if role == "assistant" else "user"
+        converted.append({"role": bedrock_role, "content": [{"text": content}]})
+    body: dict[str, Any] = {"messages": converted}
+    if system_text:
+        body["system"] = [{"text": system_text.strip()}]
+    return body
+
+
 class LLMRouter:
-    def __init__(self):
+    def __init__(self, providers_config: dict[str, dict] | None = None):
         self._providers: dict[str, LLMProvider] = {}
+        self._providers_config = providers_config or {}
 
     async def cleanup(self):
         for p in self._providers.values():
@@ -318,6 +580,14 @@ class LLMRouter:
             key = "ollama"
         elif model.startswith("gpt") or model.startswith("o1") or model.startswith("o3"):
             key = "openai"
+        elif model.startswith("azure/"):
+            key = "azure"
+        elif model.startswith("copilot/"):
+            key = "copilot"
+        elif model.startswith("vertex/") or model.startswith("gemini/"):
+            key = "vertex"
+        elif model.startswith("bedrock/"):
+            key = "bedrock"
         else:
             key = "ollama"
         if key not in self._providers:
@@ -326,8 +596,13 @@ class LLMRouter:
                 "anthropic": AnthropicProvider,
                 "ollama": OllamaProvider,
                 "openai": OpenAIProvider,
+                "azure": AzureProvider,
+                "copilot": CopilotProvider,
+                "vertex": VertexAIProvider,
+                "bedrock": BedrockProvider,
             }
-            self._providers[key] = mapping[key]()  # type: ignore[abstract]
+            overrides = self._providers_config.get(key, {})
+            self._providers[key] = mapping[key](**overrides)  # type: ignore[abstract]
         return self._providers[key]
 
     async def complete_stream(

@@ -1,0 +1,49 @@
+# RavenCode GitLab CI template
+# Include in your .gitlab-ci.yml:
+#   include:
+#     - local: ravencode/integrations/gitlab_ci.yml
+#
+# Required CI/CD variables:
+#   ANTHROPIC_API_KEY / OPENAI_API_KEY / OPENROUTER_API_KEY
+#   GITLAB_TOKEN (with api scope)
+
+.ravencode-base:
+  image: python:3.11-slim
+  before_script:
+    - pip install --upgrade pip
+    - pip install -e ".[dev]"
+  variables:
+    RAVENCODE_GITLAB_EVENT: $CI_MERGE_REQUEST_EVENT_TYPE
+    RAVENCODE_REPO: $CI_PROJECT_PATH
+    RAVENCODE_SHA: $CI_COMMIT_SHA
+    RAVENCODE_REF: $CI_COMMIT_REF_NAME
+
+ravencode-issue-triage:
+  extends: .ravencode-base
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: always
+  script:
+    - python -m ravencode integrations gitlab run
+  only:
+    - issues
+
+ravencode-mr-review:
+  extends: .ravencode-base
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+  script:
+    - python -m ravencode integrations gitlab run
+  only:
+    - merge_requests
+
+ravencode-scheduled:
+  extends: .ravencode-base
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: always
+  script:
+    - python -m ravencode integrations gitlab run
+  only:
+    - schedules
