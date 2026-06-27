@@ -50,7 +50,15 @@ class VectorStore:
         return np.array(vec, dtype=np.float32)
 
     def _save(self):
-        serializable = {k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in self._vectors.items()}
+        def _to_plain(v: Any) -> Any:
+            if isinstance(v, np.ndarray):
+                return v.tolist()
+            if isinstance(v, (np.floating, np.integer)):
+                return v.item()
+            if isinstance(v, list):
+                return [_to_plain(x) for x in v]
+            return v
+        serializable = {k: _to_plain(v) for k, v in self._vectors.items()}
         with self._vectors_path().open("w") as f:
             json.dump(serializable, f)
         with self._metadata_path().open("w") as f:
