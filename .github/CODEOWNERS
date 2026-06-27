@@ -1,0 +1,21 @@
+# Code owners for Raven AI
+
+* @ssrjkk
+
+# Core engine
+/raven/ @ssrjkk
+/ravencode/ @ssrjkk
+
+# Services
+/services/gateway/ @ssrjkk
+/services/auth/ @ssrjkk
+/services/monitor-engine/ @ssrjkk
+
+# Frontend
+/web/ @ssrjkk
+
+# Desktop
+/desktop-tauri/ @ssrjkk
+
+# Infrastructure
+/deploy/ @ssrjkk

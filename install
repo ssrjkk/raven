@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO="ssrjkk/raven"
+INSTALL_DIR="${OPENCODE_INSTALL_DIR:-${XDG_BIN_DIR:-$HOME/.raven/bin}}"
+VERSION="${1:-latest}"
+
+echo "Installing Raven AI..."
+
+if [ "$VERSION" = "latest" ]; then
+  VERSION=$(curl -sL "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)
+fi
+
+mkdir -p "$INSTALL_DIR"
+
+ARCH=$(uname -m)
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+
+case "$ARCH" in
+  x86_64) ARCH="amd64" ;;
+  aarch64|arm64) ARCH="arm64" ;;
+esac
+
+FILENAME="raven-${VERSION}-${OS}-${ARCH}.tar.gz"
+URL="https://github.com/$REPO/releases/download/${VERSION}/${FILENAME}"
+
+echo "Downloading $URL..."
+curl -fsSL "$URL" | tar xz -C "$INSTALL_DIR"
+
+if [ -f "$INSTALL_DIR/raven" ]; then
+  chmod +x "$INSTALL_DIR/raven"
+  echo "Raven AI $VERSION installed to $INSTALL_DIR/raven"
+  echo "Add to PATH: export PATH=\"$INSTALL_DIR:\$PATH\""
+else
+  echo "Installation failed. Please try: pip install raven-agent"
+  exit 1
+fi

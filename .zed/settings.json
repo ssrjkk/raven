@@ -1,0 +1,31 @@
+{
+  "formatter": {
+    "language_servers": ["ruff", "gofmt", "prettier"],
+    "format_on_save": "on"
+  },
+  "languages": {
+    "Python": {
+      "language_servers": ["pyright", "ruff"],
+      "formatter": { "language_server": { "name": "ruff" } }
+    },
+    "Go": {
+      "language_servers": ["gopls"],
+      "formatter": { "language_server": { "name": "gopls" } }
+    },
+    "TypeScript": {
+      "language_servers": ["typescript-language-server", "eslint"],
+      "formatter": { "language_server": { "name": "prettier" } }
+    }
+  },
+  "lsp": {
+    "ruff": {
+      "settings": {
+        "lineLength": 100
+      }
+    }
+  },
+  "telemetry": {
+    "diagnostics": false,
+    "metrics": false
+  }
+}

@@ -1,0 +1,39 @@
+name: Project Stats
+on:
+  schedule:
+    - cron: "0 0 * * 0"
+  workflow_dispatch:
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/github-script@v7
+        id: stats
+        with:
+          script: |
+            const { data: repo } = await github.rest.repos.get(context.repo);
+            const { data: commits } = await github.rest.repos.listCommits({
+              ...context.repo, per_page: 1,
+            });
+            const { data: issues } = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${context.repo.owner}/${context.repo.repo} type:issue state:open`,
+            });
+            const { data: prs } = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${context.repo.owner}/${context.repo.repo} type:pr state:open`,
+            });
+            const stats = {
+              stars: repo.stargazers_count,
+              forks: repo.forks_count,
+              openIssues: issues.total_count,
+              openPRs: prs.total_count,
+              lastCommit: commits[0]?.commit?.committer?.date,
+              license: repo.license?.spdx_id,
+            };
+            return stats;
+      - run: |
+          echo '${{ steps.stats.outputs.result }}' > .github/stats.json
+          echo "Updated stats: $(cat .github/stats.json)"
+        shell: bash

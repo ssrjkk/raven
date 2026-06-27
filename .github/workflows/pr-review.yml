@@ -1,0 +1,36 @@
+name: PR Review
+on:
+  pull_request:
+    types: [opened, synchronize]
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python lint
+        run: pip install ruff && ruff check --output-format=github .
+      - name: Type check
+        run: pip install mypy && mypy raven/ ravencode/ --ignore-missing-imports
+      - name: PR size label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: diff } = await github.rest.repos.compareCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              base: context.payload.pull_request.base.sha,
+              head: context.payload.pull_request.head.sha,
+            });
+            const changes = diff.files.length;
+            let label = changes > 30 ? 'size/xlarge' :
+                        changes > 15 ? 'size/large' :
+                        changes > 5 ? 'size/medium' : 'size/small';
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              labels: [label],
+            });

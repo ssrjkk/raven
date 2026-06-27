@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+target/
+*.py
+*.go
+*.rs
+*.md
+*.yml
+*.yaml
+*.json
+data/
+deploy/

@@ -1,0 +1,18 @@
+name: "Setup Python + dependencies"
+description: "Sets up Python, installs dependencies with caching"
+inputs:
+  python-version:
+    description: "Python version"
+    default: "3.13"
+  extra-deps:
+    description: "Extra pip packages"
+    default: ""
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: pip
+    - run: pip install -e ".[dev]" ${{ inputs.extra-deps }}
+      shell: bash

@@ -1,0 +1,27 @@
+name: Deploy
+on:
+  push:
+    tags: ["v*"]
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          docker build -t ghcr.io/ssrjkk/raven:${GITHUB_REF_NAME} -t ghcr.io/ssrjkk/raven:latest .
+          docker push --all-tags ghcr.io/ssrjkk/raven
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

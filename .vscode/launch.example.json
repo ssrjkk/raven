@@ -1,0 +1,35 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Raven Gateway",
+      "type": "python",
+      "request": "launch",
+      "module": "raven",
+      "args": ["start"],
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "Raven AI-OS Gateway",
+      "type": "python",
+      "request": "launch",
+      "module": "raven",
+      "args": ["aios", "gateway", "--port", "3001"],
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "Go Auth Service",
+      "type": "go",
+      "request": "launch",
+      "program": "${workspaceFolder}/services/auth",
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "Python Tests",
+      "type": "python",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["tests/"]
+    }
+  ]
+}

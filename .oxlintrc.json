@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/crates/oxc_linter/schema.json",
+  "rules": {
+    "correctness": {
+      "noUnusedVariables": "error",
+      "noUnusedImports": "warn"
+    },
+    "suspicious": {
+      "noDebugger": "error",
+      "noConsole": "warn"
+    },
+    "style": {
+      "noNonNullAssertion": "warn"
+    }
+  },
+  "ignore": ["node_modules/", "dist/", "build/"]
+}

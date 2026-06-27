@@ -1,0 +1,25 @@
+name: Discord Notification
+on:
+  release:
+    types: [published]
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const release = context.payload.release;
+            const embed = {
+              title: release.name,
+              url: release.html_url,
+              description: release.body?.slice(0, 1000) || '',
+              color: 0x8B5CF6,
+              timestamp: release.created_at,
+            };
+            await github.rest.repos.createDispatchEvent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              event_type: 'release-notify',
+              client_payload: { embed },
+            });

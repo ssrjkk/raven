@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raven.ai/schemas/tui.json",
+  "theme": {
+    "name": "raven-dark",
+    "colors": {
+      "primary": "#8B5CF6",
+      "secondary": "#3B82F6",
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "error": "#EF4444",
+      "background": "#0F172A",
+      "surface": "#1E293B",
+      "text": "#F8FAFC",
+      "textMuted": "#94A3B8",
+      "border": "#334155"
+    },
+    "fonts": {
+      "ui": "JetBrains Mono",
+      "mono": "JetBrains Mono"
+    }
+  },
+  "layout": {
+    "sidebarWidth": 40,
+    "showLineNumbers": true,
+    "minimap": false
+  },
+  "editor": {
+    "tabSize": 2,
+    "wordWrap": "off",
+    "cursorBlinking": "smooth"
+  }
+}

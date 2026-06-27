@@ -1,0 +1,22 @@
+name: "Raven AI Review"
+description: "Automated code review by Raven AI"
+author: "@ssrjkk"
+branding:
+  icon: "eye"
+  color: "purple"
+inputs:
+  github-token:
+    description: "GitHub token"
+    required: true
+  model:
+    description: "LLM model to use"
+    default: "gpt-4o"
+  config:
+    description: "Review configuration"
+    default: ""
+outputs:
+  conclusion:
+    description: "Review conclusion (pass/fail)"
+runs:
+  using: "node20"
+  main: "dist/index.js"

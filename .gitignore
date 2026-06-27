@@ -10,7 +10,8 @@ build/
 *.db
 chroma/
 node_modules/
-.vscode/
+.vscode/settings.json
+.vscode/launch.json
 .idea/
 *.log
 *.pid

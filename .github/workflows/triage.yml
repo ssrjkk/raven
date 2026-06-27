@@ -1,0 +1,28 @@
+name: Issue Triage
+on:
+  issues:
+    types: [opened]
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const title = issue.title.toLowerCase();
+            const body = (issue.body || '').toLowerCase();
+            let labels = [];
+            if (/bug|crash|error|broken|wrong/i.test(title + ' ' + body)) labels.push('bug');
+            else if (/feature|request|would like|suggestion/i.test(title + ' ' + body)) labels.push('enhancement');
+            else if (/question|how|help|usage/i.test(title + ' ' + body)) labels.push('question');
+            else if (/doc|readme|documentation|readme/i.test(title + ' ' + body)) labels.push('documentation');
+            else labels.push('needs-triage');
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              labels: labels,
+            });

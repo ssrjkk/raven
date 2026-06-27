@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "Running pre-push checks..."
+
+# Python checks
+if command -v python &> /dev/null; then
+  python -m ruff check raven/ ravencode/ aios/ 2>/dev/null || true
+  python -m mypy raven/ ravencode/ --ignore-missing-imports 2>/dev/null || true
+  python -m pytest tests/ -q --timeout=30 2>/dev/null || echo "⚠ tests failed (non-blocking)"
+fi
+
+# Go checks
+if command -v go &> /dev/null; then
+  go build ./services/... 2>/dev/null || true
+fi
+
+# Web checks
+if [ -d "web/node_modules" ]; then
+  cd web && npx tsc --noEmit 2>/dev/null || true && cd ..
+fi

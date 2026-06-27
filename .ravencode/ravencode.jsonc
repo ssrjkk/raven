@@ -1,0 +1,28 @@
+{
+  "$schema": "https://raven.ai/schemas/ravencode.json",
+  "version": "1.0.0",
+  "agent": {
+    "default": "build",
+    "agents": {
+      "build": {
+        "description": "Default agent with full access for development",
+        "mode": "full"
+      },
+      "plan": {
+        "description": "Read-only agent for analysis and code exploration",
+        "mode": "plan"
+      }
+    }
+  },
+  "customCommands": {
+    "enabled": true
+  },
+  "tools": {
+    "enabled": true
+  },
+  "theme": "dark",
+  "telemetry": false,
+  "update": {
+    "channel": "stable"
+  }
+}

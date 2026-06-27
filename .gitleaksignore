@@ -1,0 +1,6 @@
+# Gitleaks ignore file — false positives only
+# Format: <commit>:<file>:<rule-id>
+
+# Test/stub secrets
+.*\.env\.example:.*:generic-api-key
+.*test.*:.*:generic-api-key

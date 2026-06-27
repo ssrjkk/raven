@@ -22,9 +22,25 @@
   [English](README.md) •
   [Русский](README.ru.md) •
   [简体中文](README.zh.md) •
+  [繁體中文](README.zht.md) •
+  [한국어](README.ko.md) •
+  [Deutsch](README.de.md) •
   [Español](README.es.md) •
+  [Français](README.fr.md) •
+  [Italiano](README.it.md) •
+  [Dansk](README.da.md) •
   [日本語](README.ja.md) •
-  [한국어](README.ko.md)
+  [Polski](README.pl.md) •
+  [العربية](README.ar.md) •
+  [Bosanski](README.bs.md) •
+  [Norsk](README.no.md) •
+  [Português (Brasil)](README.br.md) •
+  [ไทย](README.th.md) •
+  [Türkçe](README.tr.md) •
+  [Українська](README.uk.md) •
+  [বাংলা](README.bn.md) •
+  [Ελληνικά](README.gr.md) •
+  [Tiếng Việt](README.vi.md)
 </div>
 
 ---
