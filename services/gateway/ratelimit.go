@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 type bucket struct {
@@ -34,11 +33,11 @@ func NewRateLimiter(ratePerMin int, burst int) *RateLimiter {
 		burst:    burst,
 		interval: time.Second,
 		stopCh:   make(chan struct{}),
-		allowedTotal: promauto.NewCounter(prometheus.CounterOpts{
+		allowedTotal: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "rate_limiter_allowed_total",
 			Help: "Total allowed requests",
 		}),
-		blockedTotal: promauto.NewCounter(prometheus.CounterOpts{
+		blockedTotal: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "rate_limiter_blocked_total",
 			Help: "Total blocked requests",
 		}),

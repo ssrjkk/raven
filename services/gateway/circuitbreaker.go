@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 type CircuitBreaker struct {
@@ -23,7 +22,7 @@ func NewCircuitBreaker(threshold int, recoveryTimeout time.Duration) *CircuitBre
 	return &CircuitBreaker{
 		threshold:       threshold,
 		recoveryTimeout: recoveryTimeout,
-		trippedCounter: promauto.NewCounter(prometheus.CounterOpts{
+		trippedCounter: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "circuit_breaker_tripped_total",
 			Help: "Circuit breaker trips",
 		}),
@@ -51,6 +50,9 @@ func (cb *CircuitBreaker) Success() {
 }
 
 func (cb *CircuitBreaker) Failure() {
+	if cb.open.Load() {
+		return
+	}
 	fails := atomic.AddInt64(&cb.failures, 1)
 	if fails >= int64(cb.threshold) {
 		if cb.open.CompareAndSwap(false, true) {

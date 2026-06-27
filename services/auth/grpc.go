@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	pb "github.com/ssrjkk/raven/services/proto/go/auth/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -21,19 +20,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-var (
-	grpcRequests = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "grpc_requests_total",
-		Help: "Total gRPC requests",
-	}, []string{"method", "code"})
-	grpcDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "grpc_request_duration_seconds",
-		Help:    "gRPC request duration",
-		Buckets: prometheus.DefBuckets,
-	}, []string{"method"})
-)
-
-func unaryInterceptor(logger *slog.Logger) grpc.UnaryServerInterceptor {
+func unaryInterceptor(logger *slog.Logger, grpcRequests *prometheus.CounterVec, grpcDuration *prometheus.HistogramVec) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		start := time.Now()
 		resp, err := handler(ctx, req)
@@ -59,7 +46,7 @@ func (s *AuthService) startGRPC(port string) error {
 	}
 
 	var opts []grpc.ServerOption
-	opts = append(opts, grpc.UnaryInterceptor(unaryInterceptor(s.logger)))
+	opts = append(opts, grpc.UnaryInterceptor(unaryInterceptor(s.logger, s.grpcRequests, s.grpcDuration)))
 	certFile := os.Getenv("GRPC_TLS_CERT")
 	keyFile := os.Getenv("GRPC_TLS_KEY")
 	if certFile != "" && keyFile != "" {

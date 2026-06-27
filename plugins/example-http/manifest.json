@@ -1,0 +1,8 @@
+{
+  "name": "example-http",
+  "version": "0.1.0",
+  "description": "Example plugin adding HTTP request tools (GET, POST) with configurable headers.",
+  "author": "Raven AI",
+  "tools": ["http_get", "http_post"],
+  "min_raven_version": "0.1.0"
+}

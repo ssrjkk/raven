@@ -46,6 +46,7 @@ type Gateway struct {
 	authCB     *CircuitBreaker
 	rateLimiter *RateLimiter
 
+	reg          *prometheus.Registry
 	httpRequests *prometheus.CounterVec
 	httpDuration *prometheus.HistogramVec
 }
@@ -55,9 +56,11 @@ func NewGateway() *Gateway {
 		Level: slog.LevelInfo,
 	}))
 
+	reg := prometheus.NewRegistry()
 	g := &Gateway{
 		logger:  logger,
 		started: time.Now(),
+		reg:     reg,
 		httpRequests: prometheus.NewCounterVec(
 			prometheus.CounterOpts{Name: "http_requests_total", Help: "Total HTTP requests"},
 			[]string{"method", "path", "status"},
@@ -68,7 +71,7 @@ func NewGateway() *Gateway {
 			[]string{"method", "path"},
 		),
 	}
-	prometheus.MustRegister(g.httpRequests, g.httpDuration)
+	reg.MustRegister(g.httpRequests, g.httpDuration, prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}), prometheus.NewGoCollector())
 	return g
 }
 
@@ -128,7 +131,7 @@ func (g *Gateway) Routes() http.Handler {
 		}
 		json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 	})
-	mux.Handle("GET /metrics", promhttp.Handler())
+	mux.Handle("GET /metrics", promhttp.HandlerFor(g.reg, promhttp.HandlerOpts{}))
 
 	authEP := g.proxyTo()
 	mux.HandleFunc("POST /api/v1/auth/register", authEP)
@@ -315,7 +318,9 @@ type statusWriter struct {
 
 func (w *statusWriter) WriteHeader(status int) {
 	w.status = status
-	w.ResponseWriter.WriteHeader(status)
+	if w.ResponseWriter != nil {
+		w.ResponseWriter.WriteHeader(status)
+	}
 }
 
 func main() {

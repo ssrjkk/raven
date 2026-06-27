@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -322,7 +323,10 @@ func (m *MonitorEngine) createMonitor(w http.ResponseWriter, r *http.Request) {
 func (m *MonitorEngine) deleteMonitor(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		id = r.URL.Query().Get("id")
+		parts := strings.Split(r.URL.Path, "/")
+		if len(parts) > 0 {
+			id = parts[len(parts)-1]
+		}
 	}
 	if id == "" {
 		writeMonitorError(w, http.StatusBadRequest, "missing id")

@@ -98,6 +98,17 @@ class AgentConfig:
     def autonomous(cls) -> Self:
         return cls(confirm_dangerous=False, diff_preview=True, proactive_scan=True, max_steps=100)
 
+    @classmethod
+    def plan(cls) -> Self:
+        return cls(
+            plan_mode=True,
+            confirm_dangerous=False,
+            diff_preview=False,
+            proactive_scan=True,
+            max_steps=30,
+            structured_output=True,
+        )
+
 
 # ---------------------------------------------------------------------------
 # ReActAgent
@@ -210,6 +221,7 @@ class ReActAgent:
             if self._aborted:
                 if ee:
                     await ee.emit(AgentEvent("done", {"reason": "aborted", "steps": step}))
+                await self._auto_save("aborted")
                 return "[aborted]"
 
             messages = self.conversation.get_messages()
@@ -226,6 +238,7 @@ class ReActAgent:
                     await self.config.on_message({"role": "assistant", "content": final})
                 if ee:
                     await ee.emit(AgentEvent("done", {"reason": "complete", "steps": step}))
+                await self._auto_save("complete")
                 return final
 
             content = response.get("content", "") or ""
@@ -279,6 +292,7 @@ class ReActAgent:
 
         if ee:
             await ee.emit(AgentEvent("done", {"reason": "max_steps", "steps": step}))
+        await self._auto_save("max_steps")
         return "[reached max steps]"
 
     # -----------------------------------------------------------------------
@@ -403,6 +417,19 @@ class ReActAgent:
             except json.JSONDecodeError:
                 pass
         return {"content": raw, "tool_calls": []}
+
+    # -----------------------------------------------------------------------
+    # auto-save
+    # -----------------------------------------------------------------------
+
+    async def _auto_save(self, reason: str) -> None:
+        try:
+            from ravencode.runtime.session import get_session_store
+            store = get_session_store()
+            summary = self.conversation.get_messages()[-1].get("content", "")[:200] if self.conversation.messages else reason
+            await store.save(self, summary=summary)
+        except Exception as exc:
+            logger.debug("Auto-save skipped: {}", exc)
 
     # -----------------------------------------------------------------------
     # serialization

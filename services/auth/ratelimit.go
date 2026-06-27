@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 type RateLimiter struct {
@@ -29,10 +28,10 @@ func NewRateLimiter(rate, burst int) *RateLimiter {
 		rate:    rate,
 		burst:   burst,
 		stopCh:  make(chan struct{}),
-		allowed: promauto.NewCounter(prometheus.CounterOpts{
+		allowed: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "rate_limiter_allowed_total", Help: "Allowed requests",
 		}),
-		blocked: promauto.NewCounter(prometheus.CounterOpts{
+		blocked: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "rate_limiter_blocked_total", Help: "Blocked requests",
 		}),
 	}

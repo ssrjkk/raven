@@ -54,6 +54,9 @@ type AuthService struct {
 
 	httpRequests *prometheus.CounterVec
 	httpDuration *prometheus.HistogramVec
+
+	grpcRequests *prometheus.CounterVec
+	grpcDuration *prometheus.HistogramVec
 }
 
 type User struct {
@@ -92,6 +95,18 @@ func NewAuthService(jwtSecret, secretFile string) *AuthService {
 			prometheus.HistogramOpts{Name: "auth_request_duration_seconds", Help: "Request duration",
 				Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1}},
 			[]string{"method", "path"},
+		),
+		grpcRequests: prometheus.NewCounterVec(
+			prometheus.CounterOpts{Name: "grpc_requests_total", Help: "Total gRPC requests"},
+			[]string{"method", "code"},
+		),
+		grpcDuration: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "grpc_request_duration_seconds",
+				Help:    "gRPC request duration",
+				Buckets: prometheus.DefBuckets,
+			},
+			[]string{"method"},
 		),
 	}
 }
