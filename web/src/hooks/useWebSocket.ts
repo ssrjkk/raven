@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import { WsMessage } from "../api/client";
+import { getToken, WsMessage } from "../api/client";
 
 type Handler = (msg: WsMessage) => void;
 
@@ -13,7 +13,9 @@ export function useWebSocket(onMessage: Handler) {
 
   const connect = useCallback(() => {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${location.host}/ws`);
+    const token = getToken();
+    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : "";
+    const ws = new WebSocket(`${protocol}//${location.host}/ws${tokenParam}`);
     ws.onopen = () => {
       setConnected(true);
       reconnectAttempt.current = 0;

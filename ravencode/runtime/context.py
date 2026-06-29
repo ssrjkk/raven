@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 # ---------------------------------------------------------------------------
 # memory store
 # ---------------------------------------------------------------------------
@@ -154,6 +156,39 @@ class Conversation:
     def _trim(self) -> None:
         while len(self.messages) > 2 and self._total_tokens() > self.max_tokens:
             self.messages.pop(1)
+
+    async def summarize_oldest(self, llm: Any | None = None) -> None:
+        if len(self.messages) < 4:
+            return
+        idx = 1
+        if self.messages[idx].get("role") in ("system",):
+            idx = 2
+        if idx >= len(self.messages):
+            return
+        oldest = self.messages[idx]
+        if llm is None:
+            self.messages.pop(idx)
+            return
+        try:
+            summary_prompt = (
+                "Summarize the following conversation exchange in 1-2 sentences, "
+                "preserving all key facts, decisions, and context:\n\n"
+                f"{json.dumps(oldest, ensure_ascii=False)}"
+            )
+            resp = await llm.complete(
+                messages=[{"role": "user", "content": summary_prompt}],
+                model="", tools=None,
+            )
+            summary = resp.content.strip() if resp.content else ""
+            if summary:
+                self.messages[idx] = {
+                    "role": "user", "content": f"[summarized] {summary}"
+                }
+                logger.debug("Context summarization: compressed {} chars -> {} chars",
+                             len(oldest.get("content", "")), len(summary))
+        except Exception as e:
+            logger.warning("Context summarization failed, dropping oldest message: {}", e)
+            self.messages.pop(idx)
 
     # -------------------------------------------------------------------
     # serialization

@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import hashlib
 import os
 import time
 from typing import Any
 
-import numpy as np
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from loguru import logger
@@ -22,29 +20,24 @@ setup_opentelemetry(app, service_name="rag-service")
 
 VECTOR_SIZE = 384
 COLLECTION_NAME = "documents"
-_NGRAM_RNG = np.random.RandomState(42)
-_NGRAM_PROJ = _NGRAM_RNG.randn(VECTOR_SIZE, 256).astype(np.float32)
 
-started_at = 0.0
+started_at: float = 0.0
 qdrant: QdrantClient | None = None
 _fallback_docs: dict[str, str] = {}
+_encoder: Any = None
 
 
-def _embed(text: str) -> list[float]:
-    text = text.lower()
-    ngram_counts = {}
-    for n in range(2, 5):
-        for i in range(len(text) - n + 1):
-            ng = text[i : i + n]
-            idx = int(hashlib.md5(ng.encode(), usedforsecurity=False).hexdigest()[:8], 16) % 256
-            ngram_counts[idx] = ngram_counts.get(idx, 0) + 1
-    vec = np.zeros(VECTOR_SIZE, dtype=np.float32)
-    for idx, count in ngram_counts.items():
-        vec += _NGRAM_PROJ[:, idx] * count
-    norm = np.linalg.norm(vec)
-    if norm > 0:
-        vec /= norm
-    return vec.tolist()
+def _embed(texts: list[str]) -> list[list[float]]:
+    global _encoder
+    if _encoder is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+            _encoder = SentenceTransformer("all-MiniLM-L6-v2")
+        except ImportError:
+            logger.error("sentence-transformers not installed")
+            return [[0.0] * VECTOR_SIZE for _ in texts]
+    embeddings = _encoder.encode(texts, normalize_embeddings=True)
+    return embeddings.tolist()
 
 
 @app.on_event("startup")
@@ -77,7 +70,7 @@ async def shutdown():
     logger.info("rag-service shutdown")
 
 
-@app.get("/health")
+@app.get("/health", summary="Health check", description="Returns service health, Qdrant status, and indexed document count")
 async def health() -> dict[str, Any]:
     return {
         "status": "healthy",
@@ -88,12 +81,12 @@ async def health() -> dict[str, Any]:
     }
 
 
-@app.get("/ready")
+@app.get("/ready", summary="Readiness check", description="Returns 200 when the service is ready to accept requests")
 async def ready() -> dict[str, Any]:
     return {"status": "ready", "docs_indexed": len(_fallback_docs)}
 
 
-@app.get("/metrics")
+@app.get("/metrics", summary="Metrics snapshot", description="Returns indexed document count and uptime")
 async def metrics() -> dict[str, Any]:
     return {
         "docs_indexed": len(_fallback_docs),
@@ -101,13 +94,16 @@ async def metrics() -> dict[str, Any]:
     }
 
 
-@app.post("/api/v1/rag/index")
+@app.post("/api/v1/rag/index", summary="Index a document", description="Embeds and stores a document for semantic search. Uses Qdrant if available, otherwise in-memory fallback.")
 async def index(request: dict[str, Any]) -> dict[str, Any]:
     doc_id = request.get("id", str(time.time()))
     content = request.get("content", "")
     if not content:
         raise HTTPException(status_code=400, detail="content is required")
-    vec = _embed(content)
+    vecs = _embed([content])
+    if not vecs:
+        raise HTTPException(status_code=500, detail="embedding failed")
+    vec = vecs[0]
     if qdrant is not None:
         qdrant.upsert(
             collection_name=COLLECTION_NAME,
@@ -119,13 +115,16 @@ async def index(request: dict[str, Any]) -> dict[str, Any]:
     return {"status": "indexed", "document_id": doc_id, "total_docs": len(_fallback_docs)}
 
 
-@app.get("/api/v1/rag/search")
+@app.get("/api/v1/rag/search", summary="Search documents", description="Semantic search over indexed documents using vector embeddings")
 async def search(q: str, limit: int = 5) -> dict[str, Any]:
     if not q:
         raise HTTPException(status_code=400, detail="query is required")
     logger.info("RAG search: q='{}' limit={}", q, limit)
     if qdrant is not None:
-        vec = _embed(q)
+        vecs = _embed([q])
+        if not vecs:
+            raise HTTPException(status_code=500, detail="embedding failed")
+        vec = vecs[0]
         hits = qdrant.search(
             collection_name=COLLECTION_NAME,
             query_vector=vec,

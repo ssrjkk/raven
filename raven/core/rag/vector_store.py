@@ -12,15 +12,46 @@ from raven.core.rag.embeddings import EmbeddingEngine
 
 _VECTORS_PATH = "vectors.json"
 
+try:
+    import hnswlib
+    HAS_HNSW = True
+except ImportError:
+    HAS_HNSW = False
+
 
 class VectorStore:
-    def __init__(self, db_path: Path | str, embedding_engine: EmbeddingEngine | None = None):
+    def __init__(self, db_path: Path | str, embedding_engine: EmbeddingEngine | None = None, dim: int = 384):
         self.db_path = Path(db_path)
         self.db_path.mkdir(parents=True, exist_ok=True)
         self.engine = embedding_engine or EmbeddingEngine(provider="local")
+        self._dim = dim
         self._vectors: dict[str, list[float]] = {}
         self._metadata: dict[str, dict[str, Any]] = {}
+        self._index: Any = None
+        self._id_map: dict[int, str] = {}
+        self._next_label: int = 0
         self._load()
+        self._init_index()
+
+    def _init_index(self) -> None:
+        self._index = None
+        if HAS_HNSW and len(self._vectors) > 0:
+            try:
+                idx = hnswlib.Index(space='cosine', dim=self._dim)
+                idx.init_index(max_elements=max(len(self._vectors) * 2, 1000), ef_construction=200, M=16)
+                labels = []
+                data = []
+                for label, (doc_id, vec) in enumerate(self._vectors.items()):
+                    labels.append(label)
+                    data.append(vec)
+                    self._id_map[label] = doc_id
+                    self._next_label = label + 1
+                idx.add_items(np.array(data, dtype=np.float32), np.array(labels))
+                idx.set_ef(50)
+                self._index = idx
+            except Exception as e:
+                logger.warning("HNSW init failed, falling back to brute force: {}", e)
+                self._index = None
 
     def _vectors_path(self) -> Path:
         return self.db_path / _VECTORS_PATH
@@ -73,6 +104,7 @@ class VectorStore:
             **(metadata or {}),
         }
         self._save()
+        self._rebuild_index()
 
     async def upsert_batch(self, items: list[tuple[str, str, dict[str, Any] | None]]):
         texts = [item[1] for item in items]
@@ -85,17 +117,58 @@ class VectorStore:
                 **(meta or {}),
             }
         self._save()
+        self._rebuild_index()
+
+    def _rebuild_index(self) -> None:
+        if not HAS_HNSW or len(self._vectors) < 10:
+            self._index = None
+            return
+        try:
+            idx = hnswlib.Index(space='cosine', dim=self._dim)
+            idx.init_index(max_elements=max(len(self._vectors) * 2, 1000), ef_construction=200, M=16)
+            labels = []
+            data = []
+            self._id_map.clear()
+            for label, (doc_id, vec) in enumerate(self._vectors.items()):
+                labels.append(label)
+                data.append(vec)
+                self._id_map[label] = doc_id
+                self._next_label = label + 1
+            idx.add_items(np.array(data, dtype=np.float32), np.array(labels))
+            idx.set_ef(50)
+            self._index = idx
+        except Exception as e:
+            logger.warning("HNSW rebuild failed: {}", e)
+            self._index = None
 
     def delete(self, doc_id: str):
         self._vectors.pop(doc_id, None)
         self._metadata.pop(doc_id, None)
         self._save()
+        self._rebuild_index()
 
     async def search(self, query: str, k: int = 5, filter_meta: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         if not self._vectors:
             return []
         query_vecs = await self.engine.embed([query])
         query_vec = self._as_np(query_vecs[0])
+
+        if self._index is not None:
+            labels, distances = self._index.knn_query(np.array([query_vec]), k=min(k, len(self._vectors)))
+            results = []
+            for label, dist in zip(labels[0], distances[0], strict=True):
+                doc_id = self._id_map.get(label, "")
+                meta = self._metadata.get(doc_id, {})
+                if filter_meta and not all(meta.get(k) == v for k, v in filter_meta.items()):
+                    continue
+                results.append({
+                    "id": doc_id,
+                    "text": meta.get("text", ""),
+                    "score": float(1.0 - dist),
+                    "metadata": meta,
+                })
+            return results
+
         ids = list(self._vectors.keys())
         mat = np.array([self._as_np(self._vectors[i]) for i in ids])
         norms = np.linalg.norm(mat, axis=1) * np.linalg.norm(query_vec)

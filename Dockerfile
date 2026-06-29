@@ -1,11 +1,11 @@
-FROM python:3.14-slim AS base
+FROM python:3.13-slim AS base
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libgbm1 \
     libasound2 libxshmfence1 curl \
     && rm -rf /var/lib/apt/lists/*
 RUN groupadd -r raven && useradd -r -g raven -d /app -s /sbin/nologin raven
 
-FROM python:3.14-slim AS builder
+FROM python:3.13-slim AS builder
 WORKDIR /build
 COPY pyproject.toml README.md ./
 RUN pip install --no-cache-dir build hatchling

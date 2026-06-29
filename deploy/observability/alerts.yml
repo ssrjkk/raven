@@ -88,3 +88,25 @@ groups:
         annotations:
           summary: "Outbox backlog >50 events"
           description: "{{ $value }} pending outbox events across all services"
+
+      - alert: CircuitBreakerOpen
+        expr: |
+          circuit_breaker_state{state="open"} == 1
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Circuit breaker '{{ $labels.breaker }}' is open"
+          description: "Circuit breaker {{ $labels.breaker }} has been open for >1m, requests are being rejected"
+
+      - alert: HighDBLatency
+        expr: |
+          db_query_duration_seconds{quantile="0.95"} > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "DB p95 latency >500ms"
+          description: "DB query p95 latency is {{ $value }}s"

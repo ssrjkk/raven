@@ -68,6 +68,7 @@ class Database:
                     external_id TEXT NOT NULL,
                     display_name TEXT,
                     is_allowed INTEGER DEFAULT 0,
+                    role TEXT NOT NULL DEFAULT 'user',
                     pairing_code TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -201,8 +202,8 @@ class Database:
         if row:
             return dict(row)
         await self.conn.execute(
-            "INSERT INTO users (id, channel, external_id, display_name) VALUES (?, ?, ?, ?)",
-            (user_id, channel, external_id, display_name),
+            "INSERT INTO users (id, channel, external_id, display_name, role) VALUES (?, ?, ?, ?, ?)",
+            (user_id, channel, external_id, display_name, "user"),
         )
         await self.conn.commit()
         return {
@@ -211,6 +212,7 @@ class Database:
             "external_id": external_id,
             "display_name": display_name,
             "is_allowed": 0,
+            "role": "user",
         }
 
     async def set_user_allowed(self, user_id: str, allowed: bool = True):

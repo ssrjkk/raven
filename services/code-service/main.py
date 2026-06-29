@@ -46,7 +46,7 @@ async def shutdown():
     logger.info("code-service shutdown")
 
 
-@app.get("/health")
+@app.get("/health", summary="Health check", description="Returns service health status and uptime")
 async def health():
     return {
         "status": "healthy",
@@ -55,17 +55,17 @@ async def health():
     }
 
 
-@app.get("/ready")
+@app.get("/ready", summary="Readiness check", description="Returns 200 when the service is ready to accept requests")
 async def ready():
     return {"status": "ready"}
 
 
-@app.get("/metrics")
+@app.get("/metrics", summary="Metrics snapshot", description="Returns service uptime metrics")
 async def metrics():
     return {"uptime_seconds": round(time.time() - started_at, 1)}
 
 
-@app.post("/api/v1/code/execute")
+@app.post("/api/v1/code/execute", summary="Execute code", description="Executes code in a sandboxed environment with timeout. Supports Python, JavaScript, Bash.")
 async def execute_code(request: dict):
     code = request.get("code", "")
     language = request.get("language", "python").lower()
@@ -73,23 +73,30 @@ async def execute_code(request: dict):
     if not code.strip():
         raise HTTPException(status_code=400, detail="Empty code")
 
-    runner = {
-        "python": ["python3", "-c", code],
-        "python3": ["python3", "-c", code],
-        "js": ["node", "-e", code],
-        "node": ["node", "-e", code],
-        "bash": ["bash", "-c", code],
-        "sh": ["sh", "-c", code],
-    }.get(language)
-
-    if not runner:
+    supported = {"python", "python3", "js", "node", "bash", "sh"}
+    if language not in supported:
         raise HTTPException(status_code=400, detail=f"Unsupported language: {language}")
 
     with tempfile.TemporaryDirectory() as tmpdir:
+        ext_map = {"python": ".py", "python3": ".py", "js": ".js", "node": ".js", "bash": ".sh", "sh": ".sh"}
+        ext = ext_map.get(language, ".txt")
+        script_path = os.path.join(tmpdir, f"script{ext}")
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(code)
+
+        interpreter = {
+            "python": ["python3", script_path],
+            "python3": ["python3", script_path],
+            "js": ["node", script_path],
+            "node": ["node", script_path],
+            "bash": ["bash", script_path],
+            "sh": ["sh", script_path],
+        }[language]
+
         start = time.monotonic()
         try:
             proc = await asyncio.create_subprocess_exec(
-                *runner,
+                *interpreter,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 cwd=tmpdir,

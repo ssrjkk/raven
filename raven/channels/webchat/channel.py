@@ -74,10 +74,25 @@ class WebChatChannel(BaseChannel):
 
         @app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):
+            token = websocket.query_params.get("token", "")
+            if token:
+                try:
+                    from raven.core.auth.auth_handler import auth_handler
+                    payload = await auth_handler.decode_token(token)
+                    if payload:
+                        websocket.state.user_id = payload.get("sub", "unknown")
+                        websocket.state.role = payload.get("role", "user")
+                except Exception:
+                    websocket.state.user_id = "anonymous"
+                    websocket.state.role = "user"
+            else:
+                websocket.state.user_id = "anonymous"
+                websocket.state.role = "user"
             await websocket.accept()
             client_id = str(uuid4().hex[:8])
             self._connections[client_id] = websocket
             session_id = f"webchat:{client_id}:default"
+            user_id = getattr(websocket.state, "user_id", client_id)
             try:
                 while True:
                     data = await websocket.receive_text()
@@ -87,10 +102,10 @@ class WebChatChannel(BaseChannel):
                     if text and self._handler:
                         event = IncomingMessage(
                             channel="webchat",
-                            user_id=client_id,
+                            user_id=user_id,
                             session_id=session_id,
                             text=text,
-                            metadata={"client_id": client_id},
+                            metadata={"client_id": client_id, "ws_token_auth": bool(token)},
                         )
                         await self._handler(event)
             except WebSocketDisconnect:

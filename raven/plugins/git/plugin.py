@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import shlex
 from pathlib import Path
 
 PLUGIN_NAME = "git"
@@ -10,53 +9,56 @@ PLUGIN_DESCRIPTION = "Git operations: status, log, diff, commit, branch, PR"
 
 async def git_status(path: str = ".") -> str:
     """Show git status. Args: path (str): Repository path"""
-    return await _run_git("status", path)
+    return await _run_git(["status"], path)
 
 
 async def git_log(path: str = ".", count: int = 10) -> str:
     """Show recent commit log. Args: path (str): Repository path, count (int): Number of commits"""
-    return await _run_git(f"log --oneline -{count}", path)
+    return await _run_git(["log", "--oneline", f"-{count}"], path)
 
 
 async def git_diff(path: str = ".", staged: bool = False) -> str:
     """Show uncommitted diff. Args: path (str): Repository path, staged (bool): Show staged diff only"""
-    flag = "--cached" if staged else ""
-    return await _run_git(f"diff {flag}", path)
+    args = ["diff"]
+    if staged:
+        args.append("--cached")
+    return await _run_git(args, path)
 
 
 async def git_commit(path: str = ".", message: str = "") -> str:
     """Stage all and commit. Args: path (str): Repository path, message (str): Commit message"""
     if not message:
         return "Commit message is required"
-    safe_msg = message.replace('"', '\\"')[:200]
-    await _run_git("add -A", path)
-    return await _run_git(f'commit -m "{safe_msg}"', path)
+    await _run_git(["add", "-A"], path)
+    return await _run_git(["commit", "-m", message[:200]], path)
 
 
 async def git_branch(path: str = ".", create: str = "") -> str:
     """List or create branches. Args: path (str): Repository path, create (str): Branch name to create (empty = list)"""
     if create:
-        return await _run_git(f"checkout -b {create}", path)
-    return await _run_git("branch -a", path)
+        return await _run_git(["checkout", "-b", create], path)
+    return await _run_git(["branch", "-a"], path)
 
 
 async def git_push(path: str = ".", remote: str = "origin", branch: str = "") -> str:
     """Push to remote. Args: path (str): Repository path, remote (str): Remote name, branch (str): Branch name"""
-    ref = f"{remote} {branch}" if branch else remote
-    return await _run_git(f"push {ref}", path)
+    if branch:
+        return await _run_git(["push", remote, branch], path)
+    return await _run_git(["push", remote], path)
 
 
 async def git_pull(path: str = ".", remote: str = "origin", branch: str = "") -> str:
     """Pull from remote. Args: path (str): Repository path, remote (str): Remote name, branch (str): Branch name"""
-    ref = f"{remote} {branch}" if branch else remote
-    return await _run_git(f"pull {ref}", path)
+    if branch:
+        return await _run_git(["pull", remote, branch], path)
+    return await _run_git(["pull", remote], path)
 
 
-async def _run_git(args: str, repo_path: str) -> str:
+async def _run_git(args: list[str], repo_path: str) -> str:
     try:
         proc = await asyncio.create_subprocess_exec(
             "git",
-            *shlex.split(args),
+            *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=Path(repo_path).resolve() if repo_path != "." else None,

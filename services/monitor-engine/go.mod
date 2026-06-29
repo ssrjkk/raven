@@ -3,6 +3,7 @@ module github.com/ssrjkk/raven/services/monitor-engine
 go 1.26.3
 
 require (
+	github.com/ssrjkk/raven/services/proto/go v0.0.0-00010101000000-000000000000
 	github.com/google/uuid v1.6.0
 	github.com/nats-io/nats.go v1.37.0
 	github.com/prometheus/client_golang v1.20.0
@@ -13,6 +14,8 @@ require (
 	go.opentelemetry.io/otel/sdk v1.29.0
 	modernc.org/sqlite v1.50.1
 )
+
+replace github.com/ssrjkk/raven/services/proto/go => ../proto/go
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect

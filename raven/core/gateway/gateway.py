@@ -9,7 +9,9 @@ from uuid import uuid4
 
 from loguru import logger
 
+from raven.core.auth import RBAC, Permission
 from raven.core.config import settings
+from services.observability_sdk.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 
 if TYPE_CHECKING:
     from raven.channels.base import BaseChannel
@@ -40,6 +42,8 @@ class Gateway:
         self.sandbox = Sandbox()
         self._skill_dirs: list[str] = []
         self._monitor_engine: Any = None
+        self._rbac = RBAC()
+        self._message_cb = CircuitBreaker("gateway.handle_message", failure_threshold=5, recovery_timeout=30.0)
 
     def register_channel(self, channel: BaseChannel):
         self.channels[channel.channel_id] = channel
@@ -176,40 +180,46 @@ class Gateway:
         logger.info("Incoming message from {}[{}]: {}", event.channel, event.user_id, event.text[:80])
         metrics.inc("messages_received", {"channel": event.channel})
         try:
-            user = await self.db.find_or_create_user(event.channel, event.user_id)
-
-            if not await self._is_user_allowed(event, user):
-                return
-
-            handled = await self._handle_command(event)
-            if handled:
-                return
-
-            intent_handled = await self._handle_intent(event)
-            if intent_handled:
-                return
-
-            session_id = event.session_id or f"{event.channel}:{event.user_id}:default"
-            session = await self.db.get_or_create_session(session_id, event.channel, event.user_id)
-            agent = self.registry.create_agent(session)
-
-            event.text = self._clean_text(event.channel, event.text)
-            event.text = self._apply_context_filter(event, user, event.text)
-            recall_context = None
-
-            full_response = ""
-            async for token in agent.run(event.text, recall_context=recall_context):
-                full_response += token
-
-            if full_response.strip():
-                await self._send(event.channel, session_id, full_response)
-                metrics.inc("messages_sent", {"channel": event.channel})
-                metrics.observe("response_length", len(full_response), {"channel": event.channel})
-
+            await self._message_cb.call(self._handle_message_inner, event)
+        except CircuitBreakerOpenError:
+            logger.warning("Message rejected, circuit breaker open")
+            metrics.inc("message_errors", {"channel": event.channel, "reason": "circuit_breaker"})
+            await self._send(event.channel, event.session_id, "Service temporarily unavailable, please try again later.")
         except Exception as e:
             logger.error("handle_message error: {}", e)
             metrics.inc("message_errors", {"channel": event.channel})
             await self._send(event.channel, event.session_id, f"Sorry, an error occurred: {str(e)[:200]}")
+
+    async def _handle_message_inner(self, event: IncomingMessage):
+        user = await self.db.find_or_create_user(event.channel, event.user_id)
+
+        if not await self._is_user_allowed(event, user):
+            return
+
+        handled = await self._handle_command(event, user)
+        if handled:
+            return
+
+        intent_handled = await self._handle_intent(event)
+        if intent_handled:
+            return
+
+        session_id = event.session_id or f"{event.channel}:{event.user_id}:default"
+        session = await self.db.get_or_create_session(session_id, event.channel, event.user_id)
+        agent = self.registry.create_agent(session)
+
+        event.text = self._clean_text(event.channel, event.text)
+        event.text = self._apply_context_filter(event, user, event.text)
+        recall_context = None
+
+        full_response = ""
+        async for token in agent.run(event.text, recall_context=recall_context):
+            full_response += token
+
+        if full_response.strip():
+            await self._send(event.channel, session_id, full_response)
+            metrics.inc("messages_sent", {"channel": event.channel})
+            metrics.observe("response_length", len(full_response), {"channel": event.channel})
 
     def _apply_context_filter(self, event, user: dict[str, Any], text: str) -> str:
         from raven.core.config import settings
@@ -354,7 +364,7 @@ class Gateway:
 
         return True
 
-    async def _handle_command(self, event: IncomingMessage) -> bool:
+    async def _handle_command(self, event: IncomingMessage, user: dict[str, Any]) -> bool:
         text = event.text.strip()
         cmd = text.split()[0].lower() if text else ""
         args = text.split()[1:] if len(text.split()) > 1 else []
@@ -452,6 +462,9 @@ class Gateway:
             return True
 
         if cmd == "/task":
+            if not self._check_permission(user, Permission.TASK_RUN):
+                await self._send(event.channel, event.session_id, "Access denied: insufficient permissions")
+                return True
             goal = " ".join(args)
             if not goal:
                 await self._send(event.channel, event.session_id, "Usage: /task <goal description>")
@@ -461,18 +474,27 @@ class Gateway:
             return True
 
         if cmd == "/monitor":
+            if not self._check_permission(user, Permission.MONITOR_READ):
+                await self._send(event.channel, event.session_id, "Access denied: insufficient permissions")
+                return True
             sub = args[0].lower() if args else "help"
-            await self._handle_monitor_cmd(event, sub, args[1:] if len(args) > 1 else [])
+            await self._handle_monitor_cmd(event, user, sub, args[1:] if len(args) > 1 else [])
             return True
 
         if cmd == "/code":
+            if not self._check_permission(user, Permission.CODE_READ):
+                await self._send(event.channel, event.session_id, "Access denied: insufficient permissions")
+                return True
             sub = args[0].lower() if args else "help"
             await self._handle_code_cmd(event, sub, args[1:] if len(args) > 1 else [])
             return True
 
         if cmd == "/routine":
+            if not self._check_permission(user, Permission.ROUTINE_READ):
+                await self._send(event.channel, event.session_id, "Access denied: insufficient permissions")
+                return True
             sub = args[0].lower() if args else "help"
-            await self._handle_routine_cmd(event, sub, args[1:] if len(args) > 1 else [])
+            await self._handle_routine_cmd(event, user, sub, args[1:] if len(args) > 1 else [])
             return True
 
         if cmd == "/voice":
@@ -518,6 +540,10 @@ class Gateway:
             return True
 
         return False
+
+    def _check_permission(self, user: dict[str, Any], permission: Permission) -> bool:
+        role = user.get("role", "user")
+        return self._rbac.has_permission(role, permission)
 
     async def _send(self, channel_id: str, session_id: str, text: str):
         channel = self.channels.get(channel_id)
@@ -573,7 +599,7 @@ class Gateway:
             logger.error("Task execution error: {}", e)
             await self._send(event.channel, event.session_id, f"❌ Task error: {e}")
 
-    async def _handle_monitor_cmd(self, event: IncomingMessage, sub: str, args: list[str]) -> None:
+    async def _handle_monitor_cmd(self, event: IncomingMessage, user: dict[str, Any], sub: str, args: list[str]) -> None:
         from raven.core.monitor.models import Monitor, MonitorStatus, MonitorType
         from raven.core.monitor.store import MonitorStore
 
@@ -593,7 +619,12 @@ class Gateway:
                 lines.append(f"  {icon} {mon.id[:8]} {mon.name} [{mon.type.value}] every {mon.interval_seconds}s{last}")
             await self._send(event.channel, event.session_id, "\n".join(lines))
 
-        elif sub == "add":
+        elif sub in ("add", "remove", "pause", "resume"):
+            if not self._check_permission(user, Permission.MONITOR_WRITE):
+                await self._send(event.channel, event.session_id, "Access denied: insufficient permissions")
+                return
+
+        if sub == "add":
             if len(args) < 2:
                 await self._send(
                     event.channel,
@@ -776,7 +807,7 @@ class Gateway:
                 "  /code end <id> - End session",
             )
 
-    async def _handle_routine_cmd(self, event: IncomingMessage, sub: str, args: list[str]) -> None:
+    async def _handle_routine_cmd(self, event: IncomingMessage, user: dict[str, Any], sub: str, args: list[str]) -> None:
         from raven.core.routine.models import Routine, RoutineAction, RoutineStatus, RoutineTrigger
         from raven.core.routine.store import RoutineStore
 
@@ -794,7 +825,12 @@ class Gateway:
                 lines.append(f"  {icon} {rt.id[:8]} {rt.name} [{rt.action.value}] {rt.schedule}{last}")
             await self._send(event.channel, event.session_id, "\n".join(lines))
 
-        elif sub == "add":
+        elif sub in ("add", "remove", "pause", "resume"):
+            if not self._check_permission(user, Permission.ROUTINE_WRITE):
+                await self._send(event.channel, event.session_id, "Access denied: insufficient permissions")
+                return
+
+        if sub == "add":
             if len(args) < 2:
                 await self._send(
                     event.channel,

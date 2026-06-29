@@ -46,6 +46,9 @@ async def ocr_image(image_path: str, language: str = "eng+rus") -> str:
 
 async def ocr_url(url: str, language: str = "eng+rus") -> str:
     """Download image from URL and extract text via OCR. Args: url (str): Image URL, language (str): OCR language(s)"""
+    from raven.tools.http import validate_url
+    if not validate_url(url):
+        return "Invalid or blocked URL (SSRF guard)"
     tmp = None
     try:
         async with httpx.AsyncClient(timeout=30) as client:

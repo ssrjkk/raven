@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"strings"
 	"sync"
 	"syscall"
@@ -252,11 +253,12 @@ var allowedUpstreamPrefixes = []struct {
 	{"/api/v1/agent/", "http://agent-core:8002"},
 }
 
-func (g *Gateway) resolveUpstream(method, path string) (string, bool) {
-	key := method + " " + path
+func (g *Gateway) resolveUpstream(method, rawPath string) (string, bool) {
+	key := method + " " + rawPath
+	cleaned := path.Clean(rawPath)
 	for _, u := range allowedUpstreamPrefixes {
-		if strings.HasPrefix(key, u.prefix) || strings.HasPrefix(path, u.prefix) {
-			return u.base + path, true
+		if strings.HasPrefix(key, u.prefix) || strings.HasPrefix(cleaned, u.prefix) {
+			return u.base + cleaned, true
 		}
 	}
 	return "", false

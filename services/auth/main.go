@@ -276,7 +276,6 @@ func (s *AuthService) httpRegister(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, http.StatusCreated, map[string]string{"user_id": user.ID})
 }
 

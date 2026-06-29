@@ -61,18 +61,17 @@ _RESTRICTED_BUILTINS: dict[str, Any] = {
     "bool": bool, "bytearray": bytearray, "bytes": bytes, "chr": chr,
     "complex": complex, "dict": dict, "divmod": divmod, "enumerate": enumerate,
     "filter": filter, "float": float, "format": format, "frozenset": frozenset,
-    "hasattr": hasattr, "hash": hash, "hex": hex,
-    "id": id, "int": int, "isinstance": isinstance, "issubclass": issubclass,
+    "hash": hash, "hex": hex,
+    "id": id, "int": int, "isinstance": isinstance,
     "iter": iter, "len": len, "list": list, "map": map, "max": max,
-    "min": min, "next": next, "object": object, "oct": oct, "ord": ord,
+    "min": min, "next": next, "oct": oct, "ord": ord,
     "pow": pow, "range": range, "repr": repr, "reversed": reversed,
     "round": round, "set": set, "slice": slice, "sorted": sorted,
-    "str": str, "sum": sum, "tuple": tuple, "type": type, "zip": zip,
+    "str": str, "sum": sum, "tuple": tuple, "zip": zip,
     "True": True, "False": False, "None": None,
     "Exception": Exception, "ValueError": ValueError, "TypeError": TypeError,
     "KeyError": KeyError, "IndexError": IndexError, "StopIteration": StopIteration,
     "RuntimeError": RuntimeError,
-    # __import__ explicitly excluded — blocked below at AST level
 }
 
 _DENIED_BUILTINS = frozenset({

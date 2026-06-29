@@ -48,17 +48,23 @@ class EmbeddingEngine:
         try:
             import httpx
 
-            async with httpx.AsyncClient(timeout=30) as c:
-                resp = await c.post(
-                    "https://api.openai.com/v1/embeddings",
-                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                    json={"input": texts, "model": model},
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    return [d["embedding"] for d in data["data"]]
-                logger.error("OpenAI embedding error: {} {}", resp.status_code, resp.text)
-                return await self._embed_local(texts)
+            chunk_size = 100
+            all_results: list[list[float]] = []
+            async with httpx.AsyncClient(timeout=60) as c:
+                for i in range(0, len(texts), chunk_size):
+                    chunk = texts[i:i + chunk_size]
+                    resp = await c.post(
+                        "https://api.openai.com/v1/embeddings",
+                        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                        json={"input": chunk, "model": model},
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        all_results.extend(d["embedding"] for d in data["data"])
+                    else:
+                        logger.error("OpenAI embedding error: {} {}", resp.status_code, resp.text)
+                        return await self._embed_local(texts)
+            return all_results
         except Exception as e:
             logger.error("OpenAI embedding failed: {}", e)
             return await self._embed_local(texts)

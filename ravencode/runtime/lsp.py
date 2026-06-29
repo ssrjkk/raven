@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -139,6 +140,27 @@ class LSPClient:
             return str(val) if val is not None else ""
         return str(contents)
 
+    async def document_symbols(self, uri: str) -> list[dict[str, Any]]:
+        result = await self._request("textDocument/documentSymbol", {
+            "textDocument": {"uri": uri},
+        })
+        symbols = result.get("result", [])
+        out = []
+        for s in symbols:
+            if isinstance(s, dict):
+                kind = s.get("kind", 0)
+                name = s.get("name", "")
+                detail = s.get("detail", "")
+                entry = {"name": name, "kind": kind, "detail": detail}
+                children = s.get("children", [])
+                if children:
+                    entry["children"] = [
+                        {"name": c.get("name", ""), "kind": c.get("kind", 0)}
+                        for c in children[:10]
+                    ]
+                out.append(entry)
+        return out[:30]
+
     async def stop(self) -> None:
         if self._process:
             self._process.kill()
@@ -220,3 +242,114 @@ def _detect_lang(path: str) -> str:
         ".rs": "rust",
     }
     return lang_map.get(ext, "python")
+
+
+# ---------------------------------------------------------------------------
+# LSP auto-enrichment — gather project symbols for LLM context
+# ---------------------------------------------------------------------------
+
+_SYMBOL_KIND_NAMES: dict[int, str] = {
+    1: "File", 2: "Module", 3: "Namespace", 4: "Package", 5: "Class",
+    6: "Method", 7: "Property", 8: "Field", 9: "Constructor", 10: "Enum",
+    11: "Interface", 12: "Function", 13: "Variable", 14: "Constant",
+    15: "String", 16: "Number", 17: "Boolean", 18: "Array", 19: "Object",
+    20: "Key", 21: "Null", 22: "EnumMember", 23: "Struct", 24: "Event",
+    25: "Operator", 26: "TypeParameter",
+}
+
+
+async def enrich_context(project_root: str | Path | None = None, max_files: int = 10) -> str:
+    root = Path(project_root or Path.cwd()).resolve()
+    if not root.is_dir():
+        return "(project root not found)"
+
+    extensions = await asyncio.to_thread(_scan_extensions, root)
+    if not extensions:
+        return "(no source files found in project)"
+
+    top_langs = [ext for ext, _ in Counter(extensions).most_common(5)]
+    active_languages = set()
+    for ext in top_langs:
+        lang = _ext_to_lang(ext)
+        if lang:
+            active_languages.add(lang)
+
+    parts = [f"Project: {root.name}", f"Root: {root}"]
+    if active_languages:
+        parts.append(f"Languages detected: {', '.join(sorted(active_languages))}")
+
+    for lang in sorted(active_languages):
+        try:
+            client = await _get_lsp(lang)
+        except (RuntimeError, FileNotFoundError, ValueError):
+            parts.append(f"[LSP {lang}: server not available]")
+            continue
+
+        lang_exts = [e for e in _LANG_EXTS.get(lang, [])]
+        files = await asyncio.to_thread(_find_key_files, root, lang_exts, max_files)
+        if not files:
+            continue
+
+        file_symbols: list[str] = []
+        for fp in files:
+            uri = f"file://{fp.as_posix()}"
+            try:
+                symbols = await client.document_symbols(uri)
+                if symbols:
+                    names = []
+                    for s in symbols:
+                        kind_name = _SYMBOL_KIND_NAMES.get(s["kind"], "?")
+                        label = f"{s['name']} ({kind_name})"
+                        children = s.get("children")
+                        if children:
+                            child_names = ", ".join(c["name"] for c in children[:5])
+                            label += f" {{{child_names}}}"
+                        names.append(label)
+                    file_symbols.append(f"  {fp.relative_to(root)}: {', '.join(names[:10])}")
+            except Exception:
+                file_symbols.append(f"  {fp.relative_to(root)}: (symbols unavailable)")
+
+        if file_symbols:
+            parts.append(f"\n[{lang}]")
+            parts.extend(file_symbols)
+
+    return "\n".join(parts)
+
+
+def _scan_extensions(root: Path) -> list[str]:
+    exts = []
+    try:
+        for p in root.rglob("*"):
+            if p.is_file() and p.suffix.lower() in _LANG_EXTS_FLAT:
+                exts.append(p.suffix.lower())
+    except PermissionError:
+        pass
+    return exts
+
+
+def _ext_to_lang(ext: str) -> str | None:
+    for lang, exts in _LANG_EXTS.items():
+        if ext in exts:
+            return lang
+    return None
+
+
+def _find_key_files(root: Path, exts: list[str], max_files: int) -> list[Path]:
+    files = []
+    for p in root.rglob("*"):
+        if p.is_file() and p.suffix.lower() in exts:
+            depth = len(p.relative_to(root).parts)
+            files.append((depth, p))
+    files.sort(key=lambda x: (x[0], x[1].stat().st_size))
+    return [p for _, p in files[:max_files]]
+
+
+_LANG_EXTS: dict[str, list[str]] = {
+    "python": [".py", ".pyi"],
+    "typescript": [".ts", ".tsx"],
+    "javascript": [".js", ".jsx", ".mjs", ".cjs"],
+    "go": [".go"],
+    "rust": [".rs"],
+}
+
+_LANG_EXTS_FLAT: set[str] = {e for exts in _LANG_EXTS.values() for e in exts}

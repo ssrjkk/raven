@@ -838,8 +838,25 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
 
 _PLAN_MODE_DENIED = frozenset({"write", "edit", "bash", "task", "git_commit", "git_add", "checkpoint_restore", "redo"})
 
+_plugin_tools_loaded = False
+
+
+def _ensure_plugin_tools() -> None:
+    global _plugin_tools_loaded
+    if not _plugin_tools_loaded:
+        try:
+            from ravencode.runtime.plugins import get_plugin_registry
+            reg = get_plugin_registry()
+            for name, tool in reg.all_tools().items():
+                if name not in MODULE_TOOLS:
+                    MODULE_TOOLS[name] = tool
+            _plugin_tools_loaded = True
+        except ImportError:
+            pass
+
 
 def get_tool_definitions(plan_mode: bool = False) -> list[dict[str, Any]]:
+    _ensure_plugin_tools()
     return [
         {
             "type": "function",
@@ -860,6 +877,7 @@ def is_dangerous(name: str) -> bool:
 
 
 async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
+    _ensure_plugin_tools()
     tool = MODULE_TOOLS.get(name)
     if not tool:
         return f"[error] unknown tool: {name}"
@@ -876,17 +894,17 @@ async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
         return f"[error] {name}: {exc}"
 
 
-_PERMISSION_CHECKER: Any = None
+_PERMISSION_CHECKER: contextvars.ContextVar[Any] = contextvars.ContextVar("_PERMISSION_CHECKER", default=None)
 
 
 def set_permission_checker(checker: Any) -> None:
-    global _PERMISSION_CHECKER
-    _PERMISSION_CHECKER = checker
+    _PERMISSION_CHECKER.set(checker)
 
 
 def _get_permission_for_tool(name: str, arguments: dict[str, Any]) -> tuple[bool, str]:
-    if _PERMISSION_CHECKER is not None:
-        result = _PERMISSION_CHECKER(name, arguments)
+    checker = _PERMISSION_CHECKER.get()
+    if checker is not None:
+        result = checker(name, arguments)
         if isinstance(result, tuple) and len(result) == 2:
             return (bool(result[0]), str(result[1]))
     return True, ""

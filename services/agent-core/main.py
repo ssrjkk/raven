@@ -44,7 +44,7 @@ async def shutdown():
     logger.info("agent-core shutdown")
 
 
-@app.get("/health")
+@app.get("/health", summary="Health check", description="Returns service health status including uptime")
 async def health():
     return {
         "status": "healthy",
@@ -53,7 +53,7 @@ async def health():
     }
 
 
-@app.get("/ready")
+@app.get("/ready", summary="Readiness check", description="Returns 200 if NATS is connected, 503 otherwise")
 async def ready():
     if not nats.connected:
         return JSONResponse(
@@ -63,7 +63,7 @@ async def ready():
     return {"status": "ready"}
 
 
-@app.get("/metrics")
+@app.get("/metrics", summary="Metrics snapshot", description="Returns LLM call metrics, NATS status, and uptime")
 async def metrics():
     return {
         "llm_calls": llm._metrics,
@@ -72,7 +72,7 @@ async def metrics():
     }
 
 
-@app.post("/api/v1/agent/chat")
+@app.post("/api/v1/agent/chat", summary="Chat with LLM", description="Sends messages to the LLM and returns a response. Publishes response to NATS if connected.")
 async def chat(request: dict, raw_request: Request):
     session_id = request.get("session_id") or str(uuid.uuid4())
     messages = request.get("messages", request.get("message", []))

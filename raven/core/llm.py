@@ -609,20 +609,37 @@ class LLMRouter:
         self, messages: list[dict[str, Any]], model: str | None = None, tools: list[dict[str, Any]] | None = None
     ) -> AsyncIterator[str]:
         model = model or settings.default_model
-        provider = self._get_provider(model)
-        metrics.inc("llm_stream_start", {"model": model, "provider": type(provider).__name__})
-        with trace_llm_call(model=model):
-            async for token in provider.complete_stream(messages, model, tools):
-                yield token
+        last_exc = None
+        for attempt in range(max(1, settings.llm_retry_max)):
+            try:
+                provider = self._get_provider(model)
+                metrics.inc("llm_stream_start", {"model": model, "provider": type(provider).__name__})
+                with trace_llm_call(model=model):
+                    async for token in provider.complete_stream(messages, model, tools):
+                        yield token
+                return
+            except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.NetworkError) as e:
+                last_exc = e
+                if attempt < settings.llm_retry_max - 1:
+                    delay = settings.llm_retry_delay * (2**attempt)
+                    logger.warning(
+                        "LLM stream failed (attempt {}/{}): {}, retrying in {}s",
+                        attempt + 1, settings.llm_retry_max, e, delay,
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error("LLM stream failed after {} attempts: {}", settings.llm_retry_max, e)
+                    metrics.inc("llm_stream_error", {"model": model, "error": type(e).__name__})
+        raise last_exc or RuntimeError("LLM stream failed")
 
     async def complete(
         self, messages: list[dict[str, Any]], model: str | None = None, tools: list[dict[str, Any]] | None = None
     ) -> LLMResponse:
         model = model or settings.default_model
-        provider = self._get_provider(model)
         last_exc = None
         for attempt in range(max(1, settings.llm_retry_max)):
             try:
+                provider = self._get_provider(model)
                 with trace_llm_call(model=model):
                     resp = await provider.complete(messages, model, tools)
                 metrics.inc("llm_complete", {"model": model, "status": "ok"})
@@ -642,5 +659,12 @@ class LLMRouter:
                     await asyncio.sleep(delay)
                 else:
                     logger.error("LLM call failed after {} attempts: {}", settings.llm_retry_max, e)
+                    from raven.core.failover import ModelFailover
+                    try:
+                        logger.info("Failover: trying alternative models")
+                        failover = ModelFailover(self)
+                        return await failover.complete(messages, tools=tools)
+                    except Exception as f:
+                        last_exc = f
         metrics.inc("llm_complete", {"model": model, "status": "error"})
         raise last_exc or RuntimeError("LLM call failed")

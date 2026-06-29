@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -39,14 +40,17 @@ class SessionStore:
         return sorted(sessions, key=lambda s: s["updated"], reverse=True)
 
     async def save(self, agent: ReActAgent, summary: str = "") -> str:
-        session_id = f"session_{int(time.time())}"
+        session_id = f"session_{uuid.uuid4().hex[:12]}"
         state = agent.dump_state()
         state["summary"] = summary
         state["created"] = time.time()
         state["updated"] = time.time()
         state["steps"] = agent.conversation.message_count
         p = self._path(session_id)
-        await asyncio.to_thread(p.write_text, json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        data = json.dumps(state, ensure_ascii=False, indent=2)
+        tmp = p.with_suffix(".tmp")
+        await asyncio.to_thread(tmp.write_text, data, encoding="utf-8")
+        tmp.rename(p)
         logger.info("Session saved: {}", session_id)
         return session_id
 

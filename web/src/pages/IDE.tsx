@@ -7,6 +7,25 @@ interface TerminalLine {
   output: string
 }
 
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken()
+  const headers: Record<string, string> = { "Content-Type": "application/json" }
+  if (token) headers["Authorization"] = `Bearer ${token}`
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 15000)
+  try {
+    const res = await fetch(path, { headers, signal: controller.signal, ...init })
+    if (res.status === 401 && window.location.pathname !== "/login") {
+      window.location.href = "/login"
+      throw new Error("Unauthorized")
+    }
+    if (!res.ok) throw new Error(`API ${path}: ${res.status}`)
+    return res.json()
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 export default function IDEPage() {
   const [code, setCode] = useState(`export default function App() {\n  return <h1>Hello Raven</h1>\n}`)
   const [output, setOutput] = useState("")
@@ -19,20 +38,13 @@ export default function IDEPage() {
     setTimeout(() => terminalEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
   }, [])
 
-  function authHeaders(): Record<string, string> {
-    const t = getToken()
-    return t ? { "Content-Type": "application/json", "Authorization": `Bearer ${t}` } : { "Content-Type": "application/json" }
-  }
-
   async function runAI() {
     setOutput("Thinking...")
     try {
-      const res = await fetch("/api/aios/ai", {
+      const data = await apiFetch<{ text?: string }>("/api/aios/ai", {
         method: "POST",
-        headers: authHeaders(),
         body: JSON.stringify({ prompt: aiPrompt, task: "code" }),
       })
-      const data = await res.json()
       setOutput(data.text || JSON.stringify(data))
     } catch {
       setOutput("AI Gateway unavailable. Start with: raven aios gateway")
@@ -46,12 +58,10 @@ export default function IDEPage() {
     setTerminalHistory(h => [...h, { input: cmd, output: "Processing..." }])
     scrollTerminal()
     try {
-      const res = await fetch("/api/v1/agent/execute", {
+      const data = await apiFetch<{ output?: string; error?: string }>("/api/v1/agent/execute", {
         method: "POST",
-        headers: authHeaders(),
         body: JSON.stringify({ command: cmd, context: "ide-terminal" }),
       })
-      const data = await res.json()
       setTerminalHistory(h => {
         const copy = [...h]
         copy[copy.length - 1] = { input: cmd, output: data.output || data.error || JSON.stringify(data) }

@@ -16,6 +16,7 @@ from loguru import logger
 
 from services.observability_sdk.idempotency import IdempotencyStore
 from services.observability_sdk.outbox import OutboxStore
+from services.observability_sdk.outbox_poller import OutboxPoller
 
 try:
     from opentelemetry_setup import setup_opentelemetry
@@ -26,8 +27,10 @@ app = FastAPI(title="Task Engine", version="1.0.0")
 setup_opentelemetry(app, service_name="task-engine")
 started_at = 0.0
 outbox: OutboxStore | None = None
+outbox_poller: Any = None
 idempotency: IdempotencyStore | None = None
 db_conn: sqlite3.Connection | None = None
+nats: Any = None
 
 
 class TaskStatus(StrEnum):
@@ -126,7 +129,7 @@ async def _periodic_cleanup() -> None:
 
 @app.on_event("startup")
 async def startup():
-    global started_at, outbox, idempotency, db_conn
+    global started_at, outbox, outbox_poller, idempotency, db_conn, nats
     started_at = time.time()
     db_path = os.environ.get("DB_PATH", "/data/task.db")
     try:
@@ -137,18 +140,35 @@ async def startup():
         idempotency = IdempotencyStore(db_path=db_path.replace(".db", "_idem.db"))
         logger.info("task-engine started, DB={}", db_path)
         asyncio.create_task(_periodic_cleanup())
+
+        nats_url = os.environ.get("NATS_URL", "nats://nats:4222")
+        try:
+            import nats as _nats_mod
+            nc = await _nats_mod.connect(nats_url, name="task-engine")
+            nats = nc
+            outbox_poller = OutboxPoller(outbox, nc, poll_interval=1.0)
+            outbox_poller.start()
+            logger.info("NATS connected, outbox poller started")
+        except Exception as e:
+            logger.warning("NATS unavailable, outbox poller not started: {}", e)
     except Exception as e:
         logger.warning("task-engine started without persistence: {}", e)
 
 
 @app.on_event("shutdown")
 async def shutdown():
+    global nats
+    if outbox_poller:
+        await outbox_poller.stop()
+    if nats:
+        await nats.close()
+        nats = None
     if db_conn:
         db_conn.close()
     logger.info("task-engine shutdown")
 
 
-@app.get("/health")
+@app.get("/health", summary="Health check", description="Returns service health, task count, and uptime")
 async def health() -> dict[str, Any]:
     return {
         "status": "healthy",
@@ -158,12 +178,12 @@ async def health() -> dict[str, Any]:
     }
 
 
-@app.get("/ready")
+@app.get("/ready", summary="Readiness check", description="Returns 200 when persistence is available")
 async def ready() -> dict[str, Any]:
     return {"status": "ready", "persistence": db_conn is not None}
 
 
-@app.get("/metrics")
+@app.get("/metrics", summary="Metrics snapshot", description="Returns task counts by status and uptime")
 async def metrics() -> dict[str, Any]:
     counts: dict[str, int] = {"pending": 0, "running": 0, "completed": 0, "failed": 0}
     for t in _app_tasks.values():
@@ -171,7 +191,7 @@ async def metrics() -> dict[str, Any]:
     return {"tasks": counts, "uptime_seconds": round(time.time() - started_at, 1)}
 
 
-@app.post("/api/v1/tasks")
+@app.post("/api/v1/tasks", summary="Create a task", description="Creates a new async task with optional idempotency key. Supports outbox event publishing.")
 async def create_task(request: dict[str, Any]) -> dict[str, Any]:
     task_type = request.get("type", "generic")
     task_input = request.get("input", "")
@@ -202,8 +222,7 @@ async def _execute_task(task: Task):
     task.status = TaskStatus.RUNNING
     _save_task(task)
     try:
-        await asyncio.sleep(0.5)
-        task.result = f"Executed {task.type}: {task.input[:50]}..."
+        task.result = await _dispatch_task(task)
         task.status = TaskStatus.COMPLETED
     except Exception as e:
         task.status = TaskStatus.FAILED
@@ -219,7 +238,30 @@ async def _execute_task(task: Task):
         outbox.enqueue("task.completed", {"task_id": task.id, "result": task.result, "status": task.status.value})
 
 
-@app.get("/api/v1/tasks/{task_id}")
+async def _dispatch_task(task: Task) -> str:
+    if task.type == "echo":
+        return task.input
+    if task.type == "http":
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=15) as c:
+                resp = await c.get(task.input)
+                return f"HTTP {resp.status_code}: {resp.text[:500]}"
+        except Exception as e:
+            return f"HTTP error: {e}"
+    if task.type == "sleep":
+        try:
+            duration = max(0, min(int(task.input), 300))
+            await asyncio.sleep(duration)
+            return f"Slept for {duration}s"
+        except (ValueError, TypeError):
+            return f"Invalid duration: {task.input}"
+    if task.type == "generic":
+        return f"Executed {task.type}: {task.input[:100]}..."
+    return f"Unknown task type '{task.type}': {task.input[:100]}"
+
+
+@app.get("/api/v1/tasks/{task_id}", summary="Get task details", description="Returns task details including status, result, and duration by task ID")
 async def get_task(task_id: str) -> dict[str, Any]:
     task = _app_tasks.get(task_id)
     if not task:

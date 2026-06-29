@@ -11,6 +11,7 @@ RUN addgroup -S raven && adduser -S -G raven -h /app raven && \
 WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 COPY services/code-service/ .
+COPY services/observability_sdk/ ./observability_sdk/
 RUN chown -R raven:raven /app
 ENV OTEL_SERVICE_NAME=code-service \
     OTEL_TRACES_SAMPLER=parentbased_traceidratio \

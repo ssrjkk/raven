@@ -49,10 +49,16 @@ class SecretsManager:
 
     def encrypt(self, plaintext: str) -> str:
         if not HAS_CRYPTO:
-            return plaintext
+            raise RuntimeError(
+                "Cryptography package not installed. "
+                "Run: pip install cryptography"
+            )
         key = self._get_or_create_key()
         if not key:
-            return plaintext
+            raise RuntimeError(
+                "RAVEN_MASTER_KEY not set. "
+                "Set it in .env or config"
+            )
         f = Fernet(key)
         return _MARKER + f.encrypt(plaintext.encode()).decode()
 

@@ -11,21 +11,14 @@ from raven.plugins.files import plugin as files_plugin
 
 class RuntimeAdapter:
     @staticmethod
-    async def run_command(cmd: str, shell: bool = True) -> str:
-        if shell:
-            proc = await asyncio.create_subprocess_shell(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-        else:
-            import shlex
-            parts = shlex.split(cmd)
-            proc = await asyncio.create_subprocess_exec(
-                *parts,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
+    async def run_command(cmd: str) -> str:
+        import shlex
+        parts = shlex.split(cmd)
+        proc = await asyncio.create_subprocess_exec(
+            *parts,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
         except TimeoutError:

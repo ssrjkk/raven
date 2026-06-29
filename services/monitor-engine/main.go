@@ -28,6 +28,10 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	authv1 "github.com/ssrjkk/raven/services/proto/go/auth/v1"
 )
 
 type contextKey string
@@ -54,9 +58,14 @@ type MonitorEngine struct {
 	checksMu sync.RWMutex
 	cancelMu sync.Mutex
 	cancels  map[string]context.CancelFunc
+
+	authConn    *grpc.ClientConn
+	authClient  authv1.AuthServiceClient
 }
 
 type Monitor struct {
+	mu sync.RWMutex
+
 	ID             string  `json:"id"`
 	Name           string  `json:"name"`
 	URL            string  `json:"url"`
@@ -131,6 +140,12 @@ func (m *MonitorEngine) InitDB(path string) error {
 	}
 
 	go m.cleanupOldMonitors(24 * time.Hour)
+
+	if authAddr := os.Getenv("AUTH_SERVICE_ADDR"); authAddr != "" {
+		if err := m.InitAuth(authAddr); err != nil {
+			m.logger.Warn("auth service unavailable, tokens will not be validated", "error", err)
+		}
+	}
 	return nil
 }
 
@@ -153,6 +168,19 @@ func (m *MonitorEngine) cleanupOldMonitors(ttl time.Duration) {
 			return
 		}
 	}
+}
+
+func (m *MonitorEngine) InitAuth(authAddr string) error {
+	conn, err := grpc.NewClient(authAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.WaitForReady(true)),
+	)
+	if err != nil {
+		return fmt.Errorf("auth gRPC dial: %w", err)
+	}
+	m.authConn = conn
+	m.authClient = authv1.NewAuthServiceClient(conn)
+	return nil
 }
 
 func (m *MonitorEngine) InitNATS(url string) error {
@@ -224,6 +252,17 @@ func (m *MonitorEngine) authMiddleware(next http.Handler) http.Handler {
 			writeMonitorError(w, http.StatusUnauthorized, "missing or invalid token")
 			return
 		}
+		token := authHeader[7:]
+
+		if m.authClient != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+			defer cancel()
+			resp, err := m.authClient.ValidateToken(ctx, &authv1.ValidateTokenRequest{Token: token})
+			if err != nil || !resp.Valid {
+				writeMonitorError(w, http.StatusUnauthorized, "invalid token")
+				return
+			}
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -274,7 +313,10 @@ func (m *MonitorEngine) listMonitors(w http.ResponseWriter, r *http.Request) {
 	m.checksMu.RLock()
 	items := make([]*Monitor, 0, len(m.checks))
 	for _, ch := range m.checks {
-		items = append(items, ch)
+		ch.mu.RLock()
+		copy := *ch
+		ch.mu.RUnlock()
+		items = append(items, &copy)
 	}
 	m.checksMu.RUnlock()
 	writeJSON(w, http.StatusOK, map[string]interface{}{"monitors": items})
@@ -376,6 +418,7 @@ func (m *MonitorEngine) runCheck(ctx context.Context, mon *Monitor) {
 		checkCancel()
 		duration := time.Since(start)
 
+		mon.mu.Lock()
 		mon.LastDurationMs = float64(duration.Milliseconds())
 		m.checkDuration.Observe(duration.Seconds())
 		m.checkLastDuration.Set(mon.LastDurationMs)
@@ -394,10 +437,14 @@ func (m *MonitorEngine) runCheck(ctx context.Context, mon *Monitor) {
 			}
 		}
 
+		status := mon.LastStatus
+		durationMs := mon.LastDurationMs
+		mon.mu.Unlock()
+
 		if m.js != nil && m.nc.IsConnected() {
 			result, _ := json.Marshal(map[string]interface{}{
-				"monitor_id": mon.ID, "status": mon.LastStatus,
-				"duration_ms": mon.LastDurationMs, "timestamp": time.Now().Unix(),
+				"monitor_id": mon.ID, "status": status,
+				"duration_ms": durationMs, "timestamp": time.Now().Unix(),
 			})
 			if _, err := m.js.Publish(ctx, "monitor.check.completed", result); err != nil {
 				m.logger.Warn("nats publish failed", "monitor_id", mon.ID, "error", err)
@@ -469,6 +516,9 @@ func (w *statusWriter) WriteHeader(status int) {
 func (m *MonitorEngine) Shutdown() {
 	m.logger.Info("shutting down monitor engine")
 	m.rootCancel()
+	if m.authConn != nil {
+		m.authConn.Close()
+	}
 }
 
 func main() {

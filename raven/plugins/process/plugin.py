@@ -9,21 +9,16 @@ PLUGIN_NAME = "process"
 PLUGIN_DESCRIPTION = "Run, list, and manage system processes"
 
 
-async def run(command: str, timeout: int = 30, shell: bool = False) -> str:
-    """Run a command and return output. Args: command (str): Command to execute, timeout (int): Max execution time, shell (bool): Use shell (default: False for safety)"""
+async def run(command: str, timeout: int = 30) -> str:
+    """Run a command and return output. Args: command (str): Command to execute, timeout (int): Max execution time"""
     try:
-        if shell:
-            proc = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-        else:
-            proc = await asyncio.create_subprocess_exec(
-                *command.split(),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+        import shlex
+        parts = shlex.split(command)
+        proc = await asyncio.create_subprocess_exec(
+            *parts,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except TimeoutError:

@@ -1820,5 +1820,43 @@ def tui():
         raise SystemExit(1) from e
 
 
+@cli.command()
+@click.argument("task", required=False, default="")
+@click.option("--project", "-p", default=None, help="Project root directory")
+@click.option("--agent", default="raven", help="Agent type name")
+@click.option("--max-steps", default=50, type=int, help="Max agent steps")
+@click.option("--safe", is_flag=True, help="Safe mode (confirm dangerous operations)")
+@click.option("--plan", is_flag=True, help="Plan-only mode (read-only)")
+@click.option("--model", default=None, help="LLM model override")
+@click.option("--parallel", "-P", default=None, help="Start a parallel session with this task")
+def code(
+    task: str,
+    project: str | None,
+    agent: str,
+    max_steps: int,
+    safe: bool,
+    plan: bool,
+    model: str | None,
+    parallel: str | None,
+) -> None:
+    """Interactive coding agent — like opencode in the terminal"""
+    from raven.cli.coding import code as _code
+
+    if not task and not project and not parallel:
+        console.print(Panel.fit(
+            "[bold]Raven Code Agent[/bold]\n\n"
+            "Usage:\n"
+            "  raven code                       # interactive REPL\n"
+            "  raven code \"fix this bug\"        # one-shot + REPL\n"
+            "  raven code -p /path/to/project   # specify project root\n"
+            "  raven code --parallel \"task\"     # parallel session\n"
+            "  raven code --safe                # safe mode (confirm)\n"
+            "  raven code --plan                # read-only plan mode",
+            border_style="cyan",
+        ))
+        return
+    _code(task, project, agent, max_steps, safe, plan, model, parallel)
+
+
 if __name__ == "__main__":
     cli()

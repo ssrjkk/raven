@@ -294,8 +294,8 @@ class Agent:
         if not allowed:
             logger.warning("Tool '{}' denied by policy", tc.name)
             return {"error": f"Tool '{tc.name}' is denied by security policy"}
-        path_ok = self._tool_policy.check_path(str(tc.arguments) if tc.arguments else "")
-        if not path_ok:
+        path_arg = (tc.arguments or {}).get("path") or (tc.arguments or {}).get("file") or (tc.arguments or {}).get("directory")
+        if path_arg and not self._tool_policy.check_path(str(path_arg)):
             return {"error": "Path outside workspace root — denied by security policy"}
         try:
             logger.info("Tool call: {} args={}", tc.name, tc.arguments)

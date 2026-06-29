@@ -1,8 +1,11 @@
+import os
+
 from raven.core.secrets import SecretsManager
 
 
 class TestSecretsManager:
     def setup_method(self):
+        os.environ["RAVEN_MASTER_KEY"] = "test-master-key-for-testing-only"
         self.mgr = SecretsManager(data_dir="tmp_test_secrets")
 
     def test_get_default(self):

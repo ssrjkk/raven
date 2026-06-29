@@ -204,7 +204,12 @@ class ReActAgent:
                 return await self._run_impl(user_input)
             except asyncio.CancelledError:
                 self._aborted = True
+                await self._auto_save("aborted")
                 return "[aborted]"
+            except Exception as exc:
+                logger.exception("Agent crashed: {}", exc)
+                await self._auto_save(f"crashed: {exc}")
+                return f"[error: {exc}]"
 
     async def _run_impl(self, user_input: str) -> str:
         self.conversation.add_user_message(user_input)
@@ -271,11 +276,7 @@ class ReActAgent:
                     result = f"[user denied] {name} was not approved"
 
                 result_truncated = result[:10_000]
-                self.conversation.messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.get("id", ""),
-                    "content": result_truncated,
-                })
+                self.conversation.add_tool_result(tc.get("id", ""), result_truncated)
 
                 if ee:
                     await ee.emit(AgentEvent("tool_result", {"name": name, "result": result_truncated, "step": step}))
@@ -436,14 +437,20 @@ class ReActAgent:
     # -----------------------------------------------------------------------
 
     def dump_state(self) -> dict[str, Any]:
+        cfg = {k: v for k, v in self.config.__dict__.items()
+               if not callable(v) and not k.startswith("_")}
         return {
             "name": self.name,
-            "config": self.config.__dict__,
+            "config": cfg,
             "conversation": self.conversation.messages,
+            "memory": self.conversation.memory.to_dict() if hasattr(self.conversation, 'memory') else {},
         }
 
     @classmethod
     def load_state(cls, state: dict[str, Any], llm_provider: Any = None) -> Self:
-        cfg = AgentConfig(**state.get("config", {}))
+        cfg_data = state.get("config", {})
+        cfg_data = {k: v for k, v in cfg_data.items()
+                    if not callable(v) and not k.startswith("_")}
+        cfg = AgentConfig(**cfg_data)
         conv = Conversation(messages=state.get("conversation", []))
         return cls(config=cfg, conversation=conv, llm_provider=llm_provider, name=state.get("name", "raven"))
