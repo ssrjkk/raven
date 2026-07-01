@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>Ελληνικά — Προσωπικός βοηθός τεχνητής νοημοσύνης επιχειρησιακού επιπέδου</i></p>
+  <p><i>Προσωπικός βοηθός AI επιχειρησιακού επιπέδου. 25+ κανάλια. RavenFlow. RavenCode. Φωνή. Canvas. Nodes.</i></p>
 
   [English](README.md) •
   [Русский](README.ru.md) •

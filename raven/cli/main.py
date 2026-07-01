@@ -1858,5 +1858,75 @@ def code(
     _code(task, project, agent, max_steps, safe, plan, model, parallel)
 
 
+@cli.group()
+def flow():
+    """RavenFlow — AI workflow orchestrator & gateway"""
+
+
+@flow.command()
+@click.option("--port", default=18789, type=int, help="RavenFlow gateway port")
+def serve(port: int):
+    """Start the RavenFlow gateway daemon"""
+    import asyncio
+
+    from raven.gateway.daemon import RavenFlowDaemon
+
+    console.print(f"[bold]RavenFlow Gateway[/bold] starting on port {port}")
+    daemon = RavenFlowDaemon(port=port)
+    asyncio.run(daemon.start())
+
+
+@flow.command(name="ask")
+@click.argument("message")
+@click.option("--channel", default="cli", help="Source channel")
+@click.option("--mode", default="build", help="Agent mode: build, plan, general")
+@click.option("--session", default="", help="Session ID")
+def flow_ask(message: str, channel: str, mode: str, session: str):
+    """Send a message to RavenFlow agent"""
+    import asyncio
+
+    import httpx
+
+    async def _ask():
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "http://localhost:18789/api/agent",
+                json={"message": message, "channel": channel, "mode": mode, "session_id": session},
+                timeout=120,
+            )
+            data = resp.json()
+            if "error" in data:
+                console.print(f"[red]Error: {data['error']}[/red]")
+            else:
+                console.print(data.get("response", ""))
+    asyncio.run(_ask())
+
+
+@flow.command(name="sessions")
+def flow_sessions():
+    """List RavenFlow sessions"""
+    import asyncio
+
+    import httpx
+
+    async def _list():
+        async with httpx.AsyncClient() as client:
+            resp = await client.get("http://localhost:18789/api/sessions", timeout=10)
+            data = resp.json()
+            mgr_sessions = data.get("sessions", [])
+            flow_sessions = data.get("flow_sessions", [])
+            if mgr_sessions:
+                console.print("[bold]Multi-agent sessions:[/bold]")
+                for s in mgr_sessions:
+                    console.print(f"  {s['id'][:8]} | {s.get('name', '?')} | {s['status']} | msgs: {s['message_count']}")
+            if flow_sessions:
+                console.print("[bold]Flow sessions:[/bold]")
+                for s in flow_sessions:
+                    console.print(f"  {s['id'][:8]} | {s['channel']} | {s['status']} | msgs: {s['messages']}")
+            if not mgr_sessions and not flow_sessions:
+                console.print("[yellow]No active sessions[/yellow]")
+    asyncio.run(_list())
+
+
 if __name__ == "__main__":
     cli()

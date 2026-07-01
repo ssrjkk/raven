@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>Türkçe — Kurumsal düzeyde kişisel AI asistanı</i></p>
+  <p><i>Kurumsal düzeyde kişisel AI asistanı. 25+ kanal. RavenFlow. RavenCode. Ses. Canvas. Nodes.</i></p>
 
   [English](README.md) •
   [Русский](README.ru.md) •

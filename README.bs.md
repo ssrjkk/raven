@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>Bosanski — Personalni AI asistent na nivou preduzeća</i></p>
+  <p><i>Lični AI asistent enterprise nivoa. 25+ kanala. RavenFlow. RavenCode. Glas. Canvas. Nodes.</i></p>
 
   [English](README.md) •
   [Русский](README.ru.md) •

@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>Tiếng Việt — Trợ lý AI cá nhân cấp doanh nghiệp</i></p>
+  <p><i>Trợ lý AI cá nhân cấp doanh nghiệp. 25+ kênh. RavenFlow. RavenCode. Giọng nói. Canvas. Nodes.</i></p>
 
   [English](README.md) •
   [Русский](README.ru.md) •

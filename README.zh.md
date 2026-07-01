@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>企业级个人AI助手。12个渠道。任务引擎。监控。编程助手。RAG知识库。Web仪表板。</i></p>
+  <p><i>企业级个人AI助手。25+渠道。RavenFlow工作流。RavenCode代理。语音。Canvas。Nodes。</i></p>
 
   <a href="#features">功能</a> •
   <a href="#quickstart">快速开始</a> •
@@ -12,7 +12,9 @@
   [![CI](https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=main&label=CI&logo=github)]()
   [![Python](https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white)]()
   [![License](https://img.shields.io/badge/license-MIT-green)]()
-  [![Channels](https://img.shields.io/badge/channels-12-8A2BE2)]()
+  [![Channels](https://img.shields.io/badge/channels-25+-8A2BE2)]()
+  [![RavenFlow](https://img.shields.io/badge/ravenflow-daemon-blue)]()
+  [![RavenCode](https://img.shields.io/badge/ravencode-agent-purple)]()
   [![Tests](https://img.shields.io/badge/tests-859_passing-brightgreen)]()
   [![Coverage](https://img.shields.io/codecov/c/github/ssrjkk/raven?logo=codecov)]()
   [![Security](https://img.shields.io/badge/security-hardened-blueviolet)]()
@@ -288,103 +290,185 @@ flowchart TB
 
 ## 项目结构
 
-`
+```
 raven/
-├── raven/                      # 主要Python包
-│   ├── agent/                  ReAct代理、多代理注册、工作区提示词
-│   ├── gateway/                消息路由、会话、命令
+├── raven/                      # Main Python package
+│   ├── agent/                  ReAct agent, multi-agent registry, workspace prompts
+│   ├── gateway/                Message routing, RavenFlow daemon, routing engine
 │   ├── core/
-│   │   ├── auth/               认证、RBAC（4角色、16权限）、API令牌
-│   │   ├── security/           ToolPolicyEvaluator、PII编辑、安全审计
-│   │   ├── task_engine/        规划器、执行器、任务存储
-│   │   ├── monitor/            HTTP、价格、RSS、文件、进程监控+条件
-│   │   ├── rag/                嵌入引擎、分块、向量存储
-│   │   ├── llm.py              LLM提供商（OpenAI、Anthropic、Ollama、OpenRouter）+故障转移
-│   │   ├── config.py           Pydantic设置+YAML配置
-│   │   └── admin_api.py        管理员REST API
-│   ├── channels/               12个渠道、消息总线、CircuitBreakerChannel
-│   ├── cli/                    CLI（click + rich）
-│   ├── tools/                  插件工具
-│   ├── tui/                    终端UI（textual）
-│   └── workspace/              工作区管理器、技能、插件加载器
-├── services/                   # 微服务（Go + Python）
-│   ├── gateway/                Go网关（认证代理、断路器、速率限制器、指标、gRPC）
-│   ├── auth/                   Go认证服务（SQLite、JWT、gRPC、Redis速率限制器）
-│   ├── agent-core/             Python — LLM路由器（Ollama/OpenAI/Anthropic）、NATS发布/订阅
-│   ├── monitor-engine/         Go监控服务（SQLite、NATS、Prometheus）
-│   ├── rag-service/            Python — 语义搜索（Qdrant + 内存回退）
-│   ├── task-engine/            Python — 任务规划器（SQLite、NATS、幂等性、发件箱、Saga）
-│   ├── code-service/           Python — 代码沙盒（子进程、NATS）
-│   └── proto/                  Protobuf定义+生成的Go代码
-├── web/                        React 19 + Vite + Tailwind仪表板
-├── deploy/                     Docker、k8s、systemd、可观测性栈
-├── daemon/                     Rust守护进程（ravend）：系统指标、进程管理
-├── aios/                       AI-OS-MVP代理框架
-└── plugins/                    用户插件
-`
+│   │   ├── auth/               Authentication, RBAC (4 roles, 16 permissions), API tokens
+│   │   ├── security/           ToolPolicyEvaluator, SandboxPolicy, SecurityAudit, PII redaction
+│   │   ├── task_engine/        Planner, executor, task storage
+│   │   ├── monitor/            HTTP, price, RSS, file, process monitors + conditions
+│   │   ├── rag/                Embedding engine, chunking, vector store
+│   │   ├── llm.py              LLM providers (OpenAI, Anthropic, Ollama, OpenRouter) + failover
+│   │   ├── config.py           Pydantic Settings + YAML config
+│   │   └── admin_api.py        Admin REST API
+│   ├── channels/               25+ channels, registry, message bus, CircuitBreakerChannel
+│   ├── cli/                    CLI (click + rich) — raven code, raven flow
+│   ├── tools/                  Canvas, Nodes, Plugin tools
+│   ├── tui/                    Terminal UI (textual)
+│   ├── voice/                  Wake word detection, STT, TTS modules
+│   └── workspace/              Workspace manager, skills, plugin loader
+├── ravencode/                  # RavenCode agent framework
+│   ├── runtime/
+│   │   ├── lsp.py              LSP auto-enrichment (pyright, tsserver, gopls, rust-analyzer)
+│   │   ├── multisession.py     Parallel multi-session manager
+│   │   └── tools.py            Tool registry (read, write, edit, bash, canvas, nodes, cron, sandbox, talk)
+│   └── cli/coding.py           Interactive REPL coding agent
+├── services/                   # Microservices (Go + Python)
+│   ├── gateway/                Go gateway (auth proxy, circuit breaker, rate limiter, metrics, gRPC)
+│   ├── auth/                   Go auth service (SQLite, JWT, gRPC, Redis rate limiter)
+│   ├── agent-core/             Python — LLM router (Ollama/OpenAI/Anthropic), NATS pub/sub
+│   ├── monitor-engine/         Go monitor service (SQLite, NATS, Prometheus)
+│   ├── rag-service/            Python — semantic search (Qdrant + in-memory fallback)
+│   ├── task-engine/            Python — task planner (SQLite, NATS, idempotency, outbox, saga)
+│   ├── code-service/           Python — code sandbox + RavenCode agent API + AST context
+│   └── proto/                  Protobuf definitions + generated Go code
+├── web/                        React 19 + Vite + Tailwind dashboard + Monaco IDE
+├── desktop-tauri/              Tauri desktop shell (Rust) with backend launcher
+├── deploy/                     Docker, k8s, systemd, Observability stack
+├── daemon/                     Rust daemon (ravend): system metrics, process management
+├── scripts/                    Build scripts, EXE builder
+├── aios/                       AI-OS-MVP agent framework
+└── plugins/                    User plugins
+```
 
-## 技术栈
+### RavenFlow Gateway
 
-| 层 | 技术 |
-|----|------|
-| **后端** | Python 3.13+, FastAPI, asyncio, SQLite (modernc.org/sqlite) |
-| **LLM** | Ollama（本地）→ OpenRouter → Anthropic → OpenAI（故障转移） |
-| **记忆** | SQLite + ChromaDB + numpy向量存储 |
-| **RAG** | Qdrant向量存储，内存回退，n-gram嵌入 |
-| **认证** | bcrypt, JWT (HS256), gRPC, RBAC（4角色、16权限） |
-| **前端** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
-| **渠道** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio |
-| **消息代理** | NATS + JetStream（流：agent.response、monitor.check.completed、task.events、auth.user.created） |
-| **网关** | Go 1.26 — 断路器、速率限制器、认证代理、gRPC重试、OpenTelemetry |
-| **认证服务** | Go 1.26 — SQLite、JWT、gRPC、令牌桶速率限制器、OpenTelemetry |
-| **监控引擎** | Go 1.26 — HTTP健康检查、SQLite、NATS事件、Prometheus指标 |
-| **弹性** | 断路器、gRPC重试（指数退避）、速率限制器、发件箱模式、Saga模式、幂等性 |
-| **可观测性** | OpenTelemetry（追踪+指标）、Prometheus、Grafana（12面板）、Loki、Tempo、健康/就绪探针 |
-| **安全** | 速率限制、JWT认证、DM配对、Fernet加密、RBAC、插件沙盒、ToolPolicyEvaluator（deny/allow）、exec安全策略（deny/ask/full）、contextVisibility、工作区隔离、安全审计CLI |
-| **CI/CD** | GitHub Actions — 并行Go/Python/web lint+test+build、Allure TestOps、Docker buildx、Codecov、Playwright E2E、k6负载测试 |
-| **部署** | Docker（多阶段、精简、非root）、docker-compose（微服务栈）、Kubernetes清单、systemd、launchd |
-| **测试** | pytest（800+测试、Allure报告）、Go表驱动测试、Vitest（React）、Playwright（E2E）、k6（负载） |
+Multi-agent orchestrator daemon with WebSocket streaming:
+
+```bash
+# Start the gateway
+raven flow serve --port 18789
+
+# Send an agent message
+raven flow ask "summarize the README"
+
+# List active sessions
+raven flow sessions
+```
+
+### Canvas Visual Workspace
+
+Render rich visual components directly from the agent:
+
+```python
+await canvas_render([
+    {"type": "code", "language": "typescript", "content": "const x = 1"},
+    {"type": "table", "headers": ["Name", "Value"], "rows": [["a", "1"]]},
+    {"type": "mermaid", "content": "graph TD; A-->B"},
+])
+```
+
+### Unified Desktop App
+
+A single `main.py` launcher runs all services:
+```bash
+python main.py --web-port 5173 --flow-port 18789
+```
+
+Build everything into one EXE:
+```bash
+python scripts/build_exe.py
+# Output: dist/raven-ai.exe
+```
+
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Backend** | Python 3.13+, FastAPI, asyncio, SQLite (modernc.org/sqlite) |
+| **LLM** | Ollama (local) → OpenRouter → Anthropic → OpenAI (failover) |
+| **Memory** | SQLite + ChromaDB + numpy vector store |
+| **RAG** | Qdrant vector store, fallback in-memory, n-gram embedding |
+| **Auth** | bcrypt, JWT (HS256), gRPC, RBAC (4 roles, 16 permissions) |
+| **Frontend** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
+| **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 25+ registry |
+| **RavenFlow** | FastAPI daemon (port 18789), routing engine, WebSocket streaming, multi-agent dispatch |
+| **RavenCode** | Interactive REPL, LSP auto-enrichment (pyright/tsserver/gopls/rust-analyzer), parallel multi-session, plan/safe/fast modes, 30+ tools |
+| **Canvas** | Rich component rendering (code, table, mermaid, image, link, list, alert), HTML + browser output |
+| **Nodes** | Distributed node registry, broadcast execution, async HTTP dispatch |
+| **Voice** | WakeWordDetector (speech_recognition), Whisper/Google/Azure/Vosk STT, ElevenLabs/gTTS/SAPI/Edge TTS |
+| **Sandbox Policy** | 5 policy profiles (main/non-main/code-exec/web-browsing/read-only), runtime tool allow/deny |
+| **Message Broker** | NATS + JetStream (streams: agent.response, monitor.check.completed, task.events, auth.user.created) |
+| **Gateway** | Go 1.26 — circuit breaker, rate limiter, auth proxy, gRPC retry, OpenTelemetry |
+| **Auth Service** | Go 1.26 — SQLite, JWT, gRPC, token bucket rate limiter, OpenTelemetry |
+| **Monitor Engine** | Go 1.26 — HTTP health checks, SQLite, NATS events, Prometheus metrics |
+| **Resilience** | Circuit breaker, gRPC retry (exponential backoff), rate limiter, outbox pattern, saga pattern, idempotency |
+| **Observability** | OpenTelemetry (traces + metrics), Prometheus, Grafana (12 panels), Loki, Tempo, health/ready probes |
+| **Security** | Rate limiting, JWT auth, DM pairing, Fernet encryption, RBAC, plugin sandbox, ToolPolicyEvaluator (deny/allow), exec security policy (deny/ask/full), contextVisibility, workspace isolation, security audit CLI |
+| **CI/CD** | GitHub Actions — parallel Go/Python/web lint + test + build, Allure TestOps, Docker buildx, Codecov, Playwright E2E, k6 load tests |
+| **Deploy** | Docker (multi-stage, distroless, non-root), docker-compose (microservice stack), Kubernetes manifests, systemd, launchd |
+| **Testing** | pytest (800+ tests, Allure reporting), Go table-driven tests, Vitest (React), Playwright (E2E), k6 (load) |
 
 ---
 
-## AI-OS-MVP — 混合架构
+## RavenCode — Terminal Coding Agent
 
-Raven AI 现在运行在混合 **AI-OS-MVP** 架构上：
+Raven AI includes `raven code`, a full-featured interactive terminal coding agent:
 
-`
-raven-ai/
-├── aios/                       # AI-OS-MVP桥接（Python）
-│   ├── api/bridge.py           # AI网关端点
-│   ├── agents/orchestrator.py  # 代理编排器
-│   └── runtime/adapter.py      # 统一运行时
-├── web/                        # Web IDE（React 19）
-│   └── src/pages/IDE.tsx       # 带编辑器和终端的IDE
-├── desktop-tauri/              # Tauri桌面（Rust）
-├── packages/                   # TypeScript包
-│   ├── ai-core/                # AI路由器+提供商
-│   ├── agents/                 # 多代理系统
-│   ├── runtime/                # 终端、文件系统、docker
-│   └── repo/                   # 索引器、AST、嵌入
-`
+```bash
+# Start the REPL
+raven code --project ./my-project
 
-### AI-OS-MVP 快速开始
+# In the REPL:
+raven@project> create a REST API with FastAPI
+# ... streams response, makes tool calls, edits files inline
 
-`ash
-# AI网关（桥接Raven）
-raven aios gateway --port 3001
+# Built-in commands:
+/help          Show available commands
+/multisession  Run subtasks in parallel
+/plan          Toggle plan-only mode (no writes)
+/safe          Toggle safe mode (confirm before writes)
+/fast          Toggle fast mode (skip enrichment)
+/enrich        Refresh LSP analysis
+/session <id>  Switch to a parallel session
+/exit          Exit
+```
 
-# 运行自主代理
-raven aios run "创建一个REST API" --agent autonomous
+### RavenFlow Gateway
 
-# 执行命令
-raven aios exec "npm run dev"
+Multi-agent orchestrator daemon with WebSocket streaming:
 
-# Web IDE（Monaco编辑器）
-cd web && npm install && npm run dev
-# 打开 http://localhost:5173/ide
-`
+```bash
+# Start the gateway
+raven flow serve --port 18789
 
----
+# Send an agent message
+raven flow ask "summarize the README"
+
+# List active sessions
+raven flow sessions
+```
+
+### Canvas Visual Workspace
+
+Render rich visual components directly from the agent:
+
+```python
+await canvas_render([
+    {"type": "code", "language": "typescript", "content": "const x = 1"},
+    {"type": "table", "headers": ["Name", "Value"], "rows": [["a", "1"]]},
+    {"type": "mermaid", "content": "graph TD; A-->B"},
+])
+```
+
+### Unified Desktop App
+
+A single `main.py` launcher runs all services:
+```bash
+python main.py --web-port 5173 --flow-port 18789
+```
+
+Build everything into one EXE:
+```bash
+python scripts/build_exe.py
+# Output: dist/raven-ai.exe
+```
+
+
 
 ## 联系方式
 
@@ -403,7 +487,7 @@ cd web && npm install && npm run dev
   <p>
     想要贡献？→ <a href="https://github.com/ssrjkk/raven/pulls">Pull Request</a>
   </p>
-  <p><i>为需要24/7个人AI的开发者而生</i></p>
+  <p><i>企业级个人AI助手。25+渠道。RavenFlow工作流。RavenCode代理。语音。Canvas。Nodes。</i></p>
 </div>
 
 ## License

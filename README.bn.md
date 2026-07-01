@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>বাংলা — এন্টারপ্রাইজ-গ্রেডের ব্যক্তিগত AI সহায়ক</i></p>
+  <p><i>এন্টারপ্রাইজ-গ্রেড ব্যক্তিগত AI সহায়ক। 25+ চ্যানেল। RavenFlow। RavenCode। ভয়েস। Canvas। Nodes।</i></p>
 
   [English](README.md) •
   [Русский](README.ru.md) •

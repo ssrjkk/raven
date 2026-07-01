@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>ไทย — ผู้ช่วย AI ส่วนตัวระดับองค์กร</i></p>
+  <p><i>ผู้ช่วย AI ส่วนบุคคลระดับองค์กร 25+ ช่องทาง RavenFlow RavenCode เสียง Canvas Nodes</i></p>
 
   [English](README.md) •
   [Русский](README.ru.md) •

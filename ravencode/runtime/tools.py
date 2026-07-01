@@ -420,6 +420,95 @@ async def load_skill(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# RavenFlow tools
+# ---------------------------------------------------------------------------
+
+async def _canvas_render_handler(components: list[dict[str, Any]]) -> str:
+    rendered = []
+    for comp in components:
+        ctype = comp.get("type", "text")
+        content = comp.get("content", "")
+        if ctype == "code":
+            lang = comp.get("language", "")
+            rendered.append(f"```{lang}\n{content}\n```")
+        elif ctype == "table":
+            headers = comp.get("headers", [])
+            rows = comp.get("rows", [])
+            rendered.append(" | ".join(headers) + "\n" + " | ".join(["---"] * len(headers)) + "\n" +
+                            "\n".join(" | ".join(str(c) for c in row) for row in rows))
+        elif ctype == "mermaid":
+            rendered.append(f"```mermaid\n{content}\n```")
+        elif ctype == "alert":
+            level = comp.get("level", "info")
+            rendered.append(f"> [!{level.upper()}]\n> {content}")
+        elif ctype == "list":
+            items = comp.get("items", [])
+            rendered.append("\n".join(f"- {i}" for i in items))
+        else:
+            rendered.append(content)
+    return "\n\n".join(rendered)
+
+
+async def _nodes_list_handler() -> str:
+    try:
+        from raven.tools.nodes import nodes_list
+        return await nodes_list()
+    except ImportError:
+        return "(nodes module not available)"
+
+
+async def _cron_schedule_handler(cron: str, task: str, task_id: str | None = None) -> str:
+    try:
+        from raven.plugins.cron.plugin import schedule
+        return await schedule(cron, task, task_id)
+    except ImportError:
+        return "[error] cron plugin not available"
+
+
+async def _cron_list_handler() -> str:
+    try:
+        from raven.plugins.cron.plugin import list_schedules
+        return await list_schedules()
+    except ImportError:
+        return "(cron plugin not available)"
+
+
+async def _cron_cancel_handler(task_id: str) -> str:
+    try:
+        from raven.plugins.cron.plugin import cancel_schedule
+        return await cancel_schedule(task_id)
+    except ImportError:
+        return "[error] cron plugin not available"
+
+
+_current_sandbox_policy: str = "main"
+
+
+async def _sandbox_policy_handler(policy: str | None = None) -> str:
+    global _current_sandbox_policy
+    if policy:
+        valid = {"main", "non-main", "code-exec", "web-browsing", "read-only"}
+        if policy not in valid:
+            return f"[error] unknown policy: {policy}. Available: {', '.join(sorted(valid))}"
+        _current_sandbox_policy = policy
+        return f"Sandbox policy set to: {policy}"
+    return f"Current sandbox policy: {_current_sandbox_policy}"
+
+
+async def _talk_handler(text: str, voice: str = "", provider: str = "") -> str:
+    from raven.voice.tts import TextToSpeech, TTSConfig, TTSProvider
+
+    try:
+        prov = TTSProvider(provider) if provider else TTSProvider.SYSTEM
+    except ValueError:
+        prov = TTSProvider.SYSTEM
+    config = TTSConfig(provider=prov, voice=voice)
+    tts = TextToSpeech(config)
+    path = tts.synthesize(text)
+    return f"Audio saved to {path}"
+
+
+# ---------------------------------------------------------------------------
 # tool registry
 # ---------------------------------------------------------------------------
 
@@ -832,6 +921,86 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
             "required": ["name"],
         },
         "handler": load_skill,
+    },
+    "canvas_render": {
+        "name": "canvas_render", "dangerous": False,
+        "description": "Render visual components (text, code, table, mermaid, link, image, list, alert) into formatted output",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "components": {
+                    "type": "array",
+                    "description": "List of component dicts with type, content, and optional fields",
+                    "items": {"type": "object"},
+                },
+            },
+            "required": ["components"],
+        },
+        "handler": _canvas_render_handler,
+    },
+    "nodes_list": {
+        "name": "nodes_list", "dangerous": False,
+        "description": "List all registered execution nodes for distributed task execution",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+        "handler": _nodes_list_handler,
+    },
+    "cron_schedule": {
+        "name": "cron_schedule", "dangerous": True,
+        "description": "Schedule a recurring task using a cron expression",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "cron": {"type": "string", "description": "Cron expression (e.g. '0 9 * * *')"},
+                "task": {"type": "string", "description": "Task description"},
+                "task_id": {"type": "string", "description": "Optional unique task ID"},
+            },
+            "required": ["cron", "task"],
+        },
+        "handler": _cron_schedule_handler,
+    },
+    "cron_list": {
+        "name": "cron_list", "dangerous": False,
+        "description": "List all active scheduled tasks",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+        "handler": _cron_list_handler,
+    },
+    "cron_cancel": {
+        "name": "cron_cancel", "dangerous": True,
+        "description": "Cancel a scheduled task by its ID",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "ID of the task to cancel"},
+            },
+            "required": ["task_id"],
+        },
+        "handler": _cron_cancel_handler,
+    },
+    "sandbox_policy": {
+        "name": "sandbox_policy", "dangerous": False,
+        "description": "Show or change the current sandbox security policy. Available: main, non-main, code-exec, web-browsing, read-only",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "policy": {"type": "string", "description": "Policy name to apply, or omit to show current"},
+            },
+            "required": [],
+        },
+        "handler": _sandbox_policy_handler,
+    },
+    "talk": {
+        "name": "talk", "dangerous": False,
+        "description": "Read text aloud using text-to-speech. Supports system, gtts, edge, elevenlabs providers.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "Text to speak aloud"},
+                "voice": {"type": "string", "description": "Voice ID (provider-specific)"},
+                "provider": {"type": "string", "description": "TTS provider: system, gtts, edge, elevenlabs"},
+            },
+            "required": ["text"],
+        },
+        "handler": _talk_handler,
     },
 }
 

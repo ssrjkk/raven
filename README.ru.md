@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>Персональный ИИ-помощник корпоративного уровня. 12 каналов. Механизм задач. Мониторы. Помощник по программированию. База знаний RAG. Веб-панель управления.</i></p>
+  <p><i>Enterprise-grade AI-ассистент. 25+ каналов. RavenFlow. RavenCode. Голос. Canvas. Nodes.</i></p>
 
   <a href="#features">Возможности</a> •
   <a href="#quickstart">Быстрый старт</a> •
@@ -12,7 +12,9 @@
   [![CI](https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=main&label=CI&logo=github)]()
   [![Python](https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white)]()
   [![License](https://img.shields.io/badge/license-MIT-green)]()
-  [![Channels](https://img.shields.io/badge/channels-12-8A2BE2)]()
+  [![Channels](https://img.shields.io/badge/channels-25+-8A2BE2)]()
+  [![RavenFlow](https://img.shields.io/badge/ravenflow-daemon-blue)]()
+  [![RavenCode](https://img.shields.io/badge/ravencode-agent-purple)]()
   [![Tests](https://img.shields.io/badge/tests-859_passing-brightgreen)]()
   [![Coverage](https://img.shields.io/codecov/c/github/ssrjkk/raven?logo=codecov)]()
   [![Security](https://img.shields.io/badge/security-hardened-blueviolet)]()
@@ -51,15 +53,19 @@
 
 Он думает. Он планирует. Он действует.
 
-- **Общается в 12 мессенджерах** — Telegram, Discord, Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE + веб-чат
+- **Общается в 25+ каналах** — Telegram, Discord, Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, веб-чат + 15 более
+- **RavenFlow оркестратор** — multi-agent gateway демон (порт 18789) с роутингом, управлением сессиями, WebSocket
+- **RavenCode агент** — интерактивный REPL кодинг-агент (raven code) с LSP авто-обогащением, параллельными сессиями, режимами plan/safe/fast
+- **Canvas визуальное пространство** — рендер компонентов (код, таблицы, mermaid диаграммы, изображения, алерты) в терминале или браузере
+- **Nodes распределенное выполнение** — регистрация, удаление, broadcast и выполнение на удаленных нодах
+- **Голосовой ввод/вывод** — wake word ("Raven"), STT (Whisper/Google/Azure/Vosk), TTS (ElevenLabs/gTTS/system/Edge)
 - **Выполняет задачи** — построит план из шагов, выполнит каждый инструментом, вернет результат
 - **Следит за мониторами** — пингует сайты, проверяет цены, RSS, файлы, процессы и шлет алерты
-- **Пишет код** — индексирует кодобазу, ищет символы, ревьюит файлы, ведет сессии разработки
 - **Рутины по расписанию** — утренние бриффинги, проверка почты, сортировка файлов
-- **RAG-память** — семантический поиск по документам, chunking PDF/кода, memory conversations
-- **Веб-дашборд** — React-панель с мониторингом, управлением задачами, мониторами и рутинами
+- **RAG-память** — семантический поиск по документам, PDF/code chunking, память разговоров
+- **Веб + Десктоп** — React дашборд + Monaco IDE + Tauri desktop с bundled backend
 - **Multi-user + RBAC** — админы, юзеры, вьюверы с разграничением доступа
-
+- **Политики безопасности** — 5 sandbox профилей (main, non-main, code-exec, web-browsing, read-only), allow/deny инструментов
 ---
 
 ## Быстрый старт
@@ -97,7 +103,18 @@ npm run dev    # http://localhost:5173 (прокси на :18888)
 
 | Возможность | Описание |
 |-------------|----------|
-| **12 каналов** | Telegram (голос→текст через Whisper, инлайн-кнопки), Discord (слеш-команды + embed), Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat |
+| **25+ каналов** | Telegram (голос→текст через Whisper, инлайн-кнопки), Discord (слеш-команды + embed), Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat |
+| **RavenFlow Gateway** | FastAPI демон на порту 18789 с multi-agent роутингом, управлением сессиями, WebSocket стримингом |
+| **RavenCode Agent** | Интерактивный REPL кодинг-агент (`raven code`) с потоковыми ответами, inline tool calls. Команды: `/multisession`, `/plan`, `/safe`, `/fast`, `/enrich`, `/exit` |
+| **LSP Авто-обогащение** | `enrich_context()` сканирует проект, определяет языки, запускает LSP (pyright, tsserver, gopls, rust-analyzer), собирает символы |
+| **Параллельные сессии** | SessionManager с конкурентными ManagedSession задачами, abort/cleanup |
+| **Canvas Виртуальное пространство** | Рендер rich компонентов: текст, код, таблицы, mermaid диаграммы, ссылки, изображения, списки, алерты. Вывод в терминал или HTML |
+| **Nodes Распределенное выполнение** | Регистрация/удаление удаленных нод, выполнение задач, broadcast на все ноды |
+| **Голосовой ввод/вывод** | Wake word ("Raven", "Hey Raven"), STT (Whisper, Google, Azure, Vosk), TTS (ElevenLabs, gTTS, SAPI, Edge) |
+| **Sandbox Security Policy** | 5 политик (main, non-main, code-exec, web-browsing, read-only), allow/deny, лимиты ресурсов |
+| **Cron / Планировщик** | Планирование задач через `cron_schedule`/`cron_list`/`cron_cancel` (APScheduler) |
+| **EXE Сборка** | `scripts/build_exe.py` — компилирует Go сервисы, web frontend, PyInstaller в `dist/raven-ai.exe` |
+| **Unified Launcher** | `main.py` — запускает NATS, Go сервисы, RavenCode, RavenFlow gateway, Web UI
 | **Task Engine** | Многошаговый планировщик — LLM разбивает цель на шаги, выбирает инструменты, выполняет, возвращает результат |
 | **Monitor Engine** | 5 типов мониторов: HTTP(S), цена актива, RSS-лента, файл/директория, процесс. Условия срабатывания, алерты, история проверок |
 | **Coding Assistant** | Индексация кода (AST-парсинг, 8 языков), семантический поиск, ревью файлов (LLM-driven), сессии разработки |
@@ -135,14 +152,22 @@ raven task show <id>           Детали задачи
 raven task cancel <id>         Отменить задачу
 raven monitor list             Список мониторов
 raven monitor add ...          Добавить монитор
+raven code                     Интерактивный REPL кодинг
+raven code --project <dir>     REPL в директории проекта
+raven code --plan              Режим только планирования
+raven code --safe              Безопасный режим (подтверждения)
+raven code --parallel          Параллельные сессии
 raven code index <path>        Индексация кода
 raven code search <query>      Поиск по коду
 raven code review <file>       Ревью файла
 raven routine list             Список рутин
 raven routine add ...          Добавить рутину
 raven security audit           Проверка безопасности
-raven security audit --deep    Глубокая проверка (сеть, env, зависимости)
+raven security audit --deep    Глубокая проверка
 raven security audit --fix     Авто-исправление проблем
+raven flow serve --port 18789  Запуск RavenFlow gateway
+raven flow ask <message>       Отправить сообщение gateway
+raven flow sessions            Список активных сессий
 `
 
 ## Chat Commands
@@ -288,40 +313,49 @@ flowchart TB
 
 ## Project Tree
 
-`
+```
 raven/
-├── raven/                      # Основной Python-пакет
-│   ├── agent/                  ReAct-агент, multi-agent registry, workspace prompts
-│   ├── gateway/                Маршрутизация сообщений, сессии, команды
+├── raven/                      # Main Python package
+│   ├── agent/                  ReAct agent, multi-agent registry, workspace prompts
+│   ├── gateway/                Message routing, RavenFlow daemon, routing engine
 │   ├── core/
-│   │   ├── auth/               Аутентификация, RBAC (4 роли, 16 пермишенов), API-токены
-│   │   ├── security/           ToolPolicyEvaluator, PII redaction, SecurityAudit
-│   │   ├── task_engine/        Планировщик, исполнитель, хранилище задач
-│   │   ├── monitor/            HTTP, price, RSS, file, process мониторы + условия
-│   │   ├── rag/                Embedding engine, chanking, vector store
-│   │   ├── llm.py              Провайдеры LLM (OpenAI, Anthropic, Ollama, OpenRouter) + failover
+│   │   ├── auth/               Authentication, RBAC (4 roles, 16 permissions), API tokens
+│   │   ├── security/           ToolPolicyEvaluator, SandboxPolicy, SecurityAudit, PII redaction
+│   │   ├── task_engine/        Planner, executor, task storage
+│   │   ├── monitor/            HTTP, price, RSS, file, process monitors + conditions
+│   │   ├── rag/                Embedding engine, chunking, vector store
+│   │   ├── llm.py              LLM providers (OpenAI, Anthropic, Ollama, OpenRouter) + failover
 │   │   ├── config.py           Pydantic Settings + YAML config
 │   │   └── admin_api.py        Admin REST API
-│   ├── channels/               12 каналов, message bus, CircuitBreakerChannel
-│   ├── cli/                    CLI (click + rich)
-│   ├── tools/                  Plugin-инструменты
+│   ├── channels/               25+ channels, registry, message bus, CircuitBreakerChannel
+│   ├── cli/                    CLI (click + rich) — raven code, raven flow
+│   ├── tools/                  Canvas, Nodes, Plugin tools
 │   ├── tui/                    Terminal UI (textual)
+│   ├── voice/                  Wake word detection, STT, TTS modules
 │   └── workspace/              Workspace manager, skills, plugin loader
-├── services/                   # Микросервисы (Go + Python)
-│   ├── gateway/                Go-шлюз (auth proxy, circuit breaker, rate limiter, metrics, gRPC)
-│   ├── auth/                   Go-сервис аутентификации (SQLite, JWT, gRPC, Redis rate limiter)
-│   ├── agent-core/             Python — LLM-роутер (Ollama/OpenAI/Anthropic), NATS pub/sub
-│   ├── monitor-engine/         Go-сервис мониторинга (SQLite, NATS, Prometheus)
-│   ├── rag-service/            Python — семантический поиск (Qdrant + in-memory fallback)
-│   ├── task-engine/            Python — планировщик (SQLite, NATS, idempotency, outbox, saga)
-│   ├── code-service/           Python — песочница кода (subprocess, NATS)
-│   └── proto/                  Protobuf-определения + сгенерированный Go-код
-├── web/                        React 19 + Vite + Tailwind dashboard
+├── ravencode/                  # RavenCode agent framework
+│   ├── runtime/
+│   │   ├── lsp.py              LSP auto-enrichment (pyright, tsserver, gopls, rust-analyzer)
+│   │   ├── multisession.py     Parallel multi-session manager
+│   │   └── tools.py            Tool registry (read, write, edit, bash, canvas, nodes, cron, sandbox, talk)
+│   └── cli/coding.py           Interactive REPL coding agent
+├── services/                   # Microservices (Go + Python)
+│   ├── gateway/                Go gateway (auth proxy, circuit breaker, rate limiter, metrics, gRPC)
+│   ├── auth/                   Go auth service (SQLite, JWT, gRPC, Redis rate limiter)
+│   ├── agent-core/             Python — LLM router (Ollama/OpenAI/Anthropic), NATS pub/sub
+│   ├── monitor-engine/         Go monitor service (SQLite, NATS, Prometheus)
+│   ├── rag-service/            Python — semantic search (Qdrant + in-memory fallback)
+│   ├── task-engine/            Python — task planner (SQLite, NATS, idempotency, outbox, saga)
+│   ├── code-service/           Python — code sandbox + RavenCode agent API + AST context
+│   └── proto/                  Protobuf definitions + generated Go code
+├── web/                        React 19 + Vite + Tailwind dashboard + Monaco IDE
+├── desktop-tauri/              Tauri desktop shell (Rust) with backend launcher
 ├── deploy/                     Docker, k8s, systemd, Observability stack
-├── daemon/                     Rust-демон (ravend): сисметрики, управление процессами
-├── aios/                       AI-OS-MVP агентный фреймворк
-└── plugins/                    Пользовательские плагины
-`
+├── daemon/                     Rust daemon (ravend): system metrics, process management
+├── scripts/                    Build scripts, EXE builder
+├── aios/                       AI-OS-MVP agent framework
+└── plugins/                    User plugins
+```
 
 ## Технологии
 
@@ -333,7 +367,13 @@ raven/
 | **RAG** | Qdrant vector store, fallback in-memory, n-gram embedding |
 | **Auth** | bcrypt, JWT (HS256), gRPC, RBAC (4 роли, 16 пермишенов) |
 | **Frontend** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
-| **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio |
+| **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 25+ registry |
+| **RavenFlow** | FastAPI демон (порт 18789), routing engine, WebSocket стриминг, multi-agent dispatch |
+| **RavenCode** | Интерактивный REPL, LSP авто-обогащение (pyright/tsserver/gopls/rust-analyzer), параллельные сессии, 30+ инструментов |
+| **Canvas** | Рендер компонентов (код, таблица, mermaid, изображение, ссылка, список, алерт), HTML + браузер |
+| **Nodes** | Распределенный реестр нод, broadcast выполнение, async HTTP dispatch |
+| **Голос** | WakeWordDetector, Whisper/Google/Azure/Vosk STT, ElevenLabs/gTTS/SAPI/Edge TTS |
+| **Sandbox Policy** | 5 профилей политик (main/non-main/code-exec/web-browsing/read-only), runtime allow/deny |
 | **Message Broker** | NATS + JetStream (streams: agent.response, monitor.check.completed, task.events, auth.user.created) |
 | **Gateway** | Go 1.26 — circuit breaker, rate limiter, auth proxy, gRPC retry, OpenTelemetry |
 | **Auth Service** | Go 1.26 — SQLite, JWT, gRPC, token bucket rate limiter, OpenTelemetry |
@@ -347,42 +387,68 @@ raven/
 
 ---
 
-## AI-OS-MVP — Гибридная архитектура
+## RavenCode — Terminal Coding Agent
 
-Raven AI теперь работает в гибридной архитектуре **AI-OS-MVP**:
+Raven AI includes `raven code`, a full-featured interactive terminal coding agent:
 
-`
-raven-ai/
-├── aios/                       # AI-OS-MVP bridge (Python)
-│   ├── api/bridge.py           # AI Gateway endpoint
-│   ├── agents/orchestrator.py  # Agent orchestrator
-│   └── runtime/adapter.py      # Unified runtime
-├── web/                        # Web IDE (React 19)
-│   └── src/pages/IDE.tsx       # IDE with editor + terminal
-├── desktop-tauri/              # Tauri desktop (Rust)
-├── packages/                   # TypeScript packages
-│   ├── ai-core/                # AI роутер + провайдеры
-│   ├── agents/                 # multi-agent система
-│   ├── runtime/                # terminal, fs, docker
-│   └── repo/                   # индексер, AST, embeddings
-`
+```bash
+# Start the REPL
+raven code --project ./my-project
 
-### Быстрый старт AI-OS-MVP
+# In the REPL:
+raven@project> create a REST API with FastAPI
+# ... streams response, makes tool calls, edits files inline
 
-`ash
-# AI Gateway (bridge над Raven)
-raven aios gateway --port 3001
+# Built-in commands:
+/help          Show available commands
+/multisession  Run subtasks in parallel
+/plan          Toggle plan-only mode (no writes)
+/safe          Toggle safe mode (confirm before writes)
+/fast          Toggle fast mode (skip enrichment)
+/enrich        Refresh LSP analysis
+/session <id>  Switch to a parallel session
+/exit          Exit
+```
 
-# Запустить автономного агента
-raven aios run "создай REST API" --agent autonomous
+### RavenFlow Gateway
 
-# Выполнить команду
-raven aios exec "npm run dev"
+Multi-agent orchestrator daemon with WebSocket streaming:
 
-# Web IDE (Monaco редактор)
-cd web && npm install && npm run dev
-# Открой http://localhost:5173/ide
-`
+```bash
+# Start the gateway
+raven flow serve --port 18789
+
+# Send an agent message
+raven flow ask "summarize the README"
+
+# List active sessions
+raven flow sessions
+```
+
+### Canvas Visual Workspace
+
+Render rich visual components directly from the agent:
+
+```python
+await canvas_render([
+    {"type": "code", "language": "typescript", "content": "const x = 1"},
+    {"type": "table", "headers": ["Name", "Value"], "rows": [["a", "1"]]},
+    {"type": "mermaid", "content": "graph TD; A-->B"},
+])
+```
+
+### Unified Desktop App
+
+A single `main.py` launcher runs all services:
+```bash
+python main.py --web-port 5173 --flow-port 18789
+```
+
+Build everything into one EXE:
+```bash
+python scripts/build_exe.py
+# Output: dist/raven-ai.exe
+```
 
 ---
 
@@ -404,7 +470,7 @@ cd web && npm install && npm run dev
   <p>
     Хотите внести вклад? → <a href="https://github.com/ssrjkk/raven/pulls">Pull Request</a>
   </p>
-  <p><i>Built for developers who need their personal AI 24/7</i></p>
+  <p><i>Enterprise-grade AI-ассистент. 25+ каналов. RavenFlow. RavenCode. Голос. Canvas. Nodes.</i></p>
 </div>
 
 ## License

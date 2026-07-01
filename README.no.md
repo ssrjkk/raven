@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>Norsk — Personlig AI-assistent på bedriftsnivå</i></p>
+  <p><i>Enterprise personlig AI-assistent. 25+ kanaler. RavenFlow. RavenCode. Stemme. Canvas. Nodes.</i></p>
 
   [English](README.md) •
   [Русский](README.ru.md) •

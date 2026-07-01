@@ -16,11 +16,22 @@
         "width": 1400,
         "height": 900,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "maximized": true
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:3001"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:3001 http://localhost:18789 ws://localhost:18789"
+    },
+    "bundle": {
+      "active": true,
+      "targets": ["nsis", "msi"],
+      "icon": ["icons/icon.ico", "icons/icon.png"],
+      "resources": [
+        "../services/**/*",
+        "../raven/**/*.py",
+        "../scripts/**/*"
+      ]
     }
   }
 }

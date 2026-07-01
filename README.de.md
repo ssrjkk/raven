@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>Deutsch — Persönlicher KI-Assistent auf Unternehmensniveau</i></p>
+  <p><i>Enterprise persönlicher KI-Assistent. 25+ Kanäle. RavenFlow. RavenCode. Sprache. Canvas. Nodes.</i></p>
 
   [English](README.md) •
   [Русский](README.ru.md) •

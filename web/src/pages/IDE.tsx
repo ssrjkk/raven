@@ -26,12 +26,24 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   }
 }
 
+type AgentMode = "build" | "plan" | "general"
+type WorkspaceFile = { name: string; path: string; language: string }
+
+const AGENT_MODES: { value: AgentMode; label: string; desc: string }[] = [
+  { value: "build",  label: "Build",  desc: "Write & edit code directly" },
+  { value: "plan",   label: "Plan",   desc: "Design & architect only (no writes)" },
+  { value: "general",label: "General",desc: "Answer questions about code" },
+]
+
 export default function IDEPage() {
   const [code, setCode] = useState(`export default function App() {\n  return <h1>Hello Raven</h1>\n}`)
   const [output, setOutput] = useState("")
   const [aiPrompt, setAiPrompt] = useState("")
+  const [agentMode, setAgentMode] = useState<AgentMode>("build")
   const [terminalInput, setTerminalInput] = useState("")
   const [terminalHistory, setTerminalHistory] = useState<TerminalLine[]>([])
+  const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFile[]>([])
+  const [indexStatus, setIndexStatus] = useState<string>("")
   const terminalEndRef = useRef<HTMLDivElement>(null)
 
   const scrollTerminal = useCallback(() => {
@@ -41,13 +53,41 @@ export default function IDEPage() {
   async function runAI() {
     setOutput("Thinking...")
     try {
-      const data = await apiFetch<{ text?: string }>("/api/aios/ai", {
+      const data = await apiFetch<{ response?: string }>("/api/v1/agent/run", {
         method: "POST",
-        body: JSON.stringify({ prompt: aiPrompt, task: "code" }),
+        body: JSON.stringify({ task: aiPrompt, mode: agentMode, workspace: "." }),
       })
-      setOutput(data.text || JSON.stringify(data))
+      setOutput(data.response || JSON.stringify(data))
     } catch {
-      setOutput("AI Gateway unavailable. Start with: raven aios gateway")
+      setOutput("Agent service unavailable. Start with: raven services code-service")
+    }
+  }
+
+  async function indexCodebase() {
+    setIndexStatus("Indexing...")
+    try {
+      const data = await apiFetch<{ indexed: number }>("/api/v1/context/index", {
+        method: "POST",
+        body: JSON.stringify({ workspace: "." }),
+      })
+      setIndexStatus(`Indexed ${data.indexed} files`)
+    } catch {
+      setIndexStatus("Indexing failed")
+    }
+  }
+
+  async function searchCodebase() {
+    if (!aiPrompt.trim()) return
+    setOutput("Searching...")
+    try {
+      const data = await apiFetch<{ results: { content: string; file: string; score: number }[] }>("/api/v1/context/search", {
+        method: "POST",
+        body: JSON.stringify({ query: aiPrompt, top_k: 5 }),
+      })
+      const results = data.results || []
+      setOutput(results.map(r => `[${r.score.toFixed(2)}] ${r.file}\n${r.content.slice(0, 200)}`).join("\n\n"))
+    } catch {
+      setOutput("Search failed")
     }
   }
 
@@ -123,31 +163,65 @@ export default function IDEPage() {
       </div>
 
       <div className="border-l border-[#333] flex flex-col bg-[#0d0d0d]">
-        <div className="p-3 border-b border-[#333]">
-          <div className="text-sm font-semibold mb-1">AI Agent</div>
-          <div className="text-xs text-gray-500">Autonomous Mode</div>
+        <div className="p-3 border-b border-[#333] flex flex-col gap-2">
+          <div className="text-sm font-semibold">AI Agent</div>
+          <div className="flex gap-1">
+            {AGENT_MODES.map(m => (
+              <button key={m.value} onClick={() => setAgentMode(m.value)}
+                className={`text-xs px-2.5 py-1 rounded border-none cursor-pointer transition ${
+                  agentMode === m.value
+                    ? "bg-white text-black font-semibold"
+                    : "bg-[#333] text-gray-300 hover:bg-[#444]"
+                }`}
+                title={m.desc}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <div className="text-[10px] text-gray-500">{AGENT_MODES.find(m => m.value === agentMode)?.desc}</div>
         </div>
 
-        <div className="flex-1 p-3 overflow-auto">
+        <div className="flex-1 p-3 overflow-auto flex flex-col gap-3">
           {output && (
             <div className="bg-[#1a1a2e] rounded-lg p-3 text-sm leading-relaxed text-gray-300 whitespace-pre-wrap">
               {output}
             </div>
           )}
+          {workspaceFiles.length > 0 && (
+            <div>
+              <div className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Workspace</div>
+              <div className="flex flex-wrap gap-1">
+                {workspaceFiles.map(f => (
+                  <span key={f.path} className="text-[10px] bg-[#1e1e1e] px-2 py-0.5 rounded text-gray-400">
+                    {f.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {indexStatus && (
+            <div className="text-xs text-gray-500">{indexStatus}</div>
+          )}
         </div>
 
-        <div className="p-3 border-t border-[#333]">
+        <div className="p-3 border-t border-[#333] flex flex-col gap-2">
           <div className="flex gap-2">
             <input
               value={aiPrompt}
               onChange={(e) => setAiPrompt(e.target.value)}
               placeholder="Ask AI to build anything..."
               className="flex-1 bg-[#1e1e1e] border border-[#333] rounded-lg px-3 py-2 text-gray-100 text-sm outline-none"
-              onKeyDown={(e) => e.key === "Enter" && runAI()}
+              onKeyDown={(e) => e.key === "Enter" && (agentMode === "general" ? searchCodebase() : runAI())}
             />
-            <button onClick={runAI}
+            <button onClick={() => agentMode === "general" ? searchCodebase() : runAI()}
               className="bg-white hover:bg-gray-200 text-black border-none rounded-lg px-4 py-2 font-semibold cursor-pointer text-sm transition">
-              Run
+              {agentMode === "general" ? "Search" : "Run"}
+            </button>
+          </div>
+          <div className="flex gap-1">
+            <button onClick={indexCodebase}
+              className="bg-[#2a2a2a] hover:bg-[#3a3a3a] text-gray-300 border border-[#444] rounded px-2 py-1 text-[10px] cursor-pointer transition">
+              Index
             </button>
           </div>
         </div>

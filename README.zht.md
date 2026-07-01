@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>繁體中文 — 企業級個人AI助手</i></p>
+  <p><i>企業級個人AI助手。25+渠道。RavenFlow工作流。RavenCode代理。語音。Canvas。Nodes。</i></p>
 
   [English](README.md) •
   [Русский](README.ru.md) •

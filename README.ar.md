@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>العربية — مساعد ذكاء اصطناعي شخصي على مستوى المؤسسات</i></p>
+  <p><i>مساعد ذكاء اصطناعي شخصي على مستوى المؤسسات. 25+ قناة. RavenFlow. RavenCode. صوت. Canvas. Nodes.</i></p>
 
   [English](README.md) •
   [Русский](README.ru.md) •

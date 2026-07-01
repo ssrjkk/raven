@@ -128,6 +128,63 @@ async def execute_code(request: dict):
             raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@app.post("/api/v1/agent/run", summary="Run RavenCode agent", description="Executes a coding task using RavenCode agent with build/plan/general mode.")
+async def agent_run(request: dict):
+    from services.code-service.agent import AgentMode, RavenCodeAgent
+
+    task = request.get("task", "")
+    mode_str = request.get("mode", "build")
+    workspace = request.get("workspace", ".")
+
+    if not task.strip():
+        raise HTTPException(status_code=400, detail="Empty task")
+
+    try:
+        mode = AgentMode(mode_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid mode: {mode_str}. Use build, plan, or general")
+
+    agent = RavenCodeAgent(mode=mode, workspace=workspace)
+    try:
+        result = await agent.run(task)
+        return {"response": result[:10000], "mode": mode.value}
+    except Exception as e:
+        logger.error("Agent run failed: {}", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/context/index", summary="Index codebase", description="Index the codebase using AST parsing and embeddings.")
+async def context_index(request: dict):
+    from services.code-service.context import CodebaseContext
+
+    workspace = request.get("workspace", ".")
+    ctx = CodebaseContext(workspace)
+    try:
+        stats = await ctx.index_codebase()
+        return {"indexed": stats.get("files", 0), "chunks": stats.get("chunks", 0)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/context/search", summary="Search codebase", description="Semantic search across indexed codebase.")
+async def context_search(request: dict):
+    from services.code-service.context import CodebaseContext
+
+    workspace = request.get("workspace", ".")
+    query = request.get("query", "")
+    top_k = request.get("top_k", 5)
+
+    if not query.strip():
+        raise HTTPException(status_code=400, detail="Empty query")
+
+    ctx = CodebaseContext(workspace)
+    try:
+        results = await ctx.search(query, top_k=top_k)
+        return {"results": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("SERVICE_PORT", "8006"))
     uvicorn.run(app, host="0.0.0.0", port=port)

@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>Français — Assistant personnel IA de niveau entreprise</i></p>
+  <p><i>Assistant IA personnel niveau enterprise. 25+ canaux. RavenFlow. RavenCode. Voix. Canvas. Nodes.</i></p>
 
   [English](README.md) •
   [Русский](README.ru.md) •

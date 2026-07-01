@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>Asistente personal de IA con nivel empresarial. 12 canales. Motor de tareas. Monitores. Asistente de codificación. Base de conocimiento RAG. Panel web.</i></p>
+  <p><i>Asistente personal IA enterprise. 25+ canales. RavenFlow. RavenCode. Voz. Canvas. Nodes.</i></p>
 
   <a href="#features">Características</a> •
   <a href="#quickstart">Inicio rápido</a> •
@@ -12,7 +12,9 @@
   [![CI](https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=main&label=CI&logo=github)]()
   [![Python](https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white)]()
   [![License](https://img.shields.io/badge/license-MIT-green)]()
-  [![Channels](https://img.shields.io/badge/channels-12-8A2BE2)]()
+  [![Channels](https://img.shields.io/badge/channels-25+-8A2BE2)]()
+  [![RavenFlow](https://img.shields.io/badge/ravenflow-daemon-blue)]()
+  [![RavenCode](https://img.shields.io/badge/ravencode-agent-purple)]()
   [![Tests](https://img.shields.io/badge/tests-859_passing-brightgreen)]()
   [![Coverage](https://img.shields.io/codecov/c/github/ssrjkk/raven?logo=codecov)]()
   [![Security](https://img.shields.io/badge/security-hardened-blueviolet)]()
@@ -97,7 +99,7 @@ npm run dev    # http://localhost:5173 (proxy a :18888)
 
 | Característica | Descripción |
 |---------------|-------------|
-| **12 canales** | Telegram (voz→texto con Whisper, botones inline), Discord (comandos / + embed), Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat |
+| **25+ canales** | Telegram (voz→texto con Whisper, botones inline), Discord (comandos / + embed), Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat |
 | **Motor de tareas** | Planificador multi-paso — LLM divide objetivos en pasos, selecciona herramientas, ejecuta, devuelve resultados |
 | **Motor de monitores** | 5 tipos: HTTP(S), precio de activo, feed RSS, archivo/directorio, proceso. Condiciones de activación, alertas, historial |
 | **Asistente de código** | Indexación (AST, 8 lenguajes), búsqueda semántica, revisión de archivos (LLM-driven), sesiones de desarrollo |
@@ -288,103 +290,185 @@ flowchart TB
 
 ## Árbol del proyecto
 
-`
+```
 raven/
-├── raven/                      # Paquete Python principal
-│   ├── agent/                  Agente ReAct, registro multi-agente, prompts de workspace
-│   ├── gateway/                Enrutamiento de mensajes, sesiones, comandos
+├── raven/                      # Main Python package
+│   ├── agent/                  ReAct agent, multi-agent registry, workspace prompts
+│   ├── gateway/                Message routing, RavenFlow daemon, routing engine
 │   ├── core/
-│   │   ├── auth/               Autenticación, RBAC (4 roles, 16 permisos), tokens API
-│   │   ├── security/           ToolPolicyEvaluator, redacción PII, SecurityAudit
-│   │   ├── task_engine/        Planificador, ejecutor, almacenamiento de tareas
-│   │   ├── monitor/            Monitores HTTP, precio, RSS, archivo, proceso + condiciones
-│   │   ├── rag/                Motor de embeddings, chunking, almacén vectorial
-│   │   ├── llm.py              Proveedores LLM (OpenAI, Anthropic, Ollama, OpenRouter) + failover
-│   │   ├── config.py           Configuración Pydantic + YAML
-│   │   └── admin_api.py        API REST de administración
-│   ├── channels/               12 canales, bus de mensajes, CircuitBreakerChannel
-│   ├── cli/                    CLI (click + rich)
-│   ├── tools/                  Herramientas de plugin
-│   ├── tui/                    UI de terminal (textual)
-│   └── workspace/              Gestor de workspace, skills, cargador de plugins
-├── services/                   # Microservicios (Go + Python)
-│   ├── gateway/                Gateway Go (proxy auth, circuit breaker, rate limiter, métricas, gRPC)
-│   ├── auth/                   Servicio auth Go (SQLite, JWT, gRPC, rate limiter Redis)
-│   ├── agent-core/             Python — Router LLM (Ollama/OpenAI/Anthropic), NATS pub/sub
-│   ├── monitor-engine/         Servicio monitor Go (SQLite, NATS, Prometheus)
-│   ├── rag-service/            Python — Búsqueda semántica (Qdrant + fallback in-memory)
-│   ├── task-engine/            Python — Planificador de tareas (SQLite, NATS, idempotencia, outbox, saga)
-│   ├── code-service/           Python — Sandbox de código (subprocess, NATS)
-│   └── proto/                  Definiciones Protobuf + código Go generado
-├── web/                        Dashboard React 19 + Vite + Tailwind
-├── deploy/                     Docker, k8s, systemd, stack de observabilidad
-├── daemon/                     Daemon Rust (ravend): métricas del sistema, gestión de procesos
-├── aios/                       Framework de agente AI-OS-MVP
-└── plugins/                    Plugins de usuario
-`
+│   │   ├── auth/               Authentication, RBAC (4 roles, 16 permissions), API tokens
+│   │   ├── security/           ToolPolicyEvaluator, SandboxPolicy, SecurityAudit, PII redaction
+│   │   ├── task_engine/        Planner, executor, task storage
+│   │   ├── monitor/            HTTP, price, RSS, file, process monitors + conditions
+│   │   ├── rag/                Embedding engine, chunking, vector store
+│   │   ├── llm.py              LLM providers (OpenAI, Anthropic, Ollama, OpenRouter) + failover
+│   │   ├── config.py           Pydantic Settings + YAML config
+│   │   └── admin_api.py        Admin REST API
+│   ├── channels/               25+ channels, registry, message bus, CircuitBreakerChannel
+│   ├── cli/                    CLI (click + rich) — raven code, raven flow
+│   ├── tools/                  Canvas, Nodes, Plugin tools
+│   ├── tui/                    Terminal UI (textual)
+│   ├── voice/                  Wake word detection, STT, TTS modules
+│   └── workspace/              Workspace manager, skills, plugin loader
+├── ravencode/                  # RavenCode agent framework
+│   ├── runtime/
+│   │   ├── lsp.py              LSP auto-enrichment (pyright, tsserver, gopls, rust-analyzer)
+│   │   ├── multisession.py     Parallel multi-session manager
+│   │   └── tools.py            Tool registry (read, write, edit, bash, canvas, nodes, cron, sandbox, talk)
+│   └── cli/coding.py           Interactive REPL coding agent
+├── services/                   # Microservices (Go + Python)
+│   ├── gateway/                Go gateway (auth proxy, circuit breaker, rate limiter, metrics, gRPC)
+│   ├── auth/                   Go auth service (SQLite, JWT, gRPC, Redis rate limiter)
+│   ├── agent-core/             Python — LLM router (Ollama/OpenAI/Anthropic), NATS pub/sub
+│   ├── monitor-engine/         Go monitor service (SQLite, NATS, Prometheus)
+│   ├── rag-service/            Python — semantic search (Qdrant + in-memory fallback)
+│   ├── task-engine/            Python — task planner (SQLite, NATS, idempotency, outbox, saga)
+│   ├── code-service/           Python — code sandbox + RavenCode agent API + AST context
+│   └── proto/                  Protobuf definitions + generated Go code
+├── web/                        React 19 + Vite + Tailwind dashboard + Monaco IDE
+├── desktop-tauri/              Tauri desktop shell (Rust) with backend launcher
+├── deploy/                     Docker, k8s, systemd, Observability stack
+├── daemon/                     Rust daemon (ravend): system metrics, process management
+├── scripts/                    Build scripts, EXE builder
+├── aios/                       AI-OS-MVP agent framework
+└── plugins/                    User plugins
+```
 
-## Stack tecnológico
+### RavenFlow Gateway
 
-| Capa | Tecnología |
-|------|-----------|
+Multi-agent orchestrator daemon with WebSocket streaming:
+
+```bash
+# Start the gateway
+raven flow serve --port 18789
+
+# Send an agent message
+raven flow ask "summarize the README"
+
+# List active sessions
+raven flow sessions
+```
+
+### Canvas Visual Workspace
+
+Render rich visual components directly from the agent:
+
+```python
+await canvas_render([
+    {"type": "code", "language": "typescript", "content": "const x = 1"},
+    {"type": "table", "headers": ["Name", "Value"], "rows": [["a", "1"]]},
+    {"type": "mermaid", "content": "graph TD; A-->B"},
+])
+```
+
+### Unified Desktop App
+
+A single `main.py` launcher runs all services:
+```bash
+python main.py --web-port 5173 --flow-port 18789
+```
+
+Build everything into one EXE:
+```bash
+python scripts/build_exe.py
+# Output: dist/raven-ai.exe
+```
+
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
 | **Backend** | Python 3.13+, FastAPI, asyncio, SQLite (modernc.org/sqlite) |
 | **LLM** | Ollama (local) → OpenRouter → Anthropic → OpenAI (failover) |
-| **Memoria** | SQLite + ChromaDB + almacén vectorial numpy |
-| **RAG** | Qdrant, fallback in-memory, embedding n-gram |
-| **Auth** | bcrypt, JWT (HS256), gRPC, RBAC (4 roles, 16 permisos) |
+| **Memory** | SQLite + ChromaDB + numpy vector store |
+| **RAG** | Qdrant vector store, fallback in-memory, n-gram embedding |
+| **Auth** | bcrypt, JWT (HS256), gRPC, RBAC (4 roles, 16 permissions) |
 | **Frontend** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
-| **Canales** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio |
-| **Broker** | NATS + JetStream (streams: agent.response, monitor.check.completed, task.events, auth.user.created) |
+| **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 25+ registry |
+| **RavenFlow** | FastAPI daemon (port 18789), routing engine, WebSocket streaming, multi-agent dispatch |
+| **RavenCode** | Interactive REPL, LSP auto-enrichment (pyright/tsserver/gopls/rust-analyzer), parallel multi-session, plan/safe/fast modes, 30+ tools |
+| **Canvas** | Rich component rendering (code, table, mermaid, image, link, list, alert), HTML + browser output |
+| **Nodes** | Distributed node registry, broadcast execution, async HTTP dispatch |
+| **Voice** | WakeWordDetector (speech_recognition), Whisper/Google/Azure/Vosk STT, ElevenLabs/gTTS/SAPI/Edge TTS |
+| **Sandbox Policy** | 5 policy profiles (main/non-main/code-exec/web-browsing/read-only), runtime tool allow/deny |
+| **Message Broker** | NATS + JetStream (streams: agent.response, monitor.check.completed, task.events, auth.user.created) |
 | **Gateway** | Go 1.26 — circuit breaker, rate limiter, auth proxy, gRPC retry, OpenTelemetry |
 | **Auth Service** | Go 1.26 — SQLite, JWT, gRPC, token bucket rate limiter, OpenTelemetry |
-| **Monitor Engine** | Go 1.26 — health checks HTTP, SQLite, eventos NATS, métricas Prometheus |
-| **Resiliencia** | Circuit breaker, gRPC retry (backoff exponencial), rate limiter, outbox, saga, idempotencia |
-| **Observabilidad** | OpenTelemetry (traces + métricas), Prometheus, Grafana (12 paneles), Loki, Tempo, health/ready probes |
-| **Seguridad** | Rate limiting, JWT auth, DM pairing, cifrado Fernet, RBAC, sandbox de plugins, ToolPolicyEvaluator (deny/allow), política exec (deny/ask/full), contextVisibility, aislamiento workspace, CLI de auditoría |
-| **CI/CD** | GitHub Actions — lint + test + build paralelo Go/Python/web, Allure TestOps, Docker buildx, Codecov, Playwright E2E, k6 load tests |
-| **Deploy** | Docker (multi-stage, distroless, non-root), docker-compose (stack microservicios), manifests Kubernetes, systemd, launchd |
+| **Monitor Engine** | Go 1.26 — HTTP health checks, SQLite, NATS events, Prometheus metrics |
+| **Resilience** | Circuit breaker, gRPC retry (exponential backoff), rate limiter, outbox pattern, saga pattern, idempotency |
+| **Observability** | OpenTelemetry (traces + metrics), Prometheus, Grafana (12 panels), Loki, Tempo, health/ready probes |
+| **Security** | Rate limiting, JWT auth, DM pairing, Fernet encryption, RBAC, plugin sandbox, ToolPolicyEvaluator (deny/allow), exec security policy (deny/ask/full), contextVisibility, workspace isolation, security audit CLI |
+| **CI/CD** | GitHub Actions — parallel Go/Python/web lint + test + build, Allure TestOps, Docker buildx, Codecov, Playwright E2E, k6 load tests |
+| **Deploy** | Docker (multi-stage, distroless, non-root), docker-compose (microservice stack), Kubernetes manifests, systemd, launchd |
 | **Testing** | pytest (800+ tests, Allure reporting), Go table-driven tests, Vitest (React), Playwright (E2E), k6 (load) |
 
 ---
 
-## AI-OS-MVP — Arquitectura híbrida
+## RavenCode — Terminal Coding Agent
 
-Raven AI ahora funciona en una arquitectura híbrida **AI-OS-MVP**:
+Raven AI includes `raven code`, a full-featured interactive terminal coding agent:
 
-`
-raven-ai/
-├── aios/                       # Puente AI-OS-MVP (Python)
-│   ├── api/bridge.py           # Endpoint de AI Gateway
-│   ├── agents/orchestrator.py  # Orquestador de agentes
-│   └── runtime/adapter.py      # Runtime unificado
-├── web/                        # Web IDE (React 19)
-│   └── src/pages/IDE.tsx       # IDE con editor + terminal
-├── desktop-tauri/              # Escritorio Tauri (Rust)
-├── packages/                   # Paquetes TypeScript
-│   ├── ai-core/                # Router AI + proveedores
-│   ├── agents/                 # Sistema multi-agente
-│   ├── runtime/                # Terminal, fs, docker
-│   └── repo/                   # Indexador, AST, embeddings
-`
+```bash
+# Start the REPL
+raven code --project ./my-project
 
-### Inicio rápido AI-OS-MVP
+# In the REPL:
+raven@project> create a REST API with FastAPI
+# ... streams response, makes tool calls, edits files inline
 
-`ash
-# AI Gateway (puente sobre Raven)
-raven aios gateway --port 3001
+# Built-in commands:
+/help          Show available commands
+/multisession  Run subtasks in parallel
+/plan          Toggle plan-only mode (no writes)
+/safe          Toggle safe mode (confirm before writes)
+/fast          Toggle fast mode (skip enrichment)
+/enrich        Refresh LSP analysis
+/session <id>  Switch to a parallel session
+/exit          Exit
+```
 
-# Ejecutar agente autónomo
-raven aios run "crea una API REST" --agent autonomous
+### RavenFlow Gateway
 
-# Ejecutar comando
-raven aios exec "npm run dev"
+Multi-agent orchestrator daemon with WebSocket streaming:
 
-# Web IDE (editor Monaco)
-cd web && npm install && npm run dev
-# Abre http://localhost:5173/ide
-`
+```bash
+# Start the gateway
+raven flow serve --port 18789
 
----
+# Send an agent message
+raven flow ask "summarize the README"
+
+# List active sessions
+raven flow sessions
+```
+
+### Canvas Visual Workspace
+
+Render rich visual components directly from the agent:
+
+```python
+await canvas_render([
+    {"type": "code", "language": "typescript", "content": "const x = 1"},
+    {"type": "table", "headers": ["Name", "Value"], "rows": [["a", "1"]]},
+    {"type": "mermaid", "content": "graph TD; A-->B"},
+])
+```
+
+### Unified Desktop App
+
+A single `main.py` launcher runs all services:
+```bash
+python main.py --web-port 5173 --flow-port 18789
+```
+
+Build everything into one EXE:
+```bash
+python scripts/build_exe.py
+# Output: dist/raven-ai.exe
+```
+
+
 
 ## Contacto
 
@@ -403,7 +487,7 @@ cd web && npm install && npm run dev
   <p>
     ¿Quieres contribuir? → <a href="https://github.com/ssrjkk/raven/pulls">Pull Request</a>
   </p>
-  <p><i>Creado para desarrolladores que necesitan su IA personal 24/7</i></p>
+  <p><i>Asistente personal IA enterprise. 25+ canales. RavenFlow. RavenCode. Voz. Canvas. Nodes.</i></p>
 </div>
 
 ## License

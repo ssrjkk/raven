@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>Українська — Персональний AI-асистент корпоративного рівня</i></p>
+  <p><i>Персональний AI-асистент корпоративного рівня. 25+ каналів. RavenFlow. RavenCode. Голос. Canvas. Nodes.</i></p>
 
   [English](README.md) •
   [Русский](README.ru.md) •
