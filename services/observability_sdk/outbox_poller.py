@@ -22,7 +22,7 @@ class OutboxPoller:
         self._store = store
         self._nats = nats_client
         self._poll_interval = poll_interval
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[Any] | None = None
         self._running = False
 
     async def poll_once(self):

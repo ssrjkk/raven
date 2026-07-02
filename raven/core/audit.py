@@ -310,6 +310,7 @@ class AuditLogger:
         errors: list[dict[str, Any]] = []
         prev_hash = "0" * 64
         entry_count = 0
+        i = 0
         with self._path.open() as f:
             for i, line in enumerate(f, 1):
                 try:

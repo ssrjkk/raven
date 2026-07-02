@@ -4,8 +4,9 @@ import asyncio
 import os
 import re
 import tempfile
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Callable, Awaitable
+from typing import Any
 
 from loguru import logger
 
@@ -22,7 +23,7 @@ class WakeWordDetector:
     def __init__(self, callback: WakeCallback | None = None):
         self.callback = callback
         self._running = False
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[Any] | None = None
         self.timeout: float = 5.0
         self.silence_threshold: float = 300
 

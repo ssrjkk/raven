@@ -1835,7 +1835,7 @@ def tui():
 @click.option("--plan", is_flag=True, help="Plan-only mode (read-only)")
 @click.option("--model", default=None, help="LLM model override")
 @click.option("--parallel", "-P", default=None, help="Start a parallel session with this task")
-def code(
+def repl(
     task: str,
     project: str | None,
     agent: str,
@@ -1852,12 +1852,12 @@ def code(
         console.print(Panel.fit(
             "[bold]Raven Code Agent[/bold]\n\n"
             "Usage:\n"
-            "  raven code                       # interactive REPL\n"
-            "  raven code \"fix this bug\"        # one-shot + REPL\n"
-            "  raven code -p /path/to/project   # specify project root\n"
-            "  raven code --parallel \"task\"     # parallel session\n"
-            "  raven code --safe                # safe mode (confirm)\n"
-            "  raven code --plan                # read-only plan mode",
+            "  raven repl                       # interactive REPL\n"
+            "  raven repl \"fix this bug\"        # one-shot + REPL\n"
+            "  raven repl -p /path/to/project   # specify project root\n"
+            "  raven repl --parallel \"task\"     # parallel session\n"
+            "  raven repl --safe                # safe mode (confirm)\n"
+            "  raven repl --plan                # read-only plan mode",
             border_style="cyan",
         ))
         return

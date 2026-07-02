@@ -35,7 +35,7 @@ class NodeManager:
         logger.info("Node unregistered: {}", nid)
         return True
 
-    async def list(self) -> list[dict[str, Any]]:
+    async def list_nodes(self) -> list[dict[str, Any]]:
         async with self._lock:
             return [
                 {"id": n.id, "name": n.name, "endpoint": n.endpoint, "capabilities": n.capabilities, "status": n.status}
@@ -88,7 +88,7 @@ def get_node_manager() -> NodeManager:
 
 
 async def nodes_list() -> str:
-    nodes = await _node_manager.list()
+    nodes = await _node_manager.list_nodes()
     if not nodes:
         return "(no nodes registered)"
     return "\n".join(

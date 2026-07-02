@@ -14,7 +14,7 @@ def reset_nodes():
 class TestNodeManager:
     async def test_register_and_list(self):
         nid = await _node_manager.register("test-node", "http://localhost:9999", ["shell"])
-        nodes = await _node_manager.list()
+        nodes = await _node_manager.list_nodes()
         names = [n["name"] for n in nodes]
         assert "test-node" in names
 

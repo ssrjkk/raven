@@ -30,7 +30,8 @@ class IdempotencyStore:
             self._local.conn = sqlite3.connect(self._db_path)
             self._local.conn.execute("PRAGMA journal_mode=WAL")
             self._local.conn.execute("PRAGMA busy_timeout=5000")
-        return self._local.conn
+        conn: sqlite3.Connection = self._local.conn
+        return conn
 
     def _init_table(self):
         Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)

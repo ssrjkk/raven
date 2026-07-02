@@ -172,13 +172,13 @@ async def aios_websocket(ws: WebSocket):
             elif action == "agent":
                 task_text = msg.get("task", "")
                 agent_type = msg.get("agent_type", "autonomous")
-                result = await _orch.dispatch(task=task_text, agent_type=AgentType(agent_type))
+                agent_result = await _orch.dispatch(task=task_text, agent_type=AgentType(agent_type))
                 await ws.send_text(json.dumps({
                     "type": "agent_result",
-                    "success": result.success,
-                    "data": result.data,
-                    "error": result.error,
-                    "steps": result.steps,
+                    "success": agent_result.success,
+                    "data": agent_result.data,
+                    "error": agent_result.error,
+                    "steps": agent_result.steps,
                 }))
             elif action == "ping":
                 await ws.send_text(json.dumps({"type": "pong"}))

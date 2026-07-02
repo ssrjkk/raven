@@ -559,7 +559,7 @@ def _convert_to_bedrock_converse(messages: list[dict[str, Any]]) -> dict[str, An
 
 
 class LLMRouter:
-    def __init__(self, providers_config: dict[str, dict] | None = None):
+    def __init__(self, providers_config: dict[str, Any] | None = None):
         self._providers: dict[str, LLMProvider] = {}
         self._providers_config = providers_config or {}
 
@@ -609,7 +609,7 @@ class LLMRouter:
         self, messages: list[dict[str, Any]], model: str | None = None, tools: list[dict[str, Any]] | None = None
     ) -> AsyncIterator[str]:
         model = model or settings.default_model
-        last_exc = None
+        last_exc: Exception | None = None
         for attempt in range(max(1, settings.llm_retry_max)):
             try:
                 provider = self._get_provider(model)
@@ -636,7 +636,7 @@ class LLMRouter:
         self, messages: list[dict[str, Any]], model: str | None = None, tools: list[dict[str, Any]] | None = None
     ) -> LLMResponse:
         model = model or settings.default_model
-        last_exc = None
+        last_exc: Exception | None = None
         for attempt in range(max(1, settings.llm_retry_max)):
             try:
                 provider = self._get_provider(model)
@@ -668,3 +668,13 @@ class LLMRouter:
                         last_exc = f
         metrics.inc("llm_complete", {"model": model, "status": "error"})
         raise last_exc or RuntimeError("LLM call failed")
+
+
+async def default_provider_call(messages: list[dict[str, Any]]) -> dict[str, str]:
+    router = LLMRouter()
+    resp = await router.complete(messages)
+    return {"content": resp.content}
+
+
+def get_default_provider() -> Callable[..., Any]:
+    return default_provider_call

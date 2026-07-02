@@ -1,6 +1,6 @@
 from raven.voice.stt import SpeechToText, STTConfig, STTProvider
 from raven.voice.tts import TextToSpeech, TTSConfig, TTSProvider
-from raven.voice.wake import WakeWordDetector, WAKE_WORDS
+from raven.voice.wake import WAKE_WORDS, WakeWordDetector
 
 __all__ = [
     "TextToSpeech", "TTSProvider", "TTSConfig",

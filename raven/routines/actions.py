@@ -41,7 +41,8 @@ async def check_email(routine: Routine) -> str:
     if provider == "gmail_api" and config.get("credentials_file"):
         try:
             from raven.integrations.gmail import check_gmail
-            return await check_gmail(config["credentials_file"], max_results=config.get("max_emails", 5))
+            result = await check_gmail(config["credentials_file"], max_results=config.get("max_emails", 5))
+            return str(result)
         except ImportError:
             return "[error] gmail integration not installed"
         except Exception as exc:
@@ -59,8 +60,9 @@ async def check_email(routine: Routine) -> str:
             previews = []
             for mid in unread_ids[:config.get("max_emails", 5)]:
                 status, msg_data = conn.fetch(mid, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
-                if status == "OK":
-                    msg = email.message_from_bytes(msg_data[0][1])
+                if status == "OK" and msg_data and msg_data[0]:
+                    raw = msg_data[0][1] if isinstance(msg_data[0], tuple) and len(msg_data[0]) > 1 else msg_data[0]
+                    msg = email.message_from_bytes(raw)
                     previews.append({
                         "from": msg.get("From", "unknown"),
                         "subject": msg.get("Subject", "(no subject)"),

@@ -50,7 +50,7 @@ class FlowSession:
     agent: ReActAgent | None = None
     message_count: int = 0
     status: str = "idle"
-    _task: asyncio.Task | None = None
+    _task: asyncio.Task[Any] | None = None
 
 
 class RavenFlowDaemon:
@@ -73,6 +73,8 @@ class RavenFlowDaemon:
         @app.post("/api/agent")
         async def send_to_agent(req: AgentRequest):
             session = await self._get_or_create_session(req.session_id or str(uuid.uuid4())[:8], req.channel, req.mode)
+            if session.agent is None:
+                return {"error": "agent not initialized", "session_id": session.id}
             if req.mode == "plan":
                 session.agent.config.plan_mode = True
                 session.agent.config.confirm_dangerous = False
@@ -90,7 +92,15 @@ class RavenFlowDaemon:
         async def list_sessions():
             mgr = get_session_manager()
             return {
-                "sessions": [s.info for s in mgr.sessions],
+                "sessions": [{
+                    "id": s.id,
+                    "name": s.name,
+                    "status": s.status,
+                    "agent_type": s.agent_type,
+                    "created_at": s.created_at,
+                    "message_count": s.message_count,
+                    "step_count": s.step_count,
+                } for s in mgr.sessions],
                 "flow_sessions": [
                     {"id": s.id, "channel": s.channel, "status": s.status, "messages": s.message_count}
                     for s in self.sessions.values()
@@ -142,6 +152,9 @@ class RavenFlowDaemon:
                             msg.get("channel", "websocket"),
                             msg.get("mode", "build"),
                         )
+                        if session.agent is None:
+                            await ws.send_text(json.dumps({"type": "error", "content": "agent not initialized"}))
+                            continue
                         result = await session.agent.run(msg.get("content", ""))
                         await ws.send_text(json.dumps({"type": "response", "content": result[:5000], "session_id": session.id}))
                     elif msg_type == "ping":

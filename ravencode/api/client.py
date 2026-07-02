@@ -48,7 +48,7 @@ class AIOSClient:
                 from raven.core.llm import LLMRouter
                 from ravencode.config.loader import get_config
                 cfg = get_config()
-                providers_config: dict[str, dict] = {}
+                providers_config: dict[str, Any] = {}
                 for p in cfg.resolve_providers():
                     overrides: dict[str, str] = {}
                     if p.api_key:

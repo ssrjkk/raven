@@ -99,9 +99,8 @@ async def python_code(code: str, timeout: int = 15) -> str:
                         return f"[denied] '{func.value.id}' module access is not allowed"
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "__import__":
                 return "[denied] __import__ is not allowed"
-            if isinstance(node, ast.Attribute) and node.attr.startswith("__") and node.attr.endswith("__"):
-                if isinstance(node.value, (ast.Constant, ast.List, ast.Dict, ast.Set, ast.Tuple)):
-                    return "[denied] dunder access from literal is not allowed"
+            if isinstance(node, ast.Attribute) and node.attr.startswith("__") and node.attr.endswith("__") and isinstance(node.value, (ast.Constant, ast.List, ast.Dict, ast.Set, ast.Tuple)):
+                return "[denied] dunder access from literal is not allowed"
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 for alias in node.names:
                     if alias.name in ("os", "subprocess", "sys", "shutil", "ctypes", "socket"):

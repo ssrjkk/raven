@@ -93,5 +93,5 @@ class CircuitBreaker:
         self._failure_count = 0
         self._metrics["transitions"] += 1
 
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, Any]:
         return {"name": self.name, "state": self._state, **self._metrics}
