@@ -422,8 +422,8 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
                                 new_lines = handler.stream.getvalue().splitlines()
                                 for line in new_lines:
                                     buf.append(line)
-                            except Exception:
-                                pass
+                            except Exception as exc:
+                                logger.warning("Log capture failed: {}", exc)
                 if buf:
                     while buf:
                         line = buf.popleft()

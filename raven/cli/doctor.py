@@ -12,7 +12,7 @@ def _render_security_audit(results: list[Any], fix: bool = False):
     failed = [r for r in results if not r.passed]
 
     if not failed:
-        console.print(Panel.fit("[bold green]✅ All security checks passed[/bold green]"))
+        console.print(Panel.fit("[bold green][OK] All security checks passed[/bold green]"))
         return
 
     for check in failed:

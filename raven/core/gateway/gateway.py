@@ -310,14 +310,20 @@ class Gateway:
             runner = TaskRunner(task_store, tools)
             try:
                 task = await planner.plan(text, self.llm, user_id=event.user_id, channel=event.channel)
-                await self._send(event.channel, event.session_id, f"📋 Task planned: {task.plan_summary or text[:80]}")
+                await self._send(event.channel, event.session_id, f"Task planned: {task.plan_summary or text[:80]}")
                 await runner.submit(task)
-                asyncio.create_task(runner.wait(task.id, timeout=600))
+                asyncio.create_task(self._safe_wait(runner, task.id))
             except Exception as e:
                 logger.error("Intent task planning error: {}", e)
             return True
 
         return False
+
+    async def _safe_wait(self, runner: Any, task_id: str) -> None:
+        try:
+            await runner.wait(task_id, timeout=600)
+        except Exception as exc:
+            logger.warning("Task wait failed (task={}): {}", task_id, exc)
 
     async def _is_user_allowed(self, event: IncomingMessage, user: dict[str, Any]) -> bool:
         policy = settings.dm_policy
@@ -470,7 +476,7 @@ class Gateway:
                 await self._send(event.channel, event.session_id, "Usage: /task <goal description>")
                 return True
             await self._send(event.channel, event.session_id, f"Planning task: {goal[:100]}...")
-            asyncio.create_task(self._run_task(event, goal))
+            asyncio.create_task(self._run_task_async(event, goal))
             return True
 
         if cmd == "/monitor":
@@ -558,6 +564,12 @@ class Gateway:
 
             text = re.sub(r"<@!?\d+>", "", text).strip()
         return text
+
+    async def _run_task_async(self, event: IncomingMessage, goal: str) -> None:
+        try:
+            await self._run_task(event, goal)
+        except Exception as exc:
+            logger.error("Background task failed: {}", exc)
 
     async def _run_task(self, event: IncomingMessage, goal: str) -> None:
         from raven.core.task_engine.planner import TaskPlanner
@@ -739,6 +751,10 @@ class Gateway:
         elif sub == "review" and args:
             path = " ".join(args)
             p = Path(path).expanduser().resolve()
+            ws = settings.resolved_workspace
+            if ws and not str(p).startswith(str(ws.resolve())):
+                await self._send(event.channel, event.session_id, "File outside workspace — denied")
+                return
             if not p.is_file():
                 await self._send(event.channel, event.session_id, f"File not found: {p}")
                 return

@@ -54,7 +54,7 @@ def _get_noninteractive() -> bool:
 
 async def _prompt_llm(config: dict[str, Any]) -> dict[str, Any]:
     console.print(Rule(style="bold blue"))
-    console.print(Panel.fit("[bold]🧠 LLM Provider[/bold]", border_style="blue"))
+    console.print(Panel.fit("[bold][brain] LLM Provider[/bold]", border_style="blue"))
     console.print(
         "Choose your primary AI model provider.\n"
         "[bold]OpenRouter[/bold] gives access to 200+ models (Gemini, GPT-4, Claude, etc.) with a single key.\n"
@@ -93,7 +93,7 @@ async def _prompt_llm(config: dict[str, Any]) -> dict[str, Any]:
 
 async def _prompt_telegram(config: dict[str, Any]) -> dict[str, Any]:
     console.print(Rule(style="bold green"))
-    console.print(Panel.fit("[bold]📱 Telegram Bot[/bold]", border_style="green"))
+    console.print(Panel.fit("[bold][phone] Telegram Bot[/bold]", border_style="green"))
     console.print(Markdown(TELEGRAM_HELP))
 
     token = Prompt.ask("Telegram Bot Token", password=True)
@@ -101,10 +101,10 @@ async def _prompt_telegram(config: dict[str, Any]) -> dict[str, Any]:
         with console.status("[bold]Testing token...", spinner="dots"):
             username = await _test_telegram_token(token)
         if username:
-            console.print(f"[green]✅ Connected as @{username}[/green]")
+            console.print(f"[green][OK] Connected as @{username}[/green]")
             config["telegram_bot_token"] = token
         else:
-            console.print("[red]❌ Invalid token or network error[/red]")
+            console.print("[red][NO] Invalid token or network error[/red]")
             if Confirm.ask("Try again?", default=True):
                 return await _prompt_telegram(config)
 
@@ -131,7 +131,7 @@ async def _prompt_channels(config: dict[str, Any]) -> dict[str, Any]:
 
 async def _prompt_security(config: dict[str, Any]) -> dict[str, Any]:
     console.print(Rule(style="bold red"))
-    console.print(Panel.fit("[bold]🔒 Security Settings[/bold]", border_style="red"))
+    console.print(Panel.fit("[bold][lock] Security Settings[/bold]", border_style="red"))
 
     policy = Prompt.ask(
         "DM policy",
@@ -158,22 +158,22 @@ async def _prompt_port(config: dict[str, Any]) -> dict[str, Any]:
 
 def _show_summary(config: dict[str, Any]) -> None:
     console.print(Rule(style="bold green"))
-    console.print(Panel.fit("[bold green]✅ Configuration Summary[/bold green]", border_style="green"))
+    console.print(Panel.fit("[bold green][OK] Configuration Summary[/bold green]", border_style="green"))
 
     table = Table(show_header=False)
     table.add_column("Setting", style="cyan")
     table.add_column("Value")
     table.add_row("Model", config.get("default_model", "—"))
-    table.add_row("Telegram", "✅" if config.get("telegram_bot_token") else "❌")
-    table.add_row("Discord", "✅" if config.get("discord_bot_token") else "❌")
-    table.add_row("Slack", "✅" if config.get("slack_bot_token") else "❌")
+    table.add_row("Telegram", "[OK]" if config.get("telegram_bot_token") else "[NO]")
+    table.add_row("Discord", "[OK]" if config.get("discord_bot_token") else "[NO]")
+    table.add_row("Slack", "[OK]" if config.get("slack_bot_token") else "[NO]")
     table.add_row("DM Policy", config.get("dm_policy", "pairing"))
     table.add_row("Web Port", str(config.get("web_port", 18888)))
-    table.add_row("Web Secret", "✅ Set" if config.get("web_secret_key") else "⚠️ Not set")
-    table.add_row("API Key (OpenRouter)", "✅" if config.get("openrouter_api_key") else "—")
-    table.add_row("API Key (Anthropic)", "✅" if config.get("anthropic_api_key") else "—")
-    table.add_row("API Key (OpenAI)", "✅" if config.get("openai_api_key") else "—")
-    table.add_row("Ollama", "✅" if config.get("ollama_base_url") else "—")
+    table.add_row("Web Secret", "[OK] Set" if config.get("web_secret_key") else "⚠️ Not set")
+    table.add_row("API Key (OpenRouter)", "[OK]" if config.get("openrouter_api_key") else "—")
+    table.add_row("API Key (Anthropic)", "[OK]" if config.get("anthropic_api_key") else "—")
+    table.add_row("API Key (OpenAI)", "[OK]" if config.get("openai_api_key") else "—")
+    table.add_row("Ollama", "[OK]" if config.get("ollama_base_url") else "—")
     console.print(table)
 
 
@@ -254,7 +254,7 @@ async def _test_send(config: dict[str, Any]) -> None:
 
         try:
             await asyncio.wait_for(received.wait(), timeout=60)
-            console.print(f"[green]✅ {result_text}[/green]")
+            console.print(f"[green][OK] {result_text}[/green]")
         except TimeoutError:
             console.print("[yellow]No message received within 60s. Check your token.[/yellow]")
         finally:

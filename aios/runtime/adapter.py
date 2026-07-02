@@ -1,5 +1,6 @@
 import asyncio
 import subprocess
+import sys
 from typing import Any
 
 from loguru import logger
@@ -13,12 +14,19 @@ class RuntimeAdapter:
     @staticmethod
     async def run_command(cmd: str) -> str:
         import shlex
-        parts = shlex.split(cmd)
-        proc = await asyncio.create_subprocess_exec(
-            *parts,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        if sys.platform == "win32":
+            proc = await asyncio.create_subprocess_exec(
+                "cmd.exe", "/c", cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        else:
+            parts = shlex.split(cmd)
+            proc = await asyncio.create_subprocess_exec(
+                *parts,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
         except TimeoutError:

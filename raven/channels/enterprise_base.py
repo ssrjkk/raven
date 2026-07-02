@@ -120,7 +120,9 @@ class EnterpriseChannel(BaseChannel):
                     wait = base_delay * (2**attempt)
                     logger.warning("[{}] retry {}/{} after {}s: {}", self.channel_id, attempt + 1, max_retries, wait, e)
                     await asyncio.sleep(wait)
-        raise last_ex  # type: ignore
+        if last_ex is not None:
+            raise last_ex
+        raise RuntimeError("Unreachable: retry loop completed without exception")
 
     def _audit_send(self, session_id: str, message: Message):
         user_id = session_id.split(":")[1] if ":" in session_id else session_id

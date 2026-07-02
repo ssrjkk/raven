@@ -207,7 +207,13 @@ async def create_task(request: dict[str, Any]) -> dict[str, Any]:
     _save_task(task)
     logger.info("Task created: id={} type={}", task.id, task_type)
 
-    asyncio.create_task(_execute_task(task))
+    async def _execute_safe(t: Task) -> None:
+        try:
+            await _execute_task(t)
+        except Exception as exc:
+            logger.error("Task {} execution failed: {}", t.id, exc)
+
+    asyncio.create_task(_execute_safe(task))
 
     if idem_key and idempotency:
         idempotency.set(idem_key, 201, json.dumps({"id": task.id}))

@@ -8,8 +8,13 @@ from typing import Any
 
 from loguru import logger
 
-from services.code-service.context import CodebaseContext
-from services.code-service.tools import ToolRegistry
+
+def _get_tool_registry():
+    import importlib, sys
+    _svc = Path(__file__).parent
+    if str(_svc) not in sys.path:
+        sys.path.insert(0, str(_svc))
+    return importlib.import_module("tools").ToolRegistry
 
 
 class AgentMode(str, Enum):
@@ -35,8 +40,8 @@ class RavenCodeAgent:
     def __init__(self, mode: AgentMode = AgentMode.BUILD, workspace: str = ".") -> None:
         self.mode = mode
         self.workspace = Path(workspace).resolve()
-        self.tools = ToolRegistry()
-        self.context = CodebaseContext(str(self.workspace))
+        self.tools = _get_tool_registry()()
+        self._context = None
 
     async def run(self, task: str, messages: list[dict[str, Any]] | None = None) -> str:
         if messages is None:

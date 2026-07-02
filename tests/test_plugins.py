@@ -407,10 +407,8 @@ class TestProcessPlugin:
     async def test_run_echo(self):
         from raven.plugins.process import plugin as p
 
-        if sys.platform == "win32":
-            result = await p.run("echo hello", shell=True)
-        else:
-            result = await p.run("echo hello", shell=True)
+        cmd = "cmd.exe /c echo hello" if sys.platform == "win32" else "echo hello"
+        result = await p.run(cmd)
         assert "hello" in result
 
     @pytest.mark.asyncio
@@ -432,10 +430,8 @@ class TestProcessPlugin:
     async def test_run_timeout(self):
         from raven.plugins.process import plugin as p
 
-        if sys.platform == "win32":
-            result = await p.run("ping -n 60 127.0.0.1", timeout=1, shell=True)
-        else:
-            result = await p.run("sleep 10", timeout=1, shell=True)
+        cmd = "ping -n 60 127.0.0.1" if sys.platform == "win32" else "sleep 10"
+        result = await p.run(cmd, timeout=1)
         assert isinstance(result, str)
 
     def test_tool_discovery(self):

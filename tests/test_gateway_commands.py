@@ -35,6 +35,12 @@ def gateway():
     gw._task_runner = MagicMock()  # type: ignore[attr-defined]
     gw._skills = {}  # type: ignore[attr-defined]
     gw._plugins_loaded = False  # type: ignore[attr-defined]
+    from raven.core.auth.rbac import RBAC
+    from raven.core.auth.models import Permission, Role
+    gw._rbac = RBAC()
+    for role in Role:
+        for perm in Permission:
+            gw._rbac.add_role_permission(role, perm)
     return gw
 
 
@@ -48,133 +54,131 @@ def _event(text: str, channel: str = "telegram") -> IncomingMessage:
     )
 
 
+@pytest.fixture
+def user() -> dict:
+    return {"id": "U1", "name": "Test User"}
+
+
 class TestGatewayCommandHandler:
     @pytest.mark.asyncio
-    async def test_status_command(self, gateway):
-        with patch.object(gateway, "_handle_command") as mock_cmd:
-            mock_cmd.return_value = True
-            result = await gateway._handle_command(_event("/status"))
-            assert result is True
-
-    @pytest.mark.asyncio
-    async def test_new_command(self, gateway):
-        result = await gateway._handle_command(_event("/new"))
+    async def test_new_command(self, gateway, user):
+        result = await gateway._handle_command(_event("/new"), user)
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_reset_command(self, gateway):
-        result = await gateway._handle_command(_event("/reset"))
+    async def test_reset_command(self, gateway, user):
+        result = await gateway._handle_command(_event("/reset"), user)
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_help_command(self, gateway):
-        result = await gateway._handle_command(_event("/help"))
+    async def test_help_command(self, gateway, user):
+        result = await gateway._handle_command(_event("/help"), user)
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_unknown_command(self, gateway):
+    async def test_unknown_command(self, gateway, user):
         with patch.object(gateway, "_send", new_callable=AsyncMock):
-            result = await gateway._handle_command(_event("/nonexistent"))
+            result = await gateway._handle_command(_event("/nonexistent"), user)
             assert result is not True
 
 
 class TestGatewayMonitorCommands:
     @pytest.mark.asyncio
-    async def test_monitor_list(self, gateway):
+    async def test_monitor_list(self, gateway, user):
         with patch.object(gateway, "_handle_monitor_cmd") as mock_cmd:
             mock_cmd.return_value = "Monitor list"
-            result = await gateway._handle_command(_event("/monitor list"))
+            result = await gateway._handle_command(_event("/monitor list"), user)
             assert result is True
 
     @pytest.mark.asyncio
-    async def test_monitor_add(self, gateway):
+    async def test_monitor_add(self, gateway, user):
         with patch.object(gateway, "_handle_monitor_cmd") as mock_cmd:
             mock_cmd.return_value = "Monitor added"
-            result = await gateway._handle_command(_event("/monitor add http https://example.com"))
+            result = await gateway._handle_command(_event("/monitor add http https://example.com"), user)
             assert result is True
 
     @pytest.mark.asyncio
-    async def test_monitor_remove(self, gateway):
+    async def test_monitor_remove(self, gateway, user):
         with patch.object(gateway, "_handle_monitor_cmd") as mock_cmd:
             mock_cmd.return_value = "Monitor removed"
-            result = await gateway._handle_command(_event("/monitor remove 1"))
+            result = await gateway._handle_command(_event("/monitor remove 1"), user)
             assert result is True
 
     @pytest.mark.asyncio
-    async def test_monitor_pause(self, gateway):
+    async def test_monitor_pause(self, gateway, user):
         with patch.object(gateway, "_handle_monitor_cmd") as mock_cmd:
             mock_cmd.return_value = "Monitor paused"
-            result = await gateway._handle_command(_event("/monitor pause 1"))
+            result = await gateway._handle_command(_event("/monitor pause 1"), user)
             assert result is True
 
     @pytest.mark.asyncio
-    async def test_monitor_resume(self, gateway):
+    async def test_monitor_resume(self, gateway, user):
         with patch.object(gateway, "_handle_monitor_cmd") as mock_cmd:
             mock_cmd.return_value = "Monitor resumed"
-            result = await gateway._handle_command(_event("/monitor resume 1"))
+            result = await gateway._handle_command(_event("/monitor resume 1"), user)
             assert result is True
 
 
 class TestGatewayRoutineCommands:
     @pytest.mark.asyncio
-    async def test_routine_list(self, gateway):
+    async def test_routine_list(self, gateway, user):
         with patch.object(gateway, "_handle_routine_cmd") as mock_cmd:
             mock_cmd.return_value = "Routine list"
-            result = await gateway._handle_command(_event("/routine list"))
+            result = await gateway._handle_command(_event("/routine list"), user)
             assert result is True
 
     @pytest.mark.asyncio
-    async def test_routine_add(self, gateway):
+    async def test_routine_add(self, gateway, user):
         with patch.object(gateway, "_handle_routine_cmd") as mock_cmd:
             mock_cmd.return_value = "Routine added"
-            result = await gateway._handle_command(_event("/routine add briefing 0 9 * * *"))
+            result = await gateway._handle_command(_event("/routine add briefing 0 9 * * *"), user)
             assert result is True
 
 
 class TestGatewayTaskCommands:
     @pytest.mark.asyncio
-    async def test_task_command_routes(self, gateway):
+    async def test_task_command_routes(self, gateway, user):
         with patch.object(gateway, "_run_task", new_callable=AsyncMock):
             with patch.object(gateway, "_send", new_callable=AsyncMock):
-                result = await gateway._handle_command(_event("/task do something"))
+                result = await gateway._handle_command(_event("/task do something"), user)
                 assert result is True
 
     @pytest.mark.asyncio
-    async def test_task_list(self, gateway):
+    async def test_task_list(self, gateway, user):
         with patch.object(gateway, "_send", new_callable=AsyncMock):
-            result = await gateway._handle_command(_event("/task list"))
+            result = await gateway._handle_command(_event("/task list"), user)
             assert result is True
 
 
 class TestGatewayCodeCommands:
     @pytest.mark.asyncio
-    async def test_code_index(self, gateway):
+    async def test_code_index(self, gateway, user):
         with patch.object(gateway, "_handle_code_cmd") as mock_cmd:
             mock_cmd.return_value = "Indexed"
-            result = await gateway._handle_command(_event("/code index"))
+            result = await gateway._handle_command(_event("/code index"), user)
             assert result is True
 
     @pytest.mark.asyncio
-    async def test_code_search(self, gateway):
+    async def test_code_search(self, gateway, user):
         with patch.object(gateway, "_handle_code_cmd") as mock_cmd:
             mock_cmd.return_value = "Search results"
-            result = await gateway._handle_command(_event("/code search test"))
+            result = await gateway._handle_command(_event("/code search test"), user)
             assert result is True
 
     @pytest.mark.asyncio
-    async def test_code_review(self, gateway):
+    async def test_code_review(self, gateway, user):
         with patch.object(gateway, "_handle_code_cmd") as mock_cmd:
             mock_cmd.return_value = "Review"
-            result = await gateway._handle_command(_event("/code review test.py"))
+            result = await gateway._handle_command(_event("/code review test.py"), user)
             assert result is True
 
 
 class TestGatewayVoiceCommands:
     @pytest.mark.asyncio
-    async def test_voice_tts(self, gateway):
+    async def test_voice_tts(self, gateway, user):
         with patch.object(gateway, "_handle_voice_cmd") as mock_cmd:
             mock_cmd.return_value = "Playing TTS"
-            result = await gateway._handle_command(_event("/voice tts hello"))
+            result = await gateway._handle_command(_event("/voice tts hello"), user)
             assert result is True
 
 

@@ -56,15 +56,21 @@ async def main() -> None:
 
 
 async def _start_web(port: int) -> None:
-    from raven.cli.main import create_gateway, _run_gateway
-    gateway = create_gateway()
-    await _run_gateway(gateway, port)
+    try:
+        from raven.cli.main import create_gateway, _run_gateway
+        gateway = create_gateway()
+        await _run_gateway(gateway, port)
+    except ImportError as exc:
+        print(f"[warn] Web UI unavailable: {exc}")
 
 
 async def _start_flow(port: int) -> None:
-    from raven.gateway.daemon import RavenFlowDaemon
-    daemon = RavenFlowDaemon(port=port)
-    await daemon.start()
+    try:
+        from raven.gateway.daemon import RavenFlowDaemon
+        daemon = RavenFlowDaemon(port=port)
+        await daemon.start()
+    except ImportError as exc:
+        print(f"[warn] RavenFlow unavailable: {exc}")
 
 
 if __name__ == "__main__":
@@ -72,3 +78,6 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Shutting down...")
+    except ModuleNotFoundError as exc:
+        print(f"[fatal] Missing dependency: {exc}")
+        sys.exit(1)

@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from loguru import logger
+
 
 class ContextVisibility(StrEnum):
     ALL = "all"
@@ -401,8 +403,8 @@ class PIIEngine:
                                 score=round(r.score, 2),
                             )
                         )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Presidio analysis failed: {}", exc)
 
         finds.sort(key=lambda f: f.start)
         return finds

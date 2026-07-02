@@ -23,12 +23,14 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
         from raven.core.security.context_filter import sanitize_external_content
 
         text = sanitize_external_content(text, source=source, channel="webhook", sender=user_id)
+        safe_keys = {"source", "channel", "user_id", "text", "message", "content", "type", "event", "timestamp"}
+        safe_body = {k: v for k, v in body.items() if k in safe_keys} if isinstance(body, dict) else {}
         event = IncomingMessage(
             channel="webhook",
             user_id=user_id,
             session_id=f"webhook:{source}:{user_id}",
             text=text,
-            metadata={"source": source, "body": body},
+            metadata={"source": source, "body": safe_body},
         )
         await handle_incoming(event)
         return {"ok": True, "source": source}

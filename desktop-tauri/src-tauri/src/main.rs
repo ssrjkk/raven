@@ -8,12 +8,28 @@ struct AppState {
   backend: Mutex<Option<Child>>,
 }
 
+fn find_python() -> Option<String> {
+  for cmd in &["python3", "python"] {
+    if Command::new(cmd).arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok() {
+      return Some(cmd.to_string());
+    }
+  }
+  None
+}
+
 fn start_backend(state: &AppState) {
   let mut backend = state.backend.lock().unwrap();
   if backend.is_some() {
     return;
   }
-  let child = Command::new("python")
+  let python = match find_python() {
+    Some(p) => p,
+    None => {
+      eprintln!("Python not found — Raven backend not started");
+      return;
+    }
+  };
+  let child = Command::new(&python)
     .args(["-m", "main", "--no-web", "--flow-port", "18789"])
     .stdout(Stdio::null())
     .stderr(Stdio::null())

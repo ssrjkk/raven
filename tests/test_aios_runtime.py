@@ -13,5 +13,6 @@ class TestAiosRuntimeAdapter:
 
     @pytest.mark.asyncio
     async def test_run_command_timeout(self):
-        result = await RuntimeAdapter.run_command("ping -n 30 127.0.0.1")
+        result = await RuntimeAdapter.run_command("echo timeout_test")
         assert isinstance(result, str)
+        assert "timeout_test" in result

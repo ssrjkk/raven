@@ -128,9 +128,18 @@ async def execute_code(request: dict):
             raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+def _import_module(name: str):
+    import importlib, sys
+    from pathlib import Path
+    _svc = Path(__file__).parent
+    if str(_svc) not in sys.path:
+        sys.path.insert(0, str(_svc))
+    return importlib.import_module(name)
+
+
 @app.post("/api/v1/agent/run", summary="Run RavenCode agent", description="Executes a coding task using RavenCode agent with build/plan/general mode.")
 async def agent_run(request: dict):
-    from services.code-service.agent import AgentMode, RavenCodeAgent
+    _a = _import_module("agent")
 
     task = request.get("task", "")
     mode_str = request.get("mode", "build")
@@ -140,11 +149,11 @@ async def agent_run(request: dict):
         raise HTTPException(status_code=400, detail="Empty task")
 
     try:
-        mode = AgentMode(mode_str)
+        mode = _a.AgentMode(mode_str)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid mode: {mode_str}. Use build, plan, or general")
 
-    agent = RavenCodeAgent(mode=mode, workspace=workspace)
+    agent = _a.RavenCodeAgent(mode=mode, workspace=workspace)
     try:
         result = await agent.run(task)
         return {"response": result[:10000], "mode": mode.value}
@@ -155,10 +164,10 @@ async def agent_run(request: dict):
 
 @app.post("/api/v1/context/index", summary="Index codebase", description="Index the codebase using AST parsing and embeddings.")
 async def context_index(request: dict):
-    from services.code-service.context import CodebaseContext
+    _c = _import_module("context")
 
     workspace = request.get("workspace", ".")
-    ctx = CodebaseContext(workspace)
+    ctx = _c.CodebaseContext(workspace)
     try:
         stats = await ctx.index_codebase()
         return {"indexed": stats.get("files", 0), "chunks": stats.get("chunks", 0)}
@@ -168,7 +177,7 @@ async def context_index(request: dict):
 
 @app.post("/api/v1/context/search", summary="Search codebase", description="Semantic search across indexed codebase.")
 async def context_search(request: dict):
-    from services.code-service.context import CodebaseContext
+    _c = _import_module("context")
 
     workspace = request.get("workspace", ".")
     query = request.get("query", "")
@@ -177,7 +186,7 @@ async def context_search(request: dict):
     if not query.strip():
         raise HTTPException(status_code=400, detail="Empty query")
 
-    ctx = CodebaseContext(workspace)
+    ctx = _c.CodebaseContext(workspace)
     try:
         results = await ctx.search(query, top_k=top_k)
         return {"results": results}

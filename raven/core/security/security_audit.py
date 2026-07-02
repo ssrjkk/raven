@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from raven.core.config import settings
 from raven.core.secrets import secrets
 
@@ -301,7 +303,7 @@ class SecurityAudit:
     def _check_config_validation(self):
         c = self._add("config_validation", "Configuration passes validation", "low")
         try:
-            settings.validate()
+            settings.validate_settings()
             c.ok("Configuration is valid")
         except ValueError as e:
             c.fail(f"Configuration is invalid: {e}")
@@ -418,7 +420,8 @@ class SecurityAudit:
                 client.ping()
                 client.close()
                 c.ok("Docker is available for sandbox execution")
-            except Exception:
+            except Exception as exc:
+                logger.warning("Docker daemon not reachable: {}", exc)
                 c.fail("Docker is installed but daemon is not reachable")
         except ImportError:
             c.fail("Docker Python package not installed (pip install docker)")

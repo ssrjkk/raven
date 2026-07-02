@@ -152,8 +152,13 @@ class GrepTool(Tool):
 
 class ToolDelegateTool(Tool):
     async def execute(self, description: str, context: str | None = None) -> str:
-        from services.code-service.agent import AgentMode, RavenCodeAgent
-        sub = RavenCodeAgent(mode=AgentMode.GENERAL, workspace=".")
+        import importlib, sys
+        from pathlib import Path
+        _svc = Path(__file__).parent
+        if str(_svc) not in sys.path:
+            sys.path.insert(0, str(_svc))
+        _a = importlib.import_module("agent")
+        sub = _a.RavenCodeAgent(mode=_a.AgentMode.GENERAL, workspace=".")
         prompt = f"{context}\n\n{description}" if context else description
         return await sub.run(prompt)
 
@@ -181,5 +186,10 @@ class ToolRegistry:
         return list(self._tools.keys())
 
     def for_mode(self, mode: str) -> list[str]:
-        from services.code-service.agent import AgentMode, _MODE_TOOLS
-        return _MODE_TOOLS.get(AgentMode(mode), ["read_file", "search"])
+        import importlib, sys
+        from pathlib import Path
+        _svc = Path(__file__).parent
+        if str(_svc) not in sys.path:
+            sys.path.insert(0, str(_svc))
+        _a = importlib.import_module("agent")
+        return _a._MODE_TOOLS.get(_a.AgentMode(mode), ["read_file", "search"])

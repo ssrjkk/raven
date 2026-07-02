@@ -88,7 +88,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     sessions_plugin.init(gateway.db)
 
-    settings.validate()
+    settings.validate_settings()
     audit_logger.log(AuditEventType.SYSTEM_STARTUP, "system", "gateway", detail={"plugins": len(plugin_loader.tools)})
 
     telegram = TelegramChannel()
@@ -582,9 +582,15 @@ def start(daemon: bool, port: int | None, stateless: bool):
     if stateless:
         for agent_conf in gateway.registry._configs.values():
             agent_conf.stateless = True
+    title = "[bold blue]Raven AI[/bold blue]"
+    try:
+        title = "[bold blue]\U0001f426 Raven AI[/bold blue]"
+        title.encode(sys.stdout.encoding or "utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        title = "[bold blue]Raven AI[/bold blue]"
     console.print(
         Panel.fit(
-            "[bold blue]🐦 Raven AI[/bold blue]\n"
+            f"{title}\n"
             f"[dim]Web UI: http://localhost:{web_port}[/dim]\n"
             f"[dim]Model: {settings.default_model}[/dim]" + ("\n[dim]Mode: stateless[/dim]" if stateless else "")
         )
@@ -632,10 +638,10 @@ def status():
         table.add_column("Component", style="cyan")
         table.add_column("Status", style="green")
         table.add_column("Details")
-        table.add_row("API", "🟢 Running" if api_ok else "🔴 Stopped", f"port {settings.web_port}")
-        table.add_row("Sessions", "🟢", str(len(sessions)))
-        table.add_row("Model", "⚪", settings.default_model)
-        table.add_row("DM Policy", "⚪", settings.dm_policy)
+        table.add_row("API", "[OK] Running" if api_ok else "[ERR] Stopped", f"port {settings.web_port}")
+        table.add_row("Sessions", "[OK]", str(len(sessions)))
+        table.add_row("Model", "[--]", settings.default_model)
+        table.add_row("DM Policy", "[--]", settings.dm_policy)
         console.print(table)
 
         if not api_ok:
@@ -653,7 +659,7 @@ def doctor():
     config_store.load()
     cfg = config_store._data
 
-    checks.append(("Config Store", f"✅ {config_store.path}" if config_store.path.exists() else "⚠️  Not initialized"))
+    checks.append(("Config Store", f"[OK] {config_store.path}" if config_store.path.exists() else "[!]️  Not initialized"))
     checks.append(("Python", sys.version))
     checks.append(("DB Path", str(settings.resolved_db_path)))
 
@@ -663,7 +669,7 @@ def doctor():
         or cfg.get("openai_api_key")
         or cfg.get("ollama_base_url")
     )
-    checks.append(("LLM Provider", "✅ Configured" if has_any_key else "⚠️  No provider configured"))
+    checks.append(("LLM Provider", "[OK] Configured" if has_any_key else "[!]️  No provider configured"))
 
     provider_names = []
     if cfg.get("openrouter_api_key"):
@@ -678,31 +684,31 @@ def doctor():
         checks.append(("Providers", ", ".join(provider_names)))
 
     checks.append(("Default Model", cfg.get("default_model", "—")))
-    checks.append(("Telegram", "✅ Configured" if cfg.get("telegram_bot_token") else "⚠️  Not set"))
-    checks.append(("Discord", "✅ Configured" if cfg.get("discord_bot_token") else "⚠️  Not set"))
-    checks.append(("Slack", "✅ Configured" if cfg.get("slack_bot_token") else "⚠️  Not set"))
+    checks.append(("Telegram", "[OK] Configured" if cfg.get("telegram_bot_token") else "[!]️  Not set"))
+    checks.append(("Discord", "[OK] Configured" if cfg.get("discord_bot_token") else "[!]️  Not set"))
+    checks.append(("Slack", "[OK] Configured" if cfg.get("slack_bot_token") else "[!]️  Not set"))
     checks.append(("DM Policy", cfg.get("dm_policy", "pairing")))
     checks.append(("Web Port", str(cfg.get("web_port", 18888))))
-    checks.append(("Web Secret Key", "✅ Set" if cfg.get("web_secret_key") else "⚠️  Not set"))
+    checks.append(("Web Secret Key", "[OK] Set" if cfg.get("web_secret_key") else "[!]️  Not set"))
 
     import importlib.util
     has_crypto = importlib.util.find_spec("cryptography")
-    checks.append(("Secrets Encryption", "✅ Available" if has_crypto else "⚠️  Install cryptography for secrets"))
+    checks.append(("Secrets Encryption", "[OK] Available" if has_crypto else "[!]️  Install cryptography for secrets"))
 
     try:
         import win32serviceutil  # noqa: F401
 
-        checks.append(("Windows Service", "✅ pywin32 available"))
+        checks.append(("Windows Service", "[OK] pywin32 available"))
     except ImportError:
         if sys.platform == "win32":
-            checks.append(("Windows Service", "⚠️  Install pywin32 for service support"))
+            checks.append(("Windows Service", "[!]️  Install pywin32 for service support"))
 
     try:
         import playwright  # noqa: F401
 
-        checks.append(("Playwright", "✅ Installed"))
+        checks.append(("Playwright", "[OK] Installed"))
     except ImportError:
-        checks.append(("Playwright", "⚠️  Not installed (browser plugin limited)"))
+        checks.append(("Playwright", "[!]️  Not installed (browser plugin limited)"))
 
     api_ok = False
     try:
@@ -712,7 +718,7 @@ def doctor():
         api_ok = r.is_success
     except Exception:
         pass
-    checks.append(("API", "🟢 Running" if api_ok else "🔴 Stopped"))
+    checks.append(("API", "[OK] Running" if api_ok else "[ERR] Stopped"))
 
     table = Table(show_header=False)
     table.add_column("Check", style="cyan")
@@ -831,7 +837,7 @@ def update(dry_run: bool):
                     timeout=120,
                 )
                 if upg.returncode == 0:
-                    console.print("[green]✅ Update complete![/green]")
+                    console.print("[green][OK] Update complete![/green]")
                 else:
                     console.print(f"[red]Update failed: {upg.stderr}[/red]")
         else:
@@ -958,18 +964,18 @@ def models_list():
     table.add_column("Default")
     table.add_row(
         "OpenRouter",
-        "✅" if settings.openrouter_api_key else "❌",
+        "[OK]" if settings.openrouter_api_key else "[NO]",
         "✓" if settings.default_model.startswith("openrouter/") else "",
     )
     table.add_row(
         "Anthropic",
-        "✅" if settings.anthropic_api_key else "❌",
+        "[OK]" if settings.anthropic_api_key else "[NO]",
         "✓" if settings.default_model.startswith("claude") else "",
     )
-    table.add_row("OpenAI", "✅" if settings.openai_api_key else "❌", "")
+    table.add_row("OpenAI", "[OK]" if settings.openai_api_key else "[NO]", "")
     table.add_row(
         "Ollama",
-        "✅" if settings.ollama_base_url else "❌",
+        "[OK]" if settings.ollama_base_url else "[NO]",
         "✓" if settings.default_model.startswith("ollama/") else "",
     )
     console.print(table)
@@ -1133,14 +1139,14 @@ def task_list(user: str | None, status: str | None, limit: int):
     table.add_column("Created")
     for t in tasks:
         status_icon = {
-            "pending": "⏳",
-            "running": "🔄",
-            "completed": "✅",
-            "failed": "❌",
-            "cancelled": "🚫",
-            "paused": "⏸",
+            "pending": "[..]",
+            "running": "[..]",
+            "completed": "[OK]",
+            "failed": "[NO]",
+            "cancelled": "[!]",
+            "paused": "[||]",
         }
-        icon = status_icon.get(t.status.value, "❓")
+        icon = status_icon.get(t.status.value, "[?]")
         done = sum(1 for s in t.steps if s.status.value == "completed")
         total = len(t.steps)
         created = time.strftime("%H:%M", time.localtime(t.created_at))
@@ -1169,8 +1175,8 @@ def task_show(task_id: str):
         )
     )
     for i, step in enumerate(t.steps):
-        icon = {"pending": "⏳", "running": "🔄", "completed": "✅", "failed": "❌", "cancelled": "🚫"}.get(
-            step.status.value, "❓"
+        icon = {"pending": "[..]", "running": "[..]", "completed": "[OK]", "failed": "[NO]", "cancelled": "[!]"}.get(
+            step.status.value, "[?]"
         )
         console.print(f"  {icon} Step {i + 1}: {step.description} [dim]({step.tool})[/dim]")
         if step.error:
@@ -1212,11 +1218,11 @@ def task_run(goal: str, user: str, channel: str):
 
         task = await runner.wait(task.id, timeout=300)
         if task.status.value == "completed":
-            console.print("[green]✅ Task completed![/green]")
+            console.print("[green][OK] Task completed![/green]")
         elif task.status.value == "failed":
-            console.print(f"[red]❌ Task failed: {task.error}[/red]")
+            console.print(f"[red][NO] Task failed: {task.error}[/red]")
         elif task.status.value == "cancelled":
-            console.print("[yellow]🚫 Task cancelled[/yellow]")
+            console.print("[yellow][!] Task cancelled[/yellow]")
         else:
             console.print(f"[yellow]Task status: {task.status.value}[/yellow]")
 
@@ -1322,10 +1328,10 @@ def monitor_list(user: str | None, status: str | None):
     table.add_column("Status")
     table.add_column("Last Check")
     for m in monitors:
-        icon = {"active": "🟢", "paused": "⏸", "error": "🔴"}.get(m.status.value, "❓")
+        icon = {"active": "[OK]", "paused": "[||]", "error": "[ERR]"}.get(m.status.value, "[?]")
         last = ""
         if m.last_check:
-            last = f"{'✅' if m.last_check.status == 'up' else '❌'} {m.last_check.checked_at:.0f}s ago"
+            last = f"{'[OK]' if m.last_check.status == 'up' else '[NO]'} {m.last_check.checked_at:.0f}s ago"
         table.add_row(
             m.id[:8], m.name, m.type.value, m.target[:40], f"{m.interval_seconds}s", f"{icon} {m.status.value}", last
         )
@@ -1390,7 +1396,7 @@ def monitor_add(name: str, mon_type: str, target: str, interval: int, conditions
     console.print(f"[green]Monitor '{name}' ({monitor.id[:8]}) added[/green]")
     if parsed_conditions:
         for cond in parsed_conditions:
-            console.print(f"  ⚡ Condition: {cond.metric} {cond.operator.value} {cond.value}")
+            console.print(f"  [!] Condition: {cond.metric} {cond.operator.value} {cond.value}")
 
 
 @monitor.command("remove")
@@ -1464,9 +1470,9 @@ def monitor_logs(monitor_id: str, limit: int):
     table.add_column("Error", style="red")
     for c in checks:
         t = time.strftime("%H:%M:%S", time.localtime(c.checked_at))
-        icon = "✅" if c.status == "up" else "❌"
+        icon = "[OK]" if c.status == "up" else "[NO]"
         ms = f"{c.response_time_ms:.0f}ms" if c.response_time_ms else ""
-        trig = "🔔" if c.triggered else ""
+        trig = "[!]" if c.triggered else ""
         err = (c.error or "")[:40]
         table.add_row(t, f"{icon} {c.status}", ms, trig, err)
     console.print(table)
@@ -1655,7 +1661,7 @@ def routine_list(user: str | None):
     table.add_column("Status")
     table.add_column("Last Run")
     for r in routines:
-        icon = {"active": "🟢", "paused": "⏸", "error": "🔴"}.get(r.status.value, "❓")
+        icon = {"active": "[OK]", "paused": "[||]", "error": "[ERR]"}.get(r.status.value, "[?]")
         last = r.last_run_status if r.last_run_status else "—"
         table.add_row(r.id[:8], r.name, r.action.value, r.schedule, f"{icon} {r.status.value}", last)
     console.print(table)
@@ -1762,7 +1768,7 @@ def routine_logs(routine_id: str):
     table.add_column("Duration", style="blue")
     for log in logs:
         t = time.strftime("%H:%M:%S", time.localtime(log.created_at))
-        icon = "✅" if log.status == "success" else "❌"
+        icon = "[OK]" if log.status == "success" else "[NO]"
         ms = f"{log.duration_ms:.0f}ms"
         table.add_row(t, f"{icon} {log.status}", log.message[:80], ms)
     console.print(table)

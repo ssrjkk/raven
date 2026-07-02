@@ -37,7 +37,7 @@ def _serialize(record):
     exception = record.get("exception")
     if exception:
         subset["exception"] = str(exception)
-    extra = {k: v for k, v in record["extra"].items() if k not in ("correlation_id",)}
+    extra = {k: v for k, v in record["extra"].items() if k not in ("correlation_id", "extra")}
     if extra:
         subset["extra"] = extra
     return json.dumps(subset, default=str)
@@ -49,24 +49,22 @@ def setup_logging(log_file: str | Path | None = None, level: str = "INFO", json_
     log_path = Path(log_file) if log_file else None
     file_path = os.environ.get("RAVEN_LOG_FILE")
 
-    fmt: str | Callable[[Any], str]
-    if json_format or os.environ.get("RAVEN_JSON_LOG"):
-        fmt = _serialize
-    else:
-        fmt = "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan> - <level>{message}</level>"
-
-    logger.add(sys.stderr, level=log_level, format=fmt, colorize=not json_format)
-
     log_target = log_path or (Path(file_path) if file_path else None)
-    if log_target:
-        log_target.parent.mkdir(parents=True, exist_ok=True)
-        logger.add(str(log_target), level="DEBUG", format=_serialize, rotation="100 MB", retention="30 days")
-        logger.add(
-            str(log_target.with_suffix(".err.log")),
-            level="WARNING",
-            format=_serialize,
-            rotation="100 MB",
-            retention="90 days",
-        )
+    if json_format or os.environ.get("RAVEN_JSON_LOG"):
+        if log_target:
+            log_target.parent.mkdir(parents=True, exist_ok=True)
+            logger.add(str(log_target), level="DEBUG", format=_serialize, rotation="100 MB", retention="30 days")
+            logger.add(
+                str(log_target.with_suffix(".err.log")),
+                level="WARNING",
+                format=_serialize,
+                rotation="100 MB",
+                retention="90 days",
+            )
+        console_fmt = "{time:HH:mm:ss} | {level: <8} | {name} - {message}"
+    else:
+        console_fmt = "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan> - <level>{message}</level>"
 
-    logger.info("Logging initialized", extra={"json_format": json_format, "level": log_level})
+    logger.add(sys.stderr, level=log_level, format=console_fmt, colorize=not (json_format or os.environ.get("RAVEN_JSON_LOG")))
+
+    logger.info("Logging initialized (json={}, level={})", json_format, log_level)

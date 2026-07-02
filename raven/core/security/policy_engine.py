@@ -7,6 +7,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 
 class Op(StrEnum):
     EQ = "eq"
@@ -49,7 +51,8 @@ class ConditionNode:
     def evaluate(self, input_data: dict[str, Any]) -> bool:
         try:
             return self._evaluate(input_data)
-        except Exception:
+        except Exception as exc:
+            logger.warning("Policy evaluation failed: {}", exc)
             return False
 
     def _evaluate(self, input_data: dict[str, Any]) -> bool:

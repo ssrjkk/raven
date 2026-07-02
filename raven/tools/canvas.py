@@ -1,8 +1,23 @@
 from __future__ import annotations
 
+import html
 from typing import Any
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+
+_SAFE_URL_SCHEMES = frozenset({"http", "https", "mailto", "/"})
+_ALLOWED_ALERT_LEVELS = frozenset({"info", "warning", "danger", "success"})
+
+
+def _sanitize(text: str) -> str:
+    return html.escape(text, quote=True)
+
+
+def _sanitize_url(url: str) -> str:
+    url = url.strip()
+    if any(url.startswith(s) for s in _SAFE_URL_SCHEMES):
+        return html.escape(url, quote=True)
+    return ""
 
 
 async def canvas_render(components: list[dict[str, Any]]) -> str:
@@ -11,31 +26,34 @@ async def canvas_render(components: list[dict[str, Any]]) -> str:
         ctype = comp.get("type", "text")
         content = comp.get("content", "")
         if ctype == "text":
-            rendered.append(content)
+            rendered.append(_sanitize(content))
         elif ctype == "code":
-            lang = comp.get("language", "")
+            lang = _sanitize(comp.get("language", ""))
             rendered.append(f"```{lang}\n{content}\n```")
         elif ctype == "table":
-            headers = comp.get("headers", [])
-            rows = comp.get("rows", [])
+            headers = [_sanitize(h) for h in comp.get("headers", [])]
+            rows = [[_sanitize(str(c)) for c in row] for row in comp.get("rows", [])]
             header = " | ".join(headers)
             sep = " | ".join(["---"] * len(headers))
-            body = "\n".join(" | ".join(str(c) for c in row) for row in rows)
+            body = "\n".join(" | ".join(row) for row in rows)
             rendered.append(f"{header}\n{sep}\n{body}")
         elif ctype == "mermaid":
             rendered.append(f"```mermaid\n{content}\n```")
         elif ctype == "link":
-            rendered.append(f"[{content}]({comp.get('url', '')})")
+            url = comp.get("url", "")
+            rendered.append(f"[{_sanitize(content)}]({_sanitize_url(url)})")
         elif ctype == "image":
-            rendered.append(f"![{content}]({comp.get('url', '')})")
+            url = comp.get("url", "")
+            rendered.append(f"![{_sanitize(content)}]({_sanitize_url(url)})")
         elif ctype == "list":
-            items = comp.get("items", [])
+            items = [_sanitize(i) for i in comp.get("items", [])]
             rendered.append("\n".join(f"- {i}" for i in items))
         elif ctype == "alert":
             level = comp.get("level", "info")
-            rendered.append(f"> [!{level.upper()}]\n> {content}")
+            level = level.lower() if level.lower() in _ALLOWED_ALERT_LEVELS else "info"
+            rendered.append(f"> [!{level.upper()}]\n> {_sanitize(content)}")
         else:
-            rendered.append(content)
+            rendered.append(_sanitize(content))
     return "\n\n".join(rendered)
 
 

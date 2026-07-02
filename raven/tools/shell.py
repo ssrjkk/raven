@@ -61,11 +61,10 @@ _RESTRICTED_BUILTINS: dict[str, Any] = {
     "bool": bool, "bytearray": bytearray, "bytes": bytes, "chr": chr,
     "complex": complex, "dict": dict, "divmod": divmod, "enumerate": enumerate,
     "filter": filter, "float": float, "format": format, "frozenset": frozenset,
-    "hash": hash, "hex": hex,
-    "id": id, "int": int, "isinstance": isinstance,
-    "iter": iter, "len": len, "list": list, "map": map, "max": max,
+    "hash": hash, "hex": hex, "int": int,
+    "len": len, "list": list, "map": map, "max": max,
     "min": min, "next": next, "oct": oct, "ord": ord,
-    "pow": pow, "range": range, "repr": repr, "reversed": reversed,
+    "pow": pow, "range": range, "reversed": reversed,
     "round": round, "set": set, "slice": slice, "sorted": sorted,
     "str": str, "sum": sum, "tuple": tuple, "zip": zip,
     "True": True, "False": False, "None": None,
@@ -78,6 +77,8 @@ _DENIED_BUILTINS = frozenset({
     "eval", "exec", "compile", "open", "input",
     "memoryview", "breakpoint", "callable",
     "staticmethod", "classmethod", "property", "super",
+    "getattr", "setattr", "delattr", "vars", "dir",
+    "__import__", "globals", "locals",
 })
 
 
@@ -91,12 +92,16 @@ async def python_code(code: str, timeout: int = 15) -> str:
                 func = node.func
                 if isinstance(func, ast.Name) and func.id in _DENIED_BUILTINS:
                     return f"[denied] use of '{func.id}' is not allowed"
-                if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) and func.value.id in ("os", "subprocess", "sys", "shutil", "ctypes", "socket"):
-                    return f"[denied] '{func.value.id}' module access is not allowed"
-                if isinstance(func, ast.Attribute) and func.attr == "__import__":
-                    return "[denied] __import__ is not allowed"
+                if isinstance(func, ast.Attribute):
+                    if func.attr == "__import__":
+                        return "[denied] __import__ is not allowed"
+                    if isinstance(func.value, ast.Name) and func.value.id in ("os", "subprocess", "sys", "shutil", "ctypes", "socket"):
+                        return f"[denied] '{func.value.id}' module access is not allowed"
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "__import__":
                 return "[denied] __import__ is not allowed"
+            if isinstance(node, ast.Attribute) and node.attr.startswith("__") and node.attr.endswith("__"):
+                if isinstance(node.value, (ast.Constant, ast.List, ast.Dict, ast.Set, ast.Tuple)):
+                    return "[denied] dunder access from literal is not allowed"
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 for alias in node.names:
                     if alias.name in ("os", "subprocess", "sys", "shutil", "ctypes", "socket"):

@@ -98,7 +98,7 @@ class Settings(BaseSettings):
             return base / p
         return p
 
-    def validate(self) -> bool:  # type: ignore[override]
+    def validate_settings(self) -> bool:
         errors = []
         if not self.web_secret_key:
             errors.append("WEB_SECRET_KEY must be set to a non-empty value")

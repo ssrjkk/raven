@@ -91,7 +91,8 @@ class EmbeddingEngine:
             from raven.core.config import settings
 
             return settings.openai_api_key or ""
-        except Exception:
+        except Exception as exc:
+            logger.debug("Falling back to env OPENAI_API_KEY: {}", exc)
             import os
 
             return os.environ.get("OPENAI_API_KEY", "")

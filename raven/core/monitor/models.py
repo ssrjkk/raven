@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import time as time_module
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
@@ -93,7 +93,7 @@ class Monitor:
             return True
         if not self.last_check.triggered:
             return False
-        elapsed = (datetime.now().timestamp() - self.last_check.checked_at) / 60
+        elapsed = (time_module.time() - self.last_check.checked_at) / 60
         return elapsed >= self.cooldown_minutes
 
     def to_dict(self) -> dict[str, Any]:

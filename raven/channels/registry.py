@@ -83,21 +83,6 @@ CHANNEL_MAP: dict[str, str] = {
     "feishu": "Feishu/Lark",
     "line": "LINE",
     "webchat": "Web Chat",
-    "wechat": "WeChat (coming)",
-    "qq": "QQ (coming)",
-    "imessage": "iMessage (coming)",
-    "macos": "macOS Menu Bar (coming)",
-    "ios": "iOS App (coming)",
-    "android": "Android App (coming)",
-    "windows": "Windows Hub (coming)",
-    "email": "Email/IMAP (coming)",
-    "sms": "SMS/Twilio (coming)",
-    "mattermost": "Mattermost (coming)",
-    "zulip": "Zulip (coming)",
-    "rocketchat": "Rocket.Chat (coming)",
-    "facebook": "Facebook Messenger (coming)",
-    "instagram": "Instagram DM (coming)",
-    "viber": "Viber (coming)",
 }
 
 
@@ -117,31 +102,9 @@ def register_default_channels(registry: ChannelRegistry) -> None:
     registry.register("discord", lambda: DiscordChannel())
     registry.register("slack", lambda: SlackChannel())
     registry.register("whatsapp", lambda: WhatsAppChannel())
-    registry.register("signal", lambda: SignalChannelStub())
     registry.register("matrix", lambda: MatrixChannel())
     registry.register("googlechat", lambda: GoogleChatChannel())
     registry.register("irc", lambda: IRCChannel())
     registry.register("teams", lambda: TeamsChannel())
     registry.register("feishu", lambda: FeishuChannel())
     registry.register("line", lambda: LINECChannel())
-    registry.register("webchat", lambda: WebChatChannelStub())
-
-
-class SignalChannelStub(BaseChannel):
-    channel_id = "signal"
-    async def connect(self) -> None: logger.info("[signal] stub connect")
-    async def disconnect(self) -> None: logger.info("[signal] stub disconnect")
-    async def send(self, session_id: str, message: Any) -> None: logger.info("[signal] stub send")
-    async def on_message(self, handler: Any) -> None: logger.info("[signal] stub on_message")
-    async def start(self) -> None: logger.info("[signal] stub start")
-    async def stop(self) -> None: logger.info("[signal] stub stop")
-
-
-class WebChatChannelStub(BaseChannel):
-    channel_id = "webchat"
-    async def connect(self) -> None: logger.info("[webchat] stub connect")
-    async def disconnect(self) -> None: logger.info("[webchat] stub disconnect")
-    async def send(self, session_id: str, message: Any) -> None: logger.info("[webchat] stub send")
-    async def on_message(self, handler: Any) -> None: logger.info("[webchat] stub on_message")
-    async def start(self) -> None: logger.info("[webchat] stub start")
-    async def stop(self) -> None: logger.info("[webchat] stub stop")
