@@ -452,9 +452,13 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             await asyncio.wait_for(gateway.db.disconnect(), timeout=5)
 
 
-@click.group()
-def cli():
+@click.group(invoke_without_command=True)
+@click.pass_context
+def cli(ctx: click.Context):
     """Raven AI — Personal AI Assistant 24/7"""
+    if ctx.invoked_subcommand is None:
+        from raven.cli.coding import code
+        code(task="", project=None, agent="raven", max_steps=50, safe=False, plan=False, model=None, parallel=None)
 
 
 # ── AI-OS-MVP (Hybrid Architecture) ──────────────────────────────
@@ -1932,6 +1936,90 @@ def flow_sessions():
             if not mgr_sessions and not flow_sessions:
                 console.print("[yellow]No active sessions[/yellow]")
     asyncio.run(_list())
+
+
+@cli.command()
+def upgrade():
+    """Update Raven AI to the latest version"""
+    import subprocess
+    console.print("[bold]Raven Upgrade[/bold]\n")
+    repo = Path(__file__).resolve().parent.parent.parent
+    os.chdir(str(repo))
+    if (repo / ".git").is_dir():
+        console.print("[*] Pulling latest code...")
+        r = subprocess.run(["git", "pull", "--rebase"], capture_output=True, text=True)
+        if r.returncode != 0:
+            console.print(f"[red]Git pull failed: {r.stderr.strip()}[/red]")
+            raise SystemExit(1)
+        console.print("[green]  OK[/green]")
+    console.print("[*] Updating Python dependencies...")
+    r = subprocess.run([sys.executable, "-m", "pip", "install", "-e", "."], capture_output=True, text=True)
+    if r.returncode != 0:
+        console.print(f"[yellow]pip install warning: {r.stderr.strip()}[/yellow]")
+    else:
+        console.print("[green]  OK[/green]")
+    web_dir = repo / "web"
+    if web_dir.is_dir() and (web_dir / "package.json").is_file():
+        console.print("[*] Updating web frontend...")
+        r = subprocess.run(["npm", "install"], capture_output=True, text=True, cwd=str(web_dir))
+        if r.returncode == 0:
+            console.print("[green]  OK[/green]")
+    console.print("\n[green]Upgrade complete! Run 'raven start' to apply.[/green]")
+
+
+@cli.command()
+@click.option("--lines", "-n", default=50, type=int, help="Number of lines to show")
+@click.option("--level", "-l", default="DEBUG", help="Minimum log level (DEBUG, INFO, WARNING, ERROR)")
+@click.option("--follow", "-f", is_flag=True, help="Follow log output")
+def logs(lines: int, level: str, follow: bool):
+    """View Raven AI logs"""
+    env_path = os.environ.get("RAVEN_LOG_FILE")
+    log_path: Path | None
+    if env_path:
+        log_path = Path(env_path)
+    else:
+        candidates = [
+            Path("data/logs/raven.log"),
+            Path("raven.log"),
+            Path.home() / ".raven" / "logs" / "raven.log",
+        ]
+        log_path = next((p for p in candidates if p.exists()), None)
+    if log_path is None or not log_path.exists():
+        console.print("[red]No log file found. Set RAVEN_LOG_FILE env var or run 'raven start' first.[/red]")
+        raise SystemExit(1)
+    levels = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
+    min_level = levels.get(level.upper(), 0)
+    try:
+        with log_path.open(encoding="utf-8") as f:
+            all_lines = f.readlines()
+        filtered = []
+        for line in all_lines[-lines * 10:]:
+            for lvl, lvl_id in levels.items():
+                if lvl_id >= min_level and f"| {lvl} |" in line:
+                    filtered.append((lvl, line.rstrip()))
+                    break
+        shown = filtered[-lines:] if len(filtered) > lines else filtered
+        for lvl, line in shown:
+            style = {"DEBUG": "dim", "INFO": "", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "bold red"}
+            console.print(f"[{style.get(lvl, '')}]{line}[/{style.get(lvl, '')}]")
+        if follow:
+            console.print("[dim]--- watching for new logs (Ctrl+C to stop) ---[/dim]")
+            import time
+            try:
+                with log_path.open(encoding="utf-8") as f:
+                    f.seek(0, 2)
+                    while True:
+                        line = f.readline()
+                        if line:
+                            console.print(line.rstrip())
+                        else:
+                            time.sleep(0.5)
+            except KeyboardInterrupt:
+                pass
+            except Exception as exc:
+                console.print(f"[red]Log follow error: {exc}[/red]")
+    except Exception as exc:
+        console.print(f"[red]Error reading logs: {exc}[/red]")
 
 
 if __name__ == "__main__":

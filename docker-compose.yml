@@ -16,3 +16,48 @@ services:
       retries: 3
       start_period: 60s
     restart: unless-stopped
+    profiles:
+      - minimal
+      - full
+
+  nats:
+    image: nats:2-alpine
+    command: ["-js", "-sd", "/data"]
+    ports:
+      - "4222:4222"
+    volumes:
+      - nats_data:/data
+    profiles:
+      - full
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_admin
+    secrets:
+      - grafana_admin
+    profiles:
+      - full
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    profiles:
+      - full
+
+volumes:
+  nats_data:
+  grafana_data:
+  prometheus_data:
+
+secrets:
+  grafana_admin:
+    file: ./data/secrets/grafana_admin.txt

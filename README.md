@@ -29,6 +29,33 @@
   [日本語](README.ja.md) •
 </div>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/status-active--development-brightgreen" alt="Status">
+  <img src="https://img.shields.io/github/stars/ssrjkk/raven?style=social" alt="Stars">
+</p>
+
+---
+
+## Demo
+
+<p align="center">
+  <i>📺 See Raven in action (30s demo GIF — coming soon)</i>
+</p>
+
+```text
+$ raven "explain this codebase and fix the failing test"
+🐦 Raven is analyzing your project...
+   → LSP enrichment: 3 languages detected
+   → Planning debug session...
+   → Running pytest — found 1 failure
+   → Fixing assertion in test_users.py
+   → PR opened: #42
+
+$ raven
+🐦 Interactive REPL — type your task or /help
+  >
+```
+
 ---
 
 ## Why Raven AI?
@@ -81,6 +108,29 @@ cd web
 npm install
 npm run dev    # http://localhost:5173 (proxies to :18888)
 ```
+
+---
+
+## Comparison
+
+| Feature | Raven AI | Open Interpreter | AutoGen | ChatGPT | Copilot |
+|---------|----------|-----------------|---------|---------|---------|
+| Self-hosted | ✅ 100% | ✅ | ❌ cloud | ❌ cloud | ❌ cloud |
+| 25+ channels | ✅ | ❌ | ❌ | ✅ web only | ❌ |
+| Coding agent with LSP | ✅ | ❌ | ❌ | ❌ | ✅ basic |
+| Multi-agent orchestration | ✅ RavenFlow | ❌ | ✅ | ❌ | ❌ |
+| Voice I/O + wake word | ✅ | ❌ | ❌ | ✅ Voice | ❌ |
+| Monitors & alerts | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Scheduled routines | ✅ | ❌ | ❌ | ❌ | ❌ |
+| RAG (local-first) | ✅ ChromaDB/Qdrant | ✅ | ❌ | ❌ | ❌ |
+| RBAC multi-user | ✅ | ❌ | ❌ | ❌ | ❌ |
+| 5 sandbox profiles | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Canvas workspace | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Nodes distributed exec | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Offline mode | ✅ `--ghost` | ✅ | ❌ | ❌ | ❌ |
+| Web + Desktop app | ✅ React + Tauri | ❌ CLI only | ❌ | ✅ | ✅ IDE |
+| Open source | ✅ MIT | ✅ AGPL | ✅ Apache 2 | ❌ | ❌ |
+| Free | ✅ | ✅ | ✅ | ❌ $20/mo | ❌ $10/mo |
 
 ---
 
