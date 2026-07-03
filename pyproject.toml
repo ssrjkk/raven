@@ -38,6 +38,7 @@ secrets = ["cryptography>=41.0"]
 service-win = ["pywin32>=306"]
 tui = ["textual>=1.0"]
 tracing = ["opentelemetry-api>=1.25", "opentelemetry-sdk>=1.25"]
+voice = ["sounddevice>=0.5"]
 dev = [
     "pytest>=8.0,<10.0",
     "pytest-asyncio>=0.24,<2.0",
@@ -45,7 +46,7 @@ dev = [
     "mypy>=1.10,<2.0",
     "pre-commit>=3.0,<5.0",
 ]
-all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,dev]"]
+all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,voice,dev]"]
 
 [project.scripts]
 raven = "raven.cli.main:cli"

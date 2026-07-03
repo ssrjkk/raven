@@ -153,3 +153,46 @@ def register_all_plugins(plugins_dir: str | Path | None = None) -> int:
     for p in plugins:
         registry.register(p)
     return len(plugins)
+
+
+def register_internal_plugins(internal_plugins_dir: str | Path | None = None) -> int:
+    """Bridge: discover internal Raven plugins (raven/plugins/) and register them
+    as external Plugin objects. Returns the number of plugins registered."""
+    from raven.core.plugin_loader import PluginLoader
+
+    loader = PluginLoader()
+    if internal_plugins_dir:
+        base = Path(internal_plugins_dir)
+    else:
+        base = Path(__file__).resolve().parent.parent.parent / "raven" / "plugins"
+
+    count = 0
+    registry = get_plugin_registry()
+    for entry in sorted(base.iterdir()):
+        if not entry.is_dir():
+            continue
+        plugin_file = entry / "plugin.py"
+        if not plugin_file.is_file():
+            continue
+        try:
+            tools_from_dir = loader.load_from_dir(entry)
+            if not tools_from_dir:
+                continue
+            name = entry.name
+            tools: dict[str, dict[str, Any]] = {}
+            for t in tools_from_dir:
+                tools[t.name] = {
+                    "name": t.name,
+                    "dangerous": False,
+                    "description": t.description,
+                    "parameters": t.parameters,
+                    "handler": t.handler,
+                }
+            plugin = Plugin(name=name, tools=tools)
+            registry.register(plugin)
+            count += 1
+            logger.info("Registered internal plugin via bridge: {} ({} tool(s))", name, len(tools))
+        except Exception as exc:
+            logger.warning("Failed to bridge internal plugin {}: {}", entry.name, exc)
+    logger.info("Bridged {} internal plugin(s)", count)
+    return count

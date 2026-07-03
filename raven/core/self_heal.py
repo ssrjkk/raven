@@ -103,3 +103,7 @@ class SelfHealer:
 
 
 self_healer = SelfHealer()
+
+
+def create_self_healer() -> SelfHealer:
+    return SelfHealer()

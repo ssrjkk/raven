@@ -97,4 +97,63 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
             await ch.handle_webhook(body)
         return {"ok": True}
 
+    @router.post("/github-actions")
+    async def github_actions_webhook(body: dict[str, Any], request: Request):
+        workflow_run = body.get("workflow_run", {}) or {}
+        action = body.get("action", "")
+        conclusion = workflow_run.get("conclusion", "")
+        if action != "completed" or conclusion != "failure":
+            return {"ok": True, "skipped": True}
+        repo_info = body.get("repository", {}) or {}
+        repo_full = repo_info.get("full_name", "")
+        repo_path = repo_info.get("name", "")
+        owner = repo_full.split("/")[0] if "/" in repo_full else ""
+        head_branch = workflow_run.get("head_branch", "")
+        head_sha = workflow_run.get("head_commit", {}).get("id", "") if workflow_run.get("head_commit") else ""
+        logger.info("GitHub Actions failure: {}/{} branch={}", owner, repo_path, head_branch)
+        try:
+            from raven.qa_healer.analyzer import FailureReport, TestFailure
+            from raven.qa_healer.healer import heal_test_failure
+
+            report = FailureReport()
+            report.failed = 1
+            report.suite_name = workflow_run.get("name", "CI Pipeline")
+            report.failures.append(
+                TestFailure(
+                    test_name=f"workflow:{workflow_run.get('name', 'unknown')}",
+                    test_file="",
+                    error_message=f"Workflow '{workflow_run.get('name', '')}' failed on branch '{head_branch}' (commit {head_sha[:8]})",
+                )
+            )
+            result = await heal_test_failure(report.failures[0], ".")
+            if result.get("fix_applied"):
+                return {"ok": True, "healed": True, "branch": result.get("branch")}
+            return {"ok": True, "healed": False, "error": result.get("error")}
+        except ImportError:
+            logger.warning("qa_healer module not available, skipping auto-heal")
+            return {"ok": True}
+        except Exception as exc:
+            logger.error("Auto-heal failed: {}", exc)
+            return {"ok": True, "healed": False, "error": str(exc)}
+
+    @router.post("/allure")
+    async def allure_webhook(body: dict[str, Any], request: Request):
+        results_url = body.get("results_url", "") or body.get("results_path", "")
+        if not results_url:
+            raise HTTPException(status_code=400, detail="No results_url or results_path provided")
+        auto_pr = body.get("auto_pr", False)
+        repo_path = body.get("repo_path", ".")
+        logger.info("Allure webhook: results={}, auto_pr={}", results_url, auto_pr)
+        try:
+            from raven.qa_healer.healer import qa_heal_all
+
+            report = await qa_heal_all(results_url, repo_path, auto_pr=auto_pr)
+            return {"ok": True, "report": report}
+        except ImportError:
+            logger.warning("qa_healer module not available")
+            return {"ok": True, "message": "qa_healer not installed"}
+        except Exception as exc:
+            logger.error("Allure auto-heal failed: {}", exc)
+            return {"ok": True, "error": str(exc)}
+
     return router

@@ -572,7 +572,8 @@ def shell(cmd: str):
 @click.option("--daemon", is_flag=True, help="Run as daemon process")
 @click.option("--port", default=None, type=int, help="Web UI port")
 @click.option("--stateless", is_flag=True, default=False, help="Run without memory/context persistence")
-def start(daemon: bool, port: int | None, stateless: bool):
+@click.option("--ghost", is_flag=True, default=False, help="100% offline mode — local LLM, no external APIs")
+def start(daemon: bool, port: int | None, stateless: bool, ghost: bool):
     """Start the Raven AI gateway"""
     setup_logging()
     if daemon:
@@ -580,6 +581,11 @@ def start(daemon: bool, port: int | None, stateless: bool):
         console.print("  systemd: deploy/raven.service")
         console.print("  launchd: sudo cp deploy/com.raven.plist /Library/LaunchDaemons/")
         return
+
+    if ghost:
+        from raven.core.config import apply_ghost_mode
+        apply_ghost_mode()
+        console.print("[dim]Ghost mode: 100% offline, local LLM only[/dim]")
 
     web_port = port or settings.web_port
     gateway = create_gateway()
@@ -592,9 +598,10 @@ def start(daemon: bool, port: int | None, stateless: bool):
         title.encode(sys.stdout.encoding or "utf-8")
     except (UnicodeEncodeError, UnicodeDecodeError):
         title = "[bold blue]Raven AI[/bold blue]"
+    ghost_tag = " [bold yellow]👻 GHOST[/bold yellow]" if ghost else ""
     console.print(
         Panel.fit(
-            f"{title}\n"
+            f"{title}{ghost_tag}\n"
             f"[dim]Web UI: http://localhost:{web_port}[/dim]\n"
             f"[dim]Model: {settings.default_model}[/dim]" + ("\n[dim]Mode: stateless[/dim]" if stateless else "")
         )
@@ -1939,6 +1946,43 @@ def flow_sessions():
 
 
 @cli.command()
+@click.option("--wake/--no-wake", default=True, help="Enable/disable wake word detection")
+@click.option("--stt", default="whisper", help="STT provider: whisper, google")
+@click.option("--tts", default="edge", help="TTS provider: edge, gtts, system")
+@click.option("--model", default=None, help="LLM model override")
+@click.option("--ghost", is_flag=True, default=False, help="Offline mode — local Whisper + system TTS only")
+def voice(wake: bool, stt: str, tts: str, model: str | None, ghost: bool):
+    """Start a real-time voice conversation with Raven"""
+    if ghost:
+        from raven.core.config import apply_ghost_mode
+        apply_ghost_mode()
+        stt = "whisper"
+        tts = "system"
+    try:
+        import sounddevice  # noqa: F401
+    except ImportError:
+        console.print("[red]sounddevice not installed. Install: pip install sounddevice[/red]")
+        raise SystemExit(1) from None
+    from raven.voice.stt import STTConfig, STTProvider
+    from raven.voice.tts import TTSConfig, TTSProvider
+    stt_providers = {"whisper": STTProvider.WHISPER, "google": STTProvider.GOOGLE}
+    tts_providers = {"edge": TTSProvider.EDGETTS, "gtts": TTSProvider.GTTS, "system": TTSProvider.SYSTEM}
+    stt_config = STTConfig(provider=stt_providers.get(stt, STTProvider.WHISPER))
+    tts_config = TTSConfig(provider=tts_providers.get(tts, TTSProvider.EDGETTS))
+    from raven.core.llm import LLMRouter
+    llm = LLMRouter()
+    async def ask(text: str) -> str:
+        resp = await llm.complete([{"role": "user", "content": text}], model=model)
+        return resp.content
+    from raven.voice.conversation import VoiceConversation
+    conv = VoiceConversation(llm_ask=ask, stt_config=stt_config, tts_config=tts_config)
+    try:
+        asyncio.run(conv.start(wake_mode=wake))
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Voice conversation ended[/yellow]")
+
+
+@cli.command()
 def upgrade():
     """Update Raven AI to the latest version"""
     import subprocess
@@ -1947,13 +1991,13 @@ def upgrade():
     os.chdir(str(repo))
     if (repo / ".git").is_dir():
         console.print("[*] Pulling latest code...")
-        r = subprocess.run(["git", "pull", "--rebase"], capture_output=True, text=True)
+        r = subprocess.run(["git", "pull", "--rebase"], capture_output=True, text=True, timeout=60)
         if r.returncode != 0:
             console.print(f"[red]Git pull failed: {r.stderr.strip()}[/red]")
             raise SystemExit(1)
         console.print("[green]  OK[/green]")
     console.print("[*] Updating Python dependencies...")
-    r = subprocess.run([sys.executable, "-m", "pip", "install", "-e", "."], capture_output=True, text=True)
+    r = subprocess.run([sys.executable, "-m", "pip", "install", "-e", "."], capture_output=True, text=True, timeout=120)
     if r.returncode != 0:
         console.print(f"[yellow]pip install warning: {r.stderr.strip()}[/yellow]")
     else:
@@ -1961,7 +2005,7 @@ def upgrade():
     web_dir = repo / "web"
     if web_dir.is_dir() and (web_dir / "package.json").is_file():
         console.print("[*] Updating web frontend...")
-        r = subprocess.run(["npm", "install"], capture_output=True, text=True, cwd=str(web_dir))
+        r = subprocess.run(["npm", "install"], capture_output=True, text=True, cwd=str(web_dir), timeout=120)
         if r.returncode == 0:
             console.print("[green]  OK[/green]")
     console.print("\n[green]Upgrade complete! Run 'raven start' to apply.[/green]")

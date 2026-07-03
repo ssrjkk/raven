@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 from pydantic_settings import BaseSettings
@@ -72,6 +74,8 @@ class Settings(BaseSettings):
     sandbox_mode: str = "non-main"
     sandbox_backend: str = "subprocess"
 
+    ghost_mode: bool = False
+
     @property
     def resolved_workspace(self) -> Path | None:
         if not self.workspace_path:
@@ -118,3 +122,19 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()
+
+
+def apply_ghost_mode(overrides: dict[str, Any] | None = None) -> None:
+    s = get_settings()
+    s.ghost_mode = True
+    s.default_model = "ollama/llama3"
+    if overrides:
+        for k, v in overrides.items():
+            if hasattr(s, k):
+                setattr(s, k, v)
+    logger.info("Ghost mode activated — LLM: {}, voice: local-only", s.default_model)

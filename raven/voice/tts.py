@@ -143,4 +143,4 @@ class TextToSpeech:
             return []
 
 
-tts = TextToSpeech()
+

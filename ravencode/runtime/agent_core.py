@@ -10,7 +10,7 @@ from typing import Any, Self
 
 from loguru import logger
 
-from ravencode.runtime.cache import get_cache
+from ravencode.api.client import AIOSClient
 from ravencode.runtime.context import Conversation, MemoryStore
 from ravencode.runtime.permissions import PermissionManager, default_deny_rules
 from ravencode.runtime.tools import (
@@ -385,39 +385,30 @@ class ReActAgent:
             result = await self.llm_provider(messages)
             return result if isinstance(result, dict) else {"content": str(result)}
 
-        from ravencode.api.client import ask_stream
-
+        client = AIOSClient()
         tool_defs = get_tool_definitions(plan_mode=self.config.plan_mode)
 
-        cache = get_cache() if self.config.use_cache else None
-        if cache:
-            cached = cache.get(messages, tool_defs)
-            if cached is not None:
-                return self._parse_response(cached)
-
-        full = ""
         try:
             async with asyncio.timeout(self.config.llm_timeout):
-                async for chunk in ask_stream(messages, tools=tool_defs):
-                    full += chunk
+                resp = await client.ask_messages(messages, tools=tool_defs)
         except TimeoutError:
             return {"content": "[error: LLM call timed out]", "tool_calls": []}
 
-        if cache:
-            cache.set(messages, full, tool_defs)
-        return self._parse_response(full)
-
-    def _parse_response(self, raw: str) -> dict[str, Any]:
-        cleaned = raw.strip()
-        if cleaned.startswith("{"):
-            try:
-                import json
-                result = json.loads(cleaned)
-                if isinstance(result, dict):
-                    return result
-            except json.JSONDecodeError:
-                pass
-        return {"content": raw, "tool_calls": []}
+        tool_calls = [
+            {
+                "id": tc.get("id", ""),
+                "type": "function",
+                "function": {
+                    "name": tc.get("name", ""),
+                    "arguments": json.dumps(tc.get("arguments", {})),
+                },
+            }
+            for tc in resp.tool_calls
+        ]
+        output: dict[str, Any] = {"content": resp.text or ""}
+        if tool_calls:
+            output["tool_calls"] = tool_calls
+        return output
 
     # -----------------------------------------------------------------------
     # auto-save

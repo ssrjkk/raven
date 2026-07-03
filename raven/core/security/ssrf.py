@@ -61,6 +61,12 @@ def is_private_url(url: str) -> bool:
 
 
 def validate_url(url: str) -> str | None:
+    from raven.core.config import get_settings
+
+    if get_settings().ghost_mode:
+        if not is_private_url(url):
+            return f"Ghost mode: external URL blocked: {url[:100]}"
+        return None
     if is_private_url(url):
         return f"URL resolves to a private IP range: {url[:100]}"
     return None

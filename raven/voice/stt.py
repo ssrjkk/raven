@@ -150,4 +150,4 @@ class SpeechToText:
         return text
 
 
-stt = SpeechToText()
+

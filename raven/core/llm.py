@@ -572,7 +572,9 @@ class LLMRouter:
     def _get_provider(self, model: str) -> LLMProvider:
         if not model:
             model = settings.default_model
-        if model.startswith("openrouter/"):
+        if settings.ghost_mode:
+            key = "ollama"
+        elif model.startswith("openrouter/"):
             key = "openrouter"
         elif model.startswith("claude") or model.startswith("anthropic/"):
             key = "anthropic"

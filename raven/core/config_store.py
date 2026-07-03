@@ -9,26 +9,31 @@ CONFIG_DIR = Path.home() / ".raven"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 
-DEFAULTS: dict[str, Any] = {
-    "openrouter_api_key": "",
-    "anthropic_api_key": "",
-    "openai_api_key": "",
-    "ollama_base_url": "",
-    "default_model": "openrouter/google/gemini-2.0-flash-001",
-    "telegram_bot_token": "",
-    "discord_bot_token": "",
-    "slack_bot_token": "",
-    "web_port": 18888,
-    "web_secret_key": "",
-    "web_cors_origins": "*",
-    "dm_policy": "pairing",
-    "rate_limit_max": 60,
-    "json_log": True,
-    "log_level": "INFO",
-    "db_path": "data/raven.db",
-    "llm_retry_max": 3,
-    "pairing_code_length": 6,
-}
+def _defaults_from_settings() -> dict[str, Any]:
+    from raven.core.config import Settings
+    s = Settings()
+    return {
+        "openrouter_api_key": s.openrouter_api_key,
+        "anthropic_api_key": s.anthropic_api_key,
+        "openai_api_key": s.openai_api_key,
+        "ollama_base_url": s.ollama_base_url,
+        "default_model": s.default_model,
+        "telegram_bot_token": s.telegram_bot_token,
+        "discord_bot_token": s.discord_bot_token,
+        "slack_bot_token": s.slack_bot_token,
+        "web_port": s.web_port,
+        "web_secret_key": s.web_secret_key,
+        "web_cors_origins": s.web_cors_origins,
+        "dm_policy": s.dm_policy,
+        "rate_limit_max": s.rate_limit_max,
+        "json_log": s.json_log,
+        "log_level": s.log_level,
+        "db_path": s.db_path,
+        "llm_retry_max": s.llm_retry_max,
+    }
+
+
+DEFAULTS: dict[str, Any] = _defaults_from_settings()
 
 
 class ConfigStore:
@@ -90,7 +95,7 @@ class ConfigStore:
         }
         for cfg_key, env_key in mapping.items():
             val = self._data.get(cfg_key)
-            if val is not None:
+            if val is not None and env_key not in os.environ:
                 os.environ[env_key] = str(val)
 
 

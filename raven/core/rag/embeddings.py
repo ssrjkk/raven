@@ -7,7 +7,9 @@ from loguru import logger
 
 class EmbeddingEngine:
     def __init__(self, provider: str | None = None, model: str | None = None):
-        self.provider = provider or "local"
+        from raven.core.config import get_settings
+
+        self.provider = "local" if get_settings().ghost_mode else (provider or "local")
         self.model = model
         self._cache: dict[str, list[float]] = {}
 
