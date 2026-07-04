@@ -14,6 +14,10 @@ from raven.core.health import health
 from raven.core.jobs import job_manager
 from raven.core.metrics import metrics
 from raven.core.secrets import secrets
+from raven.core.workflow import BUILTIN_TEMPLATES, WorkflowStore
+
+_workflow_store = WorkflowStore()
+_workflow_store.register_many(BUILTIN_TEMPLATES)
 
 # --- Pydantic request models with validation ---
 
@@ -371,6 +375,34 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     async def admin_delete_secret(key: str):
         secrets.unset(key)
         return {"ok": True}
+
+    @router.get("/workflows")
+    async def admin_workflows(category: str | None = None):
+        return [
+            {
+                "id": t.id,
+                "name": t.name,
+                "description": t.description,
+                "category": t.category.value,
+                "trigger": t.trigger.value,
+                "icon": t.icon,
+                "default_schedule": t.default_schedule,
+                "default_interval": t.default_interval,
+                "config_schema": t.config_schema,
+            }
+            for t in _workflow_store.list_templates(category=category)
+        ]
+
+    @router.get("/workflows/{template_id}")
+    async def admin_workflow_detail(template_id: str):
+        t = _workflow_store.get(template_id)
+        if not t:
+            raise HTTPException(404, "Template not found")
+        return t.to_dict()
+
+    @router.get("/workflow-categories")
+    async def admin_workflow_categories():
+        return {"categories": _workflow_store.list_categories()}
 
     @router.get("/jobs")
     async def admin_jobs(status: str | None = None):
