@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import time
 import uuid
 from dataclasses import dataclass
@@ -12,6 +13,9 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
+
+AUDIT_SIGNING_KEY_ENV = "RAVEN_AUDIT_SIGNING_KEY"
+AUDIT_KEY_FILE = "data/audit_signing_key.bin"
 
 
 class AuditEventType(StrEnum):
@@ -91,27 +95,62 @@ class AuditEntry:
         return f"AuditEntry({self.event}, {self.actor}, {self.target})"
 
 
+def _load_or_generate_signing_key() -> tuple[bytes, bool]:
+    key_file = Path(AUDIT_KEY_FILE)
+    if key_file.exists():
+        return key_file.read_bytes(), False
+
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        private_key = Ed25519PrivateKey.generate()
+        raw = private_key.private_bytes_raw()
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        key_file.write_bytes(raw)
+        logger.info("Generated new Ed25519 audit signing key at {}", key_file)
+        return raw, True
+    except Exception as e:
+        logger.warning("Cannot generate Ed25519 key, signing disabled: {}", e)
+        return b"", False
+
+
 class AuditLogger:
     def __init__(
         self,
         log_path: str = "data/audit.log",
         signing_key: bytes | None = None,
-        max_bytes: int = 0,
     ):
         self._path = Path(log_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._file: io.TextIOWrapper | None = None
         self._closed = False
         self._prev_hash = ""
-        self._signing_key = signing_key
-        self._use_signing = signing_key is not None
-        self._max_bytes = max_bytes
-        self._rotated_count = 0
+
+        env_key = os.environ.get(AUDIT_SIGNING_KEY_ENV)
+        if env_key:
+            try:
+                signing_key = bytes.fromhex(env_key)
+            except Exception:
+                logger.warning("Invalid RAUEN_AUDIT_SIGNING_KEY hex, falling back")
+                signing_key = None
+
+        if signing_key is None:
+            signing_key, _generated = _load_or_generate_signing_key()
+
+        self._signing_key = signing_key or None
+        self._use_signing = self._signing_key is not None
 
     def start(self):
         self._file = self._path.open("a", encoding="utf-8")
         if self._use_signing:
             self._prev_hash = self._last_entry_hash()
+
+        if self._path.exists() and self._path.stat().st_size > 0:
+            errors = self.verify_chain()
+            if errors and not errors[0].get("valid"):
+                logger.error("Audit log chain integrity check FAILED: {} errors", len(errors))
+                for err in errors[:5]:
+                    logger.error("  [line {}] {}: {}", err.get("line"), err.get("error"), err.get("event_id"))
 
     def stop(self):
         self._closed = True
@@ -124,6 +163,14 @@ class AuditLogger:
     @property
     def is_open(self) -> bool:
         return self._file is not None and not self._closed
+
+    @property
+    def is_signed(self) -> bool:
+        return self._use_signing
+
+    @property
+    def signing_key(self) -> bytes | None:
+        return self._signing_key
 
     def _close_file(self):
         if self._file:
@@ -162,18 +209,6 @@ class AuditLogger:
             logger.warning("Audit signing failed: {}", e)
             return ""
 
-    def _rotate_if_needed(self):
-        if self._max_bytes <= 0 or not self._path.exists():
-            return
-        if self._path.stat().st_size < self._max_bytes:
-            return
-        self._close_file()
-        self._rotated_count += 1
-        rotated = self._path.with_suffix(f".{self._rotated_count}.log")
-        self._path.replace(rotated)
-        self._file = self._path.open("a", encoding="utf-8")
-        logger.info("Audit log rotated: {} -> {}", self._path, rotated)
-
     def log(
         self,
         event_type: AuditEventType | str,
@@ -185,8 +220,6 @@ class AuditLogger:
         if self._closed:
             logger.warning("Audit log is closed, dropping event")
             return
-
-        self._rotate_if_needed()
 
         entry = AuditEntry(
             timestamp=time.time(),
@@ -216,7 +249,7 @@ class AuditLogger:
     def sensitive(self, event_type: str, actor: str, target: str, outcome: bool):
         self.log(event_type, actor, target, {"sensitive": True, "outcome": outcome})
 
-    def recent(self, limit: int = 20) -> list[dict[str, Any]]:
+    def recent(self, limit: int = 50) -> list[dict[str, Any]]:
         if not self._path.exists():
             return []
         with self._path.open() as f:
@@ -225,8 +258,6 @@ class AuditLogger:
         for line in lines:
             try:
                 entry = json.loads(line)
-                if entry.get("type") == "__checkpoint__":
-                    continue
                 result.append(entry)
             except json.JSONDecodeError:
                 pass
@@ -247,8 +278,6 @@ class AuditLogger:
             for line in f:
                 try:
                     entry = json.loads(line)
-                    if entry.get("type") == "__checkpoint__":
-                        continue
                     ae = AuditEntry.from_dict(entry)
                     if event_type and ae.event != event_type:
                         continue
@@ -273,13 +302,11 @@ class AuditLogger:
         by_actor: dict[str, int] = {}
         first_ts: float | None = None
         last_ts: float | None = None
-        chain_errors = 0
+        parse_errors = 0
         with self._path.open() as f:
             for line in f:
                 try:
                     entry = json.loads(line)
-                    if entry.get("type") == "__checkpoint__":
-                        continue
                     total += 1
                     ev = entry.get("event", "unknown")
                     by_event[ev] = by_event.get(ev, 0) + 1
@@ -291,17 +318,17 @@ class AuditLogger:
                     if last_ts is None or ts > last_ts:
                         last_ts = ts
                 except json.JSONDecodeError:
-                    chain_errors += 1
+                    parse_errors += 1
         return {
             "total": total,
             "by_event": by_event,
             "by_actor": by_actor,
             "first_event": datetime.fromtimestamp(first_ts).isoformat() if first_ts else None,
             "last_event": datetime.fromtimestamp(last_ts).isoformat() if last_ts else None,
-            "parse_errors": chain_errors,
+            "parse_errors": parse_errors,
             "path": str(self._path),
             "size_bytes": self._path.stat().st_size if self._path.exists() else 0,
-            "rotations": self._rotated_count,
+            "signed": self._use_signing,
         }
 
     def verify_chain(self) -> list[dict[str, Any]]:
@@ -315,8 +342,6 @@ class AuditLogger:
             for i, line in enumerate(f, 1):
                 try:
                     entry = json.loads(line)
-                    if entry.get("type") == "__checkpoint__":
-                        continue
                     entry_count += 1
                     expected_hash = entry.get("hash", "")
                     if not expected_hash:
@@ -364,12 +389,10 @@ class AuditLogger:
             for i, line in enumerate(f, 1):
                 try:
                     entry = json.loads(line)
-                    if entry.get("type") == "__checkpoint__":
-                        continue
                     sig_hex = entry.get("signature", "")
                     if not sig_hex:
                         continue
-                    content = {k: v for k, v in entry.items() if k not in ("hash", "signature", "prev_hash")}
+                    content = {k: v for k, v in entry.items() if k != "signature"}
                     payload = json.dumps(content, sort_keys=True, default=str).encode()
                     try:
                         public_key.verify(bytes.fromhex(sig_hex), payload)

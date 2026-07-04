@@ -350,6 +350,16 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     async def admin_audit(limit: int = 50):
         return audit_logger.recent(limit)
 
+    @router.get("/audit/stats")
+    async def admin_audit_stats():
+        return audit_logger.stats()
+
+    @router.get("/audit/verify")
+    async def admin_audit_verify():
+        chain = audit_logger.verify_chain()
+        sigs = audit_logger.verify_signatures()
+        return {"chain": chain, "signatures": sigs}
+
     @router.get("/config")
     async def admin_config():
         return {

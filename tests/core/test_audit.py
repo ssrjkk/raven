@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
 
-from raven.core.audit import AuditEntry, AuditEventType, AuditLogger
+from raven.core.audit import AUDIT_SIGNING_KEY_ENV, AuditEntry, AuditEventType, AuditLogger
 
 
 def test_audit_log_basic():
@@ -102,9 +103,6 @@ def test_audit_event_type_values():
     assert AuditEventType.TOOL_EXEC.value == "tool.exec"
     assert AuditEventType.POLICY_EVAL.value == "policy.eval"
     assert AuditEventType.PII_REDACTED.value == "pii.redacted"
-
-
-# ─── New tests ──────────────────────────────────────────────────────
 
 
 def test_audit_query_by_event():
@@ -213,23 +211,6 @@ def test_audit_stats_empty():
     Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_rotation():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
-        log_path = f.name
-
-    logger = AuditLogger(log_path, max_bytes=100)
-    logger.start()
-    for i in range(50):
-        logger.log("test.event", f"user{i}")
-    logger.stop()
-
-    count_entries = len(logger.recent(limit=1000))
-    assert count_entries >= 1
-    assert logger._rotated_count >= 1
-
-    Path(log_path).unlink(missing_ok=True)
-
-
 def test_audit_entry_from_dict():
     d = {
         "timestamp": 1000.0,
@@ -282,10 +263,6 @@ def test_audit_entry_timestamp_dt():
     assert dt.year >= 1970
 
 
-
-
-
-
 def test_audit_path_property():
     logger = AuditLogger("data/test_audit.log")
     assert "test_audit.log" in str(logger.path)
@@ -305,7 +282,7 @@ def test_audit_is_open():
     Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_verify_signatures_not_enabled():
+def test_audit_verify_signatures_enabled_by_default():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
@@ -316,7 +293,7 @@ def test_audit_verify_signatures_not_enabled():
 
     result = logger.verify_signatures()
     assert len(result) >= 1
-    assert result[0].get("note") == "signing not enabled"
+    assert result[0].get("signatures_verified") is True
 
     Path(log_path).unlink(missing_ok=True)
 
@@ -330,5 +307,47 @@ def test_audit_log_without_start():
 
     entries = logger.recent()
     assert len(entries) == 0
+
+    Path(log_path).unlink(missing_ok=True)
+
+
+def test_audit_signing_key_env_var():
+    key_hex = "a" * 64
+    os.environ[AUDIT_SIGNING_KEY_ENV] = key_hex
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
+            log_path = f.name
+
+        logger = AuditLogger(log_path)
+        assert logger.is_signed
+        assert logger.signing_key == bytes.fromhex(key_hex)
+
+        Path(log_path).unlink(missing_ok=True)
+    finally:
+        os.environ.pop(AUDIT_SIGNING_KEY_ENV, None)
+
+
+def test_audit_auto_generated_key():
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
+        log_path = f.name
+
+    logger = AuditLogger(log_path)
+    assert logger.is_signed
+    assert logger.signing_key is not None
+
+    Path(log_path).unlink(missing_ok=True)
+
+
+def test_audit_stats_signed_field():
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
+        log_path = f.name
+
+    logger = AuditLogger(log_path)
+    logger.start()
+    logger.log("test.event", "user")
+    logger.stop()
+
+    s = logger.stats()
+    assert "signed" in s
 
     Path(log_path).unlink(missing_ok=True)
