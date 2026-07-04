@@ -1,18 +1,33 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Raven AI — Self-hosted corporate AI assistant. 12 messengers, RAG, monitors, coding tools, RBAC." />
-    <meta name="theme-color" content="#0f1117" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ws: wss: http://localhost:18888; font-src 'self' data:;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; connect-src 'self' ws: wss: http://localhost:18888; font-src 'self' data: https://fonts.gstatic.com;" />
     <title>Raven AI</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F426;</text></svg>" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <script>
+      (function() {
+        var theme = 'dark';
+        try { var s = localStorage.getItem('raven-theme'); if (s === 'light' || s === 'dark') theme = s; }
+        catch(e) {}
+        if (theme === 'light' && window.matchMedia('(prefers-color-scheme: light)').matches) theme = 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+        if (theme === 'light') {
+          document.documentElement.className = 'light';
+          document.querySelector('meta[name=theme-color]')?.setAttribute('content', '#f8f9fc');
+        } else {
+          document.documentElement.className = 'dark';
+        }
+      })();
+    </script>
+    <meta name="theme-color" content="#0f1117" />
   </head>
-  <body class="bg-gray-950 text-gray-100">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

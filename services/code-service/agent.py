@@ -1,23 +1,21 @@
 from __future__ import annotations
 
-import asyncio
 import json
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
-
 
 def _get_tool_registry():
-    import importlib, sys
+    import importlib
+    import sys
     _svc = Path(__file__).parent
     if str(_svc) not in sys.path:
         sys.path.insert(0, str(_svc))
     return importlib.import_module("tools").ToolRegistry
 
 
-class AgentMode(str, Enum):
+class AgentMode(StrEnum):
     BUILD = "build"
     PLAN = "plan"
     GENERAL = "general"
@@ -50,7 +48,7 @@ class RavenCodeAgent:
             ]
         messages.append({"role": "user", "content": task})
 
-        for step in range(30):
+        for _step in range(30):
             response_text = await self._llm_call(messages)
             if self._is_final(response_text):
                 messages.append({"role": "assistant", "content": response_text})
@@ -128,13 +126,13 @@ class RavenCodeAgent:
         allowed = ", ".join(_MODE_TOOLS.get(self.mode, []))
         denied = ", ".join(_MODE_DENIED.get(self.mode, [])) or "(none)"
         lines = [
-            f"You are RavenCode, an AI coding assistant.",
+            "You are RavenCode, an AI coding assistant.",
             f"Workspace: {self.workspace}",
             f"Mode: {self.mode.value}",
-            f"",
+            "",
             f"Allowed tools: {allowed}",
             f"Denied tools: {denied}",
-            f"",
+            "",
         ]
         if self.mode == AgentMode.PLAN:
             lines.append("IMPORTANT: You are in READ-ONLY mode. Analyze code, search, and plan but do NOT make changes.")

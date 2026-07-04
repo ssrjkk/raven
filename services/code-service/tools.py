@@ -89,7 +89,7 @@ class SearchTool(Tool):
                 continue
             try:
                 text = await asyncio.to_thread(p.read_text, encoding="utf-8", errors="replace")
-            except Exception:
+            except Exception:  # noqa: S112
                 continue
             for i, line in enumerate(text.splitlines(), 1):
                 if query in line:
@@ -135,7 +135,7 @@ class GrepTool(Tool):
                 continue
             try:
                 text = await asyncio.to_thread(p.read_text, encoding="utf-8", errors="replace")
-            except Exception:
+            except Exception:  # noqa: S112
                 continue
             for i, line in enumerate(text.splitlines(), 1):
                 if pattern in line:
@@ -152,7 +152,8 @@ class GrepTool(Tool):
 
 class ToolDelegateTool(Tool):
     async def execute(self, description: str, context: str | None = None) -> str:
-        import importlib, sys
+        import importlib
+        import sys
         from pathlib import Path
         _svc = Path(__file__).parent
         if str(_svc) not in sys.path:
@@ -186,7 +187,8 @@ class ToolRegistry:
         return list(self._tools.keys())
 
     def for_mode(self, mode: str) -> list[str]:
-        import importlib, sys
+        import importlib
+        import sys
         from pathlib import Path
         _svc = Path(__file__).parent
         if str(_svc) not in sys.path:

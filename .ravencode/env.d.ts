@@ -1,5 +1,3 @@
-/// <reference types="ravencode" />
-
 declare namespace RavenCode {
   interface AgentConfig {
     default: string;

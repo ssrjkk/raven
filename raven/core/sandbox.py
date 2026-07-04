@@ -6,8 +6,12 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 SANDBOX_IMAGE = "python:3.12-slim"
+
+ALLOW_ALL_NETWORK = {"allow": ["*"]}
+DENY_ALL_NETWORK = {"allow": [], "deny": ["*"]}
 
 
 class SandboxConfig:
@@ -21,6 +25,7 @@ class SandboxConfig:
         denied_tools: list[str] | None = None,
         timeout: int = 30,
         docker_image: str = SANDBOX_IMAGE,
+        network_rules: dict[str, Any] | None = None,
     ):
         self.mode = mode
         self.allow_network = allow_network
@@ -30,6 +35,15 @@ class SandboxConfig:
         self.denied_tools = denied_tools or []
         self.timeout = timeout
         self.docker_image = docker_image
+        self.network_rules = network_rules
+
+    @property
+    def effective_network_rules(self) -> dict[str, Any]:
+        if self.network_rules is not None:
+            return self.network_rules
+        if not self.allow_network:
+            return DENY_ALL_NETWORK
+        return ALLOW_ALL_NETWORK
 
 
 DEFAULT_SANDBOX = SandboxConfig(
@@ -58,7 +72,16 @@ class Sandbox:
         return "Unknown sandbox mode"
 
     async def _exec_direct(self, code: str) -> str:
-        return code
+        loop = asyncio.get_running_loop()
+        def _run():
+            try:
+                compiled = compile(code, "<sandbox>", "exec", flags=0)
+                ns: dict[str, Any] = {"__builtins__": __builtins__}
+                exec(compiled, ns)  # noqa: S102
+                return "(code executed successfully)"
+            except Exception as e:
+                return f"Error: {e}"
+        return await loop.run_in_executor(None, _run)
 
     async def _exec_subprocess(self, code: str) -> str:
         self._tmpdir = tempfile.mkdtemp(prefix="raven_sandbox_")
@@ -66,7 +89,14 @@ class Sandbox:
         with script.open("w") as f:
             f.write(code)
         env = os.environ.copy()
-        if not self.config.allow_network:
+
+        net_rules = self.config.effective_network_rules
+        allow_list = net_rules.get("allow", [])
+        has_selective_allow = allow_list and allow_list != ["*"]
+
+        if has_selective_allow:
+            env["RAVEN_NET_ALLOW"] = ",".join(allow_list)
+        elif not self.config.allow_network:
             for key in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
                 env.pop(key, None)
         proc = await asyncio.create_subprocess_exec(
@@ -92,6 +122,32 @@ class Sandbox:
                 result += f"\n[stderr]\n{err}"
         return result[:5000] or "(no output)"
 
+    def _build_net_allow_entrypoint(self) -> str | None:
+        rules = self.config.effective_network_rules
+        allow = rules.get("allow", [])
+        deny = rules.get("deny", [])
+        if not allow:
+            return None
+        if allow == ["*"] and not deny:
+            return None
+        parts = ["#!/bin/sh", "set -e"]
+        parts.append("iptables -F OUTPUT")
+        parts.append("iptables -P OUTPUT DROP")
+        parts.append("iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT")
+        parts.append("iptables -A OUTPUT -o lo -j ACCEPT")
+        for domain in allow:
+            if domain == "*":
+                parts.append("iptables -P OUTPUT ACCEPT")
+                parts.append("iptables -F OUTPUT")
+                return "\n".join(parts)
+            parts.append(f"iptables -A OUTPUT -d {domain} -j ACCEPT")
+        for domain in deny:
+            if domain == "*":
+                continue
+            parts.append(f"iptables -A OUTPUT -d {domain} -j DROP")
+        parts.append("exec \"$@\"")
+        return "\n".join(parts)
+
     async def _exec_docker(self, code: str) -> str:
         try:
             import docker
@@ -109,20 +165,38 @@ class Sandbox:
         with script_path.open("w") as f:
             f.write(code)
 
+        net_rules = self.config.effective_network_rules
+        allow_list = net_rules.get("allow", [])
+        has_selective_allow = allow_list and allow_list != ["*"]
+        net_entrypoint = self._build_net_allow_entrypoint() if has_selective_allow else None
+
+        container_kwargs: dict[str, Any] = {
+            "image": self.config.docker_image,
+            "command": ["python", "/sandbox/script.py"],
+            "working_dir": "/sandbox",
+            "volumes": {self._tmpdir: {"bind": "/sandbox", "mode": "ro"}},
+            "read_only": True,
+            "mem_limit": "256m",
+            "cpu_period": 100000,
+            "cpu_quota": 50000,
+            "pids_limit": 64,
+        }
+
+        if net_entrypoint:
+            entrypoint_path = Path(self._tmpdir) / "entrypoint.sh"
+            entrypoint_path.write_text(net_entrypoint)
+            entrypoint_path.chmod(0o755)
+            container_kwargs["volumes"][self._tmpdir] = {"bind": "/sandbox", "mode": "ro"}
+            container_kwargs["entrypoint"] = ["/bin/sh", "/sandbox/entrypoint.sh"]
+            container_kwargs["command"] = ["python", "/sandbox/script.py"]
+            container_kwargs["cap_add"] = ["NET_ADMIN", "NET_RAW"]
+            container_kwargs["network_disabled"] = False
+        else:
+            container_kwargs["network_disabled"] = not self.config.allow_network
+
         container = None
         try:
-            container = client.containers.create(
-                image=self.config.docker_image,
-                command=["python", "/sandbox/script.py"],
-                working_dir="/sandbox",
-                volumes={self._tmpdir: {"bind": "/sandbox", "mode": "ro"}},
-                network_disabled=not self.config.allow_network,
-                read_only=True,
-                mem_limit="256m",
-                cpu_period=100000,
-                cpu_quota=50000,
-                pids_limit=64,
-            )
+            container = client.containers.create(**container_kwargs)
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, container.start)
             exit_code = await loop.run_in_executor(

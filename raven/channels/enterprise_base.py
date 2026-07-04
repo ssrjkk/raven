@@ -23,22 +23,17 @@ class RateLimiter:
         self._lock = asyncio.Lock()
 
     async def acquire(self):
-        await self._lock.acquire()
-        try:
+        async with self._lock:
             now = time.monotonic()
             elapsed = now - self._last_refill
             self._tokens = min(float(self._max), self._tokens + elapsed * (self._max / 60.0))
             self._last_refill = now
             if self._tokens < 1:
                 wait = (1 - self._tokens) * (60.0 / self._max)
-                self._lock.release()
                 await asyncio.sleep(wait)
-                await self._lock.acquire()
-                self._tokens -= 1
+                self._tokens = 0
             else:
                 self._tokens -= 1
-        finally:
-            self._lock.release()
 
 
 class EnterpriseChannel(BaseChannel):

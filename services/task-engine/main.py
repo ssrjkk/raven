@@ -21,7 +21,9 @@ from services.observability_sdk.outbox_poller import OutboxPoller
 try:
     from opentelemetry_setup import setup_opentelemetry
 except ImportError:
-    def setup_opentelemetry(app=None, service_name=None): pass
+    def setup_opentelemetry(app=None, service_name=None):
+        from loguru import logger
+        logger.warning("OpenTelemetry not available — install opentelemetry packages or ignore if not needed")
 
 app = FastAPI(title="Task Engine", version="1.0.0")
 setup_opentelemetry(app, service_name="task-engine")

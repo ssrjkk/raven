@@ -24,6 +24,31 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+        if: matrix.language == 'go'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+        if: matrix.language == 'javascript-typescript'
+
+      - name: Install web deps
+        run: npm ci
+        working-directory: web
+        if: matrix.language == 'javascript-typescript'
+
+      - name: Install .ravencode deps (zod)
+        run: npm install
+        working-directory: .ravencode
+        if: matrix.language == 'javascript-typescript'
+
       - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}

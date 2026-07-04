@@ -13,7 +13,9 @@ from loguru import logger
 try:
     from opentelemetry_setup import setup_opentelemetry
 except ImportError:
-    def setup_opentelemetry(app=None, service_name=None): pass
+    def setup_opentelemetry(app=None, service_name=None):
+        from loguru import logger
+        logger.warning("OpenTelemetry not available — install opentelemetry packages or ignore if not needed")
 
 app = FastAPI(title="Code Service", version="1.0.0")
 setup_opentelemetry(app, service_name="code-service")
@@ -129,7 +131,8 @@ async def execute_code(request: dict):
 
 
 def _import_module(name: str):
-    import importlib, sys
+    import importlib
+    import sys
     from pathlib import Path
     _svc = Path(__file__).parent
     if str(_svc) not in sys.path:
@@ -151,7 +154,7 @@ async def agent_run(request: dict):
     try:
         mode = _a.AgentMode(mode_str)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid mode: {mode_str}. Use build, plan, or general")
+        raise HTTPException(status_code=400, detail=f"Invalid mode: {mode_str}. Use build, plan, or general") from None
 
     agent = _a.RavenCodeAgent(mode=mode, workspace=workspace)
     try:
@@ -159,7 +162,7 @@ async def agent_run(request: dict):
         return {"response": result[:10000], "mode": mode.value}
     except Exception as e:
         logger.error("Agent run failed: {}", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/api/v1/context/index", summary="Index codebase", description="Index the codebase using AST parsing and embeddings.")
@@ -172,7 +175,7 @@ async def context_index(request: dict):
         stats = await ctx.index_codebase()
         return {"indexed": stats.get("files", 0), "chunks": stats.get("chunks", 0)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/api/v1/context/search", summary="Search codebase", description="Semantic search across indexed codebase.")
@@ -191,7 +194,7 @@ async def context_search(request: dict):
         results = await ctx.search(query, top_k=top_k)
         return {"results": results}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 if __name__ == "__main__":

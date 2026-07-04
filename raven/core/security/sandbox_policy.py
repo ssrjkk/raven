@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -17,6 +18,7 @@ class SandboxPolicy:
     timeout_seconds: int = 30
     docker_image: str = "python:3.12-slim"
     sandbox_mode: str = "docker"
+    network_rules: dict[str, Any] | None = None
 
 
 MAIN_SESSION_POLICY = SandboxPolicy(
@@ -45,11 +47,12 @@ CODE_EXECUTION_POLICY = SandboxPolicy(
     allowed_tools=["read", "write", "bash", "process"],
     denied_tools=["browser_open", "browser_screenshot", "web_search", "web_fetch",
                   "network", "nodes", "cron", "gateway", "canvas"],
-    allow_network=False,
+    allow_network=True,
     max_memory_mb=256,
     max_cpu_percent=50,
     timeout_seconds=30,
     sandbox_mode="docker",
+    network_rules={"allow": ["pypi.org", "github.com", "files.pythonhosted.org"], "deny": ["*"]},
 )
 
 WEB_BROWSING_POLICY = SandboxPolicy(

@@ -34,7 +34,9 @@ def _resolve_host(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Addre
                 except ValueError:
                     continue
         return result
-    except Exception:
+    except Exception as exc:
+        from loguru import logger
+        logger.debug("SSRF DNS resolution failed for {}: {}", host, exc)
         return []
 
 
@@ -50,13 +52,17 @@ def is_private_url(url: str) -> bool:
         for ip in ips:
             if any(ip in net for net in PRIVATE_NETS):
                 return True
-    except Exception:
-        try:
-            ip = ipaddress.ip_address(host)
-            if any(ip in net for net in PRIVATE_NETS):
-                return True
-        except ValueError:
-            pass
+    except Exception as exc:
+        from loguru import logger
+        logger.debug("SSRF IP resolution error for {}: {}", host, exc)
+        pass
+    try:
+        ip = ipaddress.ip_address(host)
+        if any(ip in net for net in PRIVATE_NETS):
+            return True
+    except ValueError:
+        from loguru import logger
+        logger.debug("SSRF host '{}' is not an IP and DNS resolution failed", host)
     return host.endswith(".local") or host.endswith(".internal")
 
 

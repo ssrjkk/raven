@@ -96,6 +96,21 @@ class AuditEntry:
         return f"AuditEntry({self.event}, {self.actor}, {self.target})"
 
 
+def _restrict_key_file(path: Path):
+    try:
+        import subprocess
+
+        if os.name == "nt":
+            username = os.environ.get("USERNAME") or os.environ.get("USER", "")
+            if username:
+                subprocess.run(
+                    ["icacls", str(path), "/inheritance:r", "/grant", f"{username}:F"],
+                    capture_output=True,
+                )
+    except Exception as exc:
+        logger.warning("Failed to restrict key file permissions: {}", exc)
+
+
 def _load_or_generate_signing_key() -> tuple[bytes, bool]:
     key_file = Path(AUDIT_KEY_FILE)
     if key_file.exists():
@@ -108,6 +123,7 @@ def _load_or_generate_signing_key() -> tuple[bytes, bool]:
         raw = private_key.private_bytes_raw()
         key_file.parent.mkdir(parents=True, exist_ok=True)
         key_file.write_bytes(raw)
+        _restrict_key_file(key_file)
         logger.info("Generated new Ed25519 audit signing key at {}", key_file)
         return raw, True
     except Exception as e:
@@ -141,6 +157,7 @@ class AuditLogger:
 
         self._signing_key = signing_key or None
         self._use_signing = self._signing_key is not None
+        self._public_key: Any = None
 
     def start(self):
         self._file = self._path.open("a", encoding="utf-8")
@@ -384,15 +401,24 @@ class AuditLogger:
                     errors.append({"line": i, "error": "parse_error"})
         return errors or [{"valid": True, "entries": entry_count, "lines_scanned": i}]
 
-    def verify_signatures(self) -> list[dict[str, Any]]:
-        if not self._use_signing or not self._path.exists():
-            return [{"valid": True, "note": "signing not enabled"}]
+    def _get_public_key(self) -> Any:
+        if self._public_key is not None:
+            return self._public_key
         try:
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
             private_key = Ed25519PrivateKey.from_private_bytes(self._signing_key or b"")
-            public_key = private_key.public_key()
-        except Exception:
+            self._public_key = private_key.public_key()
+        except Exception as exc:
+            logger.warning("Cannot derive Ed25519 public key: {}", exc)
+            return None
+        return self._public_key
+
+    def verify_signatures(self) -> list[dict[str, Any]]:
+        if not self._use_signing or not self._path.exists():
+            return [{"valid": True, "note": "signing not enabled"}]
+        public_key = self._get_public_key()
+        if public_key is None:
             return [{"valid": False, "note": "cannot derive public key"}]
         errors: list[dict[str, Any]] = []
         with self._path.open() as f:

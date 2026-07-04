@@ -16,10 +16,30 @@ const ThemeContext = createContext<ThemeContextValue>({
   setTheme: () => {},
 });
 
+function safeGetItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetItem(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* quota exceeded or private mode */
+  }
+}
+
 function getInitialTheme(): Theme {
-  const stored = localStorage.getItem("raven-theme");
+  const stored = safeGetItem("raven-theme");
   if (stored === "light" || stored === "dark") return stored;
-  if (window.matchMedia("(prefers-color-scheme: light)").matches) return "light";
+  try {
+    if (window.matchMedia("(prefers-color-scheme: light)").matches) return "light";
+  } catch {
+    /* matchMedia not supported */
+  }
   return "dark";
 }
 
@@ -45,18 +65,22 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     applyTokens(theme);
+    const meta = document.querySelector("meta[name=theme-color]");
+    if (meta) {
+      meta.setAttribute("content", theme === "dark" ? "#0f1117" : "#f8f9fc");
+    }
   }, [theme]);
 
   const toggleTheme = useCallback(() => {
     setThemeState((prev) => {
       const next = prev === "dark" ? "light" : "dark";
-      localStorage.setItem("raven-theme", next);
+      safeSetItem("raven-theme", next);
       return next;
     });
   }, []);
 
   const setTheme = useCallback((t: Theme) => {
-    localStorage.setItem("raven-theme", t);
+    safeSetItem("raven-theme", t);
     setThemeState(t);
   }, []);
 

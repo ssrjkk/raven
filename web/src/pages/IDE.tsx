@@ -1,29 +1,10 @@
 import { useState, useRef, useCallback } from "react"
 import Editor from "@monaco-editor/react"
-import { getToken } from "../api/client"
+import { request } from "../api/client"
 
 interface TerminalLine {
   input: string
   output: string
-}
-
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getToken()
-  const headers: Record<string, string> = { "Content-Type": "application/json" }
-  if (token) headers["Authorization"] = `Bearer ${token}`
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 15000)
-  try {
-    const res = await fetch(path, { headers, signal: controller.signal, ...init })
-    if (res.status === 401 && window.location.pathname !== "/login") {
-      window.location.href = "/login"
-      throw new Error("Unauthorized")
-    }
-    if (!res.ok) throw new Error(`API ${path}: ${res.status}`)
-    return res.json()
-  } finally {
-    clearTimeout(timeout)
-  }
 }
 
 type AgentMode = "build" | "plan" | "general"
@@ -42,7 +23,7 @@ export default function IDEPage() {
   const [agentMode, setAgentMode] = useState<AgentMode>("build")
   const [terminalInput, setTerminalInput] = useState("")
   const [terminalHistory, setTerminalHistory] = useState<TerminalLine[]>([])
-  const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFile[]>([])
+  const [workspaceFiles] = useState<WorkspaceFile[]>([])
   const [indexStatus, setIndexStatus] = useState<string>("")
   const terminalEndRef = useRef<HTMLDivElement>(null)
 
@@ -53,7 +34,7 @@ export default function IDEPage() {
   async function runAI() {
     setOutput("Thinking...")
     try {
-      const data = await apiFetch<{ response?: string }>("/api/v1/agent/run", {
+      const data = await request<{ response?: string }>("/api/v1/agent/run", {
         method: "POST",
         body: JSON.stringify({ task: aiPrompt, mode: agentMode, workspace: "." }),
       })
@@ -66,7 +47,7 @@ export default function IDEPage() {
   async function indexCodebase() {
     setIndexStatus("Indexing...")
     try {
-      const data = await apiFetch<{ indexed: number }>("/api/v1/context/index", {
+      const data = await request<{ indexed: number }>("/api/v1/context/index", {
         method: "POST",
         body: JSON.stringify({ workspace: "." }),
       })
@@ -80,7 +61,7 @@ export default function IDEPage() {
     if (!aiPrompt.trim()) return
     setOutput("Searching...")
     try {
-      const data = await apiFetch<{ results: { content: string; file: string; score: number }[] }>("/api/v1/context/search", {
+      const data = await request<{ results: { content: string; file: string; score: number }[] }>("/api/v1/context/search", {
         method: "POST",
         body: JSON.stringify({ query: aiPrompt, top_k: 5 }),
       })
@@ -98,7 +79,7 @@ export default function IDEPage() {
     setTerminalHistory(h => [...h, { input: cmd, output: "Processing..." }])
     scrollTerminal()
     try {
-      const data = await apiFetch<{ output?: string; error?: string }>("/api/v1/agent/execute", {
+      const data = await request<{ output?: string; error?: string }>("/api/v1/agent/execute", {
         method: "POST",
         body: JSON.stringify({ command: cmd, context: "ide-terminal" }),
       })

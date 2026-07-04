@@ -300,6 +300,42 @@ class OllamaProvider(LLMProvider):
         return LLMResponse(content=content, tool_calls=tool_calls, finish_reason="stop")
 
 
+class VLLMProvider(LLMProvider):
+    """vLLM — OpenAI-compatible API, runs on RunPod / self-hosted GPU."""
+    def __init__(self, **overrides):
+        self.base_url = overrides.get("base_url") or settings.vllm_base_url
+        self.api_key = overrides.get("api_key") or ""
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
+
+    async def cleanup(self):
+        await self.http.aclose()
+
+    async def complete_stream(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> AsyncIterator[str]:
+        body = {"model": model.replace("vllm/", ""), "messages": messages, "stream": True}
+        if tools:
+            body["tools"] = tools
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        async for token in _stream_sse(self.http, f"{self.base_url}/v1/chat/completions", body, headers):
+            yield token
+
+    async def complete(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> LLMResponse:
+        body = {"model": model.replace("vllm/", ""), "messages": messages}
+        if tools:
+            body["tools"] = tools
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        resp = await self.http.post(f"{self.base_url}/v1/chat/completions", json=body, headers=headers)
+        resp.raise_for_status()
+        return _parse_openai_response(resp.json())
+
+
 class AzureProvider(LLMProvider):
     """Azure OpenAI — OpenAI-compatible API via Azure."""
     def __init__(self, **overrides):
@@ -582,7 +618,8 @@ class LLMRouter:
             key = "ollama"
         elif model.startswith("gpt") or model.startswith("o1") or model.startswith("o3"):
             key = "openai"
-        elif model.startswith("azure/"):
+        elif model.startswith("vllm/"):
+            key = "vllm"
             key = "azure"
         elif model.startswith("copilot/"):
             key = "copilot"
@@ -598,6 +635,7 @@ class LLMRouter:
                 "anthropic": AnthropicProvider,
                 "ollama": OllamaProvider,
                 "openai": OpenAIProvider,
+                "vllm": VLLMProvider,
                 "azure": AzureProvider,
                 "copilot": CopilotProvider,
                 "vertex": VertexAIProvider,

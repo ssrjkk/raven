@@ -25,16 +25,23 @@ class ModelFailover:
 
     def _build_models(self):
         models = []
+        # 1. LOCAL — free, always available
         if settings.ollama_base_url:
-            models.append(ModelConfig("ollama", "llama3", 1.0))
+            models.append(ModelConfig("ollama", "qwen3:8b", 1.0))
+            models.append(ModelConfig("ollama", "llama3", 0.9))
             models.append(ModelConfig("ollama", "mistral", 0.8))
+        # 2. SELF-HOSTED GPU — cheap cloud inference
+        if settings.vllm_base_url:
+            models.append(ModelConfig("vllm", "qwen3-8b", 0.7))
+        # 3. FREE TIER CLOUD — OpenRouter free models
         if settings.openrouter_api_key:
-            m = settings.default_model or "openrouter/openai/gpt-4o"
-            models.append(ModelConfig("openrouter", m, 0.7))
+            m = settings.default_model or "openrouter/openai/gpt-4o-mini"
+            models.append(ModelConfig("openrouter", m, 0.6))
+        # 4. PAID CLOUD — premium backup
         if settings.anthropic_api_key:
-            models.append(ModelConfig("anthropic", "claude-sonnet-4-20250514", 0.6))
+            models.append(ModelConfig("anthropic", "claude-sonnet-4-20250514", 0.5))
         if settings.openai_api_key:
-            models.append(ModelConfig("openai", "gpt-4o", 0.5))
+            models.append(ModelConfig("openai", "gpt-4o", 0.4))
         self._models = models
 
     async def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> LLMResponse:

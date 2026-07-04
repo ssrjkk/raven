@@ -23,7 +23,17 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     ollama_base_url: str = "http://localhost:11434"
+    vllm_base_url: str = ""
     default_model: str = "ollama/llama3"
+
+    # --- Tier / rate limits ---
+    tier_default: str = "free"
+    tier_free_rpd: int = 50
+    tier_free_rpm: int = 20
+    tier_free_concurrent: int = 1
+    tier_pro_rpd: int = 10_000
+    tier_pro_rpm: int = 100
+    tier_pro_concurrent: int = 5
 
     telegram_bot_token: str = ""
     discord_bot_token: str = ""

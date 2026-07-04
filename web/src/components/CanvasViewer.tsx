@@ -224,11 +224,14 @@ export default function CanvasViewer({ sessionId, className }: { sessionId: stri
         const data = JSON.parse(evt.data) as CanvasState;
         setCanvas(data);
         setError(null);
-      } catch {
-        // ignore
+      } catch (e) {
+        console.error("Canvas fetch failed:", e);
       }
     };
-    sock.onerror = () => setError("Canvas connection lost");
+    sock.onerror = (e) => {
+      console.error("Canvas WS error:", e);
+      setError("Canvas connection lost");
+    };
     sock.onclose = () => {
       if (ws.current) return;
       setTimeout(() => {
@@ -245,7 +248,7 @@ export default function CanvasViewer({ sessionId, className }: { sessionId: stri
       method: "POST",
       headers: { "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) },
       body: JSON.stringify({ component_id: componentId, action, data }),
-    }).catch(() => {});
+    }).catch((e) => console.error("Canvas action fetch failed:", e));
   }, [sessionId]);
 
   if (error) {

@@ -83,3 +83,39 @@ async def test_sandbox_default_config():
     s = Sandbox()
     assert s.config.mode == "none"
     assert s.config.denied_tools == []
+
+
+class TestNetworkRules:
+    def test_effective_network_rules_default_deny(self):
+        cfg = SandboxConfig(mode="subprocess", allow_network=False)
+        rules = cfg.effective_network_rules
+        assert rules["allow"] == []
+        assert rules["deny"] == ["*"]
+
+    def test_effective_network_rules_default_allow(self):
+        cfg = SandboxConfig(mode="subprocess", allow_network=True)
+        rules = cfg.effective_network_rules
+        assert rules["allow"] == ["*"]
+
+    def test_effective_network_rules_custom(self):
+        cfg = SandboxConfig(mode="docker", allow_network=True, network_rules={"allow": ["pypi.org"]})
+        rules = cfg.effective_network_rules
+        assert rules["allow"] == ["pypi.org"]
+
+    def test_build_net_entrypoint_full_deny(self):
+        cfg = SandboxConfig(mode="docker", allow_network=False)
+        s = Sandbox(cfg)
+        assert s._build_net_allow_entrypoint() is None
+
+    def test_build_net_entrypoint_selective_allow(self):
+        cfg = SandboxConfig(mode="docker", allow_network=True, network_rules={"allow": ["pypi.org"], "deny": ["*"]})
+        s = Sandbox(cfg)
+        ep = s._build_net_allow_entrypoint()
+        assert ep is not None
+        assert "iptables" in ep
+        assert "pypi.org" in ep
+
+    def test_build_net_entrypoint_wildcard_allow(self):
+        cfg = SandboxConfig(mode="docker", allow_network=True, network_rules={"allow": ["*"]})
+        s = Sandbox(cfg)
+        assert s._build_net_allow_entrypoint() is None
