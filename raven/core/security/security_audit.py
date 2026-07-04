@@ -9,7 +9,6 @@ from typing import Any
 from loguru import logger
 
 from raven.core.config import settings
-from raven.core.secrets import secrets
 
 
 class AuditCheck:
@@ -155,8 +154,8 @@ class SecurityAudit:
 
     def _check_secrets_encryption(self):
         c = self._add("secrets_encryption", "Secrets are encrypted with Fernet", "high")
-        if hasattr(secrets, "_fernet") and secrets._fernet:
-            c.ok("Fernet encryption available")
+        if "RAVEN_MASTER_KEY" in os.environ:
+            c.ok("Fernet encryption available (RAVEN_MASTER_KEY set)")
         else:
             c.fail(
                 "Secrets not encrypted — install cryptography and set RAVEN_MASTER_KEY",

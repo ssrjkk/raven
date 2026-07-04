@@ -101,7 +101,7 @@ async def error_handler_middleware(request: Request, call_next):
         return await call_next(request)
     except AppError as e:
         status = {ErrorCode.AUTH_DENIED: 403, ErrorCode.RATE_LIMITED: 429, ErrorCode.NOT_FOUND: 404}.get(e.code, 400)
-        audit_logger.log(AuditEventType.ERROR, "api", request.url.path, detail=e.to_dict())
+        await audit_logger.log(AuditEventType.ERROR, "api", request.url.path, detail=e.to_dict())
         return JSONResponse(status_code=status, content=e.to_dict())
     except Exception as e:
         classify_error(e)

@@ -15,6 +15,14 @@ if TYPE_CHECKING:
     from raven.core.task_engine.tool_registry import ToolRegistry
 
 
+def _apply_schema_defaults(config: dict[str, Any] | None, schema: dict[str, Any]) -> dict[str, Any]:
+    cfg = dict(config or {})
+    for key, prop in schema.get("properties", {}).items():
+        if key not in cfg and "default" in prop:
+            cfg[key] = prop["default"]
+    return cfg
+
+
 class TemplateRunner:
     def __init__(
         self,
@@ -35,8 +43,12 @@ class TemplateRunner:
         channel: str = "internal",
         config: dict[str, Any] | None = None,
     ) -> str:
-        cfg = config or {}
-        goal = (template.steps_goal or template.description).format(**cfg)
+        cfg = _apply_schema_defaults(config, template.config_schema)
+        try:
+            goal = (template.steps_goal or template.description).format(**cfg)
+        except (KeyError, ValueError) as e:
+            raise ValueError(f"Invalid config for template '{template.id}': {e}") from e
+
         task_id = uuid.uuid4().hex[:16]
 
         from raven.core.task_engine.models import Task, TaskPriority, TaskStatus, TaskStep
@@ -69,9 +81,17 @@ class TemplateRunner:
             from raven.core.task_engine.planner import TaskPlanner
 
             planner = TaskPlanner(self._tools)
-            planned = await planner.plan(goal=goal, llm=self._llm, task_id=task_id, user_id=user_id, channel=channel)
+            try:
+                planned = await planner.plan(goal=goal, llm=self._llm, task_id=task_id, user_id=user_id, channel=channel)
+            except Exception as e:
+                raise RuntimeError(f"Task planning failed for template '{template.id}': {e}") from e
             task.steps = planned.steps
             task.plan_summary = planned.plan_summary
+        else:
+            raise ValueError(
+                f"Template '{template.id}' has no predefined steps and no LLM is configured. "
+                "Provide predefined_steps or configure an LLM."
+            )
 
         await self._task_runner.submit(task)
         logger.info("Instantiated workflow '{}' -> task {}", template.name, task_id)
@@ -84,7 +104,7 @@ class TemplateRunner:
         user_id: str = "system",
         channel: str = "internal",
         config: dict[str, Any] | None = None,
-    ) -> str | None:
+    ) -> str:
         from raven.core.routine.models import Routine, RoutineAction, RoutineStatus, RoutineTrigger
 
         trigger_map = {
@@ -93,26 +113,41 @@ class TemplateRunner:
             TemplateTrigger.MANUAL: RoutineTrigger.MANUAL,
             TemplateTrigger.EVENT: RoutineTrigger.EVENT,
         }
+        trigger = trigger_map.get(template.trigger, RoutineTrigger.MANUAL)
+        suffix = uuid.uuid4().hex[:8]
+        routine_id = f"{template.id}-{user_id}-{suffix}"
+
+        if trigger == RoutineTrigger.INTERVAL and template.default_interval is not None:
+            schedule = str(template.default_interval)
+        elif template.default_schedule is not None:
+            schedule = template.default_schedule
+        else:
+            schedule = "08:00"
+
         routine = Routine(
-            id=f"{template.id}-{user_id}",
+            id=routine_id,
             name=template.name,
             action=RoutineAction.SEND_MESSAGE,
-            trigger=trigger_map.get(template.trigger, RoutineTrigger.MANUAL),
-            schedule=template.default_schedule or "08:00",
+            trigger=trigger,
+            schedule=schedule,
             status=RoutineStatus.ACTIVE,
             user_id=user_id,
             channel=channel,
             config={"template_id": template.id, "template_config": config or {}},
             created_at=time.time(),
         )
+        from raven.core.routine.engine import RoutineEngine
         from raven.core.routine.store import RoutineStore
 
         store = RoutineStore(db_path)
-        store.save_routine(routine)
-        logger.info("Scheduled workflow '{}' as routine {}", template.name, routine.id)
+        try:
+            store.save_routine(routine)
+            logger.info("Scheduled workflow '{}' as routine {}", template.name, routine_id)
 
-        from raven.core.routine.engine import RoutineEngine
-
-        engine = RoutineEngine(store)
-        await engine.start()
-        return routine.id
+            engine = RoutineEngine(store)
+            await engine.start()
+        except Exception:
+            store.delete_routine(routine_id)
+            logger.error("Failed to start routine engine for '{}', rolled back", routine_id)
+            raise
+        return routine_id

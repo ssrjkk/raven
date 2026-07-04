@@ -14,7 +14,7 @@ class AlertDispatcher:
 
     async def dispatch(self, monitor: Monitor, check: MonitorCheck, message: str):
         logger.info("Alert: {} — {}", monitor.name, message)
-        audit_logger.log(
+        await audit_logger.log(
             AuditEventType.MESSAGE_RECEIVED,
             "alert",
             monitor.id,

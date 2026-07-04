@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import json
@@ -125,13 +126,14 @@ class AuditLogger:
         self._file: io.TextIOWrapper | None = None
         self._closed = False
         self._prev_hash = ""
+        self._lock = asyncio.Lock()
 
         env_key = os.environ.get(AUDIT_SIGNING_KEY_ENV)
         if env_key:
             try:
                 signing_key = bytes.fromhex(env_key)
             except Exception:
-                logger.warning("Invalid RAUEN_AUDIT_SIGNING_KEY hex, falling back")
+                logger.warning("Invalid RAVEN_AUDIT_SIGNING_KEY hex, falling back")
                 signing_key = None
 
         if signing_key is None:
@@ -152,9 +154,10 @@ class AuditLogger:
                 for err in errors[:5]:
                     logger.error("  [line {}] {}: {}", err.get("line"), err.get("error"), err.get("event_id"))
 
-    def stop(self):
-        self._closed = True
-        self._close_file()
+    async def stop(self):
+        async with self._lock:
+            self._closed = True
+            self._close_file()
 
     @property
     def path(self) -> Path:
@@ -209,7 +212,7 @@ class AuditLogger:
             logger.warning("Audit signing failed: {}", e)
             return ""
 
-    def log(
+    async def log(
         self,
         event_type: AuditEventType | str,
         actor: str,
@@ -217,37 +220,44 @@ class AuditLogger:
         detail: Any = None,
         channel: str = "",
     ):
-        if self._closed:
-            logger.warning("Audit log is closed, dropping event")
-            return
+        async with self._lock:
+            if self._closed:
+                logger.warning("Audit log is closed, dropping event")
+                return
 
-        entry = AuditEntry(
-            timestamp=time.time(),
-            event_id=uuid.uuid4().hex[:16],
-            event=event_type.value if isinstance(event_type, AuditEventType) else event_type,
-            actor=actor,
-            target=target,
-            detail=detail,
-            channel=channel,
-        )
-
-        if self._use_signing:
-            entry.prev_hash = self._prev_hash
-            entry.hash = self._compute_hash(
-                {k: v for k, v in entry.to_dict().items() if k not in ("prev_hash", "hash", "signature")}
+            entry = AuditEntry(
+                timestamp=time.time(),
+                event_id=uuid.uuid4().hex[:16],
+                event=event_type.value if isinstance(event_type, AuditEventType) else event_type,
+                actor=actor,
+                target=target,
+                detail=detail,
+                channel=channel,
             )
-            entry.signature = self._compute_signature(json.dumps(entry.to_dict(), sort_keys=True, default=str).encode())
-            self._prev_hash = entry.hash
 
-        line = json.dumps(entry.to_dict(), default=str)
-        if self._file:
-            self._file.write(line + "\n")
-            self._file.flush()
+            if self._use_signing:
+                entry.prev_hash = self._prev_hash
+                entry.hash = self._compute_hash(
+                    {k: v for k, v in entry.to_dict().items() if k not in ("prev_hash", "hash", "signature")}
+                )
+                entry.signature = self._compute_signature(json.dumps(entry.to_dict(), sort_keys=True, default=str).encode())
+                self._prev_hash = entry.hash
+
+            line = json.dumps(entry.to_dict(), default=str)
+            if not self._file:
+                logger.warning("Audit log not started, dropping event")
+                return
+            try:
+                self._file.write(line + "\n")
+                self._file.flush()
+                os.fsync(self._file.fileno())
+            except OSError as e:
+                logger.error("Audit log write failed: {}", e)
 
         logger.debug("[audit] {} | {} | {}", entry.event, actor, target)
 
-    def sensitive(self, event_type: str, actor: str, target: str, outcome: bool):
-        self.log(event_type, actor, target, {"sensitive": True, "outcome": outcome})
+    async def sensitive(self, event_type: str, actor: str, target: str, outcome: bool):
+        await self.log(event_type, actor, target, {"sensitive": True, "outcome": outcome})
 
     def recent(self, limit: int = 50) -> list[dict[str, Any]]:
         if not self._path.exists():

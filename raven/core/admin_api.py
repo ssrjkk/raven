@@ -188,7 +188,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
             config=body.config,
         )
         store.save_monitor(monitor)
-        audit_logger.log(AuditEventType.COMMAND, "admin", "monitor.create", detail={"monitor_id": monitor.id})
+        await audit_logger.log(AuditEventType.COMMAND, "admin", "monitor.create", detail={"monitor_id": monitor.id})
         return {"ok": True, "id": monitor.id}
 
     @router.put("/monitors/{monitor_id}")
@@ -225,7 +225,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
                 for c in body.conditions
             ]
         store.save_monitor(existing)
-        audit_logger.log(AuditEventType.COMMAND, "admin", "monitor.update", detail={"monitor_id": monitor_id})
+        await audit_logger.log(AuditEventType.COMMAND, "admin", "monitor.update", detail={"monitor_id": monitor_id})
         return {"ok": True}
 
     @router.delete("/monitors/{monitor_id}")
@@ -238,7 +238,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         if not m:
             raise HTTPException(404, "Monitor not found")
         store.delete_monitor(monitor_id)
-        audit_logger.log(AuditEventType.COMMAND, "admin", "monitor.delete", detail={"monitor_id": monitor_id})
+        await audit_logger.log(AuditEventType.COMMAND, "admin", "monitor.delete", detail={"monitor_id": monitor_id})
         return {"ok": True}
 
     @router.post("/monitors/{monitor_id}/check")
@@ -321,7 +321,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         try:
             await ch.stop()
             await ch.start()
-            audit_logger.log(AuditEventType.CHANNEL_START, "admin", channel_id)
+            await audit_logger.log(AuditEventType.CHANNEL_START, "admin", channel_id)
             return {"ok": True, "channel": channel_id}
         except Exception as e:
             raise HTTPException(500, str(e)) from e
@@ -377,13 +377,13 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
 
     @router.post("/secrets/{key}")
     async def admin_set_secret(key: str, body: SecretRequest):
-        secrets.set(key, body.value)
-        audit_logger.sensitive("secrets.set", "admin", key, True)
+        await secrets.set(key, body.value)
+        await audit_logger.sensitive("secrets.set", "admin", key, True)
         return {"ok": True}
 
     @router.delete("/secrets/{key}")
     async def admin_delete_secret(key: str):
-        secrets.unset(key)
+        await secrets.unset(key)
         return {"ok": True}
 
     @router.get("/workflows")
@@ -426,7 +426,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     @router.post("/shutdown")
     async def admin_shutdown(request: Request):
         logger.warning("Admin shutdown requested")
-        audit_logger.log(AuditEventType.SYSTEM_SHUTDOWN, "admin", "system")
+        await audit_logger.log(AuditEventType.SYSTEM_SHUTDOWN, "admin", "system")
         stop_event = request.app.state.stop_event if hasattr(request.app.state, "stop_event") else None
         if stop_event:
             stop_event.set()
@@ -482,7 +482,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
 
         config_store.set(body.key, body.value)
         config_store.save()
-        audit_logger.log(AuditEventType.COMMAND, "admin", "config.update", detail={"key": body.key})
+        await audit_logger.log(AuditEventType.COMMAND, "admin", "config.update", detail={"key": body.key})
         return {"ok": True}
 
     return router

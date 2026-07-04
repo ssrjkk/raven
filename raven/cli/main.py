@@ -54,7 +54,6 @@ from raven.core.monitor.store import MonitorStore
 from raven.core.plugin_loader import PluginLoader
 from raven.core.routine.engine import RoutineEngine
 from raven.core.routine.store import RoutineStore
-from raven.core.secrets import secrets
 from raven.core.webhooks import create_webhook_router
 from raven.monitors.register_all import register_all_monitors
 from raven.routines.register_all import register_all_routines
@@ -73,12 +72,11 @@ def create_gateway() -> Gateway:
 
 async def _run_gateway(gateway: Gateway, web_port: int):
     audit_logger.start()
-    secrets.load()
     config_watcher = ConfigWatcher()
     await config_watcher.start()
     await gateway.db.connect()
     from raven.core.secrets import secrets as _secrets
-    _secrets.bind_db(gateway.db)
+    await _secrets.bind_db(gateway.db)
     plugins_dir = Path(__file__).parent.parent / "plugins"
     plugin_loader = gateway.plugin_loader
     for pdir in plugins_dir.iterdir():
@@ -91,7 +89,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     sessions_plugin.init(gateway.db)
 
     settings.validate_settings()
-    audit_logger.log(AuditEventType.SYSTEM_STARTUP, "system", "gateway", detail={"plugins": len(plugin_loader.tools)})
+    await audit_logger.log(AuditEventType.SYSTEM_STARTUP, "system", "gateway", detail={"plugins": len(plugin_loader.tools)})
 
     telegram = TelegramChannel()
     discord = DiscordChannel()
@@ -353,7 +351,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     @api_app.post("/api/shutdown")
     async def api_shutdown():
         logger.info("Shutdown requested via API")
-        audit_logger.sensitive("shutdown", "api", "system", True)
+        await audit_logger.sensitive("shutdown", "api", "system", True)
         stop_event.set()
         return {"ok": True}
 
@@ -368,7 +366,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     @api_app.post("/api/raven")
     async def api_raven(body: RavenRequest):
         logger.info("Raven API call: action={}", body.action)
-        audit_logger.log(AuditEventType.COMMAND, "api", "raven", detail={"action": body.action})
+        await audit_logger.log(AuditEventType.COMMAND, "api", "raven", detail={"action": body.action})
         try:
             session = await gateway.db.get_or_create_session(f"vscode:{body.action}:default", "vscode", "vscode_user")
             agent_obj = gateway.registry.create_agent(session)
@@ -438,7 +436,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         with contextlib.suppress(Exception):
             await config_watcher.stop()
         with contextlib.suppress(Exception):
-            audit_logger.stop()
+            await audit_logger.stop()
         sv_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await sv_task

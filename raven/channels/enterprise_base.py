@@ -124,9 +124,9 @@ class EnterpriseChannel(BaseChannel):
             raise last_ex
         raise RuntimeError("Unreachable: retry loop completed without exception")
 
-    def _audit_send(self, session_id: str, message: Message):
+    async def _audit_send(self, session_id: str, message: Message):
         user_id = session_id.split(":")[1] if ":" in session_id else session_id
-        audit_logger.log(
+        await audit_logger.log(
             AuditEventType.MESSAGE_SENT,
             f"channel:{self.channel_id}",
             user_id,
@@ -135,8 +135,8 @@ class EnterpriseChannel(BaseChannel):
         )
         metrics.inc(f"channel.{self.channel_id}.sent", {"channel": self.channel_id})
 
-    def _audit_receive(self, user_id: str, text: str):
-        audit_logger.log(
+    async def _audit_receive(self, user_id: str, text: str):
+        await audit_logger.log(
             AuditEventType.MESSAGE_RECEIVED,
             user_id,
             f"channel:{self.channel_id}",

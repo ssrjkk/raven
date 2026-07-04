@@ -109,7 +109,7 @@ class RoutineEngine:
     async def _execute_routine(self, routine: Routine):
         start = time.time()
         logger.info("Executing routine: {} ({})", routine.id, routine.action.value)
-        audit_logger.log(
+        await audit_logger.log(
             AuditEventType.COMMAND,
             "routine",
             routine.id,

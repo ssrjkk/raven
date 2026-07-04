@@ -353,7 +353,7 @@ class Gateway:
                 if matched and matched["id"] == user["id"]:
                     await self.db.set_user_allowed(user["id"], True)
                     await self.db.set_pairing_code(user["id"], "")
-                    audit_logger.sensitive("pairing_approve", event.user_id, f"{event.channel}:{event.user_id}", True)
+                    await audit_logger.sensitive("pairing_approve", event.user_id, f"{event.channel}:{event.user_id}", True)
                     await self._send(event.channel, event.session_id, "You are now authorized!")
                     metrics.inc("pairing_approved", {"channel": event.channel})
                     return False

@@ -4,17 +4,20 @@ import os
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from raven.core.audit import AUDIT_SIGNING_KEY_ENV, AuditEntry, AuditEventType, AuditLogger
 
 
-def test_audit_log_basic():
+@pytest.mark.asyncio
+async def test_audit_log_basic():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
     logger = AuditLogger(log_path)
     logger.start()
-    logger.log(AuditEventType.SYSTEM_STARTUP, "system", detail={"version": "0.4.0"})
-    logger.stop()
+    await logger.log(AuditEventType.SYSTEM_STARTUP, "system", detail={"version": "0.4.0"})
+    await logger.stop()
 
     entries = logger.recent()
     assert len(entries) == 1
@@ -24,14 +27,15 @@ def test_audit_log_basic():
     Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_log_sensitive():
+@pytest.mark.asyncio
+async def test_audit_log_sensitive():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
     logger = AuditLogger(log_path)
     logger.start()
-    logger.sensitive("pairing_approve", "user1", "user2", True)
-    logger.stop()
+    await logger.sensitive("pairing_approve", "user1", "user2", True)
+    await logger.stop()
 
     entries = logger.recent()
     assert len(entries) == 1
@@ -41,15 +45,16 @@ def test_audit_log_sensitive():
     Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_log_recent_limit():
+@pytest.mark.asyncio
+async def test_audit_log_recent_limit():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
     logger = AuditLogger(log_path)
     logger.start()
     for i in range(10):
-        logger.log("test.event", f"actor{i}")
-    logger.stop()
+        await logger.log("test.event", f"actor{i}")
+    await logger.stop()
 
     entries = logger.recent(limit=3)
     assert len(entries) == 3
@@ -57,16 +62,17 @@ def test_audit_log_recent_limit():
     Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_log_chain_integrity():
+@pytest.mark.asyncio
+async def test_audit_log_chain_integrity():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
     logger = AuditLogger(log_path, signing_key=b"0" * 32)
     logger.start()
-    logger.log(AuditEventType.SYSTEM_STARTUP, "system")
-    logger.log(AuditEventType.MESSAGE_RECEIVED, "user1")
-    logger.log(AuditEventType.MESSAGE_SENT, "system")
-    logger.stop()
+    await logger.log(AuditEventType.SYSTEM_STARTUP, "system")
+    await logger.log(AuditEventType.MESSAGE_RECEIVED, "user1")
+    await logger.log(AuditEventType.MESSAGE_SENT, "system")
+    await logger.stop()
 
     errors = logger.verify_chain()
     assert len(errors) >= 1
@@ -75,15 +81,16 @@ def test_audit_log_chain_integrity():
     Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_log_chain_tamper_detection():
+@pytest.mark.asyncio
+async def test_audit_log_chain_tamper_detection():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
     logger = AuditLogger(log_path, signing_key=b"0" * 32)
     logger.start()
-    logger.log(AuditEventType.SYSTEM_STARTUP, "system")
-    logger.log(AuditEventType.MESSAGE_SENT, "system")
-    logger.stop()
+    await logger.log(AuditEventType.SYSTEM_STARTUP, "system")
+    await logger.log(AuditEventType.MESSAGE_SENT, "system")
+    await logger.stop()
 
     with open(log_path) as f:
         lines = f.readlines()
@@ -105,16 +112,17 @@ def test_audit_event_type_values():
     assert AuditEventType.PII_REDACTED.value == "pii.redacted"
 
 
-def test_audit_query_by_event():
+@pytest.mark.asyncio
+async def test_audit_query_by_event():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
     logger = AuditLogger(log_path)
     logger.start()
-    logger.log("user.login", "alice")
-    logger.log("user.logout", "alice")
-    logger.log("user.login", "bob")
-    logger.stop()
+    await logger.log("user.login", "alice")
+    await logger.log("user.logout", "alice")
+    await logger.log("user.login", "bob")
+    await logger.stop()
 
     results = logger.query(event_type="user.login")
     assert len(results) == 2
@@ -123,16 +131,17 @@ def test_audit_query_by_event():
     Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_query_by_actor():
+@pytest.mark.asyncio
+async def test_audit_query_by_actor():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
     logger = AuditLogger(log_path)
     logger.start()
-    logger.log("user.login", "alice")
-    logger.log("user.login", "bob")
-    logger.log("user.logout", "alice")
-    logger.stop()
+    await logger.log("user.login", "alice")
+    await logger.log("user.login", "bob")
+    await logger.log("user.logout", "alice")
+    await logger.stop()
 
     results = logger.query(actor="alice")
     assert len(results) == 2
@@ -141,15 +150,16 @@ def test_audit_query_by_actor():
     Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_query_limit():
+@pytest.mark.asyncio
+async def test_audit_query_limit():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
     logger = AuditLogger(log_path)
     logger.start()
     for _i in range(20):
-        logger.log("test.event", "user")
-    logger.stop()
+        await logger.log("test.event", "user")
+    await logger.stop()
 
     results = logger.query(limit=5)
     assert len(results) == 5
@@ -157,19 +167,20 @@ def test_audit_query_limit():
     Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_query_since():
+@pytest.mark.asyncio
+async def test_audit_query_since():
+    import time
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
-    import time
-
     logger = AuditLogger(log_path)
     logger.start()
-    logger.log("before", "user")
+    await logger.log("before", "user")
     time.sleep(0.01)
     mid = time.time()
-    logger.log("after", "user")
-    logger.stop()
+    await logger.log("after", "user")
+    await logger.stop()
 
     results = logger.query(since=mid)
     assert len(results) == 1
@@ -178,16 +189,17 @@ def test_audit_query_since():
     Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_stats():
+@pytest.mark.asyncio
+async def test_audit_stats():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
     logger = AuditLogger(log_path)
     logger.start()
-    logger.log("user.login", "alice")
-    logger.log("user.login", "bob")
-    logger.log("system.boot", "system")
-    logger.stop()
+    await logger.log("user.login", "alice")
+    await logger.log("user.login", "bob")
+    await logger.log("system.boot", "system")
+    await logger.stop()
 
     s = logger.stats()
     assert s["total"] == 3
@@ -200,7 +212,8 @@ def test_audit_stats():
     Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_stats_empty():
+@pytest.mark.asyncio
+async def test_audit_stats_empty():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
@@ -268,7 +281,8 @@ def test_audit_path_property():
     assert "test_audit.log" in str(logger.path)
 
 
-def test_audit_is_open():
+@pytest.mark.asyncio
+async def test_audit_is_open():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
@@ -276,20 +290,21 @@ def test_audit_is_open():
     assert not logger.is_open
     logger.start()
     assert logger.is_open
-    logger.stop()
+    await logger.stop()
     assert not logger.is_open
 
     Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_verify_signatures_enabled_by_default():
+@pytest.mark.asyncio
+async def test_audit_verify_signatures_enabled_by_default():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
     logger = AuditLogger(log_path)
     logger.start()
-    logger.log("test.event", "user")
-    logger.stop()
+    await logger.log("test.event", "user")
+    await logger.stop()
 
     result = logger.verify_signatures()
     assert len(result) >= 1
@@ -298,12 +313,13 @@ def test_audit_verify_signatures_enabled_by_default():
     Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_log_without_start():
+@pytest.mark.asyncio
+async def test_audit_log_without_start():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
     logger = AuditLogger(log_path)
-    logger.log("test.event", "user")
+    await logger.log("test.event", "user")
 
     entries = logger.recent()
     assert len(entries) == 0
@@ -338,14 +354,15 @@ def test_audit_auto_generated_key():
     Path(log_path).unlink(missing_ok=True)
 
 
-def test_audit_stats_signed_field():
+@pytest.mark.asyncio
+async def test_audit_stats_signed_field():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 
     logger = AuditLogger(log_path)
     logger.start()
-    logger.log("test.event", "user")
-    logger.stop()
+    await logger.log("test.event", "user")
+    await logger.stop()
 
     s = logger.stats()
     assert "signed" in s
