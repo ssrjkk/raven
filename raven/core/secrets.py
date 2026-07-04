@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import base64
-import json
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from raven.core.db import Database
 
 try:
     from cryptography.fernet import Fernet
@@ -36,6 +39,14 @@ class SecretsManager:
         self._enc_path = self._data_dir / "secrets.enc"
         self._cache: dict[str, str] = {}
         self._loaded = False
+        self._db: Database | None = None
+        self._db_path: str | None = None
+
+    def bind_db(self, db: Database) -> None:
+        self._db = db
+        if self._loaded:
+            return
+        self._loaded = True
 
     def _get_or_create_key(self) -> bytes:
         master = os.environ.get("RAVEN_MASTER_KEY", "")
@@ -71,7 +82,7 @@ class SecretsManager:
             return ciphertext
         f = Fernet(key)
         try:
-            return f.decrypt(ciphertext[len(_MARKER) :].encode()).decode()
+            return f.decrypt(ciphertext[len(_MARKER):].encode()).decode()
         except Exception as e:
             logger.error("Secrets decryption failed: {}", e)
             return ciphertext
@@ -79,19 +90,72 @@ class SecretsManager:
     def load(self):
         if self._loaded:
             return
-        if self._enc_path.exists():
-            try:
-                raw = self._enc_path.read_text()
-                encrypted = json.loads(raw)
-                self._cache = {k: self.decrypt(v) for k, v in encrypted.items()}
-            except Exception as e:
-                logger.error("Failed to load secrets: {}", e)
         self._loaded = True
 
+        if self._db is not None:
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._load_from_db())
+                return
+            except RuntimeError:
+                pass
+
+        self._load_from_file()
+
+    def _load_from_file(self):
+        if not self._enc_path.exists():
+            return
+        try:
+            import json
+            raw = self._enc_path.read_text()
+            encrypted = json.loads(raw)
+            self._cache = {k: self.decrypt(v) for k, v in encrypted.items()}
+            logger.info("Loaded {} secrets from file", len(self._cache))
+        except Exception as e:
+            logger.error("Failed to load secrets from file: {}", e)
+
+    async def _load_from_db(self):
+        if not self._db:
+            return
+        try:
+            keys = await self._db.list_secrets()
+            for key in keys:
+                enc = await self._db.get_secret(key)
+                if enc:
+                    self._cache[key] = self.decrypt(enc)
+            logger.info("Loaded {} secrets from database", len(self._cache))
+        except Exception as e:
+            logger.error("Failed to load secrets from database: {}", e)
+
     def save(self):
+        if self._db is not None:
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._save_to_db())
+                return
+            except RuntimeError:
+                pass
+        self._save_to_file()
+
+    def _save_to_file(self):
+        import json
         encrypted = {k: self.encrypt(v) for k, v in self._cache.items()}
         self._enc_path.write_text(json.dumps(encrypted, indent=2))
         self._enc_path.chmod(0o600)
+
+    async def _save_to_db(self):
+        if not self._db:
+            self._save_to_file()
+            return
+        try:
+            for key, value in self._cache.items():
+                enc = self.encrypt(value)
+                await self._db.save_secret(key, enc)
+            logger.debug("Saved {} secrets to database", len(self._cache))
+        except Exception as e:
+            logger.error("Failed to save secrets to database: {}", e)
 
     def get(self, key: str, default: str = "") -> str:
         return self._cache.get(key, default)

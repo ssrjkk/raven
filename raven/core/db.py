@@ -81,6 +81,14 @@ class Database:
                     PRIMARY KEY (plugin_id, key)
                 )
             """,
+            "secrets": """
+                CREATE TABLE IF NOT EXISTS secrets (
+                    key TEXT PRIMARY KEY,
+                    value_enc TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                )
+            """,
             "monitors": """
                 CREATE TABLE IF NOT EXISTS monitors (
                     id TEXT PRIMARY KEY,
@@ -300,6 +308,30 @@ class Database:
                 (m.id, m.session_id, m.channel, m.role, m.content, m.metadata, m.created_at.isoformat()),
             )
         await self.conn.commit()
+
+    async def save_secret(self, key: str, value_enc: str):
+        now = datetime.now(UTC).isoformat()
+        await self.conn.execute(
+            "INSERT OR REPLACE INTO secrets (key, value_enc, updated_at) VALUES (?, ?, ?)",
+            (key, value_enc, now),
+        )
+        await self.conn.commit()
+
+    async def get_secret(self, key: str) -> str | None:
+        async with self.conn.execute(
+            "SELECT value_enc FROM secrets WHERE key = ?", (key,)
+        ) as c:
+            row = await c.fetchone()
+        return row["value_enc"] if row else None
+
+    async def delete_secret(self, key: str):
+        await self.conn.execute("DELETE FROM secrets WHERE key = ?", (key,))
+        await self.conn.commit()
+
+    async def list_secrets(self) -> list[str]:
+        async with self.conn.execute("SELECT key FROM secrets ORDER BY key") as c:
+            rows = await c.fetchall()
+        return [r["key"] for r in rows]
 
     async def health_check(self) -> bool:
         if not self._conn:

@@ -77,6 +77,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     config_watcher = ConfigWatcher()
     await config_watcher.start()
     await gateway.db.connect()
+    from raven.core.secrets import secrets as _secrets
+    _secrets.bind_db(gateway.db)
     plugins_dir = Path(__file__).parent.parent / "plugins"
     plugin_loader = gateway.plugin_loader
     for pdir in plugins_dir.iterdir():
