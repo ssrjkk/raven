@@ -43,10 +43,7 @@ def is_honeytoken(key: str, value: str) -> bool:
     for suffix in HONEYTOKEN_SUFFIXES:
         if suffix in value.lower():
             return True
-    for env_key, token in HONEYTOKEN_API_KEYS.items():
-        if key == env_key and value == token:
-            return True
-    return False
+    return any(key == env_key and value == token for env_key, token in HONEYTOKEN_API_KEYS.items())
 
 
 def honeytoken_warning(key: str) -> str:
@@ -58,10 +55,7 @@ def honeytoken_warning(key: str) -> str:
 
 def install_fastapi_watermark(app):
     """Add canary response headers to a FastAPI application."""
-    from fastapi import Response
     from starlette.types import ASGIApp, Receive, Scope, Send
-
-    original_app = app
 
     class WatermarkMiddleware:
         def __init__(self, inner: ASGIApp):

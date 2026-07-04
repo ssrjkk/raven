@@ -56,7 +56,7 @@ describe("Dashboard Page", () => {
   it("renders metric cards after loading", async () => {
     renderDashboard();
     await waitFor(() => {
-      expect(screen.getByText("Channels")).toBeInTheDocument();
+      expect(screen.getAllByText("Channels").length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.getByText("Agents")).toBeInTheDocument();
     expect(screen.getByText("Plugins")).toBeInTheDocument();

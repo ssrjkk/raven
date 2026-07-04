@@ -44,6 +44,8 @@ describe("Login Page", () => {
   });
 
   it("disables submit while loading", async () => {
+    const client = await import("../api/client");
+    client.api.login = vi.fn().mockReturnValue(new Promise<{ token: string }>(() => {}));
     renderLogin();
     await userEvent.type(screen.getByLabelText(/username/i), "testuser");
     await userEvent.type(screen.getByLabelText(/password/i), "password123!");

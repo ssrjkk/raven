@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -17,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -114,8 +116,21 @@ func (g *grpcAuthServer) ValidateToken(ctx context.Context, req *pb.ValidateToke
 	}, nil
 }
 
+func bearerToken(ctx context.Context) string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+	vals := md.Get("authorization")
+	if len(vals) == 0 {
+		return ""
+	}
+	return strings.TrimPrefix(vals[0], "Bearer ")
+}
+
 func (g *grpcAuthServer) CheckPermission(ctx context.Context, req *pb.CheckPermissionRequest) (*pb.CheckPermissionResponse, error) {
-	claims, err := g.svc.validateToken(req.Token)
+	token := bearerToken(ctx)
+	claims, err := g.svc.validateToken(token)
 	if err != nil {
 		return &pb.CheckPermissionResponse{Allowed: false}, nil
 	}

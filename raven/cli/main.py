@@ -438,7 +438,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         ]:
             try:
                 await asyncio.wait_for(coro, timeout=5)
-            except (asyncio.TimeoutError, ConnectionError, RuntimeError) as e:
+            except (TimeoutError, ConnectionError, RuntimeError) as e:
                 logger.warning("Shutdown {}: {}", name, e)
         try:
             await config_watcher.stop()
@@ -459,11 +459,11 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         logger.info("Interrupted, shutting down...")
         try:
             await asyncio.wait_for(gateway.stop(), timeout=10)
-        except (asyncio.TimeoutError, ConnectionError, RuntimeError) as e:
+        except (TimeoutError, ConnectionError, RuntimeError) as e:
             logger.warning("Interrupt shutdown gateway: {}", e)
         try:
             await asyncio.wait_for(gateway.db.disconnect(), timeout=5)
-        except (asyncio.TimeoutError, ConnectionError, RuntimeError) as e:
+        except (TimeoutError, ConnectionError, RuntimeError) as e:
             logger.warning("Interrupt shutdown DB: {}", e)
 
 

@@ -10,6 +10,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const isSystem = message.role === "system";
   const isTool = message.role === "tool";
+  const ts = message.created_at ? new Date(message.created_at).toLocaleString() : null;
 
   if (isSystem) {
     return (
@@ -43,8 +44,9 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
           }
         `}
       >
-        <div className="text-[11px] font-medium mb-1 opacity-60">
-          {isUser ? "You" : "Raven"}
+        <div className="text-[11px] font-medium mb-1 opacity-60 flex items-center gap-2">
+          <span>{isUser ? "You" : "Raven"}</span>
+          {ts && <span className="text-[10px] opacity-50">{ts}</span>}
         </div>
         <div className="text-sm leading-relaxed prose prose-invert max-w-none">
           <MarkdownContent content={message.content} />

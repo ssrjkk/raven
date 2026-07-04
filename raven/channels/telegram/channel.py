@@ -128,7 +128,7 @@ class TelegramChannel(BaseChannel):
     async def send_typing(self, chat_id: int):
         if not self._app:
             return
-        with contextlib.suppress(ConnectionError, TimeoutError, asyncio.TimeoutError):
+        with contextlib.suppress(ConnectionError, TimeoutError):
             await self._app.bot.send_chat_action(
                 chat_id=chat_id,
                 action="typing",

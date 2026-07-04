@@ -4,14 +4,14 @@ import userEvent from "@testing-library/user-event";
 import { BrowserRouter } from "react-router-dom";
 import Monitors from "./Monitors";
 
-const mockMonitors = [
+const mockMonitorsData = [
   { id: "m1", name: "Production API", type: "http", target: "https://api.example.com/health", interval_seconds: 60, status: "active", last_check: { status: "up", checked_at: 1700000000 } },
   { id: "m2", name: "Staging DB", type: "tcp", target: "staging-db:5432", interval_seconds: 120, status: "paused", last_check: null },
 ];
 
 vi.mock("../api/client", () => ({
   api: {
-    monitors: vi.fn().mockResolvedValue(mockMonitors),
+    monitors: vi.fn(),
     monitorToggle: vi.fn().mockResolvedValue({ ok: true }),
   },
   isAuthenticated: vi.fn().mockReturnValue(true),
@@ -31,6 +31,11 @@ function renderMonitors() {
 }
 
 describe("Monitors Page", () => {
+  beforeEach(async () => {
+    const client = await import("../api/client");
+    client.api.monitors = vi.fn().mockResolvedValue(mockMonitorsData);
+  });
+
   it("renders loading state initially", () => {
     renderMonitors();
     expect(screen.getByText("Monitors")).toBeInTheDocument();
@@ -45,7 +50,8 @@ describe("Monitors Page", () => {
   });
 
   it("shows empty state when no monitors", async () => {
-    vi.mocked(await import("../api/client")).api.monitors = vi.fn().mockResolvedValue([]);
+    const client = await import("../api/client");
+    client.api.monitors = vi.fn().mockResolvedValue([]);
     renderMonitors();
     await waitFor(() => {
       expect(screen.getByText("No monitors configured.")).toBeInTheDocument();

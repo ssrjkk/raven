@@ -4,16 +4,15 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import signal
 import sys
 from pathlib import Path
 
-try:
-    import uvloop
+with contextlib.suppress(ImportError):
+    import uvloop  # type: ignore[no-unused-import]
 
     uvloop.install()
-except ImportError:
-    pass
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -43,12 +42,10 @@ async def main() -> None:
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
-        try:
+        with contextlib.suppress(NotImplementedError):
             loop.add_signal_handler(sig, _shutdown)
-        except NotImplementedError:
-            pass
 
-    print(f"Raven AI starting...")
+    print("Raven AI starting...")
     print(f"  Web UI:   http://localhost:{args.web_port}")
     print(f"  RavenFlow: http://localhost:{args.flow_port}")
     print("Press Ctrl+C to stop.")
@@ -64,7 +61,7 @@ async def main() -> None:
 
 async def _start_web(port: int) -> None:
     try:
-        from raven.cli.main import create_gateway, _run_gateway
+        from raven.cli.main import _run_gateway, create_gateway
         gateway = create_gateway()
         await _run_gateway(gateway, port)
     except ImportError as exc:

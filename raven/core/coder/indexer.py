@@ -223,7 +223,7 @@ class CodeIndexer:
                                 )
                             )
         except SyntaxError as e:
-            logger.debug("[indexer] syntax error parsing {}: {}", path, e)
+            logger.debug("[indexer] syntax error: {}", e)
         return symbols
 
     def _language_counts(self) -> dict[str, int]:

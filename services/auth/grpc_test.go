@@ -9,6 +9,7 @@ import (
 
 	_ "modernc.org/sqlite"
 	pb "github.com/ssrjkk/raven/services/proto/go/auth/v1"
+	"google.golang.org/grpc/metadata"
 )
 
 func newTestAuthService(t *testing.T) *AuthService {
@@ -220,7 +221,8 @@ func TestGRPCAuthServer(t *testing.T) {
 	})
 
 	t.Run("check permission user role", func(t *testing.T) {
-		resp, err := server.CheckPermission(context.Background(), &pb.CheckPermissionRequest{
+		ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
+		resp, err := server.CheckPermission(ctx, &pb.CheckPermissionRequest{
 			Role: "user",
 		})
 		if err != nil {
@@ -232,7 +234,8 @@ func TestGRPCAuthServer(t *testing.T) {
 	})
 
 	t.Run("check permission admin role", func(t *testing.T) {
-		resp, _ := server.CheckPermission(context.Background(), &pb.CheckPermissionRequest{
+		ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token))
+		resp, _ := server.CheckPermission(ctx, &pb.CheckPermissionRequest{
 			Role: "admin",
 		})
 		if !resp.Allowed {

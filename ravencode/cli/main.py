@@ -13,10 +13,9 @@ try:
 except ImportError:
     pass
 
-from raven.core._json import json
-
 import click
 
+from raven.core._json import json
 from ravencode.cli.tui import tui_run
 from ravencode.integrations.github import (
     GitHubIntegration,

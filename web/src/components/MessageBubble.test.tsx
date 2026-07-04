@@ -45,8 +45,8 @@ describe("MessageBubble", () => {
   });
 
   it("handles empty content", () => {
-    render(<MessageBubble message={{ ...baseMessage, content: "", role: "assistant" }} />);
-    expect(screen.getByText("")).toBeInTheDocument();
+    const { container } = render(<MessageBubble message={{ ...baseMessage, content: "", role: "assistant" }} />);
+    expect(container.querySelector(".prose")).toBeInTheDocument();
   });
 
   it("handles long messages without crashing", () => {
