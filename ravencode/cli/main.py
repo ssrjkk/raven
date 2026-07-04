@@ -6,9 +6,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import uvloop
+try:
+    import uvloop
 
-uvloop.install()
+    uvloop.install()
+except ImportError:
+    pass
 
 from raven.core._json import json
 

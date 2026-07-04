@@ -8,9 +8,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-import uvloop
+try:
+    import uvloop
 
-uvloop.install()
+    uvloop.install()
+except ImportError:
+    pass
 
 import click
 from loguru import logger

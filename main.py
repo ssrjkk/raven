@@ -8,9 +8,12 @@ import signal
 import sys
 from pathlib import Path
 
-import uvloop
+try:
+    import uvloop
 
-uvloop.install()
+    uvloop.install()
+except ImportError:
+    pass
 
 sys.path.insert(0, str(Path(__file__).parent))
 

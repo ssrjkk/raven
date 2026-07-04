@@ -6,9 +6,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-import uvloop
+try:
+    import uvloop
 
-uvloop.install()
+    uvloop.install()
+except ImportError:
+    pass
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from loguru import logger
