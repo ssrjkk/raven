@@ -100,3 +100,63 @@ npm run dev
 - **`tools/shell.py`**: Removed `getattr` from `_RESTRICTED_BUILTINS` (was a key component of sandbox escape via `().__class__.__bases__[0].__subclasses__()`)
 - **`Admin.tsx`**: Added JWT `Authorization` header to both `runAudit` and `updateModelKey` fetch calls (were unauthenticated)
 - **`CanvasViewer.tsx`**: Added URL scheme validation on `link` component — only `http://`, `https://`, `mailto:`, and `/`-relative URLs allowed (prevents `javascript:` XSS)
+
+## Fixes applied (Jul 2026)
+### Stubs → real implementations — TypeScript packages
+- **`packages/agents/planner.ts`**: Replaced hardcoded 4-step plan with LLM-powered planning (OpenRouter/OpenAI), plus keyword-based fallback; accepts `memory` context; dynamically selects tools
+- **`packages/agents/debugger.ts`**: Replaced `issues=errors, fixes=errors.map("Fix for:")` with LLM-powered error diagnosis; keyword fallback with 6 error categories (missing file, syntax, timeout, permission, module, unknown)
+- **`packages/agents/coder.ts`**: Replaced all-actions-target-`src/index.ts` with LLM-generated file actions; keyword fallback detects create/delete/test patterns from step descriptions
+- **`packages/repo/embeddings.ts`**: Replaced `Math.random()` vectors with deterministic SHA-256 based hash vectors; falls back to OpenAI embeddings API when `OPENAI_API_KEY` is set; `semanticSearch` now uses cosine similarity instead of `Math.random()`
+- **`packages/repo/ast.ts`**: Replaced empty `{functions:[] imports:[] exports:[] classes:[]}` with real regex-based extraction of ESM/CJS imports, function declarations, arrow functions, classes with methods, named/default exports
+- **`packages/runtime/docker.ts`**: Replaced mock sandbox (`status:"created"`) with real Docker via `child_process.exec('docker ...')`; falls back to mock when Docker is unavailable
+- **`packages/package.json`**: Added `@types/node` devDependency (required for Node.js built-in modules)
+
+### Silent error swallowing → proper logging — Python backend
+- **`raven/channels/feishu/channel.py`**: Empty `_stop()` now logs `[feishu] channel stopped`
+- **`raven/channels/googlechat/channel.py`**: Empty `_stop()` now logs `[googlechat] channel stopped`; added missing `from loguru import logger`
+- **`raven/channels/line/channel.py`**: Empty `_stop()` now logs `[line] channel stopped`; added missing `logger` import
+- **`raven/channels/teams/channel.py`**: Empty `_stop()` now logs `[teams] channel stopped`; added missing `logger` import
+- **`raven/channels/whatsapp/channel.py`**: Empty `_stop()` now logs `[whatsapp] channel stopped`; added missing `logger` import
+- **`raven/plugins/memory/plugin.py`**: All 4 `except Exception: pass` and `contextlib.suppress(Exception)` replaced with `logger.warning("[memory] ... {}")` on upsert, recall, delete, search, list_keys; removed unused `import contextlib`
+- **`raven/core/security/tool_policy.py`**: Two `except ImportError: pass` → `logger.debug("policy_engine not available: {}")`; added `from loguru import logger`
+- **`raven/cli/main.py`**: Two `except Exception: pass` in `status()` and `doctor()` → `logger.debug(...)` with error detail
+- **`raven/tui/app.py`**: Two `except Exception: pass` in `_poll_logs()` and `_poll_stats()` → `logger.debug(...)` with error detail; added `from loguru import logger`
+
+### Silent catch in frontend
+- **`web/src/pages/Admin.tsx`**: `catch(() => {})` → `catch((e) => console.error(...))` in channel poll; `catch {}` → `catch (e) { console.error(...); }` in log parser
+- **`web/src/pages/Dashboard.tsx`**: 3x `catch(() => {})` → `catch((e) => console.error(...))` on health, metrics, system status calls
+
+### Real implementation → stubs removed
+- **`services/code-service/context.py`**: `index_codebase()` was returning `{"files":0,"chunks":0,"status":"stub"}` — now actually walks directories, reads files, chunks by 1000 chars; `search()` was returning `[]` — now does keyword scoring and returns ranked results with context lines
+- **`ravencode/agents/orchestrator.py`**: `Orchestrator.__init__` had only `pass` — now initializes `self._agent_cache`
+
+### Silent `except Exception: return/None/False` → logging
+- **`raven/core/gateway/gateway.py`**: LLM health check silent `return False` → `logger.warning` + `return False`
+- **`raven/core/db.py`**: DB health check silent `return False` → `logger.warning` + `return False`; added missing `from loguru import logger`
+- **`raven/channels/webchat/channel.py`**: WebSocket auth decode silently set `anonymous` → `logger.debug` + anonymous
+- **`raven/plugins/api/plugin.py`**: JSON response parse `except Exception: pass` → `logger.debug`; added missing `logger` import
+- **`ravencode/runtime/agent_core.py`**: Auto-format error `except Exception: pass` → `logger.debug`
+- **`ravencode/runtime/lsp.py`**: Symbol parse error `except Exception: pass` → `logger.debug` + fallback message; added missing `logger` import
+- **`raven/core/monitor/store.py`**: Monitor load error `return None` → `logger.warning`; added missing `logger` import
+- **`raven/core/monitor/checkers/price.py`**: Price check error `return None` → `logger.debug`; added missing `logger` import
+- **`raven/cli/onboard.py`**: Telegram token validation `return None` → `logger.error`; added missing `logger` import
+- **`raven/core/coder/indexer.py`**: File indexing error `return None` → `logger.debug`
+- **`services/code-service/tools.py`**: `SearchTool` and `GrepTool` binary read errors `except Exception: continue` → `logger.debug`; added missing `logger` import
+- **`services/code-service/main.py`**: OTel shutdown `except Exception: pass` → `logger.warning`
+- **`raven/voice/tts.py`**: `_list_elevenlabs_voices` ImportError `return []` → `logger.debug` + `return []`
+- **`raven/core/audit.py`**: 4x `except json.JSONDecodeError: pass` → `logger.debug`
+- **`raven/core/sse.py`**: `except asyncio.QueueEmpty: pass` → `logger.debug`; `except asyncio.CancelledError: pass` → `logger.debug`
+- **`raven/core/security/ssrf.py`**: Removed bare `pass` after `logger.debug` call (dead code)
+
+### Frontend silent `catch {}` → `console.error` (batch 2)
+- **`web/src/hooks/useWebSocket.ts`**: `catch { /* ignore */ }` → `catch (e) { console.error(...) }`
+- **`web/src/pages/Tasks.tsx`**: 3x `catch { }` → `catch (e) { console.error(...) }`
+- **`web/src/pages/Routines.tsx`**: 2x `catch { }` → `catch (e) { console.error(...) }`
+- **`web/src/pages/Monitors.tsx`**: 2x `catch { }` → `catch (e) { console.error(...) }`
+- **`web/src/pages/CodeSessions.tsx`**: `catch { }` → `catch (e) { console.error(...) }`
+- **`web/src/pages/Settings.tsx`**: 2x `catch { }` → `catch (e) { console.error(...) }`
+- **`web/src/components/Chat.tsx`**: 3x `catch { }` → `catch (e) { console.error(...) }`
+- **`web/src/pages/IDE.tsx`**: 4x `catch { }` → `catch (e) { console.error(...) }`
+
+### Missing logger imports added
+- `raven/core/db.py`, `raven/cli/onboard.py`, `raven/core/monitor/store.py`, `raven/core/monitor/checkers/price.py`, `raven/plugins/api/plugin.py`, `ravencode/runtime/lsp.py`, `services/code-service/tools.py` — all gained `from loguru import logger`

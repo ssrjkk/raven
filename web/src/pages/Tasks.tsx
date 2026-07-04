@@ -14,7 +14,8 @@ export default function Tasks() {
   async function load() {
     try {
       setTasks(await api.tasks());
-    } catch {
+    } catch (e) {
+      console.error("Failed to load tasks:", e);
       toast("Failed to load tasks", "error");
     } finally {
       setPageLoading(false);
@@ -29,7 +30,8 @@ export default function Tasks() {
       setGoal("");
       toast("Task started", "success");
       await load();
-    } catch {
+    } catch (e) {
+      console.error("Failed to start task:", e);
       toast("Failed to start task", "error");
     }
     setLoading(false);
@@ -40,7 +42,8 @@ export default function Tasks() {
       await api.taskCancel(id);
       toast("Task cancelled", "info");
       await load();
-    } catch {
+    } catch (e) {
+      console.error("Failed to cancel task:", e);
       toast("Failed to cancel task", "error");
     }
   }

@@ -81,11 +81,10 @@ class EmbeddingEngine:
             result: list[list[float]] = embeddings.tolist()
             return result
         except ImportError:
-            logger.warning("sentence-transformers not installed, returning zero vectors")
-            return [[0.0] * 384 for _ in texts]
+            raise RuntimeError("sentence-transformers not installed — cannot embed locally") from None
         except Exception as e:
             logger.error("Local embedding failed: {}", e)
-            return [[0.0] * 384 for _ in texts]
+            raise
 
     @staticmethod
     def _get_openai_key() -> str:

@@ -366,8 +366,8 @@ class ReActAgent:
                             fmt_result = await format_file(path)
                             if fmt_result and not fmt_result.startswith("[skipped"):
                                 logger.info("Auto-formatted: {}", fmt_result)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("Auto-format failed for {}: {}", path, e)
                 return final
             except Exception as exc:
                 last_err = str(exc)

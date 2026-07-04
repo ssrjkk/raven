@@ -12,10 +12,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     Promise.all([
-      api.status().then(setStatus).catch(() => toast("Failed to load status", "error")),
-      api.health().then(setHealth).catch(() => {}),
-      api.metrics().then(setMetrics).catch(() => {}),
-      api.systemStatus().then(setSys).catch(() => {}),
+      api.status().then(setStatus).catch((e: unknown) => { console.error("status load failed:", e); toast("Failed to load status", "error"); }),
+      api.health().then(setHealth).catch((e: unknown) => console.error("health load failed:", e)),
+      api.metrics().then(setMetrics).catch((e: unknown) => console.error("metrics load failed:", e)),
+      api.systemStatus().then(setSys).catch((e: unknown) => console.error("system status load failed:", e)),
     ]).finally(() => setLoading(false));
   }, []);
 

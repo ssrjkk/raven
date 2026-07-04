@@ -4,7 +4,7 @@ export async function openAIProvider(prompt: string): Promise<AIResponse> {
   const apiKey = process.env.OPENAI_API_KEY
 
   if (!apiKey) {
-    return { text: "OPENAI_API_KEY not configured", model: "gpt-5" }
+    throw new Error("OPENAI_API_KEY not configured")
   }
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {

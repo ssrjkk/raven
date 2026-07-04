@@ -4,6 +4,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 ALLOWED_PROFILES = frozenset({"messaging", "minimal", "full"})
 
 MAX_PATH_DEPTH = 20
@@ -84,8 +86,8 @@ class ToolPolicyEvaluator:
             rs = policy_engine.get_ruleset("tools")
             if rs is not None and len(rs.rules) > 0 and not policy_engine.check("tools", {"tool": tool_name, "profile": self.profile, "action": "call"}):
                 return False
-        except ImportError:
-            pass
+        except ImportError as e:
+            logger.debug("policy_engine not available: {}", e)
 
         if tool_name in self._deny:
             return False
@@ -124,8 +126,8 @@ class ToolPolicyEvaluator:
             )
             if not allowed:
                 return False, "exec denied by policy engine"
-        except ImportError:
-            pass
+        except ImportError as e:
+            logger.debug("policy_engine not available: {}", e)
 
         if self.exec_security == ExecSecurity.DENY:
             return False, "exec denied by policy (security=deny)"

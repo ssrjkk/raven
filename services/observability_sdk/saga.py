@@ -114,11 +114,14 @@ class UserRegistrationSaga(Saga):
         async def _notify():
             logger.info("Welcome notification sent to {} ({})", self.username, email)
 
-        async def _noop():
-            pass
+        async def _noop_compensate():
+            logger.info("[saga/{}] no-op compensation for send_welcome (irreversible)", self.saga_id)
+
+        async def _create_monitors():
+            logger.info("Creating default monitors for {}", self.user_id)
 
         async def _delete_monitors():
             logger.info("Deleted default monitors for {}", self.user_id)
 
-        self.add_step("send_welcome", _notify, _noop)
-        self.add_step("create_default_monitors", _noop, _delete_monitors)
+        self.add_step("send_welcome", _notify, _noop_compensate)
+        self.add_step("create_default_monitors", _create_monitors, _delete_monitors)

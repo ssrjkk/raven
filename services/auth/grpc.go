@@ -115,7 +115,24 @@ func (g *grpcAuthServer) ValidateToken(ctx context.Context, req *pb.ValidateToke
 }
 
 func (g *grpcAuthServer) CheckPermission(ctx context.Context, req *pb.CheckPermissionRequest) (*pb.CheckPermissionResponse, error) {
-	return &pb.CheckPermissionResponse{Allowed: req.Role == "user" || req.Role == "admin"}, nil
+	claims, err := g.svc.validateToken(req.Token)
+	if err != nil {
+		return &pb.CheckPermissionResponse{Allowed: false}, nil
+	}
+	allowed := false
+	switch req.Permission {
+	case "read":
+		allowed = claims.Role == "admin" || claims.Role == "user" || claims.Role == "viewer"
+	case "write":
+		allowed = claims.Role == "admin" || claims.Role == "user"
+	case "delete":
+		allowed = claims.Role == "admin"
+	case "admin":
+		allowed = claims.Role == "admin"
+	default:
+		allowed = false
+	}
+	return &pb.CheckPermissionResponse{Allowed: allowed}, nil
 }
 
 func (g *grpcAuthServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetUserResponse, error) {

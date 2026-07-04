@@ -24,7 +24,7 @@ class FeishuChannel(EnterpriseChannel):
             await self._refresh_token()
 
     async def _stop(self):
-        pass
+        logger.info("[feishu] channel stopped")
 
     async def _refresh_token(self):
         import httpx

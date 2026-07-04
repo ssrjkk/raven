@@ -128,7 +128,7 @@ class TelegramChannel(BaseChannel):
     async def send_typing(self, chat_id: int):
         if not self._app:
             return
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(ConnectionError, TimeoutError, asyncio.TimeoutError):
             await self._app.bot.send_chat_action(
                 chat_id=chat_id,
                 action="typing",
@@ -214,7 +214,7 @@ class TelegramChannel(BaseChannel):
         text = await transcribe_voice(file_path)
         from pathlib import Path
 
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(FileNotFoundError, PermissionError):
             Path(file_path).unlink()
 
         if text:

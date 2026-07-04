@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 from typing import Any
 
 from loguru import logger
@@ -43,8 +42,8 @@ async def remember(key: str, value: str) -> str:
         try:
             collection.upsert(documents=[value], ids=[key])
             return f"Remembered '{key}'"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("[memory] ChromaDB upsert failed: {}", e)
     _fallback[key] = [{"document": value}]
     return f"Remembered '{key}' (fallback)"
 
@@ -58,8 +57,8 @@ async def recall(key: str) -> str:
             docs = result.get("documents", [])
             if docs and isinstance(docs[0], str):
                 return docs[0][:2000]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("[memory] ChromaDB recall failed: {}", e)
     if key in _fallback:
         items = _fallback[key]
         if items:
@@ -72,8 +71,10 @@ async def forget(key: str) -> str:
     """Delete a memory. Args: key (str): Memory key to forget"""
     collection = await _ensure_db()
     if collection:
-        with contextlib.suppress(Exception):
+        try:
             collection.delete(ids=[key])
+        except Exception as e:
+            logger.warning("[memory] ChromaDB delete failed: {}", e)
     _fallback.pop(key, None)
     return f"Forgot '{key}'"
 
@@ -89,8 +90,8 @@ async def search_memory(query: str, n_results: int = 5) -> str:
             if docs:
                 lines = [f"- `{ids[i]}`: {docs[i][:200]}" for i in range(len(docs))]
                 return "Memory search results:\n" + "\n".join(lines)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("[memory] ChromaDB search failed: {}", e)
     return "Search not available (fallback mode). Use recall with exact key."
 
 
@@ -103,8 +104,8 @@ async def list_keys() -> str:
             ids = all_data.get("ids", [])
             if ids:
                 return "Memory keys:\n" + "\n".join(f"- `{k}`" for k in ids)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("[memory] ChromaDB list_keys failed: {}", e)
     if _fallback:
         return "Memory keys (fallback):\n" + "\n".join(f"- `{k}`" for k in _fallback)
     return "No memories stored."

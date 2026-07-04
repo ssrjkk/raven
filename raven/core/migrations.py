@@ -30,13 +30,13 @@ def register(version: int, description: str, sql: str | None = None):
 
 @register(1, "Add agent_skills column to sessions")
 async def _migration_1(conn):
-    with contextlib.suppress(Exception):
+    with contextlib.suppress(RuntimeError):
         await conn.execute("ALTER TABLE sessions ADD COLUMN agent_skills TEXT DEFAULT '[]'")
 
 
 @register(2, "Add role column to users table")
 async def _migration_2(conn):
-    with contextlib.suppress(Exception):
+    with contextlib.suppress(RuntimeError):
         await conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
 
 
@@ -92,6 +92,5 @@ class Migrator:
 
         logger.info("DB migrated to version {}", current + len(pending))
 
-    def list_pending(self):
-        current = 0  # placeholder - async
-        return sorted([m for m in _MIGRATIONS if m.version > current], key=lambda m: m.version)
+    def list_pending(self) -> list[Migration]:
+        return sorted([m for m in _MIGRATIONS], key=lambda m: m.version)

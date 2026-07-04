@@ -12,7 +12,8 @@ export default function Monitors() {
   async function load() {
     try {
       setMonitors(await api.monitors());
-    } catch {
+    } catch (e) {
+      console.error("Failed to load monitors:", e);
       toast("Failed to load monitors", "error");
     } finally {
       setLoading(false);
@@ -24,7 +25,8 @@ export default function Monitors() {
       await api.monitorToggle(action, id);
       toast(`Monitor ${action}ed`, "success");
       await load();
-    } catch {
+    } catch (e) {
+      console.error("Failed to toggle monitor:", e);
       toast("Failed to toggle monitor", "error");
     }
   }

@@ -40,7 +40,7 @@ class HTTPClientPool:
     async def close_all(self):
         async with self._lock:
             for _key, client in self._clients.items():
-                with contextlib.suppress(Exception):
+                with contextlib.suppress(ConnectionError, asyncio.TimeoutError):
                     await client.aclose()
             self._clients.clear()
             self._closed = True

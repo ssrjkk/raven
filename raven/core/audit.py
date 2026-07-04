@@ -208,8 +208,8 @@ class AuditLogger:
             try:
                 entry = json.loads(last_line)
                 return entry.get("hash", "0" * 64)  # type: ignore[no-any-return]
-            except (json.JSONDecodeError, KeyError):
-                pass
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.debug("Audit: corrupt log entry, skipping: {}", e)
         return "0" * 64
 
     def _compute_hash(self, entry_dict: dict[str, Any]) -> str:
@@ -286,8 +286,8 @@ class AuditLogger:
             try:
                 entry = json.loads(line)
                 result.append(entry)
-            except json.JSONDecodeError:
-                pass
+            except json.JSONDecodeError as e:
+                logger.debug("Audit: corrupt log entry skipped: {}", e)
         return result
 
     def query(
@@ -317,8 +317,8 @@ class AuditLogger:
                     results.append(ae)
                     if len(results) >= limit:
                         break
-                except json.JSONDecodeError:
-                    pass
+                except json.JSONDecodeError as e:
+                    logger.debug("Audit: corrupt entry in query: {}", e)
         return results
 
     def stats(self) -> dict[str, Any]:
@@ -440,8 +440,8 @@ class AuditLogger:
                                 "event_id": entry.get("event_id"),
                             }
                         )
-                except json.JSONDecodeError:
-                    pass
+                except json.JSONDecodeError as e:
+                    logger.debug("Audit: corrupt entry in verify: {}", e)
         return errors or [{"valid": True, "signatures_verified": True}]
 
 

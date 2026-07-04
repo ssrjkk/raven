@@ -5,6 +5,8 @@ import shlex
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 
 class Tool:
     async def execute(self, **kwargs: Any) -> str:
@@ -89,7 +91,8 @@ class SearchTool(Tool):
                 continue
             try:
                 text = await asyncio.to_thread(p.read_text, encoding="utf-8", errors="replace")
-            except Exception:  # noqa: S112
+            except Exception as e:
+                logger.debug("SearchTool: skipping unreadable {}: {}", p, e)
                 continue
             for i, line in enumerate(text.splitlines(), 1):
                 if query in line:
@@ -135,7 +138,8 @@ class GrepTool(Tool):
                 continue
             try:
                 text = await asyncio.to_thread(p.read_text, encoding="utf-8", errors="replace")
-            except Exception:  # noqa: S112
+            except Exception as e:
+                logger.debug("GrepTool: skipping unreadable {}: {}", p, e)
                 continue
             for i, line in enumerate(text.splitlines(), 1):
                 if pattern in line:

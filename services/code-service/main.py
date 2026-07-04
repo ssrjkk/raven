@@ -43,8 +43,8 @@ async def shutdown():
     try:
         from opentelemetry import trace
         trace.get_tracer_provider().shutdown()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("OpenTelemetry shutdown failed: {}", e)
     logger.info("code-service shutdown")
 
 

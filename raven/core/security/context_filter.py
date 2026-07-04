@@ -353,7 +353,7 @@ class PIIEngine:
 
             self._presidio_analyzer = AnalyzerEngine()
         except ImportError:
-            pass
+            logger.debug("[context_filter] presidio_analyzer not available — using regex patterns only")
 
     def analyze(self, text: str, pii_types: list[str] | None = None) -> list[PIIDetection]:
         finds: list[PIIDetection] = []

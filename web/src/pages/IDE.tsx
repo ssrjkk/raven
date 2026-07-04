@@ -39,7 +39,8 @@ export default function IDEPage() {
         body: JSON.stringify({ task: aiPrompt, mode: agentMode, workspace: "." }),
       })
       setOutput(data.response || JSON.stringify(data))
-    } catch {
+    } catch (e) {
+      console.error("Agent run failed:", e);
       setOutput("Agent service unavailable. Start with: raven services code-service")
     }
   }
@@ -52,7 +53,8 @@ export default function IDEPage() {
         body: JSON.stringify({ workspace: "." }),
       })
       setIndexStatus(`Indexed ${data.indexed} files`)
-    } catch {
+    } catch (e) {
+      console.error("Indexing failed:", e);
       setIndexStatus("Indexing failed")
     }
   }
@@ -67,7 +69,8 @@ export default function IDEPage() {
       })
       const results = data.results || []
       setOutput(results.map(r => `[${r.score.toFixed(2)}] ${r.file}\n${r.content.slice(0, 200)}`).join("\n\n"))
-    } catch {
+    } catch (e) {
+      console.error("Search failed:", e);
       setOutput("Search failed")
     }
   }
@@ -88,7 +91,8 @@ export default function IDEPage() {
         copy[copy.length - 1] = { input: cmd, output: data.output || data.error || JSON.stringify(data) }
         return copy
       })
-    } catch {
+    } catch (e) {
+      console.error("Terminal exec failed:", e);
       setTerminalHistory(h => {
         const copy = [...h]
         copy[copy.length - 1] = { input: cmd, output: "[agent unavailable]" }

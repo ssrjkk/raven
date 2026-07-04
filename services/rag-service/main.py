@@ -36,8 +36,7 @@ def _embed(texts: list[str]) -> list[list[float]]:
             from sentence_transformers import SentenceTransformer
             _encoder = SentenceTransformer("all-MiniLM-L6-v2")
         except ImportError:
-            logger.error("sentence-transformers not installed")
-            return [[0.0] * VECTOR_SIZE for _ in texts]
+            raise RuntimeError("sentence-transformers not installed — cannot embed without it") from None
     embeddings = _encoder.encode(texts, normalize_embeddings=True)
     return embeddings.tolist()
 

@@ -134,8 +134,8 @@ class CodeIndexer:
             for entry in self._root.rglob("*"):
                 if entry.is_file() and entry.suffix in LANGUAGE_MAP and not any(part in IGNORE_DIRS for part in entry.relative_to(self._root).parts):
                     results.append(entry)
-        except PermissionError:
-            pass
+        except PermissionError as e:
+            logger.debug("[indexer] permission denied walking {}: {}", self._root, e)
         return sorted(results)
 
     def _index_file(self, path: Path) -> CodeFile | None:
@@ -145,7 +145,8 @@ class CodeIndexer:
 
         try:
             content = path.read_text(encoding="utf-8", errors="replace")[:100000]
-        except Exception:
+        except Exception as e:
+            logger.debug("Indexer: skipping unreadable {}: {}", path, e)
             return None
 
         lines = content.splitlines()
@@ -221,8 +222,8 @@ class CodeIndexer:
                                     column=node.col_offset or 0,
                                 )
                             )
-        except SyntaxError:
-            pass
+        except SyntaxError as e:
+            logger.debug("[indexer] syntax error parsing {}: {}", path, e)
         return symbols
 
     def _language_counts(self) -> dict[str, int]:

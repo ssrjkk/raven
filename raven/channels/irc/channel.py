@@ -69,7 +69,7 @@ class IRCChannel(EnterpriseChannel):
                     self._stats["reconnects"] += 1
                     await asyncio.sleep(self._reconnect_delay)
                     self._reconnect_delay = min(self._reconnect_delay * 2, 60)
-                    with contextlib.suppress(Exception):
+                    with contextlib.suppress(ConnectionError, OSError):
                         self._reader, self._writer = await asyncio.open_connection(self._server, self._port)
 
     _PRIVMSG_RE = re.compile(r":(\S+)!\S+ PRIVMSG (\S+) :(.+)")

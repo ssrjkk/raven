@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from loguru import logger
+
 from raven.core.http_client import client_manager
 
 if TYPE_CHECKING:
@@ -13,7 +15,8 @@ async def check_price(monitor: Monitor) -> str | None:
     url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd"
     try:
         data = await client_manager.get(url)
-    except Exception:
+    except Exception as e:
+        logger.debug("Price check failed for {}: {}", coin_id, e)
         return None
     if not data or coin_id not in data:
         return None

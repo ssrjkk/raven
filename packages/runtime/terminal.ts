@@ -22,7 +22,9 @@ export function runCommand(cmd: string): Promise<string> {
   try {
     parsed = validateCommand(cmd)
   } catch (e: unknown) {
-    return Promise.resolve(`[denied] ${(e as Error).message}`)
+    const msg = `[denied] ${(e as Error).message}`
+    console.error("[terminal]", msg)
+    return Promise.resolve(msg)
   }
   return new Promise((resolve, reject) => {
     const p = spawn(parsed.cmd, parsed.args, { shell: false, windowsHide: true })

@@ -139,7 +139,8 @@ class TextToSpeech:
             from elevenlabs import voices
 
             return [{"id": v.voice_id, "name": v.name} for v in voices()]
-        except ImportError:
+        except ImportError as e:
+            logger.debug("elevenlabs voices not available: {}", e)
             return []
 
 

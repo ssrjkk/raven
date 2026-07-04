@@ -55,7 +55,6 @@ def is_private_url(url: str) -> bool:
     except Exception as exc:
         from loguru import logger
         logger.debug("SSRF IP resolution error for {}: {}", host, exc)
-        pass
     try:
         ip = ipaddress.ip_address(host)
         if any(ip in net for net in PRIVATE_NETS):

@@ -6,6 +6,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 _LSP_SERVERS: dict[str, list[str]] = {
     "python": ["pyright-langserver", "--stdio"],
     "typescript": ["typescript-language-server", "--stdio"],
@@ -306,7 +308,8 @@ async def enrich_context(project_root: str | Path | None = None, max_files: int 
                             label += f" {{{child_names}}}"
                         names.append(label)
                     file_symbols.append(f"  {fp.relative_to(root)}: {', '.join(names[:10])}")
-            except Exception:
+            except Exception as e:
+                logger.debug("LSP symbol parse failed for {}: {}", fp, e)
                 file_symbols.append(f"  {fp.relative_to(root)}: (symbols unavailable)")
 
         if file_symbols:
@@ -322,8 +325,8 @@ def _scan_extensions(root: Path) -> list[str]:
         for p in root.rglob("*"):
             if p.is_file() and p.suffix.lower() in _LANG_EXTS_FLAT:
                 exts.append(p.suffix.lower())
-    except PermissionError:
-        pass
+    except PermissionError as e:
+        logger.debug("[lsp] permission denied scanning {}: {}", root, e)
     return exts
 
 

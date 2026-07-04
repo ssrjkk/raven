@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import aiosqlite
+from loguru import logger
 
 from raven.core.migrations import Migrator
 from raven.core.models import Message, Session
@@ -340,5 +341,6 @@ class Database:
             async with self.conn.execute("SELECT 1") as c:
                 await c.fetchone()
             return True
-        except Exception:
+        except Exception as e:
+            logger.warning("DB health check failed: {}", e)
             return False

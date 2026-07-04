@@ -154,7 +154,7 @@ class SSEStream:
                     q.get_nowait()
                     self._total_dropped += 1
                 except asyncio.QueueEmpty:
-                    pass
+                    logger.debug("SSE: queue empty during throttled drop")
             try:
                 await asyncio.wait_for(q.put(payload), timeout=0.5)
                 self._total_pushed += 1
@@ -176,7 +176,7 @@ class SSEStream:
                 except TimeoutError:
                     yield SSEEvent("ping", {"time": time.time()}).serialize()
         except asyncio.CancelledError:
-            pass
+            logger.debug("SSE: stream cancelled for session {}", session_id)
         finally:
             self.unsubscribe(session_id)
 

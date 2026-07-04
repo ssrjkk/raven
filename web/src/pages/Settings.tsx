@@ -9,7 +9,7 @@ export default function Settings() {
   const { toast } = useToast();
 
   useEffect(() => {
-    api.config().then(setConfig).catch(() => toast("Failed to load config", "error"))
+    api.config().then(setConfig).catch((e: unknown) => { console.error("Failed to load config:", e); toast("Failed to load config", "error"); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -19,7 +19,8 @@ export default function Settings() {
       try {
         await api.shutdown();
         toast("Server shutting down...", "info");
-      } catch {
+      } catch (e) {
+        console.error("Shutdown failed:", e);
         toast("Shutdown failed", "error");
         setShuttingDown(false);
       }

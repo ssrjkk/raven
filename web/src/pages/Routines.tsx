@@ -12,7 +12,8 @@ export default function Routines() {
   async function load() {
     try {
       setRoutines(await api.routines());
-    } catch {
+    } catch (e) {
+      console.error("Failed to load routines:", e);
       toast("Failed to load routines", "error");
     } finally {
       setLoading(false);
@@ -24,7 +25,8 @@ export default function Routines() {
       await api.routineToggle(action, id);
       toast(`Routine ${action}ed`, "success");
       await load();
-    } catch {
+    } catch (e) {
+      console.error("Failed to toggle routine:", e);
       toast("Failed to toggle routine", "error");
     }
   }

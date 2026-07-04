@@ -43,6 +43,8 @@ function activate(context) {
     context.subscriptions.push(fixCmd);
 }
 
-function deactivate() {}
+function deactivate() {
+    console.log('RavenCode extension deactivated');
+}
 
 module.exports = { activate, deactivate };

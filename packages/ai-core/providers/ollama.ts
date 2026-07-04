@@ -17,7 +17,7 @@ export async function ollamaProvider(prompt: string): Promise<AIResponse> {
       text: data.response || "no response",
       model: "ollama/codellama",
     }
-  } catch {
-    return { text: "Ollama not running on localhost:11434", model: "ollama" }
+  } catch (e) {
+    throw new Error(`Ollama not running on localhost:11434 — ${e}`)
   }
 }

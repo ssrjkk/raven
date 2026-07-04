@@ -110,7 +110,7 @@ class Sandbox:
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.config.timeout)
         except TimeoutError:
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(ProcessLookupError, OSError):
                 proc.kill()
             return "Execution timed out"
         result = ""
@@ -209,14 +209,14 @@ class Sandbox:
             return f"Docker execution error: {e}"
         finally:
             if container:
-                with contextlib.suppress(Exception):
+                with contextlib.suppress(docker.errors.DockerException, docker.errors.NotFound):
                     container.remove(force=True)
 
     async def cleanup(self):
         if self._tmpdir:
             import shutil
 
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(FileNotFoundError, PermissionError, OSError):
                 shutil.rmtree(self._tmpdir)
             self._tmpdir = None
 

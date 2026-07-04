@@ -421,22 +421,26 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             os._exit(1)
 
     async def _shutdown(gw: Gateway, sv_task: asyncio.Task[None]):
-        with contextlib.suppress(Exception):
-            await asyncio.wait_for(monitor_engine.stop(), timeout=5)
-        with contextlib.suppress(Exception):
-            await asyncio.wait_for(routine_engine.stop(), timeout=5)
-        with contextlib.suppress(Exception):
-            await asyncio.wait_for(gw.llm.cleanup(), timeout=5)
-        with contextlib.suppress(Exception):
-            await asyncio.wait_for(gw.stop(), timeout=10)
-        with contextlib.suppress(Exception):
-            await asyncio.wait_for(gw.db.disconnect(), timeout=5)
-        with contextlib.suppress(Exception):
-            await asyncio.wait_for(client_manager.close(), timeout=5)
-        with contextlib.suppress(Exception):
+        for name, coro in [
+            ("monitor engine", monitor_engine.stop()),
+            ("routine engine", routine_engine.stop()),
+            ("LLM cleanup", gw.llm.cleanup()),
+            ("gateway stop", gw.stop()),
+            ("DB disconnect", gw.db.disconnect()),
+            ("client manager", client_manager.close()),
+        ]:
+            try:
+                await asyncio.wait_for(coro, timeout=5)
+            except (asyncio.TimeoutError, ConnectionError, RuntimeError) as e:
+                logger.warning("Shutdown {}: {}", name, e)
+        try:
             await config_watcher.stop()
-        with contextlib.suppress(Exception):
+        except Exception as e:
+            logger.warning("Shutdown config_watcher: {}", e)
+        try:
             await audit_logger.stop()
+        except Exception as e:
+            logger.warning("Shutdown audit_logger: {}", e)
         sv_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await sv_task
@@ -446,10 +450,14 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         await run_all()
     except (KeyboardInterrupt, asyncio.CancelledError):
         logger.info("Interrupted, shutting down...")
-        with contextlib.suppress(Exception):
+        try:
             await asyncio.wait_for(gateway.stop(), timeout=10)
-        with contextlib.suppress(Exception):
+        except (asyncio.TimeoutError, ConnectionError, RuntimeError) as e:
+            logger.warning("Interrupt shutdown gateway: {}", e)
+        try:
             await asyncio.wait_for(gateway.db.disconnect(), timeout=5)
+        except (asyncio.TimeoutError, ConnectionError, RuntimeError) as e:
+            logger.warning("Interrupt shutdown DB: {}", e)
 
 
 @click.group(invoke_without_command=True)
@@ -642,8 +650,8 @@ def status():
         try:
             r = httpx.get(f"http://localhost:{settings.web_port}/api/status", timeout=3)
             api_ok = r.is_success
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Status health check failed: {}", e)
 
         table = Table(title="Raven AI Status")
         table.add_column("Component", style="cyan")
@@ -727,8 +735,8 @@ def doctor():
 
         r = httpx.get(f"http://localhost:{settings.web_port}/api/status", timeout=3)
         api_ok = r.is_success
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Doctor health check failed: {}", e)
     checks.append(("API", "[OK] Running" if api_ok else "[ERR] Stopped"))
 
     table = Table(show_header=False)

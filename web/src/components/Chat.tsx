@@ -39,7 +39,8 @@ export default function Chat() {
       const list = await api.sessions();
       setSessions(list);
       if (!currentSession && list.length > 0) setCurrentSession(list[0].id);
-    } catch {
+    } catch (e) {
+      console.error("Failed to load sessions:", e);
       toast("Failed to load sessions", "error");
     }
   }
@@ -49,7 +50,8 @@ export default function Chat() {
     try {
       const msgs = await api.sessionMessages(currentSession);
       setMessages(msgs);
-    } catch {
+    } catch (e) {
+      console.error("Failed to load messages:", e);
       toast("Failed to load messages", "error");
     }
   }
@@ -76,7 +78,8 @@ export default function Chat() {
       ]);
       setCurrentSession(s.id);
       setMessages([]);
-    } catch {
+    } catch (e) {
+      console.error("Failed to create session:", e);
       toast("Failed to create session", "error");
     }
   }

@@ -30,7 +30,7 @@ export default function Admin() {
     api.channels().then(setChannels).catch(() => toast("Failed to load channels", "error"))
       .finally(() => setChannelsLoading(false));
     const interval = setInterval(() => {
-      api.channels().then(setChannels).catch(() => {});
+      api.channels().then(setChannels).catch((e: unknown) => console.error("channel poll failed:", e));
     }, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -47,7 +47,7 @@ export default function Admin() {
         if (entry.message !== "heartbeat") {
           setLogs((prev) => [...prev.slice(-99), entry]);
         }
-      } catch {}
+      } catch (e) { console.error("log parse error:", e); }
     };
     es.onerror = () => {
       toast("Log stream disconnected", "error");

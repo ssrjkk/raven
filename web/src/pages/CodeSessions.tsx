@@ -12,7 +12,8 @@ export default function CodeSessions() {
   async function load() {
     try {
       setSessions(await api.codeSessions());
-    } catch {
+    } catch (e) {
+      console.error("Failed to load code sessions:", e);
       toast("Failed to load code sessions", "error");
     } finally {
       setLoading(false);

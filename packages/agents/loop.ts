@@ -18,5 +18,5 @@ export async function autonomousLoop(task: string) {
     if (result.verified) break
   }
 
-  return { completed: true, steps: memory.length }
+  return { completed: result.verified, steps: memory.length }
 }

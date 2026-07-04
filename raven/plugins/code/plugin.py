@@ -69,7 +69,7 @@ async def run_python(code: str, timeout: int = 30) -> str:
         if tmpdir and Path(tmpdir).exists():
             import shutil
 
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(FileNotFoundError, PermissionError, OSError):
                 shutil.rmtree(tmpdir)
 
 

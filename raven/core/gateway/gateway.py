@@ -142,7 +142,8 @@ class Gateway:
             try:
                 result = await self.llm.complete([{"role": "user", "content": "ping"}], model=settings.default_model)
                 return bool(result.content)
-            except Exception:
+            except Exception as e:
+                logger.warning("LLM health check failed: {}", e)
                 return False
 
         async def _db_restart():
@@ -338,7 +339,7 @@ class Gateway:
                     metrics.inc("messages_blocked", {"channel": event.channel, "reason": "allowlist"})
                     await self._send(event.channel, event.session_id, "Access denied. You are not on the allowlist.")
                     return False
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError, AttributeError):
                 pass
 
         if policy == "closed" and not user.get("is_allowed"):

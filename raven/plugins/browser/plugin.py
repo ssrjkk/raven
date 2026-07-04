@@ -50,8 +50,8 @@ def _validate_url(url: str) -> None:
                             raise ValueError(f"SSRF blocked: hostname {host} resolves to private IP {addr}")
                 except ValueError:
                     continue
-        except (socket.gaierror, OSError):
-            pass
+        except (socket.gaierror, OSError) as e:
+            logger.debug("[browser] DNS resolution failed for {}: {}", host, e)
 
 
 async def _ensure_browser():

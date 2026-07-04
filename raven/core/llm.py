@@ -601,7 +601,7 @@ class LLMRouter:
 
     async def cleanup(self):
         for p in self._providers.values():
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(ConnectionError, asyncio.TimeoutError):
                 await p.cleanup()
         self._providers.clear()
 

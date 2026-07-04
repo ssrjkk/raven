@@ -29,7 +29,7 @@ class AgentResult:
 
 class Orchestrator:
     def __init__(self) -> None:
-        pass
+        self._agent_cache: dict[str, Any] = {}
 
     @staticmethod
     def _build_agent(

@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 from httpx import AsyncClient
+from loguru import logger
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal
 from textual.screen import Screen
@@ -33,8 +34,8 @@ class LogWidget(RichLog):
                         if line not in self._log_buffer:
                             self._log_buffer.add(line)
                             self.write(line)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Log poll failed: {}", e)
 
 
 class DashboardScreen(Screen[Any]):
@@ -69,7 +70,8 @@ class DashboardScreen(Screen[Any]):
                     self.query_one("#sessions", Static).update(f"Sessions: {data.get('sessions', 0)}")
                     self.query_one("#model", Static).update(f"Model: {data.get('model', '--')}")
             self.query_one("#uptime", Static).update(f"Uptime: {self._format_uptime(time.time() - self._start_time)}")
-        except Exception:
+        except Exception as e:
+            logger.debug("Stats poll failed: {}", e)
             self.query_one("#channels", Static).update("Channels: ?")
 
 

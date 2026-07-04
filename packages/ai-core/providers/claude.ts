@@ -4,7 +4,7 @@ export async function claudeProvider(prompt: string): Promise<AIResponse> {
   const apiKey = process.env.ANTHROPIC_API_KEY
 
   if (!apiKey) {
-    return { text: "ANTHROPIC_API_KEY not configured", model: "claude-4" }
+    throw new Error("ANTHROPIC_API_KEY not configured")
   }
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {

@@ -7,6 +7,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from raven.core.monitor.models import (
     CheckResult,
     Condition,
@@ -237,5 +239,6 @@ class MonitorStore:
                     triggered=last_triggered is not None,
                 )
             return m
-        except Exception:
+        except Exception as e:
+            logger.warning("Monitor load failed: {}", e)
             return None

@@ -82,7 +82,8 @@ class WebChatChannel(BaseChannel):
                     if payload:
                         websocket.state.user_id = payload.get("sub", "unknown")
                         websocket.state.role = payload.get("role", "user")
-                except Exception:
+                except Exception as e:
+                    logger.debug("WebSocket token decode failed: {}", e)
                     websocket.state.user_id = "anonymous"
                     websocket.state.role = "user"
             else:
@@ -163,7 +164,7 @@ class WebChatChannel(BaseChannel):
 
     async def stop(self):
         for ws in self._connections.values():
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(ConnectionError, RuntimeError):
                 await ws.close()
         self._connections.clear()
 

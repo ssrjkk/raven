@@ -6,6 +6,7 @@ import socket
 from urllib.parse import urlparse
 
 import httpx
+from loguru import logger
 
 PLUGIN_NAME = "api"
 PLUGIN_DESCRIPTION = "Make HTTP requests to external APIs (GET, POST, PUT, DELETE)"
@@ -44,8 +45,8 @@ def _validate_url(url: str) -> tuple[str, ValueError | None]:
                             return url, ValueError(f"SSRF blocked: {host} resolves to private IP {addr}")
                 except ValueError:
                     continue
-        except (socket.gaierror, OSError):
-            pass
+        except (socket.gaierror, OSError) as e:
+            logger.debug("[api] DNS resolution failed for {}: {}", host, e)
     return url, None
 
 
@@ -114,6 +115,6 @@ def _format_response(resp: httpx.Response) -> str:
         try:
             parsed = resp.json()
             text = json.dumps(parsed, indent=2, ensure_ascii=False)[:4000]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Response JSON parse failed: {}", e)
     return f"[{resp.status_code}] {resp.reason_phrase}\n{text}"

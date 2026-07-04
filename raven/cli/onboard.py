@@ -4,6 +4,7 @@ import asyncio
 import sys
 from typing import Any
 
+from loguru import logger
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -38,7 +39,8 @@ async def _test_telegram_token(token: str) -> str | None:
         me = await app.bot.get_me()
         await app.shutdown()
         return me.username  # type: ignore[no-any-return]
-    except Exception:
+    except Exception as e:
+        logger.error("Telegram token validation failed: {}", e)
         return None
 
 

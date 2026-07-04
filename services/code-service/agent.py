@@ -5,6 +5,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 
 def _get_tool_registry():
     import importlib
@@ -89,7 +91,7 @@ class RavenCodeAgent:
             try:
                 return json.loads(text)
             except json.JSONDecodeError:
-                pass
+                logger.debug("[code-agent] failed to parse tool JSON: {}...", text[:80])
         if text.startswith("[tool:") and "]" in text:
             tool_line, _, args_text = text.partition("]")
             tool_name = tool_line.replace("[tool:", "").strip()

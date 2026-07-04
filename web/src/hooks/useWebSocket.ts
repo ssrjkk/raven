@@ -40,7 +40,7 @@ export function useWebSocket(onMessage: Handler) {
           session_id: String(parsed.session_id ?? ""),
         };
         handlerRef.current(msg);
-      } catch { /* ignore malformed messages */ }
+      } catch (e) { console.error("WS malformed message:", e, (e as any)?.data?.slice(0,200) ?? ""); }
     };
     wsRef.current = ws;
   }, []);

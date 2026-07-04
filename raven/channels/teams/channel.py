@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from loguru import logger
+
 from raven.channels.enterprise_base import EnterpriseChannel
 from raven.core.config import settings
 from raven.core.models import IncomingMessage, Message
@@ -14,7 +16,7 @@ class TeamsChannel(EnterpriseChannel):
         self._webhook_url = settings.teams_webhook_url or ""
 
     async def _stop(self):
-        pass
+        logger.info("[teams] channel stopped")
 
     async def handle_webhook(self, body: dict[str, Any]) -> bool:
         if not self._handler or not self._ready:
