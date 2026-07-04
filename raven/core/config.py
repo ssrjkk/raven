@@ -7,6 +7,8 @@ from typing import Any
 from loguru import logger
 from pydantic_settings import BaseSettings
 
+from raven.core.watermark import is_honeytoken, honeytoken_warning
+
 _DEFAULT_TOOLS_DENY = [
     "group:automation",
     "group:runtime",
@@ -132,6 +134,19 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# ── Honeytoken watermark check ────────────────────────────────
+_honeytoken_keys = {
+    "openrouter_api_key": "OPENROUTER_API_KEY",
+    "anthropic_api_key": "ANTHROPIC_API_KEY",
+    "openai_api_key": "OPENAI_API_KEY",
+    "telegram_bot_token": "TELEGRAM_BOT_TOKEN",
+    "slack_bot_token": "SLACK_BOT_TOKEN",
+}
+for _attr, _env_name in _honeytoken_keys.items():
+    _val = getattr(settings, _attr, "")
+    if _val and is_honeytoken(_env_name, _val):
+        logger.warning(honeytoken_warning(_env_name))
 
 
 @lru_cache(maxsize=1)

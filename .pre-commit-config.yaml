@@ -1,4 +1,15 @@
 repos:
+  - repo: local
+    hooks:
+      - id: generate-deploy-id
+        name: Generate deploy watermark
+        entry: python scripts/generate_deploy_id.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        description: "Bakes a unique git-based deploy ID into raven/core/_deploy.py"
+
+repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.5
     hooks:

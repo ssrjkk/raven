@@ -13,6 +13,7 @@ from raven.channels.base import BaseChannel
 from raven.core.canvas import canvas_manager
 from raven.core.db import Database
 from raven.core.models import IncomingMessage, Message
+from raven.core.watermark import canary_html_comment, install_fastapi_watermark
 
 
 class WebChatChannel(BaseChannel):
@@ -24,6 +25,7 @@ class WebChatChannel(BaseChannel):
         self._app = FastAPI(title="Raven AI Web Chat")
         self._connections: dict[str, WebSocket] = {}
         self._ready = False
+        install_fastapi_watermark(self._app)
         self._setup_routes()
 
     def _setup_routes(self):
@@ -32,6 +34,7 @@ class WebChatChannel(BaseChannel):
         @app.get("/")
         async def get_index():
             html = self._get_index_html()
+            html = html.replace("</head>", f"{canary_html_comment()}\n</head>")
             return HTMLResponse(html)
 
         @app.get("/api/sessions")

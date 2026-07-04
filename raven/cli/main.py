@@ -483,8 +483,10 @@ def gateway(port: int):
     """Start the AI Gateway (Fastify-compatible bridge)"""
     import uvicorn
     from fastapi import FastAPI
+    from raven.core.watermark import install_fastapi_watermark
 
     app = FastAPI(title="AI-OS-MVP Gateway")
+    install_fastapi_watermark(app)
     app.include_router(get_aios_adapter().get_bridge_router())
 
     click.echo(f"AI-OS-MVP Gateway running on http://localhost:{port}")

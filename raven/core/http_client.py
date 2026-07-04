@@ -7,6 +7,8 @@ from typing import Any
 import httpx
 from loguru import logger
 
+from raven.core.watermark import user_agent as _watermark_ua
+
 
 class HTTPClientPool:
     _instance: HTTPClientPool | None = None
@@ -33,7 +35,7 @@ class HTTPClientPool:
                     base_url=base_url,
                     timeout=timeout,
                     limits=limits,
-                    headers={"User-Agent": "RavenAI/1.0"},
+                    headers={"User-Agent": _watermark_ua()},
                 )
             return self._clients[key]
 
