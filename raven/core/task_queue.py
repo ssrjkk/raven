@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -10,6 +9,7 @@ from typing import Any
 
 from loguru import logger
 
+from raven.core._json import json
 from raven.core.db import Database
 
 

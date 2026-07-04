@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from typing import Any
+
+from raven.core._json import json
 
 CONFIG_DIR = Path.home() / ".raven"
 CONFIG_FILE = CONFIG_DIR / "config.json"

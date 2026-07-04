@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import os
+import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
 from typing import Any
@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 from loguru import logger
 
+from raven.core._json import json
 from raven.core.config import settings
 from raven.core.metrics import metrics
 from raven.core.tracing import trace_llm_call
@@ -107,7 +108,7 @@ class OpenRouterProvider(LLMProvider):
     def __init__(self, **overrides):
         self.api_key = overrides.get("api_key") or settings.openrouter_api_key
         self.base_url = overrides.get("base_url") or "https://openrouter.ai/api/v1"
-        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
     async def cleanup(self):
         await self.http.aclose()
@@ -145,7 +146,7 @@ class OpenAIProvider(LLMProvider):
     def __init__(self, **overrides):
         self.api_key = overrides.get("api_key") or settings.openai_api_key
         self.base_url = overrides.get("base_url") or "https://api.openai.com/v1"
-        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
     async def cleanup(self):
         await self.http.aclose()
@@ -189,7 +190,7 @@ class AnthropicProvider(LLMProvider):
     def __init__(self, **overrides):
         self.api_key = overrides.get("api_key") or settings.anthropic_api_key
         self.base_url = overrides.get("base_url") or "https://api.anthropic.com"
-        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
     async def cleanup(self):
         await self.http.aclose()
@@ -251,7 +252,7 @@ class AnthropicProvider(LLMProvider):
 class OllamaProvider(LLMProvider):
     def __init__(self, **overrides):
         self.base_url = overrides.get("base_url") or settings.ollama_base_url
-        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
     async def cleanup(self):
         await self.http.aclose()
@@ -305,7 +306,7 @@ class VLLMProvider(LLMProvider):
     def __init__(self, **overrides):
         self.base_url = overrides.get("base_url") or settings.vllm_base_url
         self.api_key = overrides.get("api_key") or ""
-        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
     async def cleanup(self):
         await self.http.aclose()
@@ -342,7 +343,7 @@ class AzureProvider(LLMProvider):
         self.api_key = overrides.get("api_key") or os.environ.get("AZURE_OPENAI_API_KEY", "")
         self.endpoint = overrides.get("base_url") or os.environ.get("AZURE_OPENAI_ENDPOINT", "https://your-resource.openai.azure.com")
         self.api_version = overrides.get("api_version") or os.environ.get("AZURE_OPENAI_API_VERSION", "2024-06-01")
-        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
     async def cleanup(self):
         await self.http.aclose()
@@ -377,7 +378,7 @@ class AzureProvider(LLMProvider):
 class CopilotProvider(LLMProvider):
     """GitHub Copilot — uses GitHub OAuth token for OpenAI-compatible API."""
     def __init__(self, **overrides):
-        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
         self._token: str | None = overrides.get("api_key") or os.environ.get("COPILOT_TOKEN") or None
         self._github_token = os.environ.get("GITHUB_TOKEN", "")
 
@@ -433,7 +434,7 @@ class VertexAIProvider(LLMProvider):
     def __init__(self, **overrides):
         self.project = overrides.get("project") or os.environ.get("VERTEX_AI_PROJECT", "")
         self.location = overrides.get("location") or os.environ.get("VERTEX_AI_LOCATION", "us-central1")
-        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
         self._api_key = overrides.get("api_key") or ""
         self._token: str | None = None
 
@@ -517,7 +518,7 @@ class BedrockProvider(LLMProvider):
         self.access_key = overrides.get("api_key") or os.environ.get("AWS_ACCESS_KEY_ID", "")
         self.secret_key = overrides.get("secret_key") or os.environ.get("AWS_SECRET_ACCESS_KEY", "")
         self.session_token = overrides.get("session_token") or os.environ.get("AWS_SESSION_TOKEN", "")
-        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120))
+        self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
     async def cleanup(self):
         await self.http.aclose()
@@ -595,6 +596,9 @@ def _convert_to_bedrock_converse(messages: list[dict[str, Any]]) -> dict[str, An
 
 
 class LLMRouter:
+    _cache: dict[str, tuple[float, LLMResponse]] = {}
+    _CACHE_TTL = 2.0
+
     def __init__(self, providers_config: dict[str, Any] | None = None):
         self._providers: dict[str, LLMProvider] = {}
         self._providers_config = providers_config or {}
@@ -604,6 +608,22 @@ class LLMRouter:
             with contextlib.suppress(ConnectionError, asyncio.TimeoutError):
                 await p.cleanup()
         self._providers.clear()
+        LLMRouter._cache.clear()
+
+    @staticmethod
+    def _cache_key(messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None) -> str:
+        return f"{model}|{tools}|{json.dumps(messages, sort_keys=True)}"
+
+    def _get_cached(self, key: str) -> LLMResponse | None:
+        entry = LLMRouter._cache.get(key)
+        if entry and (time.monotonic() - entry[0]) < LLMRouter._CACHE_TTL:
+            return entry[1]
+        if entry:
+            del LLMRouter._cache[key]
+        return None
+
+    def _set_cached(self, key: str, resp: LLMResponse):
+        LLMRouter._cache[key] = (time.monotonic(), resp)
 
     def _get_provider(self, model: str) -> LLMProvider:
         if not model:
@@ -676,6 +696,11 @@ class LLMRouter:
         self, messages: list[dict[str, Any]], model: str | None = None, tools: list[dict[str, Any]] | None = None
     ) -> LLMResponse:
         model = model or settings.default_model
+        key = self._cache_key(messages, model, tools)
+        cached = self._get_cached(key)
+        if cached is not None:
+            metrics.inc("llm_cache_hit", {"model": model})
+            return cached
         last_exc: Exception | None = None
         for attempt in range(max(1, settings.llm_retry_max)):
             try:
@@ -683,6 +708,7 @@ class LLMRouter:
                 with trace_llm_call(model=model):
                     resp = await provider.complete(messages, model, tools)
                 metrics.inc("llm_complete", {"model": model, "status": "ok"})
+                self._set_cached(key, resp)
                 return resp
             except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.NetworkError) as e:
                 last_exc = e

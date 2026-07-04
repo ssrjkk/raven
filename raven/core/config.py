@@ -7,7 +7,7 @@ from typing import Any
 from loguru import logger
 from pydantic_settings import BaseSettings
 
-from raven.core.watermark import is_honeytoken, honeytoken_warning
+from raven.core.watermark import honeytoken_warning, is_honeytoken
 
 _DEFAULT_TOOLS_DENY = [
     "group:automation",

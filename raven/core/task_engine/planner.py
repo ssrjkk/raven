@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 import time
 from typing import Any
 
 from loguru import logger
 
+from raven.core._json import json
 from raven.core.llm import LLMRouter
 from raven.core.task_engine.models import Task, TaskStep
 from raven.core.task_engine.tool_registry import ToolRegistry

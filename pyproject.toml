@@ -28,6 +28,8 @@ dependencies = [
     "python-dotenv>=1.0,<2.0",
     "numpy>=1.26,<3.0",
     "PyYAML>=6.0,<7.0",
+    "uvloop>=0.19.0,<1.0",
+    "orjson>=3.10.0,<4.0",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +40,7 @@ secrets = ["cryptography>=41.0"]
 service-win = ["pywin32>=306"]
 tui = ["textual>=1.0"]
 tracing = ["opentelemetry-api>=1.25", "opentelemetry-sdk>=1.25"]
+numba = ["numba>=0.60,<1.0"]
 voice = ["sounddevice>=0.5"]
 dev = [
     "pytest>=8.0,<10.0",
@@ -46,7 +49,7 @@ dev = [
     "mypy>=1.10,<2.0",
     "pre-commit>=3.0,<5.0",
 ]
-all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,voice,dev]"]
+all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,voice,dev,numba]"]
 
 [project.scripts]
 raven = "raven.cli.main:cli"

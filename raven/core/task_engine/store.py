@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 import sqlite3
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
+from raven.core._json import json
 from raven.core.task_engine.models import Task, TaskPriority, TaskStatus, TaskStep
 
 _local = threading.local()

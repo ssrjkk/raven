@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import sys
 from pathlib import Path
 from typing import Any
+
+import uvloop
+
+uvloop.install()
+
+from raven.core._json import json
 
 import click
 

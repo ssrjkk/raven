@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import sqlite3
 import threading
 import time
@@ -9,6 +8,7 @@ from typing import Any
 
 from loguru import logger
 
+from raven.core._json import json
 from raven.core.monitor.models import (
     CheckResult,
     Condition,

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import io
-import json
 import os
 import time
 import uuid
@@ -14,6 +13,8 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
+
+from raven.core._json import json
 
 AUDIT_SIGNING_KEY_ENV = "RAVEN_AUDIT_SIGNING_KEY"
 AUDIT_KEY_FILE = "data/audit_signing_key.bin"

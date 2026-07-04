@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import time
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
 from loguru import logger
+
+from raven.core._json import json
 
 
 class Backpressure(StrEnum):

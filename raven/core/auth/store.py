@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 import time
 from pathlib import Path
 
 import aiosqlite
 
+from raven.core._json import json
 from raven.core.auth.models import Role, User
 from raven.core.auth.password import hash_password, verify_password
 

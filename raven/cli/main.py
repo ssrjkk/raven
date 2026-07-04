@@ -8,6 +8,10 @@ import time
 from pathlib import Path
 from typing import Any
 
+import uvloop
+
+uvloop.install()
+
 import click
 from loguru import logger
 from pydantic import BaseModel
@@ -483,6 +487,7 @@ def gateway(port: int):
     """Start the AI Gateway (Fastify-compatible bridge)"""
     import uvicorn
     from fastapi import FastAPI
+
     from raven.core.watermark import install_fastapi_watermark
 
     app = FastAPI(title="AI-OS-MVP Gateway")

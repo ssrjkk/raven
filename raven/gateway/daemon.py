@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+import uvloop
+
+uvloop.install()
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from loguru import logger
 from pydantic import BaseModel
 
+from raven.core._json import json
 from raven.core.llm import LLMRouter
 from raven.gateway.routing import RoutingEngine
 from ravencode.runtime.agent_core import AgentConfig, ReActAgent

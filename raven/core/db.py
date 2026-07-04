@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -8,6 +7,7 @@ from typing import Any
 import aiosqlite
 from loguru import logger
 
+from raven.core._json import json
 from raven.core.migrations import Migrator
 from raven.core.models import Message, Session
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -8,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
+
+from raven.core._json import json
 
 
 class Op(StrEnum):

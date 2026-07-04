@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import json
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
+
+from raven.core._json import json
 
 if TYPE_CHECKING:
     from raven.core.db import Database

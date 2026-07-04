@@ -7,7 +7,6 @@ Injected into:
 - Honeytoken keys (fake credentials that trigger alerts if used)
 """
 from __future__ import annotations
-from __future__ import annotations
 
 from raven.core._deploy import DEPLOY_ID, DEPLOY_ORIGIN, DEPLOY_TIMESTAMP
 
