@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import os
 import time
 from abc import ABC, abstractmethod
@@ -451,7 +450,7 @@ class VertexAIProvider(LLMProvider):
                 self._token = result.stdout.strip()
                 return self._token
         except FileNotFoundError:
-            pass
+            logger.debug("gcloud not found, trying credentials file")
         creds_path = os.environ.get("VERTEX_AI_CREDENTIALS") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
         if creds_path:
             import json as _json
@@ -605,8 +604,10 @@ class LLMRouter:
 
     async def cleanup(self):
         for p in self._providers.values():
-            with contextlib.suppress(ConnectionError, asyncio.TimeoutError):
+            try:
                 await p.cleanup()
+            except (ConnectionError, TimeoutError):
+                logger.warning("LLM provider cleanup failed: connection error")
         self._providers.clear()
         LLMRouter._cache.clear()
 

@@ -1021,7 +1021,7 @@ def _ensure_plugin_tools() -> None:
                     MODULE_TOOLS[name] = tool
             _plugin_tools_loaded = True
         except ImportError:
-            pass
+            logger.debug("plugin tools unavailable, skipping")
 
 
 def get_tool_definitions(plan_mode: bool = False) -> list[dict[str, Any]]:

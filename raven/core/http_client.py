@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 from typing import Any
 
 import httpx
@@ -42,8 +41,10 @@ class HTTPClientPool:
     async def close_all(self):
         async with self._lock:
             for _key, client in self._clients.items():
-                with contextlib.suppress(ConnectionError, asyncio.TimeoutError):
+                try:
                     await client.aclose()
+                except (ConnectionError, TimeoutError):
+                    logger.warning("Failed to close HTTP client {}: connection error", _key)
             self._clients.clear()
             self._closed = True
             logger.info("HTTP client pool closed ({} connections freed)", len(self._clients))

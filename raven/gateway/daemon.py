@@ -6,15 +6,16 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from loguru import logger
+
 try:
     import uvloop
 
     uvloop.install()
 except ImportError:
-    pass
+    logger.debug("uvloop not available, using asyncio")
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from loguru import logger
 from pydantic import BaseModel
 
 from raven.core._json import json

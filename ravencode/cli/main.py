@@ -6,12 +6,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 try:
     import uvloop
 
     uvloop.install()
 except ImportError:
-    pass
+    logger.debug("uvloop not available, using asyncio")
 
 import click
 

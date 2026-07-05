@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 from pathlib import Path
 
 from loguru import logger
@@ -30,14 +29,18 @@ def register(version: int, description: str, sql: str | None = None):
 
 @register(1, "Add agent_skills column to sessions")
 async def _migration_1(conn):
-    with contextlib.suppress(RuntimeError):
+    try:
         await conn.execute("ALTER TABLE sessions ADD COLUMN agent_skills TEXT DEFAULT '[]'")
+    except RuntimeError:
+        logger.debug("Migration 1: column already exists")
 
 
 @register(2, "Add role column to users table")
 async def _migration_2(conn):
-    with contextlib.suppress(RuntimeError):
+    try:
         await conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
+    except RuntimeError:
+        logger.debug("Migration 2: column already exists")
 
 
 class Migrator:

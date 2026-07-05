@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import os
 import tempfile
 from enum import StrEnum
@@ -145,8 +144,10 @@ class SpeechToText:
         with open(temp, "wb") as f:
             f.write(audio.get_wav_data())
         text = self.transcribe(str(temp))
-        with contextlib.suppress(OSError):
+        try:
             os.unlink(str(temp))
+        except OSError:
+            logger.debug("Temp file already removed")
         return text
 
 

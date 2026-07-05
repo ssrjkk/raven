@@ -29,7 +29,7 @@ jobs:
       - name: Ruff lint
         run: ruff check --output-format=github .
       - name: mypy
-        run: mypy raven/ --strict --ignore-missing-imports || true
+        run: mypy raven/ --ignore-missing-imports
 
   go-build:
     runs-on: ubuntu-latest

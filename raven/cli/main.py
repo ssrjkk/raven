@@ -8,15 +8,16 @@ import time
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 try:
     import uvloop
 
     uvloop.install()
 except ImportError:
-    pass
+    logger.debug("uvloop not available, using asyncio")
 
 import click
-from loguru import logger
 from pydantic import BaseModel
 from rich.console import Console
 from rich.panel import Panel
@@ -396,8 +397,10 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
-        with contextlib.suppress(NotImplementedError):
+        try:
             loop.add_signal_handler(sig, shutdown_handler)
+        except NotImplementedError:
+            logger.debug("Signal handlers not supported on this platform")
 
     monitor_store = MonitorStore(settings.resolved_db_path)
     monitor_engine = MonitorEngine(monitor_store)
@@ -2077,7 +2080,7 @@ def logs(lines: int, level: str, follow: bool):
                         else:
                             time.sleep(0.5)
             except KeyboardInterrupt:
-                pass
+                logger.debug("[logs] follow interrupted by user")
             except Exception as exc:
                 console.print(f"[red]Log follow error: {exc}[/red]")
     except Exception as exc:

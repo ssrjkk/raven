@@ -113,7 +113,7 @@ class WebChatChannel(BaseChannel):
                         )
                         await self._handler(event)
             except WebSocketDisconnect:
-                pass
+                logger.debug("[webchat] client disconnected")
             finally:
                 self._connections.pop(client_id, None)
 
@@ -157,7 +157,7 @@ class WebChatChannel(BaseChannel):
                     elif action == "list_sessions":
                         await websocket.send_json({"type": "session_list", "sessions": canvas_manager.list_sessions()})
             except WebSocketDisconnect:
-                pass
+                logger.debug("[webchat] canvas client disconnected")
             finally:
                 canvas_manager.delete_session(session.session_id)
 

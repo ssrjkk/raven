@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import os
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
+from loguru import logger
 
 SANDBOX_IMAGE = "python:3.12-slim"
 
@@ -110,8 +111,10 @@ class Sandbox:
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.config.timeout)
         except TimeoutError:
-            with contextlib.suppress(ProcessLookupError, OSError):
+            try:
                 proc.kill()
+            except (ProcessLookupError, OSError):
+                logger.debug("Process already exited during kill")
             return "Execution timed out"
         result = ""
         if stdout:
@@ -209,15 +212,19 @@ class Sandbox:
             return f"Docker execution error: {e}"
         finally:
             if container:
-                with contextlib.suppress(docker.errors.DockerException, docker.errors.NotFound):
+                try:
                     container.remove(force=True)
+                except (docker.errors.DockerException, docker.errors.NotFound):
+                    logger.debug("Container already removed or Docker error during cleanup")
 
     async def cleanup(self):
         if self._tmpdir:
             import shutil
 
-            with contextlib.suppress(FileNotFoundError, PermissionError, OSError):
+            try:
                 shutil.rmtree(self._tmpdir)
+            except (FileNotFoundError, PermissionError, OSError) as exc:
+                logger.debug("Failed to remove temp dir: {}", exc)
             self._tmpdir = None
 
 
