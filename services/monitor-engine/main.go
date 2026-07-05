@@ -316,9 +316,18 @@ func (m *MonitorEngine) listMonitors(w http.ResponseWriter, r *http.Request) {
 	items := make([]*Monitor, 0, len(m.checks))
 	for _, ch := range m.checks {
 		ch.mu.RLock()
-		copy := *ch
+		item := &Monitor{
+			ID:             ch.ID,
+			Name:           ch.Name,
+			URL:            ch.URL,
+			IntervalSec:    ch.IntervalSec,
+			TimeoutSec:     ch.TimeoutSec,
+			LastStatus:     ch.LastStatus,
+			LastDurationMs: ch.LastDurationMs,
+			Enabled:        ch.Enabled,
+		}
 		ch.mu.RUnlock()
-		items = append(items, &copy)
+		items = append(items, item)
 	}
 	m.checksMu.RUnlock()
 	writeJSON(w, http.StatusOK, map[string]interface{}{"monitors": items})
@@ -386,7 +395,7 @@ func (m *MonitorEngine) createMonitor(w http.ResponseWriter, r *http.Request) {
 	go m.runCheck(monCtx, monPtr)
 
 	w.WriteHeader(http.StatusCreated)
-	writeJSON(w, http.StatusCreated, mon)
+	writeJSON(w, http.StatusCreated, monPtr)
 }
 
 func (m *MonitorEngine) deleteMonitor(w http.ResponseWriter, r *http.Request) {

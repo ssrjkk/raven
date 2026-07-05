@@ -9,7 +9,6 @@ from raven.core.config import settings
 from raven.core.rag.retriever import Retriever
 from raven.plugins.files import plugin as files_plugin
 
-
 _ALLOWED_COMMANDS = frozenset({"ls", "cat", "echo", "pwd", "cd", "mkdir", "rm", "cp", "mv", "grep", "find", "head", "tail", "wc", "sort", "uniq", "diff", "python", "node", "npm", "npx", "git", "pip", "curl", "wget", "docker"})
 
 
