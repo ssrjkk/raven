@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 from raven.core.db import Database
+from raven.core.models import Message
 
 PLUGIN_NAME = "sessions"
 PLUGIN_DESCRIPTION = "List and inspect conversation sessions"
@@ -49,7 +50,7 @@ async def sessions_send(session_id: str = "", message: str = "") -> str:
         return "Database not initialized"
     if not session_id or not message:
         return "Usage: sessions_send(session_id='...', message='...')"
-    await _db.add_session_message(session_id, role="assistant", content=message)
+    await _db.save_message(Message(session_id=session_id, role="assistant", content=message))
     return f"Message sent to session {session_id}"
 
 
@@ -60,5 +61,5 @@ async def sessions_spawn(session_id: str = "", task: str = "") -> str:
     if not session_id or not task:
         return "Usage: sessions_spawn(session_id='...', task='...')"
     sub_id = f"{session_id}/sub/{uuid.uuid4().hex[:8]}"
-    await _db.add_session_message(sub_id, role="system", content=f"Spawned sub-session for task: {task}")
+    await _db.save_message(Message(session_id=sub_id, role="system", content=f"Spawned sub-session for task: {task}"))
     return f"Sub-session {sub_id} spawned for task: {task[:100]}"

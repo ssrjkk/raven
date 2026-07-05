@@ -93,7 +93,8 @@ class RavenFlowDaemon:
                 return {"response": result[:5000], "session_id": session.id}
             except Exception as exc:
                 session.status = "idle"
-                return {"error": str(exc), "session_id": session.id}
+                logger.error("Agent run failed: {}", exc)
+                return {"error": "Agent execution failed", "session_id": session.id}
 
         @app.get("/api/sessions")
         async def list_sessions():

@@ -10,10 +10,16 @@ from raven.core.rag.retriever import Retriever
 from raven.plugins.files import plugin as files_plugin
 
 
+_ALLOWED_COMMANDS = frozenset({"ls", "cat", "echo", "pwd", "cd", "mkdir", "rm", "cp", "mv", "grep", "find", "head", "tail", "wc", "sort", "uniq", "diff", "python", "node", "npm", "npx", "git", "pip", "curl", "wget", "docker"})
+
+
 class RuntimeAdapter:
     @staticmethod
     async def run_command(cmd: str) -> str:
         import shlex
+        parts = shlex.split(cmd)
+        if parts and parts[0] not in _ALLOWED_COMMANDS:
+            return f"Command not allowed: {parts[0]}"
         if sys.platform == "win32":
             proc = await asyncio.create_subprocess_exec(
                 "cmd.exe", "/c", cmd,
@@ -21,7 +27,6 @@ class RuntimeAdapter:
                 stderr=subprocess.PIPE,
             )
         else:
-            parts = shlex.split(cmd)
             proc = await asyncio.create_subprocess_exec(
                 *parts,
                 stdout=subprocess.PIPE,
@@ -41,7 +46,7 @@ class RuntimeAdapter:
             return await files_plugin.read(path)
         except Exception as exc:
             logger.error("Failed to read {}: {}", path, exc)
-            return f"Read error: {exc}"
+            return "Read error"
 
     @staticmethod
     async def write_file(path: str, content: str) -> str:
@@ -49,7 +54,7 @@ class RuntimeAdapter:
             return await files_plugin.write(path, content)
         except Exception as exc:
             logger.error("Failed to write {}: {}", path, exc)
-            return f"Write error: {exc}"
+            return "Write error"
 
     @staticmethod
     async def create_sandbox(image: str = "python:3.12") -> dict[str, Any]:

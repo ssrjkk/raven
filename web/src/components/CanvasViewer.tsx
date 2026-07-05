@@ -138,13 +138,19 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
         </pre>
       );
 
-    case "image":
+    case "image": {
+      const imgUrl = props.url as string;
+      const allowedUrl = imgUrl.startsWith("http://") || imgUrl.startsWith("https://") || imgUrl.startsWith("data:image/");
+      if (!allowedUrl) {
+        return <span key={id} className="text-gray-500 text-sm">Blocked image URL</span>;
+      }
       return (
-        <img key={id} src={props.url as string} alt={props.alt as string || ""}
+        <img key={id} src={imgUrl} alt={props.alt as string || ""}
           className={`rounded-lg max-w-full ${props.className as string || ""}`}
           style={{ maxHeight: props.maxHeight as string || "300px", ...(props.style as Record<string, string> || {}) }}
         />
       );
+    }
 
     case "progress":
       const pct = ((props.value as number || 0) / (props.max as number || 1)) * 100;
@@ -165,8 +171,9 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
     case "link": {
       const href = props.href as string;
       const allowed = href.startsWith("http://") || href.startsWith("https://") || href.startsWith("mailto:") || href.startsWith("/");
-      if (!allowed) {
-        return <span key={id} className="text-gray-500 text-sm">{props.text as string} (blocked: {href.slice(0, 50)})</span>;
+      const noXss = !href.includes("javascript:") && !href.includes("data:") && !href.includes("vbscript:");
+      if (!allowed || !noXss) {
+        return <span key={id} className="text-gray-500 text-sm">{props.text as string} (blocked)</span>;
       }
       return (
         <a key={id} href={href} target="_blank" rel="noopener noreferrer"

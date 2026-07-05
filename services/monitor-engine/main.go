@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -322,6 +324,26 @@ func (m *MonitorEngine) listMonitors(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"monitors": items})
 }
 
+func validateURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("unsupported scheme: %s", u.Scheme)
+	}
+	host := u.Hostname()
+	if host == "localhost" || host == "127.0.0.1" || host == "0.0.0.0" || host == "::1" {
+		return fmt.Errorf("SSRF blocked: hostname %s", host)
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
+			return fmt.Errorf("SSRF blocked: private IP %s", host)
+		}
+	}
+	return nil
+}
+
 func (m *MonitorEngine) createMonitor(w http.ResponseWriter, r *http.Request) {
 	var mon Monitor
 	if err := json.NewDecoder(r.Body).Decode(&mon); err != nil {
@@ -337,6 +359,11 @@ func (m *MonitorEngine) createMonitor(w http.ResponseWriter, r *http.Request) {
 	}
 	mon.Enabled = true
 	mon.LastStatus = "pending"
+
+	if err := validateURL(mon.URL); err != nil {
+		writeMonitorError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	monPtr := &mon
 
@@ -395,6 +422,12 @@ func (m *MonitorEngine) deleteMonitor(w http.ResponseWriter, r *http.Request) {
 
 func (m *MonitorEngine) runCheck(ctx context.Context, mon *Monitor) {
 	client := &http.Client{Timeout: time.Duration(mon.TimeoutSec) * time.Second}
+
+	if err := validateURL(mon.URL); err != nil {
+		m.logger.Error("monitor URL blocked by SSRF guard", "monitor_id", mon.ID, "url", mon.URL, "error", err)
+		mon.LastStatus = "blocked"
+		return
+	}
 
 	for {
 		select {

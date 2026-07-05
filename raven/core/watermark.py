@@ -76,5 +76,5 @@ def install_fastapi_watermark(app):
 
             await self.inner(scope, receive, send_with_headers)
 
-    app.add_middleware(WatermarkMiddleware)  # type: ignore[arg-type]
+    app.add_middleware(WatermarkMiddleware)
 

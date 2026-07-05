@@ -43,7 +43,7 @@ class FailureReport:
 
 
 _PLAYWRIGHT_ERROR_RE = re.compile(
-    r"(?P<file>tests?/[\w/.-]+\.spec\.[\w]+):(?P<line>\d+)\s+[›>]\s+(?P<name>.+?)\n(?:.*\n)*?\s+Error:\s*(?P<error>.+?)(?:\n\s+at\s|\Z)",
+    r"(?P<file>tests?/[\w/.-]+\.spec\.[\w]+):(?P<line>\d+)\s+[›>]\s+(?P<name>.+?)\n(?:.*\n){0,50}?\s+Error:\s*(?P<error>.+?)(?:\n\s+at\s|\Z)",
     re.MULTILINE | re.DOTALL,
 )
 
@@ -148,7 +148,7 @@ class GitHubActionsAnalyzer:
                     stack_trace=match.group(0),
                 )
             )
-        passed_count = len(re.findall(r"(?:✓|✔|PASS)\s", log_text))
+        passed_count = len(re.findall(r"(?:✓|✔|PASS)\s", log_text[:200000]))
         report.passed = passed_count
         report.total_tests = report.passed + report.failed + report.skipped
         report.duration_sec = 0.0
@@ -159,9 +159,16 @@ class GitHubActionsAnalyzer:
         return report
 
 
+_ALLOWED_RESULTS_DIRS = {"results", "allure-results", "test-results", "playwright-results"}
+
+
 async def analyze_test_failure(path_or_payload: str | dict[str, Any]) -> FailureReport:
     if isinstance(path_or_payload, str):
-        p = Path(path_or_payload)
+        p = Path(path_or_payload).resolve()
+        allowed = any(parent.name in _ALLOWED_RESULTS_DIRS for parent in [p, *p.parents])
+        if not allowed:
+            logger.warning("Path not in allowed results directories: {}", p)
+            return FailureReport()
         if p.is_dir() and any(_ALLURE_RESULT_RE.search(f.name) for f in p.iterdir()):
             return AllureAnalyzer(p).analyze()
         if p.is_file():

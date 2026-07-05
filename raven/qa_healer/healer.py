@@ -12,6 +12,13 @@ from raven.qa_healer.analyzer import FailureReport, TestFailure
 _WORKSPACE_DIR = Path(os.getenv("RAVEN_WORKSPACE", "workspace")).resolve()
 
 
+def _confine(p: Path) -> Path:
+    p = p.resolve()
+    if _WORKSPACE_DIR not in p.parents and p != _WORKSPACE_DIR:
+        raise ValueError(f"Path {p} is outside workspace {_WORKSPACE_DIR}")
+    return p
+
+
 async def _ensure_agent() -> Any:
     from ravencode.agents.orchestrator import Orchestrator
 
@@ -23,11 +30,15 @@ def _is_playwright_test(file_path: str | Path) -> bool:
 
 
 def _is_selenium_test(file_path: str | Path) -> bool:
-    text = Path(file_path).read_text("utf-8") if Path(file_path).exists() else ""
+    f = Path(file_path)
+    if not f.exists():
+        return False
+    text = f.read_text("utf-8")
     return "selenium" in text or "webdriver" in text
 
 
 def _find_test_file(test_name: str, search_root: Path = _WORKSPACE_DIR) -> Path | None:
+    search_root = _confine(search_root)
     for p in search_root.rglob("*.spec.*"):
         content = p.read_text("utf-8", errors="replace")
         if test_name.split(" ")[0] in content or test_name in content:
@@ -88,10 +99,10 @@ async def heal_test_failure(
     branch_prefix: str = "raven/heal",
     auto_pr: bool = False,
 ) -> dict[str, Any]:
-    repo = Path(repo_path).resolve()
+    repo = _confine(Path(repo_path).resolve())
     if not (repo / ".git").is_dir():
         repo = _WORKSPACE_DIR
-    test_file = repo / failure.test_file
+    test_file = repo / Path(failure.test_file).name
     if not test_file.exists():
         test_file = _find_test_file(failure.test_name, repo) or test_file
     if not test_file.exists():
@@ -107,6 +118,7 @@ async def heal_test_failure(
     try:
         _run_git(repo, "checkout", "-b", branch)
     except Exception:
+        logger.debug("[healer] Branch exists, checking out anyway")
         _run_git(repo, "checkout", "-b", branch)
     from ravencode.agents.orchestrator import AgentType
 

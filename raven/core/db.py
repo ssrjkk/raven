@@ -20,7 +20,8 @@ class Database:
 
     @property
     def conn(self) -> aiosqlite.Connection:
-        assert self._conn is not None, "Database not connected"
+        if self._conn is None:
+            raise RuntimeError("Database not connected")
         return self._conn
 
     async def connect(self):

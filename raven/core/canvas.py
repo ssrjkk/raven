@@ -33,7 +33,8 @@ _COMPONENT_TYPES = frozenset(
 
 class CanvasComponent:
     def __init__(self, ctype: str, props: dict[str, Any] | None = None, children: list[CanvasComponent] | None = None):
-        assert ctype in _COMPONENT_TYPES, f"Unknown component type: {ctype}"
+        if ctype not in _COMPONENT_TYPES:
+            raise ValueError(f"Unknown component type: {ctype}")
         self.id = f"comp_{uuid4().hex[:12]}"
         self.ctype = ctype
         self.props = props or {}

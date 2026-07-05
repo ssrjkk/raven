@@ -134,7 +134,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
             return {"ok": True}
         except Exception as exc:
             logger.error("Auto-heal failed: {}", exc)
-            return {"ok": True, "healed": False, "error": str(exc)}
+            return {"ok": True, "healed": False, "error": "Auto-heal failed"}
 
     @router.post("/allure")
     async def allure_webhook(body: dict[str, Any], request: Request):
@@ -154,6 +154,6 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
             return {"ok": True, "message": "qa_healer not installed"}
         except Exception as exc:
             logger.error("Allure auto-heal failed: {}", exc)
-            return {"ok": True, "error": str(exc)}
+            return {"ok": True, "error": "Allure auto-heal failed"}
 
     return router

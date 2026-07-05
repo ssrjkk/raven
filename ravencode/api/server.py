@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
+from loguru import logger
 from pydantic import BaseModel
 
 from ravencode.runtime.agent_core import ReActAgent
@@ -91,7 +92,11 @@ def _openai_messages_to_conversation(messages: list[ChatMessage]) -> Conversatio
 async def _run_agent_nonstream(messages: list[ChatMessage], model: str, max_tokens: int) -> ChatCompletionResponse:
     conv = _openai_messages_to_conversation(messages)
     agent = ReActAgent(conversation=conv, max_steps=20)
-    result = await agent.run(messages[-1].content or "")
+    try:
+        result = await agent.run(messages[-1].content or "")
+    except Exception as exc:
+        logger.error("Agent non-stream run failed: {}", exc)
+        result = "Agent execution error"
 
     prompt_text = json.dumps([m.model_dump() for m in messages])
     return ChatCompletionResponse(
@@ -113,7 +118,11 @@ async def _run_agent_stream(messages: list[ChatMessage], model: str) -> AsyncIte
 
     yield f'data: {json.dumps({"id": f"chatcmpl-{uuid4().hex[:12]}", "object": "chat.completion.chunk", "created": int(time.time()), "model": model, "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}]})}\n\n'
 
-    result = await agent.run(messages[-1].content or "")
+    try:
+        result = await agent.run(messages[-1].content or "")
+    except Exception as exc:
+        logger.error("Agent stream run failed: {}", exc)
+        result = "Agent execution error"
 
     for chunk in [result[i:i + 100] for i in range(0, len(result), 100)]:
         yield f'data: {json.dumps({"id": f"chatcmpl-{uuid4().hex[:12]}", "object": "chat.completion.chunk", "created": int(time.time()), "model": model, "choices": [{"index": 0, "delta": {"content": chunk}, "finish_reason": None}]})}\n\n'

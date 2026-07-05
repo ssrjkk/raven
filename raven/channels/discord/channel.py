@@ -251,7 +251,7 @@ class DiscordChannel(BaseChannel):
                         if user:
                             channel = user  # type: ignore[assignment]
                     except Exception:
-                        pass
+                        logger.debug("[discord] Failed to fetch user {}", user_id)
             if channel:
                 try:
                     content = message.content
