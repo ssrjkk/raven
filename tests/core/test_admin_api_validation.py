@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from raven.core.admin_api import (
+from raven.core.admin.models import (
     AuthLoginRequest,
     AuthRegisterRequest,
     AuthUpdateRoleRequest,

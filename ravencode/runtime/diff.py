@@ -44,17 +44,25 @@ def apply_patch(path: str, diff_text: str) -> str:
     offset = 0
     for hunk in hunks:
         old_start = hunk["old_start"] - 1 + offset
-        old_count = hunk["old_count"]
-        new_lines = [x[1:] for x in hunk["lines"] if x.startswith("+")]
-        remove_lines = [x for x in hunk["lines"] if x.startswith("-")]
-        if old_start < 0 or old_start + old_count > len(result):
-            return f"[error] hunk out of range: {old_start}-{old_start + old_count} vs {len(result)} lines"
-        for i, line in enumerate(result[old_start:old_start + old_count]):
-            expected = remove_lines[i] if i < len(remove_lines) else None
-            if expected and line != expected[1:]:
-                return f"[error] context mismatch at line {old_start + i + 1}"
-        result[old_start:old_start + old_count] = new_lines
-        offset += len(new_lines) - old_count
+        new_lines: list[str] = []
+        ri = old_start
+        for diff_line in hunk["lines"]:
+            if not diff_line:
+                continue
+            prefix = diff_line[0]
+            content = diff_line[1:]
+            if prefix in (" ", "-"):
+                if ri >= len(result) or result[ri] != content:
+                    return f"[error] context mismatch at line {ri + 1}"
+                ri += 1
+                if prefix == " ":
+                    new_lines.append(content)
+            elif prefix == "+":
+                new_lines.append(content)
+        if ri - old_start == 0:
+            return "[error] no valid hunks in diff"
+        result[old_start:ri] = new_lines
+        offset += len(new_lines) - (ri - old_start)
     p.write_text("".join(result), encoding="utf-8")
     return f"[ok] applied patch to {path} ({len(hunks)} hunks)"
 

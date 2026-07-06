@@ -33,21 +33,19 @@ class UndoManager:
     def can_redo(self) -> bool:
         return len(self._redo_stack) > 0
 
-    def _apply(self, entry: UndoEntry) -> str:
+    def _apply(self, entry: UndoEntry, action: str = "undo") -> str:
         p = Path(entry.path).expanduser().resolve()
         p.write_text(entry.modified, encoding="utf-8")
-        logger.info("Undo applied {} on {}", entry.tool_name, entry.path)
-        return f"[undo] {entry.tool_name} on {entry.path}"
+        logger.info("{} applied {} on {}", action, entry.tool_name, entry.path)
+        return f"[{action}] {entry.tool_name} on {entry.path}"
 
     def undo(self) -> str | None:
         if not self._undo_stack:
             return None
         entry = self._undo_stack.pop()
         try:
-            p = Path(entry.path).expanduser().resolve()
-            current = p.read_text(encoding="utf-8")
-            self._redo_stack.append(UndoEntry(entry.path, current, entry.original, entry.tool_name))
-            result = self._apply(UndoEntry(entry.path, "", entry.original, entry.tool_name))
+            self._redo_stack.append(UndoEntry(entry.path, entry.original, entry.modified, entry.tool_name))
+            result = self._apply(UndoEntry(entry.path, "", entry.original, entry.tool_name), action="undo")
             return result
         except OSError as exc:
             logger.error("Undo failed: {}", exc)
@@ -61,7 +59,7 @@ class UndoManager:
             p = Path(entry.path).expanduser().resolve()
             current = p.read_text(encoding="utf-8")
             self._undo_stack.append(UndoEntry(entry.path, current, entry.modified, entry.tool_name))
-            result = self._apply(UndoEntry(entry.path, "", entry.modified, entry.tool_name))
+            result = self._apply(UndoEntry(entry.path, "", entry.modified, entry.tool_name), action="redo")
             return result
         except OSError as exc:
             logger.error("Redo failed: {}", exc)

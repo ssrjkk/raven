@@ -31,7 +31,7 @@ def register(version: int, description: str, sql: str | None = None):
 async def _migration_1(conn):
     try:
         await conn.execute("ALTER TABLE sessions ADD COLUMN agent_skills TEXT DEFAULT '[]'")
-    except RuntimeError:
+    except Exception:
         logger.debug("Migration 1: column already exists")
 
 
@@ -39,7 +39,7 @@ async def _migration_1(conn):
 async def _migration_2(conn):
     try:
         await conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
-    except RuntimeError:
+    except Exception:
         logger.debug("Migration 2: column already exists")
 
 

@@ -35,7 +35,6 @@ class Database:
         await self._migrate()
 
     async def _migrate(self):
-        await self.migrator.migrate()
         async with self.conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name") as c:
             rows = await c.fetchall()
             existing = {r[0] for r in rows}
@@ -120,6 +119,8 @@ class Database:
             if name not in existing:
                 await self.conn.execute(ddl)
         await self.conn.commit()
+
+        await self.migrator.migrate()
 
     async def disconnect(self):
         if self._conn:
