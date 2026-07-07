@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     anthropic_api_key: str = ""
     openai_api_key: str = ""
-    ollama_base_url: str = "http://localhost:11434"
+    ollama_base_url: str = "http://localhost:11434"  # default Ollama URL
     vllm_base_url: str = ""
     default_model: str = "ollama/llama3"
 
@@ -61,6 +61,7 @@ class Settings(BaseSettings):
 
     dm_policy: str = "pairing"
     web_port: int = 18888
+    ravenflow_port: int = 18789
     web_secret_key: str = ""
     web_cors_origins: str = "http://localhost:5173,http://localhost:3000,http://localhost:18888"
     rate_limit_max: int = 60
@@ -74,6 +75,9 @@ class Settings(BaseSettings):
     llm_retry_delay: float = 1.0
     workspace_path: str = ""
     channel_allow_from: str = ""
+    mcp_servers: str = ""
+    channel_sandbox_policy: str = ""
+    """JSON mapping channel_id to sandbox policy name, e.g. {"telegram":"non-main","discord":"code-exec"}"""
 
     # --- Security Policy ---
     tools_profile: str = "messaging"
@@ -85,6 +89,15 @@ class Settings(BaseSettings):
     context_visibility: str = "all"
     sandbox_mode: str = "non-main"
     sandbox_backend: str = "subprocess"
+
+    # --- Context Window ---
+    context_window_enabled: bool = True
+    context_window_max_tokens: int = 128000
+    context_window_warning_threshold: float = 0.8
+    context_window_summarization_threshold: float = 0.9
+    context_window_hard_limit: float = 0.95
+    context_window_reserved_tokens: int = 2000
+    context_window_sliding_size: int = 20
 
     ghost_mode: bool = False
 

@@ -100,7 +100,10 @@ class LLMProvider(ABC):
     ) -> LLMResponse: ...
     @abstractmethod
     async def cleanup(self):
-        pass
+        await self.cleanup_tasks()
+
+    async def cleanup_tasks(self):
+        logger.debug("No cleanup_tasks override for provider")
 
 
 class OpenRouterProvider(LLMProvider):

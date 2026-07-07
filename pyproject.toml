@@ -1,7 +1,7 @@
 [project]
 name = "raven-agent"
 version = "0.4.0"
-description = "Enterprise-grade personal AI assistant — Telegram-first, 12 channels, multi-provider LLM, circuit breakers, audit, admin API"
+description = "Raven — Unified AI Agent: OpenCode + OpenClaw + unique features (CRDT collaboration, multi-modal RAG, knowledge graph, fine-tuning, voice biometrics, chaos engineering)"
 authors = [
     { name = "ssrjkk" },
 ]
@@ -42,14 +42,30 @@ tui = ["textual>=1.0"]
 tracing = ["opentelemetry-api>=1.25", "opentelemetry-sdk>=1.25"]
 numba = ["numba>=0.60,<1.0"]
 voice = ["sounddevice>=0.5"]
+rag = [
+    "sentence-transformers>=3.0,<4.0",
+    "Pillow>=10.0,<12.0",
+]
+ml = [
+    "torch>=2.0,<3.0",
+    "transformers>=4.40,<5.0",
+    "peft>=0.10,<1.0",
+    "datasets>=2.20,<3.0",
+]
+ner = ["spacy>=3.7,<4.0"]
+postgres = ["asyncpg>=0.29"]
+crdt = ["y-py>=0.4,<1.0"]
+profiling = ["py-spy>=0.3,<1.0"]
+chaos = ["psutil>=5.9,<7.0"]
 dev = [
     "pytest>=8.0,<10.0",
     "pytest-asyncio>=0.24,<2.0",
+    "pytest-cov>=5.0,<7.0",
     "ruff>=0.5,<1.0",
     "mypy>=1.10,<2.0",
     "pre-commit>=3.0,<5.0",
 ]
-all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,voice,dev,numba]"]
+all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,voice,dev,numba,rag,ml,ner,crdt,profiling,chaos,postgres]"]
 
 [project.scripts]
 raven = "raven.cli.main:cli"
@@ -74,7 +90,7 @@ exclude = ['services/', 'daemon/', 'deploy/', 'build/', '\.git/', 'extension/', 
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --tb=short --no-header --alluredir=allure-results"
+addopts = "-q --tb=short --no-header --alluredir=allure-results --cov=raven --cov=ravencode --cov=aios --cov-report=term-missing --cov-config=.coveragerc"
 asyncio_mode = "auto"
 log_cli_level = "WARNING"
 markers = [

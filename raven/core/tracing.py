@@ -32,19 +32,19 @@ class _NoopSpan:
         self._name = name
 
     def set_attribute(self, key: str, value: Any) -> None:
-        pass
+        logger.debug("Span[{}] set_attribute {}={}", self._name, key, value)
 
     def set_status(self, status: Any) -> None:
-        pass
+        logger.debug("Span[{}] set_status {}", self._name, status)
 
     def end(self) -> None:
-        pass
+        logger.debug("Span[{}] end", self._name)
 
     def __enter__(self) -> _NoopSpan:
         return self
 
     def __exit__(self, *args: Any) -> None:
-        pass
+        logger.debug("Span[{}] __exit__", self._name)
 
 
 def setup_tracing(

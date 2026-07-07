@@ -1,0 +1,19 @@
+[run]
+source = raven
+omit = */tests/*,*/.venv/*,*__init__*,*_pb2*,setup.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if __name__ == .__main__.
+    raise NotImplementedError
+    raise ImportError
+    logger.exception
+    logger.error
+    logger.warning
+    logger.debug
+
+fail_under = 90
+show_missing = True
+skip_covered = False

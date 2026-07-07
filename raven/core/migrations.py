@@ -43,6 +43,50 @@ async def _migration_2(conn):
         logger.debug("Migration 2: column already exists")
 
 
+@register(3, "Create checkpoints table")
+async def _migration_3(conn):
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS checkpoints (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            channel TEXT NOT NULL DEFAULT '',
+            messages TEXT NOT NULL DEFAULT '[]',
+            agent_state TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+
+
+@register(4, "Create routines table")
+async def _migration_4(conn):
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS routines (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            action TEXT NOT NULL,
+            trigger TEXT NOT NULL DEFAULT 'manual',
+            schedule TEXT NOT NULL DEFAULT '08:00',
+            status TEXT NOT NULL DEFAULT 'active',
+            user_id TEXT NOT NULL DEFAULT '',
+            channel TEXT NOT NULL DEFAULT '',
+            last_run_status TEXT,
+            last_run_at REAL,
+            config TEXT NOT NULL DEFAULT '{}',
+            created_at REAL
+        )
+    """)
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS routine_logs (
+            id TEXT PRIMARY KEY,
+            routine_id TEXT NOT NULL REFERENCES routines(id) ON DELETE CASCADE,
+            status TEXT NOT NULL,
+            message TEXT NOT NULL DEFAULT '',
+            duration_ms REAL,
+            created_at REAL NOT NULL
+        )
+    """)
+
+
 class Migrator:
     def __init__(self, db_path: Path):
         self.db_path = db_path

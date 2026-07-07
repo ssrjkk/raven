@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from loguru import logger
+
 
 @dataclass
 class SandboxPolicy:
@@ -89,11 +91,15 @@ def get_policy(name: str) -> SandboxPolicy:
     return POLICY_REGISTRY.get(name, NON_MAIN_SESSION_POLICY)
 
 
-def check_tool_allowed(policy: SandboxPolicy, tool_name: str) -> tuple[bool, str]:
+def check_tool_allowed(policy: SandboxPolicy, tool_name: str, channel: str = "") -> tuple[bool, str]:
     if policy.allowed_tools and tool_name not in policy.allowed_tools:
-        return False, f"Tool '{tool_name}' not allowed in {policy.name} sandbox"
+        msg = f"Tool '{tool_name}' not allowed in {policy.name} sandbox"
+        logger.debug("[sandbox] {} (channel={}, policy={})", msg, channel, policy.name)
+        return False, msg
     if policy.denied_tools and tool_name in policy.denied_tools:
-        return False, f"Tool '{tool_name}' denied in {policy.name} sandbox"
+        msg = f"Tool '{tool_name}' denied in {policy.name} sandbox"
+        logger.debug("[sandbox] {} (channel={}, policy={})", msg, channel, policy.name)
+        return False, msg
     return True, ""
 
 
@@ -104,6 +110,21 @@ def check_path_allowed(policy: SandboxPolicy, path: str, mode: str = "read") -> 
         if not allowed:
             return False, f"Path '{path}' not allowed for {mode} in {policy.name} sandbox"
     return True, ""
+
+
+def get_policy_for_channel(channel_id: str) -> SandboxPolicy:
+    try:
+        from raven.core.config import settings
+        raw = settings.channel_sandbox_policy
+        if raw:
+            import json
+            mapping = json.loads(raw)
+            policy_name = mapping.get(channel_id, "")
+            if policy_name and policy_name in POLICY_REGISTRY:
+                return POLICY_REGISTRY[policy_name]
+    except Exception as exc:
+        logger.debug("Failed to resolve channel sandbox policy: {}", exc)
+    return MAIN_SESSION_POLICY
 
 
 def session_type_to_policy(session_type: str) -> SandboxPolicy:

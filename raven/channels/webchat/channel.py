@@ -96,26 +96,49 @@ class WebChatChannel(BaseChannel):
             client_id = str(uuid4().hex[:8])
             self._connections[client_id] = websocket
             session_id = f"webchat:{client_id}:default"
-            user_id = getattr(websocket.state, "user_id", client_id)
+            from raven.channels.webchat.streaming import AgentStreamHandler
             try:
                 while True:
                     data = await websocket.receive_text()
                     msg_data = json.loads(data)
                     text = msg_data.get("text", "")
                     session_id = msg_data.get("session_id", session_id)
-                    if text and self._handler:
-                        event = IncomingMessage(
-                            channel="webchat",
-                            user_id=user_id,
-                            session_id=session_id,
-                            text=text,
-                            metadata={"client_id": client_id, "ws_token_auth": bool(token)},
-                        )
-                        await self._handler(event)
+                    if text:
+                        handler = AgentStreamHandler(websocket, session_id)
+                        result = await handler.handle_message(text)
+                        if result:
+                            msg = Message(
+                                session_id=session_id,
+                                channel="webchat",
+                                role="assistant",
+                                content=result,
+                            )
+                            await self._db.save_message(msg)
             except WebSocketDisconnect:
                 logger.debug("[webchat] client disconnected")
             finally:
                 self._connections.pop(client_id, None)
+
+        @app.websocket("/ws/stream")
+        async def agent_stream(websocket: WebSocket):
+            await websocket.accept()
+            client_id = str(uuid4().hex[:8])
+            session_id = f"webchat:{client_id}:stream"
+            from raven.channels.webchat.streaming import AgentStreamHandler
+            handler = AgentStreamHandler(websocket, session_id)
+            try:
+                while True:
+                    data = await websocket.receive_text()
+                    msg_data = json.loads(data)
+                    text = msg_data.get("text", "")
+                    if text:
+                        result = await handler.handle_message(text)
+                        if not result.startswith("[aborted"):
+                            pass
+            except WebSocketDisconnect:
+                logger.debug("[webchat] stream client disconnected")
+            except Exception as exc:
+                logger.warning("[webchat] stream error: {}", exc)
 
         @app.websocket("/ws/canvas")
         async def canvas_websocket(websocket: WebSocket):
@@ -178,6 +201,9 @@ class WebChatChannel(BaseChannel):
     async def disconnect(self):
         await self.stop()
 
+    async def health_check(self) -> bool:
+        return self._ready
+
     async def on_message(self, handler: Callable[[IncomingMessage], Awaitable[None]]):
         self._handler = handler
 
@@ -196,6 +222,19 @@ class WebChatChannel(BaseChannel):
                 )
             except Exception as e:
                 logger.error("WebChat send failed: {}", e)
+
+    async def send_stream(self, session_id: str, text: str) -> None:
+        parts = session_id.split(":")
+        client_id = parts[1] if len(parts) >= 2 else None
+        if client_id and client_id in self._connections:
+            try:
+                await self._connections[client_id].send_json({
+                    "type": "stream",
+                    "content": text,
+                    "session_id": session_id,
+                })
+            except Exception as e:
+                logger.error("WebChat send_stream failed: {}", e)
 
     @property
     def app(self) -> FastAPI:
@@ -275,7 +314,13 @@ raven-ai v0.1.0
 </div>
 </template>
 <div x-show="isLoading" class="message assistant" style="max-width:80%">
-<span class="typing"></span>
+            <span class="typing"></span>
+<div x-show="streamingEvent" class="message assistant streaming-event" style="max-width:80%" x-html="streamingEvent"></div>
+<div x-show="streamingToolCalls.length > 0" class="message system" style="max-width:80%">
+<template x-for="tc in streamingToolCalls" :key="tc.id">
+<div class="text-xs"><span x-text="tc.name"></span> <span x-text="tc.status"></span></div>
+</template>
+</div>
 </div>
 </div>
 <div class="input-area p-4">
@@ -294,6 +339,9 @@ currentSession: null,
 inputText: '',
 ws: null,
 isLoading: false,
+streamingEvent: '',
+streamingToolCalls: [],
+useStream: true,
 init() {
 this.loadSessions();
 this.connectWs();
@@ -316,12 +364,26 @@ connectWs() {
 const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
 this.ws = new WebSocket(`${protocol}//${location.host}/ws`);
 this.ws.onmessage = (e) => {
-                    const data = JSON.parse(e.data);
-                    if (data.type === 'message') {
-                        this.messages.push({ id: Date.now(), role: data.role, content: data.content, created_at: new Date().toISOString() });
-                        this.isLoading = false;
-                        this.$nextTick(() => this.scrollDown());
-                    }
+const data = JSON.parse(e.data);
+if (data.type === 'message') {
+this.messages.push({ id: Date.now(), role: data.role, content: data.content, created_at: new Date().toISOString() });
+this.isLoading = false;
+this.$nextTick(() => this.scrollDown());
+} else if (data.type === 'step_start') {
+this.streamingEvent = '<em>thinking...</em>';
+this.isLoading = true;
+} else if (data.type === 'tool_call') {
+const tc = { id: Date.now(), name: data.data.name, status: 'running' };
+this.streamingToolCalls.push(tc);
+this.streamingEvent = '<em>running tool: ' + data.data.name + '</em>';
+} else if (data.type === 'tool_result') {
+const tc = this.streamingToolCalls.find(t => t.name === data.data.name);
+if (tc) tc.status = 'done';
+} else if (data.type === 'done') {
+this.streamingToolCalls = [];
+this.streamingEvent = '';
+this.isLoading = false;
+}
 };
 this.ws.onclose = () => setTimeout(() => this.connectWs(), 1000);
 },
@@ -330,7 +392,11 @@ if (!this.inputText.trim() || this.isLoading) return;
 this.isLoading = true;
 const sessionId = this.currentSession || 'webchat:anon:default';
 this.messages.push({ id: Date.now(), role: 'user', content: this.inputText, created_at: new Date().toISOString() });
+if (this.useStream) {
 this.ws.send(JSON.stringify({ text: this.inputText, session_id: sessionId }));
+} else {
+this.ws.send(JSON.stringify({ text: this.inputText, session_id: sessionId }));
+}
 this.inputText = '';
 this.$nextTick(() => this.scrollDown());
 },

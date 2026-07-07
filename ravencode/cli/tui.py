@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -10,8 +11,9 @@ from rich.table import Table
 
 from ravencode.agents.custom_agents import get_custom_agents
 from ravencode.agents.orchestrator import AgentResult, AgentType, Orchestrator
-from ravencode.runtime.agent_core import AgentConfig, ReActAgent
+from ravencode.runtime.agent_core import AgentConfig
 from ravencode.runtime.commands import CustomCommand, discover_commands
+from ravencode.runtime.question import set_question_callback, stdin_question_callback
 
 console = Console()
 
@@ -41,6 +43,8 @@ def print_help() -> None:
     table.add_row("/checkpoint restore <id>", "Restore a checkpoint")
     table.add_row("/mcp", "Start MCP server mode")
     table.add_row("/history", "Show conversation history")
+    table.add_row("/save [path]", "Save current session state to JSON file")
+    table.add_row("/load [path]", "Load session state from JSON file")
     table.add_row("/help", "Show this help")
     table.add_row("/exit", "Exit")
 
@@ -85,6 +89,7 @@ async def run_custom_command(cmd: CustomCommand, args: str) -> None:
 
 
 async def main_loop() -> None:
+    set_question_callback(stdin_question_callback)
     custom_commands = discover_commands()
     print_header()
     print_help()
@@ -121,6 +126,30 @@ async def main_loop() -> None:
             from ravencode.runtime.redo import redo_last
             result = await redo_last()
             console.print(result)
+            continue
+
+        if cmd == "/save" or cmd.startswith("/save "):
+            path = cmd[6:].strip() if cmd.startswith("/save ") else "session.json"
+            from ravencode.runtime.agent_core import ReActAgent
+            if ReActAgent._last_agent is not None:
+                import json
+                state = ReActAgent._last_agent.dump_state()
+                Path(path).write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
+                console.print(f"[green]Session saved to {path}[/green]")
+            else:
+                console.print("[red]No active session to save. Run a task first.[/red]")
+            continue
+
+        if cmd == "/load" or cmd.startswith("/load "):
+            path = cmd[6:].strip() if cmd.startswith("/load ") else "session.json"
+            p = Path(path)
+            if not p.exists():
+                console.print(f"[red]File not found: {path}[/red]")
+                continue
+            import json
+            state = json.loads(p.read_text(encoding="utf-8"))
+            agent = ReActAgent.load_state(state)
+            console.print(f"[green]Session loaded from {path}. Use /ask to continue.[/green]")
             continue
 
         if cmd.startswith("/checkpoint"):

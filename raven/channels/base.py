@@ -28,3 +28,6 @@ class BaseChannel(ABC):
 
     @abstractmethod
     async def stop(self) -> None: ...
+
+    async def health_check(self) -> bool:
+        return True

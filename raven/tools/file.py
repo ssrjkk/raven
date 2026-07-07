@@ -5,23 +5,31 @@ from pathlib import Path
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
-_WORKSPACE = Path(os.environ.get("RAVEN_WORKSPACE", "data")).resolve()
+
+def _workspace() -> Path:
+    return Path(os.environ.get("RAVEN_WORKSPACE", "data")).resolve()
 
 
 def _confine(path: str) -> Path:
     p = Path(path).expanduser().resolve()
+    ws = _workspace()
     try:
-        p.relative_to(_WORKSPACE)
+        p.relative_to(ws)
     except ValueError:
         raise PermissionError(f"Access denied: path outside workspace: {p}") from None
     return p
 
 
-async def file_read(path: str) -> str:
+async def file_read(path: str, max_size: int = 50000) -> str:
     p = _confine(path)
     if not p.exists():
         raise FileNotFoundError(f"File not found: {p}")
-    return p.read_text(encoding="utf-8", errors="replace")[:50000]
+    size = p.stat().st_size
+    if size > max_size:
+        with p.open("rb") as f:
+            content = f.read(max_size).decode("utf-8", errors="replace")
+        return content + f"\n... (truncated, {size} total bytes)"
+    return p.read_text(encoding="utf-8", errors="replace")
 
 
 async def file_write(path: str, content: str) -> str:
@@ -66,12 +74,13 @@ async def file_delete(path: str) -> str:
 
 def register_file_tools(registry: ToolRegistry) -> None:
     registry.register(
-        ToolSpec(
-            name="file_read",
-            description="Read the contents of a file",
-            parameters={
-                "path": {"type": "string", "description": "Path to the file", "required": True},
-            },
+            ToolSpec(
+                name="file_read",
+                description="Read the contents of a file (max 50KB by default)",
+                parameters={
+                    "path": {"type": "string", "description": "Path to the file", "required": True},
+                    "max_size": {"type": "integer", "description": "Max bytes to read", "required": False},
+                },
             handler=file_read,
             category="file",
         )

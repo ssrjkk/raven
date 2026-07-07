@@ -259,7 +259,7 @@ class SecurityAudit:
         if settings.web_cors_origins == "*":
             c.fail(
                 "WEB_CORS_ORIGINS=* — any website can make API requests",
-                fix_hint="Set WEB_CORS_ORIGINS to specific origins (e.g., http://localhost:3000)",
+                fix_hint=f"Set WEB_CORS_ORIGINS to specific origins (e.g., http://localhost:{settings.web_port})",
             )
         else:
             c.ok(f"CORS origins: {settings.web_cors_origins}")
@@ -291,7 +291,7 @@ class SecurityAudit:
             else:
                 c.fail(
                     "Default model is Ollama but OLLAMA_BASE_URL is not set",
-                    fix_hint="Set OLLAMA_BASE_URL=http://localhost:11434",
+                    fix_hint=f"Set OLLAMA_BASE_URL={settings.ollama_base_url}",
                 )
         else:
             c.fail(

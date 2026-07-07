@@ -11,6 +11,7 @@ from typing import Any
 from loguru import logger
 
 from raven.core.security.ssrf import validate_url
+from ravencode.runtime.question import QuestionError
 from ravencode.runtime.undo import get_undo_manager
 
 # ---------------------------------------------------------------------------
@@ -178,7 +179,7 @@ async def bash_exec(command: str, timeout: int = 30) -> str:
     return output or "(no output)"
 
 
-async def web_search(query: str, num_results: int = 5) -> str:
+async def _ddg_search(query: str, num_results: int) -> list[dict[str, str]] | None:
     try:
         from duckduckgo_search import DDGS
 
@@ -187,17 +188,54 @@ async def web_search(query: str, num_results: int = 5) -> str:
                 return list(ddgs.text(query, max_results=num_results))
 
         results = await asyncio.to_thread(_search)
-        if not results:
-            return "(no results)"
-        return "\n\n".join(
-            f"• {r.get('title', '')}\n  {r.get('body', '')[:200]}\n  {r.get('href', '')}"
-            for r in results
-        )
+        return results if results else None
     except ImportError:
-        return "[error] duckduckgo_search not installed"
-    except Exception as exc:
-        logger.exception("web_search failed")
-        return f"[error] web_search: {exc}"
+        return None
+    except Exception:
+        logger.debug("DDG search failed, trying fallback")
+        return None
+
+
+async def _httpx_search(query: str, num_results: int) -> list[dict[str, str]] | None:
+    try:
+        import httpx
+        from bs4 import BeautifulSoup
+        url = f"https://html.duckduckgo.com/html/?q={_urlencode(query)}"
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        results = []
+        for i, link in enumerate(soup.select("a.result__a")):
+            if i >= num_results:
+                break
+            title = str(link.get_text(strip=True))
+            href_attr = link.get("href", "")
+            href = str(href_attr) if href_attr else ""
+            body_el = link.find_next("a", class_="result__snippet")
+            body = str(body_el.get_text(strip=True)) if body_el else ""
+            results.append({"title": title, "href": href, "body": body})
+        return results if results else None
+    except ImportError:
+        return None
+    except Exception:
+        logger.debug("httpx search fallback also failed")
+        return None
+
+
+def _urlencode(q: str) -> str:
+    import urllib.parse
+    return urllib.parse.quote(q)
+
+
+async def web_search(query: str, num_results: int = 5) -> str:
+    results = await _ddg_search(query, num_results) or await _httpx_search(query, num_results)
+    if not results:
+        return "(no results)"
+    return "\n\n".join(
+        f"• {r.get('title', '')}\n  {r.get('body', '')[:200]}\n  {r.get('href', '')}"
+        for r in results
+    )
 
 
 async def web_fetch(url: str) -> str:
@@ -220,6 +258,11 @@ async def think(reasoning: str) -> str:
 
 _task_depth: contextvars.ContextVar[int] = contextvars.ContextVar("_task_depth", default=0)
 _MAX_TASK_DEPTH = 5
+_AGENT_MEMORY: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar("_AGENT_MEMORY", default=None)
+
+
+def set_agent_memory(memory: dict[str, Any] | None) -> None:
+    _AGENT_MEMORY.set(memory)
 
 
 async def task_delegate(description: str, context: str | None = None) -> str:
@@ -228,9 +271,16 @@ async def task_delegate(description: str, context: str | None = None) -> str:
         return f"[error] max task delegation depth ({_MAX_TASK_DEPTH}) exceeded"
     token = _task_depth.set(depth + 1)
     try:
-        from ravencode.runtime.agent_core import ReActAgent
-        sub = ReActAgent(max_steps=15)
-        prompt = f"{context}\n\n{description}" if context else description
+        from ravencode.runtime.agent_core import AgentConfig, ReActAgent
+        from ravencode.runtime.context import Conversation
+        parent_memory = _AGENT_MEMORY.get()
+        sub_prompt = "You are a sub-agent handling a delegated task. Complete it efficiently and return the result."
+        if context:
+            sub_prompt += f"\nContext from parent:\n{context}"
+        if parent_memory:
+            sub_prompt += f"\nParent session context:\n{parent_memory}"
+        prompt = f"{sub_prompt}\n\nTask: {description}"
+        sub = ReActAgent(config=AgentConfig(max_steps=15), conversation=Conversation(system_prompt=sub_prompt))
         return await sub.run(prompt)
     finally:
         _task_depth.reset(token)
@@ -410,13 +460,111 @@ async def auto_commit_tool(message: str | None = None, path: str | None = None) 
 
 
 async def load_skill(name: str) -> str:
-    from ravencode.runtime.skills import discover_skills
-    skills = discover_skills()
-    skill = skills.get(name)
-    if not skill:
-        available = ", ".join(sorted(skills))
-        return f"Skill '{name}' not found. Available: {available or '(none)'}"
-    return skill.instructions
+    from ravencode.runtime.skills import load_skill as _load_skill
+    return _load_skill(name)
+
+
+async def download_skill(name: str) -> str:
+    from ravencode.runtime.skills import download_skill as _download_skill
+    return await _download_skill(name)
+
+
+async def set_skill_registry(url: str) -> str:
+    from ravencode.runtime.skills import set_skill_registry as _set_registry
+    return _set_registry(url)
+
+
+async def todo_write(tasks: list[dict[str, str]]) -> str:
+    from ravencode.runtime.todo import todo_write as _todo_write
+    return _todo_write(tasks)
+
+
+async def todo_list(status_filter: str | None = None) -> str:
+    from ravencode.runtime.todo import todo_list as _todo_list
+    return _todo_list(status_filter)
+
+
+async def todo_update(tid: str, status: str) -> str:
+    from ravencode.runtime.todo import todo_update as _todo_update
+    return _todo_update(tid, status)
+
+
+async def todo_clear() -> str:
+    from ravencode.runtime.todo import todo_clear as _todo_clear
+    _todo_clear()
+    return "(todo list cleared)"
+
+
+async def question_tool(
+    question: str,
+    header: str = "",
+    options: list[dict[str, str]] | None = None,
+    multiple: bool = False,
+) -> str:
+    from ravencode.runtime.question import Question, ask_question
+    q = Question(
+        question=question,
+        header=header,
+        options=options or [],
+        multiple=multiple,
+    )
+    return await ask_question(q)
+
+
+async def anchored_summary_read() -> str:
+    from ravencode.runtime.anchored import anchored_summary
+    val = anchored_summary()
+    return val if val else "(no anchored summary)"
+
+
+async def anchored_summary_write(text: str) -> str:
+    from ravencode.runtime.anchored import update_anchored_summary
+    return update_anchored_summary(text)
+
+
+async def anchored_summary_append(text: str) -> str:
+    from ravencode.runtime.anchored import append_anchored_summary
+    return append_anchored_summary(text)
+
+
+async def anchored_summary_clear() -> str:
+    from ravencode.runtime.anchored import clear_anchored_summary
+    return clear_anchored_summary()
+
+
+async def browser_navigate(url: str) -> str:
+    from ravencode.runtime.browser import browser_navigate as _navigate
+    return await _navigate(url)
+
+
+async def browser_click(selector: str) -> str:
+    from ravencode.runtime.browser import browser_click as _click
+    return await _click(selector)
+
+
+async def browser_type(selector: str, text: str) -> str:
+    from ravencode.runtime.browser import browser_type as _type
+    return await _type(selector, text)
+
+
+async def browser_screenshot(path: str = "screenshot.png") -> str:
+    from ravencode.runtime.browser import browser_screenshot as _screenshot
+    return await _screenshot(path)
+
+
+async def browser_get_html(selector: str = "body") -> str:
+    from ravencode.runtime.browser import browser_get_html as _get_html
+    return await _get_html(selector)
+
+
+async def browser_evaluate(script: str) -> str:
+    from ravencode.runtime.browser import browser_evaluate as _evaluate
+    return await _evaluate(script)
+
+
+async def browser_close() -> str:
+    from ravencode.runtime.browser import browser_close as _close
+    return await _close()
 
 
 # ---------------------------------------------------------------------------
@@ -922,6 +1070,231 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         },
         "handler": load_skill,
     },
+    "download_skill": {
+        "name": "download_skill", "dangerous": False,
+        "description": "Download a skill from the remote skill registry (ClawHub-like). Requires set_skill_registry first.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Skill ID to download"},
+            },
+            "required": ["name"],
+        },
+        "handler": download_skill,
+    },
+    "set_skill_registry": {
+        "name": "set_skill_registry", "dangerous": False,
+        "description": "Set the URL for the remote skill registry to download skills from.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "Registry base URL (e.g. https://registry.example.com)"},
+            },
+            "required": ["url"],
+        },
+        "handler": set_skill_registry,
+    },
+    "todowrite": {
+        "name": "todowrite", "dangerous": False,
+        "description": "Create or update tasks in a structured todo list. Each task needs content and optional id/status.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "tasks": {
+                    "type": "array",
+                    "description": "List of task dicts with content, optional id (defaults to incremental), and optional status (pending/in_progress/completed/cancelled)",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "content": {"type": "string", "description": "Task description"},
+                            "id": {"type": "string", "description": "Optional task ID"},
+                            "status": {"type": "string", "description": "Status: pending, in_progress, completed, cancelled", "default": "pending"},
+                        },
+                        "required": ["content"],
+                    },
+                },
+            },
+            "required": ["tasks"],
+        },
+        "handler": todo_write,
+    },
+    "todolist": {
+        "name": "todolist", "dangerous": False,
+        "description": "Show the todo list, optionally filtered by status.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "status_filter": {"type": "string", "description": "Filter by status: pending, in_progress, completed, cancelled", "default": None},
+            },
+            "required": [],
+        },
+        "handler": todo_list,
+    },
+    "todoupdate": {
+        "name": "todoupdate", "dangerous": False,
+        "description": "Update the status of a todo item.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "tid": {"type": "string", "description": "Task ID to update"},
+                "status": {"type": "string", "description": "New status: pending, in_progress, completed, cancelled"},
+            },
+            "required": ["tid", "status"],
+        },
+        "handler": todo_update,
+    },
+    "todoclear": {
+        "name": "todoclear", "dangerous": False,
+        "description": "Clear all todo items.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+        "handler": todo_clear,
+    },
+    "question": {
+        "name": "question", "dangerous": False,
+        "description": "Ask the user a question with optional multiple-choice options. Use when you need clarification, preferences, or decisions.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {"type": "string", "description": "Question to ask the user"},
+                "header": {"type": "string", "description": "Short header (max 30 chars)", "default": ""},
+                "options": {
+                    "type": "array",
+                    "description": "Optional multiple-choice options",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "label": {"type": "string", "description": "Display text (1-5 words)"},
+                            "description": {"type": "string", "description": "Explanation of choice"},
+                        },
+                        "required": ["label", "description"],
+                    },
+                    "default": [],
+                },
+                "multiple": {"type": "boolean", "description": "Allow selecting multiple choices", "default": False},
+            },
+            "required": ["question"],
+        },
+        "handler": question_tool,
+    },
+    "anchored_summary_read": {
+        "name": "anchored_summary_read", "dangerous": False,
+        "description": "Read the current anchored summary. The summary persists across conversations and tracks progress, decisions, and context.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+        "handler": anchored_summary_read,
+    },
+    "anchored_summary_write": {
+        "name": "anchored_summary_write", "dangerous": False,
+        "description": "Replace the entire anchored summary with new text. Use this to set or reset the persistent session note.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "New anchored summary text"},
+            },
+            "required": ["text"],
+        },
+        "handler": anchored_summary_write,
+    },
+    "anchored_summary_append": {
+        "name": "anchored_summary_append", "dangerous": False,
+        "description": "Append text to the existing anchored summary. Use this to log progress, decisions, or completed items.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "Text to append"},
+            },
+            "required": ["text"],
+        },
+        "handler": anchored_summary_append,
+    },
+    "anchored_summary_clear": {
+        "name": "anchored_summary_clear", "dangerous": False,
+        "description": "Clear the anchored summary.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+        "handler": anchored_summary_clear,
+    },
+    "browser_navigate": {
+        "name": "browser_navigate", "dangerous": False,
+        "description": "Navigate a browser to a URL using Playwright.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "URL to navigate to"},
+            },
+            "required": ["url"],
+        },
+        "handler": browser_navigate,
+    },
+    "browser_click": {
+        "name": "browser_click", "dangerous": False,
+        "description": "Click an element on the page using a CSS selector.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "selector": {"type": "string", "description": "CSS selector to click"},
+            },
+            "required": ["selector"],
+        },
+        "handler": browser_click,
+    },
+    "browser_type": {
+        "name": "browser_type", "dangerous": False,
+        "description": "Type text into an element on the page.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "selector": {"type": "string", "description": "CSS selector for the input element"},
+                "text": {"type": "string", "description": "Text to type"},
+            },
+            "required": ["selector", "text"],
+        },
+        "handler": browser_type,
+    },
+    "browser_screenshot": {
+        "name": "browser_screenshot", "dangerous": False,
+        "description": "Take a screenshot of the current page.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path to save screenshot", "default": "screenshot.png"},
+            },
+            "required": [],
+        },
+        "handler": browser_screenshot,
+    },
+    "browser_get_html": {
+        "name": "browser_get_html", "dangerous": False,
+        "description": "Get the inner HTML of an element (default: body).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "selector": {"type": "string", "description": "CSS selector", "default": "body"},
+            },
+            "required": [],
+        },
+        "handler": browser_get_html,
+    },
+    "browser_evaluate": {
+        "name": "browser_evaluate", "dangerous": True,
+        "description": "Run JavaScript in the browser page and return the result.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "script": {"type": "string", "description": "JavaScript code to evaluate"},
+            },
+            "required": ["script"],
+        },
+        "handler": browser_evaluate,
+    },
+    "browser_close": {
+        "name": "browser_close", "dangerous": False,
+        "description": "Close the browser and release resources.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+        "handler": browser_close,
+    },
     "canvas_render": {
         "name": "canvas_render", "dangerous": False,
         "description": "Render visual components (text, code, table, mermaid, link, image, list, alert) into formatted output",
@@ -1058,6 +1431,8 @@ async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
         if isinstance(result, list):
             return "\n".join(str(r) for r in result[:200])
         return str(result)
+    except QuestionError:
+        raise
     except Exception as exc:
         logger.exception("Tool {} failed", name)
         return f"[error] {name}: {exc}"

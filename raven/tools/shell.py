@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import os
+import platform
 import subprocess
 from typing import Any, cast
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
-ALLOWED_COMMANDS = frozenset({
+_UNIX_COMMANDS = frozenset({
     "ls", "cat", "head", "tail", "echo", "pwd", "whoami", "date",
     "find", "grep", "wc", "sort", "uniq", "cut", "tr", "diff",
     "curl", "wget", "ping", "nslookup", "dig",
@@ -15,6 +16,20 @@ ALLOWED_COMMANDS = frozenset({
     "git", "make", "npm", "pip", "go", "rustc", "cargo",
     "python", "python3", "node",
 })
+
+_WIN_COMMANDS = frozenset({
+    "echo", "dir", "type", "copy", "del", "ren", "cd", "cls", "ver", "date", "time", "timeout",
+    "find", "findstr", "sort", "more", "fc", "where",
+    "ping", "tracert", "pathping", "nslookup",
+    "git", "npm", "pip", "python", "node", "powershell",
+    "tasklist", "taskkill", "systeminfo", "ipconfig", "netstat", "net",
+    "whoami", "set", "attrib", "xcopy", "robocopy", "mkdir", "rmdir",
+})
+
+if platform.system() == "Windows":
+    ALLOWED_COMMANDS = _WIN_COMMANDS
+else:
+    ALLOWED_COMMANDS = _UNIX_COMMANDS
 
 MAX_OUTPUT_CHARS = 30_000
 MAX_STDERR_CHARS = 10_000
@@ -36,6 +51,11 @@ async def shell_command(command: str, timeout: int = 30) -> str:
         args = _validate_command(command)
     except ValueError as e:
         return f"[denied] {e}"
+
+    _cmd_builtins = {"echo", "dir", "type", "copy", "del", "ren", "cd", "cls", "ver", "date", "time", "set"}
+    if platform.system() == "Windows" and args[0].lower() in _cmd_builtins:
+        args = ["cmd", "/c"] + args
+
     proc = await asyncio.create_subprocess_exec(
         *args,
         stdout=subprocess.PIPE,

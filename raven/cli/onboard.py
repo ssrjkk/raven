@@ -14,6 +14,7 @@ from rich.table import Table
 from rich.text import Text
 
 from raven.channels.telegram.channel import TelegramChannel
+from raven.core.config import settings
 from raven.core.config_store import config_store
 from raven.core.models import IncomingMessage
 
@@ -85,7 +86,7 @@ async def _prompt_llm(config: dict[str, Any]) -> dict[str, Any]:
         config["openai_api_key"] = key
         config["default_model"] = "gpt-4o"
     elif provider == "ollama":
-        url = Prompt.ask("Ollama base URL", default="http://localhost:11434")
+        url = Prompt.ask("Ollama base URL", default=settings.ollama_base_url)
         config["ollama_base_url"] = url
         model = Prompt.ask("Model name", default="llama3")
         config["default_model"] = f"ollama/{model}"
@@ -150,11 +151,11 @@ async def _prompt_security(config: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _prompt_port(config: dict[str, Any]) -> dict[str, Any]:
-    port_str = Prompt.ask("Web UI port", default="18888")
+    port_str = Prompt.ask("Web UI port", default=str(settings.web_port))
     try:
         config["web_port"] = int(port_str)
     except ValueError:
-        config["web_port"] = 18888
+        config["web_port"] = settings.web_port
     return config
 
 

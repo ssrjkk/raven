@@ -106,3 +106,44 @@ class TestWebChatChannel:
         response = client.get("/")
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
+
+    @pytest.mark.asyncio
+    async def test_health_check(self, channel):
+        assert not await channel.health_check()
+        channel._ready = True
+        assert await channel.health_check()
+
+    @pytest.mark.asyncio
+    async def test_stop_no_connections(self, channel):
+        await channel.start()
+        await channel.stop()
+
+    @pytest.mark.asyncio
+    async def test_send_error_handling(self, channel):
+        mock_ws = AsyncMock()
+        mock_ws.send_json.side_effect = RuntimeError("WS crashed")
+        channel._connections["client_x"] = mock_ws
+        msg = Message(
+            session_id="webchat:client_x:default", channel="webchat",
+            role="assistant", content="Hello",
+        )
+        await channel.send("webchat:client_x:default", msg)
+        mock_ws.send_json.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_send_invalid_session_format(self, channel):
+        msg = Message(session_id="invalid", channel="webchat", role="assistant", content="Hello")
+        await channel.send("invalid", msg)
+
+    @pytest.mark.asyncio
+    async def test_connect_sets_ready(self, channel):
+        await channel.connect()
+        assert channel._ready
+
+    @pytest.mark.asyncio
+    async def test_disconnect_closes_connections(self, channel):
+        mock_ws = AsyncMock()
+        channel._connections["c1"] = mock_ws
+        await channel.disconnect()
+        mock_ws.close.assert_awaited_once()
+        assert len(channel._connections) == 0

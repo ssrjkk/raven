@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 import builtins
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from loguru import logger
 from pydantic import BaseModel, Field
 
 from raven.core.tracing import get_tracer
+
+ValidatorFn = Callable[[dict[str, Any]], str | None]
+"""Returns error string if invalid, None if valid."""
 
 
 class ToolSpec(BaseModel):
@@ -16,6 +21,8 @@ class ToolSpec(BaseModel):
     handler: Any = None
     category: str = "general"
     timeout: int = 60
+    validator_fn: ValidatorFn | None = None
+    """Optional validation function; returns error message or None."""
 
     def to_llm_tool(self) -> dict[str, Any]:
         return {
@@ -59,14 +66,31 @@ class ToolRegistry:
     async def call(self, name: str, **params: Any) -> Any:
         spec = self.get(name)
         if not spec:
-            raise ValueError(f"Unknown tool: {name}")
+            return f"[error] Unknown tool: {name}"
         if spec.handler is None:
-            raise ValueError(f"Tool {name} has no handler registered")
+            return f"[error] Tool {name} has no handler registered"
+
+        if spec.validator_fn:
+            try:
+                error = spec.validator_fn(params)
+            except Exception as exc:
+                return f"[error] Validator failed: {exc}"
+            if error:
+                return f"[error] {error}"
+
         tracer = get_tracer()
         with tracer.start_as_current_span("tool.call") as span:
             span.set_attribute("tool.name", name)
             span.set_attribute("tool.category", spec.category)
-            return await spec.handler(**params)
+            try:
+                result = await asyncio.wait_for(spec.handler(**params), timeout=spec.timeout)
+                return result
+            except TimeoutError:
+                logger.warning("Tool {} timed out after {}s", name, spec.timeout)
+                return f"[error] Tool '{name}' timed out after {spec.timeout}s"
+            except Exception as exc:
+                logger.warning("Tool {} failed: {}", name, exc)
+                return f"[error] {exc}"
 
     @property
     def count(self) -> int:

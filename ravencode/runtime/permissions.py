@@ -49,6 +49,22 @@ class PermissionManager:
             for r in self._rules
         ]
 
+    @classmethod
+    def from_dict(cls, items: list[dict[str, str]]) -> PermissionManager:
+        rules = []
+        for item in items:
+            raw = item.get("action", "deny")
+            try:
+                action = PermissionAction(raw)
+            except ValueError:
+                action = PermissionAction.DENY
+            rules.append(PermissionRule(
+                tool=item.get("tool", "*"),
+                action=action,
+                reason=item.get("reason", ""),
+            ))
+        return cls(rules=rules)
+
 
 def default_deny_rules() -> list[PermissionRule]:
     return [

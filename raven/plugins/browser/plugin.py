@@ -37,7 +37,7 @@ def _validate_url(url: str) -> None:
             if ip in ipaddress.ip_network(r, strict=False):
                 raise ValueError(f"SSRF blocked: private IP {host}")
     except ValueError:
-        if host in ("localhost", "0.0.0.0"):
+        if host in ("localhost", "0.0.0.0"):  # noqa: S104
             raise ValueError(f"SSRF blocked: hostname {host}") from None
         try:
             addrs = socket.getaddrinfo(host, None)

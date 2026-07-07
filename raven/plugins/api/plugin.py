@@ -32,7 +32,7 @@ def _validate_url(url: str) -> tuple[str, ValueError | None]:
             if ip in ipaddress.ip_network(r, strict=False):
                 return url, ValueError(f"SSRF blocked: private IP {host}")
     except ValueError:
-        if host in ("localhost", "0.0.0.0"):
+        if host in ("localhost", "0.0.0.0"):  # noqa: S104
             return url, ValueError(f"SSRF blocked: hostname {host}")
         try:
             addrs = socket.getaddrinfo(host, None)

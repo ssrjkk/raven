@@ -9,9 +9,10 @@ from raven.core.models import IncomingMessage, Message
 
 class SignalChannel(EnterpriseChannel):
     channel_id = "signal"
+    DEFAULT_SIGNAL_URL = "http://localhost:8080"
 
     async def _start(self):
-        self._api_url = settings.signal_api_url or "http://localhost:8080"
+        self._api_url = settings.signal_api_url or self.DEFAULT_SIGNAL_URL
         self._client = None
 
     async def _stop(self):

@@ -10,8 +10,8 @@ async def process_list() -> str:
     import os
 
     if os.name == "nt":
-        proc = await asyncio.create_subprocess_shell(
-            "tasklist /FO CSV /NH",
+        proc = await asyncio.create_subprocess_exec(
+            "tasklist", "/FO", "CSV", "/NH",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
@@ -19,13 +19,14 @@ async def process_list() -> str:
         lines = stdout.decode("utf-8", errors="replace").splitlines()[:50]
         return "\n".join(line.strip('"') for line in lines)
     else:
-        proc = await asyncio.create_subprocess_shell(
-            "ps aux --sort=-%mem | head -50",
+        proc = await asyncio.create_subprocess_exec(
+            "ps", "aux", "--sort=-%mem",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
         stdout, _ = await proc.communicate()
-        return stdout.decode("utf-8", errors="replace")
+        lines = stdout.decode("utf-8", errors="replace").splitlines()[:50]
+        return "\n".join(lines)
 
 
 async def process_kill(pid: int) -> str:

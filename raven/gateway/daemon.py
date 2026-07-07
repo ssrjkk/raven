@@ -15,11 +15,15 @@ try:
 except ImportError:
     logger.debug("uvloop not available, using asyncio")
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from raven.core._json import json
+from raven.core.auth.auth_handler import auth_handler
+from raven.core.channel_guardian import TokenBucket
 from raven.core.llm import LLMRouter
+from raven.core.logging import setup_logging
 from raven.gateway.routing import RoutingEngine
 from ravencode.runtime.agent_core import AgentConfig, ReActAgent
 from ravencode.runtime.context import Conversation
@@ -61,6 +65,15 @@ class FlowSession:
     _task: asyncio.Task[Any] | None = None
 
 
+async def _validate_token(token: str) -> dict[str, Any] | None:
+    if not token:
+        return None
+    try:
+        return await auth_handler.decode_token(token)
+    except Exception:
+        return None
+
+
 class RavenFlowDaemon:
     def __init__(self, port: int = 18789):
         self.port = port
@@ -69,10 +82,36 @@ class RavenFlowDaemon:
         self.llm = LLMRouter()
         self.routing = RoutingEngine()
         self._lock = asyncio.Lock()
+        self._agent_bucket = TokenBucket(rate=10.0)
         self._setup_routes()
 
     def _setup_routes(self) -> None:
         app = self.app
+
+        @app.middleware("http")
+        async def auth_and_request_id_middleware(request: Request, call_next):
+            request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+            request.state.request_id = request_id
+
+            if request.url.path != "/health":
+                auth_header = request.headers.get("Authorization", "")
+                if auth_header.startswith("Bearer "):
+                    token = auth_header[7:]
+                    payload = await _validate_token(token)
+                    if payload is None:
+                        return JSONResponse(
+                            status_code=401,
+                            content={"error": "Invalid or expired token"},
+                        )
+                    request.state.user_id = payload.get("sub", "anonymous")
+                    request.state.role = payload.get("role", "user")
+                else:
+                    request.state.user_id = "anonymous"
+                    request.state.role = "user"
+
+            response = await call_next(request)
+            response.headers["X-Request-ID"] = request_id
+            return response
 
         @app.get("/health")
         async def health():
@@ -80,7 +119,11 @@ class RavenFlowDaemon:
 
         @app.post("/api/agent")
         async def send_to_agent(req: AgentRequest):
-            session = await self._get_or_create_session(req.session_id or str(uuid.uuid4())[:8], req.channel, req.mode)
+            if not await self._agent_bucket.acquire():
+                return {"error": "Rate limit exceeded", "session_id": ""}
+            session = await self._get_or_create_session(
+                req.session_id or str(uuid.uuid4())[:8], req.channel, req.mode
+            )
             if session.agent is None:
                 return {"error": "agent not initialized", "session_id": session.id}
             if req.mode == "plan":
@@ -101,15 +144,18 @@ class RavenFlowDaemon:
         async def list_sessions():
             mgr = get_session_manager()
             return {
-                "sessions": [{
-                    "id": s.id,
-                    "name": s.name,
-                    "status": s.status,
-                    "agent_type": s.agent_type,
-                    "created_at": s.created_at,
-                    "message_count": s.message_count,
-                    "step_count": s.step_count,
-                } for s in mgr.sessions],
+                "sessions": [
+                    {
+                        "id": s.id,
+                        "name": s.name,
+                        "status": s.status,
+                        "agent_type": s.agent_type,
+                        "created_at": s.created_at,
+                        "message_count": s.message_count,
+                        "step_count": s.step_count,
+                    }
+                    for s in mgr.sessions
+                ],
                 "flow_sessions": [
                     {"id": s.id, "channel": s.channel, "status": s.status, "messages": s.message_count}
                     for s in self.sessions.values()
@@ -134,6 +180,7 @@ class RavenFlowDaemon:
         @app.post("/api/sandbox")
         async def run_sandbox(code: str, language: str = "python"):
             from ravencode.runtime.sandbox import get_sandbox
+
             result = await get_sandbox().run_code(code, language)
             return {"result": result[:5000]}
 
@@ -148,8 +195,24 @@ class RavenFlowDaemon:
 
         @app.websocket("/ws")
         async def websocket_endpoint(ws: WebSocket):
+            token = ws.query_params.get("token", "")
+            if token:
+                payload = await _validate_token(token)
+                if payload:
+                    ws.state.user_id = payload.get("sub", "anonymous")
+                    ws.state.role = payload.get("role", "user")
+                    logger.debug("WebSocket authenticated: user_id={}", ws.state.user_id)
+                else:
+                    ws.state.user_id = "anonymous"
+                    ws.state.role = "user"
+                    logger.debug("WebSocket invalid token, continuing as anonymous")
+            else:
+                ws.state.user_id = "anonymous"
+                ws.state.role = "user"
+                logger.debug("WebSocket no token provided, continuing as anonymous")
+
             await ws.accept()
-            logger.info("RavenFlow WebSocket connected")
+            logger.info("RavenFlow WebSocket connected (user={})", ws.state.user_id)
             try:
                 while True:
                     data = await ws.receive_text()
@@ -162,10 +225,20 @@ class RavenFlowDaemon:
                             msg.get("mode", "build"),
                         )
                         if session.agent is None:
-                            await ws.send_text(json.dumps({"type": "error", "content": "agent not initialized"}))
+                            await ws.send_text(
+                                json.dumps({"type": "error", "content": "agent not initialized"})
+                            )
                             continue
                         result = await session.agent.run(msg.get("content", ""))
-                        await ws.send_text(json.dumps({"type": "response", "content": result[:5000], "session_id": session.id}))
+                        await ws.send_text(
+                            json.dumps(
+                                {
+                                    "type": "response",
+                                    "content": result[:5000],
+                                    "session_id": session.id,
+                                }
+                            )
+                        )
                     elif msg_type == "ping":
                         await ws.send_text(json.dumps({"type": "pong"}))
             except WebSocketDisconnect:
@@ -173,12 +246,18 @@ class RavenFlowDaemon:
             except Exception as exc:
                 logger.exception("RavenFlow WebSocket error: {}", exc)
 
-    async def _get_or_create_session(self, session_id: str, channel: str, mode: str = "build") -> FlowSession:
+    async def _get_or_create_session(
+        self, session_id: str, channel: str, mode: str = "build"
+    ) -> FlowSession:
         async with self._lock:
             if session_id in self.sessions:
                 return self.sessions[session_id]
             conv = Conversation(system_prompt=_build_flow_prompt(channel, mode))
-            config = AgentConfig(max_steps=30, confirm_dangerous=(mode == "plan"), plan_mode=(mode == "plan"))
+            config = AgentConfig(
+                max_steps=30,
+                confirm_dangerous=(mode == "plan"),
+                plan_mode=(mode == "plan"),
+            )
             agent = ReActAgent(config=config, conversation=conv, name=f"ravenflow-{channel}")
             session = FlowSession(
                 id=session_id,
@@ -191,8 +270,10 @@ class RavenFlowDaemon:
             return session
 
     async def start(self) -> None:
+        setup_logging()
         import uvicorn
-        config = uvicorn.Config(self.app, host="0.0.0.0", port=self.port, log_level="info")
+
+        config = uvicorn.Config(self.app, host="0.0.0.0", port=self.port, log_level="info")  # noqa: S104
         server = uvicorn.Server(config)
         logger.info("RavenFlow Gateway starting on port {}", self.port)
         await server.serve()

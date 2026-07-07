@@ -13,6 +13,7 @@ from loguru import logger
 from ravencode.api.client import AIOSClient
 from ravencode.runtime.context import Conversation, MemoryStore
 from ravencode.runtime.permissions import PermissionManager, default_deny_rules
+from ravencode.runtime.question import QuestionError
 from ravencode.runtime.tools import (
     execute_tool,
     get_tool_definitions,
@@ -115,6 +116,8 @@ class AgentConfig:
 # ---------------------------------------------------------------------------
 
 class ReActAgent:
+    _last_agent: ReActAgent | None = None
+
     def __init__(
         self,
         config: AgentConfig | None = None,
@@ -199,6 +202,13 @@ class ReActAgent:
 
     async def run(self, user_input: str) -> str:
         self._task = asyncio.current_task()
+        from ravencode.runtime.tools import set_agent_memory
+        ReActAgent._last_agent = self
+        set_agent_memory({
+            "name": self.name,
+            "config": {k: v for k, v in self.config.__dict__.items() if not callable(v) and not k.startswith("_")},
+            "messages": self.conversation.messages[-6:] if self.conversation.messages else [],
+        })
         async with self._lock:
             try:
                 return await self._run_impl(user_input)
@@ -349,9 +359,17 @@ class ReActAgent:
         last_err = ""
         for attempt in range(self.config.max_tool_retries):
             try:
-                diff = await self._diff_preview(name, args)
-                if diff:
-                    logger.info("Diff preview:\n{}", diff)
+                if self.config.diff_preview and name in ("edit", "smart_edit", "patch"):
+                    diff = await self._diff_preview(name, args)
+                    if diff and not args.get("preview"):
+                        preview_msg = f"[diff preview required] Read this diff and confirm:\n{diff}\n\n"
+                        result = await execute_tool(name, args)
+                        if isinstance(result, list):
+                            result = "\n".join(str(r) for r in result[:200])
+                        return preview_msg + str(result)
+                    if args.get("preview"):
+                        result = await execute_tool(name, args)
+                        return str(result) if isinstance(result, str) else "\n".join(str(r) for r in result[:200])
 
                 result = await execute_tool(name, args)
                 if isinstance(result, list):
@@ -369,6 +387,8 @@ class ReActAgent:
                         except Exception as e:
                             logger.debug("Auto-format failed for {}: {}", path, e)
                 return final
+            except QuestionError:
+                raise
             except Exception as exc:
                 last_err = str(exc)
                 logger.warning("Tool call attempt {}/{} failed: {}", attempt + 1, self.config.max_tool_retries, exc)

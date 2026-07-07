@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi.responses import PlainTextResponse
 from loguru import logger
 from pydantic import BaseModel
 
@@ -11,6 +13,7 @@ from aios.runtime.adapter import RuntimeAdapter
 from ravencode.agents.multi import MultiAgentOrchestrator, SubTask
 from ravencode.agents.orchestrator import AgentType, Orchestrator
 from ravencode.api.client import AIOSClient
+from ravencode.runtime.agent_core import AgentConfig, AgentEvent, EventEmitter, ReActAgent
 from ravencode.runtime.session import SessionStore
 
 router = APIRouter(prefix="/aios", tags=["ai-os-mvp"])
@@ -64,6 +67,7 @@ class MultiAgentRequest(BaseModel):
 
 @router.post("/ai", response_model=AIResponse)
 async def aios_gateway(req: AIRequest):
+    logger.debug("aios_gateway called: task={}, model={}", req.task, req.model)
     result = await _client.ask(prompt=req.prompt, task=req.task, model=req.model)
     return AIResponse(text=result.text, model=result.model, provider=result.provider)
 
@@ -188,6 +192,66 @@ async def aios_websocket(ws: WebSocket):
         logger.debug("WebSocket disconnected")
 
 
+@router.websocket("/ws/agent")
+async def aios_agent_ws(ws: WebSocket):
+    await ws.accept()
+    ee = EventEmitter()
+
+    async def send_event(event: AgentEvent) -> None:
+        with contextlib.suppress(Exception):
+            await ws.send_json({
+                "type": event.type,
+                "data": event.data,
+                "timestamp": event.timestamp,
+            })
+
+    ee.on("step_start", send_event)
+    ee.on("tool_call", send_event)
+    ee.on("tool_result", send_event)
+    ee.on("message", send_event)
+    ee.on("done", send_event)
+
+    try:
+        while True:
+            data = await ws.receive_text()
+            try:
+                msg = json.loads(data)
+            except json.JSONDecodeError:
+                await ws.send_json({"type": "error", "data": {"message": "invalid JSON"}})
+                continue
+
+            prompt = msg.get("prompt", "")
+            if not prompt:
+                await ws.send_json({"type": "error", "data": {"message": "prompt required"}})
+                continue
+
+            config = AgentConfig(
+                max_steps=msg.get("max_steps", 30),
+                event_emitter=ee,
+                diff_preview=msg.get("diff_preview", True),
+                proactive_scan=msg.get("proactive_scan", True),
+                max_tool_retries=msg.get("max_tool_retries", 3),
+            )
+            agent = ReActAgent(config=config)
+            result = await agent.run(prompt)
+            if not result.startswith("[aborted"):
+                await ws.send_json({"type": "final", "data": {"content": result}})
+    except WebSocketDisconnect:
+        logger.debug("[aios] agent WS disconnected")
+
+
 @router.get("/health")
 async def aios_health():
     return {"status": "ok", "module": "ai-os-mvp", "version": "0.1.0"}
+
+
+@router.get("/metrics")
+async def aios_metrics():
+    from raven.core.metrics import metrics
+    return metrics.snapshot()
+
+
+@router.get("/metrics/prometheus", response_class=PlainTextResponse)
+async def aios_metrics_prometheus():
+    from raven.core.metrics import metrics
+    return metrics.prometheus()

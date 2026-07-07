@@ -160,3 +160,61 @@ npm run dev
 
 ### Missing logger imports added
 - `raven/core/db.py`, `raven/cli/onboard.py`, `raven/core/monitor/store.py`, `raven/core/monitor/checkers/price.py`, `raven/plugins/api/plugin.py`, `ravencode/runtime/lsp.py`, `services/code-service/tools.py` — all gained `from loguru import logger`
+
+## Fixes applied (Oct 2026)
+### Phase 4 — DevX / Onboarding
+- **`raven/cli/init_cmd.py`** (new, ~250 lines): `raven init` — interactive project scaffolding:
+  - LLM provider selection (OpenRouter/Anthropic/OpenAI/Ollama) with API key and model prompts
+  - Channel configuration (Telegram, Discord) with token validation-like prompts
+  - Security settings (DM policy, web port)
+  - Generates `raven.json` (JSON config) and `.env.example` (documented env vars)
+  - Creates `workspace/`, `workspace/skills/`, `plugins/`, `data/` directories
+  - Summary table + next steps panel on completion
+- **`raven/cli/deploy_cmd.py`** (new, ~270 lines): `raven deploy` — Docker Compose generator:
+  - Three modes: `minimal` (Raven only), `full` (+NATS+Grafana+Prometheus), `micro` (15 microservices+Traefik)
+  - Generates `docker-compose.{mode}.yml` with healthchecks, volumes, env vars
+  - For micro mode, also creates `traefik/dynamic.yml` with CORS config
+  - Summary table + next steps panel on completion
+- **`docs/plugins.md`** (new): Plugin authoring guide covering tool functions, type hints, best practices, skills, testing, and a file search example
+- **`raven/cli/main.py`**: Registered `init` and `deploy` Click commands
+
+### Phase 5 — E2E + CI
+- **`tests/e2e/conftest.py`** (new): Mock LLM provider (`MockLLMProvider` with configurable responses and streaming), `MockChannel` (captures sent messages), fixtures for `mock_db`, `mock_plugin_loader`, `mock_settings`, and `gateway` (fully wired Gateway with mock LLM + mock channel)
+- **`tests/e2e/test_gateway_e2e.py`** (new, 11 tests): End-to-end tests marked `@pytest.mark.e2e`:
+  - Channel registration, message handling, status/new/help/reset commands, unknown command fallthrough, multiple messages, channel bridge presence, guardian presence
+- **`tests/e2e/test_stress.py`** (new, 2 tests): Load tests marked `@pytest.mark.e2e` + `@pytest.mark.load`:
+  - `test_concurrent_messages` — 50 concurrent users with latency measurement (max < 30s threshold)
+  - `test_burst_rate_limiting` — 20 rapid-fire messages from same user, verifies some pass + some rate-limited
+- **`.github/workflows/ci.yml`** (new): GitHub Actions CI with 4 jobs:
+  - `lint` — ruff check on `raven/`, `aios/`, `ravencode/`, `tests/`
+  - `typecheck` — mypy with `--ignore-missing-imports`
+  - `test` — pytest with coverage (matrix: 3.11, 3.12; `--cov-fail-under=85`; artifact upload)
+  - `e2e` — runs after lint+typecheck+test pass, `pytest tests/e2e/ -m e2e`
+
+## Fixes applied (Sep 2026)
+### Phase 3 — Channel Hardening
+- **`raven/channels/base.py`**: Added `async def health_check(self) -> bool` returning `True` by default — every channel now has health check without mandatory override
+- **`raven/channels/telegram/channel.py`**: Override `health_check()` → returns `self._ready and self._app is not None`
+- **`raven/channels/discord/channel.py`**: Override `health_check()` → returns `self._ready and self._bot is not None`
+- **`raven/channels/webchat/channel.py`**: Override `health_check()` → returns `self._ready`
+- **`raven/core/channel_guardian.py`** (new, 160 lines): `ChannelGuardian` centralized channel lifecycle manager:
+  - **Heartbeat**: per-channel `asyncio.Task` runs every 30s calling `health_check()`; 3 consecutive misses triggers `stop() + await sleep(backoff) + start()` with exponential backoff (5s, 10s, 20s); 3 failed restart attempts → dead
+  - **Rate limiting**: `TokenBucket` (token-bucket algorithm) per-channel (10 msg/s) and per-user (5 msg/s); `check_rate_limit(channel_id, user_id)` returns bool; burst = 2× rate
+  - **Dead channel detection**: `record_error(channel_id)` increments consecutive error counter; 3 errors → `_try_restart()`; after 3× MAX_RESTART_ATTEMPTS errors → `_mark_dead()` with `on_channel_dead` callback; dead channels removed from `self.channels` + stopped
+  - `status_report()` returns dict of all channels with alive/errors/restart_attempts
+- **`raven/core/gateway/gateway.py`**: Integrated `ChannelGuardian`:
+  - `self._guardian = ChannelGuardian(on_channel_dead=self._on_channel_dead)` created in `__init__`
+  - `register_channel()` also calls `self._guardian.register(channel)`
+  - `start()` calls `await self._guardian.start()` replacing old `_register_channel_heal()` (removed)
+  - `stop()` calls `await self._guardian.stop()`
+  - `handle_message()` checks `self._guardian.check_rate_limit()` before circuit breaker — returns "please slow down" on rate limit
+  - `_send()` wraps `channel.send()` in try/except — success → `guardian.record_success()`, failure → `guardian.record_error()`
+  - `_on_channel_dead()` callback removes channel from `self.channels`, stops it, increments `channels_dead` metric
+- **`tests/core/test_channel_guardian.py`** (new, 270 lines): 34 tests covering TokenBucket (acquire, reject, refill, burst), ChannelGuardian (register, unregister, start, stop, rate limit per-channel and per-user, error tracking, restart trigger, dead after exhausted restarts, dead callback, heartbeat miss handling, raising health check, status report, idempotent mark_dead)
+
+## Fixes applied (Aug 2026)
+### Raven hardening — tool system + streaming
+- **`raven/tools/shell.py`**: Added 14 Windows commands to `_WIN_COMMANDS` allowlist (`where`, `findstr`, `more`, `fc`, `tracert`, `pathping`, `taskkill`, `whoami`, `set`, `attrib`, `xcopy`, `robocopy`, `mkdir`, `rmdir`); added `set` to `_CMD_BUILTINS`
+- **`raven/core/task_engine/tool_registry.py`**: `validator_fn` now wrapped in try/except — if user-supplied validator raises, returns `[error: Validator failed: ...]` instead of propagating
+- **`raven/tools/file.py`**: `file_read` now streams at most `max_size` (default 50KB) bytes instead of reading entire file then slicing; truncated output gets `... (truncated, N total bytes)` suffix; exposed `max_size` as optional ToolSpec parameter
+- **`raven/core/unified_agent.py`**: `stream_process` now uses shared `list[bool]` to track whether `stream_wrapper` actually yielded content; falls back to yielding `process()` return value when no streaming content was produced (fixes empty stream when `process` is mocked or doesn't call `on_message`)

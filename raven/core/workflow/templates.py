@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from raven.core.config import settings
 from raven.core.workflow.models import TemplateCategory, TemplateTrigger, WorkflowTemplate
 from raven.core.workflow.store import WorkflowStore
 
@@ -98,7 +99,7 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
                     "type": "array",
                     "items": {"type": "string"},
                     "description": "URLs to health-check",
-                    "default": ["http://localhost:18888/api/health/live"],
+                    "default": [f"http://localhost:{settings.web_port}/api/health/live"],
                 },
                 "timeout": {"type": "integer", "default": 10},
                 "notify_on_failure": {"type": "boolean", "default": True},

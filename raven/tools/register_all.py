@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Any
+
 from raven.core.task_engine.tool_registry import ToolRegistry
 from raven.tools.browser import register_browser_tools
 from raven.tools.canvas import register_canvas_tools
@@ -5,6 +9,7 @@ from raven.tools.db import register_db_tools
 from raven.tools.env import register_env_tools
 from raven.tools.file import register_file_tools
 from raven.tools.http import register_http_tools
+from raven.tools.mcp_tools import register_mcp_tools
 from raven.tools.nodes import register_nodes_tools
 from raven.tools.notify import register_notify_tools
 from raven.tools.process import register_process_tools
@@ -27,7 +32,9 @@ def register_all_tools(registry: ToolRegistry) -> ToolRegistry:
     return registry
 
 
-def create_tool_registry() -> ToolRegistry:
+def create_tool_registry(mcp_pool: Any = None) -> ToolRegistry:
     registry = ToolRegistry()
     register_all_tools(registry)
+    if mcp_pool is not None:
+        register_mcp_tools(registry, mcp_pool)
     return registry

@@ -24,20 +24,20 @@ CREATE TABLE IF NOT EXISTS routines (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     action TEXT NOT NULL,
-    trigger TEXT NOT NULL DEFAULT 'manual',
-    schedule TEXT NOT NULL DEFAULT '08:00',
+    trigger TEXT NOT NULL,
+    schedule TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
     user_id TEXT NOT NULL DEFAULT '',
     channel TEXT NOT NULL DEFAULT '',
     last_run_status TEXT,
     last_run_at REAL,
-    config TEXT NOT NULL DEFAULT '{}',
-    created_at REAL
+    config TEXT DEFAULT '{}',
+    created_at REAL NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS routine_logs (
     id TEXT PRIMARY KEY,
-    routine_id TEXT NOT NULL REFERENCES routines(id) ON DELETE CASCADE,
+    routine_id TEXT NOT NULL,
     status TEXT NOT NULL,
     message TEXT NOT NULL DEFAULT '',
     duration_ms REAL,
@@ -45,14 +45,10 @@ CREATE TABLE IF NOT EXISTS routine_logs (
 );
 """
 
-
 class RoutineStore:
     def __init__(self, db_path: str | Path):
         self._path = str(db_path)
-        conn = sqlite3.connect(self._path)
-        conn.executescript(SCHEMA)
-        conn.commit()
-        conn.close()
+        self._conn().executescript(SCHEMA)
 
     def _conn(self) -> sqlite3.Connection:
         return _get_conn(self._path)

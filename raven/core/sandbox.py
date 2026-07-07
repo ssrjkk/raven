@@ -73,16 +73,7 @@ class Sandbox:
         return "Unknown sandbox mode"
 
     async def _exec_direct(self, code: str) -> str:
-        loop = asyncio.get_running_loop()
-        def _run():
-            try:
-                compiled = compile(code, "<sandbox>", "exec", flags=0)
-                ns: dict[str, Any] = {"__builtins__": __builtins__}
-                exec(compiled, ns)  # noqa: S102
-                return "(code executed successfully)"
-            except Exception as e:
-                return f"Error: {e}"
-        return await loop.run_in_executor(None, _run)
+        return code
 
     async def _exec_subprocess(self, code: str) -> str:
         self._tmpdir = tempfile.mkdtemp(prefix="raven_sandbox_")

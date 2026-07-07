@@ -16,8 +16,11 @@ with contextlib.suppress(ImportError):
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from raven.core.logging import setup_logging
+
 
 async def main() -> None:
+    setup_logging()
     import argparse
 
     parser = argparse.ArgumentParser(description="Raven AI Unified Launcher")

@@ -10,7 +10,10 @@ from textual.containers import Container, Horizontal
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Label, RichLog, Static
 
-API_BASE = "http://localhost:18888/api"
+from raven.core.config import settings
+from raven.core.logging import setup_logging
+
+API_BASE = f"http://localhost:{settings.web_port}/api"
 POLL_INTERVAL = 3.0
 LOG_MAXLEN = 500
 
@@ -88,5 +91,6 @@ class RavenTUI(App[Any]):
 
 
 def run() -> None:
+    setup_logging()
     app = RavenTUI()
     app.run()

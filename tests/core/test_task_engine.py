@@ -106,8 +106,8 @@ class TestToolRegistry:
         assert result == "search results"
 
     async def test_call_unknown(self, registry: ToolRegistry):
-        with pytest.raises(ValueError, match="Unknown tool"):
-            await registry.call("nonexistent")
+        result = await registry.call("nonexistent")
+        assert "Unknown tool" in result
 
     def test_to_llm_tools(self, registry: ToolRegistry):
         tools = registry.to_llm_tools()

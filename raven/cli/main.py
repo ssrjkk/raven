@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import os
 import sys
 import time
@@ -25,7 +26,7 @@ from raven.cli.gateway_runner import _run_gateway, create_gateway
 from raven.core.agent.registry import AgentRegistry
 from raven.core.config import settings
 from raven.core.config_store import config_store
-from raven.core.db import Database
+from raven.core.db import DatabaseFactory
 from raven.core.gateway.aios_adapter import get_aios_adapter
 from raven.core.llm import LLMRouter
 from raven.core.logging import setup_logging
@@ -56,6 +57,7 @@ def aios():
 @click.option("--port", default=3001, help="Fastify AI Gateway port")
 def gateway(port: int):
     """Start the AI Gateway (Fastify-compatible bridge)"""
+    setup_logging()
     import uvicorn
     from fastapi import FastAPI
 
@@ -66,7 +68,7 @@ def gateway(port: int):
     app.include_router(get_aios_adapter().get_bridge_router())
 
     click.echo(f"AI-OS-MVP Gateway running on http://localhost:{port}")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port)  # noqa: S104
 
 
 @aios.command()
@@ -74,6 +76,7 @@ def gateway(port: int):
 @click.option("--agent", default="autonomous", help="Agent type: planner, coder, debugger, autonomous")
 def run(task: str, agent: str):
     """Run an AI-OS-MVP agent task"""
+    setup_logging()
     import asyncio
 
     async def _run():
@@ -217,7 +220,7 @@ def status():
     """Show status of all channels and plugins"""
 
     async def _status():
-        db = Database(settings.resolved_db_path)
+        db = DatabaseFactory.create()
         await db.connect()
         sessions = await db.get_sessions()
         await db.disconnect()
@@ -317,6 +320,24 @@ def doctor():
         logger.debug("Doctor health check failed: {}", e)
     checks.append(("API", "[OK] Running" if api_ok else "[ERR] Stopped"))
 
+    mcp_raw = settings.mcp_servers
+    if mcp_raw:
+        try:
+            mcp_servers = json.loads(mcp_raw)
+            mcp_status = f"{len(mcp_servers)} configured"
+        except json.JSONDecodeError:
+            mcp_status = "[!] Invalid JSON"
+        checks.append(("MCP Servers", mcp_status))
+
+    sb_policy = settings.channel_sandbox_policy
+    if sb_policy:
+        sb_status = "[OK] Configured"
+        try:
+            json.loads(sb_policy)
+        except json.JSONDecodeError:
+            sb_status = "[!] Invalid JSON"
+        checks.append(("Channel Sandbox Policy", sb_status))
+
     table = Table(show_header=False)
     table.add_column("Check", style="cyan")
     table.add_column("Result")
@@ -334,6 +355,33 @@ def onboard():
     from raven.cli.onboard import onboard as _onboard_async
 
     asyncio.run(_onboard_async())
+
+
+@cli.command()
+@click.option("--template", type=click.Choice(["plugin", "skill"]), help="Scaffold a template instead of full project")
+def init(template: str | None):
+    """Initialize a new Raven project (scaffold raven.json + .env.example)"""
+    if template == "plugin":
+        from raven.cli.init_cmd import init_plugin_template
+
+        init_plugin_template()
+        return
+    if template == "skill":
+        from raven.cli.init_cmd import init_skill_template
+
+        init_skill_template()
+        return
+    from raven.cli.init_cmd import init as _init
+
+    _init()
+
+
+@cli.command()
+def deploy():
+    """Generate Docker Compose deployment files"""
+    from raven.cli.deploy_cmd import deploy as _deploy
+
+    _deploy()
 
 
 @cli.group()
@@ -455,7 +503,7 @@ def pairing_list():
     """List pending pairing requests"""
 
     async def _list():
-        db = Database(settings.resolved_db_path)
+        db = DatabaseFactory.create()
         await db.connect()
         users = await db.get_pending_pairing_users()
         await db.disconnect()
@@ -479,7 +527,7 @@ def pairing_approve(code: str):
     """Approve a user by pairing code"""
 
     async def _approve():
-        db = Database(settings.resolved_db_path)
+        db = DatabaseFactory.create()
         await db.connect()
         user = await db.get_user_by_pairing_code(code)
         if not user:
@@ -512,7 +560,7 @@ def msg_send(channel: str, user: str, text: str, session: str | None):
     """Send a message to a user via Raven AI"""
 
     async def _send():
-        db = Database(settings.resolved_db_path)
+        db = DatabaseFactory.create()
         await db.connect()
 
         session_id = session or f"{channel}:{user}:cli"
@@ -612,7 +660,7 @@ def history(session_id: str):
     """View message history for a session"""
 
     async def _history():
-        db = Database(settings.resolved_db_path)
+        db = DatabaseFactory.create()
         await db.connect()
         msgs = await db.get_session_messages(session_id)
         await db.disconnect()
@@ -638,7 +686,7 @@ def db_migrate(target: int | None):
     """Run pending database migrations"""
 
     async def _migrate():
-        db = Database(settings.resolved_db_path)
+        db = DatabaseFactory.create()
         await db.connect()
         await db.disconnect()
         console.print("[green]Migrations complete[/green]")
@@ -666,7 +714,7 @@ def db_version():
     """Show current database schema version"""
 
     async def _version():
-        db = Database(settings.resolved_db_path)
+        db = DatabaseFactory.create()
         await db.connect()
         version = await db.migrator.get_current_version()
         await db.disconnect()
@@ -683,7 +731,7 @@ def agent(message: str, agent_id: str, channel: str):
     """Send a message to the Raven AI agent and get a response"""
 
     async def _agent():
-        db = Database(settings.resolved_db_path)
+        db = DatabaseFactory.create()
         await db.connect()
         plugin_loader = PluginLoader()
         plugins_dir = Path(__file__).parent.parent / "plugins"
@@ -1493,7 +1541,7 @@ def flow_ask(message: str, channel: str, mode: str, session: str):
     async def _ask():
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                "http://localhost:18789/api/agent",
+                f"http://localhost:{settings.ravenflow_port}/api/agent",
                 json={"message": message, "channel": channel, "mode": mode, "session_id": session},
                 timeout=120,
             )
@@ -1514,7 +1562,7 @@ def flow_sessions():
 
     async def _list():
         async with httpx.AsyncClient() as client:
-            resp = await client.get("http://localhost:18789/api/sessions", timeout=10)
+            resp = await client.get(f"http://localhost:{settings.ravenflow_port}/api/sessions", timeout=10)
             data = resp.json()
             mgr_sessions = data.get("sessions", [])
             flow_sessions = data.get("flow_sessions", [])

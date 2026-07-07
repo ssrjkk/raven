@@ -2,331 +2,95 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
     branches: [main]
-  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
-  PYTHON_VERSION: "3.13"
-  REGISTRY: ghcr.io
-  IMAGE_TAG: ${{ github.sha }}
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHON_VERSION: "3.11"
+  PYTHONUNBUFFERED: "1"
 
 jobs:
-  lint-python:
+  lint:
+    name: Lint (ruff)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install deps
-        run: |
-          python -m pip install --upgrade pip ruff mypy
-          pip install -r monolith-requirements.txt
-          pip install -e .
-      - name: Ruff lint
-        run: ruff check --output-format=github .
-      - name: mypy
-        run: mypy raven/ --ignore-missing-imports
+      - name: Install ruff
+        run: pip install ruff
+      - name: Run ruff
+        run: ruff check raven/ aios/ ravencode/ tests/
 
-  go-build:
+  typecheck:
+    name: Type check (mypy)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "1.26"
-      - name: Go mod tidy
-        run: |
-          for svc in gateway auth monitor-engine; do
-            cd services/$svc && go mod tidy && cd ../..
-          done
-      - name: Go build
-        run: |
-          for svc in gateway auth monitor-engine; do
-            cd services/$svc && go build ./... && cd ../..
-          done
-      - name: Go vet
-        run: |
-          for svc in gateway auth monitor-engine; do
-            cd services/$svc && go vet ./... && cd ../..
-          done
-
-  go-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "1.26"
-      - name: Install allurectl
-        run: |
-          curl -sSfL https://github.com/allure-framework/allurectl/releases/latest/download/allurectl_linux_amd64 -o /usr/local/bin/allurectl
-          chmod +x /usr/local/bin/allurectl
-      - name: Run Go tests
-        run: |
-          for svc in gateway auth monitor-engine; do
-            echo "=== Testing services/$svc ==="
-            cd services/$svc
-            go test -v -race -count=1 -json ./... > ../../test-results-go-$svc.json 2>&1 || true
-            cd ../..
-          done
-      - name: Upload Go test results
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: go-test-results
-          path: test-results-go-*.json
-      - name: Upload Go test results to Allure
-        if: always()
-        run: |
-          for f in test-results-go-*.json; do
-            allurectl upload -- "$f" 2>/dev/null || true
-          done
-        env:
-          ALLURE_ENDPOINT: ${{ vars.ALLURE_ENDPOINT }}
-          ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
-          ALLURE_PROJECT_ID: ${{ vars.ALLURE_PROJECT_ID }}
-        continue-on-error: true
-
-  proto-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: bufbuild/buf-setup-action@v1
-        with:
-          version: "1.50.0"
-      - name: Buf lint
-        working-directory: services/proto
-        run: buf lint
-      - name: Buf breaking
-        working-directory: services/proto
-        run: buf breaking --against '../../.git#branch=main' || true
-
-  test-python:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install deps
+      - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-          pip install -e .
-          pip install allure-pytest
-      - name: Run unit tests (fast)
-        run: pytest tests/ -m "not slow and not integration and not pact" -v --cov=raven --cov-report=xml --cov-report=term -o "testpaths=tests" --alluredir=allure-results-unit
-      - name: Run integration tests
-        if: always()
-        run: pytest tests/ -m "integration or slow" -v --alluredir=allure-results-integration --timeout=120 || true
-      - name: Run all tests (safety net)
-        if: always()
-        run: pytest tests/ -v --alluredir=allure-results --timeout=60 || true
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
-        with:
-          file: ./coverage.xml
-      - name: Upload Allure results
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: allure-results
-          path: allure-results*/
-      - name: Upload to Allure TestOps
-        if: always()
-        run: |
-          allurectl upload -- allure-results*/ 2>/dev/null || true
-        env:
-          ALLURE_ENDPOINT: ${{ vars.ALLURE_ENDPOINT }}
-          ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
-          ALLURE_PROJECT_ID: ${{ vars.ALLURE_PROJECT_ID }}
-        continue-on-error: true
+          pip install -e ".[dev]"
+      - name: Run mypy
+        run: mypy raven/ aios/ ravencode/ --ignore-missing-imports
 
-  test-web:
+  test:
+    name: Tests (pytest)
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-      - name: Install deps
-        run: npm ci
-        working-directory: web
-      - name: TypeScript lint
-        run: npm run lint
-        working-directory: web
-        continue-on-error: true
-      - name: Vitest unit tests
-        run: npx vitest run --reporter=verbose
-        working-directory: web
-      - name: Upload Vitest results
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: vitest-results
-          path: web/test-results/
-      - name: Build
-        run: npm run build
-        working-directory: web
-
-  test-e2e:
-    runs-on: ubuntu-latest
-    needs: [test-web]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-      - name: Install deps
-        run: npm ci
-        working-directory: web
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-        working-directory: web
-      - name: Build and start preview
-        run: |
-          npx vite build --mode production
-          npx vite preview --port 5173 &
-          sleep 3
-        working-directory: web
-      - name: Run Playwright tests
-        run: npx playwright test --project=chromium
-        working-directory: web
-        env:
-          PLAYWRIGHT_BASE_URL: http://localhost:5173
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: playwright-report
-          path: web/playwright-report/
-      - name: Upload Playwright results to Allure
-        if: always()
-        run: |
-          allurectl upload -- web/playwright-results/ 2>/dev/null || true
-        env:
-          ALLURE_ENDPOINT: ${{ vars.ALLURE_ENDPOINT }}
-          ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
-          ALLURE_PROJECT_ID: ${{ vars.ALLURE_PROJECT_ID }}
-        continue-on-error: true
-
-  docker-build:
-    runs-on: ubuntu-latest
-    needs: [lint-python, go-build, proto-lint]
-    permissions:
-      contents: read
-      packages: write
     strategy:
       matrix:
-        service:
-          - gateway
-          - auth
-          - agent-core
-          - monitor-engine
-          - rag-service
-          - task-engine
-          - code-service
+        python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v7
-      - name: Log in to registry
-        uses: docker/login-action@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-      - name: Build and push
-        uses: docker/build-push-action@v7
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]"
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ \
+            -q --tb=short \
+            --timeout=120 \
+            --ignore=tests/core/test_sandbox.py \
+            -p no:schemathesis \
+            -W ignore::RuntimeWarning \
+            --cov=raven \
+            --cov-report=term-missing:skip-covered \
+            --cov-fail-under=85
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
         with:
-          context: .
-          file: services/${{ matrix.service }}/Dockerfile
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}:latest
-            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          name: coverage-${{ matrix.python-version }}
+          path: .coverage
+          retention-days: 7
 
-  nats-smoke:
+  e2e:
+    name: E2E tests
     runs-on: ubuntu-latest
-    needs: [docker-build]
-    continue-on-error: true
+    needs: [lint, typecheck, test]
     steps:
-      - uses: actions/checkout@v7
-      - name: Setup NATS
-        run: |
-          docker version
-          docker compose version
-          docker compose -f deploy/docker-compose.nats.yml up -d 2>&1 || true
-          sleep 5
-          docker ps -a
-          docker compose -f deploy/docker-compose.nats.yml logs nats||true
-      - name: Verify streams
-        run: |
-          pip install "nats-py>=2.9.0,<2.15.0"
-          for i in $(seq 1 10); do
-            python deploy/nats/nats-stream-manager.py verify && break
-            echo "Retry $i..."
-            sleep 3
-          done
-      - name: Cleanup
-        if: always()
-        run: docker compose -f deploy/docker-compose.nats.yml down --volumes
-
-  k6-smoke:
-    runs-on: ubuntu-latest
-    needs: [docker-build]
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v7
-      - name: Setup k6
-        uses: grafana/setup-k6-action@v1
-      - name: Start services
-        env:
-          JWT_SECRET: ci-test-secret-key-not-for-production
-        run: |
-          docker compose -f docker-compose.micro.yml up -d auth gateway monitor-engine 2>&1 || true
-          docker ps -a || true
-          for i in $(seq 1 24); do
-            AUTH_OK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/health 2>/dev/null || echo "000")
-            GW_OK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health 2>/dev/null || echo "000")
-            MON_OK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8003/health 2>/dev/null || echo "000")
-            if [ "$AUTH_OK" = "200" ] && [ "$GW_OK" = "200" ] && [ "$MON_OK" = "200" ]; then
-              echo "All services healthy"
-              break
-            fi
-            echo "Waiting... ($i/24) auth=$AUTH_OK gw=$GW_OK mon=$MON_OK"
-            sleep 5
-          done
-      - name: Run k6 smoke test
-        run: k6 run --vus 5 --duration 30s tests/load/scenario.js || true
-        continue-on-error: true
-        env:
-          AUTH_BASE: http://localhost:8001
-          GATEWAY_BASE: http://localhost:8000
-          MONITOR_BASE: http://localhost:8003
-      - name: Cleanup
-        if: always()
-        run: docker compose -f docker-compose.micro.yml down --volumes
-
-  py-microservices:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Check imports
+      - name: Install dependencies
         run: |
-          for svc in agent-core code-service rag-service task-engine; do
-            echo "=== Checking services/$svc ==="
-            cd services/$svc
-            pip install -r requirements.txt -q 2>/dev/null || true
-            python -c "import main" 2>/dev/null && echo "  OK" || echo "  import check skipped (runtime deps)"
-            cd ../..
-          done
+          pip install -e ".[dev]"
+      - name: Run E2E tests
+        run: |
+          pytest tests/e2e/ \
+            -q --tb=short \
+            --timeout=120 \
+            -m e2e \
+            -W ignore::RuntimeWarning

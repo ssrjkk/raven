@@ -18,6 +18,7 @@ except ImportError:
 import click
 
 from raven.core._json import json
+from raven.core.logging import setup_logging
 from ravencode.cli.tui import tui_run
 from ravencode.integrations.github import (
     GitHubIntegration,
@@ -29,6 +30,7 @@ from ravencode.integrations.gitlab import GitLabIntegration, parse_gitlab_webhoo
 @click.group()
 def cli():
     """RavenCode — Autonomous AI engineering framework."""
+    setup_logging()
 
 
 @cli.command()

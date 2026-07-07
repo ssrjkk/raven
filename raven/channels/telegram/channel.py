@@ -95,6 +95,9 @@ class TelegramChannel(BaseChannel):
     async def disconnect(self):
         await self.stop()
 
+    async def health_check(self) -> bool:
+        return self._ready and self._app is not None
+
     async def on_message(self, handler: Callable[[IncomingMessage], Awaitable[None]]):
         self._handler = handler
 

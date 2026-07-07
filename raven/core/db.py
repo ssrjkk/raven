@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -346,3 +347,19 @@ class Database:
         except Exception as e:
             logger.warning("DB health check failed: {}", e)
             return False
+
+
+class DatabaseFactory:
+    @staticmethod
+    def create() -> Database | Any:
+        dsn = os.environ.get("DATABASE_URL", "")
+        if dsn.startswith("postgresql://"):
+            from raven.core.db_postgres import PostgresDatabase
+
+            logger.info("Creating PostgresDatabase (DSN: {}...)", dsn[:40])
+            return PostgresDatabase(dsn)
+        from raven.core.config import settings
+
+        db_path = settings.resolved_db_path
+        logger.info("Creating SQLite Database (path: {})", db_path)
+        return Database(db_path)

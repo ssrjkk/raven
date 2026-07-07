@@ -6,76 +6,57 @@ from raven.core.skills import Skill, SkillsRegistry, skills_registry
 
 
 def test_skill_create():
-    skill = Skill(name="test", description="A test skill", prompt="Do X")
+    skill = Skill(name="test", description="A test skill", instructions="Do X")
     assert skill.name == "test"
     assert skill.description == "A test skill"
-
-
-def test_skill_to_dict():
-    skill = Skill(name="test", description="A test skill", prompt="Do X and Y")
-    d = skill.to_dict()
-    assert d["name"] == "test"
-    assert d["description"] == "A test skill"
+    assert skill.instructions == "Do X"
 
 
 def test_skills_registry_register():
     reg = SkillsRegistry()
-    skill = Skill(name="code", description="Write code", prompt="Generate code")
+    skill = Skill(name="code", description="Write code", instructions="Generate code")
     reg.register(skill)
     assert reg.get("code") is skill
 
 
 def test_skills_registry_list():
     reg = SkillsRegistry()
-    reg.register(Skill(name="a", description="", prompt=""))
-    reg.register(Skill(name="b", description="", prompt=""))
-    assert len(reg.list()) == 2
+    reg.register(Skill(name="a", description="", instructions=""))
+    reg.register(Skill(name="b", description="", instructions=""))
+    assert len(reg.list_names()) == 2
     assert set(reg.list_names()) == {"a", "b"}
 
 
-def test_skills_registry_active_prompts():
+def test_skills_registry_get_unknown():
     reg = SkillsRegistry()
-    reg.register(Skill(name="x", description="desc", prompt="do x"))
-    active = reg.active_prompts(["x"])
-    assert "do x" in active
-    assert "Skill: x" in active
+    assert reg.get("nonexistent") is None
 
 
-def test_skills_registry_active_prompts_empty():
+def test_skills_registry_remove():
     reg = SkillsRegistry()
-    assert reg.active_prompts([]) == ""
-    assert reg.active_prompts(["nonexistent"]) == ""
+    reg.register(Skill(name="z", description="", instructions=""))
+    assert reg.remove("z") is True
+    assert reg.get("z") is None
 
 
-def test_skills_registry_get_prompt():
+def test_skills_registry_remove_nonexistent():
     reg = SkillsRegistry()
-    reg.register(Skill(name="y", description="", prompt="hello"))
-    assert reg.get_prompt("y") == "hello"
-    assert reg.get_prompt("nonexistent") == ""
-
-
-def test_skills_registry_clear():
-    reg = SkillsRegistry()
-    reg.register(Skill(name="z", description="", prompt=""))
-    reg.clear()
-    assert reg.list() == []
+    assert reg.remove("nonexistent") is False
 
 
 def test_skills_registry_from_dir(tmp_path: Path):
-    skill_dir = tmp_path / "my_skill"
-    skill_dir.mkdir()
-    (skill_dir / "SKILL.md").write_text("My custom skill\n\nDo something useful")
+    (tmp_path / "my-skill.md").write_text("My custom skill\n\nDo something useful")
     reg = SkillsRegistry()
     reg.register_from_dir(tmp_path)
-    skill = reg.get("my_skill")
+    skill = reg.get("my-skill")
     assert skill is not None
-    assert "My custom skill" in skill.prompt
+    assert "My custom skill" in skill.instructions
 
 
 def test_skills_registry_from_dir_nonexistent():
     reg = SkillsRegistry()
     reg.register_from_dir(Path("/nonexistent"))
-    assert reg.list() == []
+    assert reg.list_names() == []
 
 
 def test_skills_registry_from_dir_no_skill_file(tmp_path: Path):
@@ -83,9 +64,10 @@ def test_skills_registry_from_dir_no_skill_file(tmp_path: Path):
     empty_dir.mkdir()
     reg = SkillsRegistry()
     reg.register_from_dir(tmp_path)
-    assert reg.list() == []
+    assert reg.list_names() == []
 
 
 def test_skills_registry_global():
-    skills_registry.clear()
-    assert skills_registry.list() == []
+    for name in skills_registry.list_names():
+        skills_registry.remove(name)
+    assert skills_registry.list_names() == []

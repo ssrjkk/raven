@@ -16,27 +16,27 @@ class CIProvider(ABC):
 
     @abstractmethod
     async def post_comment(self, ctx: EventContext, body: str) -> bool:
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     async def get_file_content(self, ctx: EventContext, path: str, ref: str | None = None) -> str | None:
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     async def create_branch(self, ctx: EventContext, base: str, head: str) -> bool:
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     async def create_pr(self, ctx: EventContext, title: str, body: str, head: str, base: str) -> int | None:
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     async def get_pr_diff(self, ctx: EventContext, pr_number: int) -> str | None:
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     async def set_commit_status(self, ctx: EventContext, sha: str, state: str, description: str) -> bool:
-        ...
+        raise NotImplementedError
 
     async def handle_event(self, ctx: EventContext) -> WorkflowResult | None:
         """Route event to appropriate handler. Override in subclass."""

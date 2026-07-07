@@ -28,7 +28,7 @@ from raven.core.admin_api import create_admin_router
 from raven.core.audit import AuditEventType, audit_logger
 from raven.core.config import settings
 from raven.core.config_watcher import ConfigWatcher
-from raven.core.db import Database
+from raven.core.db import DatabaseFactory
 from raven.core.gateway.aios_adapter import get_aios_adapter
 from raven.core.gateway.gateway import Gateway
 from raven.core.health import health
@@ -52,9 +52,11 @@ from raven.routines.register_all import register_all_routines
 
 
 def create_gateway() -> Gateway:
-    db_path = settings.resolved_db_path
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    db = Database(db_path)
+    db = DatabaseFactory.create()
+    if hasattr(db, "dsn"):
+        logger.info("Using PostgreSQL database")
+    else:
+        db.db_path.parent.mkdir(parents=True, exist_ok=True)
     plugin_loader = PluginLoader()
     gateway = Gateway(db, plugin_loader)
     return gateway
@@ -395,7 +397,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         await gateway.start()
         await monitor_engine.start()
         await routine_engine.start()
-        config = uvicorn.Config(api_app, host="0.0.0.0", port=web_port, log_level="info", ws="auto")
+        config = uvicorn.Config(api_app, host="0.0.0.0", port=web_port, log_level="info", ws="auto")  # noqa: S104
         server = uvicorn.Server(config)
         server_task = asyncio.create_task(server.serve())
 

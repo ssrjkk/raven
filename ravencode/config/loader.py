@@ -101,16 +101,17 @@ def _default_config_paths(project_dir: str | Path) -> list[tuple[str, Path]]:
     if env_cfg:
         paths.append(("env", Path(env_cfg)))
 
-    project_json = p / "ravencode.json"
-    if project_json.exists():
-        paths.append(("project", project_json))
-    project_jsonc = p / "ravencode.jsonc"
-    if project_jsonc.exists():
-        paths.append(("project", project_jsonc))
+    for name in ("opencode.json", "opencode.jsonc", "ravencode.json", "ravencode.jsonc"):
+        candidate = p / name
+        if candidate.exists():
+            paths.append(("project", candidate))
+            break
 
-    dot_dir = p / ".ravencode"
-    if dot_dir.is_dir() and (dot_dir / "config.json").exists():
-        paths.append(("dot_opencode", dot_dir / "config.json"))
+    for name in (".opencode", ".ravencode"):
+        dot_dir = p / name
+        if dot_dir.is_dir() and (dot_dir / "config.json").exists():
+            paths.append((f"dot_{name.lstrip('.')}", dot_dir / "config.json"))
+            break
 
     inline = os.environ.get("RAVENCODE_CONFIG_CONTENT")
     if inline:
