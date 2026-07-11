@@ -530,9 +530,9 @@ async def image_analyze(filepath: str, prompt: str = "Describe this image in det
                     "max_tokens": 1000,
                 },
             )
-            data = r.json()
+            data: dict[str, Any] = r.json()
             if "choices" in data and len(data["choices"]) > 0:
-                return data["choices"][0]["message"]["content"]
+                return str(data["choices"][0]["message"]["content"])
             return f"[error] API response: {data}"
     except Exception as e:
         logger.error("Image analysis failed: {}", e)

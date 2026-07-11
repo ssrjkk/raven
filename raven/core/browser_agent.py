@@ -223,8 +223,8 @@ class BrowserAgent:
     async def screenshot_bytes(self, selector: str | None = None, full_page: bool = False) -> bytes:
         if selector:
             el = await self.page.wait_for_selector(selector, timeout=5000)
-            return await el.screenshot()
-        return await self.page.screenshot(full_page=full_page)
+            return await el.screenshot()  # type: ignore[no-any-return]
+        return await self.page.screenshot(full_page=full_page)  # type: ignore[no-any-return]
 
     async def evaluate(self, script: str) -> str:
         result = await self.page.evaluate(script)
