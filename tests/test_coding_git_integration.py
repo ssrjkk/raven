@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from raven.coding.git_integration import GitIntegration, FileChange
+from raven.coding.git_integration import FileChange, GitIntegration
 
 
 @pytest.fixture

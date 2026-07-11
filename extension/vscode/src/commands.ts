@@ -1,19 +1,6 @@
 import * as vscode from 'vscode';
-
-async function apiCall(endpoint: string, action: string, code: string, context?: string): Promise<string> {
-  try {
-    const resp = await fetch(`${endpoint}/api/raven`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, code, context }),
-    });
-    if (!resp.ok) return `Error: ${resp.statusText}`;
-    const data = await resp.json();
-    return data.response || '(no response)';
-  } catch (e: any) {
-    return `Connection error: ${e.message}. Is Raven running on ${endpoint}?`;
-  }
-}
+import { RavenApi, RavenDiagnostic } from './api';
+import { getDiagnosticCollection, runReview } from './diagnostics';
 
 function getSelection(): string {
   const editor = vscode.window.activeTextEditor;
@@ -21,83 +8,123 @@ function getSelection(): string {
   return editor.document.getText(editor.selection);
 }
 
-export async function reviewSelection(endpoint: string, uri?: vscode.Uri) {
+function getEditorOrWarn(): vscode.TextEditor | undefined {
   const editor = vscode.window.activeTextEditor;
-  if (!editor) return vscode.window.showWarningMessage('No active editor');
+  if (!editor) vscode.window.showWarningMessage('No active editor');
+  return editor;
+}
 
-  const code = uri
-    ? (await vscode.workspace.openTextDocument(uri)).getText()
-    : getSelection() || editor.document.getText();
+async function apiCall(api: RavenApi, action: string, code: string, context = ''): Promise<string> {
+  return vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: `Raven is ${action}...` },
+    async () => api.call(action, code, context),
+  );
+}
 
+async function showResultInDoc(content: string, language = 'markdown', preview = true) {
+  const doc = await vscode.workspace.openTextDocument({ content, language });
+  await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Beside, preview });
+}
+
+export async function reviewSelection(api: RavenApi) {
+  const editor = getEditorOrWarn();
+  if (!editor) return;
+  const code = getSelection() || editor.document.getText();
   const filename = editor.document.fileName;
-  vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Raven is reviewing code...' }, async () => {
-    const result = await apiCall(endpoint, 'review', code, filename);
-    const doc = await vscode.workspace.openTextDocument({ content: result, language: 'markdown' });
-    await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Beside, preview: true });
-  });
+
+  const result = await apiCall(api, 'reviewing', code, filename);
+
+  // Try to parse structured diagnostics
+  const lines = result.split('\n');
+  const diagnostics: vscode.Diagnostic[] = [];
+  let summaryLines: string[] = [];
+
+  for (const line of lines) {
+    const m = line.match(/^Line\s+(\d+)(?::(\d+))?\s*-\s*(\d+)(?::(\d+))?\s+\[(\w+)\]\s+(.+)$/);
+    if (m) {
+      const d: RavenDiagnostic = {
+        line: parseInt(m[1]) - 1,
+        column: m[2] ? parseInt(m[2]) - 1 : 0,
+        endLine: parseInt(m[3]) - 1,
+        endColumn: m[4] ? parseInt(m[4]) - 1 : 100,
+        message: m[6],
+        severity: m[5] === 'error' ? 'error' : m[5] === 'warning' ? 'warning' : 'info',
+        category: 'Raven Review',
+      };
+      const range = new vscode.Range(d.line, d.column, d.endLine, d.endColumn);
+      const severity = d.severity === 'error'
+        ? vscode.DiagnosticSeverity.Error
+        : d.severity === 'warning'
+          ? vscode.DiagnosticSeverity.Warning
+          : vscode.DiagnosticSeverity.Information;
+      diagnostics.push(new vscode.Diagnostic(range, `[Raven] ${d.message}`, severity));
+    } else {
+      summaryLines.push(line);
+    }
+  }
+
+  if (diagnostics.length > 0) {
+    getDiagnosticCollection().set(editor.document.uri, diagnostics);
+    vscode.window.showInformationMessage(`Raven found ${diagnostics.length} issue(s) — see Problems tab`);
+  }
+
+  showResultInDoc(result, 'markdown');
 }
 
-export async function explainSelection(endpoint: string) {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) return vscode.window.showWarningMessage('No active editor');
-
+export async function explainSelection(api: RavenApi) {
+  const editor = getEditorOrWarn();
+  if (!editor) return;
   const code = getSelection() || editor.document.getText();
-  vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Raven is explaining...' }, async () => {
-    const result = await apiCall(endpoint, 'explain', code);
-    const doc = await vscode.workspace.openTextDocument({ content: result, language: 'markdown' });
-    await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Beside, preview: true });
-  });
+  const result = await apiCall(api, 'explaining', code, editor.document.fileName);
+  showResultInDoc(result, 'markdown');
 }
 
-export async function fixSelection(endpoint: string) {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) return vscode.window.showWarningMessage('No active editor');
-
+export async function fixSelection(api: RavenApi) {
+  const editor = getEditorOrWarn();
+  if (!editor) return;
   const code = getSelection() || editor.document.getText();
-  vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Raven is fixing issues...' }, async () => {
-    const result = await apiCall(endpoint, 'fix', code);
+  const result = await apiCall(api, 'fixing', code, editor.document.fileName);
 
-    editor.edit((editBuilder) => {
-      const selection = editor.selection.isEmpty
-        ? new vscode.Range(0, 0, editor.document.lineCount, 0)
-        : editor.selection;
-      editBuilder.replace(selection, result);
-    });
-    vscode.window.showInformationMessage('✅ Raven applied fixes');
+  await editor.edit((editBuilder) => {
+    const selection = editor.selection.isEmpty
+      ? new vscode.Range(0, 0, editor.document.lineCount, 0)
+      : editor.selection;
+    editBuilder.replace(selection, result);
   });
+
+  getDiagnosticCollection().delete(editor.document.uri);
+  vscode.window.showInformationMessage('Raven applied fixes');
 }
 
-export async function suggestImprovements(endpoint: string) {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) return vscode.window.showWarningMessage('No active editor');
-
+export async function suggestImprovements(api: RavenApi) {
+  const editor = getEditorOrWarn();
+  if (!editor) return;
   const code = getSelection() || editor.document.getText();
-  vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Raven is suggesting improvements...' }, async () => {
-    const result = await apiCall(endpoint, 'suggest', code);
-    const doc = await vscode.workspace.openTextDocument({ content: result, language: 'markdown' });
-    await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Beside, preview: true });
-  });
+  const result = await apiCall(api, 'suggesting improvements for', code, editor.document.fileName);
+  showResultInDoc(result, 'markdown');
 }
 
-export async function generateTests(endpoint: string) {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) return vscode.window.showWarningMessage('No active editor');
-
+export async function generateTests(api: RavenApi) {
+  const editor = getEditorOrWarn();
+  if (!editor) return;
   const code = getSelection() || editor.document.getText();
-  vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Raven is writing tests...' }, async () => {
-    const result = await apiCall(endpoint, 'tests', code);
-    const doc = await vscode.workspace.openTextDocument({ content: result, language: editor.document.languageId });
-    await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Beside, preview: false });
-  });
+  const result = await apiCall(api, 'writing tests for', code, editor.document.fileName);
+  showResultInDoc(result, editor.document.languageId, false);
 }
 
-export async function writeCommitMessage(endpoint: string) {
+export async function writeCommitMessage(api: RavenApi) {
   const gitRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
   if (!gitRoot) return vscode.window.showWarningMessage('No workspace folder');
 
-  vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Raven is writing commit message...' }, async () => {
-    const result = await apiCall(endpoint, 'commit', '', gitRoot.fsPath);
-    const doc = await vscode.workspace.openTextDocument({ content: result, language: 'text' });
-    await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Beside, preview: true });
-  });
+  // Collect git diff
+  let diff = '';
+  try {
+    const { execSync } = require('child_process');
+    diff = execSync('git diff --cached', { cwd: gitRoot.fsPath, encoding: 'utf-8' }).slice(0, 3000);
+  } catch {
+    diff = '(no staged changes)';
+  }
+
+  const result = await apiCall(api, 'writing commit message for', diff, gitRoot.fsPath);
+  showResultInDoc(result, 'text');
 }

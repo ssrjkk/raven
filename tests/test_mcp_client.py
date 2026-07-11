@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from raven.core.mcp.mcp_client import MCPClient, MCPClientPool
 from raven.core.mcp.channel_bridge import ChannelBridge
+from raven.core.mcp.mcp_client import MCPClient, MCPClientPool
 from raven.core.task_engine.tool_registry import ToolRegistry
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -154,6 +155,22 @@ class CodeIndexer:
 
         if language == "python":
             symbols = self._parse_python(content)
+        elif language in ("javascript", "typescript"):
+            symbols = self._parse_js_ts(content, language)
+        elif language == "go":
+            symbols = self._parse_go(content)
+        elif language == "rust":
+            symbols = self._parse_rust(content)
+        elif language == "java":
+            symbols = self._parse_java(content)
+        elif language == "csharp":
+            symbols = self._parse_csharp(content)
+        elif language == "php":
+            symbols = self._parse_php(content)
+        elif language == "ruby":
+            symbols = self._parse_ruby(content)
+        elif language == "lua":
+            symbols = self._parse_lua(content)
 
         return CodeFile(
             path=rel,
@@ -225,6 +242,398 @@ class CodeIndexer:
         except SyntaxError as e:
             logger.debug("[indexer] syntax error: {}", e)
         return symbols
+
+    def _parse_js_ts(self, content: str, language: str) -> list[CodeSymbol]:
+        symbols: list[CodeSymbol] = []
+        lines = content.splitlines()
+
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+
+            m = re.match(r"(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+(?:[*(]\s*)?(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.FUNCTION, line=i))
+                continue
+
+            m = re.match(r"(?:export\s+)?(?:default\s+)?class\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CLASS, line=i))
+                continue
+
+            m = re.match(r"(?:export\s+)?interface\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.INTERFACE, line=i))
+                continue
+
+            m = re.match(r"(?:export\s+)?type\s+(\w+)\s*=", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.TYPE, line=i))
+                continue
+
+            m = re.match(r"(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+\*?\s*(\w+)?", stripped)
+            if m and m.group(1):
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.FUNCTION, line=i))
+                continue
+
+            m = re.match(r"(?:export\s+)?(?:default\s+)?const\s+(\w+)\s*[=:]", stripped)
+            if m:
+                rest = stripped[m.end():]
+                if "=>" in rest or rest.strip().startswith("async"):
+                    symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.FUNCTION, line=i))
+                elif m.group(1).isupper():
+                    symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CONSTANT, line=i))
+                else:
+                    symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.VARIABLE, line=i))
+                continue
+
+            m = re.match(r"(?:export\s+)?enum\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.TYPE, line=i))
+                continue
+
+        return symbols
+
+    def _parse_go(self, content: str) -> list[CodeSymbol]:
+        symbols: list[CodeSymbol] = []
+        for i, line in enumerate(content.splitlines(), 1):
+            stripped = line.strip()
+
+            m = re.match(r"func\s+(?!\()(\w+)\s*\(", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.FUNCTION, line=i))
+                continue
+
+            m = re.match(r"type\s+(\w+)\s+struct", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CLASS, line=i))
+                continue
+
+            m = re.match(r"type\s+(\w+)\s+interface", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.INTERFACE, line=i))
+                continue
+
+            m = re.match(r"(?:const|var)\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CONSTANT if stripped.startswith("const") else SymbolKind.VARIABLE, line=i))
+                continue
+
+        # Second pass: methods (func with receiver)
+        for i, line in enumerate(content.splitlines(), 1):
+            stripped = line.strip()
+            m = re.match(r"func\s+\((\w+\s+\*?\w+)\)\s+(\w+)\s*\(", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(2), kind=SymbolKind.METHOD, line=i, signature=f"({m.group(1)})"))
+                continue
+
+        return symbols
+
+    def _parse_rust(self, content: str) -> list[CodeSymbol]:
+        symbols: list[CodeSymbol] = []
+        for i, line in enumerate(content.splitlines(), 1):
+            stripped = line.strip()
+
+            m = re.match(r"(?:pub\s+)?(?:unsafe\s+)?fn\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.FUNCTION, line=i))
+                continue
+
+            m = re.match(r"(?:pub\s+)?struct\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CLASS, line=i))
+                continue
+
+            m = re.match(r"(?:pub\s+)?enum\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.TYPE, line=i))
+                continue
+
+            m = re.match(r"(?:pub\s+)?(?:unsafe\s+)?trait\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.INTERFACE, line=i))
+                continue
+
+            m = re.match(r"(?:pub\s+)?const\s+(\w+)\s*:", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CONSTANT, line=i))
+                continue
+
+            m = re.match(r"(?:pub\s+)?(?:static\s+)?mut?\s+(\w+)\s*:", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.VARIABLE, line=i))
+                continue
+
+            m = re.match(r"(?:pub\s+)?impl\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CLASS, line=i))
+                continue
+
+            m = re.match(r"#!\[.*\]", stripped)
+            if m:
+                continue
+
+            m = re.match(r"(?:pub\s+)?macro_rules!\s+(\w+)", stripped)
+            if m:
+                continue
+
+        return symbols
+
+    def _parse_csharp(self, content: str) -> list[CodeSymbol]:
+        symbols: list[CodeSymbol] = []
+        for i, line in enumerate(content.splitlines(), 1):
+            stripped = line.strip()
+
+            m = re.match(r"(?:public|private|protected|internal|static|abstract|sealed|partial|\s)*\s+(?:abstract\s+|sealed\s+|static\s+)?(?:class|record|struct)\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CLASS, line=i))
+                continue
+
+            m = re.match(r"(?:public|private|protected|internal)?\s*interface\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.INTERFACE, line=i))
+                continue
+
+            m = re.match(r"(?:public|private|protected|internal)\s+(?:static\s+|virtual\s+|override\s+|abstract\s+)*(?:\w+(?:<[^>]*>)?)\s+(\w+)\s*\(", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.METHOD, line=i))
+                continue
+
+            m = re.match(r"(?:public|private|protected|internal)\s+(?:static\s+|readonly\s+|const\s+)*(?:\w+(?:\[\])?(?:<[^>]*>)?)\s+(\w+)\s*\{", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.VARIABLE, line=i))
+                continue
+
+            m = re.match(r"(?:public\s+)?enum\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.TYPE, line=i))
+                continue
+
+        return symbols
+
+    def _parse_php(self, content: str) -> list[CodeSymbol]:
+        symbols: list[CodeSymbol] = []
+        for i, line in enumerate(content.splitlines(), 1):
+            stripped = line.strip()
+
+            m = re.match(r"(?:abstract\s+|final\s+)?(?:class|trait)\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CLASS, line=i))
+                continue
+
+            m = re.match(r"interface\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.INTERFACE, line=i))
+                continue
+
+            m = re.match(r"(?:public|private|protected)\s+(?:static\s+|abstract\s+)?function\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.METHOD, line=i))
+                continue
+
+            m = re.match(r"function\s+(\w+)\s*\(", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.FUNCTION, line=i))
+                continue
+
+            m = re.match(r"(?:public|private|protected)\s+(?:static\s+)?(?:readonly\s+)?(?:int|float|string|bool|array|void|\w+)\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.VARIABLE, line=i))
+                continue
+
+            m = re.match(r"enum\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.TYPE, line=i))
+                continue
+
+        return symbols
+
+    def _parse_ruby(self, content: str) -> list[CodeSymbol]:
+        symbols: list[CodeSymbol] = []
+        for i, line in enumerate(content.splitlines(), 1):
+            stripped = line.strip()
+
+            m = re.match(r"class\s+(?:<<\s+)?(\w+(?:::\w+)*)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CLASS, line=i))
+                continue
+
+            m = re.match(r"module\s+(\w+(?:::\w+)*)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.INTERFACE, line=i))
+                continue
+
+            m = re.match(r"def\s+(?:self\.)?(\w+(?:[?!])?)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.METHOD, line=i))
+                continue
+
+            m = re.match(r"(\w+)\s*=\s*(?:->|lambda|proc\b)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.FUNCTION, line=i))
+                continue
+
+            m = re.match(r"(\w+)\s*=\s*", stripped)
+            if m and m.group(1).isupper():
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CONSTANT, line=i))
+                continue
+
+            m = re.match(r"attr_(?:reader|writer|accessor)\s+(?::)?(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.VARIABLE, line=i))
+                continue
+
+        return symbols
+
+    def _parse_lua(self, content: str) -> list[CodeSymbol]:
+        symbols: list[CodeSymbol] = []
+        for i, line in enumerate(content.splitlines(), 1):
+            stripped = line.strip()
+
+            m = re.match(r"(?:local\s+)?function\s+(\w+(?:[.:]\w+)*)\s*\(", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.FUNCTION, line=i))
+                continue
+
+            m = re.match(r"(\w+(?:[.:]\w+)*)\s*=\s*function\s*\(", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.FUNCTION, line=i))
+                continue
+
+            m = re.match(r"(\w+(?:[.:]\w+)*)\s*=\s*\{", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.VARIABLE, line=i))
+                continue
+
+            m = re.match(r"local\s+(\w+)\s*=", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.VARIABLE, line=i))
+                continue
+
+            m = re.match(r"(\w+(?:[.:]\w+)*)\s*=\s*(?:true|false|\d+)", stripped)
+            if m and m.group(1).isupper():
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CONSTANT, line=i))
+                continue
+
+        return symbols
+
+    def _parse_java(self, content: str) -> list[CodeSymbol]:
+        symbols: list[CodeSymbol] = []
+        for i, line in enumerate(content.splitlines(), 1):
+            stripped = line.strip()
+
+            m = re.match(r"(?:public|private|protected|static|abstract|final|sealed|non-sealed|\s)*\s+(?:abstract\s+|final\s+|sealed\s+)?(?:static\s+)?(?:class|record)\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CLASS, line=i))
+                continue
+
+            m = re.match(r"(?:public\s+)?interface\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.INTERFACE, line=i))
+                continue
+
+            m = re.match(r"(?:public|private|protected)\s+(?:static\s+|abstract\s+|final\s+|synchronized\s+)*(?:\w+(?:<[^>]*>)?)\s+(\w+)\s*\(", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.METHOD, line=i))
+                continue
+
+            m = re.match(r"(?:public|private|protected)\s+(?:static\s+|final\s+)*(?:\w+(?:\[\])?(?:<[^>]*>)?)\s+(\w+)\s*(?:=|;)", stripped)
+            if m:
+                kind = SymbolKind.CONSTANT if m.group(1).isupper() else SymbolKind.VARIABLE
+                symbols.append(CodeSymbol(name=m.group(1), kind=kind, line=i))
+                continue
+
+            m = re.match(r"(?:public\s+)?enum\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.TYPE, line=i))
+                continue
+
+            m = re.match(r"@interface\s+(\w+)", stripped)
+            if m:
+                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.TYPE, line=i))
+                continue
+
+        return symbols
+
+    async def index_async(self, max_files: int = 5000) -> dict[str, CodeFile]:
+        self.index(max_files)
+        await self._lsp_enrich()
+        return self._files
+
+    async def _lsp_enrich(self) -> None:
+        supported = {"python", "typescript", "javascript", "go", "rust", "java", "csharp", "php", "ruby", "lua"}
+        lang_files: dict[str, list[Path]] = {}
+        root = self._root
+        for rel_path, cf in self._files.items():
+            if cf.language in supported:
+                lang_files.setdefault(cf.language, []).append(root / rel_path)
+
+        if not lang_files:
+            return
+
+        for lang, paths in lang_files.items():
+            try:
+                from ravencode.runtime.lsp import LSPClient
+
+                client = LSPClient(lang, root_uri=f"file://{root.as_posix()}")
+                try:
+                    await client.start()
+                except (FileNotFoundError, ValueError) as exc:
+                    logger.debug("[indexer] LSP not available for {}: {}", lang, exc)
+                    continue
+
+                for fp in paths:
+                    try:
+                        uri = f"file://{fp.as_posix()}"
+                        symbols = await client.document_symbols(uri)
+                        if not symbols:
+                            continue
+                        rel = str(fp.relative_to(root)).replace("\\", "/")
+                        code_file = self._files.get(rel)
+                        if code_file is None:
+                            continue
+                        lsp_symbols: list[CodeSymbol] = []
+                        for s in symbols:
+                            kind = self._lsp_kind_to_symbol_kind(s.get("kind", 0))
+                            lsp_symbols.append(
+                                CodeSymbol(
+                                    name=s.get("name", ""),
+                                    kind=kind,
+                                    line=0,
+                                    column=0,
+                                    signature=s.get("detail", ""),
+                                )
+                            )
+                            children = s.get("children", [])
+                            for child in children[:10]:
+                                child_kind = self._lsp_kind_to_symbol_kind(child.get("kind", 0))
+                                lsp_symbols.append(
+                                    CodeSymbol(
+                                        name=child.get("name", ""),
+                                        kind=child_kind,
+                                        line=0,
+                                        column=0,
+                                    )
+                                )
+                        if lsp_symbols:
+                            code_file.symbols = lsp_symbols
+                    except Exception as e:
+                        logger.debug("[indexer] LSP enrich failed for {}: {}", fp, e)
+
+                await client.stop()
+            except Exception as exc:
+                logger.debug("[indexer] LSP enrich error for {}: {}", lang, exc)
+
+    @staticmethod
+    def _lsp_kind_to_symbol_kind(lsp_kind: int) -> SymbolKind:
+        mapping = {
+            1: SymbolKind.VARIABLE, 2: SymbolKind.VARIABLE, 3: SymbolKind.VARIABLE,
+            4: SymbolKind.VARIABLE, 5: SymbolKind.CLASS, 6: SymbolKind.METHOD,
+            7: SymbolKind.VARIABLE, 8: SymbolKind.VARIABLE, 9: SymbolKind.METHOD,
+            10: SymbolKind.TYPE, 11: SymbolKind.INTERFACE, 12: SymbolKind.FUNCTION,
+            13: SymbolKind.VARIABLE, 14: SymbolKind.CONSTANT, 22: SymbolKind.CONSTANT,
+            23: SymbolKind.CLASS, 24: SymbolKind.VARIABLE,
+        }
+        return mapping.get(lsp_kind, SymbolKind.FUNCTION)
 
     def _language_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}

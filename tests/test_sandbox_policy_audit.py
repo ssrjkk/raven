@@ -3,11 +3,11 @@ from __future__ import annotations
 import pytest
 
 from raven.core.security.sandbox_policy import (
+    CODE_EXECUTION_POLICY,
     MAIN_SESSION_POLICY,
     NON_MAIN_SESSION_POLICY,
-    CODE_EXECUTION_POLICY,
-    check_tool_allowed,
     check_path_allowed,
+    check_tool_allowed,
     get_policy,
     get_policy_for_channel,
 )

@@ -1,0 +1,28 @@
+# Production override — applies security hardening, resource limits, and observability
+# Usage: docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.override.prod.yml up -d
+
+services:
+  raven:
+    restart: always
+    logging:
+      driver: local
+      options:
+        max-size: 20m
+        max-file: 5
+    security_opt:
+      - no-new-privileges:true
+      - seccomp:default
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+          cpus: "4"
+        reservations:
+          memory: 1g
+          cpus: "1"
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-WARNING}
+      - RAVEN_ENV=production
+    labels:
+      - "com.raven.description=Raven AI Production Instance"
+      - "com.raven.version=${RAVEN_VERSION:-0.4.0}"

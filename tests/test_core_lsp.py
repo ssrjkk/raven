@@ -44,7 +44,7 @@ class TestLSPClient:
     def test_detect_lang_unknown_defaults_to_python(self) -> None:
         from raven.core.lsp import _detect_lang
 
-        assert _detect_lang("foo.rb") == "python"
+        assert _detect_lang("foo.xyz") == "python"
 
     def test_scan_extensions_empty_dir(self, tmp_path: pytest.TempPathFactory) -> None:
         from raven.core.lsp import _scan_extensions
@@ -104,7 +104,7 @@ class TestLSPClientConstructor:
         from raven.core.lsp import LSPClient
 
         client = LSPClient("ruby")
-        with pytest.raises(ValueError, match="No LSP server configured"):
+        with pytest.raises(ValueError, match="LSP server not found for language"):
             await client.start()
 
 

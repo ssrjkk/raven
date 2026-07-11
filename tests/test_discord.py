@@ -134,6 +134,7 @@ async def test_send_with_embed(channel):
     if not HAS_DISCORD:
         pytest.skip("discord.py not installed")
     import discord
+
     from raven.channels.discord.channel import build_embed
 
     mock_ch = AsyncMock()

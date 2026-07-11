@@ -19,7 +19,7 @@ def test_create_returns_database_without_postgres_url():
 def test_create_returns_postgres_with_postgres_url():
     with patch.dict(os.environ, {"DATABASE_URL": "postgresql://user:pass@localhost:5432/raven"}, clear=True):
         with patch("raven.core.db_postgres.PostgresDatabase") as MockPG:
-            result = DatabaseFactory.create()
+            DatabaseFactory.create()
             MockPG.assert_called_once_with("postgresql://user:pass@localhost:5432/raven")
 
 

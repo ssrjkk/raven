@@ -1,0 +1,122 @@
+# ── Global settings ─────────────────────────────────────────
+global:
+  namespace: raven
+  imageRegistry: ""
+  imageTag: latest
+  imagePullPolicy: Always
+
+# ── Service images ──────────────────────────────────────────
+images:
+  gateway: raven/gateway
+  auth: raven/auth
+  agentCore: raven/agent-core
+  monitorEngine: raven/monitor-engine
+  ragService: raven/rag-service
+  taskEngine: raven/task-engine
+  codeService: raven/code-service
+  nats: nats:2.10-alpine
+  otelCollector: otel/opentelemetry-collector-contrib:0.118.0
+  qdrant: qdrant/qdrant:v1.13.0
+  tempo: grafana/tempo:2.6-alpine
+  loki: grafana/loki:3.1-alpine
+  prometheus: prom/prometheus:v2.53-alpine
+  grafana: grafana/grafana:11.1-alpine
+  traefik: traefik:v3.1-alpine
+
+# ── Replicas ────────────────────────────────────────────────
+replicas:
+  gateway: 2
+  auth: 2
+  agentCore: 1
+  monitorEngine: 1
+  ragService: 1
+  taskEngine: 1
+  codeService: 1
+
+# ── Service ports ───────────────────────────────────────────
+ports:
+  gateway: 8000
+  auth:
+    http: 8001
+    grpc: 9001
+  agentCore: 8002
+  monitorEngine: 8003
+  ragService: 8004
+  taskEngine: 8005
+  codeService: 8006
+
+# ── Resource limits / requests ──────────────────────────────
+resources:
+  gateway:
+    limits: { cpu: 500m, memory: 256Mi }
+    requests: { cpu: 100m, memory: 128Mi }
+  auth:
+    limits: { cpu: 300m, memory: 128Mi }
+    requests: { cpu: 50m, memory: 64Mi }
+  agentCore:
+    limits: { cpu: 1, memory: 512Mi }
+    requests: { cpu: 200m, memory: 128Mi }
+  monitorEngine:
+    limits: { cpu: 300m, memory: 256Mi }
+    requests: { cpu: 100m, memory: 64Mi }
+  ragService:
+    limits: { cpu: 1, memory: 1Gi }
+    requests: { cpu: 200m, memory: 256Mi }
+  taskEngine:
+    limits: { cpu: 500m, memory: 256Mi }
+    requests: { cpu: 100m, memory: 64Mi }
+  codeService:
+    limits: { cpu: 500m, memory: 256Mi }
+    requests: { cpu: 100m, memory: 64Mi }
+
+# ── Service-specific config ─────────────────────────────────
+config:
+  nats:
+    url: "nats://nats:4222"
+  otel:
+    endpoint: "http://otel-collector:4317"
+  qdrant:
+    url: "http://qdrant:6333"
+    collection: "raven_docs"
+  auth:
+    dbPath: "/data/auth.db"
+  agent:
+    llmModel: "gpt-4"
+    ragGrpcUrl: "rag-service:8004"
+  rateLimit:
+    perMin: 200
+    burst: 20
+
+# ── Ingress ─────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  host: api.raven.local
+  tlsSecret: raven-tls
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+# ── Autoscaling ─────────────────────────────────────────────
+autoscaling:
+  gateway:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPU: 70
+  auth:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPU: 70
+
+# ── Network policy ──────────────────────────────────────────
+networkPolicy:
+  enabled: true
+
+# ── Secrets ─────────────────────────────────────────────────
+secrets:
+  jwtSecret: ""       # set via --set or external secret
+  grafanaPassword: "" # set via --set or external secret

@@ -67,7 +67,7 @@ async def list_consumers(stream: str):
         await nc.close()
 
 
-async def create_stream(name: str, subjects: list[str], max_age: str = "168h"):
+async def create_stream(name: str, subjects: list[str], max_age: float = 604800.0):
     nc, js = await get_js()
     try:
         cfg = StreamConfig(name=name, subjects=subjects, max_age=max_age)

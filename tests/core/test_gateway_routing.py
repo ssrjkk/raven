@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from raven.gateway.routing import RoutingEngine, RouteRule
+from raven.gateway.routing import RouteRule, RoutingEngine
 
 
 class TestRouteRule:

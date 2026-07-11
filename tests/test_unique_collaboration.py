@@ -68,7 +68,7 @@ class TestCollaborationSession:
 
     def test_get_comments_filtered(self):
         c1 = self.session.add_comment("u1", "test.py", 1, "first")
-        c2 = self.session.add_comment("u1", "test.py", 2, "second")
+        self.session.add_comment("u1", "test.py", 2, "second")
         self.session.resolve_comment(c1.id)
         unresolved = self.session.get_comments(resolved=False)
         resolved = self.session.get_comments(resolved=True)

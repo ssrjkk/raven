@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from raven.tools.canvas import canvas_render, _sanitize, _sanitize_url
+from raven.tools.canvas import _sanitize, _sanitize_url, canvas_render
 
 
 class TestCanvas:

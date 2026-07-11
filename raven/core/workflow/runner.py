@@ -97,8 +97,8 @@ class TemplateRunner:
         logger.info("Instantiated workflow '{}' -> task {}", template.name, task_id)
         return task_id
 
+    @staticmethod
     async def schedule_as_routine(
-        self,
         template: WorkflowTemplate,
         db_path: str = "data/raven.db",
         user_id: str = "system",

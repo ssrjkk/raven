@@ -14,6 +14,11 @@ _LSP_SERVERS: dict[str, list[str]] = {
     "javascript": ["typescript-language-server", "--stdio"],
     "go": ["gopls", "serve"],
     "rust": ["rust-analyzer"],
+    "java": ["jdtls"],
+    "csharp": ["omnisharp"],
+    "php": ["phpactor", "language-server"],
+    "ruby": ["solargraph", "stdio"],
+    "lua": ["lua-language-server"],
 }
 
 
@@ -29,12 +34,15 @@ class LSPClient:
         cmd = _LSP_SERVERS.get(self.language)
         if not cmd:
             raise ValueError(f"No LSP server configured for language: {self.language}")
-        self._process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        try:
+            self._process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError as exc:
+            raise ValueError(f"LSP server not found for language: {self.language}") from exc
         asyncio.create_task(self._reader())
         await self._send({
             "jsonrpc": "2.0",
@@ -242,6 +250,13 @@ def _detect_lang(path: str) -> str:
         ".jsx": "javascript",
         ".go": "go",
         ".rs": "rust",
+        ".java": "java",
+        ".cs": "csharp",
+        ".php": "php",
+        ".phtml": "php",
+        ".rb": "ruby",
+        ".erb": "ruby",
+        ".lua": "lua",
     }
     return lang_map.get(ext, "python")
 
@@ -353,6 +368,11 @@ _LANG_EXTS: dict[str, list[str]] = {
     "javascript": [".js", ".jsx", ".mjs", ".cjs"],
     "go": [".go"],
     "rust": [".rs"],
+    "java": [".java"],
+    "csharp": [".cs"],
+    "php": [".php", ".phtml"],
+    "ruby": [".rb", ".erb"],
+    "lua": [".lua"],
 }
 
 _LANG_EXTS_FLAT: set[str] = {e for exts in _LANG_EXTS.values() for e in exts}

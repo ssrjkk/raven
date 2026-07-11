@@ -35,8 +35,8 @@ def gateway():
     gw._task_runner = MagicMock()  # type: ignore[attr-defined]
     gw._skills = {}  # type: ignore[attr-defined]
     gw._plugins_loaded = False  # type: ignore[attr-defined]
-    from raven.core.auth.rbac import RBAC
     from raven.core.auth.models import Permission, Role
+    from raven.core.auth.rbac import RBAC
     gw._rbac = RBAC()
     for role in Role:
         for perm in Permission:

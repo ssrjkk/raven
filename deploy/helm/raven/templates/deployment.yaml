@@ -1,0 +1,101 @@
+{{- range $svc, $cfg := .Values.replicas }}
+{{- $port := (get $.Values.ports $svc) -}}
+{{- $res := (get $.Values.resources $svc) -}}
+{{- $image := (get $.Values.images $svc) -}}
+{{- $ns := $.Values.global.namespace -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $svc }}
+  namespace: {{ $ns }}
+  labels: {{ include "raven.labels" $ | nindent 4 }}
+    app: {{ $svc }}
+spec:
+  replicas: {{ $cfg }}
+  selector:
+    matchLabels:
+      app: {{ $svc }}
+  template:
+    metadata:
+      labels:
+        app: {{ $svc }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+    spec:
+      serviceAccountName: raven
+      containers:
+        - name: {{ $svc }}
+          image: {{ if $.Values.global.imageRegistry }}{{ $.Values.global.imageRegistry }}/{{ end }}{{ $image }}:{{ $.Values.global.imageTag | default $.Chart.AppVersion }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+          ports:
+            {{- if kindIs "map" $port }}
+            {{- range $name, $p := $port }}
+            - containerPort: {{ $p }}
+              name: {{ $name }}
+            {{- end }}
+            {{- else }}
+            - containerPort: {{ $port }}
+              name: http
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: raven-config
+          env:
+            - name: SERVICE_PORT
+              value: {{ if kindIs "map" $port }}{{ $port.http | quote }}{{ else }}{{ $port | quote }}{{ end }}
+            {{- if eq $svc "auth" }}
+            - name: DB_PATH
+              value: {{ $.Values.config.auth.dbPath | quote }}
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secret
+                  key: jwt-secret
+            {{- end }}
+            {{- if eq $svc "agentCore" }}
+            - name: DB_PATH
+              value: "/data/agent.db"
+            {{- end }}
+            {{- if eq $svc "monitorEngine" }}
+            - name: DB_PATH
+              value: "/data/monitor.db"
+            {{- end }}
+            {{- if eq $svc "ragService" }}
+            - name: DB_PATH
+              value: "/data/rag.db"
+            - name: QDRANT_URL
+              value: {{ $.Values.config.qdrant.url | quote }}
+            - name: QDRANT_COLLECTION
+              value: {{ $.Values.config.qdrant.collection | quote }}
+            {{- end }}
+            {{- if eq $svc "taskEngine" }}
+            - name: DB_PATH
+              value: "/data/task.db"
+            {{- end }}
+            {{- if eq $svc "codeService" }}
+            - name: DB_PATH
+              value: "/data/code.db"
+            {{- end }}
+          {{- if $res }}
+          resources:
+            limits:
+              cpu: {{ $res.limits.cpu }}
+              memory: {{ $res.limits.memory }}
+            requests:
+              cpu: {{ $res.requests.cpu }}
+              memory: {{ $res.requests.memory }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ if kindIs "map" $port }}{{ $port.http }}{{ else }}{{ $port }}{{ end }}
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: {{ if kindIs "map" $port }}{{ $port.http }}{{ else }}{{ $port }}{{ end }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+{{- end }}

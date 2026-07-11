@@ -7,10 +7,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from raven.coding.git_integration import (
+    _LLM_AVAILABLE,
     GitIntegration,
     ReviewComment,
     ReviewResult,
-    _LLM_AVAILABLE,
 )
 
 

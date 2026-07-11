@@ -2,14 +2,25 @@
   "name": "raven-vscode",
   "displayName": "Raven AI",
   "description": "AI coding assistant — code review, edit, explain, and automate. Your pair programmer that never sleeps.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "raven-ai",
   "license": "MIT",
   "icon": "icon.png",
   "engines": { "vscode": "^1.93.0" },
   "categories": ["Programming Languages", "Machine Learning", "Other"],
   "keywords": ["raven", "ai", "code-review", "assistant"],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:python",
+    "onLanguage:typescript",
+    "onLanguage:javascript",
+    "onLanguage:go",
+    "onLanguage:rust",
+    "onLanguage:java",
+    "onLanguage:csharp",
+    "workspaceContains:raven.json",
+    "workspaceContains:.raven.json",
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -19,20 +30,35 @@
       { "command": "raven.fix", "title": "Raven: Fix Issues in Selection" },
       { "command": "raven.suggest", "title": "Raven: Suggest Improvements" },
       { "command": "raven.tests", "title": "Raven: Generate Tests" },
-      { "command": "raven.commit", "title": "Raven: Write Commit Message" }
+      { "command": "raven.commit", "title": "Raven: Write Commit Message" },
+      { "command": "raven.terminal", "title": "Raven: Open in Terminal (REPL)" },
+      { "command": "raven.terminalTui", "title": "Raven: Open TUI in Terminal" },
+      { "command": "raven.start", "title": "Raven: Start Gateway" },
+      { "command": "raven.stop", "title": "Raven: Stop Gateway" },
+      { "command": "raven.status", "title": "Raven: Show Status" }
     ],
     "keybindings": [
       { "command": "raven.chat", "key": "ctrl+shift+r", "mac": "cmd+shift+r" },
-      { "command": "raven.review", "key": "ctrl+shift+i", "mac": "cmd+shift+i" }
+      { "command": "raven.review", "key": "ctrl+shift+i", "mac": "cmd+shift+i" },
+      { "command": "raven.terminal", "key": "ctrl+shift+t", "mac": "cmd+shift+t" },
+      { "command": "raven.terminalTui", "key": "ctrl+shift+u", "mac": "cmd+shift+u" },
+      { "command": "raven.explain", "key": "ctrl+shift+e", "mac": "cmd+shift+e" },
+      { "command": "raven.fix", "key": "ctrl+shift+f", "mac": "cmd+shift+f" }
     ],
     "menus": {
       "editor/context": [
         { "command": "raven.explain", "group": "raven@1" },
         { "command": "raven.review", "group": "raven@2" },
-        { "command": "raven.fix", "group": "raven@3" }
+        { "command": "raven.fix", "group": "raven@3" },
+        { "command": "raven.suggest", "group": "raven@4" },
+        { "command": "raven.tests", "group": "raven@5" }
       ],
       "explorer/context": [
-        { "command": "raven.review", "group": "raven@1" }
+        { "command": "raven.review", "group": "raven@1" },
+        { "command": "raven.terminal", "group": "raven@2" }
+      ],
+      "editor/title/context": [
+        { "command": "raven.explain", "group": "raven@1" }
       ]
     },
     "configuration": {
@@ -47,6 +73,46 @@
           "type": "boolean",
           "default": false,
           "description": "Run without memory/context persistence"
+        },
+        "raven.autoReviewOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Auto-review files on save"
+        },
+        "raven.enableDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Raven review results as VS Code diagnostics"
+        },
+        "raven.enableHover": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Raven explanations on hover"
+        },
+        "raven.enableCodeActions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Raven code actions (lightbulb)"
+        },
+        "raven.enableInlineValues": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show Raven inline values (CodeLens)"
+        },
+        "raven.replCommand": {
+          "type": "string",
+          "default": "raven repl",
+          "description": "Command to run Raven REPL in terminal"
+        },
+        "raven.tuiCommand": {
+          "type": "string",
+          "default": "raven tui",
+          "description": "Command to run Raven TUI in terminal"
+        },
+        "raven.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "Python interpreter path for running Raven"
         }
       }
     }

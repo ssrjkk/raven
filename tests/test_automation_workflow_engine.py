@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 
 from raven.automation.workflow_engine import (
-    WorkflowEngine, WorkflowStep, StepStatus, WorkflowStatus, get_workflow_engine,
+    StepStatus,
+    WorkflowEngine,
+    WorkflowStatus,
+    WorkflowStep,
+    get_workflow_engine,
 )
 
 

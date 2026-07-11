@@ -8,8 +8,8 @@ from raven.automation.channel_router import (
     ChannelType,
     MessageNormalizer,
     MessagePriority,
-    Notification,
     NormalizedMessage,
+    Notification,
 )
 
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, setToken } from "../api/client";
 
@@ -8,7 +8,14 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
+  const [providers, setProviders] = useState<{ name: string; icon: string; enabled: boolean }[]>([]);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    api.oauthProviders()
+      .then((r: any) => setProviders(r.providers.filter((p: any) => p.enabled)))
+      .catch(() => {});
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -27,6 +34,28 @@ export default function Login() {
     }
   }
 
+  async function handleOAuth(provider: string) {
+    try {
+      const r: any = await api.oauthAuthorize(provider, window.location.origin + "/login");
+      const popup = window.open(r.url, "oauth", "width=600,height=700");
+      if (!popup) {
+        setError("Pop-up blocked. Allow pop-ups for this site.");
+        return;
+      }
+      const handler = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        if (event.data?.type === "oauth_callback") {
+          window.removeEventListener("message", handler);
+          setToken(event.data.token);
+          navigate("/");
+        }
+      };
+      window.addEventListener("message", handler);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-950">
       <div className="bg-gray-900/60 border border-gray-800/50 rounded-2xl p-8 w-full max-w-sm space-y-6">
@@ -36,6 +65,26 @@ export default function Login() {
             {isRegister ? "Create an account" : "Sign in to your account"}
           </p>
         </div>
+
+        {providers.length > 0 && (
+          <div className="space-y-2">
+            {providers.map((p) => (
+              <button
+                key={p.name}
+                onClick={() => handleOAuth(p.name)}
+                className="w-full flex items-center justify-center gap-2 bg-gray-800/60 hover:bg-gray-800 border border-gray-700/50 rounded-lg px-3 py-2 text-sm text-gray-200 transition"
+              >
+                <span className="font-bold text-violet-400">{p.icon}</span>
+                <span>Continue with {p.name.charAt(0).toUpperCase() + p.name.slice(1)}</span>
+              </button>
+            ))}
+            <div className="flex items-center gap-3 py-2">
+              <div className="flex-1 h-px bg-gray-800" />
+              <span className="text-xs text-gray-600">or</span>
+              <div className="flex-1 h-px bg-gray-800" />
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

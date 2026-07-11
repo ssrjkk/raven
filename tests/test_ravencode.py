@@ -53,11 +53,27 @@ class TestRavencodeApiClient:
 class TestRavencodeInit:
     def test_lazy_imports(self):
         from ravencode import (
-            AIOSClient, Orchestrator, ShellExecutor, AgentConfig, MemoryStore,
-            UndoManager, PermissionManager, Plugin, PluginRegistry, ResponseCache,
-            LSPClient, CheckpointManager, FileWatcher, MCPServer,
-            Sandbox, MultiAgentOrchestrator, SessionStore, auto_commit,
-            format_file, smart_edit, apply_patch,
+            AgentConfig,
+            AIOSClient,
+            CheckpointManager,
+            FileWatcher,
+            LSPClient,
+            MCPServer,
+            MemoryStore,
+            MultiAgentOrchestrator,
+            Orchestrator,
+            PermissionManager,
+            Plugin,
+            PluginRegistry,
+            ResponseCache,
+            Sandbox,
+            SessionStore,
+            ShellExecutor,
+            UndoManager,
+            apply_patch,
+            auto_commit,
+            format_file,
+            smart_edit,
         )
 
         assert AIOSClient is not None

@@ -1,0 +1,74 @@
+{{- $ns := .Values.global.namespace }}
+{{- range $svc := list "nats" "otelCollector" "qdrant" "tempo" "loki" "prometheus" "grafana" "traefik" }}
+{{- $image := (get $.Values.images $svc) }}
+{{- $portMap := dict "nats" (dict "client" 4222 "http" 8222) "otelCollector" (dict "grpc" 4317 "metrics" 8888) "qdrant" (dict "http" 6333 "grpc" 6334) "tempo" (dict "http" 3200) "loki" (dict "http" 3100) "prometheus" (dict "http" 9090) "grafana" (dict "http" 3000) "traefik" (dict "web" 80 "websecure" 443 "dashboard" 8080) }}
+{{- $ports := (get $portMap $svc) }}
+{{- $svcName := (regexReplaceAll "([a-z])([A-Z])" $svc "${1}-${2}" | lower) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $svcName }}
+  namespace: {{ $ns }}
+  labels: {{ include "raven.labels" $ | nindent 4 }}
+    app: {{ $svcName }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ $svcName }}
+  template:
+    metadata:
+      labels:
+        app: {{ $svcName }}
+    spec:
+      containers:
+        - name: {{ $svcName }}
+          image: {{ $image }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+          {{- if eq $svc "nats" }}
+          args: ["-js", "--store_dir", "/data"]
+          {{- end }}
+          {{- if eq $svc "prometheus" }}
+          args: ["--storage.tsdb.retention.time=30d"]
+          {{- end }}
+          {{- if eq $svc "traefik" }}
+          args:
+            - "--api.dashboard=true"
+            - "--api.debug=false"
+            - "--providers.kubernetescrd=true"
+            - "--entrypoints.web.address=:80"
+            - "--entrypoints.websecure.address=:443"
+            - "--entrypoints.traefik.address=:8080"
+          {{- end }}
+          ports:
+            {{- range $name, $port := $ports }}
+            - containerPort: {{ $port }}
+              name: {{ $name }}
+            {{- end }}
+          {{- if eq $svc "grafana" }}
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: password
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $svcName }}
+  namespace: {{ $ns }}
+  labels: {{ include "raven.labels" $ | nindent 4 }}
+    app: {{ $svcName }}
+spec:
+  selector:
+    app: {{ $svcName }}
+  ports:
+    {{- range $name, $port := $ports }}
+    - name: {{ $name }}
+      port: {{ $port }}
+      targetPort: {{ $port }}
+    {{- end }}
+---
+{{- end }}

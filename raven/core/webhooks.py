@@ -97,6 +97,22 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
             await ch.handle_webhook(body)
         return {"ok": True}
 
+    @router.post("/github")
+    async def github_webhook(body: dict[str, Any], request: Request):
+        ch = request.app.state.github_channel if hasattr(request.app.state, "github_channel") else None
+        if ch:
+            headers = dict(request.headers)
+            await ch.handle_webhook(body, headers)
+        return {"ok": True}
+
+    @router.post("/gitlab")
+    async def gitlab_webhook(body: dict[str, Any], request: Request):
+        ch = request.app.state.gitlab_channel if hasattr(request.app.state, "gitlab_channel") else None
+        if ch:
+            headers = dict(request.headers)
+            await ch.handle_webhook(body, headers)
+        return {"ok": True}
+
     @router.post("/github-actions")
     async def github_actions_webhook(body: dict[str, Any], request: Request):
         workflow_run = body.get("workflow_run", {}) or {}

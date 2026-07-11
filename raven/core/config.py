@@ -79,6 +79,37 @@ class Settings(BaseSettings):
     channel_sandbox_policy: str = ""
     """JSON mapping channel_id to sandbox policy name, e.g. {"telegram":"non-main","discord":"code-exec"}"""
 
+    # --- Search Integration ---
+    brave_search_api_key: str = ""
+    perplexity_api_key: str = ""
+    google_search_api_key: str = ""
+    google_cse_id: str = ""
+    bing_search_api_key: str = ""
+    tavily_search_api_key: str = ""
+
+    # --- GitHub Integration ---
+    github_token: str = ""
+
+    # --- CI/CD Integration ---
+    gitlab_token: str = ""
+    gitlab_url: str = "https://gitlab.com"
+    gitlab_webhook_secret: str = ""
+    jenkins_url: str = ""
+    jenkins_user: str = ""
+    jenkins_token: str = ""
+
+    # --- Media Generation ---
+    replicate_api_token: str = ""
+
+    # --- OAuth / SSO ---
+    oauth_redirect_base: str = "http://localhost:5173"
+    oauth_google_client_id: str = ""
+    oauth_google_client_secret: str = ""
+    oauth_github_client_id: str = ""
+    oauth_github_client_secret: str = ""
+    oauth_microsoft_client_id: str = ""
+    oauth_microsoft_client_secret: str = ""
+
     # --- Security Policy ---
     tools_profile: str = "messaging"
     tools_deny: str = ",".join(_DEFAULT_TOOLS_DENY)

@@ -1,0 +1,27 @@
+{{- range $svc := keys $.Values.replicas }}
+{{- $port := (get $.Values.ports $svc) -}}
+{{- $ns := $.Values.global.namespace -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $svc }}
+  namespace: {{ $ns }}
+  labels: {{ include "raven.labels" $ | nindent 4 }}
+    app: {{ $svc }}
+spec:
+  selector:
+    app: {{ $svc }}
+  ports:
+    {{- if kindIs "map" $port }}
+    {{- range $name, $p := $port }}
+    - name: {{ $name }}
+      port: {{ $p }}
+      targetPort: {{ $p }}
+    {{- end }}
+    {{- else }}
+    - name: http
+      port: {{ $port }}
+      targetPort: {{ $port }}
+    {{- end }}
+---
+{{- end }}

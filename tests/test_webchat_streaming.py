@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from raven.channels.webchat.streaming import AgentStreamHandler
 from ravencode.runtime.agent_core import AgentEvent, EventEmitter

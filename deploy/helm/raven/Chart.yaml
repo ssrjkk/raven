@@ -1,0 +1,18 @@
+apiVersion: v2
+name: raven
+description: Helm chart for Raven AI — self-hosted corporate AI assistant
+type: application
+version: 0.1.0
+appVersion: "0.4.0"
+icon: https://raw.githubusercontent.com/raven-ai/raven/main/docs/logo.svg
+keywords:
+  - ai
+  - assistant
+  - chatbot
+  - llm
+  - rag
+sources:
+  - https://github.com/raven-ai/raven
+maintainers:
+  - name: Raven AI Team
+    email: team@raven.ai

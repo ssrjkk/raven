@@ -395,6 +395,41 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+    @router.get("/auth/oauth/providers")
+    async def oauth_providers():
+        from raven.core.auth.oauth import get_enabled_providers
+
+        return {"providers": get_enabled_providers()}
+
+    @router.get("/auth/oauth/authorize/{provider}")
+    async def oauth_authorize(provider: str, redirect_uri: str = ""):
+        from raven.core.auth.oauth import get_authorize_url
+
+        base = settings.oauth_redirect_base
+        uri = redirect_uri or f"{base}/login"
+        url = get_authorize_url(provider, uri)
+        if not url:
+            raise HTTPException(400, f"OAuth provider '{provider}' not enabled")
+        return {"url": url}
+
+    @router.post("/auth/oauth/callback/{provider}")
+    async def oauth_callback(provider: str, body: dict[str, str]):
+        from raven.core.auth.oauth import handle_callback
+        from raven.core.auth.tokens import token_manager
+
+        code = body.get("code", "")
+        state = body.get("state", "")
+        user_info = await handle_callback(provider, code, state)
+        if not user_info:
+            raise HTTPException(401, "OAuth authentication failed")
+        token = token_manager.create_token(user_info["user_id"], "user")
+        if provider == "github" and user_info.get("access_token"):
+            access_token = user_info.pop("access_token")
+            gh_scope = user_info.pop("scope", "")
+            await secrets.set("github_oauth_token", access_token)
+            logger.info("Persisted GitHub OAuth token (scope: {})", gh_scope)
+        return {"token": token, **user_info}
+
     @router.post("/config/key")
     async def admin_update_config_key(body: ConfigUpdateRequest):
         from raven.core.config_store import config_store
@@ -418,13 +453,39 @@ def init_auth_routes(app, db_path: str) -> None:
 
     store = AuthStore(db_path)
 
+    _login_attempts: dict[str, list[float]] = {}
+
+    def _check_login_rate(ip: str) -> bool:
+        import time
+        now = time.monotonic()
+        attempts = _login_attempts.get(ip, [])
+        attempts[:] = [t for t in attempts if now - t < 60]
+        if len(attempts) >= 5:
+            return False
+        attempts.append(now)
+        _login_attempts[ip] = attempts
+        return True
+
     @app.post("/api/auth/login")  # type: ignore[untyped-decorator]
-    async def auth_login(body: AuthLoginRequest):
+    async def auth_login(body: AuthLoginRequest, request: Request):
+        ip = request.client.host if request.client else "unknown"
+        if not _check_login_rate(ip):
+            raise HTTPException(429, "Too many login attempts. Try again later.")
         user = await store.authenticate(body.username, body.password)
         if not user:
-            from fastapi import HTTPException
-
+            await audit_logger.log(
+                AuditEventType.USER_AUTH,
+                body.username,
+                "login_failed",
+                detail={"ip": ip},
+            )
             raise HTTPException(401, "Invalid credentials")
+        await audit_logger.log(
+            AuditEventType.USER_AUTH,
+            body.username,
+            "login_success",
+            detail={"ip": ip},
+        )
         token = token_manager.create_token(user.id, user.role.value)
         return {"token": token, "user_id": user.id, "role": user.role.value, "username": user.username}
 
@@ -468,8 +529,6 @@ def init_auth_routes(app, db_path: str) -> None:
 
     @app.post("/api/auth/users/{username}/role")  # type: ignore[untyped-decorator]
     async def auth_update_role(username: str, body: AuthUpdateRoleRequest):
-        from fastapi import HTTPException
-
         try:
             await store.update_role(username, body.role)
         except ValueError as e:

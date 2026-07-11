@@ -2,6 +2,7 @@ from raven.channels.base import BaseChannel
 from raven.channels.discord.channel import DiscordChannel
 from raven.channels.enterprise_base import EnterpriseChannel
 from raven.channels.feishu.channel import FeishuChannel
+from raven.channels.gitlab.channel import GitlabChannel
 from raven.channels.googlechat.channel import GoogleChatChannel
 from raven.channels.irc.channel import IRCChannel
 from raven.channels.line.channel import LINECChannel
@@ -18,6 +19,7 @@ __all__ = [
     "EnterpriseChannel",
     "DiscordChannel",
     "FeishuChannel",
+    "GitlabChannel",
     "GoogleChatChannel",
     "IRCChannel",
     "LINECChannel",

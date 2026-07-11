@@ -252,8 +252,8 @@ class RavenGrowthEngine:
             f.write(DEV_TO_POST)
 
         print("[OK] Raven Growth Engine executed successfully!")
-        print("[+] Landing page generated: {}/index.html".format(self.docs_dir))
-        print("[+] Marketing posts generated: {}/".format(self.marketing_dir))
+        print(f"[+] Landing page generated: {self.docs_dir}/index.html")
+        print(f"[+] Marketing posts generated: {self.marketing_dir}/")
         print("")
         print("NEXT STEPS:")
         print("1. Commit the 'docs/' folder to your main branch.")

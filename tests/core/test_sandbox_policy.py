@@ -3,10 +3,10 @@ from __future__ import annotations
 import pytest
 
 from raven.core.security.sandbox_policy import (
-    SandboxPolicy,
     POLICY_REGISTRY,
-    get_policy,
+    SandboxPolicy,
     check_tool_allowed,
+    get_policy,
     session_type_to_policy,
 )
 

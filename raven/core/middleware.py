@@ -67,6 +67,18 @@ PATH_PERMISSIONS: dict[str, Permission] = {
     "/api/admin": Permission.ADMIN_READ,
     "/api/shutdown": Permission.SYSTEM_SHUTDOWN,
     "/api/raven": Permission.ADMIN_WRITE,
+    "/api/chaos": Permission.ADMIN_WRITE,
+    "/api/plugins": Permission.ADMIN_WRITE,
+    "/api/finetune": Permission.ADMIN_WRITE,
+    "/api/email/send": Permission.ADMIN_WRITE,
+    "/api/github": Permission.ADMIN_WRITE,
+    "/api/git": Permission.ADMIN_WRITE,
+    "/api/cost": Permission.ADMIN_READ,
+    "/api/auth/users": Permission.ADMIN_USERS,
+    "/api/secrets": Permission.ADMIN_SECRETS,
+    "/api/stream/push": Permission.ADMIN_WRITE,
+    "/api/browser": Permission.ADMIN_WRITE,
+    "/api/media/generate": Permission.ADMIN_WRITE,
 }
 
 

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import builtins
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from raven.core.metrics import metrics
 from raven.core.tracing import get_tracer
 
 ValidatorFn = Callable[[dict[str, Any]], str | None]
@@ -78,18 +80,29 @@ class ToolRegistry:
             if error:
                 return f"[error] {error}"
 
+        metrics.inc("tool_calls_total", {"tool": name, "category": spec.category})
         tracer = get_tracer()
+        t0 = time.monotonic()
         with tracer.start_as_current_span("tool.call") as span:
             span.set_attribute("tool.name", name)
             span.set_attribute("tool.category", spec.category)
             try:
                 result = await asyncio.wait_for(spec.handler(**params), timeout=spec.timeout)
+                elapsed = time.monotonic() - t0
+                metrics.observe("tool_call_duration", elapsed, {"tool": name})
+                metrics.inc("tool_calls_success_total", {"tool": name})
                 return result
             except TimeoutError:
+                elapsed = time.monotonic() - t0
                 logger.warning("Tool {} timed out after {}s", name, spec.timeout)
+                metrics.inc("tool_calls_error_total", {"tool": name, "reason": "timeout"})
+                metrics.observe("tool_call_duration", elapsed, {"tool": name})
                 return f"[error] Tool '{name}' timed out after {spec.timeout}s"
             except Exception as exc:
+                elapsed = time.monotonic() - t0
                 logger.warning("Tool {} failed: {}", name, exc)
+                metrics.inc("tool_calls_error_total", {"tool": name, "reason": "exception"})
+                metrics.observe("tool_call_duration", elapsed, {"tool": name})
                 return f"[error] {exc}"
 
     @property

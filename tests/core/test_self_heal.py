@@ -85,7 +85,7 @@ class TestSelfHealer:
         self.healer.register("svc", check, restart)
         self.healer.start()
         await asyncio.sleep(0.1)
-        self.healer.stop()
+        await self.healer.stop()
         assert len(calls) >= 0
 
     async def test_loop_with_unhealthy_service_restarts(self):

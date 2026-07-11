@@ -3,18 +3,18 @@ from __future__ import annotations
 import asyncio
 import os
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
-from raven.tools.file import file_read, file_write, file_append, file_list, file_delete, register_file_tools
-from raven.tools.shell import shell_command, python_code
 from raven.tools.db import db_query
-from raven.tools.utils import wait_for, get_timestamp
+from raven.tools.file import file_append, file_delete, file_list, file_read, file_write, register_file_tools
 from raven.tools.register_all import create_tool_registry, register_all_tools
-
+from raven.tools.shell import python_code, shell_command
+from raven.tools.utils import get_timestamp, wait_for
 
 # ---------------------------------------------------------------------------
 # File tools
@@ -22,7 +22,7 @@ from raven.tools.register_all import create_tool_registry, register_all_tools
 
 class TestFileTools:
     @pytest.fixture
-    def tmp_workspace(self, tmp_path: Path) -> Path:
+    def tmp_workspace(self, tmp_path: Path) -> Generator[Path, None, None]:
         old = os.environ.get("RAVEN_WORKSPACE")
         os.environ["RAVEN_WORKSPACE"] = str(tmp_path)
         yield tmp_path

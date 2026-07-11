@@ -26,7 +26,7 @@ class TestHumanApproval:
         task = asyncio.create_task(self.approval.request_approval("delete table", timeout=5.0))
         await asyncio.sleep(0.05)
         success = await self.approval.respond("", approved=True)
-        req = await task
+        await task
         assert success is False
 
     @pytest.mark.asyncio

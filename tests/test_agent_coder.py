@@ -123,6 +123,105 @@ class TestCodeIndexer:
         assert cf.path == "get.py"
 
 
+class TestMultiLangIndexing:
+    def test_index_js_functions(self, tmp_path):
+        src = tmp_path / "js_src"
+        src.mkdir()
+        (src / "app.js").write_text(
+            "function greet(name) { return `Hello ${name}`; }\n"
+            "const add = (a, b) => a + b;\n"
+            "async function fetchData(url) { return await get(url); }\n"
+            "const PI = 3.14159;\n"
+        )
+        indexer = CodeIndexer(str(src))
+        files = indexer.index()
+        cf = files.get("app.js")
+        assert cf is not None
+        names = {s.name for s in cf.symbols}
+        assert "greet" in names, f"Expected 'greet' in {names}"
+        assert "add" in names or "add" in str(cf.symbols)
+
+    def test_index_ts_classes_interfaces(self, tmp_path):
+        src = tmp_path / "ts_src"
+        src.mkdir()
+        (src / "user.ts").write_text(
+            "interface User { name: string; age: number; }\n"
+            "class Admin implements User {\n"
+            "  constructor(name: string) { this.name = name; }\n"
+            "}\n"
+            "type Status = 'active' | 'inactive';\n"
+            "export const createUser = (name: string): User => ({ name });\n"
+        )
+        indexer = CodeIndexer(str(src))
+        files = indexer.index()
+        cf = files.get("user.ts")
+        assert cf is not None
+        names = {s.name for s in cf.symbols}
+        assert "User" in names
+        assert "Admin" in names
+
+    def test_index_go_symbols(self, tmp_path):
+        src = tmp_path / "go_src"
+        src.mkdir()
+        (src / "main.go").write_text(
+            "package main\n"
+            "type Server struct { Port int }\n"
+            "type Handler interface { Serve() error }\n"
+            "func NewServer(port int) *Server { return &Server{Port: port} }\n"
+            "func (s *Server) Serve() error { return nil }\n"
+            "const DefaultPort = 8080\n"
+            "var Version = \"1.0\"\n"
+        )
+        indexer = CodeIndexer(str(src))
+        files = indexer.index()
+        cf = files.get("main.go")
+        assert cf is not None
+        names = {s.name for s in cf.symbols}
+        assert "Server" in names
+        assert "Handler" in names
+        assert "NewServer" in names, f"Expected NewServer in {names}"
+
+    def test_index_rust_symbols(self, tmp_path):
+        src = tmp_path / "rs_src"
+        src.mkdir()
+        (src / "lib.rs").write_text(
+            "pub struct Config { pub port: u16 }\n"
+            "pub enum Status { Active, Inactive }\n"
+            "pub trait Runnable { fn run(&self); }\n"
+            "pub fn start(config: Config) -> Result<(), String> { Ok(()) }\n"
+            "pub const MAX_RETRIES: u32 = 3;\n"
+            "pub impl Config { pub fn default() -> Self { Config { port: 8080 } } }\n"
+        )
+        indexer = CodeIndexer(str(src))
+        files = indexer.index()
+        cf = files.get("lib.rs")
+        assert cf is not None
+        names = {s.name for s in cf.symbols}
+        assert "Config" in names
+        assert "Status" in names
+        assert "Runnable" in names
+        assert "start" in names
+
+    def test_index_java_symbols(self, tmp_path):
+        src = tmp_path / "java_src"
+        src.mkdir()
+        (src / "App.java").write_text(
+            "public class App {\n"
+            "    public static void main(String[] args) {}\n"
+            "    private int count;\n"
+            "    public String getName() { return \"\"; }\n"
+            "}\n"
+            "interface Service { void execute(); }\n"
+        )
+        indexer = CodeIndexer(str(src))
+        files = indexer.index()
+        cf = files.get("App.java")
+        assert cf is not None
+        names = {s.name for s in cf.symbols}
+        assert "App" in names
+        assert "main" in names or "getName" in names
+
+
 class TestCodeReviewer:
     @pytest.mark.asyncio
     async def test_review_syntax_error(self, tmp_path):

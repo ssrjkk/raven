@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from raven.tools.nodes import NodeManager, nodes_list, _node_manager
+from raven.tools.nodes import NodeManager, _node_manager, nodes_list
 
 
 @pytest.fixture(autouse=True)
@@ -13,7 +13,7 @@ def reset_nodes():
 
 class TestNodeManager:
     async def test_register_and_list(self):
-        nid = await _node_manager.register("test-node", "http://localhost:9999", ["shell"])
+        await _node_manager.register("test-node", "http://localhost:9999", ["shell"])
         nodes = await _node_manager.list_nodes()
         names = [n["name"] for n in nodes]
         assert "test-node" in names

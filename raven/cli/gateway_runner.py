@@ -14,6 +14,8 @@ from pydantic import BaseModel
 
 from raven.channels.discord.channel import DiscordChannel
 from raven.channels.feishu.channel import FeishuChannel
+from raven.channels.github.channel import GithubChannel
+from raven.channels.gitlab.channel import GitlabChannel
 from raven.channels.googlechat.channel import GoogleChatChannel
 from raven.channels.irc.channel import IRCChannel
 from raven.channels.line.channel import LINECChannel
@@ -24,15 +26,29 @@ from raven.channels.teams.channel import TeamsChannel
 from raven.channels.telegram.channel import TelegramChannel
 from raven.channels.webchat.channel import WebChatChannel
 from raven.channels.whatsapp.channel import WhatsAppChannel
+from raven.core.ab_testing_api import create_ab_testing_router
 from raven.core.admin_api import create_admin_router
+from raven.core.analytics import AnalyticsEngine
+from raven.core.analytics_api import create_analytics_router, set_analytics_engine
 from raven.core.audit import AuditEventType, audit_logger
+from raven.core.browser_api import create_browser_router
+from raven.core.chaos_api import create_chaos_router
+from raven.core.cicd_api import create_cicd_router
+from raven.core.collab_api import create_collab_router
 from raven.core.config import settings
 from raven.core.config_watcher import ConfigWatcher
+from raven.core.cost_management_api import create_cost_management_router
 from raven.core.db import DatabaseFactory
+from raven.core.email_api import create_email_router
+from raven.core.finetune_api import create_finetune_router
 from raven.core.gateway.aios_adapter import get_aios_adapter
 from raven.core.gateway.gateway import Gateway
+from raven.core.git_api import create_git_router
+from raven.core.github_api import create_github_router
 from raven.core.health import health
 from raven.core.http_client import client_manager
+from raven.core.kg_api import create_knowledge_router
+from raven.core.media_api import create_media_router
 from raven.core.metrics import metrics
 from raven.core.middleware import (
     auth_middleware,
@@ -43,10 +59,17 @@ from raven.core.middleware import (
 )
 from raven.core.monitor.engine import MonitorEngine
 from raven.core.monitor.store import MonitorStore
+from raven.core.plugin_api import create_plugin_router
 from raven.core.plugin_loader import PluginLoader
+from raven.core.rag_api import create_rag_router
 from raven.core.routine.engine import RoutineEngine
 from raven.core.routine.store import RoutineStore
+from raven.core.voice_api import create_voice_router
+from raven.core.web_search_api import create_web_search_router
 from raven.core.webhooks import create_webhook_router
+from raven.core.workflow.store import WorkflowStore
+from raven.core.workflow.templates import BUILTIN_TEMPLATES
+from raven.core.workflow_api import create_workflow_router, set_workflow_store
 from raven.monitors.register_all import register_all_monitors
 from raven.routines.register_all import register_all_routines
 
@@ -96,6 +119,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     teams = TeamsChannel()
     feishu = FeishuChannel()
     line = LINECChannel()
+    github_ch = GithubChannel()
+    gitlab = GitlabChannel()
 
     await telegram.on_message(gateway.handle_message)
     await discord.on_message(gateway.handle_message)
@@ -109,6 +134,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     await teams.on_message(gateway.handle_message)
     await feishu.on_message(gateway.handle_message)
     await line.on_message(gateway.handle_message)
+    await github_ch.on_message(gateway.handle_message)
+    await gitlab.on_message(gateway.handle_message)
 
     gateway.register_channel(telegram)
     gateway.register_channel(discord)
@@ -122,13 +149,16 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     gateway.register_channel(teams)
     gateway.register_channel(feishu)
     gateway.register_channel(line)
+    gateway.register_channel(github_ch)
+    gateway.register_channel(gitlab)
 
     api_app = webchat.app
 
+    cors_origins = settings.web_cors_origins.split(",") if settings.web_cors_origins != "*" else ["*"]
     api_app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.web_cors_origins.split(",") if settings.web_cors_origins != "*" else ["*"],
-        allow_credentials=True,
+        allow_origins=cors_origins,
+        allow_credentials=cors_origins != ["*"],
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -147,6 +177,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     api_app.state.teams_channel = teams
     api_app.state.feishu_channel = feishu
     api_app.state.line_channel = line
+    api_app.state.github_channel = github_ch
+    api_app.state.gitlab_channel = gitlab
     stop_event = asyncio.Event()
     api_app.state.stop_event = stop_event
 
@@ -174,7 +206,91 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     admin_router = create_admin_router(_get_channels, _get_registry, _get_gateway)
     api_app.include_router(admin_router)
 
+    git_router = create_git_router()
+    api_app.include_router(git_router)
+
+    github_router = create_github_router()
+    api_app.include_router(github_router)
+
     api_app.include_router(get_aios_adapter().get_bridge_router())
+
+    cicd_router = create_cicd_router()
+    api_app.include_router(cicd_router)
+
+    plugin_router = create_plugin_router()
+    api_app.include_router(plugin_router)
+
+    media_router = create_media_router()
+    api_app.include_router(media_router)
+
+    knowledge_router = create_knowledge_router()
+    api_app.include_router(knowledge_router)
+
+    voice_router = create_voice_router()
+    api_app.include_router(voice_router)
+
+    collab_router = create_collab_router()
+    api_app.include_router(collab_router)
+
+    rag_router = create_rag_router()
+    api_app.include_router(rag_router)
+
+    finetune_router = create_finetune_router()
+    api_app.include_router(finetune_router)
+
+    chaos_router = create_chaos_router()
+    api_app.include_router(chaos_router)
+
+    email_router = create_email_router()
+    api_app.include_router(email_router)
+
+    analytics_router = create_analytics_router()
+    api_app.include_router(analytics_router)
+
+    ab_testing_router = create_ab_testing_router()
+    api_app.include_router(ab_testing_router)
+
+    cost_router = create_cost_management_router()
+    api_app.include_router(cost_router)
+
+    wf_store = WorkflowStore()
+    wf_store.register_many(BUILTIN_TEMPLATES)
+
+    browser_router = create_browser_router()
+    api_app.include_router(browser_router)
+
+    web_search_router = create_web_search_router()
+    api_app.include_router(web_search_router)
+
+    set_workflow_store(wf_store)
+    workflow_router = create_workflow_router()
+    api_app.include_router(workflow_router)
+
+    @api_app.post("/api/tests/run")
+    async def api_tests_run(body: dict[str, Any]):
+        from raven.tools.tests import run_tests
+        text = await run_tests(
+            path=body.get("path", ""),
+            marker=body.get("marker", ""),
+            timeout=body.get("timeout", 120),
+            extra_args=body.get("extra_args", ""),
+        )
+        return {"text": text}
+
+    @api_app.post("/api/tests/coverage")
+    async def api_tests_coverage(body: dict[str, Any]):
+        from raven.tools.tests import test_coverage
+        text = await test_coverage(
+            path=body.get("path", ""),
+            timeout=body.get("timeout", 180),
+        )
+        return {"text": text}
+
+    @api_app.post("/api/tests/generate")
+    async def api_tests_generate(body: dict[str, Any]):
+        from raven.tools.tests import generate_tests
+        text = await generate_tests(file_path=body.get("file_path", ""))
+        return {"text": text}
 
     @api_app.get("/api/status")
     async def api_status():
@@ -234,6 +350,30 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             }
             for r in eng._store.list_routines()
         ]
+
+    @api_app.post("/api/routine/create")
+    async def api_routine_create(body: dict[str, Any]):
+        from raven.core.routine.models import Routine, RoutineAction, RoutineStatus, RoutineTrigger
+
+        eng: RoutineEngine = api_app.state.routine_engine
+        routine = Routine(
+            name=body.get("name", "New Routine"),
+            action=RoutineAction(body.get("action", "send_message")),
+            trigger=RoutineTrigger(body.get("trigger", "manual")),
+            schedule=body.get("schedule", "08:00"),
+            status=RoutineStatus.ACTIVE,
+            user_id=body.get("user_id", "system"),
+            channel=body.get("channel", "internal"),
+            config=body.get("config", {}),
+        )
+        eng._store.save_routine(routine)
+        return {"ok": True, "id": routine.id}
+
+    @api_app.delete("/api/routine/{routine_id}")
+    async def api_routine_delete(routine_id: str):
+        eng: RoutineEngine = api_app.state.routine_engine
+        eng._store.delete_routine(routine_id)
+        return {"ok": True}
 
     @api_app.post("/api/routine/{action}/{routine_id}")
     async def api_routine_toggle(action: str, routine_id: str):
@@ -393,10 +533,16 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     register_all_routines(routine_engine)
     api_app.state.routine_engine = routine_engine
 
+    analytics_engine = AnalyticsEngine(settings.resolved_db_path)
+    set_analytics_engine(analytics_engine)
+    from raven.tools.analytics import set_analytics_engine as set_tool_analytics
+    set_tool_analytics(analytics_engine)
+
     async def run_all():
         await gateway.start()
         await monitor_engine.start()
         await routine_engine.start()
+        await analytics_engine.start()
         config = uvicorn.Config(api_app, host="0.0.0.0", port=web_port, log_level="info", ws="auto")  # noqa: S104
         server = uvicorn.Server(config)
         server_task = asyncio.create_task(server.serve())
@@ -414,6 +560,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         for name, coro in [
             ("monitor engine", monitor_engine.stop()),
             ("routine engine", routine_engine.stop()),
+            ("analytics engine", analytics_engine.stop()),
             ("LLM cleanup", gw.llm.cleanup()),
             ("gateway stop", gw.stop()),
             ("DB disconnect", gw.db.disconnect()),

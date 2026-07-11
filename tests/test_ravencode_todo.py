@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from ravencode.runtime.todo import todo_clear, todo_list, todo_update, todo_write
-from ravencode.runtime.todo import _reset_state
+from ravencode.runtime.todo import _reset_state, todo_clear, todo_list, todo_update, todo_write
 
 
 def _setup():

@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import ravencode.runtime.anchored as anchored_mod
-from ravencode.runtime.anchored import anchored_summary, append_anchored_summary, clear_anchored_summary, update_anchored_summary
+from ravencode.runtime.anchored import (
+    anchored_summary,
+    append_anchored_summary,
+    clear_anchored_summary,
+    update_anchored_summary,
+)
 
 
 def _setup():

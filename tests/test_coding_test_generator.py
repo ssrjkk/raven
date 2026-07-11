@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from raven.coding.test_generator import TestGenerator, FunctionInfo, TypeInfo, ClassInfo
+from raven.coding.test_generator import ClassInfo, FunctionInfo, TestGenerator, TypeInfo
 
 
 class TestFunctionInfo:

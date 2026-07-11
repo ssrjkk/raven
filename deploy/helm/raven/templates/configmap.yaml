@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: raven-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "raven.labels" . | nindent 4 }}
+data:
+  NATS_URL: {{ .Values.config.nats.url | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.config.otel.endpoint | quote }}
+  QDRANT_URL: {{ .Values.config.qdrant.url | quote }}
+  QDRANT_COLLECTION: {{ .Values.config.qdrant.collection | quote }}
+  AUTH_GRPC_TARGET: "auth:{{ .Values.ports.auth.grpc }}"
+  LLM_MODEL: {{ .Values.config.agent.llmModel | quote }}
+  RAG_GRPC_URL: {{ .Values.config.agent.ragGrpcUrl | quote }}
+  RATE_LIMIT_PER_MIN: {{ .Values.config.rateLimit.perMin | quote }}
+  RATE_LIMIT_BURST: {{ .Values.config.rateLimit.burst | quote }}

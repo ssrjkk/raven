@@ -82,12 +82,15 @@ CHANNEL_MAP: dict[str, str] = {
     "feishu": "Feishu/Lark",
     "line": "LINE",
     "webchat": "Web Chat",
+    "gitlab": "GitLab",
+    "github": "GitHub",
 }
 
 
 def register_default_channels(registry: ChannelRegistry) -> None:
     from raven.channels.discord.channel import DiscordChannel
     from raven.channels.feishu.channel import FeishuChannel
+    from raven.channels.github.channel import GithubChannel
     from raven.channels.googlechat.channel import GoogleChatChannel
     from raven.channels.irc.channel import IRCChannel
     from raven.channels.line.channel import LINECChannel
@@ -107,3 +110,4 @@ def register_default_channels(registry: ChannelRegistry) -> None:
     registry.register("teams", lambda: TeamsChannel())
     registry.register("feishu", lambda: FeishuChannel())
     registry.register("line", lambda: LINECChannel())
+    registry.register("github", lambda: GithubChannel())

@@ -1,4 +1,4 @@
-import { execSync, exec } from "child_process"
+import { spawnSync, execSync, spawn } from "child_process"
 
 function dockerAvailable(): boolean {
   try {
@@ -12,9 +12,15 @@ function dockerAvailable(): boolean {
 
 async function dockerCmd(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    exec(`docker ${args.join(" ")}`, { timeout: 30000 }, (err, stdout, stderr) => {
-      if (err) reject(new Error(stderr.trim() || err.message))
-      else resolve(stdout.trim())
+    const proc = spawn("docker", args, { timeout: 30000, shell: false, stdio: ["ignore", "pipe", "pipe"] })
+    let stdout = ""
+    let stderr = ""
+    proc.stdout?.on("data", (chunk: Buffer) => { stdout += chunk.toString() })
+    proc.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString() })
+    proc.on("error", (err) => reject(err))
+    proc.on("close", (code) => {
+      if (code === 0) resolve(stdout.trim())
+      else reject(new Error(stderr.trim() || `exit code ${code}`))
     })
   })
 }

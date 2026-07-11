@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator
+from typing import Any
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -94,7 +95,8 @@ def mock_settings(monkeypatch):
 async def gateway(mock_db, mock_plugin_loader, mock_settings) -> AsyncGenerator[Gateway, None]:
     g = Gateway(db=mock_db, plugin_loader=mock_plugin_loader)
     g.llm = LLMRouter()
-    g.llm.default_provider = MockLLMProvider(["Test response"])
+    from typing import cast
+    g.llm._providers["test"] = cast(Any, MockLLMProvider(["Test response"]))
     channel = MockChannel()
     g.register_channel(channel)
     channel._handler = g.handle_message

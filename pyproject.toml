@@ -30,6 +30,11 @@ dependencies = [
     "PyYAML>=6.0,<7.0",
     "uvloop>=0.19.0,<1.0",
     "orjson>=3.10.0,<4.0",
+    "Pillow>=10.0,<12.0",
+    "PyMuPDF>=1.24.0,<2.0",
+    "python-docx>=1.1.0,<2.0",
+    "python-pptx>=1.0.0,<2.0",
+    "openpyxl>=3.1.0,<4.0",
 ]
 
 [project.optional-dependencies]
@@ -44,7 +49,6 @@ numba = ["numba>=0.60,<1.0"]
 voice = ["sounddevice>=0.5"]
 rag = [
     "sentence-transformers>=3.0,<4.0",
-    "Pillow>=10.0,<12.0",
 ]
 ml = [
     "torch>=2.0,<3.0",
@@ -65,7 +69,8 @@ dev = [
     "mypy>=1.10,<2.0",
     "pre-commit>=3.0,<5.0",
 ]
-all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,voice,dev,numba,rag,ml,ner,crdt,profiling,chaos,postgres]"]
+media = ["ffmpeg-python>=0.2.0,<1.0"]
+all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,voice,dev,numba,rag,ml,ner,crdt,profiling,chaos,postgres,media]"]
 
 [project.scripts]
 raven = "raven.cli.main:cli"
