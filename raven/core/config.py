@@ -168,6 +168,12 @@ for _attr, _env_name in _honeytoken_keys.items():
     if _val and is_honeytoken(_env_name, _val):
         logger.warning(honeytoken_warning(_env_name))
 
+if settings.web_secret_key in ("", "change-me-in-production"):
+    logger.warning(
+        "WEB_SECRET_KEY is default or empty — set a random key in .env for auth. "
+        "Generate: python3 -c 'import secrets; print(secrets.token_hex(32))'"
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

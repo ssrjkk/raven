@@ -109,8 +109,6 @@ async def python_code(code: str, timeout: int = 15) -> str:
                 func = node.func
                 if isinstance(func, ast.Name) and func.id in _DENIED_BUILTINS:
                     return f"[denied] use of '{func.id}' is not allowed"
-                if isinstance(func, ast.Attribute) and func.attr == "getattr" and len(node.args) >= 2 and isinstance(node.args[1], ast.Constant) and isinstance(node.args[1].value, str) and node.args[1].value.startswith("__"):
-                        return f"[denied] getattr with dunder attribute '{node.args[1].value}' is not allowed"
                 if isinstance(func, ast.Attribute):
                     if func.attr == "__import__":
                         return "[denied] __import__ is not allowed"
@@ -118,10 +116,8 @@ async def python_code(code: str, timeout: int = 15) -> str:
                         return f"[denied] '{func.value.id}' module access is not allowed"
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "__import__":
                 return "[denied] __import__ is not allowed"
-            if isinstance(node, ast.Attribute) and node.attr in ("__class__", "__mro__", "__bases__", "__subclasses__", "__globals__", "__code__", "__closure__", "__func__", "__self__"):
+            if isinstance(node, ast.Attribute) and node.attr.startswith("__") and node.attr.endswith("__"):
                 return f"[denied] dunder attribute '{node.attr}' is not allowed"
-            if isinstance(node, ast.Attribute) and node.attr.startswith("__") and node.attr.endswith("__") and isinstance(node.value, (ast.Constant, ast.List, ast.Dict, ast.Set, ast.Tuple)):
-                return "[denied] dunder access from literal is not allowed"
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 for alias in node.names:
                     if alias.name in ("os", "subprocess", "sys", "shutil", "ctypes", "socket"):

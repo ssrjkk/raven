@@ -77,6 +77,8 @@ class CodingSessionManager:
             return None
         return self._row_to_session(row)
 
+    _ALLOWED_WHERE = frozenset({"1=1", "user_id = ?"})
+
     def list_sessions(self, user_id: str | None = None, limit: int = 20) -> list[CodingSession]:
         conn = self._conn()
         where = "1=1"
@@ -84,8 +86,10 @@ class CodingSessionManager:
         if user_id:
             where = "user_id = ?"
             params.append(user_id)
+        if where not in self._ALLOWED_WHERE:
+            raise ValueError(f"Disallowed WHERE clause: {where}")
         rows = conn.execute(
-            f"SELECT * FROM coding_sessions WHERE {where} ORDER BY created_at DESC LIMIT ?",  # noqa: S608
+            f"SELECT * FROM coding_sessions WHERE {where} ORDER BY created_at DESC LIMIT ?",  # noqa: S608 — validated against _ALLOWED_WHERE
             (*params, limit),
         ).fetchall()
         return [self._row_to_session(r) for r in rows]

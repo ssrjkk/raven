@@ -355,7 +355,7 @@ def github_install(repo: str | None, token: str | None) -> None:
 
 @github.command(name="webhook")
 @click.option("--port", default=8080, help="Webhook server port")
-@click.option("--host", default="0.0.0.0", help="Webhook server host")
+@click.option("--host", default="127.0.0.1", help="Webhook server host")
 @click.option("--token", help="GitHub token (default: GITHUB_TOKEN env)")
 @click.option("--secret", help="GitHub webhook secret for verification")
 def github_webhook(port: int, host: str, token: str | None, secret: str | None) -> None:

@@ -68,7 +68,7 @@ def gateway(port: int):
     app.include_router(get_aios_adapter().get_bridge_router())
 
     click.echo(f"AI-OS-MVP Gateway running on http://localhost:{port}")
-    uvicorn.run(app, host="0.0.0.0", port=port)  # noqa: S104
+    uvicorn.run(app, host="127.0.0.1", port=port)
 
 
 @aios.command()

@@ -18,7 +18,7 @@ DENY_ALL_NETWORK = {"allow": [], "deny": ["*"]}
 class SandboxConfig:
     def __init__(
         self,
-        mode: str = "none",
+        mode: str = "subprocess",
         allow_network: bool = False,
         allow_read: list[str] | None = None,
         allow_write: list[str] | None = None,
@@ -48,7 +48,7 @@ class SandboxConfig:
 
 
 DEFAULT_SANDBOX = SandboxConfig(
-    mode="none",
+    mode="subprocess",
     denied_tools=[],
 )
 

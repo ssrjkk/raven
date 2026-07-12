@@ -74,5 +74,7 @@ def run_webhook_server(
     global _integration, _webhook_secret
     _integration = GitHubIntegration(token=token)
     _webhook_secret = secret if secret is not None else os.getenv("GITHUB_WEBHOOK_SECRET", "")
+    if host == "0.0.0.0":
+        logger.warning("Binding to 0.0.0.0:{}. Ensure firewall/reverse proxy is configured.", port)
     logger.info("Starting GitHub webhook server on {}:{}", host, port)
     uvicorn.run(app, host=host, port=port, log_level="info")

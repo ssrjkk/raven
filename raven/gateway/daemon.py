@@ -262,6 +262,7 @@ class RavenFlowDaemon:
         setup_logging()
         import uvicorn
 
+        logger.warning("Binding to 0.0.0.0:{}. Ensure firewall/reverse proxy is configured.", self.port)
         config = uvicorn.Config(self.app, host="0.0.0.0", port=self.port, log_level="info")  # noqa: S104
         server = uvicorn.Server(config)
         logger.info("RavenFlow Gateway starting on port {}", self.port)

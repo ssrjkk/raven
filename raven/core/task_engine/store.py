@@ -130,6 +130,8 @@ class TaskStore:
         task.steps = [self._row_to_step(r) for r in step_rows]
         return task
 
+    _ALLOWED_CLAUSES = frozenset({"1=1", "user_id = ?", "status = ?", "user_id = ? AND status = ?"})
+
     def list_tasks(
         self,
         user_id: str | None = None,
@@ -138,7 +140,7 @@ class TaskStore:
         offset: int = 0,
     ) -> list[Task]:
         conn = self._conn()
-        where = []
+        where: list[str] = []
         params: list[Any] = []
         if user_id:
             where.append("user_id = ?")
@@ -147,8 +149,10 @@ class TaskStore:
             where.append("status = ?")
             params.append(status)
         clause = " AND ".join(where) if where else "1=1"
+        if clause not in self._ALLOWED_CLAUSES:
+            raise ValueError(f"Disallowed WHERE clause: {clause}")
         rows = conn.execute(
-            f"SELECT * FROM tasks WHERE {clause} ORDER BY created_at DESC LIMIT ? OFFSET ?",  # noqa: S608
+            f"SELECT * FROM tasks WHERE {clause} ORDER BY created_at DESC LIMIT ? OFFSET ?",  # noqa: S608 — validated against _ALLOWED_CLAUSES
             (*params, limit, offset),
         ).fetchall()
         return [self._row_to_task(r) for r in rows]
@@ -185,7 +189,7 @@ class TaskStore:
 
     def count_tasks(self, user_id: str | None = None, status: str | None = None) -> int:
         conn = self._conn()
-        where = []
+        where: list[str] = []
         params: list[Any] = []
         if user_id:
             where.append("user_id = ?")
@@ -194,7 +198,9 @@ class TaskStore:
             where.append("status = ?")
             params.append(status)
         clause = " AND ".join(where) if where else "1=1"
-        row = conn.execute(f"SELECT COUNT(*) as cnt FROM tasks WHERE {clause}", params).fetchone()  # noqa: S608
+        if clause not in self._ALLOWED_CLAUSES:
+            raise ValueError(f"Disallowed WHERE clause: {clause}")
+        row = conn.execute(f"SELECT COUNT(*) as cnt FROM tasks WHERE {clause}", params).fetchone()  # noqa: S608 — validated against _ALLOWED_CLAUSES
         return row["cnt"] if row else 0
 
     def _row_to_task(self, row: sqlite3.Row) -> Task:

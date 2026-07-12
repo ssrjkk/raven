@@ -545,6 +545,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         await monitor_engine.start()
         await routine_engine.start()
         await analytics_engine.start()
+        if web_port < 1024 or web_port not in (18888, 18789):
+            logger.warning("Binding to 0.0.0.0:{}. Ensure firewall/reverse proxy is configured.", web_port)
         config = uvicorn.Config(api_app, host="0.0.0.0", port=web_port, log_level="info", ws="auto")  # noqa: S104
         server = uvicorn.Server(config)
         server_task = asyncio.create_task(server.serve())

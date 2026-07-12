@@ -16,6 +16,8 @@ with contextlib.suppress(ImportError):
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from loguru import logger
+
 from raven.core.logging import setup_logging
 
 
@@ -48,10 +50,10 @@ async def main() -> None:
         with contextlib.suppress(NotImplementedError):
             loop.add_signal_handler(sig, _shutdown)
 
-    print("Raven AI starting...")
-    print(f"  Web UI:   http://localhost:{args.web_port}")
-    print(f"  RavenFlow: http://localhost:{args.flow_port}")
-    print("Press Ctrl+C to stop.")
+    logger.info("Raven AI starting...")
+    logger.info("Web UI:   http://localhost:{}", args.web_port)
+    logger.info("RavenFlow: http://localhost:{}", args.flow_port)
+    logger.info("Press Ctrl+C to stop.")
 
     done, pending = await asyncio.wait(
         [asyncio.create_task(t) for t in tasks] + [asyncio.create_task(stop_event.wait())],
@@ -59,7 +61,7 @@ async def main() -> None:
     )
     for p in pending:
         p.cancel()
-    print("Raven AI stopped.")
+    logger.info("Raven AI stopped.")
 
 
 async def _start_web(port: int) -> None:
@@ -68,7 +70,7 @@ async def _start_web(port: int) -> None:
         gateway = create_gateway()
         await _run_gateway(gateway, port)
     except ImportError as exc:
-        print(f"[warn] Web UI unavailable: {exc}")
+        logger.warning("Web UI unavailable: {}", exc)
 
 
 async def _start_flow(port: int) -> None:
@@ -77,14 +79,14 @@ async def _start_flow(port: int) -> None:
         daemon = RavenFlowDaemon(port=port)
         await daemon.start()
     except ImportError as exc:
-        print(f"[warn] RavenFlow unavailable: {exc}")
+        logger.warning("RavenFlow unavailable: {}", exc)
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("Shutting down...")
+        logger.info("Shutting down...")
     except ModuleNotFoundError as exc:
-        print(f"[fatal] Missing dependency: {exc}")
+        logger.error("Missing dependency: {}", exc)
         sys.exit(1)
