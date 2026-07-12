@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from collections.abc import AsyncIterator
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
@@ -59,6 +60,19 @@ class ChatCompletionResponse(BaseModel):
     model: str = "ravencode"
     choices: list[ChatChoice] = []
     usage: Usage | None = None
+
+
+_API_KEY = os.environ.get("RAVENCODE_API_KEY", "")
+
+
+def _check_auth(authorization: str = "") -> None:
+    if not _API_KEY:
+        return
+    key = authorization
+    if key.startswith("Bearer "):
+        key = key[7:]
+    if key != _API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
 
 
 app = FastAPI(title="RavenCode API", version="0.4.0")
@@ -133,7 +147,8 @@ async def _run_agent_stream(messages: list[ChatMessage], model: str) -> AsyncIte
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(request: ChatCompletionRequest) -> Any:
+async def chat_completions(request: ChatCompletionRequest, authorization: str = "") -> Any:
+    _check_auth(authorization)
     if request.stream:
         return StreamingResponse(
             _run_agent_stream(request.messages, request.model),
@@ -144,7 +159,8 @@ async def chat_completions(request: ChatCompletionRequest) -> Any:
 
 
 @app.get("/v1/models")
-async def list_models() -> dict[str, Any]:
+async def list_models(authorization: str = "") -> dict[str, Any]:
+    _check_auth(authorization)
     return {
         "object": "list",
         "data": [
@@ -153,6 +169,6 @@ async def list_models() -> dict[str, Any]:
     }
 
 
-def run_openai_server(host: str = "0.0.0.0", port: int = 8000) -> None:
+def run_openai_server(host: str = "127.0.0.1", port: int = 8000) -> None:
     import uvicorn
     uvicorn.run(app, host=host, port=port, log_level="info")

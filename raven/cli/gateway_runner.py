@@ -154,13 +154,15 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     api_app = webchat.app
 
-    cors_origins = settings.web_cors_origins.split(",") if settings.web_cors_origins != "*" else ["*"]
+    cors_origins = [o.strip() for o in settings.web_cors_origins.split(",") if o.strip()]
+    if not cors_origins:
+        cors_origins = ["http://localhost:5173", "http://localhost:3000", "http://localhost:18888"]
     api_app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
-        allow_credentials=cors_origins != ["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Correlation-ID", "X-Raven-Key"],
     )
     api_app.middleware("http")(request_id_middleware)
     api_app.middleware("http")(rate_limit_middleware)

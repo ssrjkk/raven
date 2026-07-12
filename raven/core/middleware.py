@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import time
 import uuid
 from collections import defaultdict
@@ -136,7 +137,7 @@ async def auth_middleware(request: Request, call_next):
         if session:
             request.state.user_role = session["role"]
             request.state.user_id = session["user_id"]
-        elif settings.web_secret_key and token == settings.web_secret_key:
+        elif settings.web_secret_key and hmac.compare_digest(token, settings.web_secret_key):
             request.state.user_role = Role.ADMIN.value
             request.state.user_id = "admin"
 

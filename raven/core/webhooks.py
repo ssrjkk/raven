@@ -15,6 +15,10 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/generic")
     async def generic_webhook(body: dict[str, Any], request: Request):
+        import hmac
+        signature = request.headers.get("X-Webhook-Signature", "")
+        if not signature or not hmac.compare_digest(signature, settings.web_secret_key):
+            raise HTTPException(status_code=403, detail="Invalid or missing webhook signature")
         source = request.headers.get("X-Webhook-Source", "unknown")
         text = body.get("text", "") or body.get("message", "") or body.get("content", "")
         user_id = body.get("user_id", "") or body.get("user", "") or f"webhook:{source}"
@@ -58,59 +62,74 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
         mode = request.query_params.get("hub.mode")
         token = request.query_params.get("hub.verify_token")
         challenge = request.query_params.get("hub.challenge")
-        if mode == "subscribe" and token == settings.web_secret_key:
+        import hmac
+        if mode == "subscribe" and hmac.compare_digest(token, settings.web_secret_key):
             return int(challenge)  # type: ignore[arg-type]
         raise HTTPException(status_code=403, detail="Verify token failed")
 
     @router.post("/googlechat")
     async def googlechat_webhook(body: dict[str, Any], request: Request):
         ch = request.app.state.googlechat_channel if hasattr(request.app.state, "googlechat_channel") else None
-        if ch:
-            await ch.handle_webhook(body)
+        if not ch:
+            logger.warning("googlechat channel not configured, webhook ignored")
+            return {"ok": False, "error": "googlechat channel not configured"}
+        await ch.handle_webhook(body)
         return {"ok": True}
 
     @router.post("/signal")
     async def signal_webhook(body: dict[str, Any], request: Request):
         ch = request.app.state.signal_channel if hasattr(request.app.state, "signal_channel") else None
-        if ch:
-            await ch.handle_webhook(body)
+        if not ch:
+            logger.warning("signal channel not configured, webhook ignored")
+            return {"ok": False, "error": "signal channel not configured"}
+        await ch.handle_webhook(body)
         return {"ok": True}
 
     @router.post("/teams")
     async def teams_webhook(body: dict[str, Any], request: Request):
         ch = request.app.state.teams_channel if hasattr(request.app.state, "teams_channel") else None
-        if ch:
-            await ch.handle_webhook(body)
+        if not ch:
+            logger.warning("teams channel not configured, webhook ignored")
+            return {"ok": False, "error": "teams channel not configured"}
+        await ch.handle_webhook(body)
         return {"ok": True}
 
     @router.post("/feishu")
     async def feishu_webhook(body: dict[str, Any], request: Request):
         ch = request.app.state.feishu_channel if hasattr(request.app.state, "feishu_channel") else None
-        if ch:
-            await ch.handle_webhook(body)
+        if not ch:
+            logger.warning("feishu channel not configured, webhook ignored")
+            return {"ok": False, "error": "feishu channel not configured"}
+        await ch.handle_webhook(body)
         return {"ok": True}
 
     @router.post("/line")
     async def line_webhook(body: dict[str, Any], request: Request):
         ch = request.app.state.line_channel if hasattr(request.app.state, "line_channel") else None
-        if ch:
-            await ch.handle_webhook(body)
+        if not ch:
+            logger.warning("line channel not configured, webhook ignored")
+            return {"ok": False, "error": "line channel not configured"}
+        await ch.handle_webhook(body)
         return {"ok": True}
 
     @router.post("/github")
     async def github_webhook(body: dict[str, Any], request: Request):
         ch = request.app.state.github_channel if hasattr(request.app.state, "github_channel") else None
-        if ch:
-            headers = dict(request.headers)
-            await ch.handle_webhook(body, headers)
+        if not ch:
+            logger.warning("github channel not configured, webhook ignored")
+            return {"ok": False, "error": "github channel not configured"}
+        headers = dict(request.headers)
+        await ch.handle_webhook(body, headers)
         return {"ok": True}
 
     @router.post("/gitlab")
     async def gitlab_webhook(body: dict[str, Any], request: Request):
         ch = request.app.state.gitlab_channel if hasattr(request.app.state, "gitlab_channel") else None
-        if ch:
-            headers = dict(request.headers)
-            await ch.handle_webhook(body, headers)
+        if not ch:
+            logger.warning("gitlab channel not configured, webhook ignored")
+            return {"ok": False, "error": "gitlab channel not configured"}
+        headers = dict(request.headers)
+        await ch.handle_webhook(body, headers)
         return {"ok": True}
 
     @router.post("/github-actions")

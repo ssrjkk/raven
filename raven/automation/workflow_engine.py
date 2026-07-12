@@ -116,6 +116,25 @@ class WorkflowEngine:
         result.end_time = time.time()
         return result
 
+    def _safe_eval_condition(self, condition: str, completed: dict[str, Any]) -> bool:
+        import ast
+        tree = ast.parse(condition, mode="eval")
+        allowed = {
+            ast.Expression, ast.BoolOp, ast.Compare, ast.Name, ast.Load,
+            ast.Constant, ast.And, ast.Or, ast.Not, ast.Eq, ast.NotEq,
+            ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.Is, ast.IsNot,
+            ast.In, ast.NotIn, ast.Attribute, ast.Tuple, ast.List,
+            ast.Call, ast.keyword, ast.Subscript, ast.Index, ast.Slice,
+            ast.UnaryOp, ast.USub, ast.UAdd, ast.BinOp, ast.Add, ast.Sub,
+            ast.Mult, ast.Div, ast.Mod,
+        }
+        for node in ast.walk(tree):
+            if not isinstance(node, tuple(allowed)):
+                raise ValueError(f"Unsupported expression in condition: {type(node).__name__}")
+        code = compile(tree, "<condition>", "eval")
+        result = eval(code, {"__builtins__": {}}, {"completed": completed})  # noqa: S307 — AST-validated, restricted __builtins__
+        return bool(result)
+
     def _handle_missing_deps(
         self,
         remaining: dict[str, WorkflowStep],
@@ -153,7 +172,7 @@ class WorkflowEngine:
     async def _execute_step(self, step: WorkflowStep, completed: dict[str, Any]) -> StepResult:
         if step.condition:
             try:
-                cond_result = eval(step.condition, {"__builtins__": {}}, {"completed": completed})  # noqa: S307
+                cond_result = self._safe_eval_condition(step.condition, completed)
                 if not cond_result:
                     return StepResult(step_id=step.id, status=StepStatus.SKIPPED)
             except Exception as exc:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import builtins
 import inspect
 import io
 import os
@@ -125,43 +124,54 @@ class PerformanceProfiler:
         loop = asyncio.get_running_loop()
 
         def _profile() -> tuple[float, int, int, list[ProfileFrame], str | None]:
-            ns: dict[str, Any] = {
-                "__builtins__": builtins.__dict__,
-                "__name__": "__profile__",
-            }
+            import contextlib
+            import subprocess
 
-            profiler = cProfile.Profile()
-            try:
-                profiler.enable()
-                exec(code_text, ns)  # noqa: S102
-                profiler.disable()
-            except Exception as exc:
-                profiler.disable()
-                return 0.0, 0, 0, [], f"Execution error: {exc}"
-
-            stream = io.StringIO()
-            stats = pstats.Stats(profiler, stream=stream).sort_stats("cumtime")
-            stats.print_stats(30)
-
-            total_calls = stats.total_calls  # type: ignore[attr-defined]
-            primitive_calls = stats.prim_calls  # type: ignore[attr-defined]
-            total_time = stats.total_tt  # type: ignore[attr-defined]
-
-            frames: list[ProfileFrame] = []
-            for func, (_cc, nc, _tt, ct, _callers) in stats.stats.items():  # type: ignore[attr-defined]
-                filename, lineno, func_name = func
-                frames.append(
-                    ProfileFrame(
-                        filename=filename,
-                        line=lineno,
-                        function=func_name,
-                        cumtime=ct,
-                        percall=ct / nc if nc else 0.0,
-                        ncalls=nc,
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as tmp:
+                try:
+                    tmp.write(code_text)
+                    tmp.close()
+                    result = subprocess.run(  # noqa: S603
+                        [sys.executable, "-m", "cProfile", "-s", "cumtime", tmp.name],
+                        capture_output=True, text=True, timeout=30,
                     )
-                )
-
-            return total_time, total_calls, primitive_calls, frames, None
+                    if result.returncode != 0:
+                        return 0.0, 0, 0, [], f"Execution error: {result.stderr.strip() or result.stdout.strip()}"
+                    total_time = 0.0
+                    total_calls = 0
+                    primitive_calls = 0
+                    frames = []
+                    for line_text in result.stdout.split("\n"):
+                        if "function calls" in line_text:
+                            parts = line_text.strip().split()
+                            if parts:
+                                with contextlib.suppress(ValueError, IndexError):
+                                    total_calls = int(parts[0].replace(",", ""))
+                        elif line_text.strip().startswith("ncalls"):
+                            continue
+                        elif line_text.strip() and line_text.strip()[0].isdigit():
+                            parts = line_text.strip().split()
+                            if len(parts) >= 6:
+                                with contextlib.suppress(ValueError, IndexError):
+                                    ncalls = int(parts[0].split("/")[0])
+                                    total = float(parts[2])
+                                    percall = float(parts[3])
+                                    frames.append(ProfileFrame(
+                                        filename=parts[5] if len(parts) > 5 else "",
+                                        line=0,
+                                        function=parts[4] if len(parts) > 4 else "",
+                                        cumtime=total,
+                                        percall=percall,
+                                        ncalls=ncalls,
+                                    ))
+                    return total_time, total_calls, primitive_calls, frames, None
+                except subprocess.TimeoutExpired:
+                    return 0.0, 0, 0, [], "Execution timed out"
+                except Exception as exc:
+                    return 0.0, 0, 0, [], f"Profiler error: {exc}"
+                finally:
+                    with contextlib.suppress(OSError):
+                        os.unlink(tmp.name)
 
         total_time, total_calls, primitive_calls, frames, error = await loop.run_in_executor(None, _profile)
         result = ProfileResult(

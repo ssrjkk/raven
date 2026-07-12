@@ -109,8 +109,17 @@ class TextToSpeech:
             speaker.Speak(text)
             stream.Close()
         except ImportError:
-            with open(output_path, "w") as f:
-                f.write(text)
+            logger.warning("win32com not available, writing silence WAV")
+            import struct
+            import wave
+            sample_rate = 22050
+            duration = max(len(text) * 0.06, 1.0)
+            num_samples = int(sample_rate * duration)
+            with wave.open(output_path, "w") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(sample_rate)
+                wf.writeframes(struct.pack(f"<{num_samples}h", *([0] * num_samples)))
 
     def _synthesize_macos_say(self, text: str, output_path: str):
         import tempfile
@@ -143,7 +152,9 @@ class TextToSpeech:
     def list_voices(self) -> list[dict[str, Any]]:
         if self.config.provider == TTSProvider.ELEVENLABS:
             return self._list_elevenlabs_voices()
-        return []
+        if os.name == "nt":
+            return [{"id": "windows-sapi", "name": "Windows SAPI (default)"}]
+        return [{"id": "macos-say", "name": "macOS say (default)"}]
 
     def _list_elevenlabs_voices(self) -> list[dict[str, Any]]:
         try:

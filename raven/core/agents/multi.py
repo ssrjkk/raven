@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from loguru import logger
 
-from raven.core.agents.orchestrator import AgentResult, AgentType, Orchestrator
+from ravencode.agents.orchestrator import AgentResult, AgentType, Orchestrator
 from ravencode.runtime.agent_core import AgentConfig
 
 
