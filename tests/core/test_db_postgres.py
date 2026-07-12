@@ -5,6 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytest.importorskip("asyncpg", reason="PostgreSQL tests require asyncpg")
+
 from raven.core.db import Database, DatabaseFactory
 
 

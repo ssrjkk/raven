@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("cryptography", reason="SecretsManager requires cryptography")
+
 from raven.core.secrets import SecretsManager
 
 
