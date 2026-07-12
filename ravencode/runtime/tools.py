@@ -133,8 +133,8 @@ async def grep_files(pattern: str, include: str | None = None, path: str | None 
             continue
         try:
             text = await asyncio.to_thread(p.read_text, encoding="utf-8", errors="replace")
-        except Exception:
-            logger.debug("Skipping unreadable file: {}", p)
+        except (OSError, UnicodeDecodeError, PermissionError) as e:
+            logger.debug("Skipping unreadable file {}: {}", p, e)
             continue
         for i, line in enumerate(text.splitlines(), 1):
             if pattern in line:
@@ -191,8 +191,8 @@ async def _ddg_search(query: str, num_results: int) -> list[dict[str, str]] | No
         return results if results else None
     except ImportError:
         return None
-    except Exception:
-        logger.debug("DDG search failed, trying fallback")
+    except Exception as e:
+        logger.debug("DDG search failed: {}, trying fallback", e)
         return None
 
 
@@ -218,8 +218,8 @@ async def _httpx_search(query: str, num_results: int) -> list[dict[str, str]] | 
         return results if results else None
     except ImportError:
         return None
-    except Exception:
-        logger.debug("httpx search fallback also failed")
+    except Exception as e:
+        logger.debug("httpx search fallback failed: {}", e)
         return None
 
 

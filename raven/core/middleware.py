@@ -155,7 +155,7 @@ async def input_sanitize_middleware(request: Request, call_next):
         if "json" in content_type:
             try:
                 body = await request.json()
-            except Exception:
+            except ValueError:
                 return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
             if isinstance(body, dict):
                 max_depth = 10

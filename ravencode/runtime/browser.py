@@ -87,8 +87,8 @@ async def browser_close() -> str:
             await _BROWSER_CONTEXT.close()
         if _BROWSER:
             await _BROWSER.close()
-    except Exception:
-        logger.warning("Failed to close browser resources")
+    except Exception as e:
+        logger.warning("Failed to close browser resources: {}", e)
     _PAGE = None
     _BROWSER_CONTEXT = None
     _BROWSER = None

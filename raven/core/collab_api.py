@@ -207,8 +207,8 @@ def create_collab_router() -> APIRouter:
                     await websocket.send_json({"kind": "pong"})
         except WebSocketDisconnect:
             pass
-        except Exception:
-            logger.warning("WebSocket handler error")
+        except Exception as e:
+            logger.warning("WebSocket handler error: {}", e)
         finally:
             wsm = _get_ws_manager()
             await wsm.disconnect(session_id, user_id, websocket)

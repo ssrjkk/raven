@@ -74,6 +74,7 @@ CHANNEL_MAP: dict[str, str] = {
     "discord": "Discord",
     "slack": "Slack",
     "whatsapp": "WhatsApp Business",
+    "email": "Email",
     "signal": "Signal",
     "matrix": "Matrix",
     "googlechat": "Google Chat",
@@ -89,6 +90,7 @@ CHANNEL_MAP: dict[str, str] = {
 
 def register_default_channels(registry: ChannelRegistry) -> None:
     from raven.channels.discord.channel import DiscordChannel
+    from raven.channels.email.channel import EmailChannel
     from raven.channels.feishu.channel import FeishuChannel
     from raven.channels.github.channel import GithubChannel
     from raven.channels.googlechat.channel import GoogleChatChannel
@@ -104,6 +106,7 @@ def register_default_channels(registry: ChannelRegistry) -> None:
     registry.register("discord", lambda: DiscordChannel())
     registry.register("slack", lambda: SlackChannel())
     registry.register("whatsapp", lambda: WhatsAppChannel())
+    registry.register("email", lambda: EmailChannel())
     registry.register("matrix", lambda: MatrixChannel())
     registry.register("googlechat", lambda: GoogleChatChannel())
     registry.register("irc", lambda: IRCChannel())

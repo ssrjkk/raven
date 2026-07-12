@@ -118,7 +118,8 @@ class TelegramChannel(BaseChannel):
                     parse_mode="Markdown",
                     reply_markup=kb,
                 )
-            except Exception:
+            except Exception as markdown_err:
+                logger.debug("Telegram Markdown send failed: {}, retrying without Markdown", markdown_err)
                 try:
                     await self._app.bot.send_message(
                         chat_id=int(chat_id),

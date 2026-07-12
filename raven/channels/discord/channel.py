@@ -253,8 +253,8 @@ class DiscordChannel(BaseChannel):
                         user = await self._bot.fetch_user(int(user_id))
                         if user:
                             channel = user  # type: ignore[assignment]
-                    except Exception:
-                        logger.debug("[discord] Failed to fetch user {}", user_id)
+                    except Exception as e:
+                        logger.debug("[discord] Failed to fetch user {}: {}", user_id, e)
             if channel:
                 try:
                     content = message.content

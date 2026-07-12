@@ -58,10 +58,10 @@ def _get_openai_key() -> str:
         from raven.core.config import settings
 
         return settings.openai_api_key or ""
-    except Exception:
+    except Exception as e:
         import os
 
-        logger.debug("Failed to load openai_api_key from settings, falling back to env")
+        logger.debug("Failed to load openai_api_key from settings: {}, falling back to env", e)
         return os.environ.get("OPENAI_API_KEY", "")
 
 

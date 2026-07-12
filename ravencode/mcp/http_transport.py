@@ -23,7 +23,7 @@ def create_mcp_router() -> APIRouter:
     async def mcp_rpc(request: Request) -> JSONResponse:
         try:
             body: Any = await request.json()
-        except Exception:
+        except ValueError:
             return JSONResponse({"jsonrpc": "2.0", "error": {"code": -32700, "message": "Parse error"}}, status_code=400)
         if not isinstance(body, dict):
             return JSONResponse({"jsonrpc": "2.0", "error": {"code": -32600, "message": "Invalid Request"}}, status_code=400)

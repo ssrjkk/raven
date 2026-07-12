@@ -96,33 +96,86 @@ async def review_code(code: str, language: str = "auto") -> str:
 
 async def suggest_edit(code: str, goal: str) -> str:
     """Suggest an edit to achieve a goal. Args: code (str): Original code, goal (str): What the edit should achieve"""
+    import ast
+
+    hints = []
+    try:
+        tree = ast.parse(code)
+        funcs = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]
+        classes = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
+        imports = [n for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))]
+        calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)]
+
+        hints.append(f"• {len(funcs)} function(s), {len(classes)} class(es), {len(imports)} import(s)")
+        if calls:
+            hints.append(f"• {len(calls)} call(s) — check for proper error handling")
+
+        if goal.lower() in ("optimize", "perf", "speed"):
+            hints.append("• Profile with cProfile to find bottlenecks")
+            hints.append("• Replace loops with comprehensions / built-ins")
+            hints.append("• Add `@lru_cache` on pure functions")
+        elif goal.lower() in ("read", "readability", "clean"):
+            hints.append("• Break large functions into smaller ones")
+            hints.append("• Add type hints and docstrings")
+            hints.append("• Extract magic numbers into named constants")
+        elif goal.lower() in ("test", "tests", "unittest"):
+            hints.append("• Add `pytest` tests covering edge cases")
+            hints.append("• Mock external dependencies")
+            hints.append("• Test both success and failure paths")
+        elif goal.lower() in ("security", "secure", "safe"):
+            hints.append("• Audit all `eval()` / `exec()` calls")
+            hints.append("• Validate untrusted input")
+            hints.append("• Use parameterized queries for databases")
+    except SyntaxError as e:
+        hints.append(f"• Parse error: {e}")
+
     return (
         f"## Suggested Edit\n\n"
         f"**Goal:** {goal}\n\n"
-        f"**Analysis:** To achieve '{goal}', the code needs modification.\n\n"
-        f"**Current code:**\n```\n{code[:1500]}\n```\n\n"
-        f"**Approach:** "
-        + {
-            "optimize": "Profile bottlenecks, use built-in functions, add caching",
-            "read": "Add input validation, error handling, logging",
-            "test": "Add unit tests with edge cases",
-        }.get(goal.lower(), "Review the goal and modify the logic accordingly")
+        f"**Code Analysis:**\n"
+        + "\n".join(hints)
+        + f"\n\n**Current code:**\n```\n{code[:1500]}\n```\n"
     )
 
 
 async def explain_code(code: str, detail: str = "high") -> str:
     """Explain what code does. Args: code (str): Code to explain, detail (str): 'high' for overview or 'low' for line-by-line"""
+    import ast
+
     lines = code.split("\n")
-    return (
-        f"## Code Explanation ({detail} level)\n\n"
-        + (f"**{len(lines)} lines, ~{len(code)} chars**\n\n" if detail == "high" else "")
-        + f"```\n{code[:2000]}\n```\n\n"
-        + (
-            "\n".join(f"`{i + 1}` | {line.strip()}" for i, line in enumerate(lines[:30]) if line.strip())
-            if detail == "low"
-            else "Overview only."
-        )
-    )
+    overview_parts = [f"**{len(lines)} lines, ~{len(code)} chars**"]
+
+    try:
+        tree = ast.parse(code)
+        funcs = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]
+        classes = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
+        top_level = [n for n in ast.iter_child_nodes(tree)]
+
+        if classes:
+            overview_parts.append(f"**Classes:** {', '.join(c.name for c in classes[:5])}")
+        if funcs:
+            overview_parts.append(f"**Functions:** {', '.join(f.name for f in funcs[:8])}")
+        for node in top_level:
+            if isinstance(node, ast.Assign):
+                for t in node.targets:
+                    if isinstance(t, ast.Name) and t.id.isupper():
+                        overview_parts.append(f"**Constant:** {t.id}")
+        overview_parts.append(f"**Structure:** {len(top_level)} top-level statement(s)")
+    except SyntaxError as e:
+        overview_parts.append(f"*Parse error: {e}*")
+
+    section = ""
+    if detail == "low":
+        annotated = []
+        for i, line in enumerate(lines[:40], 1):
+            stripped = line.strip()
+            if stripped:
+                annotated.append(f"`{i:2d}` | {stripped[:120]}")
+        section = "\n".join(annotated) if annotated else "(empty)"
+    else:
+        section = "\n".join(overview_parts)
+
+    return f"## Code Explanation ({detail} level)\n\n{section}\n\n```\n{code[:2000]}\n```"
 
 
 async def find_issues(code: str) -> str:

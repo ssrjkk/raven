@@ -28,8 +28,8 @@ class AgentStreamHandler:
     async def _send(self, msg: dict[str, Any]) -> None:
         try:
             await self._ws.send_json(msg)
-        except Exception:
-            logger.debug("Stream send failed (client disconnected)")
+        except Exception as e:
+            logger.debug("Stream send failed (client disconnected): {}", e)
 
     async def _on_step_start(self, event: AgentEvent) -> None:
         await self._send({

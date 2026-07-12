@@ -163,7 +163,27 @@ class SystemMonitor:
             return secrets.SystemRandom().randint(100, 500)
 
     async def _get_network_latency(self) -> float:
-        return 0.0
+        try:
+            import platform
+            import subprocess
+
+            param = "-n" if platform.system().lower() == "windows" else "-c"
+            proc = await asyncio.create_subprocess_exec(
+                "ping", param, "1", "8.8.8.8",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+            out = stdout.decode("utf-8", errors="replace")
+            for line in out.split("\n"):
+                if "time=" in line or "time<" in line:
+                    import re
+                    match = re.search(r"time[=<>]\s*(\d+\.?\d*)", line, re.IGNORECASE)
+                    if match:
+                        return float(match.group(1))
+            return 0.0
+        except (FileNotFoundError, TimeoutError, subprocess.SubprocessError):
+            return 0.0
 
     def get_snapshots(self, since: float = 0.0) -> list[SystemSnapshot]:
         if since <= 0:
@@ -280,22 +300,60 @@ class FaultInjector:
             fault["details"] = {"service": service, "simulated": True}
 
     async def _inject_network_latency(self, fault: dict[str, Any]) -> None:
-        latency_ms = fault["config"]["intensity"] * 5000  # 0–5000ms
+        import platform
+        import shutil
+        import subprocess as _subprocess
+
+        latency_ms = fault["config"]["intensity"] * 5000
         target = fault["config"]["target"] or "all interfaces"
-        logger.warning("[SIMULATED] Adding {}ms latency to {}", round(latency_ms, 1), target)
+        system = platform.system().lower()
+        iface = target if target != "all interfaces" else None
+        if system == "linux" and shutil.which("tc"):
+            iface_arg = f"dev {iface}" if iface else "dev lo"
+            try:
+                _subprocess.run(  # noqa: S602
+                    f"tc qdisc add {iface_arg} root netem delay {latency_ms}ms",
+                    shell=True, capture_output=True, timeout=5,
+                )
+                fault["details"] = {"latency_ms": round(latency_ms, 1), "target": iface or "lo", "method": "tc"}
+                logger.warning("Added {}ms latency via tc {} (real)", round(latency_ms, 1), iface_arg)
+                return
+            except Exception as exc:
+                logger.warning("tc failed: {}", exc)
+        elif system == "windows":
+            logger.warning("Network latency injection requires Linux+tc or a proxy (real not available)")
         fault["details"] = {"latency_ms": round(latency_ms, 1), "target": target, "simulated": True}
 
     async def _inject_disk_fill(self, fault: dict[str, Any]) -> None:
-        fill_percent = 50.0 + fault["config"]["intensity"] * 50.0  # 50–100%
-        logger.warning("[SIMULATED] Filling disk to {}%", round(fill_percent, 1))
+        import shutil
         import tempfile
-        target = fault["config"]["target"] or tempfile.gettempdir()
-        fault["details"] = {"fill_percent": round(fill_percent, 1), "target": target, "simulated": True}
+
+        fill_percent = 50.0 + fault["config"]["intensity"] * 50.0
+        target_dir = Path(fault["config"]["target"] or tempfile.gettempdir())
+        target_dir.mkdir(parents=True, exist_ok=True)
+        fault_file = target_dir / f".chaos_disk_fill_{fault['id']}.tmp"
+        try:
+            usage = shutil.disk_usage(target_dir)
+            target_free = min(int(usage.free * (100 - fill_percent) / 100), 100 * 1024 * 1024)
+            if target_free > 0:
+                with fault_file.open("wb") as f:
+                    written = 0
+                    chunk = bytearray(1024 * 1024)
+                    while written < target_free:
+                        f.write(chunk)
+                        written += len(chunk)
+                fault["details"] = {"fill_percent": round(fill_percent, 1), "target": str(target_dir), "bytes_written": written}
+                logger.warning("Filled disk to ~{}% in {} ({} bytes)", round(fill_percent, 1), target_dir, written)
+            else:
+                fault["details"] = {"fill_percent": round(fill_percent, 1), "target": str(target_dir), "error": "no free space"}
+        except Exception as exc:
+            logger.warning("Disk fill failed: {}", exc)
+            fault["details"] = {"fill_percent": round(fill_percent, 1), "target": str(target_dir), "error": str(exc)}
 
     async def _inject_cpu_storm(self, fault: dict[str, Any]) -> None:
         cores = max(1, int(fault["config"]["intensity"] * 8))
-        logger.warning("[SIMULATED] Consuming {} CPU cores", cores)
-        fault["details"] = {"cores": cores, "simulated": True}
+        logger.warning("Consuming {} CPU cores (real)", cores)
+        fault["details"] = {"cores": cores}
         asyncio.create_task(self._cpu_burn(cores, fault["config"]["duration_sec"], fault["id"]))
 
     async def _cpu_burn(self, cores: int, duration: float, fault_id: str) -> None:
@@ -313,11 +371,9 @@ class FaultInjector:
                 t.cancel()
 
     async def _inject_memory_leak(self, fault: dict[str, Any]) -> None:
-        mb = int(fault["config"]["intensity"] * 1024)  # 0–1024 MB
-        if mb < 1:
-            mb = 1
-        logger.warning("[SIMULATED] Allocating {}MB memory", mb)
-        fault["details"] = {"mb": mb, "simulated": True}
+        mb = max(1, int(fault["config"]["intensity"] * 1024))
+        logger.warning("Allocating {}MB memory (real)", mb)
+        fault["details"] = {"mb": mb}
         asyncio.create_task(self._memory_burn(mb, fault["config"]["duration_sec"], fault["id"]))
 
     async def _memory_burn(self, mb: int, duration: float, fault_id: str) -> None:
@@ -363,13 +419,27 @@ class FaultInjector:
         elif fault_type == FaultType.MEMORY_LEAK:
             logger.info("[RECOVER] Memory released")
         elif fault_type == FaultType.DISK_FILL:
-            logger.info("[RECOVER] Disk space cleaned")
+            import tempfile
+            target = fault["config"].get("target") or tempfile.gettempdir()
+            fill_file = Path(target) / f".chaos_disk_fill_{fault['id']}.tmp"
+            if fill_file.exists():
+                fill_file.unlink()
+                logger.info("[RECOVER] Disk fill file removed: {}", fill_file)
         elif fault_type == FaultType.NETWORK_LATENCY:
-            logger.info("[RECOVER] Network latency removed")
+            details = fault.get("details", {})
+            if details.get("method") == "tc":
+                import platform
+                import subprocess as _subprocess
+                if platform.system().lower() == "linux":
+                    iface = details.get("target", "lo")
+                    _subprocess.run(f"tc qdisc del dev {iface} root", shell=True, capture_output=True, timeout=5)  # noqa: S602
+                    logger.info("[RECOVER] tc qdisc removed from {}", iface)
+            else:
+                logger.info("[RECOVER] Network latency removed")
         elif fault_type == FaultType.SERVICE_KILL:
-            logger.info("[RECOVER] Service '{}' would need restart", fault["config"]["target"])
+            logger.warning("[RECOVER] Service '{}' would need restart", fault["config"]["target"])
         elif fault_type == FaultType.PROCESS_KILL:
-            logger.info("[RECOVER] Process '{}' would need restart", fault["config"]["target"])
+            logger.warning("[RECOVER] Process '{}' would need restart", fault["config"]["target"])
 
     def get_history(self, fault_type: FaultType | None = None) -> list[dict[str, Any]]:
         if fault_type is None:

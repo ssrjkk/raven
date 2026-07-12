@@ -17,14 +17,12 @@ dependencies = [
     "pydantic-settings>=2.7.0,<3.0",
     "loguru>=0.7.3,<1.0",
     "apscheduler>=3.10,<4.0",
-    "playwright>=1.44,<2.0",
     "beautifulsoup4>=4.12,<5.0",
     "lxml>=5.2,<6.0",
     "feedparser>=6.0,<7.0",
     "click>=8.0,<9.0",
     "rich>=13.0,<16.0",
     "python-telegram-bot>=21.0,<23.0",
-    "chromadb>=0.5.0,<2.0",
     "python-dotenv>=1.0,<2.0",
     "numpy>=1.26,<3.0",
     "PyYAML>=6.0,<7.0",
@@ -47,9 +45,9 @@ tui = ["textual>=1.0"]
 tracing = ["opentelemetry-api>=1.25", "opentelemetry-sdk>=1.25"]
 numba = ["numba>=0.60,<1.0"]
 voice = ["sounddevice>=0.5"]
-rag = [
-    "sentence-transformers>=3.0,<4.0",
-]
+browser = ["playwright>=1.44,<2.0"]
+vector = ["chromadb>=0.5.0,<2.0"]
+rag = ["sentence-transformers>=3.0,<4.0"]
 ml = [
     "torch>=2.0,<3.0",
     "transformers>=4.40,<5.0",
@@ -74,7 +72,7 @@ dev = [
     "pre-commit>=3.0,<5.0",
 ]
 media = ["ffmpeg-python>=0.2.0,<1.0"]
-all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,voice,dev,numba,crdt,profiling,chaos,postgres,media]"]
+all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,voice,dev,browser,vector,numba,crdt,profiling,chaos,postgres,media]"]
 
 [project.scripts]
 raven = "raven.cli.main:cli"
@@ -95,7 +93,7 @@ disallow_incomplete_defs = false
 ignore_missing_imports = true
 warn_unused_ignores = true
 show_error_codes = true
-exclude = ['services/', 'daemon/', 'deploy/', 'build/', '\.git/', 'extension/', 'scripts/', 'tests/']
+exclude = ['deploy/', 'build/', '\.git/', 'extension/', 'scripts/', 'tests/']
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

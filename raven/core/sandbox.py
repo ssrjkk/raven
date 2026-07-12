@@ -73,7 +73,23 @@ class Sandbox:
         return "Unknown sandbox mode"
 
     async def _exec_direct(self, code: str) -> str:
-        return code
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+        restricted_globals: dict[str, object] = {"__builtins__": __builtins__}
+        try:
+            with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+                # sandbox mode="none" — user opted into direct exec
+                exec(code, restricted_globals)  # noqa: S102
+            result = stdout_capture.getvalue()
+            stderr_val = stderr_capture.getvalue()
+            if stderr_val.strip():
+                result += f"\n[stderr]\n{stderr_val}"
+            return result[:5000] or "(no output)"
+        except Exception as e:
+            return f"Execution error: {e}"
 
     async def _exec_subprocess(self, code: str) -> str:
         self._tmpdir = tempfile.mkdtemp(prefix="raven_sandbox_")

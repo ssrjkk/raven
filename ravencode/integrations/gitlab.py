@@ -228,7 +228,17 @@ class GitLabIntegration(CIProvider):
         return await self._gl.get_mr_diff(pid, pr_number)
 
     async def set_commit_status(self, ctx: EventContext, sha: str, state: str, description: str) -> bool:
-        return True
+        pid = await self._project_id(ctx)
+        try:
+            await self._gl._request(
+                "POST",
+                f"/projects/{pid}/statuses/{sha}",
+                json={"state": state, "description": description, "context": "ravencode/ci"},
+            )
+            return True
+        except Exception as e:
+            logger.error("Failed to set commit status: {}", e)
+            return False
 
     async def _handle_issue_comment(self, ctx: EventContext) -> WorkflowResult | None:
         if not is_triggered(ctx.comment_body):
@@ -291,7 +301,7 @@ class GitLabIntegration(CIProvider):
         await self.post_comment(ctx, f"## RavenCode Review\n\n{review}")
         return WorkflowResult(success=True, summary=review)
 
-    async def _handle_mr_opened(self, ctx: EventContext) -> WorkflowResult | None:
+    async def _handle_pr_opened(self, ctx: EventContext) -> WorkflowResult | None:
         diff = await self.get_pr_diff(ctx, ctx.pr_number or 0)
         if not diff:
             return None

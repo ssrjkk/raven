@@ -121,6 +121,17 @@ class WebChatChannel(BaseChannel):
 
         @app.websocket("/ws/stream")
         async def agent_stream(websocket: WebSocket):
+            token = websocket.query_params.get("token", "")
+            if token:
+                try:
+                    from raven.core.auth.auth_handler import auth_handler
+                    payload = await auth_handler.decode_token(token)
+                    if not payload:
+                        await websocket.close(code=1008, reason="Authentication required")
+                        return
+                except Exception:
+                    await websocket.close(code=1008, reason="Authentication required")
+                    return
             await websocket.accept()
             client_id = str(uuid4().hex[:8])
             session_id = f"webchat:{client_id}:stream"
@@ -140,6 +151,17 @@ class WebChatChannel(BaseChannel):
 
         @app.websocket("/ws/canvas")
         async def canvas_websocket(websocket: WebSocket):
+            token = websocket.query_params.get("token", "")
+            if token:
+                try:
+                    from raven.core.auth.auth_handler import auth_handler
+                    payload = await auth_handler.decode_token(token)
+                    if not payload:
+                        await websocket.close(code=1008, reason="Authentication required")
+                        return
+                except Exception:
+                    await websocket.close(code=1008, reason="Authentication required")
+                    return
             await websocket.accept()
             session = canvas_manager.create_session(str(uuid4().hex[:12]))
             try:

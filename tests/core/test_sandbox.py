@@ -9,7 +9,7 @@ from raven.core.sandbox import Sandbox, SandboxConfig
 async def test_sandbox_direct_mode():
     s = Sandbox(SandboxConfig(mode="none"))
     result = await s.exec("print('hello')")
-    assert result == "print('hello')"
+    assert "hello" in result
 
 
 @pytest.mark.asyncio
@@ -81,7 +81,7 @@ async def test_sandbox_cleanup():
 @pytest.mark.asyncio
 async def test_sandbox_default_config():
     s = Sandbox()
-    assert s.config.mode == "none"
+    assert s.config.mode == "subprocess"
     assert s.config.denied_tools == []
 
 

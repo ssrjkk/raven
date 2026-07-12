@@ -130,8 +130,8 @@ class UnifiedAgent:
             if hasattr(raw, "__await__"):
                 raw = await raw
             messages = raw if isinstance(raw, list) else []
-        except Exception:
-            logger.debug("Failed to get messages for summarization")
+        except Exception as e:
+            logger.debug("Failed to get messages for summarization: {}", e)
             return False
         self._total_tokens = self._estimate_tokens(messages)
         if not messages or self._total_tokens < self._max_context_tokens * 0.75:

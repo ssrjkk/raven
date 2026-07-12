@@ -42,7 +42,7 @@ class CIProvider(ABC):
         """Route event to appropriate handler. Override in subclass."""
         if ctx.event_type == EventType.ISSUE_COMMENT and ctx.comment_body:
             return await self._handle_issue_comment(ctx)
-        if ctx.event_type == EventType.PR_OPENED:
+        if ctx.event_type in (EventType.PR_OPENED, EventType.MERGE_REQUEST_OPENED):
             return await self._handle_pr_opened(ctx)
         if ctx.event_type == EventType.ISSUE_OPENED:
             return await self._handle_issue_opened(ctx)

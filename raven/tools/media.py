@@ -373,8 +373,8 @@ async def video_thumbnail(filepath: str, time_sec: float = 1.0, size: str = "320
         buf = BytesIO()
         thumb.save(buf, format="JPEG", quality=85)
         b64 = base64.b64encode(buf.getvalue()).decode()
-    except Exception:
-        logger.debug("Thumbnail base64 encoding failed")
+    except Exception as e:
+        logger.debug("Thumbnail base64 encoding failed: {}", e)
         b64 = ""
 
     lines = [

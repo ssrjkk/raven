@@ -95,7 +95,7 @@ class TestFaultInjector:
         assert result["error"] == ""
 
     @pytest.mark.asyncio
-    async def test_inject_network_latency_simulated(self):
+    async def test_inject_network_latency(self):
         config = FaultConfig(
             fault_type=FaultType.NETWORK_LATENCY,
             target="eth0",
@@ -104,32 +104,31 @@ class TestFaultInjector:
         )
         result = await self.injector.inject(config)
         assert result["details"]["latency_ms"] == 1500.0
-        assert result["details"]["simulated"] is True
 
     @pytest.mark.asyncio
-    async def test_inject_disk_fill_simulated(self):
+    async def test_inject_disk_fill(self):
         config = FaultConfig(
             fault_type=FaultType.DISK_FILL, intensity=0.5, duration_sec=0.01
         )
         result = await self.injector.inject(config)
         assert result["details"]["fill_percent"] == 75.0
-        assert result["details"]["simulated"] is True
+        assert "bytes_written" in result["details"] or "error" in result["details"]
 
     @pytest.mark.asyncio
-    async def test_inject_cpu_storm_simulated(self):
+    async def test_inject_cpu_storm(self):
         config = FaultConfig(
             fault_type=FaultType.CPU_STORM, intensity=0.5, duration_sec=0.01
         )
         result = await self.injector.inject(config)
-        assert result["details"]["simulated"] is True
+        assert "cores" in result["details"]
 
     @pytest.mark.asyncio
-    async def test_inject_memory_leak_simulated(self):
+    async def test_inject_memory_leak(self):
         config = FaultConfig(
             fault_type=FaultType.MEMORY_LEAK, intensity=0.5, duration_sec=0.01
         )
         result = await self.injector.inject(config)
-        assert result["details"]["simulated"] is True
+        assert result["details"]["mb"] == 512
 
     @pytest.mark.asyncio
     async def test_recover_fault(self):
