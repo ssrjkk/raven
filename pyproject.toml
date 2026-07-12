@@ -72,6 +72,7 @@ dev = [
     "pre-commit>=3.0,<5.0",
 ]
 media = ["ffmpeg-python>=0.2.0,<1.0"]
+re = ["capstone>=5.0,<6.0", "pyelftools>=0.31,<1.0", "pefile>=2023,<2024"]
 all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,voice,dev,browser,vector,numba,crdt,profiling,chaos,postgres,media]"]
 
 [project.scripts]

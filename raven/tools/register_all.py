@@ -28,6 +28,7 @@ from raven.tools.notify import register_notify_tools
 from raven.tools.plugin import register_plugin_tools
 from raven.tools.process import register_process_tools
 from raven.tools.rag import register_rag_tools
+from raven.tools.reverse_engineering import register_re_tools
 from raven.tools.shell import register_shell_tools
 from raven.tools.tests import register_test_tools
 from raven.tools.utils import register_util_tools
@@ -67,6 +68,7 @@ def register_all_tools(registry: ToolRegistry) -> ToolRegistry:
     register_github_tools(registry)
     register_plugin_tools(registry)
     register_workflow_tools(registry)
+    register_re_tools(registry)
     return registry
 
 
