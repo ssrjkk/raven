@@ -283,7 +283,7 @@ def upgrade(version: str | None) -> None:
             pip_cmd.append(f"ravencode=={version}")
         else:
             pip_cmd.append("ravencode")
-        result = subprocess.run(pip_cmd, capture_output=True, text=True)
+        result = subprocess.run(pip_cmd, capture_output=True, text=True)  # noqa: S603
         if result.returncode == 0:
             click.echo("Upgrade successful!")
         else:

@@ -74,7 +74,7 @@ dev = [
     "pre-commit>=3.0,<5.0",
 ]
 media = ["ffmpeg-python>=0.2.0,<1.0"]
-all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,voice,dev,numba,rag,ml,ner,crdt,profiling,chaos,postgres,media]"]
+all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,voice,dev,numba,crdt,profiling,chaos,postgres,media]"]
 
 [project.scripts]
 raven = "raven.cli.main:cli"
@@ -124,10 +124,10 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "S"]
-ignore = ["E501", "SIM108", "S101", "S104", "S110", "S603", "S607"]
+ignore = ["E501", "SIM108", "S101", "S104"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*" = ["F401", "ANN", "S101", "S102", "S105", "S106", "S108", "S604", "B017", "N806", "SIM117"]
+"tests/**/*" = ["F401", "ANN", "S101", "S102", "S105", "S106", "S108", "S603", "S604", "S607", "B017", "N806", "SIM117"]
 "*__init__.py" = ["F401"]
 
 [tool.ruff.format]

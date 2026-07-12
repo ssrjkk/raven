@@ -63,8 +63,8 @@ class GitIntegration:
         self._llm = llm_provider
 
     def _run(self, *args: str) -> tuple[str, str]:
-        result = subprocess.run(
-            ["git", "-C", str(self._repo), *args],
+        result = subprocess.run(  # noqa: S603
+            ["git", "-C", str(self._repo), *args],  # noqa: S607
             capture_output=True, text=True, timeout=_GIT_TIMEOUT,
         )
         return result.stdout.strip(), result.stderr.strip()

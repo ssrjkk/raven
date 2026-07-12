@@ -11,10 +11,10 @@ from uuid import uuid4
 from loguru import logger
 
 from raven.core.auth import RBAC, Permission
+from raven.core.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from raven.core.config import settings
 from raven.core.context_window import ContextWindowConfig, ContextWindowManager
 from raven.core.gateway.command_handlers import CommandHandlersMixin
-from services.observability_sdk.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 
 if TYPE_CHECKING:
     from raven.channels.base import BaseChannel

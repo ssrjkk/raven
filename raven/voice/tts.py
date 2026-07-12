@@ -113,7 +113,18 @@ class TextToSpeech:
                 f.write(text)
 
     def _synthesize_macos_say(self, text: str, output_path: str):
-        subprocess.run(["say", "-o", output_path, text], capture_output=True, timeout=30)
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write(text)
+            tmp = f.name
+        try:
+            subprocess.run(  # noqa: S603
+                ["say", "-o", output_path, "-f", tmp],  # noqa: S607
+                capture_output=True, timeout=30,
+            )
+        finally:
+            Path(tmp).unlink(missing_ok=True)
 
     def _synthesize_edge(self, text: str, output_path: str = "") -> str:
         try:

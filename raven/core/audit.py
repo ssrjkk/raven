@@ -104,8 +104,8 @@ def _restrict_key_file(path: Path):
         if os.name == "nt":
             username = os.environ.get("USERNAME") or os.environ.get("USER", "")
             if username:
-                subprocess.run(
-                    ["icacls", str(path), "/inheritance:r", "/grant", f"{username}:F"],
+                subprocess.run(  # noqa: S603
+                    ["icacls", str(path), "/inheritance:r", "/grant", f"{username}:F"],  # noqa: S607
                     capture_output=True,
                 )
     except Exception as exc:

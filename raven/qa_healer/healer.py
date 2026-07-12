@@ -158,7 +158,7 @@ async def heal_test_failure(
 
 
 def _run_git(repo: Path, *args: str) -> str:
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603
         ["git"] + list(args),
         capture_output=True,
         text=True,

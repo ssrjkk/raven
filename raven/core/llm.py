@@ -445,8 +445,8 @@ class VertexAIProvider(LLMProvider):
             return self._token
         import subprocess
         try:
-            result = subprocess.run(
-                ["gcloud", "auth", "print-access-token"],
+            result = subprocess.run(  # noqa: S603
+                ["gcloud", "auth", "print-access-token"],  # noqa: S607
                 capture_output=True, text=True, timeout=30,
             )
             if result.returncode == 0:

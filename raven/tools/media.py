@@ -478,12 +478,12 @@ async def video_extract_frames(filepath: str, interval_sec: float = 5.0, max_fra
                     b64 = base64.b64encode(f.read()).decode()
                 previews.append(f"data:image/jpeg;base64,{b64}")
             except Exception:
-                pass
-        lines = [
-            f"Extracted {len(frame_paths)} frames from {path.name}",
-            f"Interval: {interval_sec}s, Size: {size}",
-            f"Output: {out_dir}",
-        ]
+                logger.warning("Failed to generate preview for frame")
+            lines = [
+                f"Extracted {len(frame_paths)} frames from {path.name}",
+                f"Interval: {interval_sec}s, Size: {size}",
+                f"Output: {out_dir}",
+            ]
         for p in previews:
             lines.append(f"![frame]({p})")
         return "\n".join(lines)

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from loguru import logger
+
 _BROWSER: Any = None
 _BROWSER_CONTEXT: Any = None
 _PAGE: Any = None
@@ -86,7 +88,7 @@ async def browser_close() -> str:
         if _BROWSER:
             await _BROWSER.close()
     except Exception:
-        pass
+        logger.warning("Failed to close browser resources")
     _PAGE = None
     _BROWSER_CONTEXT = None
     _BROWSER = None

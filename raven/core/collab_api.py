@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from loguru import logger
 from pydantic import BaseModel
 
 from raven.unique.collaboration import CollaborationManager, TextChange, WebSocketManager
@@ -207,7 +208,7 @@ def create_collab_router() -> APIRouter:
         except WebSocketDisconnect:
             pass
         except Exception:
-            pass
+            logger.warning("WebSocket handler error")
         finally:
             wsm = _get_ws_manager()
             await wsm.disconnect(session_id, user_id, websocket)

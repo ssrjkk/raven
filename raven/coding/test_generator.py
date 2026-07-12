@@ -389,7 +389,7 @@ class TestGenerator:
             return TestResult(passed=False, coverage=0.0, test_count=0)
 
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: S603
                 [
                     sys.executable, "-m", "pytest", str(test_file),
                     f"--cov={src.parent}",

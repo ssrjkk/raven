@@ -1707,7 +1707,7 @@ def upgrade():
     os.chdir(str(repo))
     if (repo / ".git").is_dir():
         console.print("[*] Pulling latest code...")
-        r = subprocess.run(["git", "pull", "--rebase"], capture_output=True, text=True, timeout=60)
+        r = subprocess.run(["git", "pull", "--rebase"], capture_output=True, text=True, timeout=60)  # noqa: S603, S607
         if r.returncode != 0:
             console.print(f"[red]Git pull failed: {r.stderr.strip()}[/red]")
             raise SystemExit(1)
@@ -1721,7 +1721,7 @@ def upgrade():
     web_dir = repo / "web"
     if web_dir.is_dir() and (web_dir / "package.json").is_file():
         console.print("[*] Updating web frontend...")
-        r = subprocess.run(["npm", "install"], capture_output=True, text=True, cwd=str(web_dir), timeout=120)
+        r = subprocess.run(["npm", "install"], capture_output=True, text=True, cwd=str(web_dir), timeout=120)  # noqa: S603, S607
         if r.returncode == 0:
             console.print("[green]  OK[/green]")
     console.print("\n[green]Upgrade complete! Run 'raven start' to apply.[/green]")

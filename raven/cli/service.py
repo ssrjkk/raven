@@ -18,7 +18,7 @@ IS_MACOS = sys.platform == "darwin"
 def _find_raven() -> str:
     """Return the path to the 'raven' executable."""
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603
             ["which", "raven"] if not IS_WINDOWS else ["where", "raven"],
             capture_output=True, text=True, timeout=5,
         )
@@ -239,7 +239,7 @@ def _uninstall_launchd():
 
 def _run_python(module: str, *args: str):
     cmd = [sys.executable, "-m", module, *args]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)  # noqa: S603
     if result.returncode != 0:
         console.print(f"[yellow]Command failed ({result.returncode}): {' '.join(cmd)}[/yellow]")
         if result.stderr:
@@ -247,8 +247,8 @@ def _run_python(module: str, *args: str):
 
 
 def _run_systemctl(action: str):
-    result = subprocess.run(
-        ["systemctl", action, "raven.service"],
+    result = subprocess.run(  # noqa: S603
+        ["systemctl", action, "raven.service"],  # noqa: S607
         capture_output=True, text=True, timeout=30,
     )
     if result.returncode != 0:
@@ -256,8 +256,8 @@ def _run_systemctl(action: str):
 
 
 def _run_launchctl(action: str, target: str = "com.raven.ai"):
-    result = subprocess.run(
-        ["launchctl", action, target],
+    result = subprocess.run(  # noqa: S603
+        ["launchctl", action, target],  # noqa: S607
         capture_output=True, text=True, timeout=15,
     )
     if result.returncode != 0 and action != "list":
