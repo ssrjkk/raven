@@ -8,12 +8,8 @@ from loguru import logger
 
 from raven.core.config import settings
 from raven.core.llm import LLMResponse, LLMRouter
+from raven.core.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError, CircuitBreakerState
 from raven.core.metrics import metrics
-from services.observability_sdk.circuit_breaker import (
-    CircuitBreaker,
-    CircuitBreakerOpenError,
-    CircuitBreakerState,
-)
 
 
 class ModelConfig:
