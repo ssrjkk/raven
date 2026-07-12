@@ -6,17 +6,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from loguru import logger
-
-try:
-    import uvloop
-
-    uvloop.install()
-except ImportError:
-    logger.debug("uvloop not available, using asyncio")
-
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from loguru import logger
 from pydantic import BaseModel
 
 from raven.core._json import json
@@ -196,20 +188,13 @@ class RavenFlowDaemon:
         @app.websocket("/ws")
         async def websocket_endpoint(ws: WebSocket):
             token = ws.query_params.get("token", "")
-            if token:
-                payload = await _validate_token(token)
-                if payload:
-                    ws.state.user_id = payload.get("sub", "anonymous")
-                    ws.state.role = payload.get("role", "user")
-                    logger.debug("WebSocket authenticated: user_id={}", ws.state.user_id)
-                else:
-                    ws.state.user_id = "anonymous"
-                    ws.state.role = "user"
-                    logger.debug("WebSocket invalid token, continuing as anonymous")
-            else:
-                ws.state.user_id = "anonymous"
-                ws.state.role = "user"
-                logger.debug("WebSocket no token provided, continuing as anonymous")
+            payload = await _validate_token(token)
+            if payload is None:
+                await ws.close(code=1008, reason="Authentication required")
+                return
+            ws.state.user_id = payload.get("sub", "anonymous")
+            ws.state.role = payload.get("role", "user")
+            logger.debug("WebSocket authenticated: user_id={}", ws.state.user_id)
 
             await ws.accept()
             logger.info("RavenFlow WebSocket connected (user={})", ws.state.user_id)
@@ -270,6 +255,9 @@ class RavenFlowDaemon:
             return session
 
     async def start(self) -> None:
+        import uvloop
+
+        uvloop.install()
         setup_logging()
         import uvicorn
 

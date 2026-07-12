@@ -265,31 +265,35 @@ def doctor():
 
     has_any_key = bool(
         cfg.get("openrouter_api_key")
+        or settings.openrouter_api_key
         or cfg.get("anthropic_api_key")
+        or settings.anthropic_api_key
         or cfg.get("openai_api_key")
+        or settings.openai_api_key
         or cfg.get("ollama_base_url")
+        or settings.ollama_base_url
     )
     checks.append(("LLM Provider", "[OK] Configured" if has_any_key else "[!]️  No provider configured"))
 
     provider_names = []
-    if cfg.get("openrouter_api_key"):
+    if cfg.get("openrouter_api_key") or settings.openrouter_api_key:
         provider_names.append("OpenRouter")
-    if cfg.get("anthropic_api_key"):
+    if cfg.get("anthropic_api_key") or settings.anthropic_api_key:
         provider_names.append("Anthropic")
-    if cfg.get("openai_api_key"):
+    if cfg.get("openai_api_key") or settings.openai_api_key:
         provider_names.append("OpenAI")
-    if cfg.get("ollama_base_url"):
+    if cfg.get("ollama_base_url") or settings.ollama_base_url:
         provider_names.append("Ollama")
     if provider_names:
         checks.append(("Providers", ", ".join(provider_names)))
 
-    checks.append(("Default Model", cfg.get("default_model", "—")))
-    checks.append(("Telegram", "[OK] Configured" if cfg.get("telegram_bot_token") else "[!]️  Not set"))
-    checks.append(("Discord", "[OK] Configured" if cfg.get("discord_bot_token") else "[!]️  Not set"))
-    checks.append(("Slack", "[OK] Configured" if cfg.get("slack_bot_token") else "[!]️  Not set"))
+    checks.append(("Default Model", cfg.get("default_model") or settings.default_model or "—"))
+    checks.append(("Telegram", "[OK] Configured" if (cfg.get("telegram_bot_token") or settings.telegram_bot_token) else "[!]️  Not set"))
+    checks.append(("Discord", "[OK] Configured" if (cfg.get("discord_bot_token") or settings.discord_bot_token) else "[!]️  Not set"))
+    checks.append(("Slack", "[OK] Configured" if (cfg.get("slack_bot_token") or settings.slack_bot_token) else "[!]️  Not set"))
     checks.append(("DM Policy", cfg.get("dm_policy", "pairing")))
-    checks.append(("Web Port", str(cfg.get("web_port", 18888))))
-    checks.append(("Web Secret Key", "[OK] Set" if cfg.get("web_secret_key") else "[!]️  Not set"))
+    checks.append(("Web Port", str(cfg.get("web_port") or settings.web_port)))
+    checks.append(("Web Secret Key", "[OK] Set" if (cfg.get("web_secret_key") or settings.web_secret_key) else "[!]️  Not set"))
 
     import importlib.util
     has_crypto = importlib.util.find_spec("cryptography")
