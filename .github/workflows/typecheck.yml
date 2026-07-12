@@ -10,7 +10,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python
-      - run: mypy raven/ ravencode/ --ignore-missing-imports
+      - run: python -m mypy --version
+      - run: python -m mypy raven/ ravencode/ --ignore-missing-imports
   golang:
     runs-on: ubuntu-latest
     steps:

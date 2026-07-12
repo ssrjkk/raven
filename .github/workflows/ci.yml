@@ -39,8 +39,10 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -e ".[dev]"
+      - name: Check mypy version
+        run: python -m mypy --version
       - name: Run mypy
-        run: mypy raven/ aios/ ravencode/ --ignore-missing-imports
+        run: python -m mypy raven/ aios/ ravencode/ --ignore-missing-imports
 
   test:
     name: Tests (pytest)
