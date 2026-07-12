@@ -106,84 +106,6 @@ volumes:
   prometheus-data:
 """
 
-    COMPOSE_CONTENT["micro"] = """\
-services:
-  traefik:
-    image: traefik:latest
-    container_name: raven-traefik
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-
-  nats:
-    image: nats:latest
-    container_name: raven-nats
-    restart: unless-stopped
-    ports:
-      - "4222:4222"
-    command: ["-js"]
-
-  gateway:
-    build: services/gateway
-    container_name: raven-gateway
-    restart: unless-stopped
-    environment:
-      - NATS_URL=nats://nats:4222
-      - RAVEN_LLM_PROVIDER=${RAVEN_LLM_PROVIDER:-openrouter}
-      - RAVEN_DEFAULT_MODEL=${RAVEN_DEFAULT_MODEL:-openrouter/google/gemini-2.0-flash-001}
-    depends_on:
-      - nats
-      - auth
-
-  auth:
-    build: services/auth
-    container_name: raven-auth
-    restart: unless-stopped
-    ports:
-      - "50051"
-    depends_on:
-      - nats
-
-  agent-core:
-    build: services/agent-core
-    container_name: raven-agent-core
-    restart: unless-stopped
-    depends_on:
-      - nats
-      - rag-service
-
-  monitor-engine:
-    build: services/monitor-engine
-    container_name: raven-monitor-engine
-    restart: unless-stopped
-    depends_on:
-      - nats
-
-  rag-service:
-    build: services/rag-service
-    container_name: raven-rag-service
-    restart: unless-stopped
-    depends_on:
-      - nats
-
-  task-engine:
-    build: services/task-engine
-    container_name: raven-task-engine
-    restart: unless-stopped
-    depends_on:
-      - nats
-
-  code-service:
-    build: services/code-service
-    container_name: raven-code-service
-    restart: unless-stopped
-    depends_on:
-      - nats
-"""
 
     # Substitute port in healthcheck URLs
     for key in COMPOSE_CONTENT:
@@ -197,7 +119,6 @@ def _show_deploy_table(mode: str) -> None:
     details = {
         "minimal": "Raven only, no dependencies",
         "full": "Raven + NATS + Grafana + Prometheus",
-        "micro": "15 microservices with Traefik routing",
     }
     table = Table(show_header=False)
     table.add_column("Setting", style="cyan")
@@ -224,7 +145,7 @@ def deploy() -> None:
         console.print("[yellow]Aborted.[/yellow]")
         return
 
-    mode = Prompt.ask("Deployment mode", choices=["minimal", "full", "micro"], default="minimal")
+    mode = Prompt.ask("Deployment mode", choices=["minimal", "full"], default="minimal")
     _show_deploy_table(mode)
 
     if not Confirm.ask("Generate docker-compose file?", default=True):
@@ -239,33 +160,6 @@ def deploy() -> None:
     content = COMPOSE_CONTENT[mode]
     output.write_text(content)
     console.print(f"[green]Written {output}[/green]")
-
-    if mode == "micro":
-        traefik_dir = root / "traefik"
-        traefik_dir.mkdir(exist_ok=True)
-        traefik_config = traefik_dir / "dynamic.yml"
-        if not traefik_config.exists():
-            traefik_config.write_text("""\
-http:
-  routers:
-    api:
-      rule: "PathPrefix(`/api`)"
-      service: gateway
-      middlewares:
-        - cors
-  services:
-    gateway:
-      loadBalancer:
-        servers:
-          - url: "http://gateway:8000"
-  middlewares:
-    cors:
-      headers:
-        accessControlAllowOriginList:
-          - "http://localhost:5173"
-          - "http://localhost:3000"
-""")
-            console.print(f"[green]Written {traefik_config}[/green]")
 
     console.print()
     name = output.name
