@@ -42,7 +42,15 @@ jobs:
       - name: Check mypy version
         run: python -m mypy --version
       - name: Run mypy
-        run: python -m mypy raven/ aios/ ravencode/ --ignore-missing-imports
+        run: |
+          python -m mypy raven/ aios/ ravencode/ --ignore-missing-imports 2>&1 | tee mypy_output.txt
+      - name: Upload mypy output
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: mypy-output
+          path: mypy_output.txt
+          retention-days: 7
 
   test:
     name: Tests (pytest)
