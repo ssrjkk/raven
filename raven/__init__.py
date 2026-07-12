@@ -15,6 +15,7 @@ from raven.core.llm import (
 )
 from raven.core.models import IncomingMessage, Message, PluginTool, Session
 from raven.core.plugin_loader import PluginLoader
+from raven.core.task_queue import Task, TaskQueue, TaskStatus
 
 __all__ = [
     "Settings",
@@ -37,4 +38,7 @@ __all__ = [
     "Agent",
     "AgentConfig",
     "AgentRegistry",
+    "TaskQueue",
+    "Task",
+    "TaskStatus",
 ]
