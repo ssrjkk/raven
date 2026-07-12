@@ -59,9 +59,17 @@ raven onboard   # インタラクティブセットアップウィザード（LL
 raven start
 `
 
+### ポート
+
+| ポート | サービス | 説明 |
+|--------|----------|------|
+| **18888** | Web UI | Webチャット、ダッシュボード、Monaco IDE、設定 |
+| **18789** | RavenFlow ゲートウェイ | WebSocketストリーミング対応マルチエージェントオーケストレータデーモン |
+
 ブラウザで開く:
 - **http://localhost:18888** — Webチャット
 - **http://localhost:18888/dashboard** — ダッシュボード
+- **http://localhost:18888/ide** — Monacoエディタ（AIサイドバー付き）
 
 ### Docker
 

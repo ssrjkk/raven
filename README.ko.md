@@ -59,9 +59,17 @@ raven onboard   # 대화형 설정 마법사 (LLM, Telegram, 채널)
 raven start
 `
 
+### 포트
+
+| 포트 | 서비스 | 설명 |
+|------|--------|------|
+| **18888** | Web UI | 웹 채팅, 대시보드, Monaco IDE, 설정 |
+| **18789** | RavenFlow 게이트웨이 | WebSocket 스트리밍을 지원하는 멀티 에이전트 오케스트레이터 데몬 |
+
 브라우저에서 열기:
 - **http://localhost:18888** — 웹 채팅
 - **http://localhost:18888/dashboard** — 대시보드
+- **http://localhost:18888/ide** — Monaco 편집기 (AI 사이드바 포함)
 
 ### Docker
 

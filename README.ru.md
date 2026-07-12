@@ -63,9 +63,17 @@ raven onboard   # Интерактивный мастер настройки (LL
 raven start
 `
 
+### Порты
+
+| Порт | Сервис | Описание |
+|------|--------|----------|
+| **18888** | Web UI | Веб-чат, дашборд, Monaco IDE, настройки |
+| **18789** | RavenFlow Gateway | Демон multi-agent оркестратора с WebSocket стримингом |
+
 Откройте в браузере:
 - **http://localhost:18888** — веб-чат
 - **http://localhost:18888/dashboard** — дашборд
+- **http://localhost:18888/ide** — Monaco редактор с AI-панелью
 
 ### Docker
 

@@ -59,9 +59,17 @@ raven onboard   # 交互式设置向导（LLM、Telegram、渠道）
 raven start
 `
 
+### 端口
+
+| 端口 | 服务 | 描述 |
+|------|------|------|
+| **18888** | Web UI | 网页聊天、仪表板、Monaco IDE、设置 |
+| **18789** | RavenFlow 网关 | 多智能体协调器守护进程，支持WebSocket流式传输 |
+
 在浏览器中打开：
 - **http://localhost:18888** — 网页聊天
 - **http://localhost:18888/dashboard** — 仪表板
+- **http://localhost:18888/ide** — Monaco编辑器（含AI侧边栏）
 
 ### Docker
 
