@@ -1,3 +1,6 @@
+import asyncio
+from unittest.mock import patch
+
 import pytest
 
 from services.observability_sdk.retry import DEFAULT_RETRY, FAST_RETRY, NO_RETRY, SLOW_RETRY, RetryPolicy
@@ -51,8 +54,9 @@ class TestRetryPolicy:
 
     @pytest.mark.asyncio
     async def test_slow_retry_limits(self):
-        with pytest.raises(ConnectionError):
-            await SLOW_RETRY.execute(async_fail_conn, operation_name="slow")
+        with patch.object(asyncio, "sleep", return_value=None):
+            with pytest.raises(ConnectionError):
+                await SLOW_RETRY.execute(async_fail_conn, operation_name="slow")
 
     @pytest.mark.asyncio
     async def test_non_retryable_exception(self):

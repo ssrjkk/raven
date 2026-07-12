@@ -66,7 +66,7 @@ dev = [
     "pytest-asyncio>=0.24,<2.0",
     "pytest-cov>=5.0,<7.0",
     "ruff>=0.5,<1.0",
-    "mypy>=1.10,<2.0",
+    "mypy>=1.10,<3.0",
     "pre-commit>=3.0,<5.0",
 ]
 media = ["ffmpeg-python>=0.2.0,<1.0"]
@@ -95,7 +95,7 @@ exclude = ['services/', 'daemon/', 'deploy/', 'build/', '\.git/', 'extension/', 
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --tb=short --no-header --alluredir=allure-results --cov=raven --cov=ravencode --cov=aios --cov-report=term-missing --cov-config=.coveragerc"
+addopts = "-q --tb=short --no-header --cov=raven --cov=ravencode --cov=aios --cov-report=term-missing --cov-config=.coveragerc"
 asyncio_mode = "auto"
 log_cli_level = "WARNING"
 markers = [

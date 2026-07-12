@@ -9,6 +9,7 @@ from raven.tools.browser import register_browser_tools
 from raven.tools.canvas import register_canvas_tools
 from raven.tools.chaos import register_chaos_tools
 from raven.tools.ci import register_ci_tools
+from raven.tools.code_analysis import register_code_analysis_tools
 from raven.tools.collaboration import register_collaboration_tools
 from raven.tools.cost_management import register_cost_management_tools
 from raven.tools.db import register_db_tools
@@ -61,6 +62,7 @@ def register_all_tools(registry: ToolRegistry) -> ToolRegistry:
     register_email_tools(registry)
     register_analytics_tools(registry)
     register_ab_testing_tools(registry)
+    register_code_analysis_tools(registry)
     register_cost_management_tools(registry)
     register_github_tools(registry)
     register_plugin_tools(registry)

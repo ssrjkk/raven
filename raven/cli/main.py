@@ -1282,6 +1282,88 @@ def code_end(session_id: str):
     console.print(f"[green]Session {session_id[:8]} ended[/green]")
 
 
+@code.command("analyze")
+@click.argument("path", default=".", required=False)
+@click.option("--all", "show_all", is_flag=True, help="Show all lines including unannotated")
+def code_analyze(path: str, show_all: bool):
+    """Analyze codebase structure — dependencies, call graph, symbols"""
+    from pathlib import Path
+
+    from rich.panel import Panel
+
+    from raven.core.coder.analyzer import CodeAnalyzer
+
+    p = Path(path).expanduser().resolve()
+    analyzer = CodeAnalyzer(str(p.parent if p.is_file() else p))
+    if p.is_file():
+        result = analyzer.explain_file(p)
+        console.print(result.summary)
+        if result.symbols:
+            console.print(Panel.fit(
+                "\n".join(f"  {s.name} ({s.kind}, line {s.line})" + (f" — {s.docstring[:50]}" if s.docstring else "")
+                          for s in result.symbols),
+                title="Symbols",
+            ))
+        if result.call_graph:
+            table = Table(title="Call Graph")
+            table.add_column("Caller", style="cyan")
+            table.add_column("Callee", style="green")
+            table.add_column("Line", style="dim")
+            for caller, callee, line in sorted(result.call_graph, key=lambda x: x[2]):
+                table.add_row(caller, callee, str(line))
+            console.print(table)
+    else:
+        results = analyzer.analyze(p)
+        console.print(analyzer.format_analysis(results))
+
+
+@code.command("explain")
+@click.argument("path")
+@click.option("--all", "show_all", is_flag=True, help="Show every line")
+@click.option("--function", "-f", "func_name", default="", help="Trace a specific function")
+def code_explain(path: str, show_all: bool, func_name: str):
+    """Explain code line-by-line with annotations and origin info"""
+    from pathlib import Path
+
+    from rich.table import Table
+
+    from raven.core.coder.analyzer import CodeAnalyzer
+
+    p = Path(path).expanduser().resolve()
+    if not p.exists():
+        console.print(f"[red]File not found: {p}[/red]")
+        return
+    analyzer = CodeAnalyzer(str(p.parent))
+    if func_name:
+        trace = analyzer.trace_function(p, func_name)
+        console.print(trace)
+        return
+    result = analyzer.explain_file(p)
+    console.print(result.summary)
+    if not result.annotated_lines:
+        return
+    table = Table(title=f"Annotations: {p.name}", show_lines=True)
+    table.add_column("Line", style="dim", width=4)
+    table.add_column("Code", style="white", width=60)
+    table.add_column("Explanation / Origin", style="yellow", width=50)
+    for al in result.annotated_lines:
+        if not show_all and not al.explanation and not al.origin_info:
+            continue
+        label = ""
+        if al.is_definition:
+            label = "[bold]▸[/bold] "
+        elif al.is_import:
+            label = "[blue]→[/blue] "
+        elif al.is_call:
+            label = "[green]↪[/green] "
+        detail = al.explanation
+        if al.origin_info:
+            detail = (detail + "; " if detail else "") + al.origin_info
+        code_display = al.code.rstrip()[:58]
+        table.add_row(str(al.number), f"{label}{code_display}", detail[:48] if detail else "")
+    console.print(table)
+
+
 @cli.group()
 def routine():
     """Manage automated routines (briefing, email, file organization)"""

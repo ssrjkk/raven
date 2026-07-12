@@ -1,5 +1,5 @@
 [run]
-source = raven
+source = raven,ravencode,aios
 omit = */tests/*,*/.venv/*,*__init__*,*_pb2*,setup.py
 
 [report]
