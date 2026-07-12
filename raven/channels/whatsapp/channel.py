@@ -5,7 +5,7 @@ from typing import Any
 from loguru import logger
 
 from raven.channels.enterprise_base import EnterpriseChannel
-from raven.core.config import settings
+from raven.core.channel_config import get_channel_config
 from raven.core.models import IncomingMessage, Message
 
 
@@ -13,10 +13,12 @@ class WhatsAppChannel(EnterpriseChannel):
     channel_id = "whatsapp"
 
     async def _start(self):
-        self._token = settings.whatsapp_token or ""
-        self._phone_id = settings.whatsapp_phone_id or ""
+        self._token = get_channel_config("whatsapp").get("token", "")
+        self._phone_id = get_channel_config("whatsapp").get("phone_id", "")
 
     async def _stop(self):
+        self._token = ""
+        self._phone_id = ""
         logger.info("[whatsapp] channel stopped")
 
     async def handle_webhook(self, body: dict[str, Any]) -> bool:

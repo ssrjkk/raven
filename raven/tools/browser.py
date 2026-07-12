@@ -8,6 +8,8 @@ import json
 import socket
 from urllib.parse import urlparse
 
+from loguru import logger
+
 from raven.core.browser_agent import BrowserAgent
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
@@ -43,7 +45,7 @@ def _validate_url(url: str) -> None:
                 except ValueError:
                     continue
         except (socket.gaierror, OSError):
-            pass
+            logger.warning("SSRF guard: DNS resolution failed for {}", host)
 
 
 async def _get_playwright():

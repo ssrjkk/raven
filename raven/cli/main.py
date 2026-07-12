@@ -288,9 +288,10 @@ def doctor():
         checks.append(("Providers", ", ".join(provider_names)))
 
     checks.append(("Default Model", cfg.get("default_model") or settings.default_model or "—"))
-    checks.append(("Telegram", "[OK] Configured" if (cfg.get("telegram_bot_token") or settings.telegram_bot_token) else "[!]️  Not set"))
-    checks.append(("Discord", "[OK] Configured" if (cfg.get("discord_bot_token") or settings.discord_bot_token) else "[!]️  Not set"))
-    checks.append(("Slack", "[OK] Configured" if (cfg.get("slack_bot_token") or settings.slack_bot_token) else "[!]️  Not set"))
+    from raven.core.channel_config import configured_channels
+
+    channel_list = configured_channels()
+    checks.append(("Channels", ", ".join(channel_list) if channel_list else "[!]️  None configured"))
     checks.append(("DM Policy", cfg.get("dm_policy", "pairing")))
     checks.append(("Web Port", str(cfg.get("web_port") or settings.web_port)))
     checks.append(("Web Secret Key", "[OK] Set" if (cfg.get("web_secret_key") or settings.web_secret_key) else "[!]️  Not set"))
@@ -1521,9 +1522,19 @@ def nodes_list():
 
 @nodes.command("pair")
 @click.argument("device_id")
-def nodes_pair(device_id: str):
+@click.option("--url", default=None, help="Node URL (auto-detected if omitted)")
+def nodes_pair(device_id: str, url: str | None):
     """Pair a new device node"""
-    console.print(f"[green]Device {device_id} pairing initiated (stub)[/green]")
+    import requests
+    node_url = url or f"http://{device_id}:18789"
+    try:
+        resp = requests.post(f"{node_url.rstrip('/')}/api/v1/pair", json={"device_id": device_id}, timeout=10)
+        if resp.ok:
+            console.print(f"[green]Device {device_id} paired successfully ({node_url})[/green]")
+        else:
+            console.print(f"[red]Device {device_id} pairing failed: {resp.status_code} {resp.text}[/red]")
+    except requests.RequestException as e:
+        console.print(f"[red]Device {device_id} pairing failed: {e}[/red]")
 
 
 @cli.group()

@@ -122,9 +122,27 @@ class CanvasManager:
         if not session:
             return None
         session.push_event({"component_id": component_id, "action": action, "data": data or {}})
-        if hasattr(session, "_action_handler"):
-            return session._action_handler(component_id, action, data or {})  # type: ignore[no-any-return]
-        return None
+
+        def _walk(c: CanvasComponent) -> CanvasComponent | None:
+            if c.id == component_id:
+                return c
+            for child in c.children:
+                found = _walk(child)
+                if found:
+                    return found
+            return None
+
+        if action in ("click", "select", "toggle"):
+            return {"status": "handled", "action": action}
+        elif action == "change" and data and session.root:
+            comp = _walk(session.root)
+            if comp and "value" in data:
+                comp.props["value"] = data["value"]
+            return {"status": "updated", "action": action}
+        elif action == "submit":
+            return {"status": "submitted", "data": data or {}}
+
+        return {"status": "queued", "action": action}
 
     def list_sessions(self) -> list[dict[str, Any]]:
         now = time.time()

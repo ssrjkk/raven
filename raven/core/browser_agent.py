@@ -40,7 +40,7 @@ def validate_url(url: str) -> None:
                 except ValueError:
                     continue
         except (socket.gaierror, OSError):
-            pass
+            logger.warning("SSRF guard: DNS resolution failed for {}", host)
 
 
 @dataclass
@@ -415,6 +415,7 @@ class BrowserAgent:
                 marker = " <-- active" if i == self._tab_index else ""
                 lines.append(f"  [{i}] {title} ({url}){marker}")
             except Exception:
+                logger.debug("Failed to get tab {} info, marking as closed", i)
                 lines.append(f"  [{i}] <closed>")
         return f"Tabs ({len(self._tabs)}):\n" + "\n".join(lines)
 

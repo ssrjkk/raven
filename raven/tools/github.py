@@ -206,7 +206,8 @@ def _resolve_oauth_token() -> str:
     try:
         from raven.core.secrets import secrets
         return secrets.get("github_oauth_token", "")
-    except Exception:
+    except Exception as e:
+        logger.debug("GitHub OAuth token resolve failed: {}", e)
         return ""
 
 

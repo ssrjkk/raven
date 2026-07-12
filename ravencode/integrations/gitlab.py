@@ -56,7 +56,8 @@ class GitLabClient:
             data = resp.json()
             import base64
             return base64.b64decode(data["content"]).decode("utf-8")
-        except httpx.HTTPStatusError:
+        except httpx.HTTPStatusError as e:
+            logger.debug("GitLab get_file failed: {}", e)
             return None
 
     async def create_branch(self, project_id: int | str, base: str, head: str) -> bool:

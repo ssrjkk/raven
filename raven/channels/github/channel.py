@@ -17,6 +17,7 @@ class GithubChannel(EnterpriseChannel):
         logger.info("[github] channel started")
 
     async def _stop(self):
+        self._token = ""
         logger.info("[github] channel stopped")
 
     async def handle_webhook(self, body: dict[str, Any], headers: dict[str, str] | None = None) -> bool:

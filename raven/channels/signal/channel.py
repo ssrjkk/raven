@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from raven.channels.enterprise_base import EnterpriseChannel
-from raven.core.config import settings
+from raven.core.channel_config import get_channel_config
 from raven.core.models import IncomingMessage, Message
 
 
@@ -12,7 +12,7 @@ class SignalChannel(EnterpriseChannel):
     DEFAULT_SIGNAL_URL = "http://localhost:8080"
 
     async def _start(self):
-        self._api_url = settings.signal_api_url or self.DEFAULT_SIGNAL_URL
+        self._api_url = get_channel_config("signal").get("api_url", self.DEFAULT_SIGNAL_URL)
         self._client = None
 
     async def _stop(self):

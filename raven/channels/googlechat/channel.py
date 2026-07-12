@@ -5,7 +5,7 @@ from typing import Any
 from loguru import logger
 
 from raven.channels.enterprise_base import EnterpriseChannel
-from raven.core.config import settings
+from raven.core.channel_config import get_channel_config
 from raven.core.models import IncomingMessage, Message
 
 
@@ -13,9 +13,10 @@ class GoogleChatChannel(EnterpriseChannel):
     channel_id = "googlechat"
 
     async def _start(self):
-        self._webhook_url = settings.googlechat_webhook_url or ""
+        self._webhook_url = get_channel_config("googlechat").get("webhook_url", "")
 
     async def _stop(self):
+        self._webhook_url = ""
         logger.info("[googlechat] channel stopped")
 
     async def handle_webhook(self, body: dict[str, Any]) -> bool:

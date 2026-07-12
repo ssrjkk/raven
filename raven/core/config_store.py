@@ -19,9 +19,7 @@ def _defaults_from_settings() -> dict[str, Any]:
         "openai_api_key": s.openai_api_key,
         "ollama_base_url": s.ollama_base_url,
         "default_model": s.default_model,
-        "telegram_bot_token": s.telegram_bot_token,
-        "discord_bot_token": s.discord_bot_token,
-        "slack_bot_token": s.slack_bot_token,
+
         "web_port": s.web_port,
         "web_secret_key": s.web_secret_key,
         "web_cors_origins": s.web_cors_origins,

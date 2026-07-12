@@ -178,7 +178,7 @@ class KnowledgeGraph:
                             self.add_relation(subj_ent.id, obj_ent.id, rel_type, {"source": document.source})
                             relations_added.append(f"{subj_ent.name} --{rel_type}--> {obj_ent.name}")
                         except ValueError:
-                            pass
+                            logger.debug("Duplicate relation skipped: {} --{}--> {}", subj_ent.name, rel_type, obj_ent.name)
 
     def _get_entity_span(self, token: Any, doc: Doc) -> str:
         for ent in doc.ents:
@@ -211,7 +211,7 @@ class KnowledgeGraph:
                             self.add_relation(source.id, target.id, rel_type)
                             relations_added.append(f"{source.name} --{rel_type}--> {target.name}")
                         except ValueError:
-                            pass
+                            logger.debug("Duplicate relation skipped: {} --{}--> {}", source.name, rel_type, target.name)
 
     def _extract_tech_keywords(self, document: Document, entities_added: list[str]) -> None:
         text_lower = document.text.lower()

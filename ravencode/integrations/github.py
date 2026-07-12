@@ -46,7 +46,8 @@ class GitHubClient:
             data = resp.json()
             import base64
             return base64.b64decode(data["content"]).decode("utf-8")
-        except httpx.HTTPStatusError:
+        except httpx.HTTPStatusError as e:
+            logger.debug("GitHub get_file failed: {}", e)
             return None
 
     async def create_branch(self, owner: str, repo: str, base: str, head: str) -> bool:
@@ -95,7 +96,8 @@ class GitHubClient:
                 json={"state": state, "description": description, "context": "ravencode"},
             )
             return True
-        except httpx.HTTPStatusError:
+        except httpx.HTTPStatusError as e:
+            logger.debug("GitHub set_commit_status failed: {}", e)
             return False
 
     async def get_issue(self, owner: str, repo: str, issue_number: int) -> dict[str, Any]:
@@ -110,7 +112,8 @@ class GitHubClient:
                 json={"state": "closed"},
             )
             return True
-        except httpx.HTTPStatusError:
+        except httpx.HTTPStatusError as e:
+            logger.debug("GitHub close_issue failed: {}", e)
             return False
 
     async def get_repo_labels(self, owner: str, repo: str) -> list[dict[str, Any]]:
@@ -125,7 +128,8 @@ class GitHubClient:
                 json={"labels": labels},
             )
             return True
-        except httpx.HTTPStatusError:
+        except httpx.HTTPStatusError as e:
+            logger.debug("GitHub add_labels failed: {}", e)
             return False
 
 

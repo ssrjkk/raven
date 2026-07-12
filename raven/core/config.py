@@ -37,28 +37,6 @@ class Settings(BaseSettings):
     tier_pro_rpm: int = 100
     tier_pro_concurrent: int = 5
 
-    telegram_bot_token: str = ""
-    discord_bot_token: str = ""
-    slack_bot_token: str = ""
-    slack_signing_secret: str = ""
-    matrix_homeserver: str = ""
-    matrix_access_token: str = ""
-    whatsapp_token: str = ""
-    whatsapp_phone_id: str = ""
-    googlechat_webhook_url: str = ""
-    signal_api_url: str = ""
-    irc_server: str = ""
-    irc_port: int = 6697
-    irc_nick: str = ""
-    irc_password: str = ""
-    irc_channels: str = ""
-    teams_webhook_url: str = ""
-    feishu_webhook_url: str = ""
-    feishu_app_id: str = ""
-    feishu_app_secret: str = ""
-    line_channel_token: str = ""
-    line_channel_secret: str = ""
-
     dm_policy: str = "pairing"
     web_port: int = 18888
     ravenflow_port: int = 18789
@@ -184,8 +162,6 @@ _honeytoken_keys = {
     "openrouter_api_key": "OPENROUTER_API_KEY",
     "anthropic_api_key": "ANTHROPIC_API_KEY",
     "openai_api_key": "OPENAI_API_KEY",
-    "telegram_bot_token": "TELEGRAM_BOT_TOKEN",
-    "slack_bot_token": "SLACK_BOT_TOKEN",
 }
 for _attr, _env_name in _honeytoken_keys.items():
     _val = getattr(settings, _attr, "")

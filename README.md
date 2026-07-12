@@ -91,9 +91,17 @@ raven onboard   # Interactive setup wizard (LLM, Telegram, channels)
 raven start
 ```
 
+### Ports
+
+| Port | Service | Description |
+|------|---------|-------------|
+| **18888** | Web UI | Web chat, Dashboard, Monaco IDE, Settings |
+| **18789** | RavenFlow Gateway | Multi-agent orchestrator daemon with WebSocket streaming |
+
 Open in your browser:
 - **http://localhost:18888** — web chat
 - **http://localhost:18888/dashboard** — dashboard
+- **http://localhost:18888/ide** — Monaco editor with AI sidebar
 
 ### Docker
 

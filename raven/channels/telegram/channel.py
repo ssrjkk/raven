@@ -12,7 +12,7 @@ from telegram.ext import MessageHandler as TGMessageHandler
 
 from raven.channels.base import BaseChannel
 from raven.channels.telegram.voice import download_voice, transcribe_voice
-from raven.core.config import settings
+from raven.core.channel_config import get_channel_config
 from raven.core.models import IncomingMessage, Message
 
 TELEGRAM_HELP = (
@@ -48,7 +48,7 @@ class TelegramChannel(BaseChannel):
     channel_id = "telegram"
 
     def __init__(self):
-        self._token = settings.telegram_bot_token
+        self._token = get_channel_config("telegram").get("bot_token", "")
         self._app: Application[Any, Any, Any, Any, Any, Any] | None = None
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
         self._ready = False
@@ -282,6 +282,11 @@ class TelegramChannel(BaseChannel):
     async def _cmd_reset(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.message is None:
             return
+        await self._incoming(
+            update,
+            "/new",
+            session_id=f"telegram:{self._chat_id(update)}:{uuid4().hex[:8]}",
+        )
         await update.message.reply_text("Session reset.")
 
     async def _cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):

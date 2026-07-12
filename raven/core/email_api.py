@@ -33,6 +33,7 @@ def _get_config() -> dict[str, str]:
             "imap_pass": getattr(settings, "EMAIL_IMAP_PASS", ""),
         }
     except Exception:
+        logger.debug("Failed to load email config from settings")
         return {}
 
 

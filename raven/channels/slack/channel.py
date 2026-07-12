@@ -7,7 +7,7 @@ from typing import Any
 from loguru import logger
 
 from raven.channels.enterprise_base import EnterpriseChannel
-from raven.core.config import settings
+from raven.core.channel_config import get_channel_config
 from raven.core.models import IncomingMessage, Message
 
 try:
@@ -23,8 +23,8 @@ class SlackChannel(EnterpriseChannel):
     channel_id = "slack"
 
     async def _start(self):
-        self._token = settings.slack_bot_token or ""
-        self._signing_secret = settings.slack_signing_secret or ""
+        self._token = get_channel_config("slack").get("bot_token", "")
+        self._signing_secret = get_channel_config("slack").get("signing_secret", "")
         if HAS_SLACK_SDK and self._token:
             self._client = AsyncWebClient(token=self._token)
         else:

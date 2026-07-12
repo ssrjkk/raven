@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from loguru import logger
 
 from raven.channels.base import BaseChannel
-from raven.core.config import settings
+from raven.core.channel_config import get_channel_config
 from raven.core.models import IncomingMessage, Message
 
 try:
@@ -45,7 +45,7 @@ class DiscordChannel(BaseChannel):
     channel_id = "discord"
 
     def __init__(self):
-        self._token = settings.discord_bot_token
+        self._token = get_channel_config("discord").get("bot_token", "")
         self._bot: commands.Bot | None = None
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
         self._ready = False

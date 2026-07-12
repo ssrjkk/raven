@@ -132,9 +132,7 @@ class WebChatChannel(BaseChannel):
                     msg_data = json.loads(data)
                     text = msg_data.get("text", "")
                     if text:
-                        result = await handler.handle_message(text)
-                        if not result.startswith("[aborted"):
-                            pass
+                        await handler.handle_message(text)
             except WebSocketDisconnect:
                 logger.debug("[webchat] stream client disconnected")
             except Exception as exc:
@@ -193,6 +191,7 @@ class WebChatChannel(BaseChannel):
             with contextlib.suppress(ConnectionError, RuntimeError):
                 await ws.close()
         self._connections.clear()
+        self._ready = False
 
     async def connect(self):
         if not self._ready:

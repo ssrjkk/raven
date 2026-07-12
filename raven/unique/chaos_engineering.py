@@ -565,14 +565,14 @@ class ChaosEngineering:
                     if after.get("cpu", 100) > threshold:
                         return False
                 except ValueError:
-                    pass
+                    logger.debug("Could not parse CPU threshold from criterion: {}", criterion)
             if "memory" in criterion_lower and "below" in criterion_lower:
                 try:
                     threshold = float("".join(c for c in criterion if c.isdigit() or c == "."))
                     if after.get("memory", 100) > threshold:
                         return False
                 except ValueError:
-                    pass
+                    logger.debug("Could not parse memory threshold from criterion: {}", criterion)
             if "recover" in criterion_lower:
                 injected = len(result.faults_injected)
                 recovered = len(result.faults_recovered)

@@ -5,7 +5,7 @@ from typing import Any
 from loguru import logger
 
 from raven.channels.enterprise_base import EnterpriseChannel
-from raven.core.config import settings
+from raven.core.channel_config import get_channel_config
 from raven.core.models import IncomingMessage, Message
 
 
@@ -13,10 +13,13 @@ class LINECChannel(EnterpriseChannel):
     channel_id = "line"
 
     async def _start(self):
-        self._token = settings.line_channel_token or ""
-        self._secret = settings.line_channel_secret or ""
+        cfg = get_channel_config("line")
+        self._token = cfg.get("channel_token", "")
+        self._secret = cfg.get("channel_secret", "")
 
     async def _stop(self):
+        self._token = ""
+        self._secret = ""
         logger.info("[line] channel stopped")
 
     async def handle_webhook(self, body: dict[str, Any]) -> bool:

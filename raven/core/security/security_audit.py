@@ -427,10 +427,12 @@ class SecurityAudit:
 
     def _check_token_expiry(self):
         c = self._add("token_expiry", "No expired or long-lived tokens detected", "low")
+        from raven.core.channel_config import get_channel_config
+
         tokens = {
-            "TELEGRAM_BOT_TOKEN": bool(settings.telegram_bot_token),
-            "DISCORD_BOT_TOKEN": bool(settings.discord_bot_token),
-            "SLACK_BOT_TOKEN": bool(settings.slack_bot_token),
+            "TELEGRAM_BOT_TOKEN": bool(get_channel_config("telegram").get("bot_token", "")),
+            "DISCORD_BOT_TOKEN": bool(get_channel_config("discord").get("bot_token", "")),
+            "SLACK_BOT_TOKEN": bool(get_channel_config("slack").get("bot_token", "")),
         }
         configured = sum(1 for v in tokens.values() if v)
         c.ok(f"{configured} token(s) configured (check expiry manually via provider dashboard)")

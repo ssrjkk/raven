@@ -61,6 +61,7 @@ def _get_openai_key() -> str:
     except Exception:
         import os
 
+        logger.debug("Failed to load openai_api_key from settings, falling back to env")
         return os.environ.get("OPENAI_API_KEY", "")
 
 

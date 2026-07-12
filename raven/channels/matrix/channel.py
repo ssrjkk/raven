@@ -6,7 +6,7 @@ from typing import Any
 from loguru import logger
 
 from raven.channels.enterprise_base import EnterpriseChannel
-from raven.core.config import settings
+from raven.core.channel_config import get_channel_config
 from raven.core.models import IncomingMessage, Message
 
 
@@ -14,8 +14,8 @@ class MatrixChannel(EnterpriseChannel):
     channel_id = "matrix"
 
     async def _start(self):
-        self._homeserver = settings.matrix_homeserver.rstrip("/") if settings.matrix_homeserver else ""
-        self._token = settings.matrix_access_token or ""
+        self._homeserver = get_channel_config("matrix").get("homeserver", "").rstrip("/") if get_channel_config("matrix").get("homeserver") else ""
+        self._token = get_channel_config("matrix").get("access_token", "")
         self._sync_token = ""
         self._sync_task: asyncio.Task[None] | None = None
         self._rooms: dict[str, str] = {}

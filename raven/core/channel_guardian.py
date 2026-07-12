@@ -55,6 +55,7 @@ class ChannelGuardian:
             from raven.core.config import settings
             rate = float(settings.rate_limit_max) / max(float(settings.rate_limit_window), 1.0)
         except Exception:
+            logger.debug("Failed to load rate_limit config, defaulting to 10.0")
             rate = 10.0
         self._channel_buckets[cid] = TokenBucket(rate=rate)
         self._error_counts[cid] = 0

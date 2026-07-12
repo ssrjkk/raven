@@ -54,6 +54,7 @@ async def _compute_diff(img_a: bytes, img_b: bytes) -> float:
     except ImportError:
         return -1.0
     except Exception:
+        logger.debug("Image diff comparison failed")
         return -1.0
 
 
@@ -195,6 +196,7 @@ def create_browser_router() -> APIRouter:
             try:
                 return {"started": True, "title": await _agent.get_title(), "url": _agent.page.url}
             except Exception:
+                logger.debug("Failed to get browser title/URL for status")
                 return {"started": True}
         return {"started": False}
 

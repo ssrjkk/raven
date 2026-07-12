@@ -62,7 +62,8 @@ async def _validate_token(token: str) -> dict[str, Any] | None:
         return None
     try:
         return await auth_handler.decode_token(token)
-    except Exception:
+    except Exception as e:
+        logger.debug("Token validation failed: {}", e)
         return None
 
 

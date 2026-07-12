@@ -7,7 +7,7 @@ from typing import Any
 from loguru import logger
 
 from raven.channels.enterprise_base import EnterpriseChannel
-from raven.core.config import settings
+from raven.core.channel_config import get_channel_config
 from raven.core.models import IncomingMessage, Message
 
 
@@ -15,15 +15,21 @@ class FeishuChannel(EnterpriseChannel):
     channel_id = "feishu"
 
     async def _start(self):
-        self._webhook_url = settings.feishu_webhook_url or ""
-        self._app_id = settings.feishu_app_id or ""
-        self._app_secret = settings.feishu_app_secret or ""
+        cfg = get_channel_config("feishu")
+        self._webhook_url = cfg.get("webhook_url", "")
+        self._app_id = cfg.get("app_id", "")
+        self._app_secret = cfg.get("app_secret", "")
         self._tenant_token = ""
         self._token_expires = 0.0
         if self._app_id and self._app_secret:
             await self._refresh_token()
 
     async def _stop(self):
+        self._webhook_url = ""
+        self._app_id = ""
+        self._app_secret = ""
+        self._tenant_token = ""
+        self._token_expires = 0.0
         logger.info("[feishu] channel stopped")
 
     async def _refresh_token(self):

@@ -124,9 +124,9 @@ class RoutineEngine:
             elif routine.action == RoutineAction.SEND_MESSAGE:
                 result = await self._execute_message(routine)
             elif routine.action == RoutineAction.CHECK_EMAIL:
-                result = "Email check not yet implemented"
+                result = await self._execute_email_check(routine)
             elif routine.action == RoutineAction.ORGANIZE_FILES:
-                result = "File organization not yet implemented"
+                result = await self._execute_file_organization(routine)
             else:
                 result = f"Unknown action: {routine.action.value}"
 
@@ -157,6 +157,81 @@ class RoutineEngine:
             routine.last_run_status = f"error: {e}"
             routine.last_run_at = time.time()
             logger.error("Routine {} execution failed: {}", routine.id, e)
+
+    async def _execute_email_check(self, routine: Routine) -> str:
+        try:
+            from raven.core.email_api import _get_config
+            config = _get_config()
+            if not config.get("imap_host"):
+                return "Email check skipped: no IMAP configured"
+
+            import imaplib
+
+            mail = imaplib.IMAP4_SSL(config["imap_host"], int(config.get("imap_port", "993")))
+            mail.login(config["imap_user"], config["imap_pass"])
+            mail.select("INBOX")
+
+            status, messages = mail.search(None, "UNSEEN")
+            if status != "OK":
+                return "Failed to search inbox"
+
+            unread_ids = messages[0].split() if messages[0] else []
+            count = len(unread_ids)
+            mail.logout()
+
+            if count > 0 and self._gateway_ref:
+                session_id = f"{routine.channel}:{routine.user_id}:email"
+                await self._gateway_ref._send(
+                    routine.channel, session_id,
+                    f"You have {count} unread email(s) in your inbox."
+                )
+
+            return f"Email check complete: {count} unread messages"
+        except Exception as e:
+            return f"Email check failed: {e}"
+
+    async def _execute_file_organization(self, routine: Routine) -> str:
+        import shutil
+        from pathlib import Path
+
+        workspace = Path("workspace")
+        organized = 0
+
+        rules = {
+            ".txt": "text", ".md": "docs", ".json": "data",
+            ".csv": "data", ".xml": "data", ".yaml": "config",
+            ".yml": "config", ".py": "code", ".js": "code",
+            ".ts": "code", ".jpg": "images", ".jpeg": "images",
+            ".png": "images", ".gif": "images", ".svg": "images",
+            ".pdf": "documents", ".doc": "documents", ".docx": "documents",
+            ".xls": "documents", ".xlsx": "documents",
+        }
+
+        if not workspace.exists():
+            return "No workspace directory found"
+
+        for item in workspace.iterdir():
+            if not item.is_file():
+                continue
+            ext = item.suffix.lower()
+            folder_name = rules.get(ext)
+            if not folder_name:
+                continue
+            target_dir = workspace / folder_name
+            target_dir.mkdir(exist_ok=True)
+            target_path = target_dir / item.name
+            if not target_path.exists():
+                shutil.move(str(item), str(target_path))
+                organized += 1
+
+        if organized > 0 and self._gateway_ref:
+            session_id = f"{routine.channel}:{routine.user_id}:organize"
+            await self._gateway_ref._send(
+                routine.channel, session_id,
+                f"File organization complete: moved {organized} file(s) into categorized folders."
+            )
+
+        return f"File organization complete: {organized} files organized"
 
     async def _execute_briefing(self, routine: Routine) -> str:
         if not self._gateway_ref:

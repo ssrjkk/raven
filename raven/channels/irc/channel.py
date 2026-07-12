@@ -7,7 +7,7 @@ import re
 from loguru import logger
 
 from raven.channels.enterprise_base import EnterpriseChannel
-from raven.core.config import settings
+from raven.core.channel_config import get_channel_config
 from raven.core.models import IncomingMessage, Message
 
 
@@ -28,13 +28,14 @@ class IRCChannel(EnterpriseChannel):
         self._reconnect_delay = 1.0
 
     async def _start(self):
-        self._server = settings.irc_server or "irc.libera.chat"
-        self._port = settings.irc_port or 6697
-        self._nick = settings.irc_nick or "raven-bot"
-        self._password = settings.irc_password or ""
-        self._user = settings.irc_nick or "raven-bot"
+        cfg = get_channel_config("irc")
+        self._server = cfg.get("server", "irc.libera.chat")
+        self._port = int(cfg.get("port", "6697"))
+        self._nick = cfg.get("nick", "raven-bot")
+        self._password = cfg.get("password", "")
+        self._user = cfg.get("nick", "raven-bot")
         self._realname = "Raven AI"
-        self._channels_to_join = (settings.irc_channels or "#raven").split(",")
+        self._channels_to_join = cfg.get("channels", "#raven").split(",")
         self._reconnect_delay = 1.0
 
     async def _stop(self):

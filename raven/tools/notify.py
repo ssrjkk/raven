@@ -5,9 +5,9 @@ from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 async def notify_telegram(message: str, token: str = "", chat_id: str = "") -> str:
     if not token:
-        from raven.core.config import settings
+        from raven.core.channel_config import get_channel_config
 
-        token = settings.telegram_bot_token
+        token = get_channel_config("telegram").get("bot_token", "")
     if not token:
         return "Telegram not configured (no bot token)"
     try:
