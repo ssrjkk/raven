@@ -30,7 +30,7 @@ MAIN_SESSION_POLICY = SandboxPolicy(
     allow_network=True,
     max_memory_mb=512,
     timeout_seconds=60,
-    sandbox_mode="none",
+    sandbox_mode="subprocess",
 )
 
 NON_MAIN_SESSION_POLICY = SandboxPolicy(

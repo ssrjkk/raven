@@ -158,7 +158,7 @@ class Database:
             id=session_id, channel=channel, user_id=user_id, agent_id=agent_id, created_at=now, updated_at=now
         )
         await self.conn.execute(
-            "INSERT INTO sessions (id, channel, user_id, agent_id, agent_skills, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO sessions (id, channel, user_id, agent_id, agent_skills, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 session.id,
                 session.channel,
@@ -214,10 +214,14 @@ class Database:
         if row:
             return dict(row)
         await self.conn.execute(
-            "INSERT INTO users (id, channel, external_id, display_name, role) VALUES (?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO users (id, channel, external_id, display_name, role) VALUES (?, ?, ?, ?, ?)",
             (user_id, channel, external_id, display_name, "user"),
         )
         await self.conn.commit()
+        async with self.conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)) as c:
+            row = await c.fetchone()
+        if row:
+            return dict(row)
         return {
             "id": user_id,
             "channel": channel,
@@ -299,6 +303,7 @@ class Database:
         await self.conn.commit()
 
     async def replace_session_messages(self, session_id: str, new_messages: list[dict[str, Any]]):
+        await self.conn.execute("BEGIN")
         await self.conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
         for msg in new_messages:
             m = Message(
@@ -311,7 +316,7 @@ class Database:
                 "INSERT INTO messages (id, session_id, channel, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (m.id, m.session_id, m.channel, m.role, m.content, m.metadata, m.created_at.isoformat()),
             )
-        await self.conn.commit()
+        await self.conn.execute("COMMIT")
 
     async def save_secret(self, key: str, value_enc: str):
         now = datetime.now(UTC).isoformat()

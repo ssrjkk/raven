@@ -203,7 +203,7 @@ class AnthropicProvider(LLMProvider):
         body = {
             "model": model,
             "messages": [m for m in messages if m["role"] != "system"],
-            "system": next((m["content"] for m in messages if m["role"] == "system"), ""),
+            "system": "\n\n".join(m["content"] for m in messages if m["role"] == "system"),
             "max_tokens": 4096,
             "stream": stream,
         }
@@ -529,7 +529,10 @@ class BedrockProvider(LLMProvider):
         return model.replace("bedrock/", "")
 
     async def _signed_headers(self, method: str, url: str, body: bytes) -> dict[str, str]:
-        return {"Content-Type": "application/json", "Accept": "application/json"}
+        raise NotImplementedError(
+            "AWS SigV4 signing not implemented. "
+            "Use IAM auth, instance role, or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY env vars."
+        )
 
     async def complete_stream(self, messages, model, tools=None):
         model_id = self._model_id(model)
@@ -644,7 +647,6 @@ class LLMRouter:
             key = "openai"
         elif model.startswith("vllm/"):
             key = "vllm"
-            key = "azure"
         elif model.startswith("copilot/"):
             key = "copilot"
         elif model.startswith("vertex/") or model.startswith("gemini/"):

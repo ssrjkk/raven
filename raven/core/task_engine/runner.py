@@ -12,6 +12,8 @@ from raven.core.task_engine.tool_registry import ToolRegistry
 
 
 class TaskRunner:
+    MAX_CONCURRENT = 10
+
     def __init__(self, store: TaskStore, tools: ToolRegistry):
         self._store = store
         self._tools = tools
@@ -19,6 +21,11 @@ class TaskRunner:
         self._cancel_events: dict[str, asyncio.Event] = {}
 
     async def submit(self, task: Task) -> Task:
+        if len(self._running) >= self.MAX_CONCURRENT:
+            raise RuntimeError(
+                f"Too many concurrent tasks ({len(self._running)}/{self.MAX_CONCURRENT}). "
+                "Wait for a running task to complete."
+            )
         task.status = TaskStatus.PENDING
         task.updated_at = time.time()
         for step in task.steps:

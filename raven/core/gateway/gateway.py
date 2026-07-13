@@ -30,7 +30,6 @@ from raven.core.metrics import metrics
 from raven.core.models import IncomingMessage, Message
 from raven.core.monitor.checkers.price import check_price
 from raven.core.monitor.models import Monitor, MonitorType
-from raven.core.monitor.store import MonitorStore
 from raven.core.plugin_loader import PluginLoader
 from raven.core.sandbox import Sandbox
 from raven.core.security.context_filter import ContextVisibility, filter_context_by_visibility
@@ -78,6 +77,7 @@ class Gateway(CommandHandlersMixin):
             )
             self._ctxmgr = ContextWindowManager(self.llm, ctx_cfg)
         self._rate_limiter = RateLimiter()
+        self._init_stores()
 
     def register_channel(self, channel: BaseChannel):
         self.channels[channel.channel_id] = channel
@@ -132,8 +132,7 @@ class Gateway(CommandHandlersMixin):
         async def _morning_briefing(user_id: str, channel: str) -> str:
             try:
                 monitors_info = ""
-                store = MonitorStore(self.db.db_path)
-                monitors = store.list_monitors(user_id=user_id)
+                monitors = self._monitor_store.list_monitors(user_id=user_id)
                 if monitors:
                     statuses = [
                         f"{m.name}[{m.type.value}]:{'🟢' if m.status.value == 'active' else '⏸'}" for m in monitors[:5]
@@ -286,7 +285,8 @@ class Gateway(CommandHandlersMixin):
             await self._send(event.channel, session_id, buffer, streaming=True)
 
         if full_response.strip():
-            await self._send(event.channel, session_id, full_response, streaming=False)
+            if not supports_stream:
+                await self._send(event.channel, session_id, full_response, streaming=False)
             metrics.inc("messages_sent", {"channel": event.channel})
             metrics.observe("response_length", len(full_response), {"channel": event.channel})
 
@@ -347,8 +347,7 @@ class Gateway(CommandHandlersMixin):
             return True
 
         if self._MONITOR_PATTERN.search(text):
-            store = MonitorStore(self.db.db_path)
-            monitors = store.list_monitors(user_id=event.user_id)
+            monitors = self._monitor_store.list_monitors(user_id=event.user_id)
             if not monitors:
                 await self._send(event.channel, event.session_id, "You have no monitors configured.")
                 return True
@@ -524,9 +523,9 @@ class Gateway(CommandHandlersMixin):
             return True
 
         if cmd == "/restart":
-            await self._send(event.channel, event.session_id, "Restarting agent session...")
-            session_id = f"{event.channel}:{event.user_id}:{uuid4().hex[:8]}"
-            await self._send(event.channel, event.session_id, "Session restarted.")
+            new_session_id = f"{event.channel}:{event.user_id}:{uuid4().hex[:8]}"
+            await self.db.get_or_create_session(new_session_id, event.channel, event.user_id)
+            await self._send(event.channel, new_session_id, "Session restarted.")
             return True
 
         if cmd == "/activation":

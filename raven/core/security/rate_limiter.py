@@ -10,11 +10,14 @@ from raven.core.metrics import metrics
 
 
 class TokenBucket:
+    _IDLE_TTL = 300.0  # evict buckets idle > 5 minutes
+
     def __init__(self, rate: float = 10.0, burst: int | None = None):
         self._rate = rate
         self._burst = burst or int(rate * 2)
         self._tokens = float(self._burst)
         self._last_refill = time.monotonic()
+        self._last_access = time.monotonic()
         self._lock = asyncio.Lock()
 
     async def acquire(self) -> bool:
@@ -23,6 +26,7 @@ class TokenBucket:
             elapsed = now - self._last_refill
             self._tokens = min(float(self._burst), self._tokens + elapsed * self._rate)
             self._last_refill = now
+            self._last_access = now
             if self._tokens >= 1.0:
                 self._tokens -= 1.0
                 return True
@@ -35,6 +39,10 @@ class TokenBucket:
     @property
     def burst(self) -> int:
         return self._burst
+
+    @property
+    def last_access(self) -> float:
+        return self._last_access
 
 
 DEFAULT_CHANNEL_LIMITS: dict[str, dict[str, float | int]] = {
@@ -98,6 +106,7 @@ class RateLimiter:
     async def check_rate_limit(
         self, channel_id: str, user_id: str | None = None, channel_type: str | None = None
     ) -> bool:
+        self._evict_idle()
         cb = self._get_or_create_channel_bucket(channel_id, channel_type)
         if not await cb.acquire():
             logger.warning("Rate limit exceeded for channel {} (type={})", channel_id, channel_type)
@@ -135,3 +144,14 @@ class RateLimiter:
         self._channel_buckets.clear()
         self._user_buckets.clear()
         self._type_cache.clear()
+
+    def _evict_idle(self) -> None:
+        now = time.monotonic()
+        idle_cutoff = now - TokenBucket._IDLE_TTL
+        stale_channels = [k for k, b in self._channel_buckets.items() if b.last_access < idle_cutoff]
+        for k in stale_channels:
+            del self._channel_buckets[k]
+            self._type_cache.pop(k, None)
+        stale_users = [k for k, b in self._user_buckets.items() if b.last_access < idle_cutoff]
+        for k in stale_users:
+            del self._user_buckets[k]

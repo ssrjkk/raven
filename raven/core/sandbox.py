@@ -56,7 +56,7 @@ DEFAULT_SANDBOX = SandboxConfig(
 class Sandbox:
     def __init__(self, config: SandboxConfig | None = None):
         self.config = config or DEFAULT_SANDBOX
-        self._tmpdir: str | None = None
+        self._tmpdirs: list[str] = []
 
     async def exec(self, code: str, tool_name: str = "") -> str:
         if self.config.denied_tools and tool_name in self.config.denied_tools:
@@ -78,10 +78,17 @@ class Sandbox:
 
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
-        restricted_globals: dict[str, object] = {"__builtins__": __builtins__}
+        safe_builtins = {
+            k: v for k, v in __builtins__.__dict__.items()
+            if k not in frozenset({
+                "__import__", "exec", "eval", "compile", "open",
+                "getattr", "setattr", "delattr", "globals", "locals",
+                "breakpoint", "exit", "quit",
+            })
+        } if hasattr(__builtins__, "__dict__") else {}
+        restricted_globals: dict[str, object] = {"__builtins__": safe_builtins}
         try:
             with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-                # sandbox mode="none" — user opted into direct exec
                 exec(code, restricted_globals)  # noqa: S102
             result = stdout_capture.getvalue()
             stderr_val = stderr_capture.getvalue()
@@ -92,8 +99,9 @@ class Sandbox:
             return f"Execution error: {e}"
 
     async def _exec_subprocess(self, code: str) -> str:
-        self._tmpdir = tempfile.mkdtemp(prefix="raven_sandbox_")
-        script = Path(self._tmpdir) / "script.py"
+        tmpdir = tempfile.mkdtemp(prefix="raven_sandbox_")
+        self._tmpdirs.append(tmpdir)
+        script = Path(tmpdir) / "script.py"
         with script.open("w") as f:
             f.write(code)
         env = os.environ.copy()
@@ -113,7 +121,7 @@ class Sandbox:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
-            cwd=self._tmpdir,
+            cwd=tmpdir,
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.config.timeout)
@@ -170,8 +178,9 @@ class Sandbox:
         except Exception as e:
             return f"Docker not available: {e}"
 
-        self._tmpdir = tempfile.mkdtemp(prefix="raven_sandbox_")
-        script_path = Path(self._tmpdir) / "script.py"
+        tmpdir = tempfile.mkdtemp(prefix="raven_sandbox_")
+        self._tmpdirs.append(tmpdir)
+        script_path = Path(tmpdir) / "script.py"
         with script_path.open("w") as f:
             f.write(code)
 
@@ -184,7 +193,7 @@ class Sandbox:
             "image": self.config.docker_image,
             "command": ["python", "/sandbox/script.py"],
             "working_dir": "/sandbox",
-            "volumes": {self._tmpdir: {"bind": "/sandbox", "mode": "ro"}},
+            "volumes": {tmpdir: {"bind": "/sandbox", "mode": "ro"}},
             "read_only": True,
             "mem_limit": "256m",
             "cpu_period": 100000,
@@ -193,10 +202,10 @@ class Sandbox:
         }
 
         if net_entrypoint:
-            entrypoint_path = Path(self._tmpdir) / "entrypoint.sh"
+            entrypoint_path = Path(tmpdir) / "entrypoint.sh"
             entrypoint_path.write_text(net_entrypoint)
             entrypoint_path.chmod(0o755)
-            container_kwargs["volumes"][self._tmpdir] = {"bind": "/sandbox", "mode": "ro"}
+            container_kwargs["volumes"][tmpdir] = {"bind": "/sandbox", "mode": "ro"}
             container_kwargs["entrypoint"] = ["/bin/sh", "/sandbox/entrypoint.sh"]
             container_kwargs["command"] = ["python", "/sandbox/script.py"]
             container_kwargs["cap_add"] = ["NET_ADMIN", "NET_RAW"]
@@ -225,14 +234,14 @@ class Sandbox:
                     logger.debug("Container already removed or Docker error during cleanup")
 
     async def cleanup(self):
-        if self._tmpdir:
-            import shutil
+        import shutil
 
+        for tmpdir in self._tmpdirs:
             try:
-                shutil.rmtree(self._tmpdir)
+                shutil.rmtree(tmpdir)
             except (FileNotFoundError, PermissionError, OSError) as exc:
-                logger.debug("Failed to remove temp dir: {}", exc)
-            self._tmpdir = None
+                logger.debug("Failed to remove temp dir {}: {}", tmpdir, exc)
+        self._tmpdirs.clear()
 
 
 sandbox_default = Sandbox()

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import hmac as hmac_mod
+import time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -10,14 +13,19 @@ from raven.core.db import Database
 from raven.core.models import IncomingMessage
 
 
+def _verify_hmac_sha256(body_bytes: bytes, signature: str, secret: str) -> bool:
+    expected = hmac_mod.new(secret.encode(), body_bytes, hashlib.sha256).hexdigest()
+    return hmac_mod.compare_digest(f"sha256={expected}", signature)
+
+
 def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
     router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
     @router.post("/generic")
     async def generic_webhook(body: dict[str, Any], request: Request):
-        import hmac
+        body_bytes = await request.body()
         signature = request.headers.get("X-Webhook-Signature", "")
-        if not signature or not hmac.compare_digest(signature, settings.web_secret_key):
+        if not signature or not _verify_hmac_sha256(body_bytes, signature, settings.web_secret_key):
             raise HTTPException(status_code=403, detail="Invalid or missing webhook signature")
         source = request.headers.get("X-Webhook-Source", "unknown")
         text = body.get("text", "") or body.get("message", "") or body.get("content", "")
@@ -41,6 +49,22 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/slack/events")
     async def slack_events(body: dict[str, Any], request: Request):
+        body_bytes = await request.body()
+        slack_sig = request.headers.get("X-Slack-Signature", "")
+        slack_ts = request.headers.get("X-Slack-Request-Timestamp", "")
+        if settings.web_secret_key and slack_sig:
+            try:
+                ts = int(slack_ts)
+                if abs(time.time() - ts) > 300:
+                    raise HTTPException(status_code=403, detail="Slack request timestamp too old")
+            except (ValueError, TypeError) as err:
+                raise HTTPException(status_code=403, detail="Invalid Slack timestamp") from err
+            sig_basestring = f"v0:{slack_ts}:{body_bytes.decode()}"
+            expected = "v0=" + hmac_mod.new(
+                settings.web_secret_key.encode(), sig_basestring.encode(), hashlib.sha256
+            ).hexdigest()
+            if not hmac_mod.compare_digest(expected, slack_sig):
+                raise HTTPException(status_code=403, detail="Invalid Slack signature")
         logger.debug("Slack webhook event: {}", body.get("type", ""))
         if body.get("type") == "url_verification":
             return {"challenge": body.get("challenge", "")}
@@ -52,6 +76,10 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/whatsapp")
     async def whatsapp_webhook(body: dict[str, Any], request: Request):
+        body_bytes = await request.body()
+        wa_sig = request.headers.get("X-Hub-Signature-256", "")
+        if settings.web_secret_key and wa_sig and not _verify_hmac_sha256(body_bytes, wa_sig, settings.web_secret_key):
+            raise HTTPException(status_code=403, detail="Invalid WhatsApp signature")
         wa_ch = request.app.state.whatsapp_channel if hasattr(request.app.state, "whatsapp_channel") else None
         if wa_ch:
             await wa_ch.handle_webhook(body)
@@ -62,8 +90,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
         mode = request.query_params.get("hub.mode")
         token = request.query_params.get("hub.verify_token")
         challenge = request.query_params.get("hub.challenge")
-        import hmac
-        if mode == "subscribe" and hmac.compare_digest(token, settings.web_secret_key):
+        if mode == "subscribe" and hmac_mod.compare_digest(token or "", settings.web_secret_key):
             return int(challenge)  # type: ignore[arg-type]
         raise HTTPException(status_code=403, detail="Verify token failed")
 

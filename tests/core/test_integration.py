@@ -45,11 +45,19 @@ def _patch_webhook_settings():
 @pytest.mark.asyncio
 async def test_webhook_generic(app):
     transport = ASGITransport(app=app)
+    import hashlib
+    import hmac as hmac_mod
+    body_bytes = b'{"text":"hello world"}'
+    sig = "sha256=" + hmac_mod.new(b"test-secret-key", body_bytes, hashlib.sha256).hexdigest()
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
             "/api/webhooks/generic",
-            json={"text": "hello world"},
-            headers={"X-Webhook-Source": "test", "X-Webhook-Signature": "test-secret-key"},
+            content=body_bytes,
+            headers={
+                "X-Webhook-Source": "test",
+                "X-Webhook-Signature": sig,
+                "Content-Type": "application/json",
+            },
         )
     assert resp.status_code == 200
     data = resp.json()

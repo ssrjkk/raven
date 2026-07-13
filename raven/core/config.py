@@ -177,7 +177,7 @@ if settings.web_secret_key in ("", "change-me-in-production"):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    return settings
 
 
 def apply_ghost_mode(overrides: dict[str, Any] | None = None) -> None:

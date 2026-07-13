@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json as json_mod
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,11 +13,15 @@ class FakeAppState:
 
 
 class FakeRequest:
-    def __init__(self, headers=None, app_state=None):
+    def __init__(self, headers=None, app_state=None, body_bytes=None):
         self.headers = headers or {}
         self.app = MagicMock()
         self.app.state = app_state or FakeAppState()
         self.query_params = {}
+        self._body_bytes = body_bytes or b"{}"
+
+    async def body(self):
+        return self._body_bytes
 
 
 class FakeDB:
@@ -30,7 +35,10 @@ async def test_generic_webhook_text_field():
     handler = AsyncMock()
     router = create_webhook_router(db, handler)  # type: ignore[arg-type]
     body = {"text": "hello"}
-    req = FakeRequest(headers={"X-Webhook-Source": "github", "X-Webhook-Signature": "test-secret"})
+    body_bytes = json_mod.dumps(body).encode()
+    import hashlib, hmac as hmac_mod
+    sig = "sha256=" + hmac_mod.new(b"test-secret", body_bytes, hashlib.sha256).hexdigest()
+    req = FakeRequest(headers={"X-Webhook-Source": "github", "X-Webhook-Signature": sig}, body_bytes=body_bytes)
     with patch("raven.core.webhooks.settings") as mock_settings:
         mock_settings.web_secret_key = "test-secret"
         resp = await router.routes[0].endpoint(body, req)  # type: ignore[attr-defined]
@@ -48,7 +56,10 @@ async def test_generic_webhook_message_field():
     handler = AsyncMock()
     router = create_webhook_router(db, handler)  # type: ignore[arg-type]
     body = {"message": "world"}
-    req = FakeRequest(headers={"X-Webhook-Source": "test", "X-Webhook-Signature": "test-secret"})
+    body_bytes = json_mod.dumps(body).encode()
+    import hashlib, hmac as hmac_mod
+    sig = "sha256=" + hmac_mod.new(b"test-secret", body_bytes, hashlib.sha256).hexdigest()
+    req = FakeRequest(headers={"X-Webhook-Source": "test", "X-Webhook-Signature": sig}, body_bytes=body_bytes)
     with patch("raven.core.webhooks.settings") as mock_settings:
         mock_settings.web_secret_key = "test-secret"
         resp = await router.routes[0].endpoint(body, req)  # type: ignore[attr-defined]
@@ -64,7 +75,10 @@ async def test_generic_webhook_no_text():
     handler = AsyncMock()
     router = create_webhook_router(db, handler)  # type: ignore[arg-type]
     body = {"not_text": ""}
-    req = FakeRequest(headers={"X-Webhook-Signature": "test-secret"})
+    body_bytes = json_mod.dumps(body).encode()
+    import hashlib, hmac as hmac_mod
+    sig = "sha256=" + hmac_mod.new(b"test-secret", body_bytes, hashlib.sha256).hexdigest()
+    req = FakeRequest(headers={"X-Webhook-Signature": sig}, body_bytes=body_bytes)
     from fastapi import HTTPException
 
     with patch("raven.core.webhooks.settings") as mock_settings:

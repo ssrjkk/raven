@@ -13,6 +13,7 @@ from raven.core.plugin_loader import PluginLoader
 @pytest.fixture
 def mock_db():
     db = AsyncMock(spec=Database)
+    db.db_path = ":memory:"
     db.connect = AsyncMock()
     db.disconnect = AsyncMock()
     db.find_or_create_user = AsyncMock(

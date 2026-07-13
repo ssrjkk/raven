@@ -270,9 +270,11 @@ class Agent:
         if final_content:
             yield final_content
         elif tool_used:
+            parts: list[str] = []
             async for token in self.llm.complete_stream(messages):
-                final_content += token
+                parts.append(token)
                 yield token
+            final_content = "".join(parts)
 
         if not self.config.stateless:
             user_msg = Message(

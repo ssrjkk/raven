@@ -19,11 +19,17 @@ class CommandHandlersMixin:
     self.db, self.channels.
     """
 
+    def _init_stores(self) -> None:
+        from raven.core.monitor.store import MonitorStore
+        from raven.core.routine.store import RoutineStore
+
+        self._monitor_store = MonitorStore(self.db.db_path)
+        self._routine_store = RoutineStore(self.db.db_path)
+
     async def _handle_monitor_cmd(self, event: IncomingMessage, user: dict[str, Any], sub: str, args: list[str]) -> None:
         from raven.core.monitor.models import Monitor, MonitorStatus, MonitorType
-        from raven.core.monitor.store import MonitorStore
 
-        store = MonitorStore(self.db.db_path)
+        store = self._monitor_store
 
         if sub == "list":
             monitors = store.list_monitors(user_id=event.user_id)
@@ -231,9 +237,8 @@ class CommandHandlersMixin:
 
     async def _handle_routine_cmd(self, event: IncomingMessage, user: dict[str, Any], sub: str, args: list[str]) -> None:
         from raven.core.routine.models import Routine, RoutineAction, RoutineStatus, RoutineTrigger
-        from raven.core.routine.store import RoutineStore
 
-        store = RoutineStore(self.db.db_path)
+        store = self._routine_store
 
         if sub == "list":
             routines = store.list_routines(user_id=event.user_id)
