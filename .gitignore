@@ -45,6 +45,7 @@ services/*/bin/
 
 # Test artifacts
 .coverage
+.coverage.*
 tmp_test_secrets/
 allure-results*/
 allure-report/

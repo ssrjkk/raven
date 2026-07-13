@@ -9,12 +9,10 @@
 - Async first: all I/O operations must be async
 
 ## Module structure
-- `raven/` — core engine (Telegram, LLM, channels, tools)
-- `ravencode/` — high-level Python API for AI agents
+- `raven/` — core engine (Telegram, LLM, channels, tools, RavenFlow gateway)
+- `ravencode/` — autonomous coding agent (opencode analog)
 - `aios/` — thin FastAPI bridge (delegates to ravencode)
 - `web/` — React SPA (Vite + Tailwind)
-- `desktop-tauri/` — Tauri desktop shell
-- `packages/` — TypeScript shared packages
 - `tests/` — pytest tests (unit + integration)
 
 ## Setup
@@ -24,11 +22,6 @@ pip install -e ".[dev]"
 
 # Web frontend (requires Node.js)
 cd web
-npm install
-cd ..
-
-# Desktop (requires Rust)
-cd desktop-tauri
 npm install
 cd ..
 ```

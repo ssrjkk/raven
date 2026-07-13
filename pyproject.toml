@@ -1,7 +1,7 @@
 [project]
 name = "raven-agent"
 version = "0.4.0"
-description = "Raven — Unified AI Agent: OpenCode + OpenClaw + unique features (CRDT collaboration, multi-modal RAG, knowledge graph, fine-tuning, voice biometrics, chaos engineering)"
+description = "Raven — 2-in-1 AI platform: RavenCode (autonomous coding agent) + RavenFlow (persistent workflow gateway)"
 authors = [
     { name = "ssrjkk" },
 ]
@@ -78,6 +78,7 @@ all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,voice,d
 [project.scripts]
 raven = "raven.cli.main:cli"
 ravencode = "ravencode.cli.main:cli"
+ravenflow = "raven.gateway.daemon:main"
 
 [build-system]
 requires = ["hatchling"]

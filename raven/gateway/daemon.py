@@ -274,6 +274,17 @@ class RavenFlowDaemon:
                 s.agent.abort()
 
 
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="RavenFlow Gateway daemon")
+    parser.add_argument("--port", type=int, default=18789, help="Gateway port")
+    args = parser.parse_args()
+
+    daemon = RavenFlowDaemon(port=args.port)
+    asyncio.run(daemon.start())
+
+
 def _build_flow_prompt(channel: str, mode: str) -> str:
     mode_instructions = {
         "build": "You have full access to all tools.",
