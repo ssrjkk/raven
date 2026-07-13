@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -30,8 +30,10 @@ async def test_generic_webhook_text_field():
     handler = AsyncMock()
     router = create_webhook_router(db, handler)  # type: ignore[arg-type]
     body = {"text": "hello"}
-    req = FakeRequest(headers={"X-Webhook-Source": "github"})
-    resp = await router.routes[0].endpoint(body, req)  # type: ignore[attr-defined]
+    req = FakeRequest(headers={"X-Webhook-Source": "github", "X-Webhook-Signature": "test-secret"})
+    with patch("raven.core.webhooks.settings") as mock_settings:
+        mock_settings.web_secret_key = "test-secret"
+        resp = await router.routes[0].endpoint(body, req)  # type: ignore[attr-defined]
     assert resp["ok"] is True
     handler.assert_awaited_once()
     event = handler.await_args[0][0]  # type: ignore[index]
@@ -46,8 +48,10 @@ async def test_generic_webhook_message_field():
     handler = AsyncMock()
     router = create_webhook_router(db, handler)  # type: ignore[arg-type]
     body = {"message": "world"}
-    req = FakeRequest(headers={"X-Webhook-Source": "test"})
-    resp = await router.routes[0].endpoint(body, req)  # type: ignore[attr-defined]
+    req = FakeRequest(headers={"X-Webhook-Source": "test", "X-Webhook-Signature": "test-secret"})
+    with patch("raven.core.webhooks.settings") as mock_settings:
+        mock_settings.web_secret_key = "test-secret"
+        resp = await router.routes[0].endpoint(body, req)  # type: ignore[attr-defined]
     assert resp["ok"] is True
     event = handler.await_args[0][0]  # type: ignore[index]
     assert "world" in event.text
@@ -60,11 +64,13 @@ async def test_generic_webhook_no_text():
     handler = AsyncMock()
     router = create_webhook_router(db, handler)  # type: ignore[arg-type]
     body = {"not_text": ""}
-    req = FakeRequest()
+    req = FakeRequest(headers={"X-Webhook-Signature": "test-secret"})
     from fastapi import HTTPException
 
-    with pytest.raises(HTTPException) as exc:
-        await router.routes[0].endpoint(body, req)  # type: ignore[attr-defined]
+    with patch("raven.core.webhooks.settings") as mock_settings:
+        mock_settings.web_secret_key = "test-secret"
+        with pytest.raises(HTTPException) as exc:
+            await router.routes[0].endpoint(body, req)  # type: ignore[attr-defined]
     assert exc.value.status_code == 400
 
 

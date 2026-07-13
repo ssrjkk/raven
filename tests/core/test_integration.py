@@ -34,6 +34,14 @@ def app(db):
     return api
 
 
+@pytest.fixture(autouse=True)
+def _patch_webhook_settings():
+    from unittest.mock import patch
+    with patch("raven.core.webhooks.settings") as mock_settings:
+        mock_settings.web_secret_key = "test-secret-key"
+        yield
+
+
 @pytest.mark.asyncio
 async def test_webhook_generic(app):
     transport = ASGITransport(app=app)
@@ -41,7 +49,7 @@ async def test_webhook_generic(app):
         resp = await client.post(
             "/api/webhooks/generic",
             json={"text": "hello world"},
-            headers={"X-Webhook-Source": "test"},
+            headers={"X-Webhook-Source": "test", "X-Webhook-Signature": "test-secret-key"},
         )
     assert resp.status_code == 200
     data = resp.json()

@@ -41,8 +41,9 @@ class TestAgentTypes:
 
 class TestSubTask:
     def test_sub_task_defaults(self) -> None:
-        from raven.core.agents.multi import SubTask
         from raven.core.agents.orchestrator import AgentType
+
+        from raven.core.agents.multi import SubTask
 
         t = SubTask(description="do something")
         assert t.description == "do something"
@@ -51,8 +52,9 @@ class TestSubTask:
         assert t.config is None
 
     def test_sub_task_with_deps(self) -> None:
-        from raven.core.agents.multi import SubTask
         from raven.core.agents.orchestrator import AgentType
+
+        from raven.core.agents.multi import SubTask
 
         t = SubTask(description="step 2", agent_type=AgentType.CODER, depends_on=[0, 1])
         assert t.depends_on == [0, 1]
@@ -61,8 +63,9 @@ class TestSubTask:
 
 class TestTaskResult:
     def test_task_result_dataclass(self) -> None:
-        from raven.core.agents.multi import TaskResult
         from raven.core.agents.orchestrator import AgentResult
+
+        from raven.core.agents.multi import TaskResult
 
         ar = AgentResult(agent="planner", success=True)
         tr = TaskResult(index=0, description="plan", result=ar, duration=1.5)
