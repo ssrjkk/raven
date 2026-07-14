@@ -89,7 +89,7 @@ def run(task: str, agent: str):
 
 @aios.command()
 @click.argument("cmd")
-def exec(cmd: str):
+def run_command(cmd: str):
     """Execute a command via the unified runtime"""
     import asyncio
 

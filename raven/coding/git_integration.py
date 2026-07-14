@@ -230,9 +230,7 @@ class GitIntegration:
                 ))
                 issues_found.append("long_line")
 
-            if stripped.endswith(("}", ")", ";", ":", ",")):
-                pass
-            elif "print(" in stripped:
+            if not stripped.endswith(("}", ")", ";", ":", ",")) and "print(" in stripped:
                 comments.append(ReviewComment(
                     file=file_path or "(unknown)", line=0,
                     severity="info",

@@ -6,6 +6,7 @@ import sys
 import textwrap
 from pathlib import Path
 
+from loguru import logger
 from rich.console import Console
 
 console = Console()
@@ -25,8 +26,8 @@ def _find_raven() -> str:
         path = result.stdout.strip()
         if path:
             return path
-    except (subprocess.SubprocessError, FileNotFoundError):
-        pass
+    except (subprocess.SubprocessError, FileNotFoundError) as exc:
+        logger.debug("Failed to find raven executable: {}", exc)
     return f"{sys.executable} -m raven.cli.main"
 
 

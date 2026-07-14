@@ -226,7 +226,7 @@ class VoiceConversation:
                 if response:
                     await self.speak(response)
         except asyncio.CancelledError:
-            pass
+            raise
         finally:
             self.stop()
 
