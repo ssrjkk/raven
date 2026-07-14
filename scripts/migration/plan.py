@@ -36,7 +36,7 @@ STEPS = [
 ]
 
 
-def run_step(step: dict, dry_run: bool = False):
+def run_step(step: dict[str, str], dry_run: bool = False) -> None:
     print(f"\n{'=' * 60}")
     print(f"Step: {step['name']} — {step['desc']}")
     print(f"Risk: {step['risk']}")

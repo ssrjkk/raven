@@ -278,6 +278,7 @@ def greet(name: str) -> str:
         types = await gen.extract_types("example.py")
         assert len(types) >= 1
         assert types[0].name == "greet"
+        assert isinstance(types[0], FunctionInfo)
         assert types[0].args[0].type_hint == "str"
 
     def test_generate_test_for_function_preserved(self):

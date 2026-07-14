@@ -167,7 +167,8 @@ class TestFaultInjector:
         assert self.injector.active_faults == {}
 
     def test_clear_history(self):
-        assert self.injector.clear_history() is None
+        # should not raise
+        self.injector.clear_history()
 
 
 class TestSystemMonitor:

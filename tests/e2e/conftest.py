@@ -19,12 +19,12 @@ class MockLLMProvider:
         self.responses = responses or ["Hello! How can I help you?"]
         self.call_count = 0
 
-    async def complete(self, messages: list[dict], **kwargs) -> dict:
+    async def complete(self, messages: list[dict[str, Any]], **kwargs) -> dict[str, str]:
         self.call_count += 1
         idx = min(self.call_count - 1, len(self.responses) - 1)
         return {"content": self.responses[idx], "role": "assistant"}
 
-    async def complete_stream(self, messages: list[dict], **kwargs) -> AsyncGenerator[str, None]:
+    async def complete_stream(self, messages: list[dict[str, Any]], **kwargs) -> AsyncGenerator[str, None]:
         self.call_count += 1
         idx = min(self.call_count - 1, len(self.responses) - 1)
         for token in self.responses[idx].split():

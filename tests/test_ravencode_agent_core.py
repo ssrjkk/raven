@@ -61,8 +61,8 @@ class TestEventEmitter:
 
     def test_on_different_events(self):
         ee = EventEmitter()
-        ee.on("a", lambda e: None)
-        ee.on("b", lambda e: None)
+        ee.on("a", lambda e: None)  # type: ignore[arg-type,return-value]
+        ee.on("b", lambda e: None)  # type: ignore[arg-type,return-value]
         assert len(ee._handlers) == 2
 
     @pytest.mark.asyncio
@@ -141,7 +141,7 @@ class TestAgentConfig:
         assert cfg.on_step is cb
 
     def test_on_message_config(self):
-        async def cb(msg: dict) -> None:
+        async def cb(msg: dict[str, str]) -> None:
             pass
         cfg = AgentConfig(on_message=cb)
         assert cfg.on_message is cb

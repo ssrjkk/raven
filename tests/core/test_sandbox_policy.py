@@ -33,6 +33,7 @@ class TestSandboxPolicy:
 
     def test_readonly_policy_denies_write(self):
         policy = get_policy("read-only")
+        assert policy.denied_tools is not None
         assert "write" in policy.denied_tools
 
     def test_session_type_to_policy_returns_policy_object(self):
@@ -46,5 +47,6 @@ class TestSandboxPolicy:
 
     def test_allowed_tools_intersection(self):
         policy = get_policy("read-only")
+        assert policy.allowed_tools is not None
         assert "read" in policy.allowed_tools
         assert "write" not in policy.allowed_tools

@@ -50,27 +50,27 @@ class TestLLMFallback:
 class TestProcessWithRecovery:
     async def test_first_attempt_succeeds(self) -> None:
         agent = UnifiedAgent()
-        agent.process = AsyncMock(return_value="ok")
+        agent.process = AsyncMock(return_value="ok")  # type: ignore[method-assign]
         result = await agent.process_with_recovery("hi")
         assert result == "ok"
 
     async def test_retry_on_failure(self) -> None:
         agent = UnifiedAgent()
-        agent.process = AsyncMock(side_effect=[RuntimeError("fail1"), RuntimeError("fail2"), "ok"])
+        agent.process = AsyncMock(side_effect=[RuntimeError("fail1"), RuntimeError("fail2"), "ok"])  # type: ignore[method-assign]
         result = await agent.process_with_recovery("hi", max_retries=2)
         assert result == "ok"
         assert agent.process.call_count == 3
 
     async def test_exhausted_retries_raises(self) -> None:
         agent = UnifiedAgent()
-        agent.process = AsyncMock(side_effect=RuntimeError("always fail"))
+        agent.process = AsyncMock(side_effect=RuntimeError("always fail"))  # type: ignore[method-assign]
         with pytest.raises(RuntimeError, match="always fail"):
             await agent.process_with_recovery("hi", max_retries=1)
         assert agent.process.call_count == 2
 
     async def test_cancelled_error_not_caught(self) -> None:
         agent = UnifiedAgent()
-        agent.process = AsyncMock(side_effect=asyncio.CancelledError())
+        agent.process = AsyncMock(side_effect=asyncio.CancelledError())  # type: ignore[method-assign]
         with pytest.raises(asyncio.CancelledError):
             await agent.process_with_recovery("hi")
 
@@ -78,7 +78,7 @@ class TestProcessWithRecovery:
 class TestStreamProcess:
     async def test_stream_yields_messages(self) -> None:
         agent = UnifiedAgent()
-        agent.process = AsyncMock(return_value="final answer")
+        agent.process = AsyncMock(return_value="final answer")  # type: ignore[method-assign]
         agent._on_message = AsyncMock()
         tokens = [t async for t in agent.stream_process("hi")]
         assert "final answer" in tokens
@@ -86,14 +86,14 @@ class TestStreamProcess:
     async def test_stream_with_on_message(self) -> None:
         on_message = AsyncMock()
         agent = UnifiedAgent(on_message=on_message)
-        agent.process = AsyncMock(return_value="done")
+        agent.process = AsyncMock(return_value="done")  # type: ignore[method-assign]
         tokens = [t async for t in agent.stream_process("hi")]
         assert tokens
         assert any("done" in t for t in tokens)
 
     async def test_stream_error_handling(self) -> None:
         agent = UnifiedAgent()
-        agent.process = AsyncMock(side_effect=RuntimeError("boom"))
+        agent.process = AsyncMock(side_effect=RuntimeError("boom"))  # type: ignore[method-assign]
         tokens = [t async for t in agent.stream_process("hi")]
         assert any("error" in t for t in tokens)
 

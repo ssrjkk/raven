@@ -68,5 +68,6 @@ async def test_migrator_idempotent(db_path):
     conn = await aiosqlite.connect(str(db_path))
     async with conn.execute("SELECT COUNT(*) FROM _migrations") as c:
         row = await c.fetchone()
+        assert row is not None
         assert row[0] >= 4
     await conn.close()

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -15,7 +16,7 @@ def db_path(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-async def db(db_path: Path) -> AsyncIterator:
+async def db(db_path: Path) -> AsyncIterator[Any]:
     from raven.core.db import Database
 
     db = Database(db_path)

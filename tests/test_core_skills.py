@@ -76,7 +76,7 @@ class TestSkillsRegistry:
 
 
 class TestSkillsFileDiscovery:
-    def test_discover_from_skill_file(self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_discover_from_skill_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from raven.core.skills import _SKILL_SEARCH_DIRS, discover_skills
 
         skill_dir = tmp_path / ".opencode" / "skills"

@@ -73,9 +73,9 @@ async def test_sandbox_unknown_mode():
 async def test_sandbox_cleanup():
     s = Sandbox(SandboxConfig(mode="subprocess"))
     await s.exec("print('test')")
-    assert s._tmpdir is not None
+    assert len(s._tmpdirs) > 0
     await s.cleanup()
-    assert s._tmpdir is None
+    assert len(s._tmpdirs) == 0
 
 
 @pytest.mark.asyncio

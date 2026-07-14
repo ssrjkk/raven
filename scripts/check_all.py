@@ -25,7 +25,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 ROOT = Path(__file__).resolve().parent.parent
 os.chdir(ROOT)
@@ -61,7 +61,7 @@ class CheckResult:
 
 # -- Helpers -----------------------------------------------------------------
 
-def _run(cmd: list[str], timeout: int = 600, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+def _run(cmd: list[str], timeout: int = 600, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[Any]:
     merged_env = {**os.environ, "LOGURU_LEVEL": "ERROR", **(env or {})}
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=merged_env)  # noqa: S603 — cmd from trusted callers
 
@@ -120,11 +120,26 @@ def check_ruff() -> CheckResult:
     return CheckResult("ruff check", "fail", dt, "\n".join(errors[:20]))
 
 
+def _mypy_targets() -> list[str]:
+    result: list[str] = []
+    for d in CHECK_DIRS:
+        p = ROOT / d
+        if p.is_dir() and list(p.glob("*.py")):
+            py_files = sorted(str(f) for f in p.rglob("*.py") if ".venv" not in str(f) and "__pycache__" not in str(f))
+            if py_files:
+                result.extend(py_files)
+            else:
+                result.append(d)
+        else:
+            result.append(d)
+    return result
+
+
 def check_mypy() -> CheckResult:
     _print_section("Type Check (mypy)")
     t0 = time.time()
-    mypy_dirs = [d for d in CHECK_DIRS if d not in ("scripts/", "tests/")]
-    r = _run([sys.executable, "-m", "mypy", *mypy_dirs, "--ignore-missing-imports"], timeout=120)
+    targets = _mypy_targets()
+    r = _run([sys.executable, "-m", "mypy", *targets, "--ignore-missing-imports"], timeout=120)
     dt = time.time() - t0
     if r.returncode == 0:
         return CheckResult("mypy", "pass", dt)
@@ -199,7 +214,7 @@ def check_cli_imports() -> CheckResult:
     return CheckResult("CLI imports", "pass", dt, f"all {len(clis)} CLIs")
 
 
-COMPONENTS: dict[str, dict[str, object]] = {
+COMPONENTS: dict[str, dict[str, Any]] = {
     "core": {
         "paths": ["tests/core/"],
         "ignore": ["tests/core/test_sandbox.py"],

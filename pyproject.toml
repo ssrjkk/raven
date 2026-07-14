@@ -96,7 +96,7 @@ disallow_incomplete_defs = false
 ignore_missing_imports = true
 warn_unused_ignores = true
 show_error_codes = true
-exclude = ['deploy/', 'build/', '\.git/', 'extension/', 'scripts/', 'tests/']
+exclude = ['deploy/', 'build/', '\.git/', 'extension/', 'scripts/']
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
