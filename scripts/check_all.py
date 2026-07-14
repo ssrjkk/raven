@@ -9,12 +9,14 @@ Usage:
     python scripts/check_all.py --tests      # all tests only
     python scripts/check_all.py --component core  # single component tests
     python scripts/check_all.py --frontend   # include frontend build
-    python scripts/check_all.py --quick      # lint + imports + CLI only (no tests)
+    python scripts/check_all.py --quick      # lint + mypy + imports + CLI only (no tests)
+    python scripts/check_all.py --cov        # full run with coverage report
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib
 import os
 import re
@@ -27,6 +29,9 @@ from typing import Literal
 
 ROOT = Path(__file__).resolve().parent.parent
 os.chdir(ROOT)
+
+CHECK_DIRS = ["raven/", "aios/", "ravencode/", "tests/"]
+_USE_COV = False
 
 # -- Colors ------------------------------------------------------------------
 
@@ -107,22 +112,23 @@ def _print_section(title: str) -> None:
 def check_ruff() -> CheckResult:
     _print_section("Lint (ruff)")
     t0 = time.time()
-    r = _run([sys.executable, "-m", "ruff", "check", "raven/", "aios/", "ravencode/", "tests/"], timeout=120)
+    r = _run([sys.executable, "-m", "ruff", "check", *CHECK_DIRS], timeout=120)
     dt = time.time() - t0
     if r.returncode == 0:
         return CheckResult("ruff check", "pass", dt)
-    errors = [l for l in r.stdout.splitlines() if l.strip()]
+    errors = [line for line in r.stdout.splitlines() if line.strip()]
     return CheckResult("ruff check", "fail", dt, "\n".join(errors[:20]))
 
 
 def check_mypy() -> CheckResult:
     _print_section("Type Check (mypy)")
     t0 = time.time()
-    r = _run([sys.executable, "-m", "mypy", "raven/", "aios/", "ravencode/", "--ignore-missing-imports"], timeout=120)
+    mypy_dirs = [d for d in CHECK_DIRS if d not in ("scripts/", "tests/")]
+    r = _run([sys.executable, "-m", "mypy", *mypy_dirs, "--ignore-missing-imports"], timeout=120)
     dt = time.time() - t0
     if r.returncode == 0:
         return CheckResult("mypy", "pass", dt)
-    errors = [l for l in (r.stdout + r.stderr).splitlines() if l.strip() and ":" in l]
+    errors = [line for line in (r.stdout + r.stderr).splitlines() if line.strip() and ":" in line]
     return CheckResult("mypy", "fail", dt, "\n".join(errors[:20]))
 
 
@@ -131,7 +137,7 @@ def check_imports() -> CheckResult:
     t0 = time.time()
     sys.path.insert(0, str(ROOT))
 
-    MODULES = [
+    modules = [
         "raven.core.config",
         "raven.core.llm",
         "raven.core.db",
@@ -153,7 +159,7 @@ def check_imports() -> CheckResult:
     ]
 
     failed: list[str] = []
-    for mod in MODULES:
+    for mod in modules:
         try:
             importlib.import_module(mod)
             print(f"  {GREEN}OK{RESET}  {mod}")
@@ -163,8 +169,8 @@ def check_imports() -> CheckResult:
 
     dt = time.time() - t0
     if failed:
-        return CheckResult("module imports", "fail", dt, f"{len(failed)}/{len(MODULES)} failed: {', '.join(failed)}")
-    return CheckResult("module imports", "pass", dt, f"all {len(MODULES)} modules")
+        return CheckResult("module imports", "fail", dt, f"{len(failed)}/{len(modules)} failed: {', '.join(failed)}")
+    return CheckResult("module imports", "pass", dt, f"all {len(modules)} modules")
 
 
 def check_cli_imports() -> CheckResult:
@@ -172,14 +178,14 @@ def check_cli_imports() -> CheckResult:
     t0 = time.time()
     sys.path.insert(0, str(ROOT))
 
-    CLIS = [
+    clis = [
         ("raven", "raven.cli.main"),
         ("ravencode", "ravencode.__main__"),
         ("ravenflow", "raven.gateway.daemon"),
     ]
 
     failed: list[str] = []
-    for name, mod in CLIS:
+    for name, mod in clis:
         try:
             importlib.import_module(mod)
             print(f"  {GREEN}OK{RESET}  {name} ({mod})")
@@ -190,7 +196,7 @@ def check_cli_imports() -> CheckResult:
     dt = time.time() - t0
     if failed:
         return CheckResult("CLI imports", "fail", dt, f"failed: {', '.join(failed)}")
-    return CheckResult("CLI imports", "pass", dt, f"all {len(CLIS)} CLIs")
+    return CheckResult("CLI imports", "pass", dt, f"all {len(clis)} CLIs")
 
 
 COMPONENTS: dict[str, dict[str, object]] = {
@@ -239,11 +245,12 @@ def check_component(name: str) -> CheckResult:
     _print_section(f"Tests: {name} -- {cfg['desc']}")
     t0 = time.time()
 
+    cov_flag = "--cov=raven" if _USE_COV else "--no-cov"
     cmd = [
         sys.executable, "-m", "pytest",
         "-q", "--tb=short", "--timeout=120",
         "-p", "no:schemathesis",
-        "--no-cov",
+        cov_flag,
         "-W", "ignore::RuntimeWarning",
     ]
 
@@ -272,16 +279,14 @@ def check_component(name: str) -> CheckResult:
             for part in clean.split(","):
                 part = part.strip()
                 if "error" in part:
-                    try:
+                    with contextlib.suppress(ValueError):
                         errors = int(part.split()[0])
-                    except ValueError:
-                        pass
 
     counts = {"passed": passed, "failed": failed, "skipped": skipped, "errors": errors}
 
     # Print last 30 lines of output for context
-    lines = [l for l in output.splitlines() if l.strip()]
-    for line in lines[-30:]:
+    out_lines = [line for line in output.splitlines() if line.strip()]
+    for line in out_lines[-30:]:
         print(f"  {line}")
 
     status: Status = "pass"
@@ -302,13 +307,14 @@ def check_full_tests() -> CheckResult:
     _print_section("Tests: Full Suite")
     t0 = time.time()
 
+    cov_flag = "--cov=raven" if _USE_COV else "--no-cov"
     cmd = [
         sys.executable, "-m", "pytest",
         "tests/",
         "-q", "--tb=short", "--timeout=120",
         "--ignore=tests/core/test_sandbox.py",
         "-p", "no:schemathesis",
-        "--no-cov",
+        cov_flag,
         "-W", "ignore::RuntimeWarning",
     ]
 
@@ -327,8 +333,8 @@ def check_full_tests() -> CheckResult:
 
     counts = {"passed": passed, "failed": failed, "skipped": skipped}
 
-    lines = [l for l in output.splitlines() if l.strip()]
-    for line in lines[-30:]:
+    out_lines = [line for line in output.splitlines() if line.strip()]
+    for line in out_lines[-30:]:
         print(f"  {line}")
 
     status: Status = "pass" if r.returncode == 0 else "fail"
@@ -371,9 +377,13 @@ def main() -> int:
     parser.add_argument("--component", choices=list(COMPONENTS.keys()), help="Run tests for a specific component")
     parser.add_argument("--frontend", action="store_true", help="Include frontend build check")
     parser.add_argument("--quick", action="store_true", help="Lint + mypy + imports + CLI only (skip tests)")
+    parser.add_argument("--cov", action="store_true", help="Include coverage report in full test run")
     args = parser.parse_args()
 
     run_all = not (args.lint or args.tests or args.component or args.quick)
+
+    global _USE_COV  # noqa: PLW0603
+    _USE_COV = args.cov
 
     print(f"\n{BOLD}{'=' * 62}{RESET}")
     print(f"{BOLD}  Raven Project -- Unified Check Script{RESET}")
