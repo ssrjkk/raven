@@ -301,6 +301,7 @@ class FaultInjector:
 
     async def _inject_network_latency(self, fault: dict[str, Any]) -> None:
         import platform
+        import shlex
         import shutil
         import subprocess as _subprocess
 
@@ -309,7 +310,7 @@ class FaultInjector:
         system = platform.system().lower()
         iface = target if target != "all interfaces" else None
         if system == "linux" and shutil.which("tc"):
-            iface_arg = f"dev {iface}" if iface else "dev lo"
+            iface_arg = f"dev {shlex.quote(iface)}" if iface else "dev lo"
             try:
                 _subprocess.run(  # noqa: S602
                     f"tc qdisc add {iface_arg} root netem delay {latency_ms}ms",
@@ -429,10 +430,11 @@ class FaultInjector:
             details = fault.get("details", {})
             if details.get("method") == "tc":
                 import platform
+                import shlex
                 import subprocess as _subprocess
                 if platform.system().lower() == "linux":
                     iface = details.get("target", "lo")
-                    _subprocess.run(f"tc qdisc del dev {iface} root", shell=True, capture_output=True, timeout=5)  # noqa: S602
+                    _subprocess.run(f"tc qdisc del dev {shlex.quote(iface)} root", shell=True, capture_output=True, timeout=5)  # noqa: S602
                     logger.info("[RECOVER] tc qdisc removed from {}", iface)
             else:
                 logger.info("[RECOVER] Network latency removed")
