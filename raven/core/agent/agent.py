@@ -303,7 +303,7 @@ class Agent:
             return {"error": "Path outside workspace root — denied by security policy"}
         try:
             logger.info("Tool call: {} args={}", tc.name, tc.arguments)
-            result = await tool.handler(**tc.arguments)
+            result = await tool.handler(**(tc.arguments or {}))
             return {"result": str(result)[:4000]}
         except Exception as e:
             logger.error("Tool {} error: {}", tc.name, e)

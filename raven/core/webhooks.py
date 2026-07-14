@@ -33,8 +33,11 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
     async def generic_webhook(body: dict[str, Any], request: Request):
         body_bytes = await request.body()
         signature = request.headers.get("X-Webhook-Signature", "")
-        if not signature or not _verify_hmac_sha256(body_bytes, signature, settings.web_secret_key):
-            raise HTTPException(status_code=403, detail="Invalid or missing webhook signature")
+        if settings.web_secret_key:
+            if not signature or not _verify_hmac_sha256(body_bytes, signature, settings.web_secret_key):
+                raise HTTPException(status_code=403, detail="Invalid or missing webhook signature")
+        elif signature:
+            raise HTTPException(status_code=403, detail="Webhook signature not supported — WEB_SECRET_KEY not configured")
         source = request.headers.get("X-Webhook-Source", "unknown")
         text = body.get("text", "") or body.get("message", "") or body.get("content", "")
         user_id = body.get("user_id", "") or body.get("user", "") or f"webhook:{source}"
@@ -98,7 +101,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
         mode = request.query_params.get("hub.mode")
         token = request.query_params.get("hub.verify_token")
         challenge = request.query_params.get("hub.challenge")
-        if mode == "subscribe" and hmac_mod.compare_digest(token or "", settings.web_secret_key):
+        if mode == "subscribe" and settings.web_secret_key and hmac_mod.compare_digest(token or "", settings.web_secret_key):
             return int(challenge)  # type: ignore[arg-type]
         raise HTTPException(status_code=403, detail="Verify token failed")
 

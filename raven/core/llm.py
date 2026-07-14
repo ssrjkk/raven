@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac as hmac_mod
 import os
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
+from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from loguru import logger
@@ -81,8 +85,8 @@ async def _stream_sse(
 
 
 def _parse_openai_response(data: dict[str, Any]) -> LLMResponse:
-    choice = data["choices"][0]
-    msg = choice["message"]
+    choice = data.get("choices", [{}])[0] if data.get("choices") else {}
+    msg = choice.get("message", {}) if isinstance(choice, dict) else {}
     content = msg.get("content", "") or ""
     tool_calls_raw = msg.get("tool_calls")
     tool_calls = [ToolCall.from_openai(tc) for tc in tool_calls_raw] if tool_calls_raw else []
@@ -529,10 +533,59 @@ class BedrockProvider(LLMProvider):
         return model.replace("bedrock/", "")
 
     async def _signed_headers(self, method: str, url: str, body: bytes) -> dict[str, str]:
-        raise NotImplementedError(
-            "AWS SigV4 signing not implemented. "
-            "Use IAM auth, instance role, or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY env vars."
+        service = "bedrock"
+        amz_date = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        datestamp = amz_date[:8]
+
+        parsed_url = urlparse(url)
+        canonical_uri = parsed_url.path or "/"
+        canonical_qs = parsed_url.query or ""
+
+        payload_hash = hashlib.sha256(body).hexdigest()
+        canonical_headers = (
+            f"content-type:application/json\n"
+            f"host:{parsed_url.hostname}\n"
+            f"x-amz-date:{amz_date}\n"
         )
+        signed_headers = "content-type;host;x-amz-date"
+        canonical_request = (
+            f"{method}\n"
+            f"{canonical_uri}\n"
+            f"{canonical_qs}\n"
+            f"{canonical_headers}\n"
+            f"{signed_headers}\n"
+            f"{payload_hash}"
+        )
+
+        algorithm = "AWS4-HMAC-SHA256"
+        credential_scope = f"{datestamp}/{self.region}/{service}/aws4_request"
+        string_to_sign = (
+            f"{algorithm}\n"
+            f"{amz_date}\n"
+            f"{credential_scope}\n"
+            f"{hashlib.sha256(canonical_request.encode()).hexdigest()}"
+        )
+
+        k_secret = f"AWS4{self.secret_key}".encode()
+        k_date = hmac_mod.new(k_secret, datestamp.encode(), hashlib.sha256).digest()
+        k_region = hmac_mod.new(k_date, self.region.encode(), hashlib.sha256).digest()
+        k_service = hmac_mod.new(k_region, service.encode(), hashlib.sha256).digest()
+        k_signing = hmac_mod.new(k_service, b"aws4_request", hashlib.sha256).digest()
+        signature = hmac_mod.new(k_signing, string_to_sign.encode(), hashlib.sha256).hexdigest()
+
+        authorization = (
+            f"{algorithm} Credential={self.access_key}/{credential_scope}, "
+            f"SignedHeaders={signed_headers}, Signature={signature}"
+        )
+
+        headers = {
+            "Content-Type": "application/json",
+            "X-Amz-Date": amz_date,
+            "Authorization": authorization,
+        }
+        if self.session_token:
+            headers["X-Amz-Security-Token"] = self.session_token
+        return headers
 
     async def complete_stream(self, messages, model, tools=None):
         model_id = self._model_id(model)

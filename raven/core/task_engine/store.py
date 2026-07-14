@@ -69,9 +69,11 @@ class TaskStore:
     def __init__(self, db_path: str | Path):
         self._path = str(db_path)
         conn = sqlite3.connect(self._path)
-        conn.executescript(SCHEMA)
-        conn.commit()
-        conn.close()
+        try:
+            conn.executescript(SCHEMA)
+            conn.commit()
+        finally:
+            conn.close()
 
     def close(self) -> None:
         _close_all_conns()
