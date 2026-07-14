@@ -10,9 +10,9 @@ from raven.core.secrets import SecretsManager
 
 
 @pytest.fixture
-def mgr():
+def mgr(tmp_path):
     os.environ["RAVEN_MASTER_KEY"] = "test-master-key-for-testing-only"
-    data_dir = "tmp_test_secrets"
+    data_dir = str(tmp_path / "secrets")
     manager = SecretsManager(data_dir=data_dir)
     yield manager
     os.environ.pop("RAVEN_MASTER_KEY", None)

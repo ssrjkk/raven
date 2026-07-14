@@ -215,7 +215,7 @@ class Gateway(CommandHandlersMixin):
         except Exception as e:
             logger.error("handle_message error: {}", e)
             metrics.inc("message_errors", {"channel": event.channel})
-            await self._send(event.channel, event.session_id, f"Sorry, an error occurred: {str(e)[:200]}")
+            await self._send(event.channel, event.session_id, "Sorry, an error occurred. The team has been notified.")
 
     async def _manage_context(self, session_id: str) -> None:
         if self._ctxmgr is None:

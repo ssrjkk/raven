@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 
 from raven.core.self_heal import MAX_RESTART_ATTEMPTS, SelfHealer, ServiceStatus
 
@@ -84,9 +85,9 @@ class TestSelfHealer:
 
         self.healer.register("svc", check, restart)
         self.healer.start()
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.15)
         await self.healer.stop()
-        assert len(calls) >= 0
+        assert len(calls) >= 1
 
     async def test_loop_with_unhealthy_service_restarts(self):
         restart_calls = []
@@ -94,11 +95,17 @@ class TestSelfHealer:
         def check():
             return False
 
-        async def restart():
+        def restart():
             restart_calls.append("restart")
 
         self.healer.register("svc", check, restart)
         self.healer._services["svc"][0].failures = 3
         self.healer._services["svc"][0].alive = False
 
-        await self.healer._loop.__wrapped__(self.healer) if hasattr(self.healer._loop, "__wrapped__") else None
+        loop_task = asyncio.create_task(self.healer._loop())
+        await asyncio.sleep(0.15)
+        loop_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await loop_task
+
+        assert len(restart_calls) >= 1

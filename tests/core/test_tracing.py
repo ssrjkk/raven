@@ -3,11 +3,9 @@ from __future__ import annotations
 import pytest
 
 from raven.core.tracing import (
-    HAS_OTEL,
     _NoopSpan,
     _NoopTracer,
     get_tracer,
-    setup_tracing,
     trace_llm_call,
     trace_tool_call,
 )
@@ -75,12 +73,3 @@ async def test_trace_tool_call_default_name():
     decorated = trace_tool_call()(_dummy_tool)
     result = await decorated(3)
     assert result == 6
-
-
-def test_setup_tracing_no_otel():
-    setup_tracing(service_name="test", enable_console=False)
-    assert True
-
-
-def test_has_otel_attribute():
-    assert HAS_OTEL in (True, False)

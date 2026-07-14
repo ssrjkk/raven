@@ -99,6 +99,8 @@ class Sandbox:
             return f"Execution error: {e}"
 
     async def _exec_subprocess(self, code: str) -> str:
+        if len(code.splitlines()) > 5000:
+            return "Error: Code exceeds 5000 line limit"
         tmpdir = tempfile.mkdtemp(prefix="raven_sandbox_")
         self._tmpdirs.append(tmpdir)
         script = Path(tmpdir) / "script.py"

@@ -18,6 +18,14 @@ def _verify_hmac_sha256(body_bytes: bytes, signature: str, secret: str) -> bool:
     return hmac_mod.compare_digest(f"sha256={expected}", signature)
 
 
+async def _verify_webhook_signature(request: Request) -> None:
+    if settings.web_secret_key:
+        body_bytes = await request.body()
+        sig = request.headers.get("X-Webhook-Signature", "")
+        if sig and not _verify_hmac_sha256(body_bytes, sig, settings.web_secret_key):
+            raise HTTPException(status_code=403, detail="Invalid webhook signature")
+
+
 def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
     router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
@@ -96,6 +104,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/googlechat")
     async def googlechat_webhook(body: dict[str, Any], request: Request):
+        await _verify_webhook_signature(request)
         ch = request.app.state.googlechat_channel if hasattr(request.app.state, "googlechat_channel") else None
         if not ch:
             logger.warning("googlechat channel not configured, webhook ignored")
@@ -105,6 +114,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/signal")
     async def signal_webhook(body: dict[str, Any], request: Request):
+        await _verify_webhook_signature(request)
         ch = request.app.state.signal_channel if hasattr(request.app.state, "signal_channel") else None
         if not ch:
             logger.warning("signal channel not configured, webhook ignored")
@@ -114,6 +124,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/teams")
     async def teams_webhook(body: dict[str, Any], request: Request):
+        await _verify_webhook_signature(request)
         ch = request.app.state.teams_channel if hasattr(request.app.state, "teams_channel") else None
         if not ch:
             logger.warning("teams channel not configured, webhook ignored")
@@ -123,6 +134,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/feishu")
     async def feishu_webhook(body: dict[str, Any], request: Request):
+        await _verify_webhook_signature(request)
         ch = request.app.state.feishu_channel if hasattr(request.app.state, "feishu_channel") else None
         if not ch:
             logger.warning("feishu channel not configured, webhook ignored")
@@ -132,6 +144,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/line")
     async def line_webhook(body: dict[str, Any], request: Request):
+        await _verify_webhook_signature(request)
         ch = request.app.state.line_channel if hasattr(request.app.state, "line_channel") else None
         if not ch:
             logger.warning("line channel not configured, webhook ignored")
@@ -141,6 +154,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/github")
     async def github_webhook(body: dict[str, Any], request: Request):
+        await _verify_webhook_signature(request)
         ch = request.app.state.github_channel if hasattr(request.app.state, "github_channel") else None
         if not ch:
             logger.warning("github channel not configured, webhook ignored")
@@ -151,6 +165,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/gitlab")
     async def gitlab_webhook(body: dict[str, Any], request: Request):
+        await _verify_webhook_signature(request)
         ch = request.app.state.gitlab_channel if hasattr(request.app.state, "gitlab_channel") else None
         if not ch:
             logger.warning("gitlab channel not configured, webhook ignored")

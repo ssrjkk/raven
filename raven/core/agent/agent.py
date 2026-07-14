@@ -90,7 +90,7 @@ class Agent:
             workspace_root=ws_root,
         )
 
-    def _build_system_prompt(self) -> str:
+    async def _build_system_prompt(self) -> str:
         base = self.config.system_prompt or DEFAULT_SYSTEM_PROMPT
         if self.session.system_prompt:
             base = self.session.system_prompt + "\n\n" + base
@@ -102,7 +102,9 @@ class Agent:
             for fname in ("SOUL.md", "AGENTS.md", "TOOLS.md"):
                 fp = ws / fname
                 if fp.exists():
-                    content = fp.read_text(encoding="utf-8").strip()
+                    loop = asyncio.get_running_loop()
+                    content = await loop.run_in_executor(None, fp.read_text, "utf-8")
+                    content = content.strip()
                     if content:
                         base += f"\n\n---\n[{fname}]\n{content}"
         return base
@@ -188,7 +190,7 @@ class Agent:
         recall_context: str | None = None,
     ) -> AsyncIterator[str]:
         state = AgentState.INIT
-        messages: list[dict[str, Any]] = [{"role": "system", "content": self._build_system_prompt()}]
+        messages: list[dict[str, Any]] = [{"role": "system", "content": await self._build_system_prompt()}]
         tool_used = False
         final_content = ""
         consecutive_errors = 0

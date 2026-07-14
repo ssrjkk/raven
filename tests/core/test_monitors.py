@@ -337,10 +337,7 @@ class TestCheckerSignatures:
         from raven.core.monitor.checkers.price import check_price
 
         m = Monitor(name="test-price", type=MonitorType.PRICE, target="nonexistentcoinxyz")
-        try:
-            result = await check_price(m)
-        except Exception:
-            result = None
+        result = await check_price(m)
         assert result is None or isinstance(result, str)
 
     async def test_http_checker_returns_str_or_none(self):

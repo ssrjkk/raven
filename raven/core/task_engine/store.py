@@ -16,7 +16,13 @@ def _get_conn(db_path: str) -> sqlite3.Connection:
     if not hasattr(_local, "conn") or _local.conn is None:
         _local.conn = sqlite3.connect(db_path)
         _local.conn.row_factory = sqlite3.Row
-    return _local.conn  # type: ignore[no-any-return]
+    return _local.conn
+
+
+def _close_all_conns() -> None:
+    if hasattr(_local, "conn") and _local.conn is not None:
+        _local.conn.close()
+        _local.conn = None
 
 
 SCHEMA = """
@@ -66,6 +72,9 @@ class TaskStore:
         conn.executescript(SCHEMA)
         conn.commit()
         conn.close()
+
+    def close(self) -> None:
+        _close_all_conns()
 
     def _conn(self) -> sqlite3.Connection:
         return _get_conn(self._path)

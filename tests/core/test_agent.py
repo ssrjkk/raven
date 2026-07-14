@@ -103,7 +103,7 @@ class TestAgent:
         assert config.agent_id == "default"
 
     async def test_build_system_prompt(self, agent):
-        prompt = agent._build_system_prompt()
+        prompt = await agent._build_system_prompt()
         assert "Raven" in prompt
 
 
