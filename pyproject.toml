@@ -65,6 +65,7 @@ dev = [
     "pytest-cov>=5.0,<7.0",
     "pytest-timeout>=2.3,<4.0",
     "pytest-github-actions-annotate-failures>=0.2,<1.0",
+    "allure-pytest>=2.13,<3.0",
     "coverage>=7.5,<8.0",
     "cryptography>=41.0,<45.0",
     "ruff>=0.5,<1.0",

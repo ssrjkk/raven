@@ -9,7 +9,14 @@ repos:
         pass_filenames: false
         description: "Bakes a unique git-based deploy ID into raven/core/_deploy.py"
 
-repos:
+      - id: check-all
+        name: Raven unified checks (ruff + mypy + imports)
+        entry: python scripts/check_all.py --quick
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.5
     hooks:
