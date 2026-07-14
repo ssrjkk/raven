@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import json
 from typing import Any
 
@@ -198,12 +197,14 @@ async def aios_agent_ws(ws: WebSocket):
     ee = EventEmitter()
 
     async def send_event(event: AgentEvent) -> None:
-        with contextlib.suppress(Exception):
+        try:
             await ws.send_json({
                 "type": event.type,
                 "data": event.data,
                 "timestamp": event.timestamp,
             })
+        except Exception as exc:
+            logger.debug("Failed to send WS event {}: {}", event.type, exc)
 
     ee.on("step_start", send_event)
     ee.on("tool_call", send_event)

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import contextlib
 import ipaddress
 import json
 import socket
@@ -67,8 +66,10 @@ async def _close_playwright():
     global _browser_instance, _browser_context
     async with _lock:
         if _browser_instance:
-            with contextlib.suppress(Exception):
+            try:
                 await _browser_instance.stop()
+            except Exception as exc:
+                logger.debug("Failed to stop browser instance: {}", exc)
             _browser_instance = None
             _browser_context = None
 

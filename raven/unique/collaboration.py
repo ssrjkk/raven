@@ -134,11 +134,11 @@ class WebSocketManager:
         return list(self._connections.keys())
 
     async def disconnect_all(self, session_id: str) -> None:
-        import contextlib
-
         for ws in list(self._connections.get(session_id, set())):
-            with contextlib.suppress(Exception):
+            try:
                 await ws.close()
+            except Exception as exc:
+                logger.debug("Failed to close WS in session {}: {}", session_id, exc)
         self._connections.pop(session_id, None)
 
 

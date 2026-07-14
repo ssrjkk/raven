@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import hashlib
 import json
 import math
@@ -433,11 +432,15 @@ class MultiModalRAG:
     def _remove_from_chroma(self, chunk_ids: list[str]) -> None:
         self._ensure_chroma()
         if self._chroma_text_collection is not None:
-            with contextlib.suppress(Exception):
+            try:
                 self._chroma_text_collection.delete(ids=chunk_ids)
+            except Exception as exc:
+                logger.debug("Chroma text delete failed for {} ids: {}", len(chunk_ids), exc)
         if self._chroma_clip_collection is not None:
-            with contextlib.suppress(Exception):
+            try:
                 self._chroma_clip_collection.delete(ids=chunk_ids)
+            except Exception as exc:
+                logger.debug("Chroma CLIP delete failed for {} ids: {}", len(chunk_ids), exc)
 
     # -- Removal -------------------------------------------------------------
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import contextlib
 import ipaddress
 import re
 import socket
@@ -315,8 +314,10 @@ class BrowserAgent:
 
         async def on_request(request: Any) -> None:
             body = None
-            with contextlib.suppress(Exception):
+            try:
                 body = str(await request.body())
+            except Exception as exc:
+                logger.debug("Failed to read request body: {}", exc)
             self._intercepted_requests.append(InterceptedRequest(
                 url=request.url,
                 method=request.method,
@@ -327,8 +328,10 @@ class BrowserAgent:
 
         async def on_response(response: Any) -> None:
             body = None
-            with contextlib.suppress(Exception):
+            try:
                 body = str(await response.body())
+            except Exception as exc:
+                logger.debug("Failed to read response body: {}", exc)
             self._intercepted_responses.append(InterceptedResponse(
                 url=response.url,
                 status=response.status,
