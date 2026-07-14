@@ -100,7 +100,16 @@ exclude = ['deploy/', 'build/', '\.git/', 'extension/', 'scripts/', 'tests/']
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --tb=short --no-header --cov=raven --cov=ravencode --cov=aios --cov-report=term-missing --cov-config=.coveragerc"
+addopts = """
+    --alluredir=allure-results
+    --cov=raven
+    --cov=aios
+    --cov=ravencode
+    --cov-report=term-missing
+    --cov-report=xml
+    --tb=short
+    --no-header
+"""
 asyncio_mode = "auto"
 log_cli_level = "WARNING"
 markers = [

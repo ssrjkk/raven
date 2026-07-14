@@ -121,13 +121,7 @@ jobs:
           RAVEN_LLM_PROVIDER: mock
           DATABASE_URL: postgresql+asyncpg://raven:raven@localhost:5432/raven_test
           REDIS_URL: redis://localhost:6379/0
-        run: |
-          pytest tests/e2e/ \
-            --alluredir=allure-results \
-            --cov=raven --cov=aios --cov=ravencode \
-            --cov-report=xml:coverage-e2e.xml \
-            --cov-report=term-missing \
-            -v
+        run: pytest tests/e2e/ -v --cov-report=xml:coverage-e2e.xml
 
       - name: Generate Allure report
         if: always()
