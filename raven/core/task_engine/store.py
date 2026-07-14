@@ -4,7 +4,7 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from raven.core._json import json
 from raven.core.task_engine.models import Task, TaskPriority, TaskStatus, TaskStep
@@ -16,7 +16,7 @@ def _get_conn(db_path: str) -> sqlite3.Connection:
     if not hasattr(_local, "conn") or _local.conn is None:
         _local.conn = sqlite3.connect(db_path)
         _local.conn.row_factory = sqlite3.Row
-    return _local.conn
+    return cast(sqlite3.Connection, _local.conn)
 
 
 def _close_all_conns() -> None:

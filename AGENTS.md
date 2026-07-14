@@ -39,10 +39,9 @@ npm run dev
 ```
 
 ## Changes
-- Run `python scripts/test_imports.py` before commit
-- Run `ruff check raven/ aios/ ravencode/` before commit
-- Run `python -m mypy raven/ aios/ ravencode/ --ignore-missing-imports` before commit (target: 0 errors)
-- Run `python -m pytest tests/ -q` before commit
+- Run `python scripts/check_all.py` before commit (ruff + mypy + imports + all tests)
+- Run `python scripts/check_all.py --quick` for quick check (lint + types + imports only, no tests)
+- Run `python scripts/check_all.py --component core` for single component tests
 - Never commit secrets or .env files
 
 ## Fixes applied (May 2026)

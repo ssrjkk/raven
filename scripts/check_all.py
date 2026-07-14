@@ -115,6 +115,17 @@ def check_ruff() -> CheckResult:
     return CheckResult("ruff check", "fail", dt, "\n".join(errors[:20]))
 
 
+def check_mypy() -> CheckResult:
+    _print_section("Type Check (mypy)")
+    t0 = time.time()
+    r = _run([sys.executable, "-m", "mypy", "raven/", "aios/", "ravencode/", "--ignore-missing-imports"], timeout=120)
+    dt = time.time() - t0
+    if r.returncode == 0:
+        return CheckResult("mypy", "pass", dt)
+    errors = [l for l in (r.stdout + r.stderr).splitlines() if l.strip() and ":" in l]
+    return CheckResult("mypy", "fail", dt, "\n".join(errors[:20]))
+
+
 def check_imports() -> CheckResult:
     _print_section("Module Imports")
     t0 = time.time()
@@ -359,7 +370,7 @@ def main() -> int:
     parser.add_argument("--tests", action="store_true", help="Run all tests only")
     parser.add_argument("--component", choices=list(COMPONENTS.keys()), help="Run tests for a specific component")
     parser.add_argument("--frontend", action="store_true", help="Include frontend build check")
-    parser.add_argument("--quick", action="store_true", help="Lint + imports + CLI only (skip tests)")
+    parser.add_argument("--quick", action="store_true", help="Lint + mypy + imports + CLI only (skip tests)")
     args = parser.parse_args()
 
     run_all = not (args.lint or args.tests or args.component or args.quick)
@@ -374,6 +385,7 @@ def main() -> int:
     # Always run these
     if run_all or args.lint or args.quick:
         results.append(check_ruff())
+        results.append(check_mypy())
 
     if run_all or args.quick:
         results.append(check_imports())
