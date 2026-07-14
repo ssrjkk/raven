@@ -55,7 +55,7 @@ def run_step(step: dict, dry_run: bool = False):
         return
 
     print("  Enabling shadow mode...")
-    subprocess.run([sys.executable, "scripts/migration/promote.py", "--shadow-only", "--service", step["name"]])
+    subprocess.run([sys.executable, "scripts/migration/promote.py", "--shadow-only", "--service", step["name"]])  # noqa: S603 — sys.executable trusted
     print(f"  ✅ Shadow mode active for {step['name']}")
     print(f"  Monitor for drift. Run '--service {step['name']}' again to switch traffic.")
 

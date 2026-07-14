@@ -30,7 +30,7 @@ from typing import Literal
 ROOT = Path(__file__).resolve().parent.parent
 os.chdir(ROOT)
 
-CHECK_DIRS = ["raven/", "aios/", "ravencode/", "tests/"]
+CHECK_DIRS = ["raven/", "aios/", "ravencode/", "tests/", "scripts/"]
 _USE_COV = False
 
 # -- Colors ------------------------------------------------------------------
@@ -63,7 +63,7 @@ class CheckResult:
 
 def _run(cmd: list[str], timeout: int = 600, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     merged_env = {**os.environ, "LOGURU_LEVEL": "ERROR", **(env or {})}
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=merged_env)
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=merged_env)  # noqa: S603 — cmd from trusted callers
 
 
 def _strip_ansi(text: str) -> str:

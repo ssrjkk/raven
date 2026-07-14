@@ -4,16 +4,19 @@ Called automatically by pre-commit hook. Each commit produces a distinct build.
 """
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+_GIT = shutil.which("git") or "git"
+
 
 def _git_describe() -> str:
     try:
-        return subprocess.check_output(
-            ["git", "describe", "--always", "--dirty", "--long"],
+        return subprocess.check_output(  # noqa: S603 — args hardcoded
+            [_GIT, "describe", "--always", "--dirty", "--long"],
             stderr=subprocess.DEVNULL,
             timeout=5,
         ).decode().strip()
@@ -23,8 +26,8 @@ def _git_describe() -> str:
 
 def _git_origin() -> str:
     try:
-        out = subprocess.check_output(
-            ["git", "remote", "get-url", "origin"],
+        out = subprocess.check_output(  # noqa: S603 — args hardcoded
+            [_GIT, "remote", "get-url", "origin"],
             stderr=subprocess.DEVNULL,
             timeout=5,
         ).decode().strip()
@@ -35,8 +38,8 @@ def _git_origin() -> str:
 
 def _git_branch() -> str:
     try:
-        out = subprocess.check_output(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        out = subprocess.check_output(  # noqa: S603 — args hardcoded
+            [_GIT, "rev-parse", "--abbrev-ref", "HEAD"],
             stderr=subprocess.DEVNULL,
             timeout=5,
         ).decode().strip()

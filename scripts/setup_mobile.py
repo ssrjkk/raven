@@ -24,7 +24,7 @@ WEB_DIR = os.path.join(ROOT, "web")
 
 def run(cmd: list[str], cwd: str = WEB_DIR) -> None:
     print(f"[mobile] Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=cwd)
+    result = subprocess.run(cmd, cwd=cwd)  # noqa: S603 — cmd from trusted callers
     if result.returncode != 0:
         print(f"[mobile] ERROR: Command failed with code {result.returncode}")
         sys.exit(result.returncode)
