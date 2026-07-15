@@ -42,6 +42,12 @@ jobs:
         if: github.event_name == 'push'
         run: python scripts/check_all.py --cov
 
+      - name: Verify DB indexes (migration v5)
+        if: github.event_name == 'push'
+        run: |
+          python -c "from raven.core.db import RavenDatabase; import asyncio; asyncio.run(RavenDatabase().connect())"
+          python scripts/verify_db_indexes.py
+
       - name: E2E tests (on main push, py3.11 only)
         if: github.event_name == 'push' && matrix.python-version == '3.11'
         run: python scripts/check_all.py --component e2e
