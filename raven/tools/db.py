@@ -11,18 +11,24 @@ from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 async def db_query(query: str, db_path: str = "data/raven.db") -> str:
     from raven.core.config import settings
     p = Path(db_path)
-    if not p.is_absolute() and not p.drive and not p.root:
-        base = settings.resolved_db_path.parent.parent.resolve()
-        data_dir = settings.resolved_db_path.parent.resolve()
-        p = (base / p).resolve()
+    data_dir = settings.resolved_db_path.parent.resolve()
+    if p.is_absolute() or p.drive or p.root:
+        p = p.expanduser().resolve()
+        if not p.exists():
+            return f"Database not found: {p}"
         try:
             p.relative_to(data_dir)
         except ValueError:
             return f"Access denied: path outside data directory: {p}"
     else:
-        p = p.expanduser().resolve()
-    if not p.exists():
-        return f"Database not found: {p}"
+        base = settings.resolved_db_path.parent.parent.resolve()
+        p = (base / p).resolve()
+        if not p.exists():
+            return f"Database not found: {p}"
+        try:
+            p.relative_to(data_dir)
+        except ValueError:
+            return f"Access denied: path outside data directory: {p}"
 
     stripped = query.strip()
     if not stripped.upper().startswith("SELECT"):

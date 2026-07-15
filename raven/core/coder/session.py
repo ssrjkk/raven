@@ -94,6 +94,21 @@ class CodingSessionManager:
         ).fetchall()
         return [self._row_to_session(r) for r in rows]
 
+    def count_sessions(self, user_id: str | None = None) -> int:
+        conn = self._conn()
+        where = "1=1"
+        params: list[Any] = []
+        if user_id:
+            where = "user_id = ?"
+            params.append(user_id)
+        if where not in self._ALLOWED_WHERE:
+            raise ValueError(f"Disallowed WHERE clause: {where}")
+        row = conn.execute(
+            f"SELECT COUNT(*) as cnt FROM coding_sessions WHERE {where}",  # noqa: S608 — validated against _ALLOWED_WHERE
+            params,
+        ).fetchone()
+        return row["cnt"] if row else 0
+
     def update_session(self, session: CodingSession) -> None:
         conn = self._conn()
         conn.execute(

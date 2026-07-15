@@ -149,14 +149,18 @@ export const api = {
   metrics: () => request<MetricsSnapshot>("/api/metrics"),
   channels: () => request<ChannelInfo[]>("/api/admin/channels"),
   systemStatus: () => request<{ channels: number; agents: number; running: boolean; version: string }>("/api/admin/system/status"),
-  monitors: (limit = 50, offset = 0) => request<MonitorData[]>(`/api/monitor/list?limit=${limit}&offset=${offset}`),
+  monitors: (limit = 50, offset = 0) =>
+    request<{ items: MonitorData[]; total: number; limit: number; offset: number }>(`/api/monitor/list?limit=${limit}&offset=${offset}`).then((r) => r.items),
   monitorToggle: (action: string, id: string) => request<{ ok: boolean }>(`/api/monitor/${action}/${id}`, { method: "POST" }),
-  routines: (limit = 50, offset = 0) => request<RoutineData[]>(`/api/routine/list?limit=${limit}&offset=${offset}`),
+  routines: (limit = 50, offset = 0) =>
+    request<{ items: RoutineData[]; total: number; limit: number; offset: number }>(`/api/routine/list?limit=${limit}&offset=${offset}`).then((r) => r.items),
   routineToggle: (action: string, id: string) => request<{ ok: boolean }>(`/api/routine/${action}/${id}`, { method: "POST" }),
-  tasks: (limit = 50, offset = 0) => request<TaskData[]>(`/api/task/list?limit=${limit}&offset=${offset}`),
+  tasks: (limit = 50, offset = 0) =>
+    request<{ items: TaskData[]; total: number; limit: number; offset: number }>(`/api/task/list?limit=${limit}&offset=${offset}`).then((r) => r.items),
   taskRun: (goal: string) => request<{ id: string }>("/api/task/run", { method: "POST", body: JSON.stringify({ goal }) }),
   taskCancel: (id: string) => request<{ ok: boolean }>(`/api/task/${id}/cancel`, { method: "POST" }),
-  codeSessions: (limit = 20, offset = 0) => request<CodingSessionData[]>(`/api/code/list?limit=${limit}&offset=${offset}`),
+  codeSessions: (limit = 20, offset = 0) =>
+    request<{ items: CodingSessionData[]; total: number; limit: number; offset: number }>(`/api/code/list?limit=${limit}&offset=${offset}`).then((r) => r.items),
   config: () => request<Record<string, string>>("/api/admin/config"),
   shutdown: () => request<{ ok: boolean }>("/api/shutdown", { method: "POST" }),
   login: (username: string, password: string) =>

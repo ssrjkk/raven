@@ -76,6 +76,9 @@ class MonitorEngine:
     def list_monitors(self, user_id: str | None = None, limit: int = 50, offset: int = 0) -> list[Monitor]:
         return self._store.list_monitors(user_id=user_id, limit=limit, offset=offset)
 
+    def count_monitors(self, user_id: str | None = None) -> int:
+        return self._store.count_monitors(user_id=user_id)
+
     def add_monitor(self, monitor: Monitor):
         self._store.save_monitor(monitor)
         if monitor.status == MonitorStatus.ACTIVE and self._running:

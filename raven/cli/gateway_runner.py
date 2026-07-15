@@ -312,8 +312,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     @api_app.get("/api/monitor/list")
     async def api_monitor_list(limit: int = 50, offset: int = 0):
         eng: MonitorEngine = api_app.state.monitor_engine
-        monitors = eng.list_monitors(limit=limit, offset=offset)
-        return [
+        limit = min(limit, 1000)
+        items = [
             {
                 "id": m.id,
                 "name": m.name,
@@ -325,8 +325,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
                 if m.last_check
                 else None,
             }
-            for m in monitors
+            for m in eng.list_monitors(limit=limit, offset=offset)
         ]
+        return {"items": items, "total": eng.count_monitors(), "limit": limit, "offset": offset}
 
     @api_app.post("/api/monitor/{action}/{monitor_id}")
     async def api_monitor_toggle(action: str, monitor_id: str):
@@ -340,7 +341,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     @api_app.get("/api/routine/list")
     async def api_routine_list(limit: int = 50, offset: int = 0):
         eng: RoutineEngine = api_app.state.routine_engine
-        return [
+        limit = min(limit, 1000)
+        items = [
             {
                 "id": r.id,
                 "name": r.name,
@@ -352,6 +354,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             }
             for r in eng.list_routines(limit=limit, offset=offset)
         ]
+        return {"items": items, "total": eng._store.count_routines(), "limit": limit, "offset": offset}
 
     @api_app.post("/api/routine/create")
     async def api_routine_create(body: dict[str, Any]):
@@ -391,8 +394,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         from raven.core.task_engine.store import TaskStore
 
         store = TaskStore(settings.resolved_db_path)
-        tasks = store.list_tasks(limit=limit, offset=offset)
-        return [
+        limit = min(limit, 1000)
+        items = [
             {
                 "id": t.id,
                 "goal": t.goal,
@@ -403,8 +406,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
                 ],
                 "created_at": t.created_at,
             }
-            for t in tasks
+            for t in store.list_tasks(limit=limit, offset=offset)
         ]
+        return {"items": items, "total": store.count_tasks(), "limit": limit, "offset": offset}
 
     @api_app.post("/api/task/run")
     async def api_task_run(body: dict[str, Any]):
@@ -444,8 +448,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         from raven.core.coder.session import CodingSessionManager
 
         mgr = CodingSessionManager(settings.resolved_db_path)
-        sessions = mgr.list_sessions(limit=limit, offset=offset)
-        return [
+        limit = min(limit, 1000)
+        items = [
             {
                 "id": s.id,
                 "goal": s.goal,
@@ -453,8 +457,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
                 "project_path": s.project_path,
                 "files": len(s.files),
             }
-            for s in sessions
+            for s in mgr.list_sessions(limit=limit, offset=offset)
         ]
+        return {"items": items, "total": mgr.count_sessions(), "limit": limit, "offset": offset}
 
     @api_app.get("/api/health")
     async def api_health():

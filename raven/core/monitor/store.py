@@ -29,6 +29,12 @@ def _get_conn(db_path: str) -> sqlite3.Connection:
     return _local.conn  # type: ignore[no-any-return]
 
 
+def close_conn() -> None:
+    if hasattr(_local, "conn") and _local.conn is not None:
+        _local.conn.close()
+        _local.conn = None
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS monitors (
     id TEXT PRIMARY KEY,
@@ -132,6 +138,19 @@ class MonitorStore:
         params.extend([limit, offset])
         rows = conn.execute(" ".join(parts), params).fetchall()
         return [m for r in rows if (m := self._row_to_monitor(r)) is not None]
+
+    def count_monitors(self, user_id: str | None = None, status: str | None = None) -> int:
+        conn = self._conn()
+        parts = ["SELECT COUNT(*) as cnt FROM monitors WHERE 1=1"]
+        params: list[Any] = []
+        if user_id:
+            parts.append("AND user_id = ?")
+            params.append(user_id)
+        if status:
+            parts.append("AND status = ?")
+            params.append(status)
+        row = conn.execute(" ".join(parts), params).fetchone()
+        return row["cnt"] if row else 0
 
     def list_active(self) -> list[Monitor]:
         return self.list_monitors(status="active")

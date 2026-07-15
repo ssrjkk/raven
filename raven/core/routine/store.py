@@ -109,6 +109,19 @@ class RoutineStore:
         rows = conn.execute(" ".join(parts), params).fetchall()
         return [self._row_to_routine(r) for r in rows]
 
+    def count_routines(self, user_id: str | None = None, status: str | None = None) -> int:
+        conn = self._conn()
+        parts = ["SELECT COUNT(*) as cnt FROM routines WHERE 1=1"]
+        params: list[Any] = []
+        if user_id:
+            parts.append("AND user_id = ?")
+            params.append(user_id)
+        if status:
+            parts.append("AND status = ?")
+            params.append(status)
+        row = conn.execute(" ".join(parts), params).fetchone()
+        return row["cnt"] if row else 0
+
     def list_active(self) -> list[Routine]:
         return self.list_routines(status="active")
 
