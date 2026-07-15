@@ -73,8 +73,8 @@ class MonitorEngine:
             self._schedule_monitor(m)
         return True
 
-    def list_monitors(self, user_id: str | None = None) -> list[Monitor]:
-        return self._store.list_monitors(user_id=user_id)
+    def list_monitors(self, user_id: str | None = None, limit: int = 50, offset: int = 0) -> list[Monitor]:
+        return self._store.list_monitors(user_id=user_id, limit=limit, offset=offset)
 
     def add_monitor(self, monitor: Monitor):
         self._store.save_monitor(monitor)

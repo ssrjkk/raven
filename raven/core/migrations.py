@@ -87,6 +87,28 @@ async def _migration_4(conn):
     """)
 
 
+@register(5, "Add indexes on common query columns")
+async def _migration_5(conn):
+    indexes = [
+        "CREATE INDEX IF NOT EXISTS idx_sessions_channel ON sessions(channel)",
+        "CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)",
+        "CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_users_channel ON users(channel)",
+        "CREATE INDEX IF NOT EXISTS idx_users_external_id ON users(external_id)",
+        "CREATE INDEX IF NOT EXISTS idx_monitor_status ON monitors(status)",
+        "CREATE INDEX IF NOT EXISTS idx_monitor_user_id ON monitors(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_monitor_checks_monitor_id ON monitor_checks(monitor_id)",
+        "CREATE INDEX IF NOT EXISTS idx_routine_status ON routines(status)",
+        "CREATE INDEX IF NOT EXISTS idx_routine_user_id ON routines(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_routine_logs_routine_id ON routine_logs(routine_id)",
+    ]
+    for idx in indexes:
+        try:
+            await conn.execute(idx)
+        except Exception:
+            logger.debug("Migration 5: index already exists")
+
+
 class Migrator:
     def __init__(self, db_path: Path):
         self.db_path = db_path

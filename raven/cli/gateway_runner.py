@@ -310,9 +310,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         return gateway.registry.list_agents()
 
     @api_app.get("/api/monitor/list")
-    async def api_monitor_list():
+    async def api_monitor_list(limit: int = 50, offset: int = 0):
         eng: MonitorEngine = api_app.state.monitor_engine
-        monitors = eng.list_monitors()
+        monitors = eng.list_monitors(limit=limit, offset=offset)
         return [
             {
                 "id": m.id,
@@ -338,7 +338,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         return {"ok": True}
 
     @api_app.get("/api/routine/list")
-    async def api_routine_list():
+    async def api_routine_list(limit: int = 50, offset: int = 0):
         eng: RoutineEngine = api_app.state.routine_engine
         return [
             {
@@ -350,7 +350,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
                 "status": r.status.value,
                 "last_run_status": r.last_run_status,
             }
-            for r in eng._store.list_routines()
+            for r in eng.list_routines(limit=limit, offset=offset)
         ]
 
     @api_app.post("/api/routine/create")
@@ -387,11 +387,11 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         return {"ok": True}
 
     @api_app.get("/api/task/list")
-    async def api_task_list():
+    async def api_task_list(limit: int = 50, offset: int = 0):
         from raven.core.task_engine.store import TaskStore
 
         store = TaskStore(settings.resolved_db_path)
-        tasks = store.list_tasks()
+        tasks = store.list_tasks(limit=limit, offset=offset)
         return [
             {
                 "id": t.id,
@@ -440,11 +440,11 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         return {"ok": ok}
 
     @api_app.get("/api/code/list")
-    async def api_code_sessions():
+    async def api_code_sessions(limit: int = 20, offset: int = 0):
         from raven.core.coder.session import CodingSessionManager
 
         mgr = CodingSessionManager(settings.resolved_db_path)
-        sessions = mgr.list_sessions()
+        sessions = mgr.list_sessions(limit=limit, offset=offset)
         return [
             {
                 "id": s.id,

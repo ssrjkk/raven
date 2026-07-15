@@ -15,8 +15,8 @@ def channel():
 
 @pytest.mark.asyncio
 async def test_start_no_token(channel):
-    with patch("raven.channels.telegram.channel.settings") as mock_settings:
-        mock_settings.telegram_bot_token = ""
+    with patch("raven.channels.telegram.channel.get_channel_config", return_value={}):
+        channel._token = ""
         await channel.start()
         assert channel._app is None
 

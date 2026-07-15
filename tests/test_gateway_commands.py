@@ -42,6 +42,10 @@ def gateway():
     for role in Role:
         for perm in Permission:
             gw._rbac.add_role_permission(role, perm)
+    from raven.core.channel_guardian import ChannelGuardian
+    gw._guardian = MagicMock(spec=ChannelGuardian)
+    gw._guardian.record_error = AsyncMock()
+    gw._guardian.record_success = AsyncMock()
     return gw
 
 

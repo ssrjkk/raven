@@ -152,7 +152,7 @@ class TestUnifiedAgentUpgraded:
         session = agent.get_hybrid_session("nonexistent")
         assert session is None
 
-    @patch("raven.core.unified_agent.ReActAgent")
+    @patch("ravencode.runtime.agent_core.ReActAgent")
     async def test_handle_coding_config(self, mock_react: AsyncMock) -> None:
         mock_instance = AsyncMock()
         mock_instance.run = AsyncMock(return_value="ok")
@@ -170,7 +170,7 @@ class TestUnifiedAgentUpgraded:
         assert config.proactive_scan is True
         assert config.plan_mode is False
 
-    @patch("raven.core.unified_agent.ReActAgent")
+    @patch("ravencode.runtime.agent_core.ReActAgent")
     async def test_handle_automation_config(self, mock_react: AsyncMock) -> None:
         mock_instance = AsyncMock()
         mock_instance.run = AsyncMock(return_value="ok")
@@ -188,7 +188,7 @@ class TestUnifiedAgentUpgraded:
         assert config.proactive_scan is False
         assert config.plan_mode is False
 
-    @patch("raven.core.unified_agent.ReActAgent")
+    @patch("ravencode.runtime.agent_core.ReActAgent")
     async def test_handle_query_config(self, mock_react: AsyncMock) -> None:
         mock_instance = AsyncMock()
         mock_instance.run = AsyncMock(return_value="answer")
@@ -231,7 +231,7 @@ class TestUnifiedAgentUpgraded:
         assert agent.mode == AgentMode.HYBRID
         assert agent.task_type == TaskType.HYBRID
 
-    @patch("raven.core.unified_agent.ReActAgent")
+    @patch("ravencode.runtime.agent_core.ReActAgent")
     async def test_process_hybrid_session_persistence(self, mock_react: AsyncMock) -> None:
         mock_instance = AsyncMock()
         mock_instance.run = AsyncMock(return_value="result")

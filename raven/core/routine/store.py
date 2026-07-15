@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS routine_logs (
     duration_ms REAL,
     created_at REAL NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_routine_status ON routines(status);
+CREATE INDEX IF NOT EXISTS idx_routine_user_id ON routines(user_id);
+CREATE INDEX IF NOT EXISTS idx_routine_logs_routine_id ON routine_logs(routine_id);
 """
 
 class RoutineStore:
@@ -91,7 +94,7 @@ class RoutineStore:
         conn.execute("DELETE FROM routine_logs WHERE routine_id = ?", (routine_id,))
         conn.commit()
 
-    def list_routines(self, user_id: str | None = None, status: str | None = None) -> list[Routine]:
+    def list_routines(self, user_id: str | None = None, status: str | None = None, limit: int = 50, offset: int = 0) -> list[Routine]:
         conn = self._conn()
         parts = ["SELECT * FROM routines WHERE 1=1"]
         params: list[Any] = []
@@ -101,7 +104,8 @@ class RoutineStore:
         if status:
             parts.append("AND status = ?")
             params.append(status)
-        parts.append("ORDER BY created_at DESC")
+        parts.append("ORDER BY created_at DESC LIMIT ? OFFSET ?")
+        params.extend([limit, offset])
         rows = conn.execute(" ".join(parts), params).fetchall()
         return [self._row_to_routine(r) for r in rows]
 

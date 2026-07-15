@@ -4,14 +4,16 @@ import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 from raven.core.context_router import ContextRouter, TaskType
 from raven.core.shared_memory import SharedMemory
 from raven.core.tool_registry import ToolRegistry
-from ravencode.runtime.agent_core import AgentConfig, EventEmitter, ReActAgent
+
+if TYPE_CHECKING:
+    from ravencode.runtime.agent_core import AgentConfig, EventEmitter, ReActAgent
 from ravencode.runtime.permissions import PermissionManager
 
 
@@ -50,6 +52,8 @@ class UnifiedAgent:
         max_context_tokens: int = 128_000,
     ):
         self.name = name
+        from ravencode.runtime.agent_core import EventEmitter
+
         self._event_emitter = event_emitter or EventEmitter()
         self._permissions = permissions
         self._on_step = on_step
@@ -181,6 +185,8 @@ class UnifiedAgent:
             TaskType.QUERY: {"diff_preview": True, "proactive_scan": True, "plan_mode": True, "structured_output": True},
         }
         mode_opts = mode_configs.get(task_type, mode_configs[TaskType.QUERY])
+        from ravencode.runtime.agent_core import AgentConfig
+
         return AgentConfig(
             max_steps=self._max_steps,
             event_emitter=self._event_emitter,
@@ -296,6 +302,8 @@ class UnifiedAgent:
 
     async def _run_with_agent(self, message: str, task_type: TaskType) -> str:
         config = self._build_agent_config(task_type)
+        from ravencode.runtime.agent_core import ReActAgent
+
         self._agent = ReActAgent(config=config, llm_provider=self._llm_provider, name=self.name)
 
         prompt_modifier = self._router.get_system_prompt_modifier(message)

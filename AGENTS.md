@@ -210,3 +210,10 @@ npm run dev
 - **`raven/core/task_engine/tool_registry.py`**: `validator_fn` now wrapped in try/except — if user-supplied validator raises, returns `[error: Validator failed: ...]` instead of propagating
 - **`raven/tools/file.py`**: `file_read` now streams at most `max_size` (default 50KB) bytes instead of reading entire file then slicing; truncated output gets `... (truncated, N total bytes)` suffix; exposed `max_size` as optional ToolSpec parameter
 - **`raven/core/unified_agent.py`**: `stream_process` now uses shared `list[bool]` to track whether `stream_wrapper` actually yielded content; falls back to yielding `process()` return value when no streaming content was produced (fixes empty stream when `process` is mocked or doesn't call `on_message`)
+
+## Fixes applied (Nov 2026)
+### Audit-driven hardening
+- **`raven/tools/db.py`**: Replaced sync `sqlite3.connect()` with `aiosqlite.connect()` in async `db_query()` — was blocking event loop
+- **Pagination on all list API endpoints**: `/api/monitor/list`, `/api/routine/list`, `/api/task/list`, `/api/code/list` now accept `limit`/`offset` query parameters with sensible defaults (50/50/50/20). Store layers for monitors and routines gained LIMIT/OFFSET SQL. Frontend API client and pages pass through these params
+- **Concurrency limit on `run_dag()`**: Added `asyncio.Semaphore(max_concurrent=5)` to `run_dag()` in both `raven/core/agents/multi.py` and `ravencode/agents/multi.py` — was running all ready tasks in a batch without any limit
+- **DB indexes on high-query tables**: Added indexes on `sessions(channel)`, `messages(session_id)`, `messages(created_at)`, `users(channel)`, `users(external_id)`, `monitors(status)`, `monitors(user_id)`, `monitor_checks(monitor_id)`, `routines(status)`, `routines(user_id)`, `routine_logs(routine_id)`. Migration v5 added in `core/migrations.py` for existing databases

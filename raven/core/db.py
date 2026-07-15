@@ -119,6 +119,15 @@ class Database:
         for name, ddl in tables.items():
             if name not in existing:
                 await self.conn.execute(ddl)
+        indexes = [
+            "CREATE INDEX IF NOT EXISTS idx_sessions_channel ON sessions(channel)",
+            "CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)",
+            "CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_users_channel ON users(channel)",
+            "CREATE INDEX IF NOT EXISTS idx_users_external_id ON users(external_id)",
+        ]
+        for idx in indexes:
+            await self.conn.execute(idx)
         await self.conn.commit()
 
         await self.migrator.migrate()

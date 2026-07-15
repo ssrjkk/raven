@@ -57,6 +57,9 @@ CREATE TABLE IF NOT EXISTS monitor_checks (
     result TEXT,
     error TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_monitor_status ON monitors(status);
+CREATE INDEX IF NOT EXISTS idx_monitor_user_id ON monitors(user_id);
+CREATE INDEX IF NOT EXISTS idx_monitor_checks_monitor_id ON monitor_checks(monitor_id);
 """
 
 
@@ -115,7 +118,7 @@ class MonitorStore:
         conn.execute("DELETE FROM monitor_checks WHERE monitor_id = ?", (monitor_id,))
         conn.commit()
 
-    def list_monitors(self, user_id: str | None = None, status: str | None = None) -> list[Monitor]:
+    def list_monitors(self, user_id: str | None = None, status: str | None = None, limit: int = 50, offset: int = 0) -> list[Monitor]:
         conn = self._conn()
         parts = ["SELECT * FROM monitors WHERE 1=1"]
         params: list[Any] = []
@@ -125,7 +128,8 @@ class MonitorStore:
         if status:
             parts.append("AND status = ?")
             params.append(status)
-        parts.append("ORDER BY created_at DESC")
+        parts.append("ORDER BY created_at DESC LIMIT ? OFFSET ?")
+        params.extend([limit, offset])
         rows = conn.execute(" ".join(parts), params).fetchall()
         return [m for r in rows if (m := self._row_to_monitor(r)) is not None]
 

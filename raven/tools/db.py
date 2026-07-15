@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
+
+import aiosqlite
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
@@ -27,20 +28,18 @@ async def db_query(query: str, db_path: str = "data/raven.db") -> str:
     if not stripped.upper().startswith("SELECT"):
         return "Only SELECT queries are allowed for security reasons"
 
-    conn = sqlite3.connect(str(p))
-    conn.row_factory = sqlite3.Row
-    try:
-        cursor = conn.execute(query)
-        rows = cursor.fetchmany(100)
-        if not rows:
-            return "(empty result set)"
-        columns = [d[0] for d in cursor.description]
-        result = [dict(zip(columns, row, strict=False)) for row in rows]
-        return json.dumps(result, indent=2, default=str)
-    except Exception as e:
-        return f"Query error: {e}"
-    finally:
-        conn.close()
+    async with aiosqlite.connect(str(p)) as conn:
+        conn.row_factory = aiosqlite.Row
+        try:
+            cursor = await conn.execute(query)
+            rows = await cursor.fetchmany(100)
+            if not rows:
+                return "(empty result set)"
+            columns = [d[0] for d in cursor.description]
+            result = [dict(zip(columns, row, strict=False)) for row in rows]
+            return json.dumps(result, indent=2, default=str)
+        except Exception as e:
+            return f"Query error: {e}"
 
 
 def register_db_tools(registry: ToolRegistry) -> None:

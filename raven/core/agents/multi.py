@@ -55,7 +55,8 @@ class MultiAgentOrchestrator:
         await asyncio.gather(*coros)
         return [r for r in results if r is not None]
 
-    async def run_dag(self, tasks: list[SubTask]) -> list[TaskResult]:
+    async def run_dag(self, tasks: list[SubTask], max_concurrent: int = 5) -> list[TaskResult]:
+        sem = asyncio.Semaphore(max_concurrent)
         results: dict[int, TaskResult] = {}
         completed = set()
         remaining = list(range(len(tasks)))
@@ -76,9 +77,10 @@ class MultiAgentOrchestrator:
                 logger.info("Multi-agent: DAG task {}/{}: {}", i + 1, len(tasks), task.description[:80])
 
                 async def run_task(idx: int, t: SubTask, started: float) -> TaskResult:
-                    r = await self._orchestrator.dispatch(t.description, t.agent_type, agent_config_override=t.config)
-                    dur = asyncio.get_event_loop().time() - started
-                    return TaskResult(index=idx, description=t.description, result=r, duration=dur)
+                    async with sem:
+                        r = await self._orchestrator.dispatch(t.description, t.agent_type, agent_config_override=t.config)
+                        dur = asyncio.get_event_loop().time() - started
+                        return TaskResult(index=idx, description=t.description, result=r, duration=dur)
 
                 coros.append(run_task(i, task, asyncio.get_event_loop().time()))
             for r in await asyncio.gather(*coros):

@@ -60,8 +60,8 @@ class RoutineEngine:
             self._schedule_routine(r)
         return True
 
-    def list_routines(self) -> list[Routine]:
-        return self._store.list_routines()
+    def list_routines(self, limit: int = 50, offset: int = 0) -> list[Routine]:
+        return self._store.list_routines(limit=limit, offset=offset)
 
     def add_routine(self, routine: Routine):
         self._store.save_routine(routine)
