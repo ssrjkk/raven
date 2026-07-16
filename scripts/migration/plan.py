@@ -73,7 +73,7 @@ if __name__ == "__main__":
     if not dry:
         for step in STEPS:
             run_step(step, dry_run=False)
-            time.sleep(1)
+            time.sleep(1)  # noqa: ASYNC100 — sync migration script
     else:
         for step in STEPS:
             run_step(step, dry_run=True)

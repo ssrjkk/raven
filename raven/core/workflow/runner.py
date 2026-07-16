@@ -141,13 +141,13 @@ class TemplateRunner:
 
         store = RoutineStore(db_path)
         try:
-            store.save_routine(routine)
+            await store.save_routine(routine)
             logger.info("Scheduled workflow '{}' as routine {}", template.name, routine_id)
 
             engine = RoutineEngine(store)
             await engine.start()
         except Exception:
-            store.delete_routine(routine_id)
+            await store.delete_routine(routine_id)
             logger.error("Failed to start routine engine for '{}', rolled back", routine_id)
             raise
         return routine_id

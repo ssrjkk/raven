@@ -35,8 +35,8 @@ if TYPE_CHECKING:
         load_config_file,
     )
     from ravencode.integrations.base import CIProvider, EventContext, EventType
-    from ravencode.integrations.github import GitHubClient, GitHubIntegration
-    from ravencode.integrations.gitlab import GitLabClient, GitLabIntegration
+    from ravencode.integrations.github import GitHubIntegration
+    from ravencode.integrations.gitlab import GitLabIntegration
     from ravencode.mcp.server import MCPServer, run_mcp_server
     from ravencode.runtime.agent_core import AgentConfig, EventEmitter, ReActAgent
     from ravencode.runtime.autogit import auto_commit
@@ -110,9 +110,7 @@ def __getattr__(name: str):
         "CIProvider": "ravencode.integrations.base",
         "EventContext": "ravencode.integrations.models",
         "EventType": "ravencode.integrations.models",
-        "GitHubClient": "ravencode.integrations.github",
         "GitHubIntegration": "ravencode.integrations.github",
-        "GitLabClient": "ravencode.integrations.gitlab",
         "GitLabIntegration": "ravencode.integrations.gitlab",
         "Sandbox": "ravencode.runtime.sandbox",
         "get_sandbox": "ravencode.runtime.sandbox",
@@ -195,9 +193,7 @@ __all__ = [
     "CIProvider",
     "EventContext",
     "EventType",
-    "GitHubClient",
     "GitHubIntegration",
-    "GitLabClient",
     "GitLabIntegration",
     "Sandbox",
     "get_sandbox",

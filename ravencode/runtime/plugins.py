@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -86,7 +87,7 @@ def get_plugin_registry() -> PluginRegistry:
 
 
 def discover_plugins(plugins_dir: str | Path | None = None) -> list[Plugin]:
-    """Scan directories for plugin.py files and load them.
+    """Scan directories for plugin.py files and load them (untrusted → subprocess worker).
 
     Search order:
     1. Explicit plugins_dir parameter
@@ -114,7 +115,7 @@ def discover_plugins(plugins_dir: str | Path | None = None) -> list[Plugin]:
             if entry.name in seen:
                 continue
             try:
-                plugin = _load_plugin_from_file(plugin_file)
+                plugin = _load_untrusted_plugin_via_worker(plugin_file)
                 if plugin:
                     found.append(plugin)
                     seen.add(entry.name)
@@ -123,6 +124,41 @@ def discover_plugins(plugins_dir: str | Path | None = None) -> list[Plugin]:
 
     logger.info("Discovered {} plugin(s)", len(found))
     return found
+
+
+def _load_untrusted_plugin_via_worker(path: Path) -> Plugin | None:
+    from raven.core.plugin_loader import call_untrusted_tool, register_untrusted_plugin
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        result = asyncio.run(register_untrusted_plugin(path))
+    else:
+        result = loop.run_until_complete(register_untrusted_plugin(path))
+    if result is None:
+        return None
+
+    name = result["name"]
+    tools_meta = result.get("tools", [])
+    plugin_file = str(path)
+
+    def _make_handler(tool_name: str) -> Callable[..., Awaitable[str]]:
+        async def _handler(**kwargs: Any) -> str:
+            return await call_untrusted_tool(plugin_file, tool_name, kwargs)
+        return _handler
+
+    tools: dict[str, dict[str, Any]] = {}
+    for t in tools_meta:
+        tname = t["name"]
+        tools[tname] = {
+            "name": tname,
+            "dangerous": t.get("dangerous", False),
+            "description": t.get("description", ""),
+            "parameters": t.get("parameters", {}),
+            "handler": _make_handler(tname),
+        }
+
+    return Plugin(name=name, tools=tools)
 
 
 def _load_plugin_from_file(path: Path) -> Plugin | None:

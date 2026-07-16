@@ -11,18 +11,15 @@ from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 _UNIX_COMMANDS = frozenset({
     "ls", "cat", "head", "tail", "echo", "pwd", "whoami", "date",
     "find", "grep", "wc", "sort", "uniq", "cut", "tr", "diff",
-    "curl", "wget", "ping", "nslookup", "dig",
     "df", "du", "free", "ps", "top", "uptime",
-    "git", "make", "npm", "pip", "go", "rustc", "cargo",
-    "python", "python3", "node",
+    "sleep",
 })
 
 _WIN_COMMANDS = frozenset({
     "echo", "dir", "type", "copy", "del", "ren", "cd", "cls", "ver", "date", "time", "timeout",
     "find", "findstr", "sort", "more", "fc", "where",
     "ping", "tracert", "pathping", "nslookup",
-    "git", "npm", "pip", "python", "node", "powershell",
-    "tasklist", "taskkill", "systeminfo", "ipconfig", "netstat", "net",
+    "tasklist", "taskkill", "systeminfo", "ipconfig", "netstat",
     "whoami", "set", "attrib", "xcopy", "robocopy", "mkdir", "rmdir",
 })
 
@@ -76,6 +73,12 @@ async def shell_command(command: str, timeout: int = 30) -> str:
         return f"[timeout after {timeout}s]"
 
 
+_DENIED_MODULES = frozenset({
+    "os", "subprocess", "sys", "shutil", "ctypes", "socket",
+    "operator", "inspect", "importlib", "pickle", "marshal",
+    "code", "codeop", "builtins", "typing",
+})
+
 _RESTRICTED_BUILTINS: dict[str, Any] = {
     "abs": abs, "all": all, "any": any, "ascii": ascii, "bin": bin,
     "bool": bool, "bytearray": bytearray, "bytes": bytes, "chr": chr,
@@ -105,22 +108,25 @@ async def python_code(code: str, timeout: int = 15) -> str:
 
         tree = ast.parse(code)
         for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and node.id in ("__builtins__", "__import__"):
+                return f"[denied] access to '{node.id}' is not allowed"
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.startswith("__") and node.value.endswith("__"):
+                return f"[denied] dunder string literal '{node.value}' is not allowed"
             if isinstance(node, ast.Call):
                 func = node.func
                 if isinstance(func, ast.Name) and func.id in _DENIED_BUILTINS:
                     return f"[denied] use of '{func.id}' is not allowed"
                 if isinstance(func, ast.Attribute):
-                    if func.attr == "__import__":
-                        return "[denied] __import__ is not allowed"
-                    if isinstance(func.value, ast.Name) and func.value.id in ("os", "subprocess", "sys", "shutil", "ctypes", "socket"):
+                    if func.attr in _DENIED_BUILTINS:
+                        return f"[denied] '{func.attr}' called via attribute access"
+                    if isinstance(func.value, ast.Name) and func.value.id in _DENIED_MODULES:
                         return f"[denied] '{func.value.id}' module access is not allowed"
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "__import__":
-                return "[denied] __import__ is not allowed"
             if isinstance(node, ast.Attribute) and node.attr.startswith("__") and node.attr.endswith("__"):
                 return f"[denied] dunder attribute '{node.attr}' is not allowed"
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 for alias in node.names:
-                    if alias.name in ("os", "subprocess", "sys", "shutil", "ctypes", "socket"):
+                    module_name = alias.name.split(".")[0]
+                    if module_name in _DENIED_MODULES:
                         return f"[denied] import of '{alias.name}' is not allowed"
 
         last_expr: ast.Expr | None = None

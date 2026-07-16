@@ -73,19 +73,20 @@ class Sandbox:
         return "Unknown sandbox mode"
 
     async def _exec_direct(self, code: str) -> str:
+        import builtins
         import io
         from contextlib import redirect_stderr, redirect_stdout
 
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
         safe_builtins = {
-            k: v for k, v in __builtins__.__dict__.items()
+            k: v for k, v in builtins.__dict__.items()
             if k not in frozenset({
                 "__import__", "exec", "eval", "compile", "open",
                 "getattr", "setattr", "delattr", "globals", "locals",
                 "breakpoint", "exit", "quit",
             })
-        } if hasattr(__builtins__, "__dict__") else {}
+        }
         restricted_globals: dict[str, object] = {"__builtins__": safe_builtins}
         try:
             with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):

@@ -182,15 +182,24 @@ class Database:
         return session
 
     async def save_message(self, msg: Message):
-        await self.conn.execute(
-            "INSERT OR IGNORE INTO messages (id, session_id, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (msg.id, msg.session_id, msg.role, msg.content, json.dumps(msg.metadata), msg.created_at.isoformat()),
-        )
-        await self.conn.execute(
-            "UPDATE sessions SET updated_at = ? WHERE id = ?",
-            (datetime.now(UTC).isoformat(), msg.session_id),
-        )
-        await self.conn.commit()
+        await self.conn.execute("BEGIN")
+        try:
+            await self.conn.execute(
+                "INSERT OR IGNORE INTO messages (id, session_id, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (msg.id, msg.session_id, msg.role, msg.content, json.dumps(msg.metadata), msg.created_at.isoformat()),
+            )
+            await self.conn.execute(
+                "UPDATE sessions SET updated_at = ? WHERE id = ?",
+                (datetime.now(UTC).isoformat(), msg.session_id),
+            )
+            await self.conn.execute("COMMIT")
+        except Exception:
+            try:
+                await self.conn.execute("ROLLBACK")
+            except Exception as rb_e:
+                logger.error("ROLLBACK failed after save_message error: {}", rb_e)
+            logger.error("save_message failed for session {}", msg.session_id)
+            raise
 
     async def get_session_messages(self, session_id: str, limit: int = 50) -> list[Message]:
         async with self.conn.execute(
@@ -307,25 +316,43 @@ class Database:
         return row["value"] if row else None
 
     async def delete_session(self, session_id: str):
-        await self.conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
-        await self.conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
-        await self.conn.commit()
+        await self.conn.execute("BEGIN")
+        try:
+            await self.conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+            await self.conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+            await self.conn.execute("COMMIT")
+        except Exception:
+            try:
+                await self.conn.execute("ROLLBACK")
+            except Exception as rb_e:
+                logger.error("ROLLBACK failed after delete_session error: {}", rb_e)
+            logger.error("delete_session failed for session {}", session_id)
+            raise
 
     async def replace_session_messages(self, session_id: str, new_messages: list[dict[str, Any]]):
         await self.conn.execute("BEGIN")
-        await self.conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
-        for msg in new_messages:
-            m = Message(
-                session_id=session_id,
-                channel="",
-                role=msg.get("role", "system"),
-                content=msg.get("content", ""),
-            )
-            await self.conn.execute(
-                "INSERT INTO messages (id, session_id, channel, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (m.id, m.session_id, m.channel, m.role, m.content, m.metadata, m.created_at.isoformat()),
-            )
-        await self.conn.execute("COMMIT")
+        try:
+            await self.conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+            for msg in new_messages:
+                m = Message(
+                    session_id=session_id,
+                    role=msg.get("role", "system"),
+                    content=msg.get("content", ""),
+                    metadata=msg.get("metadata", {}),
+                    created_at=msg.get("created_at", datetime.now(UTC)),
+                )
+                await self.conn.execute(
+                    "INSERT INTO messages (id, session_id, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (m.id, m.session_id, m.role, m.content, json.dumps(m.metadata), m.created_at.isoformat()),
+                )
+            await self.conn.execute("COMMIT")
+        except Exception:
+            try:
+                await self.conn.execute("ROLLBACK")
+            except Exception as rb_e:
+                logger.error("ROLLBACK also failed after replace_session_messages error: {}", rb_e)
+            logger.error("replace_session_messages failed for session {}, rolled back", session_id)
+            raise
 
     async def save_secret(self, key: str, value_enc: str):
         now = datetime.now(UTC).isoformat()

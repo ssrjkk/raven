@@ -1,21 +1,20 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from functools import wraps
-from typing import Any
+from typing import ParamSpec, TypeVar
 
 from loguru import logger
 
+P = ParamSpec("P")
+T = TypeVar("T")
 
-def measure_latency(threshold_ms: float = 50.0):
-    """
-    Декоратор для замера времени выполнения асинхронных функций.
-    Логирует предупреждение, если выполнение превышает threshold_ms.
-    """
-    def decorator(func: Callable[..., Any]):
+
+def measure_latency(threshold_ms: float = 50.0) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
+    def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             start = time.perf_counter()
             try:
                 return await func(*args, **kwargs)

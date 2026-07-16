@@ -8,6 +8,8 @@ from typing import Any
 
 from loguru import logger
 
+from ravencode.core.prompts import get_prompt
+
 # ---------------------------------------------------------------------------
 # memory store
 # ---------------------------------------------------------------------------
@@ -211,12 +213,7 @@ class Conversation:
 
     @staticmethod
     def _default_system_prompt() -> str:
-        return (
-            "You are Raven, an AI coding assistant.\n"
-            "You have access to tools for reading, writing, editing files, running commands, searching the web, "
-            "managing git, and delegating subtasks.\n"
-            "Always read before editing, show diffs before applying, and verify with tests or lint."
-        )
+        return get_prompt("system")
 
 
 # ---------------------------------------------------------------------------

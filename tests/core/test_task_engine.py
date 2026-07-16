@@ -16,13 +16,6 @@ async def _async_gen(items):
         yield item
 
 
-@pytest.fixture(autouse=True)
-def _clear_cache():
-    import raven.core.task_engine.store as ts
-
-    ts._local.conn = None
-
-
 @pytest.fixture
 def db_path(tmp_path: Path) -> str:
     return str(tmp_path / "tasks.db")
@@ -120,51 +113,59 @@ class TestToolRegistry:
 
 
 class TestTaskStore:
-    def test_save_and_load(self, store: TaskStore, task: Task):
-        store.save_task(task)
-        loaded = store.load_task(task.id)
+    @pytest.mark.asyncio
+    async def test_save_and_load(self, store: TaskStore, task: Task):
+        await store.save_task(task)
+        loaded = await store.load_task(task.id)
         assert loaded is not None
         assert loaded.goal == "test task"
         assert len(loaded.steps) == 2
         assert loaded.steps[0].tool == "web_search"
 
-    def test_list_tasks(self, store: TaskStore, task: Task):
-        store.save_task(task)
-        tasks = store.list_tasks()
+    @pytest.mark.asyncio
+    async def test_list_tasks(self, store: TaskStore, task: Task):
+        await store.save_task(task)
+        tasks = await store.list_tasks()
         assert len(tasks) == 1
 
-    def test_list_tasks_by_user(self, store: TaskStore):
+    @pytest.mark.asyncio
+    async def test_list_tasks_by_user(self, store: TaskStore):
         a = Task(goal="task1", user_id="u1")
         b = Task(goal="task2", user_id="u2")
-        store.save_task(a)
-        store.save_task(b)
-        u1_tasks = store.list_tasks(user_id="u1")
+        await store.save_task(a)
+        await store.save_task(b)
+        u1_tasks = await store.list_tasks(user_id="u1")
         assert len(u1_tasks) == 1
 
-    def test_update_status(self, store: TaskStore, task: Task):
-        store.save_task(task)
-        store.update_status(task.id, TaskStatus.RUNNING)
-        loaded = store.load_task(task.id)
+    @pytest.mark.asyncio
+    async def test_update_status(self, store: TaskStore, task: Task):
+        await store.save_task(task)
+        await store.update_status(task.id, TaskStatus.RUNNING)
+        loaded = await store.load_task(task.id)
         assert loaded is not None
         assert loaded.status == TaskStatus.RUNNING
 
-    def test_update_status_with_error(self, store: TaskStore, task: Task):
-        store.save_task(task)
-        store.update_status(task.id, TaskStatus.FAILED, error="something broke")
-        loaded = store.load_task(task.id)
+    @pytest.mark.asyncio
+    async def test_update_status_with_error(self, store: TaskStore, task: Task):
+        await store.save_task(task)
+        await store.update_status(task.id, TaskStatus.FAILED, error="something broke")
+        loaded = await store.load_task(task.id)
         assert loaded is not None
         assert loaded.status == TaskStatus.FAILED
         assert loaded.error == "something broke"
 
-    def test_delete(self, store: TaskStore, task: Task):
-        store.save_task(task)
-        store.delete_task(task.id)
-        assert store.load_task(task.id) is None
+    @pytest.mark.asyncio
+    async def test_delete(self, store: TaskStore, task: Task):
+        await store.save_task(task)
+        await store.delete_task(task.id)
+        loaded = await store.load_task(task.id)
+        assert loaded is None
 
-    def test_count_tasks(self, store: TaskStore):
-        store.save_task(Task(goal="a"))
-        store.save_task(Task(goal="b"))
-        assert store.count_tasks() == 2
+    @pytest.mark.asyncio
+    async def test_count_tasks(self, store: TaskStore):
+        await store.save_task(Task(goal="a"))
+        await store.save_task(Task(goal="b"))
+        assert await store.count_tasks() == 2
 
 
 class TestTaskPlanner:
@@ -240,8 +241,8 @@ class TestTaskRunner:
         )
         for s in t.steps:
             s.task_id = t.id
-        store.save_task(t)
-        store.update_status(t.id, TaskStatus.RUNNING)
+        await store.save_task(t)
+        await store.update_status(t.id, TaskStatus.RUNNING)
 
         runner = TaskRunner(store, registry)
         paused = await runner.pause(t.id)
@@ -251,15 +252,15 @@ class TestTaskRunner:
         from raven.core.task_engine.runner import TaskRunner
 
         runner = TaskRunner(store, registry)
-        store.save_task(task)
-        tasks = runner.list_tasks()
+        await store.save_task(task)
+        tasks = await runner.list_tasks()
         assert len(tasks) >= 1
 
     async def test_get_task(self, store: TaskStore, registry: ToolRegistry, task: Task):
         from raven.core.task_engine.runner import TaskRunner
 
         runner = TaskRunner(store, registry)
-        store.save_task(task)
-        loaded = runner.get_task(task.id)
+        await store.save_task(task)
+        loaded = await runner.get_task(task.id)
         assert loaded is not None
         assert loaded.goal == "test task"

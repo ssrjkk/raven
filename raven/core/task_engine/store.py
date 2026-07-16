@@ -1,29 +1,15 @@
 from __future__ import annotations
 
-import sqlite3
-import threading
 import time
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
+
+import aiosqlite
 
 from raven.core._json import json
+from raven.core.store import BaseStore
 from raven.core.task_engine.models import Task, TaskPriority, TaskStatus, TaskStep
-
-_local = threading.local()
-
-
-def _get_conn(db_path: str) -> sqlite3.Connection:
-    if not hasattr(_local, "conn") or _local.conn is None:
-        _local.conn = sqlite3.connect(db_path)
-        _local.conn.row_factory = sqlite3.Row
-    return cast(sqlite3.Connection, _local.conn)
-
-
-def _close_all_conns() -> None:
-    if hasattr(_local, "conn") and _local.conn is not None:
-        _local.conn.close()
-        _local.conn = None
-
+from raven.utils.performance import measure_latency
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks (
@@ -62,28 +48,22 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
 CREATE INDEX IF NOT EXISTS idx_task_steps_task_id ON task_steps(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_steps_status ON task_steps(status);
+CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 """
 
 
-class TaskStore:
+class TaskStore(BaseStore):
+    SCHEMA = SCHEMA
+
     def __init__(self, db_path: str | Path):
-        self._path = str(db_path)
-        conn = sqlite3.connect(self._path)
-        try:
-            conn.executescript(SCHEMA)
-            conn.commit()
-        finally:
-            conn.close()
+        super().__init__(db_path)
 
-    def close(self) -> None:
-        _close_all_conns()
+    _ALLOWED_CLAUSES = frozenset({"1=1", "user_id = ?", "status = ?", "user_id = ? AND status = ?"})
 
-    def _conn(self) -> sqlite3.Connection:
-        return _get_conn(self._path)
-
-    def save_task(self, task: Task) -> None:
-        conn = self._conn()
-        conn.execute(
+    @measure_latency()
+    async def save_task(self, task: Task) -> None:
+        conn = await self._conn()
+        await conn.execute(
             """INSERT OR REPLACE INTO tasks
                (id, user_id, channel, goal, plan_summary, status, priority,
                 current_step_index, result, error, created_at, updated_at,
@@ -107,7 +87,7 @@ class TaskStore:
             ),
         )
         for step in task.steps:
-            conn.execute(
+            await conn.execute(
                 """INSERT OR REPLACE INTO task_steps
                    (id, task_id, step_order, description, tool, params,
                     status, result, error, started_at, completed_at)
@@ -126,31 +106,29 @@ class TaskStore:
                     step.completed_at,
                 ),
             )
-        conn.commit()
+        await self._commit()
 
-    def load_task(self, task_id: str) -> Task | None:
-        conn = self._conn()
-        row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    @measure_latency()
+    async def load_task(self, task_id: str) -> Task | None:
+        row = await self._fetchone("SELECT * FROM tasks WHERE id = ?", (task_id,))
         if not row:
             return None
         task = self._row_to_task(row)
-        step_rows = conn.execute(
+        step_rows = await self._fetchall(
             "SELECT * FROM task_steps WHERE task_id = ? ORDER BY step_order",
             (task_id,),
-        ).fetchall()
+        )
         task.steps = [self._row_to_step(r) for r in step_rows]
         return task
 
-    _ALLOWED_CLAUSES = frozenset({"1=1", "user_id = ?", "status = ?", "user_id = ? AND status = ?"})
-
-    def list_tasks(
+    @measure_latency()
+    async def list_tasks(
         self,
         user_id: str | None = None,
         status: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Task]:
-        conn = self._conn()
         where: list[str] = []
         params: list[Any] = []
         if user_id:
@@ -162,23 +140,23 @@ class TaskStore:
         clause = " AND ".join(where) if where else "1=1"
         if clause not in self._ALLOWED_CLAUSES:
             raise ValueError(f"Disallowed WHERE clause: {clause}")
-        rows = conn.execute(
-            f"SELECT * FROM tasks WHERE {clause} ORDER BY created_at DESC LIMIT ? OFFSET ?",  # noqa: S608 — validated against _ALLOWED_CLAUSES
+        rows = await self._fetchall(
+            f"SELECT * FROM tasks WHERE {clause} ORDER BY created_at DESC LIMIT ? OFFSET ?",  # noqa: S608
             (*params, limit, offset),
-        ).fetchall()
+        )
         return [self._row_to_task(r) for r in rows]
 
-    def update_status(self, task_id: str, status: TaskStatus, error: str | None = None) -> None:
-        conn = self._conn()
-        conn.execute(
+    @measure_latency()
+    async def update_status(self, task_id: str, status: TaskStatus, error: str | None = None) -> None:
+        await self._execute(
             "UPDATE tasks SET status = ?, updated_at = ?, error = ? WHERE id = ?",
             (status.value, time.time(), error, task_id),
         )
-        conn.commit()
+        await self._commit()
 
-    def update_step(self, step: TaskStep) -> None:
-        conn = self._conn()
-        conn.execute(
+    @measure_latency()
+    async def update_step(self, step: TaskStep) -> None:
+        await self._execute(
             """UPDATE task_steps SET status = ?, result = ?, error = ?,
                started_at = ?, completed_at = ? WHERE id = ?""",
             (
@@ -190,16 +168,16 @@ class TaskStore:
                 step.id,
             ),
         )
-        conn.commit()
+        await self._commit()
 
-    def delete_task(self, task_id: str) -> None:
-        conn = self._conn()
-        conn.execute("DELETE FROM task_steps WHERE task_id = ?", (task_id,))
-        conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
-        conn.commit()
+    @measure_latency()
+    async def delete_task(self, task_id: str) -> None:
+        await self._execute("DELETE FROM task_steps WHERE task_id = ?", (task_id,))
+        await self._execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        await self._commit()
 
-    def count_tasks(self, user_id: str | None = None, status: str | None = None) -> int:
-        conn = self._conn()
+    @measure_latency()
+    async def count_tasks(self, user_id: str | None = None, status: str | None = None) -> int:
         where: list[str] = []
         params: list[Any] = []
         if user_id:
@@ -211,10 +189,13 @@ class TaskStore:
         clause = " AND ".join(where) if where else "1=1"
         if clause not in self._ALLOWED_CLAUSES:
             raise ValueError(f"Disallowed WHERE clause: {clause}")
-        row = conn.execute(f"SELECT COUNT(*) as cnt FROM tasks WHERE {clause}", params).fetchone()  # noqa: S608 — validated against _ALLOWED_CLAUSES
+        row = await self._fetchone(
+            f"SELECT COUNT(*) as cnt FROM tasks WHERE {clause}",  # noqa: S608
+            params,
+        )
         return row["cnt"] if row else 0
 
-    def _row_to_task(self, row: sqlite3.Row) -> Task:
+    def _row_to_task(self, row: aiosqlite.Row) -> Task:
         return Task(
             id=row["id"],
             user_id=row["user_id"],
@@ -233,7 +214,7 @@ class TaskStore:
             steps=[],
         )
 
-    def _row_to_step(self, row: sqlite3.Row) -> TaskStep:
+    def _row_to_step(self, row: aiosqlite.Row) -> TaskStep:
         return TaskStep(
             id=row["id"],
             task_id=row["task_id"],

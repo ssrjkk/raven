@@ -10,13 +10,6 @@ from raven.core.routine.models import Routine, RoutineAction, RoutineLog, Routin
 from raven.core.routine.store import RoutineStore
 
 
-@pytest.fixture(autouse=True)
-def _clear_cache():
-    import raven.core.routine.store as rs
-
-    rs._local.conn = None
-
-
 @pytest.fixture
 def db_path(tmp_path: Path) -> str:
     return str(tmp_path / "routines.db")
@@ -39,14 +32,16 @@ def routine() -> Routine:
 
 
 class TestRoutineStore:
-    def test_save_and_load(self, store: RoutineStore, routine: Routine):
-        store.save_routine(routine)
-        loaded = store.load_routine(routine.id)
+    @pytest.mark.asyncio
+    async def test_save_and_load(self, store: RoutineStore, routine: Routine):
+        await store.save_routine(routine)
+        loaded = await store.load_routine(routine.id)
         assert loaded is not None
         assert loaded.name == "test-briefing"
         assert loaded.action == RoutineAction.SEND_BRIEFING
 
-    def test_list_active(self, store: RoutineStore):
+    @pytest.mark.asyncio
+    async def test_list_active(self, store: RoutineStore):
         a = Routine(name="active-r", action=RoutineAction.SEND_MESSAGE, trigger=RoutineTrigger.MANUAL)
         b = Routine(
             name="paused-r",
@@ -54,45 +49,51 @@ class TestRoutineStore:
             trigger=RoutineTrigger.MANUAL,
             status=RoutineStatus.PAUSED,
         )
-        store.save_routine(a)
-        store.save_routine(b)
-        active = store.list_active()
+        await store.save_routine(a)
+        await store.save_routine(b)
+        active = await store.list_active()
         assert len(active) == 1
         assert active[0].id == a.id
 
-    def test_update_status(self, store: RoutineStore, routine: Routine):
-        store.save_routine(routine)
-        store.update_status(routine.id, RoutineStatus.PAUSED)
-        loaded = store.load_routine(routine.id)
+    @pytest.mark.asyncio
+    async def test_update_status(self, store: RoutineStore, routine: Routine):
+        await store.save_routine(routine)
+        await store.update_status(routine.id, RoutineStatus.PAUSED)
+        loaded = await store.load_routine(routine.id)
         assert loaded is not None
         assert loaded.status == RoutineStatus.PAUSED
 
-    def test_update_last_run(self, store: RoutineStore, routine: Routine):
-        store.save_routine(routine)
-        store.update_last_run(routine.id, "success")
-        loaded = store.load_routine(routine.id)
+    @pytest.mark.asyncio
+    async def test_update_last_run(self, store: RoutineStore, routine: Routine):
+        await store.save_routine(routine)
+        await store.update_last_run(routine.id, "success")
+        loaded = await store.load_routine(routine.id)
         assert loaded is not None
         assert loaded.last_run_status == "success"
         assert loaded.last_run_at is not None
 
-    def test_delete(self, store: RoutineStore, routine: Routine):
-        store.save_routine(routine)
-        store.delete_routine(routine.id)
-        assert store.load_routine(routine.id) is None
+    @pytest.mark.asyncio
+    async def test_delete(self, store: RoutineStore, routine: Routine):
+        await store.save_routine(routine)
+        await store.delete_routine(routine.id)
+        loaded = await store.load_routine(routine.id)
+        assert loaded is None
 
-    def test_list_routines(self, store: RoutineStore):
+    @pytest.mark.asyncio
+    async def test_list_routines(self, store: RoutineStore):
         a = Routine(name="r1", action=RoutineAction.CHECK_EMAIL, trigger=RoutineTrigger.MANUAL)
         b = Routine(name="r2", action=RoutineAction.ORGANIZE_FILES, trigger=RoutineTrigger.MANUAL)
-        store.save_routine(a)
-        store.save_routine(b)
-        all_r = store.list_routines()
+        await store.save_routine(a)
+        await store.save_routine(b)
+        all_r = await store.list_routines()
         assert len(all_r) == 2
 
-    def test_save_and_get_logs(self, store: RoutineStore, routine: Routine):
-        store.save_routine(routine)
+    @pytest.mark.asyncio
+    async def test_save_and_get_logs(self, store: RoutineStore, routine: Routine):
+        await store.save_routine(routine)
         log = RoutineLog(routine_id=routine.id, status="success", message="done", duration_ms=100.0)
-        store.save_log(log)
-        logs = store.get_logs(routine.id)
+        await store.save_log(log)
+        logs = await store.get_logs(routine.id)
         assert len(logs) == 1
         assert logs[0].status == "success"
 
@@ -117,7 +118,7 @@ class TestRoutineEngine:
             trigger=RoutineTrigger.INTERVAL,
             schedule="3600",
         )
-        engine.add_routine(r)
+        await engine.add_routine(r)
         assert r.id in engine._tasks
 
         await engine.stop()
@@ -134,17 +135,17 @@ class TestRoutineEngine:
             trigger=RoutineTrigger.INTERVAL,
             schedule="3600",
         )
-        engine.add_routine(r)
+        await engine.add_routine(r)
         assert r.id in engine._tasks
 
-        paused = engine.pause_routine(r.id)
+        paused = await engine.pause_routine(r.id)
         assert paused is True
         assert r.id not in engine._tasks
-        loaded = store.load_routine(r.id)
+        loaded = await store.load_routine(r.id)
         assert loaded is not None
         assert loaded.status == RoutineStatus.PAUSED
 
-        resumed = engine.resume_routine(r.id)
+        resumed = await engine.resume_routine(r.id)
         assert resumed is True
         assert r.id in engine._tasks
 
@@ -162,11 +163,12 @@ class TestRoutineEngine:
             trigger=RoutineTrigger.INTERVAL,
             schedule="3600",
         )
-        engine.add_routine(r)
+        await engine.add_routine(r)
         assert r.id in engine._tasks
 
-        engine.remove_routine(r.id)
-        assert store.load_routine(r.id) is None
+        await engine.remove_routine(r.id)
+        loaded = await store.load_routine(r.id)
+        assert loaded is None
 
         await engine.stop()
 
@@ -182,14 +184,14 @@ class TestRoutineEngine:
             trigger=RoutineTrigger.INTERVAL,
             schedule="3600",
         )
-        store.save_routine(r)
+        await store.save_routine(r)
 
         await engine._execute_routine(r)
-        logs = store.get_logs(r.id)
+        logs = await store.get_logs(r.id)
         assert len(logs) == 1
         assert logs[0].status == "success"
 
-        loaded = store.load_routine(r.id)
+        loaded = await store.load_routine(r.id)
         assert loaded is not None
         assert loaded.last_run_status == "success"
 
@@ -207,10 +209,10 @@ class TestRoutineEngine:
             trigger=RoutineTrigger.INTERVAL,
             schedule="3600",
         )
-        store.save_routine(r)
+        await store.save_routine(r)
 
         await engine._execute_routine(r)
-        logs = store.get_logs(r.id)
+        logs = await store.get_logs(r.id)
         assert len(logs) == 1
         assert logs[0].status == "error"
         assert "simulated failure" in logs[0].message

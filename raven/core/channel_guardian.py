@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -13,6 +14,7 @@ HEARTBEAT_INTERVAL = 30.0
 MAX_CONSECUTIVE_FAILURES = 3
 BACKOFF_BASE = 5.0
 MAX_RESTART_ATTEMPTS = 3
+MAX_USER_BUCKETS = 1000
 
 
 class TokenBucket:
@@ -42,7 +44,8 @@ class ChannelGuardian:
         self._channels: dict[str, BaseChannel] = {}
         self._heartbeat_tasks: dict[str, asyncio.Task[None]] = {}
         self._channel_buckets: dict[str, TokenBucket] = {}
-        self._user_buckets: dict[str, TokenBucket] = {}
+        self._user_buckets: OrderedDict[str, TokenBucket] = OrderedDict()
+        self._user_bucket_times: dict[str, float] = {}
         self._error_counts: dict[str, int] = {}
         self._dead_channels: set[str] = set()
         self._restart_attempts: dict[str, int] = {}
@@ -88,10 +91,16 @@ class ChannelGuardian:
             logger.warning("Rate limit exceeded for channel {}", channel_id)
             return False
         if user_id:
+            now = time.monotonic()
             ub = self._user_buckets.get(user_id)
             if ub is None:
+                if len(self._user_buckets) >= MAX_USER_BUCKETS and self._user_bucket_times:
+                    stale = min(self._user_bucket_times, key=lambda k: self._user_bucket_times[k])
+                    self._user_buckets.pop(stale, None)
+                    self._user_bucket_times.pop(stale, None)
                 ub = TokenBucket(rate=5.0)
                 self._user_buckets[user_id] = ub
+            self._user_bucket_times[user_id] = now
             if not await ub.acquire():
                 logger.warning("Rate limit exceeded for user {} on channel {}", user_id, channel_id)
                 return False
@@ -142,7 +151,16 @@ class ChannelGuardian:
             except Exception as e:
                 logger.error("on_channel_dead callback failed for {}: {}", channel_id, e)
 
+    def _cleanup_stale_user_buckets(self):
+        now = time.monotonic()
+        stale_cutoff = now - 3600
+        stale = [uid for uid, last in self._user_bucket_times.items() if last < stale_cutoff]
+        for uid in stale:
+            self._user_buckets.pop(uid, None)
+            self._user_bucket_times.pop(uid, None)
+
     async def _heartbeat_loop(self, channel_id: str) -> None:
+        tick = 0
         while channel_id in self._channels and channel_id not in self._dead_channels:
             await asyncio.sleep(HEARTBEAT_INTERVAL)
             channel = self._channels.get(channel_id)
@@ -157,6 +175,9 @@ class ChannelGuardian:
                 self._error_counts[channel_id] = 0
             else:
                 await self._handle_unhealthy(channel_id)
+            tick += 1
+            if tick % 10 == 0:
+                self._cleanup_stale_user_buckets()
 
     async def _handle_unhealthy(self, channel_id: str) -> None:
         count = self._error_counts.get(channel_id, 0) + 1
@@ -166,11 +187,12 @@ class ChannelGuardian:
             await self._try_restart(channel_id)
 
     def status_report(self) -> dict[str, Any]:
+        cids = list(self._channels)
         return {
             cid: {
                 "alive": cid not in self._dead_channels,
                 "errors": self._error_counts.get(cid, 0),
                 "restart_attempts": self._restart_attempts.get(cid, 0),
             }
-            for cid in self._channels
+            for cid in cids
         }

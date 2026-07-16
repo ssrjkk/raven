@@ -5,35 +5,37 @@ from typing import Any
 from ravencode.runtime.plugins import Plugin
 
 
-async def http_get(url: str, headers: dict[str, str] | None = None) -> str:
-    try:
-        import httpx
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            resp = await client.get(url, headers=headers or {})
-            resp.raise_for_status()
-        content = resp.text[:50_000]
-        return f"[200 OK] {len(content)} chars\n{content}"
-    except ImportError:
-        return "[error] httpx not installed"
-    except Exception as exc:
-        return f"[error] {exc}"
+def register(ctx: Any = None) -> Plugin:
+    async def http_get(url: str, headers: dict[str, str] | None = None) -> str:
+        if ctx:
+            return await ctx.safe_http("GET", url, headers=headers or {})
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+                resp = await client.get(url, headers=headers or {})
+                resp.raise_for_status()
+            content = resp.text[:50_000]
+            return f"[200 OK] {len(content)} chars\n{content}"
+        except ImportError:
+            return "[error] httpx not installed"
+        except Exception as exc:
+            return f"[error] {exc}"
 
+    async def http_post(url: str, data: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> str:
+        if ctx:
+            return await ctx.safe_http("POST", url, headers=headers or {}, body=data)
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+                resp = await client.post(url, json=data, headers=headers or {})
+                resp.raise_for_status()
+            content = resp.text[:50_000]
+            return f"[{resp.status_code}] {len(content)} chars\n{content}"
+        except ImportError:
+            return "[error] httpx not installed"
+        except Exception as exc:
+            return f"[error] {exc}"
 
-async def http_post(url: str, data: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> str:
-    try:
-        import httpx
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            resp = await client.post(url, json=data, headers=headers or {})
-            resp.raise_for_status()
-        content = resp.text[:50_000]
-        return f"[{resp.status_code}] {len(content)} chars\n{content}"
-    except ImportError:
-        return "[error] httpx not installed"
-    except Exception as exc:
-        return f"[error] {exc}"
-
-
-def register() -> Plugin:
     tools = {
         "http_get": {
             "name": "http_get",

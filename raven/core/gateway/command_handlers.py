@@ -32,7 +32,7 @@ class CommandHandlersMixin:
         store = self._monitor_store
 
         if sub == "list":
-            monitors = store.list_monitors(user_id=event.user_id)
+            monitors = await store.list_monitors(user_id=event.user_id)
             if not monitors:
                 await self._send(event.channel, event.session_id, "No monitors configured.")
                 return
@@ -83,33 +83,33 @@ class CommandHandlersMixin:
                 user_id=event.user_id,
                 channel=event.channel,
             )
-            store.save_monitor(monitor)
+            await store.save_monitor(monitor)
             await self._send(
                 event.channel, event.session_id, f"✅ Monitor '{name}' ({monitor.id[:8]}) added. Checks every 5min."
             )
 
         elif sub == "remove" and args:
-            m = store.load_monitor(args[0])
+            m = await store.load_monitor(args[0])
             if not m:
                 await self._send(event.channel, event.session_id, f"Monitor not found: {args[0]}")
                 return
-            store.delete_monitor(args[0])
+            await store.delete_monitor(args[0])
             await self._send(event.channel, event.session_id, f"🗑 Monitor '{m.name}' removed.")
 
         elif sub == "pause" and args:
-            m = store.load_monitor(args[0])
+            m = await store.load_monitor(args[0])
             if not m:
                 await self._send(event.channel, event.session_id, f"Monitor not found: {args[0]}")
                 return
-            store.update_status(args[0], MonitorStatus.PAUSED)
+            await store.update_status(args[0], MonitorStatus.PAUSED)
             await self._send(event.channel, event.session_id, f"⏸ Monitor '{m.name}' paused.")
 
         elif sub == "resume" and args:
-            m = store.load_monitor(args[0])
+            m = await store.load_monitor(args[0])
             if not m:
                 await self._send(event.channel, event.session_id, f"Monitor not found: {args[0]}")
                 return
-            store.update_status(args[0], MonitorStatus.ACTIVE)
+            await store.update_status(args[0], MonitorStatus.ACTIVE)
             await self._send(event.channel, event.session_id, f"▶️ Monitor '{m.name}' resumed.")
 
         else:
@@ -188,7 +188,7 @@ class CommandHandlersMixin:
             goal = " ".join(args)
             project = str(Path.cwd())
             new_session = CodingSession(user_id=event.user_id, channel=event.channel, goal=goal, project_path=project)
-            mgr.create_session(new_session)
+            await mgr.create_session(new_session)
             await self._send(
                 event.channel,
                 event.session_id,
@@ -199,7 +199,7 @@ class CommandHandlersMixin:
             )
 
         elif sub == "status" and args:
-            session = mgr.get_session(args[0])
+            session = await mgr.get_session(args[0])
             if not session:
                 await self._send(event.channel, event.session_id, f"Session not found: {args[0]}")
                 return
@@ -214,12 +214,12 @@ class CommandHandlersMixin:
             )
 
         elif sub == "end" and args:
-            session = mgr.get_session(args[0])
+            session = await mgr.get_session(args[0])
             if not session:
                 await self._send(event.channel, event.session_id, f"Session not found: {args[0]}")
                 return
             session.status = SessionStatus.COMPLETED
-            mgr.update_session(session)
+            await mgr.update_session(session)
             await self._send(event.channel, event.session_id, f"Session {args[0][:8]} ended.")
 
         else:
@@ -241,7 +241,7 @@ class CommandHandlersMixin:
         store = self._routine_store
 
         if sub == "list":
-            routines = store.list_routines(user_id=event.user_id)
+            routines = await store.list_routines(user_id=event.user_id)
             if not routines:
                 await self._send(event.channel, event.session_id, "No routines configured.")
                 return
@@ -299,7 +299,7 @@ class CommandHandlersMixin:
                 user_id=event.user_id,
                 channel=event.channel,
             )
-            store.save_routine(routine)
+            await store.save_routine(routine)
             await self._send(
                 event.channel,
                 event.session_id,
@@ -307,27 +307,27 @@ class CommandHandlersMixin:
             )
 
         elif sub == "remove" and args:
-            r = store.load_routine(args[0])
+            r = await store.load_routine(args[0])
             if not r:
                 await self._send(event.channel, event.session_id, f"Routine not found: {args[0]}")
                 return
-            store.delete_routine(args[0])
+            await store.delete_routine(args[0])
             await self._send(event.channel, event.session_id, f"🗑 Routine '{r.name}' removed.")
 
         elif sub == "pause" and args:
-            r = store.load_routine(args[0])
+            r = await store.load_routine(args[0])
             if not r:
                 await self._send(event.channel, event.session_id, f"Routine not found: {args[0]}")
                 return
-            store.update_status(args[0], RoutineStatus.PAUSED)
+            await store.update_status(args[0], RoutineStatus.PAUSED)
             await self._send(event.channel, event.session_id, f"⏸ Routine '{r.name}' paused.")
 
         elif sub == "resume" and args:
-            r = store.load_routine(args[0])
+            r = await store.load_routine(args[0])
             if not r:
                 await self._send(event.channel, event.session_id, f"Routine not found: {args[0]}")
                 return
-            store.update_status(args[0], RoutineStatus.ACTIVE)
+            await store.update_status(args[0], RoutineStatus.ACTIVE)
             await self._send(event.channel, event.session_id, f"▶️ Routine '{r.name}' resumed.")
 
         else:

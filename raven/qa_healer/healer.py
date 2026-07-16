@@ -134,18 +134,21 @@ async def heal_test_failure(
     if auto_pr:
         try:
             _run_git(repo, "push", "origin", branch)
-            from ravencode.integrations.github import GitHubClient
+            from ravencode.integrations.vcs import create_vcs_provider
 
-            gh = GitHubClient()
+            gh_token = os.environ.get("GITHUB_TOKEN", "")
+            gh = create_vcs_provider("github", token=gh_token)
             owner = _run_git(repo, "remote", "get-url", "origin").split("/")[-2] if "/" in _run_git(repo, "remote", "get-url", "origin") else ""
             repo_name = repo.name
             if owner and repo_name:
-                pr_number = await gh.create_pr(
-                    owner, repo_name,
-                    f"Fix: {failure.test_name[:60]}",
-                    f"## Auto-fix by Raven QA Healer\n\n### Failure\n```\n{failure.error_message}\n```\n\n### Test\n`{failure.test_file}`",
-                    branch, "main",
+                pr = await gh.create_pull_request(
+                    f"{owner}/{repo_name}",
+                    title=f"Fix: {failure.test_name[:60]}",
+                    source=branch,
+                    target="main",
+                    body=f"## Auto-fix by Raven QA Healer\n\n### Failure\n```\n{failure.error_message}\n```\n\n### Test\n`{failure.test_file}`",
                 )
+                pr_number = pr.id
         except Exception as exc:
             logger.warning("Auto-PR failed: {}", exc)
     return {

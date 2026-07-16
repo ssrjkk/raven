@@ -280,7 +280,7 @@ class TestCodingSessionManager:
         db_path = str(tmp_path / "coder_test.db")
         manager = CodingSessionManager(db_path)
         session = CodingSession(goal="test goal", user_id="u1")
-        saved = manager.create_session(session)
+        saved = await manager.create_session(session)
         assert saved.id is not None
         assert saved.goal == "test goal"
 
@@ -288,8 +288,8 @@ class TestCodingSessionManager:
     async def test_list_sessions(self, tmp_path):
         db_path = str(tmp_path / "coder_list.db")
         manager = CodingSessionManager(db_path)
-        manager.create_session(CodingSession(goal="goal 1", user_id="u1"))
-        sessions = manager.list_sessions()
+        await manager.create_session(CodingSession(goal="goal 1", user_id="u1"))
+        sessions = await manager.list_sessions()
         assert len(sessions) >= 1
 
     @pytest.mark.asyncio
@@ -297,10 +297,10 @@ class TestCodingSessionManager:
         db_path = str(tmp_path / "coder_update.db")
         manager = CodingSessionManager(db_path)
         s = CodingSession(goal="goal to update", user_id="u1")
-        manager.create_session(s)
+        await manager.create_session(s)
         s.status = SessionStatus.COMPLETED
-        manager.update_session(s)
-        loaded = manager.get_session(s.id)
+        await manager.update_session(s)
+        loaded = await manager.get_session(s.id)
         assert loaded is not None
         assert loaded.status == SessionStatus.COMPLETED
 
@@ -308,7 +308,7 @@ class TestCodingSessionManager:
     async def test_get_nonexistent(self, tmp_path):
         db_path = str(tmp_path / "coder_nonexist.db")
         manager = CodingSessionManager(db_path)
-        session = manager.get_session("nonexistent_id")
+        session = await manager.get_session("nonexistent_id")
         assert session is None
 
     @pytest.mark.asyncio
@@ -316,9 +316,9 @@ class TestCodingSessionManager:
         db_path = str(tmp_path / "coder_hist.db")
         manager = CodingSessionManager(db_path)
         s = CodingSession(goal="hist test", user_id="u1")
-        manager.create_session(s)
-        manager.add_history(s.id, "user", "hello")
-        loaded = manager.get_session(s.id)
+        await manager.create_session(s)
+        await manager.add_history(s.id, "user", "hello")
+        loaded = await manager.get_session(s.id)
         assert loaded is not None
         assert len(loaded.history) >= 1
 
@@ -327,19 +327,17 @@ class TestCodingSessionManager:
         db_path = str(tmp_path / "coder_del.db")
         manager = CodingSessionManager(db_path)
         s = CodingSession(goal="to delete", user_id="u1")
-        manager.create_session(s)
-        manager.delete_session(s.id)
-        assert manager.get_session(s.id) is None
+        await manager.create_session(s)
+        await manager.delete_session(s.id)
+        loaded = await manager.get_session(s.id)
+        assert loaded is None
 
     @pytest.mark.asyncio
     async def test_list_sessions_by_user(self, tmp_path):
-        from raven.core.coder.session import _local
-
-        _local.conn = None
         db_path = str(tmp_path / "coder_user.db")
         manager = CodingSessionManager(db_path)
-        manager.create_session(CodingSession(goal="user1 goal", user_id="u1"))
-        manager.create_session(CodingSession(goal="user2 goal", user_id="u2"))
-        u1_sessions = manager.list_sessions(user_id="u1")
+        await manager.create_session(CodingSession(goal="user1 goal", user_id="u1"))
+        await manager.create_session(CodingSession(goal="user2 goal", user_id="u2"))
+        u1_sessions = await manager.list_sessions(user_id="u1")
         assert len(u1_sessions) == 1
         assert u1_sessions[0].user_id == "u1"

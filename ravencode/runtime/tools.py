@@ -271,10 +271,11 @@ async def task_delegate(description: str, context: str | None = None) -> str:
         return f"[error] max task delegation depth ({_MAX_TASK_DEPTH}) exceeded"
     token = _task_depth.set(depth + 1)
     try:
+        from ravencode.core.prompts import get_prompt
         from ravencode.runtime.agent_core import AgentConfig, ReActAgent
         from ravencode.runtime.context import Conversation
         parent_memory = _AGENT_MEMORY.get()
-        sub_prompt = "You are a sub-agent handling a delegated task. Complete it efficiently and return the result."
+        sub_prompt = get_prompt("delegate")
         if context:
             sub_prompt += f"\nContext from parent:\n{context}"
         if parent_memory:

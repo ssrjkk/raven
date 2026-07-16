@@ -46,6 +46,9 @@ def gateway():
     gw._guardian = MagicMock(spec=ChannelGuardian)
     gw._guardian.record_error = AsyncMock()
     gw._guardian.record_success = AsyncMock()
+    import asyncio
+    gw._bg_tasks = set()
+    gw._channels_lock = asyncio.Lock()
     return gw
 
 

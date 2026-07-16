@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import time
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -14,100 +12,56 @@ from raven.core.monitor.checkers.price import check_price
 from raven.core.monitor.checkers.rss import check_rss
 from raven.core.monitor.models import CheckResult, Monitor, MonitorCheck, MonitorStatus, MonitorType
 from raven.core.monitor.store import MonitorStore
+from raven.core.periodic_engine import PeriodicEngine
 
 
-class MonitorEngine:
+class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
     def __init__(
         self,
         store_or_path: MonitorStore | str | Path,
-        send_fn: Callable[[str, str], Any] | None = None,
+        send_fn: Any = None,
     ):
         if isinstance(store_or_path, MonitorStore):
-            self._store = store_or_path
+            store = store_or_path
         else:
-            self._store = MonitorStore(str(store_or_path))
-        self._send_fn = send_fn
-        self._tasks: dict[str, asyncio.Task[None]] = {}
-        self._running = False
-        self._handlers: dict[str, Callable[..., Any]] = {}
+            store = MonitorStore(str(store_or_path))
+        super().__init__(store, send_fn=send_fn)
 
     @classmethod
-    def from_db(cls, db_path: str, send_fn: Callable[..., Any] | None = None) -> MonitorEngine:
+    def from_db(cls, db_path: str, send_fn: Any = None) -> MonitorEngine:
         return cls(db_path, send_fn=send_fn)
 
-    def register_handler(self, monitor_type: str, handler: Callable[..., Any]):
-        self._handlers[monitor_type] = handler
+    async def list_monitors(self, user_id: str | None = None, limit: int = 50, offset: int = 0) -> list[Monitor]:
+        return await self._store.list_monitors(user_id=user_id, limit=limit, offset=offset)
 
-    async def start(self):
-        self._running = True
-        monitors = self._store.list_active()
-        for m in monitors:
-            self._schedule_monitor(m)
-        logger.info("MonitorEngine started with {} monitors", len(monitors))
+    async def count_monitors(self, user_id: str | None = None) -> int:
+        return await self._store.count_monitors(user_id=user_id)
 
-    async def stop(self):
-        self._running = False
-        for _mid, task in list(self._tasks.items()):
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
-        self._tasks.clear()
-        logger.info("MonitorEngine stopped")
+    async def add_monitor(self, monitor: Monitor):
+        await self.add_item(monitor)
 
-    def pause_monitor(self, monitor_id: str) -> bool:
-        m = self._store.load_monitor(monitor_id)
-        if not m:
-            return False
-        self._store.update_status(monitor_id, MonitorStatus.PAUSED)
-        task = self._tasks.pop(monitor_id, None)
-        if task:
-            task.cancel()
-        return True
+    async def remove_monitor(self, monitor_id: str):
+        await self.remove_item(monitor_id)
 
-    def resume_monitor(self, monitor_id: str) -> bool:
-        m = self._store.load_monitor(monitor_id)
-        if not m:
-            return False
-        self._store.update_status(monitor_id, MonitorStatus.ACTIVE)
-        if self._running:
-            self._schedule_monitor(m)
-        return True
+    async def pause_monitor(self, monitor_id: str) -> bool:
+        return await self.pause_item(monitor_id)
 
-    def list_monitors(self, user_id: str | None = None, limit: int = 50, offset: int = 0) -> list[Monitor]:
-        return self._store.list_monitors(user_id=user_id, limit=limit, offset=offset)
-
-    def count_monitors(self, user_id: str | None = None) -> int:
-        return self._store.count_monitors(user_id=user_id)
-
-    def add_monitor(self, monitor: Monitor):
-        self._store.save_monitor(monitor)
-        if monitor.status == MonitorStatus.ACTIVE and self._running:
-            self._schedule_monitor(monitor)
-
-    def remove_monitor(self, monitor_id: str):
-        task = self._tasks.pop(monitor_id, None)
-        if task:
-            task.cancel()
-        self._store.delete_monitor(monitor_id)
+    async def resume_monitor(self, monitor_id: str) -> bool:
+        return await self.resume_item(monitor_id)
 
     async def check_now(self, monitor_id: str) -> str | None:
-        monitor = self._store.load_monitor(monitor_id)
+        monitor = await self._load_item(monitor_id)
         if not monitor:
             return None
-        alert_text = await self._run_check(monitor)
+        alert_text = await self._run_item(monitor)
         if alert_text:
             await self._alert(monitor, alert_text)
         return alert_text
 
-    def _schedule_monitor(self, monitor: Monitor):
-        if monitor.id in self._tasks:
-            self._tasks[monitor.id].cancel()
-        self._tasks[monitor.id] = asyncio.create_task(self._run_loop(monitor))
-
     async def _run_loop(self, monitor: Monitor):
         while self._running:
             try:
-                alert_text = await self._run_check(monitor)
+                alert_text = await self._run_item(monitor)
                 if alert_text and self._running:
                     await self._alert(monitor, alert_text)
                 await asyncio.sleep(monitor.interval_seconds)
@@ -117,7 +71,7 @@ class MonitorEngine:
                 logger.error("Monitor {} loop error: {}", monitor.id, e)
                 await asyncio.sleep(60)
 
-    async def _run_check(self, monitor: Monitor) -> str | None:
+    async def _run_item(self, monitor: Monitor) -> str | None:
         start = time.time()
         try:
             handler = self._handlers.get(monitor.type.value)
@@ -156,7 +110,7 @@ class MonitorEngine:
                 triggered=triggered,
                 error=None,
             )
-            self._store.save_check(check)
+            await self._store.save_check(check)
 
             return alert_text  # type: ignore[no-any-return]
 
@@ -178,8 +132,38 @@ class MonitorEngine:
                 triggered=False,
                 error=str(e),
             )
-            self._store.save_check(check)
+            await self._store.save_check(check)
             return None
+
+    async def _list_active(self) -> list[Monitor]:
+        return await self._store.list_active()
+
+    async def _load_item(self, item_id: str) -> Monitor | None:
+        return await self._store.load_monitor(item_id)
+
+    async def _save_item(self, item: Monitor):
+        await self._store.save_monitor(item)
+
+    async def _delete_item(self, item_id: str):
+        await self._store.delete_monitor(item_id)
+
+    async def _update_status(self, item_id: str, status: MonitorStatus):
+        await self._store.update_status(item_id, status)
+
+    def _get_item_id(self, item: Monitor) -> str:
+        return item.id
+
+    def _is_active(self, item: Monitor) -> bool:
+        return item.status == MonitorStatus.ACTIVE
+
+    def _get_interval(self, item: Monitor) -> int | float:
+        return item.interval_seconds
+
+    def _paused_status(self) -> MonitorStatus:
+        return MonitorStatus.PAUSED
+
+    def _active_status(self) -> MonitorStatus:
+        return MonitorStatus.ACTIVE
 
     async def _check_file(self, monitor: Monitor) -> str | None:
         from pathlib import Path

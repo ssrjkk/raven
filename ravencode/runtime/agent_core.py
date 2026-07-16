@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import time
 from collections.abc import Awaitable, Callable
@@ -11,6 +12,7 @@ from typing import Any, Self
 from loguru import logger
 
 from ravencode.api.client import AIOSClient
+from ravencode.core.prompts import get_prompt
 from ravencode.runtime.context import Conversation, MemoryStore
 from ravencode.runtime.permissions import PermissionManager, default_deny_rules
 from ravencode.runtime.question import QuestionError
@@ -115,8 +117,14 @@ class AgentConfig:
 # ReActAgent
 # ---------------------------------------------------------------------------
 
+_last_agent_var: contextvars.ContextVar[ReActAgent | None] = contextvars.ContextVar("_last_agent", default=None)
+
+
 class ReActAgent:
-    _last_agent: ReActAgent | None = None
+
+    @classmethod
+    def last_agent(cls) -> ReActAgent | None:
+        return _last_agent_var.get()
 
     def __init__(
         self,
@@ -161,35 +169,20 @@ class ReActAgent:
         base = prompt.read_text(encoding="utf-8") if prompt.is_file() else self._default_system_prompt()
         extras = []
         if self.config.structured_output:
-            extras.append("You must respond with valid JSON only.")
+            extras.append(get_prompt("structured_output_instruction"))
         if self.config.plan_mode:
-            extras.append(
-                "You are in PLAN MODE. You may ONLY read, search, and explore the codebase. "
-                "You MUST NOT write, edit, execute shell commands, or make any changes. "
-                "Create a detailed plan for the requested task."
-            )
+            extras.append(get_prompt("plan_mode_instruction"))
         if self.config.proactive_scan:
-            extras.append(
-                "Before taking action, first explore the project to find relevant files. "
-                "Read existing code to understand conventions before writing new code."
-            )
+            extras.append(get_prompt("proactive_scan_instruction"))
         if self.config.diff_preview:
-            extras.append(
-                "Before editing a file, read it first and show the diff by calling "
-                "edit with preview=true to confirm your changes are correct."
-            )
+            extras.append(get_prompt("diff_preview_instruction"))
         if extras:
             base += "\n\n" + "\n".join(extras)
         return base
 
     @staticmethod
     def _default_system_prompt() -> str:
-        return (
-            "You are Raven, an AI coding assistant.\n"
-            "You have tools for reading, writing, editing files, running commands, searching the web, "
-            "managing git, and delegating subtasks.\n"
-            "Always read before editing, show diffs before applying, and verify with tests or lint."
-        )
+        return get_prompt("system")
 
     # -----------------------------------------------------------------------
     # core loop
@@ -203,7 +196,7 @@ class ReActAgent:
     async def run(self, user_input: str) -> str:
         self._task = asyncio.current_task()
         from ravencode.runtime.tools import set_agent_memory
-        ReActAgent._last_agent = self
+        _last_agent_var.set(self)
         set_agent_memory({
             "name": self.name,
             "config": {k: v for k, v in self.config.__dict__.items() if not callable(v) and not k.startswith("_")},

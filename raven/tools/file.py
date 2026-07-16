@@ -1,61 +1,114 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+
+_MAX_LIST_ITEMS = 1000
+
+if sys.platform == "win32":
+    _O_NOFOLLOW = 0
+else:
+    _O_NOFOLLOW = os.O_NOFOLLOW
 
 
 def _workspace() -> Path:
     return Path(os.environ.get("RAVEN_WORKSPACE", "data")).resolve()
 
 
+def _check_no_symlinks_in_path(p: Path, ws: Path) -> None:
+    current = ws
+    for part in p.relative_to(ws).parts:
+        current = current / part
+        if current.is_symlink():
+            raise PermissionError(f"Symlink detected in path: {current}")
+
+
 def _confine(path: str) -> Path:
-    p = Path(path).expanduser().resolve()
+    p = Path(os.path.normpath(Path(path).expanduser()))
     ws = _workspace()
     try:
         p.relative_to(ws)
     except ValueError:
         raise PermissionError(f"Access denied: path outside workspace: {p}") from None
+    _check_no_symlinks_in_path(p, ws)
     return p
 
 
+def _confine_fd(path: str, flags: int) -> int:
+    p = Path(os.path.normpath(Path(path).expanduser()))
+    ws = _workspace()
+    try:
+        p.relative_to(ws)
+    except ValueError:
+        raise PermissionError(f"Access denied: path outside workspace: {p}") from None
+    _check_no_symlinks_in_path(p, ws)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(str(p), flags | _O_NOFOLLOW, 0o644)
+    except OSError as e:
+        if e.errno == 34:
+            raise PermissionError(f"Symlink detected: {p}") from e
+        raise
+    return fd
+
+
 async def file_read(path: str, max_size: int = 50000) -> str:
-    p = _confine(path)
-    if not p.exists():
-        raise FileNotFoundError(f"File not found: {p}")
-    size = p.stat().st_size
-    if size > max_size:
-        with p.open("rb") as f:
-            content = f.read(max_size).decode("utf-8", errors="replace")
-        return content + f"\n... (truncated, {size} total bytes)"
-    return p.read_text(encoding="utf-8", errors="replace")
+    fd = _confine_fd(path, os.O_RDONLY)
+    try:
+        size = os.lseek(fd, 0, os.SEEK_END)
+        os.lseek(fd, 0, os.SEEK_SET)
+        to_read = min(size, max_size)
+        raw = os.read(fd, to_read)
+        content = raw.decode("utf-8", errors="replace")
+        if size > max_size:
+            content += f"\n... (truncated, {size} total bytes)"
+        return content
+    finally:
+        os.close(fd)
 
 
 async def file_write(path: str, content: str) -> str:
-    p = _confine(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(content, encoding="utf-8")
-    return f"Written {len(content)} bytes to {p}"
+    fd = _confine_fd(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _O_NOFOLLOW)
+    try:
+        os.write(fd, content.encode("utf-8"))
+    finally:
+        os.close(fd)
+    return f"Written {len(content)} bytes to {path}"
 
 
 async def file_append(path: str, content: str) -> str:
-    p = _confine(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a", encoding="utf-8") as f:
-        f.write(content)
-    return f"Appended {len(content)} bytes to {p}"
+    fd = _confine_fd(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | _O_NOFOLLOW)
+    try:
+        os.write(fd, content.encode("utf-8"))
+    finally:
+        os.close(fd)
+    return f"Appended {len(content)} bytes to {path}"
 
 
 async def file_list(path: str = ".", pattern: str = "*") -> str:
     p = _confine(path)
     if not p.exists():
         raise FileNotFoundError(f"Directory not found: {p}")
-    items = []
+    items: list[str] = []
+    depth = 0
     for f in p.glob(pattern):
+        if len(items) >= _MAX_LIST_ITEMS:
+            items.append("... (truncated, too many files)")
+            break
         kind = "📁" if f.is_dir() else "📄"
         size = f.stat().st_size if f.is_file() else 0
         items.append(f"{kind} {f.name}  ({size} bytes)" if size else f"{kind} {f.name}")
+        try:
+            rel = f.relative_to(p)
+            depth = len(rel.parts)
+        except ValueError:
+            pass
+        if depth > 10:
+            items.append("... (truncated, depth limit reached)")
+            break
     return "\n".join(items[:200]) if items else "(empty)"
 
 

@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     llm_timeout: int = 120
     llm_retry_max: int = 3
     llm_retry_delay: float = 1.0
+    agent_token_timeout: float = 30.0
+    agent_tool_timeout: float = 120.0
     workspace_path: str = ""
     channel_allow_from: str = ""
     mcp_servers: str = ""
@@ -138,8 +140,8 @@ class Settings(BaseSettings):
 
     def validate_settings(self) -> bool:
         errors = []
-        if not self.web_secret_key:
-            errors.append("WEB_SECRET_KEY must be set to a non-empty value")
+        if not self.web_secret_key or self.web_secret_key == "change-me-in-production":  # noqa: S105
+            errors.append("WEB_SECRET_KEY must be set to a non-default value")
         if self.dm_policy not in ("pairing", "open", "closed"):
             errors.append(f"DM_POLICY must be 'pairing', 'open', or 'closed', got '{self.dm_policy}'")
         if self.web_port < 1 or self.web_port > 65535:

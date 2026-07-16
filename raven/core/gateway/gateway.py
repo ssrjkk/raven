@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from loguru import logger
 
+from raven.core.agent.registry import AgentRegistry
 from raven.core.auth import RBAC, Permission
 from raven.core.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from raven.core.config import settings
@@ -18,7 +19,6 @@ from raven.core.gateway.command_handlers import CommandHandlersMixin
 
 if TYPE_CHECKING:
     from raven.channels.base import BaseChannel
-from raven.core.agent.registry import AgentRegistry
 from raven.core.audit import audit_logger
 from raven.core.channel_guardian import ChannelGuardian
 from raven.core.failover import ModelFailover
@@ -54,6 +54,8 @@ class Gateway(CommandHandlersMixin):
         self.failover = ModelFailover(self.llm)
         self.plugin_loader = plugin_loader
         self.channels: dict[str, Any] = {}
+        self._channels_lock = asyncio.Lock()
+        self._bg_tasks: set[asyncio.Task[None]] = set()
         self._running = False
         self.registry = AgentRegistry(db, self.llm, plugin_loader.tools)
         self.sandbox = Sandbox()
@@ -100,11 +102,12 @@ class Gateway(CommandHandlersMixin):
 
     async def start(self):
         self.registry.setup_defaults()
+        channels = list(self.channels.items())
         logger.info(
-            "Starting gateway with {} channels, {} agents", len(self.channels), len(self.registry.list_agents())
+            "Starting gateway with {} channels, {} agents", len(channels), len(self.registry.list_agents())
         )
         self._running = True
-        for cid, channel in self.channels.items():
+        for cid, channel in channels:
             try:
                 await channel.start()
                 logger.info("Channel started: {}", cid)
@@ -119,9 +122,16 @@ class Gateway(CommandHandlersMixin):
     async def stop(self):
         logger.info("Stopping gateway...")
         self._running = False
+        for task in list(self._bg_tasks):
+            task.cancel()
+        if self._bg_tasks:
+            await asyncio.gather(*self._bg_tasks, return_exceptions=True)
+            self._bg_tasks.clear()
         await self._guardian.stop()
         await self.mcp_pool.disconnect_all()
-        for cid, channel in self.channels.items():
+        async with self._channels_lock:
+            channels = list(self.channels.items())
+        for cid, channel in channels:
             try:
                 await channel.stop()
                 logger.info("Channel stopped: {}", cid)
@@ -132,7 +142,7 @@ class Gateway(CommandHandlersMixin):
         async def _morning_briefing(user_id: str, channel: str) -> str:
             try:
                 monitors_info = ""
-                monitors = self._monitor_store.list_monitors(user_id=user_id)
+                monitors = await self._monitor_store.list_monitors(user_id=user_id)
                 if monitors:
                     statuses = [
                         f"{m.name}[{m.type.value}]:{'🟢' if m.status.value == 'active' else '⏸'}" for m in monitors[:5]
@@ -140,7 +150,7 @@ class Gateway(CommandHandlersMixin):
                     monitors_info = "Monitors: " + ", ".join(statuses)
 
                 tstore = TaskStore(self.db.db_path)
-                tasks = tstore.list_tasks(user_id=user_id, limit=5)
+                tasks = await tstore.list_tasks(user_id=user_id, limit=5)
                 tasks_info = ""
                 if tasks:
                     pending = [t for t in tasks if t.status.value in ("pending", "running")]
@@ -193,29 +203,30 @@ class Gateway(CommandHandlersMixin):
         self_healer.register("llm", _llm_check, _llm_restart)
 
     async def handle_message(self, event: IncomingMessage):
-        logger.info("Incoming message from {}[{}]: {}", event.channel, event.user_id, event.text[:80])
+        cid = str(uuid4())[:8]
+        logger.info("[{}] Incoming message from {}[{}]: {}", cid, event.channel, event.user_id, event.text[:80])
         metrics.inc("messages_received", {"channel": event.channel})
 
         if not await self._rate_limiter.check_rate_limit(event.channel, event.user_id, channel_type=event.channel):
             metrics.inc("messages_rate_limited", {"channel": event.channel, "reason": "rate_limiter"})
-            await self._send(event.channel, event.session_id, "Please slow down — you're sending messages too quickly.")
+            await self._send(event.channel, event.session_id, "Please slow down.")
             return
 
         if not await self._guardian.check_rate_limit(event.channel, event.user_id):
             metrics.inc("messages_rate_limited", {"channel": event.channel, "reason": "guardian"})
-            await self._send(event.channel, event.session_id, "Please slow down — you're sending messages too quickly.")
+            await self._send(event.channel, event.session_id, "Please slow down.")
             return
 
         try:
-            await self._message_cb.call(self._handle_message_inner, event)
+            await self._message_cb.call(self._handle_message_inner, event, cid)
         except CircuitBreakerOpenError:
-            logger.warning("Message rejected, circuit breaker open")
+            logger.warning("[{}] Message rejected, circuit breaker open", cid)
             metrics.inc("message_errors", {"channel": event.channel, "reason": "circuit_breaker"})
-            await self._send(event.channel, event.session_id, "Service temporarily unavailable, please try again later.")
+            await self._send(event.channel, event.session_id, f"Service temporarily unavailable (ref: {cid}).")
         except Exception as e:
-            logger.error("handle_message error: {}", e)
+            logger.error("[{}] handle_message error: {}", cid, e)
             metrics.inc("message_errors", {"channel": event.channel})
-            await self._send(event.channel, event.session_id, "Sorry, an error occurred. The team has been notified.")
+            await self._send(event.channel, event.session_id, f"Sorry, an error occurred (ref: {cid}).")
 
     async def _manage_context(self, session_id: str) -> None:
         if self._ctxmgr is None:
@@ -243,7 +254,14 @@ class Gateway(CommandHandlersMixin):
             metrics.inc("context_window_managed", {"session_id": session_id})
             logger.info("Context window management applied for session {} ({:.1f}%)", session_id, ratio * 100)
 
-    async def _handle_message_inner(self, event: IncomingMessage):
+    def _bg_task(self, coro: Any) -> asyncio.Task[None]:
+        task = asyncio.create_task(coro)
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
+        return task
+
+    async def _handle_message_inner(self, event: IncomingMessage, cid: str = ""):
+        logger.info("[{}] Processing message from {}[{}]", cid, event.channel, event.user_id)
         user = await self.db.find_or_create_user(event.channel, event.user_id)
 
         if not await self._is_user_allowed(event, user):
@@ -273,13 +291,28 @@ class Gateway(CommandHandlersMixin):
 
         full_response = ""
         buffer = ""
-        async for token in agent.run(event.text):
+        gen = agent.run(event.text)
+        timed_out = False
+        while True:
+            try:
+                token = await asyncio.wait_for(gen.__anext__(), timeout=settings.agent_token_timeout)
+            except StopAsyncIteration:
+                break
+            except TimeoutError:
+                timed_out = True
+                break
             full_response += token
             if supports_stream:
                 buffer += token
                 if len(buffer) >= 50 or token.endswith(("\n", ".", "!", "?")):
                     await self._send(event.channel, session_id, buffer, streaming=True)
                     buffer = ""
+
+        if timed_out:
+            tail = "\n\n[⏱ Response timed out. Try rephrasing or splitting your request.]"
+            full_response += tail
+            if supports_stream:
+                await self._send(event.channel, session_id, tail, streaming=True)
 
         if supports_stream and buffer:
             await self._send(event.channel, session_id, buffer, streaming=True)
@@ -347,7 +380,7 @@ class Gateway(CommandHandlersMixin):
             return True
 
         if self._MONITOR_PATTERN.search(text):
-            monitors = self._monitor_store.list_monitors(user_id=event.user_id)
+            monitors = await self._monitor_store.list_monitors(user_id=event.user_id)
             if not monitors:
                 await self._send(event.channel, event.session_id, "You have no monitors configured.")
                 return True
@@ -377,7 +410,7 @@ class Gateway(CommandHandlersMixin):
                 task = await planner.plan(text, self.llm, user_id=event.user_id, channel=event.channel)
                 await self._send(event.channel, event.session_id, f"Task planned: {task.plan_summary or text[:80]}")
                 await runner.submit(task)
-                asyncio.create_task(self._safe_wait(runner, task.id))
+                self._bg_task(self._safe_wait(runner, task.id))
             except Exception as e:
                 logger.error("Intent task planning error: {}", e)
             return True
@@ -551,7 +584,7 @@ class Gateway(CommandHandlersMixin):
                 await self._send(event.channel, event.session_id, "Usage: /task <goal description>")
                 return True
             await self._send(event.channel, event.session_id, f"Planning task: {goal[:100]}...")
-            asyncio.create_task(self._run_task_async(event, goal))
+            self._bg_task(self._run_task_async(event, goal))
             return True
 
         if cmd == "/mcp":
@@ -704,7 +737,8 @@ class Gateway(CommandHandlersMixin):
         return handler
 
     async def _on_channel_dead(self, channel_id: str) -> None:
-        channel = self.channels.pop(channel_id, None)
+        async with self._channels_lock:
+            channel = self.channels.pop(channel_id, None)
         if channel:
             logger.error("Channel {} removed from gateway (dead)", channel_id)
             metrics.inc("channels_dead", {"channel": channel_id})
@@ -712,7 +746,8 @@ class Gateway(CommandHandlersMixin):
                 await channel.stop()
             except Exception as e:
                 logger.error("Error stopping dead channel {}: {}", channel_id, e)
-        remaining = list(self.channels.keys())
+        async with self._channels_lock:
+            remaining = list(self.channels.keys())
         if remaining:
             alert = f"[Alert] Channel '{channel_id}' is dead and has been removed. Remaining: {', '.join(remaining)}"
             logger.warning(alert)

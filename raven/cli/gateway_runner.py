@@ -325,17 +325,17 @@ async def _run_gateway(gateway: Gateway, web_port: int):
                 if m.last_check
                 else None,
             }
-            for m in eng.list_monitors(limit=limit, offset=offset)
+            for m in await eng.list_monitors(limit=limit, offset=offset)
         ]
-        return {"items": items, "total": eng.count_monitors(), "limit": limit, "offset": offset}
+        return {"items": items, "total": await eng.count_monitors(), "limit": limit, "offset": offset, "version": 1}
 
     @api_app.post("/api/monitor/{action}/{monitor_id}")
     async def api_monitor_toggle(action: str, monitor_id: str):
         eng: MonitorEngine = api_app.state.monitor_engine
         if action == "pause":
-            eng.pause_monitor(monitor_id)
+            await eng.pause_monitor(monitor_id)
         elif action == "resume":
-            eng.resume_monitor(monitor_id)
+            await eng.resume_monitor(monitor_id)
         return {"ok": True}
 
     @api_app.get("/api/routine/list")
@@ -352,9 +352,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
                 "status": r.status.value,
                 "last_run_status": r.last_run_status,
             }
-            for r in eng.list_routines(limit=limit, offset=offset)
+            for r in await eng.list_routines(limit=limit, offset=offset)
         ]
-        return {"items": items, "total": eng._store.count_routines(), "limit": limit, "offset": offset}
+        return {"items": items, "total": await eng._store.count_routines(), "limit": limit, "offset": offset, "version": 1}
 
     @api_app.post("/api/routine/create")
     async def api_routine_create(body: dict[str, Any]):
@@ -371,22 +371,22 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             channel=body.get("channel", "internal"),
             config=body.get("config", {}),
         )
-        eng._store.save_routine(routine)
+        await eng._store.save_routine(routine)
         return {"ok": True, "id": routine.id}
 
     @api_app.delete("/api/routine/{routine_id}")
     async def api_routine_delete(routine_id: str):
         eng: RoutineEngine = api_app.state.routine_engine
-        eng._store.delete_routine(routine_id)
+        await eng._store.delete_routine(routine_id)
         return {"ok": True}
 
     @api_app.post("/api/routine/{action}/{routine_id}")
     async def api_routine_toggle(action: str, routine_id: str):
         eng: RoutineEngine = api_app.state.routine_engine
         if action == "pause":
-            eng.pause_routine(routine_id)
+            await eng.pause_routine(routine_id)
         elif action == "resume":
-            eng.resume_routine(routine_id)
+            await eng.resume_routine(routine_id)
         return {"ok": True}
 
     @api_app.get("/api/task/list")
@@ -406,9 +406,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
                 ],
                 "created_at": t.created_at,
             }
-            for t in store.list_tasks(limit=limit, offset=offset)
+            for t in await store.list_tasks(limit=limit, offset=offset)
         ]
-        return {"items": items, "total": store.count_tasks(), "limit": limit, "offset": offset}
+        return {"items": items, "total": await store.count_tasks(), "limit": limit, "offset": offset, "version": 1}
 
     @api_app.post("/api/task/run")
     async def api_task_run(body: dict[str, Any]):
@@ -457,9 +457,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
                 "project_path": s.project_path,
                 "files": len(s.files),
             }
-            for s in mgr.list_sessions(limit=limit, offset=offset)
+            for s in await mgr.list_sessions(limit=limit, offset=offset)
         ]
-        return {"items": items, "total": mgr.count_sessions(), "limit": limit, "offset": offset}
+        return {"items": items, "total": await mgr.count_sessions(), "limit": limit, "offset": offset, "version": 1}
 
     @api_app.get("/api/health")
     async def api_health():
@@ -531,13 +531,13 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     monitor_store = MonitorStore(settings.resolved_db_path)
     monitor_engine = MonitorEngine(monitor_store)
-    register_all_monitors(monitor_engine)
+    await register_all_monitors(monitor_engine)
     gateway._monitor_engine = monitor_engine
     api_app.state.monitor_engine = monitor_engine
 
     routine_store = RoutineStore(settings.resolved_db_path)
     routine_engine = RoutineEngine(routine_store)
-    register_all_routines(routine_engine)
+    await register_all_routines(routine_engine)
     api_app.state.routine_engine = routine_engine
 
     analytics_engine = AnalyticsEngine(settings.resolved_db_path)

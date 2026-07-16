@@ -37,7 +37,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         from raven.core.monitor.store import MonitorStore
 
         store = MonitorStore(gateway.db.db_path)
-        monitors = store.list_monitors(user_id=user_id)
+        monitors = await store.list_monitors(user_id=user_id)
         return [
             {
                 "id": m.id,
@@ -65,7 +65,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         from raven.core.monitor.store import MonitorStore
 
         store = MonitorStore(gateway.db.db_path)
-        m = store.load_monitor(monitor_id)
+        m = await store.load_monitor(monitor_id)
         if not m:
             raise HTTPException(404, "Monitor not found")
         return {
@@ -106,7 +106,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
             cooldown_minutes=body.cooldown_minutes,
             config=body.config,
         )
-        store.save_monitor(monitor)
+        await store.save_monitor(monitor)
         await audit_logger.log(AuditEventType.COMMAND, "admin", "monitor.create", detail={"monitor_id": monitor.id})
         return {"ok": True, "id": monitor.id}
 
@@ -117,7 +117,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         from raven.core.monitor.store import MonitorStore
 
         store = MonitorStore(gateway.db.db_path)
-        existing = store.load_monitor(monitor_id)
+        existing = await store.load_monitor(monitor_id)
         if not existing:
             raise HTTPException(404, "Monitor not found")
         if body.name is not None:
@@ -143,7 +143,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
                 Condition(metric=c.metric, operator=ConditionOperator(c.operator), value=c.value)
                 for c in body.conditions
             ]
-        store.save_monitor(existing)
+        await store.save_monitor(existing)
         await audit_logger.log(AuditEventType.COMMAND, "admin", "monitor.update", detail={"monitor_id": monitor_id})
         return {"ok": True}
 
@@ -153,10 +153,10 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         from raven.core.monitor.store import MonitorStore
 
         store = MonitorStore(gateway.db.db_path)
-        m = store.load_monitor(monitor_id)
+        m = await store.load_monitor(monitor_id)
         if not m:
             raise HTTPException(404, "Monitor not found")
-        store.delete_monitor(monitor_id)
+        await store.delete_monitor(monitor_id)
         await audit_logger.log(AuditEventType.COMMAND, "admin", "monitor.delete", detail={"monitor_id": monitor_id})
         return {"ok": True}
 
@@ -176,7 +176,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         gateway = get_gateway_fn()
         engine = getattr(gateway, "_monitor_engine", None)
         if engine:
-            engine.pause_monitor(monitor_id)
+            await engine.pause_monitor(monitor_id)
         return {"ok": True}
 
     @router.post("/monitors/{monitor_id}/resume")
@@ -184,7 +184,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         gateway = get_gateway_fn()
         engine = getattr(gateway, "_monitor_engine", None)
         if engine:
-            engine.resume_monitor(monitor_id)
+            await engine.resume_monitor(monitor_id)
         return {"ok": True}
 
     @router.get("/health")

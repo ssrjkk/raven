@@ -6,6 +6,7 @@ import hmac as hmac_mod
 import os
 import time
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -654,8 +655,10 @@ def _convert_to_bedrock_converse(messages: list[dict[str, Any]]) -> dict[str, An
 
 
 class LLMRouter:
-    _cache: dict[str, tuple[float, LLMResponse]] = {}
     _CACHE_TTL = 2.0
+    _CACHE_MAXSIZE = 1024
+
+    _cache: OrderedDict[str, tuple[float, LLMResponse]] = OrderedDict()
 
     def __init__(self, providers_config: dict[str, Any] | None = None):
         self._providers: dict[str, LLMProvider] = {}
@@ -677,12 +680,15 @@ class LLMRouter:
     def _get_cached(self, key: str) -> LLMResponse | None:
         entry = LLMRouter._cache.get(key)
         if entry and (time.monotonic() - entry[0]) < LLMRouter._CACHE_TTL:
+            LLMRouter._cache.move_to_end(key)
             return entry[1]
         if entry:
             del LLMRouter._cache[key]
         return None
 
     def _set_cached(self, key: str, resp: LLMResponse):
+        if len(LLMRouter._cache) >= LLMRouter._CACHE_MAXSIZE:
+            LLMRouter._cache.popitem(last=False)
         LLMRouter._cache[key] = (time.monotonic(), resp)
 
     def _get_provider(self, model: str) -> LLMProvider:

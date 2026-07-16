@@ -20,13 +20,6 @@ from raven.core.monitor.models import (
 from raven.core.monitor.store import MonitorStore
 
 
-@pytest.fixture(autouse=True)
-def _clear_cache():
-    import raven.core.monitor.store as ms
-
-    ms._local.conn = None
-
-
 @pytest.fixture
 def db_path(tmp_path: Path) -> str:
     return str(tmp_path / "monitors.db")
@@ -49,64 +42,72 @@ def monitor() -> Monitor:
 
 
 class TestMonitorStore:
-    def test_save_and_load(self, store: MonitorStore, monitor: Monitor):
-        store.save_monitor(monitor)
-        loaded = store.load_monitor(monitor.id)
+    @pytest.mark.asyncio
+    async def test_save_and_load(self, store: MonitorStore, monitor: Monitor):
+        await store.save_monitor(monitor)
+        loaded = await store.load_monitor(monitor.id)
         assert loaded is not None
         assert loaded.name == "test-http"
         assert loaded.type == MonitorType.HTTP
         assert loaded.target == "https://example.com"
 
-    def test_save_and_load_with_conditions(self, store: MonitorStore):
+    @pytest.mark.asyncio
+    async def test_save_and_load_with_conditions(self, store: MonitorStore):
         m = Monitor(
             name="price-check",
             type=MonitorType.PRICE,
             target="bitcoin",
             conditions=[Condition(metric="price", operator=ConditionOperator.GT, value="50000")],
         )
-        store.save_monitor(m)
-        loaded = store.load_monitor(m.id)
+        await store.save_monitor(m)
+        loaded = await store.load_monitor(m.id)
         assert loaded is not None
         assert len(loaded.conditions) == 1
         assert loaded.conditions[0].metric == "price"
         assert loaded.conditions[0].operator == ConditionOperator.GT
 
-    def test_list_active(self, store: MonitorStore):
+    @pytest.mark.asyncio
+    async def test_list_active(self, store: MonitorStore):
         a = Monitor(name="active-1", type=MonitorType.HTTP, target="http://a.com")
         b = Monitor(name="paused-1", type=MonitorType.HTTP, target="http://b.com", status=MonitorStatus.PAUSED)
-        store.save_monitor(a)
-        store.save_monitor(b)
-        active = store.list_active()
+        await store.save_monitor(a)
+        await store.save_monitor(b)
+        active = await store.list_active()
         assert len(active) == 1
         assert active[0].id == a.id
 
-    def test_update_status(self, store: MonitorStore, monitor: Monitor):
-        store.save_monitor(monitor)
-        store.update_status(monitor.id, MonitorStatus.PAUSED)
-        loaded = store.load_monitor(monitor.id)
+    @pytest.mark.asyncio
+    async def test_update_status(self, store: MonitorStore, monitor: Monitor):
+        await store.save_monitor(monitor)
+        await store.update_status(monitor.id, MonitorStatus.PAUSED)
+        loaded = await store.load_monitor(monitor.id)
         assert loaded is not None
         assert loaded.status == MonitorStatus.PAUSED
 
-    def test_delete(self, store: MonitorStore, monitor: Monitor):
-        store.save_monitor(monitor)
-        store.delete_monitor(monitor.id)
-        assert store.load_monitor(monitor.id) is None
+    @pytest.mark.asyncio
+    async def test_delete(self, store: MonitorStore, monitor: Monitor):
+        await store.save_monitor(monitor)
+        await store.delete_monitor(monitor.id)
+        loaded = await store.load_monitor(monitor.id)
+        assert loaded is None
 
-    def test_save_and_get_checks(self, store: MonitorStore, monitor: Monitor):
-        store.save_monitor(monitor)
+    @pytest.mark.asyncio
+    async def test_save_and_get_checks(self, store: MonitorStore, monitor: Monitor):
+        await store.save_monitor(monitor)
         c = MonitorCheck(monitor_id=monitor.id, status="up", result={"status_code": 200})
-        store.save_check(c)
-        checks = store.get_checks(monitor.id)
+        await store.save_check(c)
+        checks = await store.get_checks(monitor.id)
         assert len(checks) == 1
         assert checks[0].status == "up"
         assert checks[0].result["status_code"] == 200
 
-    def test_list_monitors_by_user(self, store: MonitorStore):
+    @pytest.mark.asyncio
+    async def test_list_monitors_by_user(self, store: MonitorStore):
         a = Monitor(name="user1-mon", type=MonitorType.HTTP, target="http://a.com", user_id="u1")
         b = Monitor(name="user2-mon", type=MonitorType.HTTP, target="http://b.com", user_id="u2")
-        store.save_monitor(a)
-        store.save_monitor(b)
-        u1_list = store.list_monitors(user_id="u1")
+        await store.save_monitor(a)
+        await store.save_monitor(b)
+        u1_list = await store.list_monitors(user_id="u1")
         assert len(u1_list) == 1
         assert u1_list[0].user_id == "u1"
 
@@ -195,7 +196,7 @@ class TestMonitorEngine:
         await engine.start()
 
         m = Monitor(name="test", type=MonitorType.HTTP, target="https://example.com", interval_seconds=3600)
-        engine.add_monitor(m)
+        await engine.add_monitor(m)
         await asyncio.sleep(0.05)
 
         assert m.id in engine._tasks
@@ -208,17 +209,17 @@ class TestMonitorEngine:
         await engine.start()
 
         m = Monitor(name="test", type=MonitorType.HTTP, target="https://example.com")
-        engine.add_monitor(m)
+        await engine.add_monitor(m)
         assert m.id in engine._tasks
 
-        paused = engine.pause_monitor(m.id)
+        paused = await engine.pause_monitor(m.id)
         assert paused is True
         assert m.id not in engine._tasks
-        loaded = store.load_monitor(m.id)
+        loaded = await store.load_monitor(m.id)
         assert loaded is not None
         assert loaded.status == MonitorStatus.PAUSED
 
-        resumed = engine.resume_monitor(m.id)
+        resumed = await engine.resume_monitor(m.id)
         assert resumed is True
         assert m.id in engine._tasks
         await engine.stop()
@@ -230,24 +231,25 @@ class TestMonitorEngine:
         await engine.start()
 
         m = Monitor(name="test", type=MonitorType.HTTP, target="https://example.com")
-        engine.add_monitor(m)
+        await engine.add_monitor(m)
         assert m.id in engine._tasks
 
-        engine.remove_monitor(m.id)
-        assert store.load_monitor(m.id) is None
+        await engine.remove_monitor(m.id)
+        loaded = await store.load_monitor(m.id)
+        assert loaded is None
         await engine.stop()
 
     async def test_list_monitors(self, store: MonitorStore):
         engine = MonitorEngine(store)
         m1 = Monitor(name="a", type=MonitorType.HTTP, target="http://a.com", user_id="u1")
         m2 = Monitor(name="b", type=MonitorType.HTTP, target="http://b.com", user_id="u2")
-        store.save_monitor(m1)
-        store.save_monitor(m2)
+        await store.save_monitor(m1)
+        await store.save_monitor(m2)
 
-        all_m = engine.list_monitors()
+        all_m = await engine.list_monitors()
         assert len(all_m) == 2
 
-        u1_m = engine.list_monitors(user_id="u1")
+        u1_m = await engine.list_monitors(user_id="u1")
         assert len(u1_m) == 1
         assert u1_m[0].id == m1.id
 
@@ -266,7 +268,7 @@ class TestCheckNow:
         engine = MonitorEngine(store)
         engine.register_handler("http", handler)
         m = Monitor(name="test", type=MonitorType.HTTP, target="https://example.com")
-        store.save_monitor(m)
+        await store.save_monitor(m)
         result = await engine.check_now(m.id)
         assert result is None
 
@@ -275,7 +277,7 @@ class TestCheckNow:
         engine = MonitorEngine(store)
         engine.register_handler("http", handler)
         m = Monitor(name="test", type=MonitorType.HTTP, target="https://example.com")
-        store.save_monitor(m)
+        await store.save_monitor(m)
         result = await engine.check_now(m.id)
         assert result == "🔴 Something went wrong"
 
@@ -289,9 +291,9 @@ class TestCheckNow:
         engine = MonitorEngine(store)
         engine.register_handler("http", handler)
         m = Monitor(name="test", type=MonitorType.HTTP, target="https://example.com")
-        store.save_monitor(m)
+        await store.save_monitor(m)
         await engine.check_now(m.id)
-        checks = store.get_checks(m.id)
+        checks = await store.get_checks(m.id)
         assert len(checks) == 1
         assert checks[0].triggered is True
 
@@ -309,7 +311,7 @@ class TestCooldown:
         m = Monitor(
             name="test", type=MonitorType.HTTP, target="https://example.com", cooldown_minutes=60, channel="test_ch"
         )
-        store.save_monitor(m)
+        await store.save_monitor(m)
         await engine.check_now(m.id)
         first_count = len(sent)
         await engine.check_now(m.id)
@@ -327,7 +329,7 @@ class TestCooldown:
         m = Monitor(
             name="test", type=MonitorType.HTTP, target="https://example.com", cooldown_minutes=0, channel="test_ch"
         )
-        store.save_monitor(m)
+        await store.save_monitor(m)
         await engine.check_now(m.id)
         assert len(sent) >= 1
 

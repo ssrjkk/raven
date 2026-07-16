@@ -7,6 +7,7 @@ from typing import Any
 from loguru import logger
 
 from ravencode.config.loader import RavenConfig, get_config
+from ravencode.core.prompts import get_prompt
 from ravencode.runtime.agent_core import AgentConfig, ReActAgent
 from ravencode.runtime.context import Conversation
 from ravencode.runtime.permissions import PermissionManager
@@ -100,8 +101,7 @@ class Orchestrator:
     async def _run_planner(self, task: str, memory_path: str | None = None, agent_config_override: AgentConfig | None = None) -> AgentResult:
         agent = self._build_with_override(
             agent_config_override,
-            system_prompt="You are a planning agent. Analyze the task and create a detailed step-by-step plan. "
-            "Use tools to explore the codebase and understand what needs to be done.",
+            system_prompt=get_prompt("planner"),
             memory_path=memory_path,
         )
         result = await agent.run(task)
@@ -113,8 +113,7 @@ class Orchestrator:
         else:
             cfg = AgentConfig(memory_path=memory_path, plan_mode=True)
         conv = Conversation(
-            system_prompt="You are a read-only planning agent. You analyze tasks and create plans. "
-            "You MUST NOT modify any files or execute commands."
+            system_prompt=get_prompt("planner_readonly")
         )
         agent = ReActAgent(config=cfg, conversation=conv)
         result = await agent.run(task)
@@ -123,8 +122,7 @@ class Orchestrator:
     async def _run_coder(self, task: str, memory_path: str | None = None, agent_config_override: AgentConfig | None = None) -> AgentResult:
         agent = self._build_with_override(
             agent_config_override,
-            system_prompt="You are a coding agent. Write, edit, and refactor code. Always explore existing code "
-            "before making changes. Use read/glob/grep to understand the codebase first.",
+            system_prompt=get_prompt("coder"),
             memory_path=memory_path,
         )
         result = await agent.run(task)
@@ -138,8 +136,7 @@ class Orchestrator:
         agent = ReActAgent(
             config=config,
             conversation=Conversation(
-                system_prompt="You are a debugging agent. Diagnose issues in code by examining file contents, "
-                "running tests, and analyzing error messages. Use bash to run tests when needed."
+                system_prompt=get_prompt("debugger"),
             ),
         )
         result = await agent.run(task)
@@ -152,7 +149,7 @@ class Orchestrator:
 
     @staticmethod
     async def delegate(task: str, context: str | None = None, memory_path: str | None = None) -> str:
-        prompt = "You are a sub-agent handling a delegated task. Complete it efficiently and return the result."
+        prompt = get_prompt("delegate")
         if context:
             prompt += f"\nContext: {context}"
         config = AgentConfig(memory_path=memory_path, max_steps=15)

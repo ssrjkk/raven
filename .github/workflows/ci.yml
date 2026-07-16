@@ -175,9 +175,7 @@ jobs:
           fetch-depth: 0
       - name: Gitleaks scan
         uses: gitleaks/gitleaks-action@v2
-        continue-on-error: true
       - name: Pip audit
         run: |
           pip install pip-audit
           pip-audit --ignore-vuln PYSEC-2024- --desc on -r <(pip freeze 2>/dev/null || true)
-        continue-on-error: true

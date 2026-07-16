@@ -131,9 +131,10 @@ async def main_loop() -> None:
         if cmd == "/save" or cmd.startswith("/save "):
             path = cmd[6:].strip() if cmd.startswith("/save ") else "session.json"
             from ravencode.runtime.agent_core import ReActAgent
-            if ReActAgent._last_agent is not None:
+            agent = ReActAgent.last_agent()
+            if agent is not None:
                 import json
-                state = ReActAgent._last_agent.dump_state()
+                state = agent.dump_state()
                 Path(path).write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
                 console.print(f"[green]Session saved to {path}[/green]")
             else:

@@ -1,23 +1,15 @@
 from __future__ import annotations
 
-import sqlite3
-import threading
 import time
 from pathlib import Path
 from typing import Any
 
+import aiosqlite
+
 from raven.core._json import json
 from raven.core.coder.models import CodingSession, SessionStatus
-
-_local = threading.local()
-
-
-def _get_conn(db_path: str) -> sqlite3.Connection:
-    if not hasattr(_local, "conn") or _local.conn is None:
-        _local.conn = sqlite3.connect(db_path)
-        _local.conn.row_factory = sqlite3.Row
-    return _local.conn  # type: ignore[no-any-return]
-
+from raven.core.store import BaseStore
+from raven.utils.performance import measure_latency
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS coding_sessions (
@@ -34,23 +26,21 @@ CREATE TABLE IF NOT EXISTS coding_sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_cs_user ON coding_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_cs_status ON coding_sessions(status);
+CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 """
 
 
-class CodingSessionManager:
+class CodingSessionManager(BaseStore):
+    SCHEMA = SCHEMA
+
     def __init__(self, db_path: str | Path):
-        self._path = str(db_path)
-        conn = sqlite3.connect(self._path)
-        conn.executescript(SCHEMA)
-        conn.commit()
-        conn.close()
+        super().__init__(db_path)
 
-    def _conn(self) -> sqlite3.Connection:
-        return _get_conn(self._path)
+    _ALLOWED_WHERE = frozenset({"1=1", "user_id = ?"})
 
-    def create_session(self, session: CodingSession) -> CodingSession:
-        conn = self._conn()
-        conn.execute(
+    @measure_latency()
+    async def create_session(self, session: CodingSession) -> CodingSession:
+        await self._execute(
             """INSERT INTO coding_sessions
                (id, user_id, channel, goal, project_path, files, status, history, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -67,20 +57,20 @@ class CodingSessionManager:
                 session.updated_at,
             ),
         )
-        conn.commit()
+        await self._commit()
         return session
 
-    def get_session(self, session_id: str) -> CodingSession | None:
-        conn = self._conn()
-        row = conn.execute("SELECT * FROM coding_sessions WHERE id = ?", (session_id,)).fetchone()
+    @measure_latency()
+    async def get_session(self, session_id: str) -> CodingSession | None:
+        row = await self._fetchone("SELECT * FROM coding_sessions WHERE id = ?", (session_id,))
         if not row:
             return None
         return self._row_to_session(row)
 
-    _ALLOWED_WHERE = frozenset({"1=1", "user_id = ?"})
-
-    def list_sessions(self, user_id: str | None = None, limit: int = 20, offset: int = 0) -> list[CodingSession]:
-        conn = self._conn()
+    @measure_latency()
+    async def list_sessions(
+        self, user_id: str | None = None, limit: int = 20, offset: int = 0
+    ) -> list[CodingSession]:
         where = "1=1"
         params: list[Any] = []
         if user_id:
@@ -88,14 +78,14 @@ class CodingSessionManager:
             params.append(user_id)
         if where not in self._ALLOWED_WHERE:
             raise ValueError(f"Disallowed WHERE clause: {where}")
-        rows = conn.execute(
-            f"SELECT * FROM coding_sessions WHERE {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",  # noqa: S608 — validated against _ALLOWED_WHERE
+        rows = await self._fetchall(
+            f"SELECT * FROM coding_sessions WHERE {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",  # noqa: S608
             (*params, limit, offset),
-        ).fetchall()
+        )
         return [self._row_to_session(r) for r in rows]
 
-    def count_sessions(self, user_id: str | None = None) -> int:
-        conn = self._conn()
+    @measure_latency()
+    async def count_sessions(self, user_id: str | None = None) -> int:
         where = "1=1"
         params: list[Any] = []
         if user_id:
@@ -103,15 +93,15 @@ class CodingSessionManager:
             params.append(user_id)
         if where not in self._ALLOWED_WHERE:
             raise ValueError(f"Disallowed WHERE clause: {where}")
-        row = conn.execute(
-            f"SELECT COUNT(*) as cnt FROM coding_sessions WHERE {where}",  # noqa: S608 — validated against _ALLOWED_WHERE
+        row = await self._fetchone(
+            f"SELECT COUNT(*) as cnt FROM coding_sessions WHERE {where}",  # noqa: S608
             params,
-        ).fetchone()
+        )
         return row["cnt"] if row else 0
 
-    def update_session(self, session: CodingSession) -> None:
-        conn = self._conn()
-        conn.execute(
+    @measure_latency()
+    async def update_session(self, session: CodingSession) -> None:
+        await self._execute(
             """UPDATE coding_sessions SET goal=?, project_path=?, files=?, status=?, history=?,
                updated_at=? WHERE id=?""",
             (
@@ -124,22 +114,22 @@ class CodingSessionManager:
                 session.id,
             ),
         )
-        conn.commit()
+        await self._commit()
 
-    def add_history(self, session_id: str, role: str, content: str) -> None:
-        session = self.get_session(session_id)
+    async def add_history(self, session_id: str, role: str, content: str) -> None:
+        session = await self.get_session(session_id)
         if not session:
             return
         session.history.append({"role": role, "content": content, "time": time.time()})
         session.history = session.history[-100:]
-        self.update_session(session)
+        await self.update_session(session)
 
-    def delete_session(self, session_id: str) -> None:
-        conn = self._conn()
-        conn.execute("DELETE FROM coding_sessions WHERE id = ?", (session_id,))
-        conn.commit()
+    @measure_latency()
+    async def delete_session(self, session_id: str) -> None:
+        await self._execute("DELETE FROM coding_sessions WHERE id = ?", (session_id,))
+        await self._commit()
 
-    def _row_to_session(self, row: sqlite3.Row) -> CodingSession:
+    def _row_to_session(self, row: aiosqlite.Row) -> CodingSession:
         return CodingSession(
             id=row["id"],
             user_id=row["user_id"] or "",

@@ -6,7 +6,7 @@ from raven.core.monitor.engine import MonitorEngine
 from raven.core.monitor.models import Monitor, MonitorStatus, MonitorType
 
 
-def register_all_monitors(engine: MonitorEngine):
+async def register_all_monitors(engine: MonitorEngine):
     examples: list[dict[str, Any]] = [
         {
             "name": "Raven AI Status",
@@ -16,7 +16,7 @@ def register_all_monitors(engine: MonitorEngine):
             "status": MonitorStatus.ACTIVE,
         },
     ]
-    existing = engine.list_monitors()
+    existing = await engine.list_monitors()
     existing_names = {m.name for m in existing}
     for cfg in examples:
         if cfg["name"] not in existing_names:
@@ -27,4 +27,4 @@ def register_all_monitors(engine: MonitorEngine):
                 interval_seconds=cfg["interval_seconds"],
                 status=cfg["status"],
             )
-            engine.add_monitor(m)
+            await engine.add_monitor(m)

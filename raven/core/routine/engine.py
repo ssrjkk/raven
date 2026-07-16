@@ -1,85 +1,37 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import time
-from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
 from loguru import logger
 
 from raven.core.audit import AuditEventType, audit_logger
+from raven.core.periodic_engine import PeriodicEngine
 from raven.core.routine.models import Routine, RoutineAction, RoutineLog, RoutineStatus, RoutineTrigger
 from raven.core.routine.store import RoutineStore
 
 
-class RoutineEngine:
+class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
     def __init__(self, store: RoutineStore):
-        self._store = store
-        self._tasks: dict[str, asyncio.Task[None]] = {}
-        self._running = False
-        self._handlers: dict[str, Callable[..., Any]] = {}
+        super().__init__(store)
         self._gateway_ref: Any = None
 
-    def register_handler(self, action: str, handler: Callable[..., Any]):
-        self._handlers[action] = handler
+    async def add_routine(self, routine: Routine):
+        await self.add_item(routine)
 
-    async def start(self):
-        self._running = True
-        routines = self._store.list_active()
-        for r in routines:
-            self._schedule_routine(r)
-        logger.info("RoutineEngine started with {} routines", len(routines))
+    async def remove_routine(self, routine_id: str):
+        await self.remove_item(routine_id)
 
-    async def stop(self):
-        self._running = False
-        for _rid, task in list(self._tasks.items()):
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
-        self._tasks.clear()
-        logger.info("RoutineEngine stopped")
+    async def pause_routine(self, routine_id: str) -> bool:
+        return await self.pause_item(routine_id)
 
-    def pause_routine(self, routine_id: str) -> bool:
-        r = self._store.load_routine(routine_id)
-        if not r:
-            return False
-        self._store.update_status(routine_id, RoutineStatus.PAUSED)
-        task = self._tasks.pop(routine_id, None)
-        if task:
-            task.cancel()
-        return True
+    async def resume_routine(self, routine_id: str) -> bool:
+        return await self.resume_item(routine_id)
 
-    def resume_routine(self, routine_id: str) -> bool:
-        r = self._store.load_routine(routine_id)
-        if not r:
-            return False
-        self._store.update_status(routine_id, RoutineStatus.ACTIVE)
-        if self._running:
-            self._schedule_routine(r)
-        return True
-
-    def list_routines(self, limit: int = 50, offset: int = 0) -> list[Routine]:
-        return self._store.list_routines(limit=limit, offset=offset)
-
-    def add_routine(self, routine: Routine):
-        self._store.save_routine(routine)
-        if routine.status == RoutineStatus.ACTIVE and self._running:
-            self._schedule_routine(routine)
-
-    def remove_routine(self, routine_id: str):
-        task = self._tasks.pop(routine_id, None)
-        if task:
-            task.cancel()
-        self._store.delete_routine(routine_id)
-
-    def _schedule_routine(self, routine: Routine):
-        if routine.id in self._tasks:
-            self._tasks[routine.id].cancel()
-        self._tasks[routine.id] = asyncio.create_task(
-            self._run_loop(routine),
-        )
+    async def list_routines(self, limit: int = 50, offset: int = 0) -> list[Routine]:
+        return await self._store.list_routines(limit=limit, offset=offset)
 
     async def _run_loop(self, routine: Routine):
         while self._running:
@@ -105,6 +57,39 @@ class RoutineEngine:
             except Exception as e:
                 logger.error("Routine {} loop error: {}", routine.id, e)
                 await asyncio.sleep(60)
+
+    async def _run_item(self, routine: Routine) -> Any:
+        return await self._execute_routine(routine)
+
+    async def _list_active(self) -> list[Routine]:
+        return await self._store.list_active()
+
+    async def _load_item(self, item_id: str) -> Routine | None:
+        return await self._store.load_routine(item_id)
+
+    async def _save_item(self, item: Routine):
+        await self._store.save_routine(item)
+
+    async def _delete_item(self, item_id: str):
+        await self._store.delete_routine(item_id)
+
+    async def _update_status(self, item_id: str, status: RoutineStatus):
+        await self._store.update_status(item_id, status)
+
+    def _get_item_id(self, item: Routine) -> str:
+        return item.id
+
+    def _is_active(self, item: Routine) -> bool:
+        return item.status == RoutineStatus.ACTIVE
+
+    def _get_interval(self, item: Routine) -> int | float:
+        return int(item.schedule)
+
+    def _paused_status(self) -> RoutineStatus:
+        return RoutineStatus.PAUSED
+
+    def _active_status(self) -> RoutineStatus:
+        return RoutineStatus.ACTIVE
 
     async def _execute_routine(self, routine: Routine):
         start = time.time()
@@ -138,8 +123,8 @@ class RoutineEngine:
                 duration_ms=duration,
                 created_at=time.time(),
             )
-            self._store.save_log(log)
-            self._store.update_last_run(routine.id, "success")
+            await self._store.save_log(log)
+            await self._store.update_last_run(routine.id, "success")
             routine.last_run_status = "success"
             routine.last_run_at = time.time()
 
@@ -152,8 +137,8 @@ class RoutineEngine:
                 duration_ms=duration,
                 created_at=time.time(),
             )
-            self._store.save_log(log)
-            self._store.update_last_run(routine.id, f"error: {e}")
+            await self._store.save_log(log)
+            await self._store.update_last_run(routine.id, f"error: {e}")
             routine.last_run_status = f"error: {e}"
             routine.last_run_at = time.time()
             logger.error("Routine {} execution failed: {}", routine.id, e)
