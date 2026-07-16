@@ -11,6 +11,7 @@ from typing import Any
 from loguru import logger
 
 from raven.core.security.ssrf import validate_url
+from ravencode.core.metrics import observe_tool
 from ravencode.runtime.question import QuestionError
 from ravencode.runtime.undo import get_undo_manager
 
@@ -1419,6 +1420,7 @@ def is_dangerous(name: str) -> bool:
     return t.get("dangerous", False) if t else False
 
 
+@observe_tool(tool_name="execute_tool")
 async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
     _ensure_plugin_tools()
     tool = MODULE_TOOLS.get(name)

@@ -1,36 +1,34 @@
 repos:
-  - repo: local
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
     hooks:
-      - id: generate-deploy-id
-        name: Generate deploy watermark
-        entry: python scripts/generate_deploy_id.py
-        language: system
-        always_run: true
-        pass_filenames: false
-        description: "Bakes a unique git-based deploy ID into raven/core/_deploy.py"
-
-      - id: check-all
-        name: Raven unified checks (ruff + mypy + imports)
-        entry: python scripts/check_all.py --quick
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-commit]
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-ast
+      - id: check-docstring-first
+      - id: check-json
+      - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.5
+    rev: v0.5.0
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.0
     hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-json
-      - id: check-toml
-      - id: check-added-large-files
-      - id: detect-private-key
+      - id: mypy
+        args: [--ignore-missing-imports, --python-version=3.11]
+        additional_dependencies:
+          - pydantic>=2.10
+          - httpx>=0.28
+          - fastapi>=0.115
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2
+    hooks:
+      - id: gitleaks

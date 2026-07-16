@@ -59,6 +59,8 @@ postgres = ["asyncpg>=0.29"]
 crdt = ["y-py>=0.4,<1.0"]
 profiling = ["py-spy>=0.3,<1.0"]
 chaos = ["psutil>=5.9,<7.0"]
+metrics = ["prometheus-client>=0.19,<1.0"]
+redis = ["redis>=5.0,<6.0"]
 dev = [
     "pytest>=8.0,<10.0",
     "pytest-asyncio>=0.24,<2.0",
@@ -131,6 +133,7 @@ markers = [
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+exclude = [".pre-commit-config.yaml"]
 
 [tool.ruff.lint]
 select = ["ASYNC100", "E", "F", "W", "I", "N", "UP", "B", "SIM", "S"]
