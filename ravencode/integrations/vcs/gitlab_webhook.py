@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 from typing import Any
 
 from ravencode.integrations.models import EventType
@@ -12,7 +13,9 @@ from ravencode.integrations.vcs.webhook import (
 class GitLabWebhookNormalizer:
     def validate_signature(self, headers: dict[str, str], body: bytes, secret: str) -> bool:
         token = headers.get("X-Gitlab-Token", "")
-        return token == secret
+        if not secret:
+            return False
+        return hmac.compare_digest(token, secret)
 
     def normalize(self, raw_payload: dict[str, Any]) -> WebhookEvent:
         object_kind = raw_payload.get("object_kind")
