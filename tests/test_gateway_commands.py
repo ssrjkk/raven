@@ -27,7 +27,8 @@ def gateway():
     gw.failover.complete = AsyncMock(return_value="test response")
     gw.plugin_loader = MagicMock()
     gw.plugin_loader.tools = []
-    gw.mcp_pool = MagicMock()
+    from raven.core.gateway.mcp_bridge import MCPBridge
+    gw.mcp = MCPBridge()
     gw.registry = MagicMock()
     gw.registry.plugins = {}
     from raven.core.gateway.channel_manager import ChannelManager
@@ -59,7 +60,7 @@ def gateway():
     gw.tasks = TaskOrchestrator(
         db=gw.db,
         llm=gw.llm,
-        mcp_pool=gw.mcp_pool,
+        mcp_pool=gw.mcp.pool,
         send_notification=gw._send,
     )
     return gw

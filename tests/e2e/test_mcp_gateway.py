@@ -136,8 +136,8 @@ class TestMCPGatewayIntegration:
         assert any("no mcp" in m.content.lower() for m in channel.sent_messages)
 
     async def test_mcp_empty_config_does_not_fail(self, gateway):
-        assert gateway.mcp_pool is not None
-        assert gateway.mcp_pool.connected_count == 0
+        assert gateway.mcp is not None
+        assert gateway.mcp.connected_count == 0
 
     async def test_mcp_tool_registry_with_empty_pool(self):
         pool = _FakeMCPPool({})

@@ -17,6 +17,7 @@ from raven.core.config import settings
 from raven.core.context_window import ContextWindowConfig, ContextWindowManager
 from raven.core.gateway.channel_manager import ChannelManager
 from raven.core.gateway.command_handlers import CommandHandlersMixin
+from raven.core.gateway.mcp_bridge import MCPBridge
 from raven.core.gateway.task_orchestrator import TaskOrchestrator
 
 if TYPE_CHECKING:
@@ -26,8 +27,6 @@ from raven.core.channel_guardian import ChannelGuardian
 from raven.core.failover import ModelFailover
 from raven.core.health import health
 from raven.core.llm import LLMRouter
-from raven.core.mcp.channel_bridge import ChannelBridge
-from raven.core.mcp.mcp_client import MCPClientPool
 from raven.core.metrics import metrics
 from raven.core.models import IncomingMessage, Message
 from raven.core.monitor.checkers.price import check_price
@@ -62,8 +61,7 @@ class Gateway(CommandHandlersMixin):
         self._rbac = RBAC()
         self._message_cb = CircuitBreaker("gateway.handle_message", failure_threshold=5, recovery_timeout=30.0)
         self._guardian = ChannelGuardian(on_channel_dead=self._on_channel_dead)
-        self.channel_bridge = ChannelBridge(send_fn=self._send)
-        self.mcp_pool = MCPClientPool()
+        self.mcp = MCPBridge(send_fn=self._send)
 
         self._ctxmgr: ContextWindowManager | None = None
         if settings.context_window_enabled and settings.context_window_max_tokens > 0:
@@ -79,7 +77,7 @@ class Gateway(CommandHandlersMixin):
         self.tasks = TaskOrchestrator(
             db=self.db,
             llm=self.llm,
-            mcp_pool=self.mcp_pool,
+            mcp_pool=self.mcp.pool,
             send_notification=self._send,
         )
         self._rate_limiter = RateLimiter()
@@ -115,7 +113,7 @@ class Gateway(CommandHandlersMixin):
         self.load_skills()
         self._register_skill_handlers()
         self._register_health_checks()
-        await self._load_mcp_servers()
+        await self.mcp.start(plugin_loader=self.plugin_loader)
         await self._guardian.start()
 
     async def stop(self):
@@ -128,7 +126,7 @@ class Gateway(CommandHandlersMixin):
             self._bg_tasks.clear()
         await self._guardian.stop()
         await self.tasks.stop()
-        await self.mcp_pool.disconnect_all()
+        await self.mcp.stop()
         await self.channels.stop_all()
 
     def _register_skill_handlers(self):
@@ -578,15 +576,13 @@ class Gateway(CommandHandlersMixin):
             return True
 
         if cmd == "/mcp":
-            servers = self.mcp_pool.connected_count
+            servers = self.mcp.connected_count
             if servers == 0:
                 await self._send(event.channel, event.session_id, "No MCP servers connected.")
                 return True
             lines = [f"🌐 MCP servers ({servers} connected):"]
-            for name in list(self.mcp_pool._clients.keys()):
-                client = self.mcp_pool.get_client(name)
-                tools = len(client.tools) if client else 0
-                lines.append(f"  {name}: {tools} tools")
+            for info in self.mcp.list_servers_info():
+                lines.append(f"  {info['name']}: {info['tools']} tools")
             await self._send(event.channel, event.session_id, "\n".join(lines))
             return True
 
@@ -676,55 +672,6 @@ class Gateway(CommandHandlersMixin):
             return True
 
         return False
-
-    async def _load_mcp_servers(self) -> None:
-        raw = settings.mcp_servers
-        if not raw:
-            return
-        try:
-            servers = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            logger.error("Failed to parse mcp_servers config: {}", exc)
-            return
-        for name, cfg in servers.items():
-            command = cfg.get("command", [])
-            cwd = cfg.get("cwd")
-            if not command:
-                logger.warning("MCP server '{}' has no command, skipping", name)
-                continue
-            try:
-                client = await self.mcp_pool.connect(name, command, cwd=cwd)
-                from raven.core.models import PluginTool
-                for tool in client.tools:
-                    raw_tool_name = tool.get("name", "unknown")
-                    wrapped = f"mcp_{name}_{raw_tool_name}"
-                    params = tool.get("inputSchema") or tool.get("parameters") or {}
-                    self.plugin_loader.tools.append(PluginTool(
-                        name=wrapped,
-                        description=tool.get("description", ""),
-                        parameters=params.get("properties", {}),
-                        handler=self._make_mcp_handler(name, raw_tool_name),
-                    ))
-                logger.info("MCP server '{}' connected with {} tools", name, len(client.tools))
-            except Exception as exc:
-                logger.error("Failed to connect MCP server '{}': {}", name, exc)
-
-    def _make_mcp_handler(self, pool_name: str, tool_name: str) -> Any:
-        async def handler(**params: Any) -> str:
-            client = self.mcp_pool.get_client(pool_name)
-            if not client:
-                return f"[error] MCP server '{pool_name}' not connected"
-            try:
-                result = await client.call_tool(tool_name, params)
-                if result and isinstance(result, list) and isinstance(result[0], dict):
-                    text = result[0].get("text")
-                    if text is not None:
-                        return str(text)
-                return str(result)
-            except Exception as exc:
-                logger.error("MCP tool {}.{} failed: {}", pool_name, tool_name, exc)
-                return f"[error] MCP tool call failed: {exc}"
-        return handler
 
     async def _on_channel_dead(self, channel_id: str) -> None:
         channel = self.channels.remove(channel_id)

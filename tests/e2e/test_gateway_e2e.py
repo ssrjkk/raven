@@ -91,10 +91,10 @@ class TestGatewayE2E:
         assert len(channel.sent_messages) >= 3
 
     async def test_channel_bridge_present(self, gateway):
-        assert hasattr(gateway, "channel_bridge")
-        assert hasattr(gateway.channel_bridge, "_send_message")
-        assert hasattr(gateway.channel_bridge, "_list_channels")
-        assert hasattr(gateway.channel_bridge, "register_tools")
+        assert hasattr(gateway, "mcp")
+        assert hasattr(gateway.mcp.channel_bridge, "_send_message")
+        assert hasattr(gateway.mcp.channel_bridge, "_list_channels")
+        assert hasattr(gateway.mcp.channel_bridge, "register_tools")
 
     async def test_guardian_present(self, gateway):
         assert hasattr(gateway, "_guardian")
