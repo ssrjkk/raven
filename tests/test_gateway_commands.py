@@ -27,6 +27,7 @@ def gateway():
     gw.failover.complete = AsyncMock(return_value="test response")
     gw.plugin_loader = MagicMock()
     gw.plugin_loader.tools = []
+    gw.mcp_pool = MagicMock()
     gw.registry = MagicMock()
     gw.registry.plugins = {}
     from raven.core.gateway.channel_manager import ChannelManager
@@ -54,6 +55,13 @@ def gateway():
     gw._guardian.record_error = AsyncMock()
     gw._guardian.record_success = AsyncMock()
     gw._bg_tasks = set()
+    from raven.core.gateway.task_orchestrator import TaskOrchestrator
+    gw.tasks = TaskOrchestrator(
+        db=gw.db,
+        llm=gw.llm,
+        mcp_pool=gw.mcp_pool,
+        send_notification=gw._send,
+    )
     return gw
 
 
@@ -151,7 +159,7 @@ class TestGatewayRoutineCommands:
 class TestGatewayTaskCommands:
     @pytest.mark.asyncio
     async def test_task_command_routes(self, gateway, user):
-        with patch.object(gateway, "_run_task", new_callable=AsyncMock):
+        with patch.object(gateway.tasks, "create_and_run", new_callable=AsyncMock):
             with patch.object(gateway, "_send", new_callable=AsyncMock):
                 result = await gateway._handle_command(_event("/task do something"), user)
                 assert result is True

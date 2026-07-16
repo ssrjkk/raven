@@ -17,6 +17,7 @@ from raven.core.config import settings
 from raven.core.context_window import ContextWindowConfig, ContextWindowManager
 from raven.core.gateway.channel_manager import ChannelManager
 from raven.core.gateway.command_handlers import CommandHandlersMixin
+from raven.core.gateway.task_orchestrator import TaskOrchestrator
 
 if TYPE_CHECKING:
     from raven.channels.base import BaseChannel
@@ -42,10 +43,7 @@ from raven.core.security.sandbox_policy import (
 )
 from raven.core.self_heal import self_healer
 from raven.core.skills import Skill, skills_registry
-from raven.core.task_engine.planner import TaskPlanner
-from raven.core.task_engine.runner import TaskRunner
 from raven.core.task_engine.store import TaskStore
-from raven.tools.register_all import create_tool_registry
 
 
 class Gateway(CommandHandlersMixin):
@@ -78,6 +76,12 @@ class Gateway(CommandHandlersMixin):
                 sliding_window_size=settings.context_window_sliding_size,
             )
             self._ctxmgr = ContextWindowManager(self.llm, ctx_cfg)
+        self.tasks = TaskOrchestrator(
+            db=self.db,
+            llm=self.llm,
+            mcp_pool=self.mcp_pool,
+            send_notification=self._send,
+        )
         self._rate_limiter = RateLimiter()
         self._init_stores()
 
@@ -106,6 +110,7 @@ class Gateway(CommandHandlersMixin):
             "Starting gateway with {} channels, {} agents", channel_count, len(self.registry.list_agents())
         )
         self._running = True
+        await self.tasks.start()
         await self.channels.start_all()
         self.load_skills()
         self._register_skill_handlers()
@@ -122,6 +127,7 @@ class Gateway(CommandHandlersMixin):
             await asyncio.gather(*self._bg_tasks, return_exceptions=True)
             self._bg_tasks.clear()
         await self._guardian.stop()
+        await self.tasks.stop()
         await self.mcp_pool.disconnect_all()
         await self.channels.stop_all()
 
@@ -389,26 +395,18 @@ class Gateway(CommandHandlersMixin):
             return True
 
         if self._TASK_INTENT.search(text):
-            tools = create_tool_registry(self.mcp_pool)
-            task_store = TaskStore(self.db.db_path)
-            planner = TaskPlanner(tools)
-            runner = TaskRunner(task_store, tools)
             try:
-                task = await planner.plan(text, self.llm, user_id=event.user_id, channel=event.channel)
-                await self._send(event.channel, event.session_id, f"Task planned: {task.plan_summary or text[:80]}")
-                await runner.submit(task)
-                self._bg_task(self._safe_wait(runner, task.id))
+                await self.tasks.create_and_run(
+                    goal=text,
+                    user_id=event.user_id,
+                    channel=event.channel,
+                    session_id=event.session_id or "",
+                )
             except Exception as e:
                 logger.error("Intent task planning error: {}", e)
             return True
 
         return False
-
-    async def _safe_wait(self, runner: Any, task_id: str) -> None:
-        try:
-            await runner.wait(task_id, timeout=600)
-        except Exception as exc:
-            logger.warning("Task wait failed (task={}): {}", task_id, exc)
 
     async def _is_user_allowed(self, event: IncomingMessage, user: dict[str, Any]) -> bool:
         policy = settings.dm_policy
@@ -571,7 +569,12 @@ class Gateway(CommandHandlersMixin):
                 await self._send(event.channel, event.session_id, "Usage: /task <goal description>")
                 return True
             await self._send(event.channel, event.session_id, f"Planning task: {goal[:100]}...")
-            self._bg_task(self._run_task_async(event, goal))
+            self._bg_task(self.tasks.create_and_run(
+                goal=goal,
+                user_id=event.user_id,
+                channel=event.channel,
+                session_id=event.session_id or "",
+            ))
             return True
 
         if cmd == "/mcp":
@@ -775,46 +778,5 @@ class Gateway(CommandHandlersMixin):
         if channel == "discord":
             text = re.sub(r"<@!?\d+>", "", text).strip()
         return text
-
-    async def _run_task_async(self, event: IncomingMessage, goal: str) -> None:
-        try:
-            await self._run_task(event, goal)
-        except Exception as exc:
-            logger.error("Background task failed: {}", exc)
-
-    async def _run_task(self, event: IncomingMessage, goal: str) -> None:
-        tools = create_tool_registry(self.mcp_pool)
-        store = TaskStore(self.db.db_path)
-        planner = TaskPlanner(tools)
-        runner = TaskRunner(store, tools)
-
-        try:
-            task = await planner.plan(goal, self.llm, user_id=event.user_id, channel=event.channel)
-            await self._send(
-                event.channel,
-                event.session_id,
-                f"📋 Plan: {task.plan_summary or goal}\n"
-                + "\n".join(f"  {i + 1}. {s.description}" for i, s in enumerate(task.steps[:10])),
-            )
-            await runner.submit(task)
-            task = await runner.wait(task.id, timeout=600)
-
-            if task.status.value == "completed":
-                results = []
-                for s in task.steps:
-                    if s.result:
-                        r = str(s.result)[:200]
-                        results.append(f"  ✅ {s.description}: {r}")
-                msg = "✅ Task completed!\n" + "\n".join(results[:10])
-                await self._send(event.channel, event.session_id, msg)
-            elif task.status.value == "failed":
-                await self._send(event.channel, event.session_id, f"❌ Task failed: {task.error or 'Unknown error'}")
-            elif task.status.value == "cancelled":
-                await self._send(event.channel, event.session_id, "🚫 Task cancelled")
-            else:
-                await self._send(event.channel, event.session_id, f"Task status: {task.status.value}")
-        except Exception as e:
-            logger.error("Task execution error: {}", e)
-            await self._send(event.channel, event.session_id, f"❌ Task error: {e}")
 
 
