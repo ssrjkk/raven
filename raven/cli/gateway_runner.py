@@ -298,7 +298,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     async def api_status():
         return {
             "status": "running",
-            "channels": list(gateway.channels.keys()),
+            "channels": list(gateway.channels.list_ids()),
             "plugins": len(plugin_loader.tools),
             "agents": gateway.registry.list_agents(),
             "model": settings.default_model,

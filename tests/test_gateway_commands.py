@@ -29,7 +29,14 @@ def gateway():
     gw.plugin_loader.tools = []
     gw.registry = MagicMock()
     gw.registry.plugins = {}
-    gw.channels = {"telegram": AsyncMock(), "webchat": AsyncMock()}
+    from raven.core.gateway.channel_manager import ChannelManager
+    gw.channels = ChannelManager()
+    tel = AsyncMock()
+    tel.channel_id = "telegram"
+    web = AsyncMock()
+    web.channel_id = "webchat"
+    gw.channels.register(tel)
+    gw.channels.register(web)
     gw.sandbox = None  # type: ignore[assignment]
     gw._monitor_engine = MagicMock()
     gw._routine_engine = MagicMock()  # type: ignore[attr-defined]
@@ -46,9 +53,7 @@ def gateway():
     gw._guardian = MagicMock(spec=ChannelGuardian)
     gw._guardian.record_error = AsyncMock()
     gw._guardian.record_success = AsyncMock()
-    import asyncio
     gw._bg_tasks = set()
-    gw._channels_lock = asyncio.Lock()
     return gw
 
 

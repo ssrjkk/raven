@@ -15,6 +15,7 @@ from raven.core.auth import RBAC, Permission
 from raven.core.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from raven.core.config import settings
 from raven.core.context_window import ContextWindowConfig, ContextWindowManager
+from raven.core.gateway.channel_manager import ChannelManager
 from raven.core.gateway.command_handlers import CommandHandlersMixin
 
 if TYPE_CHECKING:
@@ -53,8 +54,7 @@ class Gateway(CommandHandlersMixin):
         self.llm = LLMRouter()
         self.failover = ModelFailover(self.llm)
         self.plugin_loader = plugin_loader
-        self.channels: dict[str, Any] = {}
-        self._channels_lock = asyncio.Lock()
+        self.channels = ChannelManager()
         self._bg_tasks: set[asyncio.Task[None]] = set()
         self._running = False
         self.registry = AgentRegistry(db, self.llm, plugin_loader.tools)
@@ -82,9 +82,8 @@ class Gateway(CommandHandlersMixin):
         self._init_stores()
 
     def register_channel(self, channel: BaseChannel):
-        self.channels[channel.channel_id] = channel
+        self.channels.register(channel)
         self._guardian.register(channel)
-        logger.info("Registered channel: {}", channel.channel_id)
 
     def load_skills(self, skills_path: str | None = None):
         from pathlib import Path
@@ -102,17 +101,12 @@ class Gateway(CommandHandlersMixin):
 
     async def start(self):
         self.registry.setup_defaults()
-        channels = list(self.channels.items())
+        channel_count = len(self.channels.list_ids())
         logger.info(
-            "Starting gateway with {} channels, {} agents", len(channels), len(self.registry.list_agents())
+            "Starting gateway with {} channels, {} agents", channel_count, len(self.registry.list_agents())
         )
         self._running = True
-        for cid, channel in channels:
-            try:
-                await channel.start()
-                logger.info("Channel started: {}", cid)
-            except Exception as e:
-                logger.error("Failed to start channel {}: {}", cid, e)
+        await self.channels.start_all()
         self.load_skills()
         self._register_skill_handlers()
         self._register_health_checks()
@@ -129,14 +123,7 @@ class Gateway(CommandHandlersMixin):
             self._bg_tasks.clear()
         await self._guardian.stop()
         await self.mcp_pool.disconnect_all()
-        async with self._channels_lock:
-            channels = list(self.channels.items())
-        for cid, channel in channels:
-            try:
-                await channel.stop()
-                logger.info("Channel stopped: {}", cid)
-            except Exception as e:
-                logger.error("Error stopping channel {}: {}", cid, e)
+        await self.channels.stop_all()
 
     def _register_skill_handlers(self):
         async def _morning_briefing(user_id: str, channel: str) -> str:
@@ -475,7 +462,7 @@ class Gateway(CommandHandlersMixin):
             await self._send(
                 event.channel,
                 event.session_id,
-                f"Raven AI is running.\nChannels: {', '.join(self.channels.keys())}\n"
+                f"Raven AI is running.\nChannels: {', '.join(self.channels.list_ids())}\n"
                 f"Agents: {len(self.registry.list_agents())}\n"
                 f"Skills: {len(skills_registry.list_names())}",
             )
@@ -737,8 +724,7 @@ class Gateway(CommandHandlersMixin):
         return handler
 
     async def _on_channel_dead(self, channel_id: str) -> None:
-        async with self._channels_lock:
-            channel = self.channels.pop(channel_id, None)
+        channel = self.channels.remove(channel_id)
         if channel:
             logger.error("Channel {} removed from gateway (dead)", channel_id)
             metrics.inc("channels_dead", {"channel": channel_id})
@@ -746,8 +732,7 @@ class Gateway(CommandHandlersMixin):
                 await channel.stop()
             except Exception as e:
                 logger.error("Error stopping dead channel {}: {}", channel_id, e)
-        async with self._channels_lock:
-            remaining = list(self.channels.keys())
+        remaining = self.channels.list_ids()
         if remaining:
             alert = f"[Alert] Channel '{channel_id}' is dead and has been removed. Remaining: {', '.join(remaining)}"
             logger.warning(alert)
@@ -763,7 +748,7 @@ class Gateway(CommandHandlersMixin):
 
     async def _send(self, channel_id: str, session_id: str, text: str, streaming: bool = False):
         channel = self.channels.get(channel_id)
-        if not channel:
+        if channel is None:
             logger.warning("Channel '{}' not found for _send, session={}", channel_id, session_id)
             return
         if streaming:

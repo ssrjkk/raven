@@ -47,13 +47,13 @@ class TestGateway:
         assert gateway.db is not None
         assert gateway.llm is not None
         assert gateway.plugin_loader is not None
-        assert gateway.channels == {}
+        assert gateway.channels.list_ids() == []
 
     async def test_register_channel(self, gateway):
         channel = AsyncMock()
         channel.channel_id = "test"
         gateway.register_channel(channel)
-        assert "test" in gateway.channels
+        assert gateway.channels.get("test") is not None
 
     async def test_start_stop(self, gateway):
         await gateway.start()
