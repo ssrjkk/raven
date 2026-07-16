@@ -17,6 +17,7 @@ from raven.core.config import settings
 from raven.core.context_window import ContextWindowConfig, ContextWindowManager
 from raven.core.gateway.channel_manager import ChannelManager
 from raven.core.gateway.command_handlers import CommandHandlersMixin
+from raven.core.gateway.health_monitor import HealthMonitor
 from raven.core.gateway.mcp_bridge import MCPBridge
 from raven.core.gateway.task_orchestrator import TaskOrchestrator
 
@@ -25,7 +26,6 @@ if TYPE_CHECKING:
 from raven.core.audit import audit_logger
 from raven.core.channel_guardian import ChannelGuardian
 from raven.core.failover import ModelFailover
-from raven.core.health import health
 from raven.core.llm import LLMRouter
 from raven.core.metrics import metrics
 from raven.core.models import IncomingMessage, Message
@@ -40,7 +40,6 @@ from raven.core.security.sandbox_policy import (
     check_tool_allowed,
     get_policy_for_channel,
 )
-from raven.core.self_heal import self_healer
 from raven.core.skills import Skill, skills_registry
 from raven.core.task_engine.store import TaskStore
 
@@ -80,6 +79,12 @@ class Gateway(CommandHandlersMixin):
             mcp_pool=self.mcp.pool,
             send_notification=self._send,
         )
+        self._health = HealthMonitor(
+            db_check=self.db.health_check,
+            llm_check=self._llm_health_check,
+            db_restart=self._db_restart,
+            llm_restart=self._llm_restart,
+        )
         self._rate_limiter = RateLimiter()
         self._init_stores()
 
@@ -112,7 +117,7 @@ class Gateway(CommandHandlersMixin):
         await self.channels.start_all()
         self.load_skills()
         self._register_skill_handlers()
-        self._register_health_checks()
+        self._health.register_checks()
         await self.mcp.start(plugin_loader=self.plugin_loader)
         await self._guardian.start()
 
@@ -168,30 +173,21 @@ class Gateway(CommandHandlersMixin):
             skill._handler = _morning_briefing
             logger.info("Registered morning_briefing skill handler")
 
-    def _register_health_checks(self):
-        async def _db_check():
-            return await self.db.health_check()
+    async def _llm_health_check(self) -> bool:
+        try:
+            result = await self.llm.complete([{"role": "user", "content": "ping"}], model=settings.default_model)
+            return bool(result.content)
+        except Exception as e:
+            logger.warning("LLM health check failed: {}", e)
+            return False
 
-        async def _llm_check():
-            try:
-                result = await self.llm.complete([{"role": "user", "content": "ping"}], model=settings.default_model)
-                return bool(result.content)
-            except Exception as e:
-                logger.warning("LLM health check failed: {}", e)
-                return False
+    async def _db_restart(self) -> None:
+        await self.db.disconnect()
+        await self.db.connect()
 
-        async def _db_restart():
-            await self.db.disconnect()
-            await self.db.connect()
-
-        async def _llm_restart():
-            self.llm = LLMRouter()
-            self.failover = ModelFailover(self.llm)
-
-        health.register("database", _db_check, timeout=3.0, critical=True)
-        health.register("llm", _llm_check, timeout=10.0, critical=False)
-        self_healer.register("database", _db_check, _db_restart)
-        self_healer.register("llm", _llm_check, _llm_restart)
+    async def _llm_restart(self) -> None:
+        self.llm = LLMRouter()
+        self.failover = ModelFailover(self.llm)
 
     async def handle_message(self, event: IncomingMessage):
         cid = str(uuid4())[:8]
