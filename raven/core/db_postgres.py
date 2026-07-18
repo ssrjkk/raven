@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
@@ -8,6 +9,9 @@ from loguru import logger
 
 from raven.core._json import json
 from raven.core.models import Message, Session
+
+_MAX_CONNECT_RETRIES = 3
+_CONNECT_RETRY_DELAY_S = 2.0
 
 
 class _PostgresMigrator:
@@ -37,18 +41,12 @@ class _PostgresMigrator:
         async with self.db._p.acquire() as conn:
             for mig in pending:
                 logger.info("Applying Postgres migration {}: {}", mig.version, mig.description)
-                try:
-                    if mig.sql:
-                        await conn.execute(mig.sql)
-                    if mig.migrate_fn:
-                        await mig.migrate_fn(conn)
-                    await conn.execute("INSERT INTO _migrations (version) VALUES ($1)", mig.version)
-                    logger.info("Postgres Migration {} applied", mig.version)
-                except Exception as e:
-                    await conn.execute(
-                        "INSERT INTO _migrations (version) VALUES ($1) ON CONFLICT DO NOTHING", mig.version
-                    )
-                    logger.warning("Postgres Migration {} skipped (already applied or incompatible): {}", mig.version, e)
+                if mig.sql:
+                    await conn.execute(mig.sql)
+                if mig.migrate_fn:
+                    await mig.migrate_fn(conn)
+                await conn.execute("INSERT INTO _migrations (version) VALUES ($1)", mig.version)
+                logger.info("Postgres Migration {} applied", mig.version)
 
 
 class PostgresDatabase:
@@ -64,9 +62,23 @@ class PostgresDatabase:
         return self._pool
 
     async def connect(self):
-        self._pool = await asyncpg.create_pool(self.dsn, min_size=1, max_size=10)
-        await self._create_tables()
-        await self.migrator.migrate()
+        last_error: Exception | None = None
+        for attempt in range(1, _MAX_CONNECT_RETRIES + 1):
+            try:
+                self._pool = await asyncpg.create_pool(self.dsn, min_size=1, max_size=10)
+                await self._create_tables()
+                await self.migrator.migrate()
+                return
+            except (TimeoutError, OSError, asyncpg.PostgresError) as e:
+                last_error = e
+                if attempt < _MAX_CONNECT_RETRIES:
+                    logger.warning("Postgres connect attempt {}/{} failed: {} — retrying in {}s", attempt, _MAX_CONNECT_RETRIES, e, _CONNECT_RETRY_DELAY_S)
+                    await asyncio.sleep(_CONNECT_RETRY_DELAY_S)
+        raise RuntimeError(f"Postgres connect failed after {_MAX_CONNECT_RETRIES} attempts") from last_error
+
+    async def reconnect(self):
+        await self.disconnect()
+        await self.connect()
 
     async def _create_tables(self):
         async with self._p.acquire() as conn:
@@ -206,7 +218,7 @@ class PostgresDatabase:
         return session
 
     async def save_message(self, msg: Message):
-        async with self._p.acquire() as conn:
+        async with self._p.acquire() as conn, conn.transaction():
             await conn.execute(
                 "INSERT INTO messages (id, session_id, role, content, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
                 msg.id,
@@ -338,12 +350,12 @@ class PostgresDatabase:
         return row["value"] if row else None
 
     async def delete_session(self, session_id: str):
-        async with self._p.acquire() as conn:
+        async with self._p.acquire() as conn, conn.transaction():
             await conn.execute("DELETE FROM messages WHERE session_id = $1", session_id)
             await conn.execute("DELETE FROM sessions WHERE id = $1", session_id)
 
     async def replace_session_messages(self, session_id: str, new_messages: list[dict[str, Any]]):
-        async with self._p.acquire() as conn:
+        async with self._p.acquire() as conn, conn.transaction():
             await conn.execute("DELETE FROM messages WHERE session_id = $1", session_id)
             for msg in new_messages:
                 m = Message(
@@ -389,12 +401,42 @@ class PostgresDatabase:
             rows = await conn.fetch("SELECT key FROM secrets ORDER BY key")
         return [r["key"] for r in rows]
 
+    def pool_status(self) -> dict[str, Any]:
+        if not self._pool:
+            return {"connected": False, "total": 0, "idle": 0, "min_size": 0, "max_size": 0}
+        return {
+            "connected": True,
+            "total": self._pool.get_size(),
+            "idle": self._pool.get_idle_size(),
+            "min_size": self._pool.get_min_size(),
+            "max_size": self._pool.get_max_size(),
+        }
+
+    async def validate_pool(self) -> bool:
+        if not self._pool:
+            return False
+        idle = self._pool.get_idle_size()
+        if idle == 0:
+            return True
+        tested = 0
+        for _ in range(idle):
+            try:
+                async with self._p.acquire(timeout=5) as conn:
+                    await conn.fetchval("SELECT 1")
+                    tested += 1
+            except Exception as e:
+                logger.debug("Pool connection validation failed: {}", e)
+        return tested > 0 or self._pool.get_idle_size() == 0
+
     async def health_check(self) -> bool:
         if not self._pool:
             return False
         try:
             async with self._p.acquire() as conn:
                 await conn.fetchval("SELECT 1")
+            status = self.pool_status()
+            if status["idle"] == 0 and status["total"] >= status["max_size"]:
+                logger.warning("Postgres pool exhausted (total={}, max={})", status["total"], status["max_size"])
             return True
         except Exception as e:
             logger.warning("Postgres DB health check failed: {}", e)

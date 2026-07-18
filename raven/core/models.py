@@ -37,6 +37,7 @@ class Session(BaseModel):
     agent_id: str = "default"
     agent_skills: list[str] = []
     system_prompt: str | None = None
+    sandbox_policy: Any = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

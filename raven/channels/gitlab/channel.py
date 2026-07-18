@@ -13,8 +13,8 @@ class GitlabChannel(EnterpriseChannel):
     channel_id = "gitlab"
 
     async def _start(self):
-        self._webhook_secret = settings.gitlab_webhook_secret or ""
-        self._token = settings.gitlab_token or ""
+        self._webhook_secret = settings.gitlab_webhook_secret.get_secret_value() or ""
+        self._token = settings.gitlab_token.get_secret_value() or ""
         self._gitlab_url = settings.gitlab_url.rstrip("/") or "https://gitlab.com"
 
     async def _stop(self):

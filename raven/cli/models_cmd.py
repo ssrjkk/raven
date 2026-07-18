@@ -23,15 +23,15 @@ def models_list():
     table.add_column("Default")
     table.add_row(
         "OpenRouter",
-        "[OK]" if settings.openrouter_api_key else "[NO]",
+        "[OK]" if settings.openrouter_api_key.get_secret_value() else "[NO]",
         "✓" if settings.default_model.startswith("openrouter/") else "",
     )
     table.add_row(
         "Anthropic",
-        "[OK]" if settings.anthropic_api_key else "[NO]",
+        "[OK]" if settings.anthropic_api_key.get_secret_value() else "[NO]",
         "✓" if settings.default_model.startswith("claude") else "",
     )
-    table.add_row("OpenAI", "[OK]" if settings.openai_api_key else "[NO]", "")
+    table.add_row("OpenAI", "[OK]" if settings.openai_api_key.get_secret_value() else "[NO]", "")
     table.add_row(
         "Ollama",
         "[OK]" if settings.ollama_base_url else "[NO]",

@@ -11,24 +11,30 @@ if TYPE_CHECKING:
 
 class ChannelManager:
     def __init__(self) -> None:
-        self.channels: dict[str, BaseChannel] = {}
+        self._channels: dict[str, BaseChannel] = {}
         self._lock = asyncio.Lock()
 
-    def register(self, channel: BaseChannel) -> None:
-        self.channels[channel.channel_id] = channel
+    async def register(self, channel: BaseChannel) -> None:
+        async with self._lock:
+            self._channels[channel.channel_id] = channel
         logger.info("Registered channel: {}", channel.channel_id)
 
-    def get(self, channel_id: str) -> BaseChannel | None:
-        return self.channels.get(channel_id)
+    async def get(self, channel_id: str) -> BaseChannel | None:
+        async with self._lock:
+            return self._channels.get(channel_id)
 
-    def remove(self, channel_id: str) -> BaseChannel | None:
-        return self.channels.pop(channel_id, None)
+    async def remove(self, channel_id: str) -> BaseChannel | None:
+        async with self._lock:
+            return self._channels.pop(channel_id, None)
 
-    def list_ids(self) -> list[str]:
-        return list(self.channels.keys())
+    async def list_ids(self) -> list[str]:
+        async with self._lock:
+            return list(self._channels.keys())
 
     async def start_all(self) -> None:
-        for cid, channel in list(self.channels.items()):
+        async with self._lock:
+            channels = list(self._channels.items())
+        for cid, channel in channels:
             try:
                 await channel.start()
                 logger.info("Channel started: {}", cid)
@@ -37,7 +43,7 @@ class ChannelManager:
 
     async def stop_all(self) -> None:
         async with self._lock:
-            channels = list(self.channels.items())
+            channels = list(self._channels.items())
         for cid, channel in channels:
             try:
                 await channel.stop()
@@ -46,7 +52,7 @@ class ChannelManager:
                 logger.error("Error stopping channel {}: {}", cid, e)
 
     def __contains__(self, channel_id: str) -> bool:
-        return channel_id in self.channels
+        return channel_id in self._channels
 
     def __getitem__(self, channel_id: str) -> BaseChannel:
-        return self.channels[channel_id]
+        return self._channels[channel_id]

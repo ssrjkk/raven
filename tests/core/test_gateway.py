@@ -1,99 +1,81 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
-
 import pytest
 
-from raven.core.db import Database
 from raven.core.gateway.gateway import Gateway
 from raven.core.models import IncomingMessage
-from raven.core.plugin_loader import PluginLoader
-
-
-@pytest.fixture
-def mock_db():
-    db = AsyncMock(spec=Database)
-    db.db_path = ":memory:"
-    db.connect = AsyncMock()
-    db.disconnect = AsyncMock()
-    db.find_or_create_user = AsyncMock(
-        return_value={
-            "id": "telegram:u1",
-            "channel": "telegram",
-            "external_id": "u1",
-            "is_allowed": 1,
-            "pairing_code": None,
-        }
-    )
-    db.get_or_create_session = AsyncMock()
-    db.save_message = AsyncMock()
-    return db
-
-
-@pytest.fixture
-def plugin_loader():
-    return PluginLoader()
-
-
-@pytest.fixture
-def gateway(mock_db, plugin_loader):
-    g = Gateway(db=mock_db, plugin_loader=plugin_loader)
-    g.registry.setup_defaults()
-    return g
+from tests.conftest import MockChannel
 
 
 class TestGateway:
-    async def test_gateway_init(self, gateway):
+    async def test_gateway_init(self, gateway: Gateway):
         assert gateway.db is not None
         assert gateway.llm is not None
         assert gateway.plugin_loader is not None
-        assert gateway.channels.list_ids() == []
+        channels = await gateway.channels.list_ids()
+        assert channels == ["mock"]
 
-    async def test_register_channel(self, gateway):
-        channel = AsyncMock()
+    async def test_register_channel(self, gateway: Gateway):
+        channel = MockChannel()
         channel.channel_id = "test"
-        gateway.register_channel(channel)
-        assert gateway.channels.get("test") is not None
+        await gateway.register_channel(channel)
+        ch = await gateway.channels.get("test")
+        assert ch is channel
 
-    async def test_start_stop(self, gateway):
+    async def test_start_stop(self, gateway: Gateway):
         await gateway.start()
         assert gateway._running is True
         await gateway.stop()
         assert gateway._running is False
 
-    async def test_handle_message_allowed(self, gateway):
-        channel = AsyncMock()
-        channel.channel_id = "test"
-        gateway.register_channel(channel)
-
-        event = IncomingMessage(channel="test", user_id="u1", text="hello")
+    async def test_handle_message_sends_response(self, gateway: Gateway):
+        await gateway.start()
+        event = IncomingMessage(channel="mock", user_id="u1", session_id="mock:u1", text="hello")
         await gateway.handle_message(event)
-        assert gateway.db.find_or_create_user.called
+        channel = gateway.channels["mock"]
+        assert isinstance(channel, MockChannel)
+        assert len(channel.sent_messages) > 0
+        last = channel.sent_messages[-1]
+        assert "Test response" in last.content
 
-    async def test_handle_message_closed_policy(self, gateway):
-        gateway.db.find_or_create_user = AsyncMock(
-            return_value={"id": "test:u1", "channel": "test", "external_id": "u1", "is_allowed": 0}
-        )
-        channel = AsyncMock()
-        channel.channel_id = "test"
-        gateway.register_channel(channel)
+    async def test_closed_policy_blocks_user(self, gateway: Gateway, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr("raven.core.gateway.gateway.settings.dm_policy", "closed")
+        await gateway.start()
+        channel = gateway.channels["mock"]
+        assert isinstance(channel, MockChannel)
+        event = IncomingMessage(channel="mock", user_id="blocked", session_id="mock:blocked", text="hello")
+        await gateway.handle_message(event)
+        assert len(channel.sent_messages) > 0
+        last = channel.sent_messages[-1]
+        assert "not authorized" in last.content.lower()
+        await gateway.stop()
 
-        with patch("raven.core.gateway.gateway.settings") as mock_settings:
-            mock_settings.dm_policy = "closed"
-            event = IncomingMessage(channel="test", user_id="u1", text="hello")
-            await gateway.handle_message(event)
-            channel.send.assert_called_once()
+    async def test_pairing_policy_sends_code(self, gateway: Gateway, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr("raven.core.gateway.gateway.settings.dm_policy", "pairing")
+        await gateway.start()
+        channel = gateway.channels["mock"]
+        assert isinstance(channel, MockChannel)
+        event = IncomingMessage(channel="mock", user_id="new_user", session_id="mock:new_user", text="hello")
+        await gateway.handle_message(event)
+        assert len(channel.sent_messages) > 0
+        last = channel.sent_messages[-1]
+        assert "pairing code" in last.content.lower()
+        await gateway.stop()
 
-    async def test_handle_message_pairing(self, gateway):
-        gateway.db.find_or_create_user = AsyncMock(
-            return_value={"id": "test:u1", "channel": "test", "external_id": "u1", "is_allowed": 0}
-        )
-        channel = AsyncMock()
-        channel.channel_id = "test"
-        gateway.register_channel(channel)
+    async def test_double_start_raises(self, gateway: Gateway):
+        await gateway.start()
+        with pytest.raises(RuntimeError, match="already running"):
+            await gateway.start()
+        await gateway.stop()
 
-        with patch("raven.core.gateway.gateway.settings") as mock_settings:
-            mock_settings.dm_policy = "pairing"
-            event = IncomingMessage(channel="test", user_id="u1", text="hello")
-            await gateway.handle_message(event)
-            channel.send.assert_called_once()
+    async def test_double_stop_does_not_raise(self, gateway: Gateway):
+        await gateway.start()
+        await gateway.stop()
+        await gateway.stop()
+
+    async def test_dropped_when_not_running(self, gateway: Gateway):
+        channel = gateway.channels["mock"]
+        assert isinstance(channel, MockChannel)
+        event = IncomingMessage(channel="mock", user_id="u1", session_id="mock:u1", text="hello")
+        await gateway.handle_message(event)
+        assert len(channel.sent_messages) == 0

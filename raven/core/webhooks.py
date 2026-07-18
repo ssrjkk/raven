@@ -19,10 +19,10 @@ def _verify_hmac_sha256(body_bytes: bytes, signature: str, secret: str) -> bool:
 
 
 async def _verify_webhook_signature(request: Request) -> None:
-    if settings.web_secret_key:
+    if settings.web_secret_key.get_secret_value():
         body_bytes = await request.body()
         sig = request.headers.get("X-Webhook-Signature", "")
-        if sig and not _verify_hmac_sha256(body_bytes, sig, settings.web_secret_key):
+        if sig and not _verify_hmac_sha256(body_bytes, sig, settings.web_secret_key.get_secret_value()):
             raise HTTPException(status_code=403, detail="Invalid webhook signature")
 
 
@@ -33,8 +33,8 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
     async def generic_webhook(body: dict[str, Any], request: Request):
         body_bytes = await request.body()
         signature = request.headers.get("X-Webhook-Signature", "")
-        if settings.web_secret_key:
-            if not signature or not _verify_hmac_sha256(body_bytes, signature, settings.web_secret_key):
+        if settings.web_secret_key.get_secret_value():
+            if not signature or not _verify_hmac_sha256(body_bytes, signature, settings.web_secret_key.get_secret_value()):
                 raise HTTPException(status_code=403, detail="Invalid or missing webhook signature")
         elif signature:
             raise HTTPException(status_code=403, detail="Webhook signature not supported — WEB_SECRET_KEY not configured")
@@ -63,7 +63,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
         body_bytes = await request.body()
         slack_sig = request.headers.get("X-Slack-Signature", "")
         slack_ts = request.headers.get("X-Slack-Request-Timestamp", "")
-        if settings.web_secret_key and slack_sig:
+        if settings.web_secret_key.get_secret_value() and slack_sig:
             try:
                 ts = int(slack_ts)
                 if abs(time.time() - ts) > 300:
@@ -72,7 +72,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
                 raise HTTPException(status_code=403, detail="Invalid Slack timestamp") from err
             sig_basestring = f"v0:{slack_ts}:{body_bytes.decode()}"
             expected = "v0=" + hmac_mod.new(
-                settings.web_secret_key.encode(), sig_basestring.encode(), hashlib.sha256
+                settings.web_secret_key.get_secret_value().encode(), sig_basestring.encode(), hashlib.sha256
             ).hexdigest()
             if not hmac_mod.compare_digest(expected, slack_sig):
                 raise HTTPException(status_code=403, detail="Invalid Slack signature")
@@ -89,7 +89,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
     async def whatsapp_webhook(body: dict[str, Any], request: Request):
         body_bytes = await request.body()
         wa_sig = request.headers.get("X-Hub-Signature-256", "")
-        if settings.web_secret_key and wa_sig and not _verify_hmac_sha256(body_bytes, wa_sig, settings.web_secret_key):
+        if settings.web_secret_key.get_secret_value() and wa_sig and not _verify_hmac_sha256(body_bytes, wa_sig, settings.web_secret_key.get_secret_value()):
             raise HTTPException(status_code=403, detail="Invalid WhatsApp signature")
         wa_ch = request.app.state.whatsapp_channel if hasattr(request.app.state, "whatsapp_channel") else None
         if wa_ch:
@@ -101,7 +101,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
         mode = request.query_params.get("hub.mode")
         token = request.query_params.get("hub.verify_token")
         challenge = request.query_params.get("hub.challenge")
-        if mode == "subscribe" and settings.web_secret_key and hmac_mod.compare_digest(token or "", settings.web_secret_key):
+        if mode == "subscribe" and settings.web_secret_key.get_secret_value() and hmac_mod.compare_digest(token or "", settings.web_secret_key.get_secret_value()):
             return int(challenge)  # type: ignore[arg-type]
         raise HTTPException(status_code=403, detail="Verify token failed")
 

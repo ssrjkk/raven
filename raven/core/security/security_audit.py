@@ -106,7 +106,7 @@ class SecurityAudit:
 
     def _check_auth_mode(self):
         c = self._add("web_auth", "Web dashboard has auth middleware", "medium")
-        has_key = bool(settings.web_secret_key)
+        has_key = bool(settings.web_secret_key.get_secret_value())
         if has_key:
             c.ok("WEB_SECRET_KEY configured — auth middleware active")
         else:
@@ -117,7 +117,7 @@ class SecurityAudit:
 
     def _check_secret_key(self):
         c = self._add("secret_key_prod", "Secret key is not default", "high")
-        if settings.web_secret_key in ("", "change-me-in-production"):
+        if settings.web_secret_key.get_secret_value() in ("", "change-me-in-production"):
             c.fail(
                 "WEB_SECRET_KEY is default or empty — change in production",
                 fix_hint="Generate a key: python3 -c 'import secrets; print(secrets.token_hex(32))'",
@@ -279,11 +279,11 @@ class SecurityAudit:
     def _check_api_keys(self):
         c = self._add("api_keys", "LLM API keys are configured for default model", "high")
         model = settings.default_model
-        if "openrouter" in model and settings.openrouter_api_key:
+        if "openrouter" in model and settings.openrouter_api_key.get_secret_value():
             c.ok(f"OpenRouter key configured for {model}")
-        elif "anthropic" in model and settings.anthropic_api_key:
+        elif "anthropic" in model and settings.anthropic_api_key.get_secret_value():
             c.ok(f"Anthropic key configured for {model}")
-        elif "openai" in model and settings.openai_api_key:
+        elif "openai" in model and settings.openai_api_key.get_secret_value():
             c.ok(f"OpenAI key configured for {model}")
         elif "ollama" in model:
             if settings.ollama_base_url:

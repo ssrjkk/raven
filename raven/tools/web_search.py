@@ -70,7 +70,7 @@ class WebSearchTool:
         raise RuntimeError(f"All providers failed. Last error: {last_error}")
 
     async def _brave(self, query: str, max_results: int) -> list[SearchResult]:
-        api_key = settings.brave_search_api_key
+        api_key = settings.brave_search_api_key.get_secret_value()
         if not api_key:
             raise ValueError("BRAVE_SEARCH_API_KEY env var required")
         client = await self._client_get()
@@ -109,7 +109,7 @@ class WebSearchTool:
         return results
 
     async def _perplexity(self, query: str, max_results: int) -> list[SearchResult]:
-        api_key = settings.perplexity_api_key
+        api_key = settings.perplexity_api_key.get_secret_value()
         if not api_key:
             raise ValueError("PERPLEXITY_API_KEY env var required")
         client = await self._client_get()
@@ -142,7 +142,7 @@ class WebSearchTool:
         return results[:max_results]
 
     async def _google(self, query: str, max_results: int) -> list[SearchResult]:
-        api_key = settings.google_search_api_key
+        api_key = settings.google_search_api_key.get_secret_value()
         cse_id = settings.google_cse_id
         if not api_key or not cse_id:
             raise ValueError("GOOGLE_SEARCH_API_KEY and GOOGLE_CSE_ID env vars required")
@@ -159,7 +159,7 @@ class WebSearchTool:
         ]
 
     async def _bing(self, query: str, max_results: int) -> list[SearchResult]:
-        api_key = settings.bing_search_api_key
+        api_key = settings.bing_search_api_key.get_secret_value()
         if not api_key:
             raise ValueError("BING_SEARCH_API_KEY env var required")
         client = await self._client_get()
@@ -176,7 +176,7 @@ class WebSearchTool:
         ]
 
     async def _tavily(self, query: str, max_results: int) -> list[SearchResult]:
-        api_key = settings.tavily_search_api_key
+        api_key = settings.tavily_search_api_key.get_secret_value()
         if not api_key:
             raise ValueError("TAVILY_SEARCH_API_KEY env var required")
         client = await self._client_get()

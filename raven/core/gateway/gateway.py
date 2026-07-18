@@ -16,9 +16,11 @@ from raven.core.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from raven.core.config import settings
 from raven.core.context_window import ContextWindowConfig, ContextWindowManager
 from raven.core.gateway.channel_manager import ChannelManager
-from raven.core.gateway.command_handlers import CommandHandlersMixin
+from raven.core.gateway.commands.base import CommandContext
+from raven.core.gateway.commands.registry import CommandRegistry
 from raven.core.gateway.health_monitor import HealthMonitor
 from raven.core.gateway.mcp_bridge import MCPBridge
+from raven.core.gateway.message_processor import MessageProcessor
 from raven.core.gateway.task_orchestrator import TaskOrchestrator
 
 if TYPE_CHECKING:
@@ -37,14 +39,13 @@ from raven.core.security.context_filter import ContextVisibility, filter_context
 from raven.core.security.rate_limiter import RateLimiter
 from raven.core.security.sandbox_policy import (
     MAIN_SESSION_POLICY,
-    check_tool_allowed,
     get_policy_for_channel,
 )
 from raven.core.skills import Skill, skills_registry
 from raven.core.task_engine.store import TaskStore
 
 
-class Gateway(CommandHandlersMixin):
+class Gateway:
     def __init__(self, db: Any, plugin_loader: PluginLoader):
         self.db = db
         self.llm = LLMRouter()
@@ -52,6 +53,7 @@ class Gateway(CommandHandlersMixin):
         self.plugin_loader = plugin_loader
         self.channels = ChannelManager()
         self._bg_tasks: set[asyncio.Task[None]] = set()
+        self._bg_semaphore = asyncio.Semaphore(100)
         self._running = False
         self.registry = AgentRegistry(db, self.llm, plugin_loader.tools)
         self.sandbox = Sandbox()
@@ -87,9 +89,19 @@ class Gateway(CommandHandlersMixin):
         )
         self._rate_limiter = RateLimiter()
         self._init_stores()
+        self.commands = CommandRegistry()
+        self._register_commands()
+        self._message_processor = MessageProcessor(
+            db=self.db,
+            registry=self.registry,
+            channels=self.channels,
+            ctxmgr=self._ctxmgr,
+            metrics=metrics,
+            send_fn=self._send,
+        )
 
-    def register_channel(self, channel: BaseChannel):
-        self.channels.register(channel)
+    async def register_channel(self, channel: BaseChannel):
+        await self.channels.register(channel)
         self._guardian.register(channel)
 
     def load_skills(self, skills_path: str | None = None):
@@ -106,9 +118,59 @@ class Gateway(CommandHandlersMixin):
     def register_skill(self, skill: Skill):
         skills_registry.register(skill)
 
+    def _init_stores(self) -> None:
+        from raven.core.monitor.store import MonitorStore
+        from raven.core.routine.store import RoutineStore
+
+        self._monitor_store = MonitorStore(self.db.db_path)
+        self._routine_store = RoutineStore(self.db.db_path)
+
+    def _register_commands(self) -> None:
+        from raven.core.gateway.commands.code import CodeCommand
+        from raven.core.gateway.commands.compact import CompactCommand
+        from raven.core.gateway.commands.help import HelpCommand
+        from raven.core.gateway.commands.mcp import MCPCommand
+        from raven.core.gateway.commands.monitor import MonitorCommand
+        from raven.core.gateway.commands.new_session import NewSessionCommand
+        from raven.core.gateway.commands.reset import ResetCommand
+        from raven.core.gateway.commands.routine import RoutineCommand
+        from raven.core.gateway.commands.settings import (
+            ActivationCommand,
+            RestartCommand,
+            ThinkCommand,
+            TraceCommand,
+            UsageCommand,
+            VerboseCommand,
+        )
+        from raven.core.gateway.commands.skills import SkillsCommand
+        from raven.core.gateway.commands.status import StatusCommand
+        from raven.core.gateway.commands.task import TaskCommand
+        from raven.core.gateway.commands.voice import VoiceCommand
+
+        self.commands.register(StatusCommand(self))
+        self.commands.register(NewSessionCommand(self))
+        self.commands.register(ResetCommand(self))
+        self.commands.register(CompactCommand(self))
+        self.commands.register(ThinkCommand(self))
+        self.commands.register(VerboseCommand(self))
+        self.commands.register(TraceCommand(self))
+        self.commands.register(UsageCommand(self))
+        self.commands.register(RestartCommand(self))
+        self.commands.register(ActivationCommand(self))
+        self.commands.register(HelpCommand(self))
+        self.commands.register(SkillsCommand(self))
+        self.commands.register(TaskCommand(self))
+        self.commands.register(MCPCommand(self))
+        self.commands.register(MonitorCommand(self))
+        self.commands.register(CodeCommand(self))
+        self.commands.register(RoutineCommand(self))
+        self.commands.register(VoiceCommand(self))
+
     async def start(self):
+        if self._running:
+            raise RuntimeError("Gateway already running")
         self.registry.setup_defaults()
-        channel_count = len(self.channels.list_ids())
+        channel_count = len(await self.channels.list_ids())
         logger.info(
             "Starting gateway with {} channels, {} agents", channel_count, len(self.registry.list_agents())
         )
@@ -122,6 +184,9 @@ class Gateway(CommandHandlersMixin):
         await self._guardian.start()
 
     async def stop(self):
+        if not self._running:
+            logger.warning("Gateway already stopped")
+            return
         logger.info("Stopping gateway...")
         self._running = False
         for task in list(self._bg_tasks):
@@ -190,6 +255,9 @@ class Gateway(CommandHandlersMixin):
         self.failover = ModelFailover(self.llm)
 
     async def handle_message(self, event: IncomingMessage):
+        if not self._running:
+            logger.warning("Gateway not running, dropping message from {}[{}]", event.channel, event.user_id)
+            return
         cid = str(uuid4())[:8]
         logger.info("[{}] Incoming message from {}[{}]: {}", cid, event.channel, event.user_id, event.text[:80])
         metrics.inc("messages_received", {"channel": event.channel})
@@ -215,36 +283,16 @@ class Gateway(CommandHandlersMixin):
             metrics.inc("message_errors", {"channel": event.channel})
             await self._send(event.channel, event.session_id, f"Sorry, an error occurred (ref: {cid}).")
 
-    async def _manage_context(self, session_id: str) -> None:
-        if self._ctxmgr is None:
-            return
-
-        msgs = await self.db.get_session_messages(session_id, limit=200)
-        if not msgs:
-            return
-
-        msg_dicts = [{"role": m.role, "content": m.content} for m in msgs]
-        total = await self._ctxmgr.estimate_tokens(msg_dicts)
-        ratio = total / self._ctxmgr._config.max_tokens if self._ctxmgr._config.max_tokens > 0 else 0
-
-        metrics.observe("context_window_pct", ratio * 100, {"session_id": session_id})
-
-        if ratio < self._ctxmgr._config.warning_threshold:
-            return
-
-        logger.info("Context at {:.1f}% for session {} ({} / {} tokens)", ratio * 100, session_id, total, self._ctxmgr._config.max_tokens)
-        metrics.inc("context_window_urgent", {"session_id": session_id})
-
-        managed = await self._ctxmgr.manage(msg_dicts)
-        if managed is not msg_dicts:
-            await self.db.replace_session_messages(session_id, managed)
-            metrics.inc("context_window_managed", {"session_id": session_id})
-            logger.info("Context window management applied for session {} ({:.1f}%)", session_id, ratio * 100)
-
-    def _bg_task(self, coro: Any) -> asyncio.Task[None]:
+    async def _bg_task(self, coro: Any) -> asyncio.Task[None]:
+        await self._bg_semaphore.acquire()
         task = asyncio.create_task(coro)
         self._bg_tasks.add(task)
-        task.add_done_callback(self._bg_tasks.discard)
+
+        def _done(t: asyncio.Task[None]) -> None:
+            self._bg_tasks.discard(t)
+            self._bg_semaphore.release()
+
+        task.add_done_callback(_done)
         return task
 
     async def _handle_message_inner(self, event: IncomingMessage, cid: str = ""):
@@ -266,49 +314,7 @@ class Gateway(CommandHandlersMixin):
             return
 
         session_id = event.session_id or f"{event.channel}:{event.user_id}:default"
-        session = await self.db.get_or_create_session(session_id, event.channel, event.user_id)
-        session.sandbox_policy = get_policy_for_channel(event.channel)
-
-        await self._manage_context(session_id)
-
-        agent = self.registry.create_agent(session)
-
-        channel_obj = self.channels.get(event.channel)
-        supports_stream = hasattr(channel_obj, "send_stream") if channel_obj else False
-
-        full_response = ""
-        buffer = ""
-        gen = agent.run(event.text)
-        timed_out = False
-        while True:
-            try:
-                token = await asyncio.wait_for(gen.__anext__(), timeout=settings.agent_token_timeout)
-            except StopAsyncIteration:
-                break
-            except TimeoutError:
-                timed_out = True
-                break
-            full_response += token
-            if supports_stream:
-                buffer += token
-                if len(buffer) >= 50 or token.endswith(("\n", ".", "!", "?")):
-                    await self._send(event.channel, session_id, buffer, streaming=True)
-                    buffer = ""
-
-        if timed_out:
-            tail = "\n\n[⏱ Response timed out. Try rephrasing or splitting your request.]"
-            full_response += tail
-            if supports_stream:
-                await self._send(event.channel, session_id, tail, streaming=True)
-
-        if supports_stream and buffer:
-            await self._send(event.channel, session_id, buffer, streaming=True)
-
-        if full_response.strip():
-            if not supports_stream:
-                await self._send(event.channel, session_id, full_response, streaming=False)
-            metrics.inc("messages_sent", {"channel": event.channel})
-            metrics.observe("response_length", len(full_response), {"channel": event.channel})
+        await self._message_processor.process(event, session_id)
 
     def _apply_context_filter(self, event, user: dict[str, Any], text: str) -> str:
         visibility = ContextVisibility(settings.context_visibility)
@@ -447,230 +453,16 @@ class Gateway(CommandHandlersMixin):
 
     async def _handle_command(self, event: IncomingMessage, user: dict[str, Any]) -> bool:
         text = event.text.strip()
-        cmd = text.split()[0].lower() if text else ""
-        args = text.split()[1:] if len(text.split()) > 1 else []
-
-        if cmd == "/status":
-            await self._send(
-                event.channel,
-                event.session_id,
-                f"Raven AI is running.\nChannels: {', '.join(self.channels.list_ids())}\n"
-                f"Agents: {len(self.registry.list_agents())}\n"
-                f"Skills: {len(skills_registry.list_names())}",
-            )
-            return True
-
-        if cmd == "/new":
-            new_sid = f"{event.channel}:{event.user_id}:{uuid4().hex[:8]}"
-            await self.db.get_or_create_session(new_sid, event.channel, event.user_id)
-            await self._send(event.channel, new_sid, "Starting fresh conversation.")
-            return True
-
-        if cmd == "/reset":
-            sid = event.session_id or f"{event.channel}:{event.user_id}:default"
-            await self.db.delete_session(sid)
-            await self._send(event.channel, sid, "Session reset.")
-            return True
-
-        if cmd == "/compact":
-            policy = get_policy_for_channel(event.channel)
-            if policy is not MAIN_SESSION_POLICY:
-                allowed, msg = check_tool_allowed(policy, "read", event.channel)
-                if not allowed:
-                    await self._send(event.channel, event.session_id, f"Access denied: {msg}")
-                    return True
-            session_id = event.session_id or f"{event.channel}:{event.user_id}:default"
-            session = await self.db.get_or_create_session(session_id, event.channel, event.user_id)
-            agent = self.registry.create_agent(session)
-            msgs = await self.db.get_session_messages(session.id, limit=100)
-            if not msgs:
-                await self._send(event.channel, event.session_id, "No messages to compact.")
-                return True
-            history_text = "\n".join(f"{m.role}: {m.content[:200]}" for m in msgs)
-            summary = ""
-            async for token in agent.simple_complete(
-                [
-                    {"role": "system", "content": "Summarize this conversation concisely in 2-3 sentences."},
-                    {"role": "user", "content": f"Summarize:\n{history_text}"},
-                ]
-            ):
-                summary += token
-            if summary.strip():
-                await self.db.replace_session_messages(
-                    session.id, [{"role": "system", "content": f"[Session compacted: {summary[:500]}]"}]
-                )
-            await self._send(event.channel, event.session_id, f"Session compacted.\nSummary: {summary[:300]}")
-            return True
-
-        if cmd == "/think":
-            level = args[0] if args else "high"
-            if level in ("low", "medium", "high"):
-                await self._send(event.channel, event.session_id, f"Thinking level set to: {level}.")
-            else:
-                await self._send(event.channel, event.session_id, "Usage: /think <low|medium|high>")
-            return True
-
-        if cmd == "/verbose":
-            setting = args[0] if args else ""
-            if setting in ("on", "off"):
-                await self._send(event.channel, event.session_id, f"Verbose mode: {setting}.")
-            else:
-                await self._send(event.channel, event.session_id, "Usage: /verbose <on|off>")
-            return True
-
-        if cmd == "/trace":
-            setting = args[0] if args else ""
-            if setting in ("on", "off"):
-                await self._send(event.channel, event.session_id, f"Trace mode: {setting}.")
-            else:
-                await self._send(event.channel, event.session_id, "Usage: /trace <on|off>")
-            return True
-
-        if cmd == "/usage":
-            mode = args[0] if args else ""
-            if mode in ("off", "tokens", "full"):
-                await self._send(event.channel, event.session_id, f"Usage mode: {mode}.")
-            else:
-                await self._send(event.channel, event.session_id, "Usage: /usage <off|tokens|full>")
-            return True
-
-        if cmd == "/restart":
-            new_session_id = f"{event.channel}:{event.user_id}:{uuid4().hex[:8]}"
-            await self.db.get_or_create_session(new_session_id, event.channel, event.user_id)
-            await self._send(event.channel, new_session_id, "Session restarted.")
-            return True
-
-        if cmd == "/activation":
-            mode = args[0] if args else ""
-            if mode in ("mention", "always"):
-                await self._send(event.channel, event.session_id, f"Activation mode: {mode}.")
-            else:
-                await self._send(event.channel, event.session_id, "Usage: /activation <mention|always>")
-            return True
-
-        if cmd == "/task":
-            policy = get_policy_for_channel(event.channel)
-            if policy is not MAIN_SESSION_POLICY:
-                allowed, msg = check_tool_allowed(policy, "gateway", event.channel)
-                if not allowed:
-                    await self._send(event.channel, event.session_id, f"Access denied: {msg}")
-                    return True
-            if not self._check_permission(user, Permission.TASK_RUN):
-                await self._send(event.channel, event.session_id, "Access denied: insufficient permissions")
-                return True
-            goal = " ".join(args)
-            if not goal:
-                await self._send(event.channel, event.session_id, "Usage: /task <goal description>")
-                return True
-            await self._send(event.channel, event.session_id, f"Planning task: {goal[:100]}...")
-            self._bg_task(self.tasks.create_and_run(
-                goal=goal,
-                user_id=event.user_id,
-                channel=event.channel,
-                session_id=event.session_id or "",
-            ))
-            return True
-
-        if cmd == "/mcp":
-            servers = self.mcp.connected_count
-            if servers == 0:
-                await self._send(event.channel, event.session_id, "No MCP servers connected.")
-                return True
-            lines = [f"🌐 MCP servers ({servers} connected):"]
-            for info in self.mcp.list_servers_info():
-                lines.append(f"  {info['name']}: {info['tools']} tools")
-            await self._send(event.channel, event.session_id, "\n".join(lines))
-            return True
-
-        if cmd == "/monitor":
-            policy = get_policy_for_channel(event.channel)
-            if policy is not MAIN_SESSION_POLICY:
-                allowed, msg = check_tool_allowed(policy, "read", event.channel)
-                if not allowed:
-                    await self._send(event.channel, event.session_id, f"Access denied: {msg}")
-                    return True
-            if not self._check_permission(user, Permission.MONITOR_READ):
-                await self._send(event.channel, event.session_id, "Access denied: insufficient permissions")
-                return True
-            sub = args[0].lower() if args else "help"
-            await self._handle_monitor_cmd(event, user, sub, args[1:] if len(args) > 1 else [])
-            return True
-
-        if cmd == "/code":
-            policy = get_policy_for_channel(event.channel)
-            if policy is not MAIN_SESSION_POLICY:
-                allowed, msg = check_tool_allowed(policy, "write", event.channel)
-                if not allowed:
-                    await self._send(event.channel, event.session_id, f"Access denied: {msg}")
-                    return True
-            if not self._check_permission(user, Permission.CODE_READ):
-                await self._send(event.channel, event.session_id, "Access denied: insufficient permissions")
-                return True
-            sub = args[0].lower() if args else "help"
-            await self._handle_code_cmd(event, sub, args[1:] if len(args) > 1 else [])
-            return True
-
-        if cmd == "/routine":
-            policy = get_policy_for_channel(event.channel)
-            if policy is not MAIN_SESSION_POLICY:
-                allowed, msg = check_tool_allowed(policy, "gateway", event.channel)
-                if not allowed:
-                    await self._send(event.channel, event.session_id, f"Access denied: {msg}")
-                    return True
-            if not self._check_permission(user, Permission.ROUTINE_READ):
-                await self._send(event.channel, event.session_id, "Access denied: insufficient permissions")
-                return True
-            sub = args[0].lower() if args else "help"
-            await self._handle_routine_cmd(event, user, sub, args[1:] if len(args) > 1 else [])
-            return True
-
-        if cmd == "/voice":
-            sub = args[0].lower() if args else "help"
-            await self._handle_voice_cmd(event, sub, args[1:] if len(args) > 1 else [])
-            return True
-
-        if cmd == "/help":
-            await self._send(
-                event.channel,
-                event.session_id,
-                (
-                    "Commands:\n"
-                    "/status - Show bot status\n"
-                    "/new - Start fresh conversation\n"
-                    "/reset - Reset session\n"
-                    "/task <goal> - Plan and execute a task\n"
-                    "/monitor list - List your monitors\n"
-                    "/monitor add <type> <target> - Add monitor\n"
-                    "/code index [path] - Index codebase\n"
-                    "/code search <query> - Search code\n"
-                    "/code review <file> - Review file\n"
-                    "/code start <goal> - Start coding session\n"
-                    "/routine list - List routines\n"
-                    "/routine add <action> <sched> - Add routine\n"
-                    "/voice tts <text> - Text-to-speech synthesis\n"
-                    "/voice providers - List TTS providers\n"
-                    "/compact - Summarize conversation\n"
-                    "/think <low|medium|high> - Set thinking level\n"
-                    "/mcp - List connected MCP servers\n"
-                    "/skills - List loaded skills\n"
-                    "/help - Show this help\n"
-                    "/pair <code> - Authorize with pairing code"
-                ),
-            )
-            return True
-
-        if cmd == "/skills":
-            names = skills_registry.list_names()
-            if names:
-                await self._send(event.channel, event.session_id, f"Skills: {', '.join(names)}")
-            else:
-                await self._send(event.channel, event.session_id, "No skills loaded.")
-            return True
-
-        return False
+        if not text or not text.startswith("/"):
+            return False
+        parts = text.split()
+        cmd_name = parts[0][1:].lower()
+        args = parts[1:] if len(parts) > 1 else []
+        ctx = CommandContext(event=event, user=user, args=args)
+        return await self.commands.execute(cmd_name, ctx)
 
     async def _on_channel_dead(self, channel_id: str) -> None:
-        channel = self.channels.remove(channel_id)
+        channel = await self.channels.remove(channel_id)
         if channel:
             logger.error("Channel {} removed from gateway (dead)", channel_id)
             metrics.inc("channels_dead", {"channel": channel_id})
@@ -678,7 +470,7 @@ class Gateway(CommandHandlersMixin):
                 await channel.stop()
             except Exception as e:
                 logger.error("Error stopping dead channel {}: {}", channel_id, e)
-        remaining = self.channels.list_ids()
+        remaining = await self.channels.list_ids()
         if remaining:
             alert = f"[Alert] Channel '{channel_id}' is dead and has been removed. Remaining: {', '.join(remaining)}"
             logger.warning(alert)
@@ -693,7 +485,7 @@ class Gateway(CommandHandlersMixin):
         return self._rbac.has_permission(role, permission)
 
     async def _send(self, channel_id: str, session_id: str, text: str, streaming: bool = False):
-        channel = self.channels.get(channel_id)
+        channel = await self.channels.get(channel_id)
         if channel is None:
             logger.warning("Channel '{}' not found for _send, session={}", channel_id, session_id)
             return

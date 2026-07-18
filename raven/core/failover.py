@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import random
-import time
 from typing import Any
 
 from loguru import logger
 
-from raven.core.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError, CircuitBreakerState
+from raven.core.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from raven.core.config import settings
-from raven.core.llm import LLMResponse, LLMRouter
+from raven.core.llm.protocol import LLMClientProtocol, LLMResponse
 from raven.core.metrics import metrics
 
 
@@ -20,7 +19,7 @@ class ModelConfig:
 
 
 class ModelFailover:
-    def __init__(self, llm: LLMRouter):
+    def __init__(self, llm: LLMClientProtocol):
         self.llm = llm
         self._models: list[ModelConfig] = []
         self._circuits: dict[str, CircuitBreaker] = {}
@@ -43,12 +42,12 @@ class ModelFailover:
             models.append(ModelConfig("ollama", "mistral", 0.8))
         if settings.vllm_base_url:
             models.append(ModelConfig("vllm", "qwen3-8b", 0.7))
-        if settings.openrouter_api_key:
+        if settings.openrouter_api_key.get_secret_value():
             m = settings.default_model or "openrouter/openai/gpt-4o-mini"
             models.append(ModelConfig("openrouter", m, 0.6))
-        if settings.anthropic_api_key:
+        if settings.anthropic_api_key.get_secret_value():
             models.append(ModelConfig("anthropic", "claude-sonnet-4-20250514", 0.5))
-        if settings.openai_api_key:
+        if settings.openai_api_key.get_secret_value():
             models.append(ModelConfig("openai", "gpt-4o", 0.4))
         self._models = models
 
@@ -90,40 +89,21 @@ class ModelFailover:
                     last_error = CircuitBreakerOpenError(cb.name)
                     continue
 
-                logger.info("Failover stream trying: {}/{}", model_cfg.provider, model_cfg.model)
+                if not await cb.try_acquire():
+                    logger.info("Circuit rejected, skipping {}/{} stream", model_cfg.provider, model_cfg.model)
+                    last_error = CircuitBreakerOpenError(cb.name)
+                    continue
 
-                async with cb._lock:
-                    if cb._state == CircuitBreakerState.OPEN:
-                        cb._state = CircuitBreakerState.HALF_OPEN
-                        cb._half_open_attempts = 0
-                        cb._metrics["transitions"] += 1
-                        logger.info("[cb/{}] half-open", cb.name)
+                logger.info("Failover stream trying: {}/{}", model_cfg.provider, model_cfg.model)
 
                 try:
                     async for token in self.llm.complete_stream(messages, model=model_cfg.model, tools=tools):
                         yield token
                 except Exception:
-                    async with cb._lock:
-                        cb._failure_count += 1
-                        cb._last_failure_time = time.monotonic()
-                        cb._metrics["failures"] += 1
-                        if cb._state == CircuitBreakerState.HALF_OPEN:
-                            cb._state = CircuitBreakerState.OPEN
-                            cb._metrics["transitions"] += 1
-                            logger.warning("[cb/{}] open after half-open stream failure", cb.name)
-                        elif cb._failure_count >= cb._failure_threshold:
-                            cb._state = CircuitBreakerState.OPEN
-                            cb._metrics["transitions"] += 1
-                            logger.warning("[cb/{}] open after {} stream failures", cb.name, cb._failure_threshold)
+                    await cb.on_failure()
                     raise
 
-                async with cb._lock:
-                    cb._metrics["successes"] += 1
-                    if cb._state == CircuitBreakerState.HALF_OPEN:
-                        cb._state = CircuitBreakerState.CLOSED
-                        cb._failure_count = 0
-                        cb._metrics["transitions"] += 1
-                        logger.info("[cb/{}] closed after stream success", cb.name)
+                await cb.on_success()
                 return
 
             except CircuitBreakerOpenError as e:

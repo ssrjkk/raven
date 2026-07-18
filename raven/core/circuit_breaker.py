@@ -88,6 +88,42 @@ class CircuitBreaker:
                     logger.info("[cb/{}] closed after half-open tests", self.name)
         return result
 
+    async def on_success(self):
+        async with self._lock:
+            self._metrics["successes"] += 1
+            if self._state == CircuitBreakerState.HALF_OPEN:
+                self._state = CircuitBreakerState.CLOSED
+                self._failure_count = 0
+                self._metrics["transitions"] += 1
+                logger.info("[cb/{}] closed after success", self.name)
+
+    async def on_failure(self):
+        async with self._lock:
+            self._failure_count += 1
+            self._last_failure_time = time.monotonic()
+            self._metrics["failures"] += 1
+            if self._state == CircuitBreakerState.HALF_OPEN:
+                self._state = CircuitBreakerState.OPEN
+                self._metrics["transitions"] += 1
+                logger.warning("[cb/{}] open after half-open failure", self.name)
+            elif self._failure_count >= self._failure_threshold:
+                self._state = CircuitBreakerState.OPEN
+                self._metrics["transitions"] += 1
+                logger.warning("[cb/{}] open after {} failures", self.name, self._failure_threshold)
+
+    async def try_acquire(self) -> bool:
+        async with self._lock:
+            if self._state == CircuitBreakerState.OPEN:
+                if time.monotonic() - self._last_failure_time >= self._recovery_timeout:
+                    self._state = CircuitBreakerState.HALF_OPEN
+                    self._half_open_attempts = 0
+                    self._metrics["transitions"] += 1
+                    logger.info("[cb/{}] half-open", self.name)
+                    return True
+                self._metrics["rejected"] += 1
+                return False
+            return True
+
     def reset(self):
         self._state = CircuitBreakerState.CLOSED
         self._failure_count = 0

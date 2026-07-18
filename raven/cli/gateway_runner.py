@@ -137,20 +137,20 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     await github_ch.on_message(gateway.handle_message)
     await gitlab.on_message(gateway.handle_message)
 
-    gateway.register_channel(telegram)
-    gateway.register_channel(discord)
-    gateway.register_channel(webchat)
-    gateway.register_channel(slack)
-    gateway.register_channel(whatsapp)
-    gateway.register_channel(matrix)
-    gateway.register_channel(googlechat)
-    gateway.register_channel(sig_ch)
-    gateway.register_channel(irc)
-    gateway.register_channel(teams)
-    gateway.register_channel(feishu)
-    gateway.register_channel(line)
-    gateway.register_channel(github_ch)
-    gateway.register_channel(gitlab)
+    await gateway.register_channel(telegram)
+    await gateway.register_channel(discord)
+    await gateway.register_channel(webchat)
+    await gateway.register_channel(slack)
+    await gateway.register_channel(whatsapp)
+    await gateway.register_channel(matrix)
+    await gateway.register_channel(googlechat)
+    await gateway.register_channel(sig_ch)
+    await gateway.register_channel(irc)
+    await gateway.register_channel(teams)
+    await gateway.register_channel(feishu)
+    await gateway.register_channel(line)
+    await gateway.register_channel(github_ch)
+    await gateway.register_channel(gitlab)
 
     api_app = webchat.app
 
@@ -298,7 +298,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     async def api_status():
         return {
             "status": "running",
-            "channels": list(gateway.channels.list_ids()),
+            "channels": await gateway.channels.list_ids(),
             "plugins": len(plugin_loader.tools),
             "agents": gateway.registry.list_agents(),
             "model": settings.default_model,

@@ -31,22 +31,22 @@ def doctor():
 
     has_any_key = bool(
         cfg.get("openrouter_api_key")
-        or settings.openrouter_api_key
+        or settings.openrouter_api_key.get_secret_value()
         or cfg.get("anthropic_api_key")
-        or settings.anthropic_api_key
+        or settings.anthropic_api_key.get_secret_value()
         or cfg.get("openai_api_key")
-        or settings.openai_api_key
+        or settings.openai_api_key.get_secret_value()
         or cfg.get("ollama_base_url")
         or settings.ollama_base_url
     )
     checks.append(("LLM Provider", "[OK] Configured" if has_any_key else "[!]️  No provider configured"))
 
     provider_names = []
-    if cfg.get("openrouter_api_key") or settings.openrouter_api_key:
+    if cfg.get("openrouter_api_key") or settings.openrouter_api_key.get_secret_value():
         provider_names.append("OpenRouter")
-    if cfg.get("anthropic_api_key") or settings.anthropic_api_key:
+    if cfg.get("anthropic_api_key") or settings.anthropic_api_key.get_secret_value():
         provider_names.append("Anthropic")
-    if cfg.get("openai_api_key") or settings.openai_api_key:
+    if cfg.get("openai_api_key") or settings.openai_api_key.get_secret_value():
         provider_names.append("OpenAI")
     if cfg.get("ollama_base_url") or settings.ollama_base_url:
         provider_names.append("Ollama")
@@ -60,7 +60,7 @@ def doctor():
     checks.append(("Channels", ", ".join(channel_list) if channel_list else "[!]️  None configured"))
     checks.append(("DM Policy", cfg.get("dm_policy", "pairing")))
     checks.append(("Web Port", str(cfg.get("web_port") or settings.web_port)))
-    checks.append(("Web Secret Key", "[OK] Set" if (cfg.get("web_secret_key") or settings.web_secret_key) else "[!]️  Not set"))
+    checks.append(("Web Secret Key", "[OK] Set" if (cfg.get("web_secret_key") or settings.web_secret_key.get_secret_value()) else "[!]️  Not set"))
 
     import importlib.util
     has_crypto = importlib.util.find_spec("cryptography")

@@ -4,7 +4,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from raven.core.config import get_settings
+from raven.core.config import SafeSecretStr, get_settings
 from raven.core.db import Database
 from raven.core.webhooks import create_webhook_router
 
@@ -18,7 +18,7 @@ def db():
 @pytest.fixture
 def app(db):
     s = get_settings()
-    s.web_secret_key = "test-secret-key"
+    s.web_secret_key = SafeSecretStr("test-secret-key")
     api = FastAPI()
     api.state.slack_channel = None
     api.state.whatsapp_channel = None
@@ -38,7 +38,7 @@ def app(db):
 def _patch_webhook_settings():
     from unittest.mock import patch
     with patch("raven.core.webhooks.settings") as mock_settings:
-        mock_settings.web_secret_key = "test-secret-key"
+        mock_settings.web_secret_key = SafeSecretStr("test-secret-key")
         yield
 
 

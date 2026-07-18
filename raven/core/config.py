@@ -5,9 +5,16 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
 from raven.core.watermark import honeytoken_warning, is_honeytoken
+
+
+class SafeSecretStr(SecretStr):
+    """SecretStr that is falsy when the secret value is empty."""
+    def __bool__(self) -> bool:
+        return bool(self.get_secret_value())
 
 _DEFAULT_TOOLS_DENY = [
     "group:automation",
@@ -21,9 +28,9 @@ _DEFAULT_TOOLS_DENY = [
 class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
-    openrouter_api_key: str = ""
-    anthropic_api_key: str = ""
-    openai_api_key: str = ""
+    openrouter_api_key: SafeSecretStr = SafeSecretStr("")
+    anthropic_api_key: SafeSecretStr = SafeSecretStr("")
+    openai_api_key: SafeSecretStr = SafeSecretStr("")
     ollama_base_url: str = "http://localhost:11434"  # default Ollama URL
     vllm_base_url: str = ""
     default_model: str = "ollama/llama3"
@@ -40,7 +47,7 @@ class Settings(BaseSettings):
     dm_policy: str = "pairing"
     web_port: int = 18888
     ravenflow_port: int = 18789
-    web_secret_key: str = ""
+    web_secret_key: SafeSecretStr = SafeSecretStr("")
     web_cors_origins: str = "http://localhost:5173,http://localhost:3000,http://localhost:18888"
     rate_limit_max: int = 60
     rate_limit_window: int = 60
@@ -60,35 +67,35 @@ class Settings(BaseSettings):
     """JSON mapping channel_id to sandbox policy name, e.g. {"telegram":"non-main","discord":"code-exec"}"""
 
     # --- Search Integration ---
-    brave_search_api_key: str = ""
-    perplexity_api_key: str = ""
-    google_search_api_key: str = ""
+    brave_search_api_key: SafeSecretStr = SafeSecretStr("")
+    perplexity_api_key: SafeSecretStr = SafeSecretStr("")
+    google_search_api_key: SafeSecretStr = SafeSecretStr("")
     google_cse_id: str = ""
-    bing_search_api_key: str = ""
-    tavily_search_api_key: str = ""
+    bing_search_api_key: SafeSecretStr = SafeSecretStr("")
+    tavily_search_api_key: SafeSecretStr = SafeSecretStr("")
 
     # --- GitHub Integration ---
-    github_token: str = ""
+    github_token: SafeSecretStr = SafeSecretStr("")
 
     # --- CI/CD Integration ---
-    gitlab_token: str = ""
+    gitlab_token: SafeSecretStr = SafeSecretStr("")
     gitlab_url: str = "https://gitlab.com"
-    gitlab_webhook_secret: str = ""
+    gitlab_webhook_secret: SafeSecretStr = SafeSecretStr("")
     jenkins_url: str = ""
     jenkins_user: str = ""
-    jenkins_token: str = ""
+    jenkins_token: SafeSecretStr = SafeSecretStr("")
 
     # --- Media Generation ---
-    replicate_api_token: str = ""
+    replicate_api_token: SafeSecretStr = SafeSecretStr("")
 
     # --- OAuth / SSO ---
     oauth_redirect_base: str = "http://localhost:5173"
-    oauth_google_client_id: str = ""
-    oauth_google_client_secret: str = ""
-    oauth_github_client_id: str = ""
-    oauth_github_client_secret: str = ""
-    oauth_microsoft_client_id: str = ""
-    oauth_microsoft_client_secret: str = ""
+    oauth_google_client_id: SafeSecretStr = SafeSecretStr("")
+    oauth_google_client_secret: SafeSecretStr = SafeSecretStr("")
+    oauth_github_client_id: SafeSecretStr = SafeSecretStr("")
+    oauth_github_client_secret: SafeSecretStr = SafeSecretStr("")
+    oauth_microsoft_client_id: SafeSecretStr = SafeSecretStr("")
+    oauth_microsoft_client_secret: SafeSecretStr = SafeSecretStr("")
 
     # --- Security Policy ---
     tools_profile: str = "messaging"
@@ -140,7 +147,7 @@ class Settings(BaseSettings):
 
     def validate_settings(self) -> bool:
         errors = []
-        if not self.web_secret_key or self.web_secret_key == "change-me-in-production":  # noqa: S105
+        if not self.web_secret_key or self.web_secret_key.get_secret_value() == "change-me-in-production":  # noqa: S105
             errors.append("WEB_SECRET_KEY must be set to a non-default value")
         if self.dm_policy not in ("pairing", "open", "closed"):
             errors.append(f"DM_POLICY must be 'pairing', 'open', or 'closed', got '{self.dm_policy}'")
@@ -166,11 +173,11 @@ _honeytoken_keys = {
     "openai_api_key": "OPENAI_API_KEY",
 }
 for _attr, _env_name in _honeytoken_keys.items():
-    _val = getattr(settings, _attr, "")
-    if _val and is_honeytoken(_env_name, _val):
+    _val = getattr(settings, _attr, SafeSecretStr(""))
+    if _val and is_honeytoken(_env_name, _val.get_secret_value()):
         logger.warning(honeytoken_warning(_env_name))
 
-if settings.web_secret_key in ("", "change-me-in-production"):
+if settings.web_secret_key.get_secret_value() in ("", "change-me-in-production"):
     logger.warning(
         "WEB_SECRET_KEY is default or empty — set a random key in .env for auth. "
         "Generate: python3 -c 'import secrets; print(secrets.token_hex(32))'"

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from raven.core.config import SafeSecretStr
 from raven.core.webhooks import create_webhook_router
 
 
@@ -41,7 +42,7 @@ async def test_generic_webhook_text_field():
     sig = "sha256=" + hmac_mod.new(b"test-secret", body_bytes, hashlib.sha256).hexdigest()
     req = FakeRequest(headers={"X-Webhook-Source": "github", "X-Webhook-Signature": sig}, body_bytes=body_bytes)
     with patch("raven.core.webhooks.settings") as mock_settings:
-        mock_settings.web_secret_key = "test-secret"
+        mock_settings.web_secret_key = SafeSecretStr("test-secret")
         resp = await router.routes[0].endpoint(body, req)  # type: ignore[attr-defined]
     assert resp["ok"] is True
     handler.assert_awaited_once()
@@ -63,7 +64,7 @@ async def test_generic_webhook_message_field():
     sig = "sha256=" + hmac_mod.new(b"test-secret", body_bytes, hashlib.sha256).hexdigest()
     req = FakeRequest(headers={"X-Webhook-Source": "test", "X-Webhook-Signature": sig}, body_bytes=body_bytes)
     with patch("raven.core.webhooks.settings") as mock_settings:
-        mock_settings.web_secret_key = "test-secret"
+        mock_settings.web_secret_key = SafeSecretStr("test-secret")
         resp = await router.routes[0].endpoint(body, req)  # type: ignore[attr-defined]
     assert resp["ok"] is True
     event = handler.await_args[0][0]  # type: ignore[index]
@@ -85,7 +86,7 @@ async def test_generic_webhook_no_text():
     from fastapi import HTTPException
 
     with patch("raven.core.webhooks.settings") as mock_settings:
-        mock_settings.web_secret_key = "test-secret"
+        mock_settings.web_secret_key = SafeSecretStr("test-secret")
         with pytest.raises(HTTPException) as exc:
             await router.routes[0].endpoint(body, req)  # type: ignore[attr-defined]
     assert exc.value.status_code == 400

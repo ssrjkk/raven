@@ -57,7 +57,7 @@ def _get_openai_key() -> str:
     try:
         from raven.core.config import settings
 
-        return settings.openai_api_key or ""
+        return settings.openai_api_key.get_secret_value() or ""
     except Exception as e:
         import os
 

@@ -76,7 +76,7 @@ class SetTokenRequest(BaseModel):
 
 
 def _resolve_token() -> str:
-    token = settings.github_token or ""
+    token = settings.github_token.get_secret_value() or ""
     if not token:
         token = secrets.get("github_oauth_token", "")
     return token
@@ -327,7 +327,7 @@ def create_github_router() -> APIRouter:
 
     @router.get("/token/status")
     async def token_status():
-        env_token = bool(settings.github_token)
+        env_token = bool(settings.github_token.get_secret_value())
         oauth_token = bool(secrets.get("github_oauth_token", ""))
         return {
             "has_env_token": env_token,

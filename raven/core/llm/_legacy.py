@@ -5,57 +5,44 @@ import hashlib
 import hmac as hmac_mod
 import os
 import time
-from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import httpx
 from loguru import logger
+from pydantic import SecretStr
 
 from raven.core._json import json
 from raven.core.config import settings
+from raven.core.failover import ModelFailover
+from raven.core.llm.protocol import LLMProvider, LLMResponse, ToolCall
 from raven.core.metrics import metrics
 from raven.core.tracing import trace_llm_call
 
 
-class ToolCall:
-    id: str
-    name: str
-    arguments: dict[str, Any]
-
-    def __init__(self, id: str, name: str, arguments: dict[str, Any]):
-        self.id = id
-        self.name = name
-        self.arguments = arguments
-
-    def __repr__(self):
-        return f"ToolCall(id={self.id}, name={self.name})"
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "type": "function",
-            "function": {"name": self.name, "arguments": json.dumps(self.arguments)},
-        }
-
-    @classmethod
-    def from_openai(cls, tc: dict[str, Any]) -> ToolCall:
-        args = (
-            json.loads(tc["function"]["arguments"])
-            if isinstance(tc["function"]["arguments"], str)
-            else tc["function"]["arguments"]
-        )
-        return cls(id=tc["id"], name=tc["function"]["name"], arguments=args)
+def _parse_retry_after(headers: Any, default: int = 5) -> int:
+    raw = headers.get("Retry-After")
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        pass
+    try:
+        parsed = datetime.strptime(raw, "%a, %d %b %Y %H:%M:%S %Z")
+        return max(int(parsed.timestamp() - time.time()), 0)
+    except (ValueError, TypeError):
+        return default
 
 
-class LLMResponse:
-    def __init__(self, content: str = "", tool_calls: list[ToolCall] | None = None, finish_reason: str = "stop"):
-        self.content = content
-        self.tool_calls = tool_calls or []
-        self.finish_reason = finish_reason
+def _read_json_file(path: str) -> dict[str, Any]:
+    with open(path) as f:
+        import json as _json
+        data = _json.load(f)
+        return cast("dict[str, Any]", data)
 
 
 async def _stream_sse(
@@ -94,35 +81,35 @@ def _parse_openai_response(data: dict[str, Any]) -> LLMResponse:
     return LLMResponse(content=content, tool_calls=tool_calls, finish_reason=choice.get("finish_reason", "stop"))
 
 
-class LLMProvider(ABC):
-    @abstractmethod
-    def complete_stream(
-        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
-    ) -> AsyncIterator[str]: ...
-    @abstractmethod
-    async def complete(
-        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
-    ) -> LLMResponse: ...
-    @abstractmethod
-    async def cleanup(self):
-        await self.cleanup_tasks()
+class BaseLLMProvider:
+    """Base class for LLM providers with SecretStr API key handling."""
 
-    async def cleanup_tasks(self):
-        logger.debug("No cleanup_tasks override for provider")
+    def __init__(self, api_key: SecretStr | str, base_url: str, timeout: float = 120.0):
+        self._api_key = SecretStr(api_key) if isinstance(api_key, str) else api_key
+        self.http = httpx.AsyncClient(timeout=timeout, limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
+
+    async def cleanup(self):
+        await self.http.aclose()
+        self._api_key = SecretStr("")
+
+    def _get_api_key(self) -> str:
+        return self._api_key.get_secret_value()
 
 
 class OpenRouterProvider(LLMProvider):
     def __init__(self, **overrides):
-        self.api_key = overrides.get("api_key") or settings.openrouter_api_key
+        raw = overrides.get("api_key") or settings.openrouter_api_key.get_secret_value()
+        self.api_key = SecretStr(raw) if isinstance(raw, str) else raw
         self.base_url = overrides.get("base_url") or "https://openrouter.ai/api/v1"
         self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
     async def cleanup(self):
         await self.http.aclose()
+        self.api_key = SecretStr("")
 
     async def _headers(self) -> dict[str, Any]:
         return {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {self.api_key.get_secret_value()}",
             "Content-Type": "application/json",
             "HTTP-Referer": "https://github.com/raven-ai",
             "X-Title": "Raven AI",
@@ -151,12 +138,14 @@ class OpenRouterProvider(LLMProvider):
 
 class OpenAIProvider(LLMProvider):
     def __init__(self, **overrides):
-        self.api_key = overrides.get("api_key") or settings.openai_api_key
+        raw = overrides.get("api_key") or settings.openai_api_key.get_secret_value()
+        self.api_key = SecretStr(raw) if isinstance(raw, str) else raw
         self.base_url = overrides.get("base_url") or "https://api.openai.com/v1"
         self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
     async def cleanup(self):
         await self.http.aclose()
+        self.api_key = SecretStr("")
 
     async def complete_stream(
         self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
@@ -169,7 +158,7 @@ class OpenAIProvider(LLMProvider):
             f"{self.base_url}/chat/completions",
             body,
             {
-                "Authorization": f"Bearer {self.api_key}",
+                "Authorization": f"Bearer {self.api_key.get_secret_value()}",
                 "Content-Type": "application/json",
             },
         ):
@@ -185,7 +174,7 @@ class OpenAIProvider(LLMProvider):
             f"{self.base_url}/chat/completions",
             json=body,
             headers={
-                "Authorization": f"Bearer {self.api_key}",
+                "Authorization": f"Bearer {self.api_key.get_secret_value()}",
                 "Content-Type": "application/json",
             },
         )
@@ -195,12 +184,14 @@ class OpenAIProvider(LLMProvider):
 
 class AnthropicProvider(LLMProvider):
     def __init__(self, **overrides):
-        self.api_key = overrides.get("api_key") or settings.anthropic_api_key
+        raw = overrides.get("api_key") or settings.anthropic_api_key.get_secret_value()
+        self.api_key = SecretStr(raw) if isinstance(raw, str) else raw
         self.base_url = overrides.get("base_url") or "https://api.anthropic.com"
         self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
     async def cleanup(self):
         await self.http.aclose()
+        self.api_key = SecretStr("")
 
     def _build_body(
         self, messages: list[dict[str, Any]], model: str, stream: bool, tools: list[dict[str, Any]] | None = None
@@ -217,7 +208,7 @@ class AnthropicProvider(LLMProvider):
         return body
 
     def _headers(self) -> dict[str, Any]:
-        return {"x-api-key": self.api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"}
+        return {"x-api-key": self.api_key.get_secret_value(), "anthropic-version": "2023-06-01", "Content-Type": "application/json"}
 
     async def complete_stream(
         self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
@@ -312,11 +303,13 @@ class VLLMProvider(LLMProvider):
     """vLLM — OpenAI-compatible API, runs on RunPod / self-hosted GPU."""
     def __init__(self, **overrides):
         self.base_url = overrides.get("base_url") or settings.vllm_base_url
-        self.api_key = overrides.get("api_key") or ""
+        raw = overrides.get("api_key") or ""
+        self.api_key = SecretStr(raw) if isinstance(raw, str) else raw
         self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
     async def cleanup(self):
         await self.http.aclose()
+        self.api_key = SecretStr("")
 
     async def complete_stream(
         self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
@@ -325,8 +318,8 @@ class VLLMProvider(LLMProvider):
         if tools:
             body["tools"] = tools
         headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+        if self.api_key.get_secret_value():
+            headers["Authorization"] = f"Bearer {self.api_key.get_secret_value()}"
         async for token in _stream_sse(self.http, f"{self.base_url}/v1/chat/completions", body, headers):
             yield token
 
@@ -337,8 +330,8 @@ class VLLMProvider(LLMProvider):
         if tools:
             body["tools"] = tools
         headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+        if self.api_key.get_secret_value():
+            headers["Authorization"] = f"Bearer {self.api_key.get_secret_value()}"
         resp = await self.http.post(f"{self.base_url}/v1/chat/completions", json=body, headers=headers)
         resp.raise_for_status()
         return _parse_openai_response(resp.json())
@@ -347,13 +340,15 @@ class VLLMProvider(LLMProvider):
 class AzureProvider(LLMProvider):
     """Azure OpenAI — OpenAI-compatible API via Azure."""
     def __init__(self, **overrides):
-        self.api_key = overrides.get("api_key") or os.environ.get("AZURE_OPENAI_API_KEY", "")
+        raw = overrides.get("api_key") or os.environ.get("AZURE_OPENAI_API_KEY", "")
+        self.api_key = SecretStr(raw) if isinstance(raw, str) else raw
         self.endpoint = overrides.get("base_url") or os.environ.get("AZURE_OPENAI_ENDPOINT", "https://your-resource.openai.azure.com")
         self.api_version = overrides.get("api_version") or os.environ.get("AZURE_OPENAI_API_VERSION", "2024-06-01")
         self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
     async def cleanup(self):
         await self.http.aclose()
+        self.api_key = SecretStr("")
 
     def _deployment(self, model: str) -> str:
         return model.replace("azure/", "")
@@ -362,7 +357,7 @@ class AzureProvider(LLMProvider):
         return f"{self.endpoint}/openai/deployments/{deployment}/chat/completions?api-version={self.api_version}"
 
     async def _headers(self) -> dict[str, str]:
-        return {"Content-Type": "application/json", "api-key": self.api_key}
+        return {"Content-Type": "application/json", "api-key": self.api_key.get_secret_value()}
 
     async def complete_stream(self, messages, model, tools=None):
         deployment = self._deployment(model)
@@ -386,12 +381,13 @@ class CopilotProvider(LLMProvider):
     """GitHub Copilot — uses GitHub OAuth token for OpenAI-compatible API."""
     def __init__(self, **overrides):
         self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
-        self._token: str | None = overrides.get("api_key") or os.environ.get("COPILOT_TOKEN") or None
+        raw = overrides.get("api_key") or os.environ.get("COPILOT_TOKEN") or ""
+        self._token: SecretStr | None = SecretStr(raw) if raw else None
         self._github_token = os.environ.get("GITHUB_TOKEN", "")
 
     async def _get_token(self) -> str:
         if self._token:
-            return self._token
+            return self._token.get_secret_value()
         if not self._github_token:
             logger.warning("No GITHUB_TOKEN or COPILOT_TOKEN set for CopilotProvider")
             return ""
@@ -402,14 +398,17 @@ class CopilotProvider(LLMProvider):
             )
             resp.raise_for_status()
             data = resp.json()
-            self._token = data.get("token", self._github_token)
+            raw = data.get("token", self._github_token)
+            self._token = SecretStr(raw) if raw else None
         except Exception as e:
             logger.warning("Failed to get Copilot token: {}", e)
-            self._token = self._github_token
-        return self._token or ""
+            raw = self._github_token
+            self._token = SecretStr(raw) if raw else None
+        return self._token.get_secret_value() if self._token else ""
 
     async def cleanup(self):
         await self.http.aclose()
+        self._token = None
 
     async def complete_stream(self, messages, model, tools=None):
         token = await self._get_token()
@@ -442,28 +441,41 @@ class VertexAIProvider(LLMProvider):
         self.project = overrides.get("project") or os.environ.get("VERTEX_AI_PROJECT", "")
         self.location = overrides.get("location") or os.environ.get("VERTEX_AI_LOCATION", "us-central1")
         self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
-        self._api_key = overrides.get("api_key") or ""
+        raw = overrides.get("api_key") or ""
+        self._api_key = SecretStr(raw) if isinstance(raw, str) else raw
         self._token: str | None = None
 
     async def _get_token(self) -> str:
         if self._token:
             return self._token
-        import subprocess
         try:
-            result = subprocess.run(  # noqa: S603
-                ["gcloud", "auth", "print-access-token"],  # noqa: S607
-                capture_output=True, text=True, timeout=30,
+            proc = await asyncio.create_subprocess_exec(
+                "gcloud", "auth", "print-access-token",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
-            if result.returncode == 0:
-                self._token = result.stdout.strip()
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30.0)
+            except TimeoutError:
+                proc.kill()
+                logger.warning("gcloud auth timed out after 30s")
+                raise
+            if proc.returncode == 0:
+                self._token = stdout.decode().strip()
                 return self._token
+            else:
+                err_text = stderr.decode().strip()
+                logger.warning("gcloud auth failed (rc={}): {}", proc.returncode, err_text)
         except FileNotFoundError:
             logger.debug("gcloud not found, trying credentials file")
         creds_path = os.environ.get("VERTEX_AI_CREDENTIALS") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
         if creds_path:
-            import json as _json
-            with open(creds_path) as f:
-                creds = _json.load(f)
+            loop = asyncio.get_running_loop()
+            try:
+                creds = await loop.run_in_executor(None, _read_json_file, creds_path)
+            except (FileNotFoundError, ValueError) as e:
+                logger.warning("Vertex AI: failed to read credentials file: {}", e)
+                return ""
             self._token = creds.get("access_token", "")
             if not self._token and "private_key" in creds:
                 logger.warning("Vertex AI: service account needs `gcloud auth application-default print-access-token`")
@@ -522,13 +534,15 @@ class BedrockProvider(LLMProvider):
     """
     def __init__(self, **overrides):
         self.region = overrides.get("region") or os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
-        self.access_key = overrides.get("api_key") or os.environ.get("AWS_ACCESS_KEY_ID", "")
+        raw_key = overrides.get("api_key") or os.environ.get("AWS_ACCESS_KEY_ID", "")
+        self.access_key = SecretStr(raw_key) if isinstance(raw_key, str) else raw_key
         self.secret_key = overrides.get("secret_key") or os.environ.get("AWS_SECRET_ACCESS_KEY", "")
         self.session_token = overrides.get("session_token") or os.environ.get("AWS_SESSION_TOKEN", "")
         self.http = httpx.AsyncClient(timeout=overrides.get("timeout", 120), limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
     async def cleanup(self):
         await self.http.aclose()
+        self.access_key = SecretStr("")
 
     def _model_id(self, model: str) -> str:
         return model.replace("bedrock/", "")
@@ -575,7 +589,7 @@ class BedrockProvider(LLMProvider):
         signature = hmac_mod.new(k_signing, string_to_sign.encode(), hashlib.sha256).hexdigest()
 
         authorization = (
-            f"{algorithm} Credential={self.access_key}/{credential_scope}, "
+            f"{algorithm} Credential={self.access_key.get_secret_value()}/{credential_scope}, "
             f"SignedHeaders={signed_headers}, Signature={signature}"
         )
 
@@ -658,11 +672,12 @@ class LLMRouter:
     _CACHE_TTL = 2.0
     _CACHE_MAXSIZE = 1024
 
-    _cache: OrderedDict[str, tuple[float, LLMResponse]] = OrderedDict()
-
     def __init__(self, providers_config: dict[str, Any] | None = None):
         self._providers: dict[str, LLMProvider] = {}
         self._providers_config = providers_config or {}
+        self._cache: OrderedDict[str, tuple[float, LLMResponse]] = OrderedDict()
+        self._cache_lock = asyncio.Lock()
+        self._rate_semaphore = asyncio.Semaphore(10)
 
     async def cleanup(self):
         for p in self._providers.values():
@@ -671,25 +686,28 @@ class LLMRouter:
             except (ConnectionError, TimeoutError):
                 logger.warning("LLM provider cleanup failed: connection error")
         self._providers.clear()
-        LLMRouter._cache.clear()
+        async with self._cache_lock:
+            self._cache.clear()
 
     @staticmethod
     def _cache_key(messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None) -> str:
         return f"{model}|{tools}|{json.dumps(messages, sort_keys=True)}"
 
-    def _get_cached(self, key: str) -> LLMResponse | None:
-        entry = LLMRouter._cache.get(key)
-        if entry and (time.monotonic() - entry[0]) < LLMRouter._CACHE_TTL:
-            LLMRouter._cache.move_to_end(key)
-            return entry[1]
-        if entry:
-            del LLMRouter._cache[key]
-        return None
+    async def _get_cached(self, key: str) -> LLMResponse | None:
+        async with self._cache_lock:
+            entry = self._cache.get(key)
+            if entry and (time.monotonic() - entry[0]) < LLMRouter._CACHE_TTL:
+                self._cache.move_to_end(key)
+                return entry[1]
+            if entry:
+                del self._cache[key]
+            return None
 
-    def _set_cached(self, key: str, resp: LLMResponse):
-        if len(LLMRouter._cache) >= LLMRouter._CACHE_MAXSIZE:
-            LLMRouter._cache.popitem(last=False)
-        LLMRouter._cache[key] = (time.monotonic(), resp)
+    async def _set_cached(self, key: str, resp: LLMResponse):
+        async with self._cache_lock:
+            if len(self._cache) >= LLMRouter._CACHE_MAXSIZE:
+                self._cache.popitem(last=False)
+            self._cache[key] = (time.monotonic(), resp)
 
     def _get_provider(self, model: str) -> LLMProvider:
         if not model:
@@ -715,19 +733,10 @@ class LLMRouter:
         else:
             key = "ollama"
         if key not in self._providers:
-            mapping = {
-                "openrouter": OpenRouterProvider,
-                "anthropic": AnthropicProvider,
-                "ollama": OllamaProvider,
-                "openai": OpenAIProvider,
-                "vllm": VLLMProvider,
-                "azure": AzureProvider,
-                "copilot": CopilotProvider,
-                "vertex": VertexAIProvider,
-                "bedrock": BedrockProvider,
-            }
-            overrides = self._providers_config.get(key, {})
-            self._providers[key] = mapping[key](**overrides)  # type: ignore[abstract]
+            from raven.core.llm.factory import LLMProviderFactory
+            overrides = dict(self._providers_config.get(key, {}))
+            api_key = overrides.pop("api_key", None)
+            self._providers[key] = LLMProviderFactory.create(key, api_key=api_key, **overrides)
         return self._providers[key]
 
     async def complete_stream(
@@ -737,13 +746,31 @@ class LLMRouter:
         last_exc: Exception | None = None
         for attempt in range(max(1, settings.llm_retry_max)):
             try:
-                provider = self._get_provider(model)
-                metrics.inc("llm_stream_start", {"model": model, "provider": type(provider).__name__})
-                with trace_llm_call(model=model):
-                    async for token in provider.complete_stream(messages, model, tools):
-                        yield token
+                async with self._rate_semaphore:
+                    provider = self._get_provider(model)
+                    metrics.inc("llm_stream_start", {"model": model, "provider": type(provider).__name__})
+                    with trace_llm_call(model=model):
+                        async for token in provider.complete_stream(messages, model, tools):
+                            yield token
                 return
-            except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.NetworkError) as e:
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    retry_after = _parse_retry_after(e.response.headers, 5)
+                    logger.warning("LLM rate limited (429), retrying in {}s", retry_after)
+                    await asyncio.sleep(retry_after)
+                    continue
+                last_exc = e
+                if attempt < settings.llm_retry_max - 1:
+                    delay = settings.llm_retry_delay * (2**attempt)
+                    logger.warning(
+                        "LLM stream failed (attempt {}/{}): {}, retrying in {}s",
+                        attempt + 1, settings.llm_retry_max, e, delay,
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error("LLM stream failed after {} attempts: {}", settings.llm_retry_max, e)
+                    metrics.inc("llm_stream_error", {"model": model, "error": type(e).__name__})
+            except (httpx.TimeoutException, httpx.NetworkError) as e:
                 last_exc = e
                 if attempt < settings.llm_retry_max - 1:
                     delay = settings.llm_retry_delay * (2**attempt)
@@ -762,20 +789,26 @@ class LLMRouter:
     ) -> LLMResponse:
         model = model or settings.default_model
         key = self._cache_key(messages, model, tools)
-        cached = self._get_cached(key)
+        cached = await self._get_cached(key)
         if cached is not None:
             metrics.inc("llm_cache_hit", {"model": model})
             return cached
         last_exc: Exception | None = None
         for attempt in range(max(1, settings.llm_retry_max)):
             try:
-                provider = self._get_provider(model)
-                with trace_llm_call(model=model):
-                    resp = await provider.complete(messages, model, tools)
+                async with self._rate_semaphore:
+                    provider = self._get_provider(model)
+                    with trace_llm_call(model=model):
+                        resp = await provider.complete(messages, model, tools)
                 metrics.inc("llm_complete", {"model": model, "status": "ok"})
-                self._set_cached(key, resp)
+                await self._set_cached(key, resp)
                 return resp
-            except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.NetworkError) as e:
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    retry_after = _parse_retry_after(e.response.headers, 5)
+                    logger.warning("LLM rate limited (429), retrying in {}s", retry_after)
+                    await asyncio.sleep(retry_after)
+                    continue
                 last_exc = e
                 metrics.inc("llm_complete", {"model": model, "status": "retry"})
                 if attempt < settings.llm_retry_max - 1:
@@ -790,7 +823,27 @@ class LLMRouter:
                     await asyncio.sleep(delay)
                 else:
                     logger.error("LLM call failed after {} attempts: {}", settings.llm_retry_max, e)
-                    from raven.core.failover import ModelFailover
+                    try:
+                        logger.info("Failover: trying alternative models")
+                        failover = ModelFailover(self)
+                        return await failover.complete(messages, tools=tools)
+                    except Exception as f:
+                        last_exc = f
+            except (httpx.TimeoutException, httpx.NetworkError) as e:
+                last_exc = e
+                metrics.inc("llm_complete", {"model": model, "status": "retry"})
+                if attempt < settings.llm_retry_max - 1:
+                    delay = settings.llm_retry_delay * (2**attempt)
+                    logger.warning(
+                        "LLM call failed (attempt {}/{}): {}, retrying in {}s",
+                        attempt + 1,
+                        settings.llm_retry_max,
+                        e,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error("LLM call failed after {} attempts: {}", settings.llm_retry_max, e)
                     try:
                         logger.info("Failover: trying alternative models")
                         failover = ModelFailover(self)

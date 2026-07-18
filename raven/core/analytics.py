@@ -24,8 +24,11 @@ class AnalyticsEngine:
         self._db_path = Path(db_path)
         self._interval = snapshot_interval
         self._task: asyncio.Task[None] | None = None
+        self._db: aiosqlite.Connection | None = None
 
     async def start(self) -> None:
+        self._db = await aiosqlite.connect(str(self._db_path))
+        self._db.row_factory = aiosqlite.Row
         await self._ensure_tables()
         self._task = asyncio.create_task(self._loop())
         logger.info("analytics engine started (snapshot every {}s)", self._interval)
@@ -35,27 +38,29 @@ class AnalyticsEngine:
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
+        if self._db:
+            await self._db.close()
         logger.info("analytics engine stopped")
 
     async def _ensure_tables(self) -> None:
-        async with aiosqlite.connect(str(self._db_path)) as db:
-            await db.execute("""
-                CREATE TABLE IF NOT EXISTS analytics_snapshots (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    ts INTEGER NOT NULL,
-                    metric_name TEXT NOT NULL,
-                    metric_value REAL NOT NULL
-                )
-            """)
-            await db.execute("""
-                CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_ts
-                ON analytics_snapshots(ts)
-            """)
-            await db.execute("""
-                CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_name
-                ON analytics_snapshots(metric_name)
-            """)
-            await db.commit()
+        assert self._db is not None
+        await self._db.execute("""
+            CREATE TABLE IF NOT EXISTS analytics_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts INTEGER NOT NULL,
+                metric_name TEXT NOT NULL,
+                metric_value REAL NOT NULL
+            )
+        """)
+        await self._db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_ts
+            ON analytics_snapshots(ts)
+        """)
+        await self._db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_name
+            ON analytics_snapshots(metric_name)
+        """)
+        await self._db.commit()
 
     async def _loop(self) -> None:
         while True:
@@ -68,6 +73,7 @@ class AnalyticsEngine:
                 logger.warning("analytics snapshot error: {}", e)
 
     async def _snapshot(self) -> None:
+        assert self._db is not None
         snap = metrics.snapshot()
         now = int(datetime.now(UTC).timestamp())
         rows: list[tuple[int, str, float]] = []
@@ -76,12 +82,11 @@ class AnalyticsEngine:
                 rows.append((now, name, float(value)))
         if not rows:
             return
-        async with aiosqlite.connect(str(self._db_path)) as db:
-            await db.executemany(
-                "INSERT INTO analytics_snapshots (ts, metric_name, metric_value) VALUES (?, ?, ?)",
-                rows,
-            )
-            await db.commit()
+        await self._db.executemany(
+            "INSERT INTO analytics_snapshots (ts, metric_name, metric_value) VALUES (?, ?, ?)",
+            rows,
+        )
+        await self._db.commit()
 
     async def query_series(
         self,
@@ -89,69 +94,67 @@ class AnalyticsEngine:
         since: int | None = None,
         bucket: str = "5m",
     ) -> list[dict[str, Any]]:
+        assert self._db is not None, "AnalyticsEngine not started"
         since = since or int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
         bucket_sec = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400}.get(bucket, 300)
-        async with aiosqlite.connect(str(self._db_path)) as db:
-            db.row_factory = aiosqlite.Row
-            rows = await db.execute_fetchall(
-                """
-                SELECT
-                    (ts / ?) * ? AS bucket_ts,
-                    AVG(metric_value) AS avg_val,
-                    MAX(metric_value) AS max_val,
-                    MIN(metric_value) AS min_val,
-                    COUNT(*) AS sample_count
-                FROM analytics_snapshots
-                WHERE metric_name = ? AND ts >= ?
-                GROUP BY bucket_ts
-                ORDER BY bucket_ts ASC
-                """,
-                (bucket_sec, bucket_sec, metric_name, since),
-            )
-            return [
-                {
-                    "ts": r[0],
-                    "avg": round(r[1], 2) if r[1] is not None else 0,
-                    "max": round(r[2], 2) if r[2] is not None else 0,
-                    "min": round(r[3], 2) if r[3] is not None else 0,
-                    "count": r[4],
-                }
-                for r in rows
-            ]
+        rows = await self._db.execute_fetchall(
+            """
+            SELECT
+                (ts / ?) * ? AS bucket_ts,
+                AVG(metric_value) AS avg_val,
+                MAX(metric_value) AS max_val,
+                MIN(metric_value) AS min_val,
+                COUNT(*) AS sample_count
+            FROM analytics_snapshots
+            WHERE metric_name = ? AND ts >= ?
+            GROUP BY bucket_ts
+            ORDER BY bucket_ts ASC
+            """,
+            (bucket_sec, bucket_sec, metric_name, since),
+        )
+        return [
+            {
+                "ts": r[0],
+                "avg": round(r[1], 2) if r[1] is not None else 0,
+                "max": round(r[2], 2) if r[2] is not None else 0,
+                "min": round(r[3], 2) if r[3] is not None else 0,
+                "count": r[4],
+            }
+            for r in rows
+        ]
 
     async def query_metrics_list(self) -> list[str]:
-        async with aiosqlite.connect(str(self._db_path)) as db:
-            rows = await db.execute_fetchall(
-                "SELECT DISTINCT metric_name FROM analytics_snapshots ORDER BY metric_name"
-            )
-            return [r[0] for r in rows]
+        assert self._db is not None
+        rows = await self._db.execute_fetchall(
+            "SELECT DISTINCT metric_name FROM analytics_snapshots ORDER BY metric_name"
+        )
+        return [r[0] for r in rows]
 
     async def query_summary(self, since: int | None = None) -> dict[str, Any]:
+        assert self._db is not None
         since = since or int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
-        async with aiosqlite.connect(str(self._db_path)) as db:
-            db.row_factory = aiosqlite.Row
-            totals = await db.execute_fetchall(
-                """
-                SELECT metric_name, AVG(metric_value) AS avg_val,
-                       MAX(metric_value) AS max_val, COUNT(*) AS cnt
-                FROM analytics_snapshots
-                WHERE ts >= ?
-                GROUP BY metric_name
-                ORDER BY metric_name
-                """,
+        totals = await self._db.execute_fetchall(
+            """
+            SELECT metric_name, AVG(metric_value) AS avg_val,
+                   MAX(metric_value) AS max_val, COUNT(*) AS cnt
+            FROM analytics_snapshots
+            WHERE ts >= ?
+            GROUP BY metric_name
+            ORDER BY metric_name
+            """,
+            (since,),
+        )
+        total_points = list(
+            await self._db.execute_fetchall(
+                "SELECT COUNT(*) AS c FROM analytics_snapshots WHERE ts >= ?",
                 (since,),
             )
-            total_points = list(
-                await db.execute_fetchall(
-                    "SELECT COUNT(*) AS c FROM analytics_snapshots WHERE ts >= ?",
-                    (since,),
-                )
+        )
+        oldest = list(
+            await self._db.execute_fetchall(
+                "SELECT MIN(ts) AS t FROM analytics_snapshots"
             )
-            oldest = list(
-                await db.execute_fetchall(
-                    "SELECT MIN(ts) AS t FROM analytics_snapshots"
-                )
-            )
+        )
         data_rows = [
             {
                 "name": r[0],
@@ -169,18 +172,18 @@ class AnalyticsEngine:
         }
 
     async def query_aggregated(self, since: int | None = None) -> dict[str, Any]:
+        assert self._db is not None
         since = since or int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
         series = await self.query_series("raven_messages_received_total", since=since)
         error_series = await self.query_series("raven_message_errors_total", since=since)
         total_received = sum(s["avg"] * s["count"] for s in series) if series else 0
         total_errors = sum(s["avg"] * s["count"] for s in error_series) if error_series else 0
-        async with aiosqlite.connect(str(self._db_path)) as db:
-            rows = await db.execute_fetchall(
-                "SELECT DISTINCT metric_name FROM analytics_snapshots WHERE metric_name LIKE '%latency%' OR metric_name LIKE '%response%' OR metric_name LIKE '%p99%'"
-            )
-            latency_series = {}
-            for r in rows:
-                latency_series[r[0]] = await self.query_series(r[0], since=since)
+        rows = await self._db.execute_fetchall(
+            "SELECT DISTINCT metric_name FROM analytics_snapshots WHERE metric_name LIKE '%latency%' OR metric_name LIKE '%response%' OR metric_name LIKE '%p99%'"
+        )
+        latency_series = {}
+        for r in rows:
+            latency_series[r[0]] = await self.query_series(r[0], since=since)
         return {
             "received": round(total_received),
             "errors": round(total_errors),
@@ -192,12 +195,12 @@ class AnalyticsEngine:
         }
 
     async def query_tool_usage(self, since: int | None = None) -> list[dict[str, Any]]:
+        assert self._db is not None
         since = since or int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
-        async with aiosqlite.connect(str(self._db_path)) as db:
-            rows = await db.execute_fetchall(
-                "SELECT DISTINCT metric_name FROM analytics_snapshots WHERE metric_name LIKE '%tool_calls%' AND ts >= ?",
-                (since,),
-            )
+        rows = await self._db.execute_fetchall(
+            "SELECT DISTINCT metric_name FROM analytics_snapshots WHERE metric_name LIKE '%tool_calls%' AND ts >= ?",
+            (since,),
+        )
         results: list[dict[str, Any]] = []
         for row in rows:
             name = row[0]

@@ -95,13 +95,15 @@ class Database:
                 CREATE TABLE IF NOT EXISTS monitors (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
-                    type TEXT NOT NULL CHECK(type IN ('price','http','rss')),
-                    config TEXT NOT NULL,
+                    type TEXT NOT NULL CHECK(type IN ('price','http','rss','file','process')),
+                    config TEXT NOT NULL DEFAULT '{}',
                     condition TEXT NOT NULL DEFAULT '',
                     cooldown_minutes INTEGER NOT NULL DEFAULT 30,
                     interval_seconds INTEGER NOT NULL DEFAULT 300,
                     notify_channels TEXT NOT NULL DEFAULT '[]',
                     status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','error')),
+                    user_id TEXT NOT NULL DEFAULT '',
+                    channel TEXT NOT NULL DEFAULT '',
                     last_checked TEXT,
                     last_triggered TEXT,
                     created_at TEXT NOT NULL DEFAULT (datetime('now'))

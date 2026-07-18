@@ -10,7 +10,7 @@ from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 async def _github_api(method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any] | list[Any]:
     import httpx
-    token = settings.github_token or ""
+    token = settings.github_token.get_secret_value() or ""
     if not token:
         return {"error": "GitHub token not configured. Set GITHUB_TOKEN in .env"}
     headers = {
@@ -94,7 +94,7 @@ async def github_get_pr_files(owner: str, repo: str, number: int) -> dict[str, A
 async def github_trigger_workflow(owner: str, repo: str, workflow_id: str, ref: str = "main", inputs: dict[str, str] | None = None) -> dict[str, Any] | list[Any]:
     """Trigger a GitHub Actions workflow"""
     import httpx
-    token = settings.github_token or ""
+    token = settings.github_token.get_secret_value() or ""
     if not token:
         return {"error": "GitHub token not configured"}
     headers = {
@@ -113,7 +113,7 @@ async def github_trigger_workflow(owner: str, repo: str, workflow_id: str, ref: 
 async def github_merge_pr(owner: str, repo: str, number: int, merge_method: str = "merge") -> dict[str, Any] | list[Any]:
     """Merge a pull request on GitHub"""
     import httpx
-    token = settings.github_token or ""
+    token = settings.github_token.get_secret_value() or ""
     if not token:
         token = _resolve_oauth_token()
     if not token:
@@ -136,7 +136,7 @@ async def github_merge_pr(owner: str, repo: str, number: int, merge_method: str 
 async def github_create_review(owner: str, repo: str, number: int, body: str = "", event: str = "COMMENT") -> dict[str, Any] | list[Any]:
     """Submit a review on a pull request"""
     import httpx
-    token = settings.github_token or ""
+    token = settings.github_token.get_secret_value() or ""
     if not token:
         token = _resolve_oauth_token()
     if not token:
@@ -176,7 +176,7 @@ async def github_clone_repo(owner: str, repo: str, branch: str = "main") -> dict
     import asyncio
     from pathlib import Path
 
-    token = settings.github_token or ""
+    token = settings.github_token.get_secret_value() or ""
     if not token:
         token = _resolve_oauth_token()
     if not token:

@@ -221,3 +221,46 @@ npm run dev
 - **`raven/utils/performance.py`**: New `@measure_latency(threshold_ms)` decorator for async function latency monitoring — warns via `logger.warning` when threshold exceeded
 - **`tests/test_core_db.py`**: 4 tests covering `db_query` — async execution, SELECT-only guard, path traversal denial, empty result
 - **`tests/test_api_pagination.py`**: 9 tests across monitors, routines, tasks, code sessions — verifies limit, offset, count, and filter-scoped counting
+
+## Fixes applied (Dec 2026)
+### P0 — Thread safety & blocking I/O
+- **P0#1 — `LLMRouter._cache` lock**: Moved `_cache` from class-level `OrderedDict` to instance-level in `__init__`. Added `_cache_lock = asyncio.Lock()`. All cache ops (`_get_cached`, `_set_cached`, `cleanup`) now `async with self._cache_lock`. Fixes data race on concurrent cache access.
+- **P0#2 — `VertexAIProvider._get_token`**: Replaced `subprocess.run(["gcloud","auth","print-access-token"])` with `asyncio.create_subprocess_exec()` + `asyncio.wait_for(timeout=30)`. Added `stderr` logging on failure. Added `_read_json_file` helper for credentials fallback. Fixes event loop freeze.
+- **P0#3 — `CircuitBreaker` public API**: Added `on_success()`, `on_failure()`, `try_acquire()` — all atomic under `self._lock`. `ModelFailover.complete_stream()` rewritten via `cb.try_acquire()` / `cb.on_success()` / `cb.on_failure()`. Removed `CircuitBreakerState` import from `failover.py`. Fixes encapsulation violation.
+- **P0#4 — `PostgresDatabase` transactions**: `save_message()`, `delete_session()`, `replace_session_messages()` wrapped in `async with conn.transaction()`. Nested `async with` flattened to single `async with pool.acquire() as conn, conn.transaction():`. Fixes missing ACID guarantees.
+- **P0#5 — `_PostgresMigrator.migrate()` silent skip**: Removed `try/except` wrapping `ON CONFLICT DO NOTHING` — migration errors now propagate instead of being silently swallowed.
+
+### P1.1 — ChannelManager async lock
+- **`channel_manager.py`**: All methods (`register`, `get`, `remove`, `list_ids`, `start_all`, `stop_all`) now `async with self._lock`. Internal dict renamed `_channels`. Added `__contains__` and `__getitem__` as sync read-only accessors.
+- **Callers updated**: `gateway.py` (register_channel → async, _send → await channels.get, _on_channel_dead, start), `message_processor.py` (await channels.get), `gateway_runner.py` (14 await register_channel), `status.py` (await list_ids, import fix), `test_gateway.py`, `conftest.py`, `e2e/conftest.py`.
+
+### P1.2 — Gateway._bg_task semaphore
+- **`gateway.py`**: `_bg_task` made explicit async method. Added `_bg_semaphore = asyncio.Semaphore(100)`. Task creation acquires semaphore; done_callback releases it. Prevents unlimited background task accumulation.
+- **`commands/task.py`**: Caller updated with await.
+
+### P1.3 — AnalyticsEngine connection pooling
+- **`analytics.py`**: Replaced 7 separate `async with aiosqlite.connect(...)` calls with single persistent `self._db` opened in `start()` (with `row_factory = aiosqlite.Row`) and closed in `stop()`. All query methods use `self._db` directly. `assert self._db is not None` guards added for mypy.
+
+### P1.4 — LLM rate limiting (semaphore + 429)
+- **`_legacy.py`**: Added `self._rate_semaphore = asyncio.Semaphore(10)` to `LLMRouter.__init__`. Both `complete()` and `complete_stream()` acquire semaphore before provider calls. Added `httpx.HTTPStatusError` handling for 429 with `Retry-After` header parsing.
+
+### P1.5 — MessageProcessor error recovery
+- **`message_processor.py`**: Streaming loop in `process()` wrapped in try/except — on mid-stream exception: logs error, increments `message_processing_errors` metric, appends error hint to partial response, sends remaining buffer.
+
+### P1.6 — PBKDF2 iterations 600k + rehash on verify
+- **`password.py`**: `_PBKDF2_ITERATIONS = 600_000` (was inline 100k). `_LEGACY_ITERATIONS = 100_000`. Added `verify_and_rehash(password, hashed) -> (new_hash | None, is_valid)` — tries current iterations first, falls back to legacy, returns new hash for transparent rehash.
+- **`auth/store.py`**: `AuthStore.authenticate()` uses `verify_and_rehash` — saves rehashed password on successful legacy match.
+- **`auth/__init__.py`**: Exports `verify_and_rehash`.
+
+### Verification
+- ruff 0 errors, mypy 0 errors. 11 relevant tests pass (password, gateway, gateway_commands). All 4 quick checks pass.
+
+## Fixes applied (Jan 2027)
+### P2.1 — OAuth hardening
+- **`raven/core/auth/oauth.py`**:
+  - **State parameter 128 bit**: replaced `uuid4().hex[:16]` (64 bit) with `secrets.token_urlsafe(16)` (128 bit, ~22 chars base64url).
+  - **Redirect URI exact match**: removed `startswith` vulnerability — `validate_redirect_uri()` now does exact match against `_ALLOWED_REDIRECT_URIS` set (normalized `scheme://netloc/path`). Subpath attacks (`/callback/evil`) rejected.
+  - **PKCE (S256)**: `generate_pkce_pair()` returns `(code_verifier, code_challenge)`. `get_authorize_url()` includes `code_challenge` + `code_challenge_method=S256`. `_exchange_code()` passes `code_verifier` in token request. `handle_callback()` validates with `secrets.compare_digest`.
+  - **`OAuthFlow` class**: High-level API — `initiate(session)` generates state+PKCE, builds auth URL; `handle_callback(code, state, session)` verifies state (constant-time), exchanges code with PKCE, returns `OAuthToken`. Cleans up session after success.
+  - **`OAuthProvider`**: Added `redirect_uri` field, `exchange_code()` async method.
+- **`tests/core/auth/test_oauth.py`** (new, 10 tests): state length, redirect URI exact match + subpath/evil host/empty rejection, PKCE pair attributes, full OAuth flow with PKCE (initiate → callback → token), invalid state rejection.

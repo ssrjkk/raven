@@ -7,7 +7,7 @@ import aiosqlite
 
 from raven.core._json import json
 from raven.core.auth.models import Role, User
-from raven.core.auth.password import hash_password, verify_password
+from raven.core.auth.password import hash_password, verify_and_rehash
 from raven.core.store import BaseStore
 
 SCHEMA = """
@@ -89,9 +89,16 @@ class AuthStore(BaseStore):
             return None
         if not user.password_hash:
             return None
-        if verify_password(password, user.password_hash):
-            return user
-        return None
+        new_hash, is_valid = verify_and_rehash(password, user.password_hash)
+        if not is_valid:
+            return None
+        if new_hash:
+            await self._execute(
+                "UPDATE auth_users SET password_hash = ? WHERE username = ?",
+                (new_hash, username),
+            )
+            await self._commit()
+        return user
 
     async def list_users(self) -> list[User]:
         rows = await self._fetchall("SELECT * FROM auth_users ORDER BY created_at DESC")

@@ -7,10 +7,24 @@ from contextvars import ContextVar
 from pathlib import Path
 
 from loguru import logger
+from pydantic import SecretStr
 
 from raven.core._json import json
 
 correlation_id: ContextVar[str] = ContextVar("correlation_id", default="")
+
+
+def _mask_secret_str(record):
+    args = record.get("args")
+    if args is not None and isinstance(args, tuple):
+        masked = []
+        for arg in args:
+            if isinstance(arg, SecretStr):
+                masked.append("**********")
+            else:
+                masked.append(arg)
+        record["args"] = tuple(masked)
+    return True
 
 
 def get_correlation_id() -> str:
@@ -52,18 +66,19 @@ def setup_logging(log_file: str | Path | None = None, level: str = "INFO", json_
     if json_format or os.environ.get("RAVEN_JSON_LOG"):
         if log_target:
             log_target.parent.mkdir(parents=True, exist_ok=True)
-            logger.add(str(log_target), level="DEBUG", format=_serialize, rotation="100 MB", retention="30 days")
+            logger.add(str(log_target), level="DEBUG", format=_serialize, rotation="100 MB", retention="30 days", filter=_mask_secret_str)
             logger.add(
                 str(log_target.with_suffix(".err.log")),
                 level="WARNING",
                 format=_serialize,
                 rotation="100 MB",
                 retention="90 days",
+                filter=_mask_secret_str,
             )
         console_fmt = "{time:HH:mm:ss} | {level: <8} | {name} - {message}"
     else:
         console_fmt = "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan> - <level>{message}</level>"
 
-    logger.add(sys.stderr, level=log_level, format=console_fmt, colorize=not (json_format or os.environ.get("RAVEN_JSON_LOG")))
+    logger.add(sys.stderr, level=log_level, format=console_fmt, colorize=not (json_format or os.environ.get("RAVEN_JSON_LOG")), filter=_mask_secret_str)
 
     logger.info("Logging initialized (json={}, level={})", json_format, log_level)

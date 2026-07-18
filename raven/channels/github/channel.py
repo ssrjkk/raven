@@ -13,7 +13,7 @@ class GithubChannel(EnterpriseChannel):
     channel_id = "github"
 
     async def _start(self):
-        self._token = settings.github_token or ""
+        self._token = settings.github_token.get_secret_value() or ""
         logger.info("[github] channel started")
 
     async def _stop(self):
