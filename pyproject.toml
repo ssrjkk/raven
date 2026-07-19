@@ -73,6 +73,7 @@ dev = [
     "ruff>=0.5,<1.0",
     "mypy>=1.10,<3.0",
     "pre-commit>=3.0,<5.0",
+    "testcontainers[redis]>=4.0.0,<5.0",
 ]
 media = ["ffmpeg-python>=0.2.0,<1.0"]
 re = ["capstone>=5.0,<6.0", "pyelftools>=0.31,<1.0", "pefile>=2023,<2024"]

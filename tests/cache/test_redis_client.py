@@ -4,6 +4,8 @@ import pytest
 
 from raven.core.cache.redis_client import RedisClient
 
+_NO_REDIS = "redis://localhost:16379/0?socket_connect_timeout=0.5"
+
 
 class TestRedisClientInit:
     def test_default_parameters(self) -> None:
@@ -33,14 +35,14 @@ class TestRedisClientInit:
 
 class TestRedisClientConnect:
     async def test_connect_to_nonexistent_redis_returns_false(self) -> None:
-        c = RedisClient(url="redis://localhost:16379/0", max_connections=2, retry_attempts=1)
+        c = RedisClient(url=_NO_REDIS, max_connections=2, retry_attempts=1)
         result = await c.connect()
         assert result is False
         assert c.is_healthy is False
         await c.disconnect()
 
     async def test_double_connect_is_idempotent(self) -> None:
-        c = RedisClient(url="redis://localhost:16379/0", max_connections=2, retry_attempts=1)
+        c = RedisClient(url=_NO_REDIS, max_connections=2, retry_attempts=1)
         await c.connect()
         await c.connect()
         await c.disconnect()
@@ -48,14 +50,14 @@ class TestRedisClientConnect:
 
 class TestRedisClientExecute:
     async def test_execute_with_retry_raises_on_all_failures(self) -> None:
-        c = RedisClient(url="redis://localhost:16379/0", max_connections=2, retry_attempts=2)
+        c = RedisClient(url=_NO_REDIS, max_connections=2, retry_attempts=2)
         await c.connect()
         with pytest.raises(Exception):
             await c._execute_with_retry("ping", c._client.ping)  # type: ignore[union-attr]
         await c.disconnect()
 
     async def test_disconnect_sets_unhealthy(self) -> None:
-        c = RedisClient(url="redis://localhost:16379/0", max_connections=2, retry_attempts=1)
+        c = RedisClient(url=_NO_REDIS, max_connections=2, retry_attempts=1)
         await c.connect()
         await c.disconnect()
         assert c.is_healthy is False
@@ -65,14 +67,14 @@ class TestRedisClientExecute:
 
 class TestRedisClientGraceful:
     async def test_health_check_after_disconnect(self) -> None:
-        c = RedisClient(url="redis://localhost:16379/0")
+        c = RedisClient(url=_NO_REDIS)
         await c.connect()
         await c.disconnect()
         hc = await c.health_check()
         assert hc["status"] == "disconnected"
 
     async def test_operations_after_connect_failure(self) -> None:
-        c = RedisClient(url="redis://invalid:9999/0", max_connections=2, retry_attempts=1)
+        c = RedisClient(url="redis://invalid:9999/0?socket_connect_timeout=0.5", max_connections=2, retry_attempts=1)
         await c.connect()
         assert c.is_healthy is False
         hc = await c.health_check()

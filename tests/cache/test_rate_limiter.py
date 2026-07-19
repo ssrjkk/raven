@@ -81,7 +81,7 @@ class TestRedisRateLimiter:
             assert result is True
 
     async def test_fallback_when_redis_disconnected(self) -> None:
-        client = RedisClient(url="redis://localhost:16379/0", max_connections=2, retry_attempts=1)
+        client = RedisClient(url="redis://localhost:16379/0?socket_connect_timeout=0.5", max_connections=2, retry_attempts=1)
         await client.connect()
         await client.disconnect()
         fallback = InMemoryRateLimiter()

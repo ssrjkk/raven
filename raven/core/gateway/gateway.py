@@ -12,6 +12,9 @@ from loguru import logger
 
 from raven.core.agent.registry import AgentRegistry
 from raven.core.auth import RBAC, Permission
+from raven.core.cache.llm_cache import LLMCache
+from raven.core.cache.redis_client import RedisClient
+from raven.core.cache.session_store import SessionStore
 from raven.core.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from raven.core.config import settings
 from raven.core.context_window import ContextWindowConfig, ContextWindowManager
@@ -48,8 +51,12 @@ from raven.core.tracing import TracingManager, get_tracer
 
 
 class Gateway:
-    def __init__(self, db: Any, plugin_loader: PluginLoader):
+    def __init__(self, db: Any, plugin_loader: PluginLoader, redis_url: str | None = None):
         self.db = db
+        self._redis_url = redis_url
+        self._redis_client: RedisClient | None = None
+        self._session_store: SessionStore | None = None
+        self._llm_cache: LLMCache | None = None
         self.llm = LLMRouter()
         self.failover = ModelFailover(self.llm)
         self.plugin_loader = plugin_loader
@@ -181,6 +188,22 @@ class Gateway:
         )
         self._running = True
         started: list[str] = []
+
+        if self._redis_url:
+            logger.info("redis_url_configured_attempting_connection")
+            self._redis_client = RedisClient(url=self._redis_url)
+            is_connected = await self._redis_client.connect()
+            if is_connected:
+                logger.info("redis_connected_enabling_distributed_features")
+                self._session_store = SessionStore(self._redis_client, ttl=3600)
+                self._llm_cache = LLMCache(self._redis_client, ttl=300)
+                self.llm = LLMRouter(llm_cache=self._llm_cache)
+                self.failover = ModelFailover(self.llm)
+            else:
+                logger.warning("redis_connection_failed_falling_back_to_in_memory")
+        else:
+            logger.info("redis_not_configured_using_in_memory")
+
         try:
             await self._metrics_server.start()
             started.append("metrics")
@@ -203,6 +226,11 @@ class Gateway:
             raise
 
     async def _partial_stop(self, components: list[str]) -> None:
+        if self._redis_client:
+            try:
+                await self._redis_client.disconnect()
+            except Exception as e:
+                logger.debug("redis stop during rollback: {}", e)
         if "guardian" in components:
             try:
                 await self._guardian.stop()
@@ -249,6 +277,11 @@ class Gateway:
             await self._guardian.stop()
         except Exception as e:
             logger.warning("guardian stop error: {}", e)
+        if self._redis_client:
+            try:
+                await self._redis_client.disconnect()
+            except Exception as e:
+                logger.warning("redis disconnect error: {}", e)
         try:
             await self.tasks.stop()
         except Exception as e:

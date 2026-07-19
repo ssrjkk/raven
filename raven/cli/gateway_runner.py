@@ -81,7 +81,8 @@ def create_gateway() -> Gateway:
     else:
         db.db_path.parent.mkdir(parents=True, exist_ok=True)
     plugin_loader = PluginLoader()
-    gateway = Gateway(db, plugin_loader)
+    redis_url = settings.redis_url or None
+    gateway = Gateway(db, plugin_loader, redis_url=redis_url)
     return gateway
 
 

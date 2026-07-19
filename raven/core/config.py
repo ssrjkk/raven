@@ -121,6 +121,7 @@ class Settings(BaseSettings):
 
     metrics_port: int = 9090
     otlp_endpoint: str = ""
+    redis_url: str = ""
 
     @property
     def resolved_workspace(self) -> Path | None:

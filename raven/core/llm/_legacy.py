@@ -16,6 +16,7 @@ from loguru import logger
 from pydantic import SecretStr
 
 from raven.core._json import json
+from raven.core.cache.llm_cache import LLMCache
 from raven.core.config import settings
 from raven.core.failover import ModelFailover
 from raven.core.llm.protocol import LLMProvider, LLMResponse, ToolCall
@@ -672,12 +673,13 @@ class LLMRouter:
     _CACHE_TTL = 2.0
     _CACHE_MAXSIZE = 1024
 
-    def __init__(self, providers_config: dict[str, Any] | None = None):
+    def __init__(self, providers_config: dict[str, Any] | None = None, llm_cache: LLMCache | None = None):
         self._providers: dict[str, LLMProvider] = {}
         self._providers_config = providers_config or {}
         self._cache: OrderedDict[str, tuple[float, LLMResponse]] = OrderedDict()
         self._cache_lock = asyncio.Lock()
         self._rate_semaphore = asyncio.Semaphore(10)
+        self._llm_cache = llm_cache
 
     async def cleanup(self):
         for p in self._providers.values():
@@ -794,6 +796,12 @@ class LLMRouter:
         if cached is not None:
             metrics.inc("llm_cache_hit", {"model": model})
             return cached
+        if self._llm_cache:
+            redis_cached = await self._llm_cache.get(model, messages, tools)
+            if redis_cached is not None:
+                await self._set_cached(key, redis_cached)
+                metrics.inc("llm_cache_hit", {"model": model})
+                return redis_cached
         last_exc: Exception | None = None
         for attempt in range(max(1, settings.llm_retry_max)):
             try:
@@ -802,6 +810,8 @@ class LLMRouter:
                     with trace_llm_call(model=model):
                         resp = await provider.complete(messages, model, tools)
                 metrics.inc("llm_complete", {"model": model, "status": "ok"})
+                if self._llm_cache:
+                    await self._llm_cache.set(model, messages, resp, tools)
                 await self._set_cached(key, resp)
                 return resp
             except httpx.HTTPStatusError as e:
