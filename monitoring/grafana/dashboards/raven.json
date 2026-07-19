@@ -1,0 +1,70 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Raven Dashboard",
+    "tags": ["raven"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "title": "LLM Requests Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(raven_llm_requests_total[5m])",
+            "legendFormat": "{{provider}} - {{model}} - {{status}}"
+          }
+        ]
+      },
+      {
+        "title": "LLM Request Duration (p95)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(raven_llm_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{provider}} - {{model}}"
+          }
+        ]
+      },
+      {
+        "title": "Message Processing Latency (p95)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(raven_message_latency_seconds_bucket[5m]))",
+            "legendFormat": "{{channel}}"
+          }
+        ]
+      },
+      {
+        "title": "Tool Executions Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(raven_tool_executions_total[5m])",
+            "legendFormat": "{{tool_name}} - {{status}}"
+          }
+        ]
+      },
+      {
+        "title": "Active Connections",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "raven_active_connections",
+            "legendFormat": "{{channel}}"
+          }
+        ]
+      },
+      {
+        "title": "Error Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(raven_messages_total{status=\"error\"}[5m]) / rate(raven_messages_total[5m]) * 100",
+            "legendFormat": "Error %"
+          }
+        ]
+      }
+    ]
+  }
+}

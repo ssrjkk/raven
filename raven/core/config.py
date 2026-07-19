@@ -119,6 +119,9 @@ class Settings(BaseSettings):
 
     ghost_mode: bool = False
 
+    metrics_port: int = 9090
+    otlp_endpoint: str = ""
+
     @property
     def resolved_workspace(self) -> Path | None:
         if not self.workspace_path:

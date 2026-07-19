@@ -19,7 +19,7 @@ from raven.core._json import json
 from raven.core.config import settings
 from raven.core.failover import ModelFailover
 from raven.core.llm.protocol import LLMProvider, LLMResponse, ToolCall
-from raven.core.metrics import metrics
+from raven.core.metrics import InstrumentedLLMProvider, metrics
 from raven.core.tracing import trace_llm_call
 
 
@@ -736,7 +736,8 @@ class LLMRouter:
             from raven.core.llm.factory import LLMProviderFactory
             overrides = dict(self._providers_config.get(key, {}))
             api_key = overrides.pop("api_key", None)
-            self._providers[key] = LLMProviderFactory.create(key, api_key=api_key, **overrides)
+            raw = LLMProviderFactory.create(key, api_key=api_key, **overrides)
+            self._providers[key] = InstrumentedLLMProvider(raw, provider_name=key)
         return self._providers[key]
 
     async def complete_stream(

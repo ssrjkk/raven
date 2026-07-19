@@ -29,7 +29,8 @@ from raven.core.audit import audit_logger
 from raven.core.channel_guardian import ChannelGuardian
 from raven.core.failover import ModelFailover
 from raven.core.llm import LLMRouter
-from raven.core.metrics import metrics
+from raven.core.logging import bind_context, clear_context
+from raven.core.metrics import MetricsServer, metrics
 from raven.core.models import IncomingMessage, Message
 from raven.core.monitor.checkers.price import check_price
 from raven.core.monitor.models import Monitor, MonitorType
@@ -43,6 +44,7 @@ from raven.core.security.sandbox_policy import (
 )
 from raven.core.skills import Skill, skills_registry
 from raven.core.task_engine.store import TaskStore
+from raven.core.tracing import TracingManager, get_tracer
 
 
 class Gateway:
@@ -63,6 +65,9 @@ class Gateway:
         self._message_cb = CircuitBreaker("gateway.handle_message", failure_threshold=5, recovery_timeout=30.0)
         self._guardian = ChannelGuardian(on_channel_dead=self._on_channel_dead)
         self.mcp = MCPBridge(send_fn=self._send)
+        self._metrics_server = MetricsServer(port=settings.metrics_port)
+        self._tracing = TracingManager(service_name="raven-gateway", otlp_endpoint=settings.otlp_endpoint or None)
+        self._tracer = get_tracer("raven.gateway")
 
         self._ctxmgr: ContextWindowManager | None = None
         if settings.context_window_enabled and settings.context_window_max_tokens > 0:
@@ -175,13 +180,59 @@ class Gateway:
             "Starting gateway with {} channels, {} agents", channel_count, len(self.registry.list_agents())
         )
         self._running = True
-        await self.tasks.start()
-        await self.channels.start_all()
-        self.load_skills()
-        self._register_skill_handlers()
-        self._health.register_checks()
-        await self.mcp.start(plugin_loader=self.plugin_loader)
-        await self._guardian.start()
+        started: list[str] = []
+        try:
+            await self._metrics_server.start()
+            started.append("metrics")
+            await self._tracing.start()
+            started.append("tracing")
+            await self.tasks.start()
+            started.append("tasks")
+            await self.channels.start_all()
+            started.append("channels")
+            self.load_skills()
+            self._register_skill_handlers()
+            self._health.register_checks()
+            await self.mcp.start(plugin_loader=self.plugin_loader)
+            started.append("mcp")
+            await self._guardian.start()
+        except Exception:
+            logger.error("Gateway start failed, rolling back {} components", len(started))
+            await self._partial_stop(started)
+            self._running = False
+            raise
+
+    async def _partial_stop(self, components: list[str]) -> None:
+        if "guardian" in components:
+            try:
+                await self._guardian.stop()
+            except Exception as e:
+                logger.debug("guardian stop during rollback: {}", e)
+        if "mcp" in components:
+            try:
+                await self.mcp.stop()
+            except Exception as e:
+                logger.debug("mcp stop during rollback: {}", e)
+        if "channels" in components:
+            try:
+                await self.channels.stop_all()
+            except Exception as e:
+                logger.debug("channels stop during rollback: {}", e)
+        if "tasks" in components:
+            try:
+                await self.tasks.stop()
+            except Exception as e:
+                logger.debug("tasks stop during rollback: {}", e)
+        if "tracing" in components:
+            try:
+                await self._tracing.stop()
+            except Exception as e:
+                logger.debug("tracing stop during rollback: {}", e)
+        if "metrics" in components:
+            try:
+                await self._metrics_server.stop()
+            except Exception as e:
+                logger.debug("metrics stop during rollback: {}", e)
 
     async def stop(self):
         if not self._running:
@@ -194,10 +245,30 @@ class Gateway:
         if self._bg_tasks:
             await asyncio.gather(*self._bg_tasks, return_exceptions=True)
             self._bg_tasks.clear()
-        await self._guardian.stop()
-        await self.tasks.stop()
-        await self.mcp.stop()
-        await self.channels.stop_all()
+        try:
+            await self._guardian.stop()
+        except Exception as e:
+            logger.warning("guardian stop error: {}", e)
+        try:
+            await self.tasks.stop()
+        except Exception as e:
+            logger.warning("tasks stop error: {}", e)
+        try:
+            await self.mcp.stop()
+        except Exception as e:
+            logger.warning("mcp stop error: {}", e)
+        try:
+            await self.channels.stop_all()
+        except Exception as e:
+            logger.warning("channels stop error: {}", e)
+        try:
+            await self._tracing.stop()
+        except Exception as e:
+            logger.warning("tracing stop error: {}", e)
+        try:
+            await self._metrics_server.stop()
+        except Exception as e:
+            logger.warning("metrics stop error: {}", e)
 
     def _register_skill_handlers(self):
         async def _morning_briefing(user_id: str, channel: str) -> str:
@@ -261,27 +332,32 @@ class Gateway:
         cid = str(uuid4())[:8]
         logger.info("[{}] Incoming message from {}[{}]: {}", cid, event.channel, event.user_id, event.text[:80])
         metrics.inc("messages_received", {"channel": event.channel})
+        with self._tracer.start_as_current_span("handle_message") as span:
+            span.set_attribute("channel", event.channel)
+            span.set_attribute("user_id", event.user_id)
+            span.set_attribute("session_id", event.session_id or "")
+            span.set_attribute("message_id", cid)
 
-        if not await self._rate_limiter.check_rate_limit(event.channel, event.user_id, channel_type=event.channel):
-            metrics.inc("messages_rate_limited", {"channel": event.channel, "reason": "rate_limiter"})
-            await self._send(event.channel, event.session_id, "Please slow down.")
-            return
+            if not await self._rate_limiter.check_rate_limit(event.channel, event.user_id, channel_type=event.channel):
+                metrics.inc("messages_rate_limited", {"channel": event.channel, "reason": "rate_limiter"})
+                await self._send(event.channel, event.session_id, "Please slow down.")
+                return
 
-        if not await self._guardian.check_rate_limit(event.channel, event.user_id):
-            metrics.inc("messages_rate_limited", {"channel": event.channel, "reason": "guardian"})
-            await self._send(event.channel, event.session_id, "Please slow down.")
-            return
+            if not await self._guardian.check_rate_limit(event.channel, event.user_id):
+                metrics.inc("messages_rate_limited", {"channel": event.channel, "reason": "guardian"})
+                await self._send(event.channel, event.session_id, "Please slow down.")
+                return
 
-        try:
-            await self._message_cb.call(self._handle_message_inner, event, cid)
-        except CircuitBreakerOpenError:
-            logger.warning("[{}] Message rejected, circuit breaker open", cid)
-            metrics.inc("message_errors", {"channel": event.channel, "reason": "circuit_breaker"})
-            await self._send(event.channel, event.session_id, f"Service temporarily unavailable (ref: {cid}).")
-        except Exception as e:
-            logger.error("[{}] handle_message error: {}", cid, e)
-            metrics.inc("message_errors", {"channel": event.channel})
-            await self._send(event.channel, event.session_id, f"Sorry, an error occurred (ref: {cid}).")
+            try:
+                await self._message_cb.call(self._handle_message_inner, event, cid)
+            except CircuitBreakerOpenError:
+                logger.warning("[{}] Message rejected, circuit breaker open", cid)
+                metrics.inc("message_errors", {"channel": event.channel, "reason": "circuit_breaker"})
+                await self._send(event.channel, event.session_id, f"Service temporarily unavailable (ref: {cid}).")
+            except Exception as e:
+                logger.error("[{}] handle_message error: {}", cid, e)
+                metrics.inc("message_errors", {"channel": event.channel})
+                await self._send(event.channel, event.session_id, f"Sorry, an error occurred (ref: {cid}).")
 
     async def _bg_task(self, coro: Any) -> asyncio.Task[None]:
         await self._bg_semaphore.acquire()
@@ -296,25 +372,29 @@ class Gateway:
         return task
 
     async def _handle_message_inner(self, event: IncomingMessage, cid: str = ""):
-        logger.info("[{}] Processing message from {}[{}]", cid, event.channel, event.user_id)
-        user = await self.db.find_or_create_user(event.channel, event.user_id)
+        bind_context(channel_id=event.channel, user_id=event.user_id, session_id=event.session_id or "")
+        try:
+            logger.info("[{}] Processing message from {}[{}]", cid, event.channel, event.user_id)
+            user = await self.db.find_or_create_user(event.channel, event.user_id)
 
-        if not await self._is_user_allowed(event, user):
-            return
+            if not await self._is_user_allowed(event, user):
+                return
 
-        if not await self._enforce_sandbox_policy(event, user):
-            return
+            if not await self._enforce_sandbox_policy(event, user):
+                return
 
-        handled = await self._handle_command(event, user)
-        if handled:
-            return
+            handled = await self._handle_command(event, user)
+            if handled:
+                return
 
-        intent_handled = await self._handle_intent(event)
-        if intent_handled:
-            return
+            intent_handled = await self._handle_intent(event)
+            if intent_handled:
+                return
 
-        session_id = event.session_id or f"{event.channel}:{event.user_id}:default"
-        await self._message_processor.process(event, session_id)
+            session_id = event.session_id or f"{event.channel}:{event.user_id}:default"
+            await self._message_processor.process(event, session_id)
+        finally:
+            clear_context()
 
     def _apply_context_filter(self, event, user: dict[str, Any], text: str) -> str:
         visibility = ContextVisibility(settings.context_visibility)
@@ -485,29 +565,34 @@ class Gateway:
         return self._rbac.has_permission(role, permission)
 
     async def _send(self, channel_id: str, session_id: str, text: str, streaming: bool = False):
-        channel = await self.channels.get(channel_id)
-        if channel is None:
-            logger.warning("Channel '{}' not found for _send, session={}", channel_id, session_id)
-            return
-        if streaming:
-            send_stream = getattr(channel, "send_stream", None)
-            if send_stream:
-                try:
-                    await send_stream(session_id, text)
-                    await self._guardian.record_success(channel_id)
-                except Exception as e:
-                    logger.error("Send stream failed for channel {}: {}", channel_id, e)
-                    metrics.inc("send_errors", {"channel": channel_id})
-                    await self._guardian.record_error(channel_id)
+        with self._tracer.start_as_current_span("send") as span:
+            span.set_attribute("channel_id", channel_id)
+            span.set_attribute("session_id", session_id)
+            span.set_attribute("text_length", len(text))
+            span.set_attribute("streaming", str(streaming))
+            channel = await self.channels.get(channel_id)
+            if channel is None:
+                logger.warning("Channel '{}' not found for _send, session={}", channel_id, session_id)
                 return
-        msg = Message(session_id=session_id, channel=channel_id, role="assistant", content=text)
-        try:
-            await channel.send(session_id, msg)
-            await self._guardian.record_success(channel_id)
-        except Exception as e:
-            logger.error("Send failed for channel {}: {}", channel_id, e)
-            metrics.inc("send_errors", {"channel": channel_id})
-            await self._guardian.record_error(channel_id)
+            if streaming:
+                send_stream = getattr(channel, "send_stream", None)
+                if send_stream:
+                    try:
+                        await send_stream(session_id, text)
+                        await self._guardian.record_success(channel_id)
+                    except Exception as e:
+                        logger.error("Send stream failed for channel {}: {}", channel_id, e)
+                        metrics.inc("send_errors", {"channel": channel_id})
+                        await self._guardian.record_error(channel_id)
+                    return
+            msg = Message(session_id=session_id, channel=channel_id, role="assistant", content=text)
+            try:
+                await channel.send(session_id, msg)
+                await self._guardian.record_success(channel_id)
+            except Exception as e:
+                logger.error("Send failed for channel {}: {}", channel_id, e)
+                metrics.inc("send_errors", {"channel": channel_id})
+                await self._guardian.record_error(channel_id)
 
     def _clean_text(self, channel: str, text: str) -> str:
         if channel == "discord":

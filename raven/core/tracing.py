@@ -33,19 +33,90 @@ class _NoopSpan:
         self._name = name
 
     def set_attribute(self, key: str, value: Any) -> None:
-        logger.debug("Span[{}] set_attribute {}={}", self._name, key, value)
+        pass
 
     def set_status(self, status: Any) -> None:
-        logger.debug("Span[{}] set_status {}", self._name, status)
+        pass
 
     def end(self) -> None:
-        logger.debug("Span[{}] end", self._name)
+        pass
 
     def __enter__(self) -> _NoopSpan:
         return self
 
     def __exit__(self, *args: Any) -> None:
-        logger.debug("Span[{}] __exit__", self._name)
+        pass
+
+
+class TracingManager:
+    def __init__(
+        self,
+        service_name: str = "raven",
+        otlp_endpoint: str | None = None,
+        enable_console: bool = False,
+    ):
+        self._service_name = service_name
+        self._otlp_endpoint = otlp_endpoint
+        self._enable_console = enable_console
+        self._provider: TracerProvider | None = None
+        self._started = False
+
+    async def start(self) -> None:
+        if self._started:
+            return
+        if not HAS_OTEL:
+            logger.info("OpenTelemetry not available — tracing disabled (install opentelemetry packages)")
+            self._started = True
+            return
+        resource = Resource.create({"service.name": self._service_name})
+        self._provider = TracerProvider(resource=resource)
+        if self._enable_console:
+            self._provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+        if self._otlp_endpoint:
+            try:
+                from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
+                self._provider.add_span_processor(
+                    BatchSpanProcessor(OTLPSpanExporter(endpoint=self._otlp_endpoint, insecure=True))
+                )
+            except ImportError:
+                try:
+                    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter as HTTPExporter
+
+                    self._provider.add_span_processor(
+                        BatchSpanProcessor(HTTPExporter(endpoint=self._otlp_endpoint))
+                    )
+                except ImportError:
+                    logger.warning("OTLP exporter not installed — trace export disabled")
+        try:
+            from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
+            HTTPXClientInstrumentor().instrument()
+        except ImportError:
+            pass
+        otel_trace.set_tracer_provider(self._provider)
+        self._started = True
+        logger.info("Tracing initialized (service={}, otlp={})", self._service_name, self._otlp_endpoint or "none")
+
+    async def stop(self) -> None:
+        if self._provider:
+            self._provider.shutdown()
+        self._started = False
+
+    def get_tracer(self, name: str = "raven"):
+        if HAS_OTEL and self._started:
+            return otel_trace.get_tracer(name)
+        return _NoopTracer()
+
+
+_tracing_manager: TracingManager | None = None
+
+
+def get_tracing_manager() -> TracingManager:
+    global _tracing_manager
+    if _tracing_manager is None:
+        _tracing_manager = TracingManager()
+    return _tracing_manager
 
 
 def setup_tracing(

@@ -3,8 +3,10 @@ from __future__ import annotations
 import os
 import sys
 import uuid
+from collections.abc import Callable
 from contextvars import ContextVar
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 from pydantic import SecretStr
@@ -12,6 +14,29 @@ from pydantic import SecretStr
 from raven.core._json import json
 
 correlation_id: ContextVar[str] = ContextVar("correlation_id", default="")
+
+_CONTEXT_BINDINGS: ContextVar[dict[str, Any]] = ContextVar("context_bindings", default={})  # noqa: B039
+
+
+def bind_context(**kwargs: Any) -> None:
+    ctx = _CONTEXT_BINDINGS.get().copy()
+    ctx.update(kwargs)
+    _CONTEXT_BINDINGS.set(ctx)
+
+
+def unbind_context(*keys: str) -> None:
+    ctx = _CONTEXT_BINDINGS.get().copy()
+    for k in keys:
+        ctx.pop(k, None)
+    _CONTEXT_BINDINGS.set(ctx)
+
+
+def clear_context() -> None:
+    _CONTEXT_BINDINGS.set({})
+
+
+def get_context() -> dict[str, Any]:
+    return dict(_CONTEXT_BINDINGS.get())
 
 
 def _mask_secret_str(record):
@@ -47,6 +72,9 @@ def _serialize(record):
         "message": record["message"],
         "correlation_id": record["extra"].get("correlation_id", ""),
     }
+    ctx = get_context()
+    if ctx:
+        subset["context"] = ctx
     exception = record.get("exception")
     if exception:
         subset["exception"] = str(exception)
@@ -54,6 +82,29 @@ def _serialize(record):
     if extra:
         subset["extra"] = extra
     return json.dumps(subset, default=str)
+
+
+try:
+    import structlog as _structlog
+
+    HAS_STRUCTLOG = True
+except ImportError:
+    HAS_STRUCTLOG = False
+
+
+def _structlog_processors(json_format: bool) -> list[Callable[..., Any]]:
+    processors: list[Callable[..., Any]] = [
+        _structlog.contextvars.merge_contextvars,
+        _structlog.processors.add_log_level,
+        _structlog.processors.StackInfoRenderer(),
+        _structlog.dev.set_exc_info,
+        _structlog.processors.TimeStamper(fmt="iso"),
+    ]
+    if json_format:
+        processors.append(_structlog.processors.JSONRenderer())
+    else:
+        processors.append(_structlog.dev.ConsoleRenderer())
+    return processors
 
 
 def setup_logging(log_file: str | Path | None = None, level: str = "INFO", json_format: bool = True):
@@ -80,5 +131,15 @@ def setup_logging(log_file: str | Path | None = None, level: str = "INFO", json_
         console_fmt = "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan> - <level>{message}</level>"
 
     logger.add(sys.stderr, level=log_level, format=console_fmt, colorize=not (json_format or os.environ.get("RAVEN_JSON_LOG")), filter=_mask_secret_str)
+
+    if HAS_STRUCTLOG:
+        import logging as _stdlib_logging
+        _structlog.configure(
+            processors=_structlog_processors(json_format or bool(os.environ.get("RAVEN_JSON_LOG"))),
+            wrapper_class=_structlog.make_filtering_bound_logger(getattr(_stdlib_logging, log_level, _stdlib_logging.INFO)),
+            context_class=dict,
+            logger_factory=_structlog.PrintLoggerFactory(),
+            cache_logger_on_first_use=False,
+        )
 
     logger.info("Logging initialized (json={}, level={})", json_format, log_level)
