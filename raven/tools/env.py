@@ -6,7 +6,7 @@ from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 _SENSITIVE_KEYWORDS = frozenset({"key", "token", "secret", "password", "auth", "credential"})
 
-_SENSITIVE_VALUES = {"", "0", "false", "null", "none", "sk-or-...", "sk-ant-...", "sk-...", "change-me-in-production"}
+_SENSITIVE_VALUES = frozenset({"", "0", "false", "null", "none", "sk-or-...", "sk-ant-...", "sk-...", "change-me-in-production"})
 
 
 def _is_sensitive(name: str) -> bool:
@@ -20,14 +20,14 @@ def _safe_val(name: str, value: str) -> str:
     return value
 
 
-async def env_get(name: str) -> str:
+def env_get(name: str) -> str:
     val = os.environ.get(name)
     if val is None:
         return f"Environment variable {name} not set"
     return _safe_val(name, val)
 
 
-async def env_list() -> str:
+def env_list() -> str:
     keys = sorted(os.environ.keys())[:50]
     lines = [f"{k}={_safe_val(k, os.environ[k])}" for k in keys]
     return "\n".join(lines)

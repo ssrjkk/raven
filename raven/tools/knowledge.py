@@ -32,7 +32,7 @@ def _save_kg() -> None:
         logger.error("Failed to save knowledge graph: {}", e)
 
 
-async def knowledge_extract(text: str, source: str = "") -> str:
+def knowledge_extract(text: str, source: str = "") -> str:
     kg = _get_kg()
     doc = Document(text=text, source=source)
     try:
@@ -66,7 +66,7 @@ async def knowledge_extract(text: str, source: str = "") -> str:
     return "\n".join(lines)
 
 
-async def knowledge_search(query: str, max_depth: int = 2) -> str:
+def knowledge_search(query: str, max_depth: int = 2) -> str:
     kg = _get_kg()
     stats = kg.get_stats()
     if stats["entities"] == 0:
@@ -90,7 +90,7 @@ async def knowledge_search(query: str, max_depth: int = 2) -> str:
     return "\n".join(lines)
 
 
-async def knowledge_stats() -> str:
+def knowledge_stats() -> str:
     kg = _get_kg()
     stats = kg.get_stats()
     lines = [
@@ -111,7 +111,7 @@ async def knowledge_stats() -> str:
     return "\n".join(lines)
 
 
-async def knowledge_add_entity(name: str, type: str = "concept", metadata: str = "") -> str:
+def knowledge_add_entity(name: str, type: str = "concept", metadata: str = "") -> str:
     kg = _get_kg()
     meta: dict[str, Any] = {}
     if metadata:
@@ -128,7 +128,7 @@ async def knowledge_add_entity(name: str, type: str = "concept", metadata: str =
         return f"[error] Failed to add entity: {e}"
 
 
-async def knowledge_add_relation(source: str, target: str, type: str = "related_to") -> str:
+def knowledge_add_relation(source: str, target: str, type: str = "related_to") -> str:
     kg = _get_kg()
     source_ent = kg._find_entity(source)
     target_ent = kg._find_entity(target)
@@ -144,7 +144,7 @@ async def knowledge_add_relation(source: str, target: str, type: str = "related_
         return f"[error] Failed to add relation: {e}"
 
 
-async def knowledge_graph_vis() -> str:
+def knowledge_graph_vis() -> str:
     kg = _get_kg()
     stats = kg.get_stats()
     if stats["entities"] == 0:

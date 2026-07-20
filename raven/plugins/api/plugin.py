@@ -20,92 +20,101 @@ _PRIVATE_RANGES = [
     "fc00::/7",
 ]
 
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client(timeout: int = 30) -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(
+            timeout=httpx.Timeout(timeout),
+            follow_redirects=True,
+            limits=httpx.Limits(max_keepalive_connections=10, max_connections=50),
+        )
+    return _client
+
+
+def _is_private_ip(host: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(host)
+        for r in _PRIVATE_RANGES:
+            if ip in ipaddress.ip_network(r, strict=False):
+                return True
+    except ValueError:
+        pass
+    return False
+
 
 def _validate_url(url: str) -> tuple[str, ValueError | None]:
     parsed = urlparse(url)
     host = parsed.hostname
     if not host:
         return url, ValueError("URL missing hostname")
+    if _is_private_ip(host):
+        return url, ValueError(f"SSRF blocked: private IP {host}")
+    if host in ("localhost", "0.0.0.0"):  # noqa: S104
+        return url, ValueError(f"SSRF blocked: hostname {host}")
     try:
-        ip = ipaddress.ip_address(host)
-        for r in _PRIVATE_RANGES:
-            if ip in ipaddress.ip_network(r, strict=False):
-                return url, ValueError(f"SSRF blocked: private IP {host}")
-    except ValueError:
-        if host in ("localhost", "0.0.0.0"):  # noqa: S104
-            return url, ValueError(f"SSRF blocked: hostname {host}")
-        try:
-            addrs = socket.getaddrinfo(host, None)
-            for _family, _, _, _, sockaddr in addrs:
-                addr = sockaddr[0]
-                try:
-                    ip = ipaddress.ip_address(addr)
-                    for r in _PRIVATE_RANGES:
-                        if ip in ipaddress.ip_network(r, strict=False):
-                            return url, ValueError(f"SSRF blocked: {host} resolves to private IP {addr}")
-                except ValueError:
-                    continue
-        except (socket.gaierror, OSError) as e:
-            logger.debug("[api] DNS resolution failed for {}: {}", host, e)
+        addrs = socket.getaddrinfo(host, None)
+        for _family, _, _, _, sockaddr in addrs:
+            addr = str(sockaddr[0])
+            if _is_private_ip(addr):
+                return url, ValueError(f"SSRF blocked: {host} resolves to private IP {addr}")
+    except (socket.gaierror, OSError) as e:
+        logger.debug("[api] DNS resolution failed for {}: {}", host, e)
     return url, None
 
 
-async def http_get(url: str, headers: str = "{}", timeout: int = 30) -> str:
-    """Make an HTTP GET request. Args: url (str): Request URL, headers (str): JSON dict of headers, timeout (int): Timeout in seconds"""
+def _check_response_ssrf(resp: httpx.Response) -> str | None:
+    if resp.has_redirect_location:
+        redirect_url = str(resp.url)
+        _, err = _validate_url(redirect_url)
+        if err:
+            return f"SSRF blocked on redirect: {err}"
+    return None
+
+
+async def _request(method: str, url: str, **kwargs) -> str:
     url, err = _validate_url(url)
     if err:
-        return f"HTTP GET blocked: {err}"
+        return f"HTTP {method.upper()} blocked: {err}"
     try:
-        h = json.loads(headers) if isinstance(headers, str) else headers
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            resp = await client.get(url, headers=h)
+        h = kwargs.pop("headers", None)
+        if h and isinstance(h, str):
+            h = json.loads(h)
+        if h:
+            kwargs["headers"] = h
+        client = _get_client()
+        resp = await client.request(method, url, **kwargs)
+        ssrf_err = _check_response_ssrf(resp)
+        if ssrf_err:
+            return ssrf_err
+        if resp.is_redirect:
+            final_url = str(resp.url)
+            _, err = _validate_url(final_url)
+            if err:
+                return f"SSRF blocked on final URL: {err}"
         return _format_response(resp)
     except Exception as e:
-        return f"HTTP GET error: {e}"
+        return f"HTTP {method.upper()} error: {e}"
+
+
+async def http_get(url: str, headers: str = "{}", timeout: int = 30) -> str:
+    return await _request("GET", url, headers=headers)
 
 
 async def http_post(url: str, data: str = "{}", headers: str = "{}", timeout: int = 30) -> str:
-    """Make an HTTP POST request with JSON body. Args: url (str): Request URL, data (str): JSON body, headers (str): JSON headers, timeout (int): Timeout"""
-    url, err = _validate_url(url)
-    if err:
-        return f"HTTP POST blocked: {err}"
-    try:
-        h = json.loads(headers) if isinstance(headers, str) else headers
-        body = json.loads(data) if isinstance(data, str) else data
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            resp = await client.post(url, json=body, headers=h)
-        return _format_response(resp)
-    except Exception as e:
-        return f"HTTP POST error: {e}"
+    body = json.loads(data) if isinstance(data, str) else data
+    return await _request("POST", url, json=body, headers=headers)
 
 
 async def http_put(url: str, data: str = "{}", headers: str = "{}", timeout: int = 30) -> str:
-    """Make an HTTP PUT request with JSON body. Args: url (str): Request URL, data (str): JSON body, headers (str): JSON headers, timeout (int): Timeout"""
-    url, err = _validate_url(url)
-    if err:
-        return f"HTTP PUT blocked: {err}"
-    try:
-        h = json.loads(headers) if isinstance(headers, str) else headers
-        body = json.loads(data) if isinstance(data, str) else data
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            resp = await client.put(url, json=body, headers=h)
-        return _format_response(resp)
-    except Exception as e:
-        return f"HTTP PUT error: {e}"
+    body = json.loads(data) if isinstance(data, str) else data
+    return await _request("PUT", url, json=body, headers=headers)
 
 
 async def http_delete(url: str, headers: str = "{}", timeout: int = 30) -> str:
-    """Make an HTTP DELETE request. Args: url (str): Request URL, headers (str): JSON headers, timeout (int): Timeout"""
-    url, err = _validate_url(url)
-    if err:
-        return f"HTTP DELETE blocked: {err}"
-    try:
-        h = json.loads(headers) if isinstance(headers, str) else headers
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.delete(url, headers=h)
-        return _format_response(resp)
-    except Exception as e:
-        return f"HTTP DELETE error: {e}"
+    return await _request("DELETE", url, headers=headers, follow_redirects=False)
 
 
 def _format_response(resp: httpx.Response) -> str:

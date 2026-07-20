@@ -15,7 +15,7 @@ def _get_manager() -> CollaborationManager:
     return _manager
 
 
-async def collab_create_session(session_id: str, file_path: str) -> str:
+def collab_create_session(session_id: str, file_path: str) -> str:
     mgr = _get_manager()
     try:
         mgr.create_session(session_id, file_path)
@@ -25,7 +25,7 @@ async def collab_create_session(session_id: str, file_path: str) -> str:
         return f"[error] {e}"
 
 
-async def collab_list_sessions() -> str:
+def collab_list_sessions() -> str:
     mgr = _get_manager()
     sessions = mgr.list_sessions()
     if not sessions:
@@ -36,7 +36,7 @@ async def collab_list_sessions() -> str:
     return "\n".join(lines)
 
 
-async def collab_join_session(session_id: str, user_id: str, user_name: str) -> str:
+def collab_join_session(session_id: str, user_id: str, user_name: str) -> str:
     mgr = _get_manager()
     session = mgr.get_session(session_id)
     if not session:
@@ -45,7 +45,7 @@ async def collab_join_session(session_id: str, user_id: str, user_name: str) -> 
     return f"User '{user_name}' ({user_id}) joined session '{session_id}'."
 
 
-async def collab_leave_session(session_id: str, user_id: str) -> str:
+def collab_leave_session(session_id: str, user_id: str) -> str:
     mgr = _get_manager()
     session = mgr.get_session(session_id)
     if not session:
@@ -54,7 +54,7 @@ async def collab_leave_session(session_id: str, user_id: str) -> str:
     return f"User '{user_id}' left session '{session_id}'."
 
 
-async def collab_apply_change(session_id: str, file: str, start_line: int, start_col: int, end_line: int, end_col: int, old_text: str, new_text: str) -> str:
+def collab_apply_change(session_id: str, file: str, start_line: int, start_col: int, end_line: int, end_col: int, old_text: str, new_text: str) -> str:
     mgr = _get_manager()
     session = mgr.get_session(session_id)
     if not session:
@@ -76,7 +76,7 @@ async def collab_apply_change(session_id: str, file: str, start_line: int, start
     return "[error] Change could not be applied."
 
 
-async def collab_add_comment(session_id: str, user_id: str, file: str, line: int, text: str) -> str:
+def collab_add_comment(session_id: str, user_id: str, file: str, line: int, text: str) -> str:
     mgr = _get_manager()
     session = mgr.get_session(session_id)
     if not session:
@@ -85,7 +85,7 @@ async def collab_add_comment(session_id: str, user_id: str, file: str, line: int
     return f"Comment added (id: {comment.id})."
 
 
-async def collab_session_state(session_id: str) -> str:
+def collab_session_state(session_id: str) -> str:
     mgr = _get_manager()
     session = mgr.get_session(session_id)
     if not session:

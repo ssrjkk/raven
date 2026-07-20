@@ -34,7 +34,7 @@ class VoiceCommand(CommandHandler):
             from raven.voice import TextToSpeech
             tts = TextToSpeech()
             try:
-                output = await asyncio.get_event_loop().run_in_executor(None, tts.synthesize, text)
+                output = await asyncio.to_thread(tts.synthesize, text)
                 await gateway._send(ctx.event.channel, ctx.event.session_id, f"🔊 TTS saved to: {output}")
             except Exception as e:
                 await gateway._send(ctx.event.channel, ctx.event.session_id, f"❌ TTS failed: {e}")

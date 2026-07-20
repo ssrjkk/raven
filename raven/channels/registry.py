@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 
 from loguru import logger
@@ -43,19 +44,20 @@ class ChannelRegistry:
         canonical = self._aliases.get(name, name)
         self._instances.pop(canonical, None)
 
-    def start_all(self) -> None:
+    async def start_all(self) -> None:
         for name in self._factories:
             channel = self.get(name)
             if channel and channel not in self._instances.values():
                 self._instances[name] = channel
 
-    def stop_all(self) -> None:
-        for name, channel in self._instances.items():
-            try:
-                import asyncio
-                asyncio.ensure_future(channel.stop())
-            except Exception as exc:
-                logger.error("Failed to stop channel {}: {}", name, exc)
+    async def stop_all(self) -> None:
+        results = await asyncio.gather(
+            *[channel.stop() for name, channel in self._instances.items()],
+            return_exceptions=True,
+        )
+        for (name, _channel), result in zip(list(self._instances.items()), results, strict=False):
+            if isinstance(result, Exception):
+                logger.error("Failed to stop channel {}: {}", name, result)
         self._instances.clear()
 
 

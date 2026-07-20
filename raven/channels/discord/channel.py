@@ -44,14 +44,14 @@ def build_embed(
 class DiscordChannel(BaseChannel):
     channel_id = "discord"
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._token = get_channel_config("discord").get("bot_token", "")
         self._bot: commands.Bot | None = None
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
         self._ready = False
         self._tree: app_commands.CommandTree | None = None
 
-    async def start(self):
+    async def start(self) -> None:
         if not HAS_DISCORD:
             logger.warning("discord.py not installed, skipping Discord channel")
             return

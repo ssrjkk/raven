@@ -58,7 +58,7 @@ async def chaos_recover_all() -> str:
     return f"Recovered {len(results)} active faults."
 
 
-async def chaos_list_active() -> str:
+def chaos_list_active() -> str:
     ce = _get_chaos()
     active = ce.injector.active_faults
     if not active:
@@ -69,7 +69,7 @@ async def chaos_list_active() -> str:
     return "\n".join(lines)
 
 
-async def chaos_list_history(fault_type: str = "") -> str:
+def chaos_list_history(fault_type: str = "") -> str:
     ce = _get_chaos()
     from raven.unique.chaos_engineering import FaultType
     ft = None
@@ -123,7 +123,7 @@ async def chaos_run_experiment(name: str, faults_json: str, hypothesis: str = ""
         return f"[error] Experiment failed: {e}"
 
 
-async def chaos_experiment_report(experiment_id: str) -> str:
+def chaos_experiment_report(experiment_id: str) -> str:
     ce = _get_chaos()
     try:
         report = ce.generate_report(experiment_id)
@@ -142,7 +142,7 @@ async def chaos_experiment_report(experiment_id: str) -> str:
     )
 
 
-async def chaos_resilience_summary() -> str:
+def chaos_resilience_summary() -> str:
     ce = _get_chaos()
     summary = ce.get_resilience_summary()
     return (

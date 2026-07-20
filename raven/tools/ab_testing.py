@@ -4,7 +4,7 @@ from raven.core.ab_testing import _engine
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 
-async def ab_create(name: str, description: str, variants_json: str, metric_name: str = "conversion") -> str:
+def ab_create(name: str, description: str, variants_json: str, metric_name: str = "conversion") -> str:
     import json
     try:
         variants = json.loads(variants_json)
@@ -22,7 +22,7 @@ async def ab_create(name: str, description: str, variants_json: str, metric_name
     )
 
 
-async def ab_list() -> str:
+def ab_list() -> str:
     experiments = _engine.list_experiments()
     if not experiments:
         return "[info] No experiments yet."
@@ -32,7 +32,7 @@ async def ab_list() -> str:
     return "\n".join(lines)
 
 
-async def ab_get(experiment_id: str) -> str:
+def ab_get(experiment_id: str) -> str:
     exp = _engine.get_experiment(experiment_id)
     if not exp:
         return f"[error] Experiment '{experiment_id}' not found."
@@ -47,47 +47,47 @@ async def ab_get(experiment_id: str) -> str:
     )
 
 
-async def ab_start(experiment_id: str) -> str:
+def ab_start(experiment_id: str) -> str:
     exp = _engine.start_experiment(experiment_id)
     if not exp:
         return f"[error] Experiment '{experiment_id}' not found."
     return f"Experiment '{exp.name}' started."
 
 
-async def ab_pause(experiment_id: str) -> str:
+def ab_pause(experiment_id: str) -> str:
     exp = _engine.pause_experiment(experiment_id)
     if not exp:
         return f"[error] Experiment '{experiment_id}' not found."
     return f"Experiment '{exp.name}' paused."
 
 
-async def ab_complete(experiment_id: str) -> str:
+def ab_complete(experiment_id: str) -> str:
     exp = _engine.complete_experiment(experiment_id)
     if not exp:
         return f"[error] Experiment '{experiment_id}' not found."
     return f"Experiment '{exp.name}' completed."
 
 
-async def ab_delete(experiment_id: str) -> str:
+def ab_delete(experiment_id: str) -> str:
     ok = _engine.delete_experiment(experiment_id)
     if not ok:
         return f"[error] Experiment '{experiment_id}' not found."
     return f"Experiment '{experiment_id}' deleted."
 
 
-async def ab_assign(experiment_id: str, user_id: str = "") -> str:
+def ab_assign(experiment_id: str, user_id: str = "") -> str:
     variant = _engine.assign_variant(experiment_id, user_id)
     if variant is None:
         return f"[error] Experiment '{experiment_id}' not found or not running."
     return variant
 
 
-async def ab_record(experiment_id: str, variant: str, metric_name: str = "conversion", value: float = 1.0, user_id: str = "") -> str:
+def ab_record(experiment_id: str, variant: str, metric_name: str = "conversion", value: float = 1.0, user_id: str = "") -> str:
     _engine.record_event(experiment_id, variant, metric_name, value, user_id)
     return f"Event recorded: {experiment_id}/{variant}/{metric_name}={value}"
 
 
-async def ab_results(experiment_id: str) -> str:
+def ab_results(experiment_id: str) -> str:
     results = _engine.get_results(experiment_id)
     if not results:
         return f"[error] Experiment '{experiment_id}' not found."

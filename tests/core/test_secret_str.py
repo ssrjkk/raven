@@ -96,7 +96,7 @@ async def test_provider_cleanup_zeroes_key():
 
 @pytest.mark.asyncio
 async def test_base_llm_provider():
-    from raven.core.llm._legacy import BaseLLMProvider
+    from raven.core.llm import BaseLLMProvider
     provider = BaseLLMProvider(api_key=SecretStr("sk-base"), base_url="https://test.api")
     assert provider._get_api_key() == "sk-base"
     assert provider._api_key.get_secret_value() == "sk-base"

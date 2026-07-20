@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -58,48 +59,49 @@ def _confine_fd(path: str, flags: int) -> int:
 async def file_read(path: str, max_size: int = 50000) -> str:
     fd = _confine_fd(path, os.O_RDONLY)
     try:
-        size = os.lseek(fd, 0, os.SEEK_END)
-        os.lseek(fd, 0, os.SEEK_SET)
+        size = await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_END)
+        await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_SET)
         to_read = min(size, max_size)
-        raw = os.read(fd, to_read)
+        raw = await asyncio.to_thread(os.read, fd, to_read)
         content = raw.decode("utf-8", errors="replace")
         if size > max_size:
             content += f"\n... (truncated, {size} total bytes)"
         return content
     finally:
-        os.close(fd)
+        await asyncio.to_thread(os.close, fd)
 
 
 async def file_write(path: str, content: str) -> str:
     fd = _confine_fd(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _O_NOFOLLOW)
     try:
-        os.write(fd, content.encode("utf-8"))
+        await asyncio.to_thread(os.write, fd, content.encode("utf-8"))
     finally:
-        os.close(fd)
+        await asyncio.to_thread(os.close, fd)
     return f"Written {len(content)} bytes to {path}"
 
 
 async def file_append(path: str, content: str) -> str:
     fd = _confine_fd(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | _O_NOFOLLOW)
     try:
-        os.write(fd, content.encode("utf-8"))
+        await asyncio.to_thread(os.write, fd, content.encode("utf-8"))
     finally:
-        os.close(fd)
+        await asyncio.to_thread(os.close, fd)
     return f"Appended {len(content)} bytes to {path}"
 
 
 async def file_list(path: str = ".", pattern: str = "*") -> str:
     p = _confine(path)
-    if not p.exists():
+    exists = await asyncio.to_thread(p.exists)
+    if not exists:
         raise FileNotFoundError(f"Directory not found: {p}")
     items: list[str] = []
     depth = 0
-    for f in p.glob(pattern):
+    for f in await asyncio.to_thread(lambda: list(p.glob(pattern))):
         if len(items) >= _MAX_LIST_ITEMS:
             items.append("... (truncated, too many files)")
             break
-        kind = "📁" if f.is_dir() else "📄"
-        size = f.stat().st_size if f.is_file() else 0
+        kind = "📁" if await asyncio.to_thread(f.is_dir) else "📄"
+        size = (await asyncio.to_thread(f.stat)).st_size if await asyncio.to_thread(f.is_file) else 0
         items.append(f"{kind} {f.name}  ({size} bytes)" if size else f"{kind} {f.name}")
         try:
             rel = f.relative_to(p)
@@ -114,13 +116,15 @@ async def file_list(path: str = ".", pattern: str = "*") -> str:
 
 async def file_delete(path: str) -> str:
     p = _confine(path)
-    if p.is_file():
-        p.unlink()
+    is_file = await asyncio.to_thread(p.is_file)
+    if is_file:
+        await asyncio.to_thread(p.unlink)
         return f"Deleted {p}"
-    elif p.is_dir():
+    is_dir = await asyncio.to_thread(p.is_dir)
+    if is_dir:
         import shutil
 
-        shutil.rmtree(p)
+        await asyncio.to_thread(shutil.rmtree, p)
         return f"Deleted directory {p}"
     raise FileNotFoundError(f"Not found: {p}")
 

@@ -16,13 +16,13 @@ class SafeSecretStr(SecretStr):
     def __bool__(self) -> bool:
         return bool(self.get_secret_value())
 
-_DEFAULT_TOOLS_DENY = [
+_DEFAULT_TOOLS_DENY = (
     "group:automation",
     "group:runtime",
     "sessions_spawn",
     "shell.exec",
     "browser.control",
-]
+)
 
 
 class Settings(BaseSettings):

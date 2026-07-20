@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import aiosqlite
+from loguru import logger
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
@@ -45,6 +46,7 @@ async def db_query(query: str, db_path: str = "data/raven.db") -> str:
             result = [dict(zip(columns, row, strict=False)) for row in rows]
             return json.dumps(result, indent=2, default=str)
         except Exception as e:
+            logger.error("DB query failed: {}", e)
             return f"Query error: {e}"
 
 

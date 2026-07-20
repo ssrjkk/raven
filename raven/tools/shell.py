@@ -6,6 +6,8 @@ import platform
 import subprocess
 from typing import Any, cast
 
+from loguru import logger
+
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 _UNIX_COMMANDS = frozenset({
@@ -129,20 +131,24 @@ async def python_code(code: str, timeout: int = 15) -> str:
                     if module_name in _DENIED_MODULES:
                         return f"[denied] import of '{alias.name}' is not allowed"
 
-        last_expr: ast.Expr | None = None
-        if tree.body and isinstance(tree.body[-1], ast.Expr):
-            last_expr = cast(ast.Expr, tree.body.pop())
-        compiled = compile(tree, "<sandbox>", "exec")
+        def _run() -> str:
+            last_expr: ast.Expr | None = None
+            if tree.body and isinstance(tree.body[-1], ast.Expr):
+                last_expr = cast(ast.Expr, tree.body.pop())
+            compiled = compile(tree, "<sandbox>", "exec")
+            ns: dict[str, Any] = {"__builtins__": _RESTRICTED_BUILTINS.copy()}
+            exec(compiled, ns)  # noqa: S102
+            if last_expr:
+                compiled_expr = compile(ast.Expression(last_expr.value), "<sandbox>", "eval")
+                result = eval(compiled_expr, ns)  # noqa: S307
+                return str(result) if result is not None else "(no return value)"
+            return "(code executed, no return value)"
 
-        ns: dict[str, Any] = {"__builtins__": _RESTRICTED_BUILTINS.copy()}
-        exec(compiled, ns)  # noqa: S102
-
-        if last_expr:
-            compiled_expr = compile(ast.Expression(last_expr.value), "<sandbox>", "eval")
-            result = eval(compiled_expr, ns)  # noqa: S307
-            return str(result) if result is not None else "(no return value)"
-        return "(code executed, no return value)"
+        return await asyncio.to_thread(_run)
+    except SyntaxError as e:
+        return f"Syntax Error: {e}"
     except Exception as e:
+        logger.warning("Python sandbox execution failed: {}", e)
         return f"Error: {e}"
 
 

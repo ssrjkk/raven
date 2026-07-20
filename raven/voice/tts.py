@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 import tempfile
@@ -18,6 +19,9 @@ class TTSProvider(StrEnum):
     EDGETTS = "edge"
 
 
+_ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+
+
 class TTSConfig:
     def __init__(
         self,
@@ -27,18 +31,17 @@ class TTSConfig:
         speed: float = 1.0,
         api_key: str = "",
         cache_dir: str = "",
-    ):
+    ) -> None:
         self.provider = provider
         self.voice = voice
         self.model = model
         self.speed = speed
-        self.api_key = api_key or os.getenv("ELEVENLABS_API_KEY", "")
+        self.api_key = api_key or _ELEVENLABS_API_KEY
         self.cache_dir = Path(cache_dir or tempfile.gettempdir()) / "raven_tts_cache"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
 
 class TextToSpeech:
-    def __init__(self, config: TTSConfig | None = None):
+    def __init__(self, config: TTSConfig | None = None) -> None:
         self.config = config or TTSConfig()
 
     def synthesize(self, text: str, output_path: str = "") -> str:
@@ -141,11 +144,14 @@ class TextToSpeech:
         except ImportError:
             logger.warning("edge-tts not installed, falling back to system TTS")
             return self._synthesize_system(text, output_path)
-        import asyncio
 
         out = output_path or str(self.config.cache_dir / f"{uuid4().hex}.mp3")
         voice = self.config.voice or "en-US-AriaNeural"
-        asyncio.run(edge_tts.Communicate(text, voice).save(out))
+        _loop = asyncio.new_event_loop()
+        try:
+            _loop.run_until_complete(edge_tts.Communicate(text, voice).save(out))
+        finally:
+            _loop.close()
         logger.info("Edge TTS saved to {}", out)
         return out
 

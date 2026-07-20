@@ -48,7 +48,7 @@ def create_voice_router() -> APIRouter:
     router = APIRouter(prefix="/api/voice", tags=["voice"])
 
     @router.post("/enroll")
-    async def enroll(req: EnrollRequest):
+    def enroll(req: EnrollRequest):
         vb = _get_vb()
         try:
             result = vb.enroll(req.speaker_id, req.audio_samples, req.sample_rate)
@@ -66,7 +66,7 @@ def create_voice_router() -> APIRouter:
             raise HTTPException(500, str(e)) from e
 
     @router.post("/verify")
-    async def verify(req: VerifyRequest):
+    def verify(req: VerifyRequest):
         vb = _get_vb()
         try:
             result = vb.verify(req.speaker_id, req.audio, req.sample_rate, req.anti_spoof)
@@ -86,7 +86,7 @@ def create_voice_router() -> APIRouter:
             raise HTTPException(500, str(e)) from e
 
     @router.post("/identify")
-    async def identify(req: IdentifyRequest):
+    def identify(req: IdentifyRequest):
         vb = _get_vb()
         try:
             results = vb.identify(req.audio, req.sample_rate, req.top_k)
@@ -108,24 +108,24 @@ def create_voice_router() -> APIRouter:
             raise HTTPException(500, str(e)) from e
 
     @router.get("/speakers")
-    async def list_speakers():
+    def list_speakers():
         vb = _get_vb()
         return {"speakers": vb.list_speakers()}
 
     @router.post("/remove")
-    async def remove_speaker(req: RemoveRequest):
+    def remove_speaker(req: RemoveRequest):
         vb = _get_vb()
         if vb.remove_speaker(req.speaker_id):
             return {"success": True, "speaker_id": req.speaker_id}
         raise HTTPException(404, f"Speaker '{req.speaker_id}' not found")
 
     @router.get("/stats")
-    async def stats():
+    def stats():
         vb = _get_vb()
         return vb.get_stats()
 
     @router.post("/continuous_start")
-    async def continuous_start(req: ContinuousAuthRequest):
+    def continuous_start(req: ContinuousAuthRequest):
         vb = _get_vb()
         try:
             vb.start_continuous_auth(req.speaker_id, req.interval_sec)
@@ -137,13 +137,13 @@ def create_voice_router() -> APIRouter:
             raise HTTPException(500, str(e)) from e
 
     @router.post("/continuous_stop")
-    async def continuous_stop(req: RemoveRequest):
+    def continuous_stop(req: RemoveRequest):
         vb = _get_vb()
         vb.stop_continuous_auth(req.speaker_id)
         return {"success": True, "speaker_id": req.speaker_id}
 
     @router.get("/continuous_status/{speaker_id}")
-    async def continuous_status(speaker_id: str):
+    def continuous_status(speaker_id: str):
         vb = _get_vb()
         status = vb.get_continuous_auth_status(speaker_id)
         if status is None:

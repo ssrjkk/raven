@@ -30,7 +30,7 @@ def create_ab_testing_router() -> APIRouter:
     router = APIRouter(prefix="/api/ab", tags=["ab_testing"])
 
     @router.post("/experiments")
-    async def create_experiment(req: CreateRequest):
+    def create_experiment(req: CreateRequest):
         try:
             variants = json.loads(req.variants_json)
         except json.JSONDecodeError as e:
@@ -47,7 +47,7 @@ def create_ab_testing_router() -> APIRouter:
         }
 
     @router.get("/experiments")
-    async def list_experiments():
+    def list_experiments():
         experiments = _engine.list_experiments()
         return {
             "experiments": [
@@ -64,7 +64,7 @@ def create_ab_testing_router() -> APIRouter:
         }
 
     @router.get("/experiments/{experiment_id}")
-    async def get_experiment(experiment_id: str):
+    def get_experiment(experiment_id: str):
         exp = _engine.get_experiment(experiment_id)
         if not exp:
             raise HTTPException(404, f"Experiment '{experiment_id}' not found")
@@ -80,7 +80,7 @@ def create_ab_testing_router() -> APIRouter:
         }
 
     @router.post("/experiments/{experiment_id}/status")
-    async def update_status(experiment_id: str, req: UpdateRequest):
+    def update_status(experiment_id: str, req: UpdateRequest):
         action = req.status
         actions = {
             "running": _engine.start_experiment,
@@ -96,14 +96,14 @@ def create_ab_testing_router() -> APIRouter:
         return {"id": exp.id, "status": exp.status}
 
     @router.delete("/experiments/{experiment_id}")
-    async def delete_experiment(experiment_id: str):
+    def delete_experiment(experiment_id: str):
         ok = _engine.delete_experiment(experiment_id)
         if not ok:
             raise HTTPException(404, f"Experiment '{experiment_id}' not found")
         return {"ok": True}
 
     @router.post("/experiments/{experiment_id}/assign")
-    async def assign_variant(experiment_id: str, body: dict[str, str] | None = None):
+    def assign_variant(experiment_id: str, body: dict[str, str] | None = None):
         body = body or {}
         variant = _engine.assign_variant(experiment_id, body.get("user_id", ""))
         if variant is None:
@@ -111,7 +111,7 @@ def create_ab_testing_router() -> APIRouter:
         return {"variant": variant}
 
     @router.post("/experiments/{experiment_id}/record")
-    async def record_event(experiment_id: str, req: RecordRequest):
+    def record_event(experiment_id: str, req: RecordRequest):
         exp = _engine.get_experiment(experiment_id)
         if not exp:
             raise HTTPException(404, f"Experiment '{experiment_id}' not found")
@@ -119,7 +119,7 @@ def create_ab_testing_router() -> APIRouter:
         return {"ok": True}
 
     @router.get("/experiments/{experiment_id}/results")
-    async def get_results(experiment_id: str):
+    def get_results(experiment_id: str):
         results = _engine.get_results(experiment_id)
         if not results:
             raise HTTPException(404, f"Experiment '{experiment_id}' not found")

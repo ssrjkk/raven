@@ -9,6 +9,11 @@ from loguru import logger
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
+_GOOGLE_SEARCH_API_KEY = os.environ.get("GOOGLE_SEARCH_API_KEY", "")
+_GOOGLE_CSE_ID = os.environ.get("GOOGLE_CSE_ID", "")
+_BRAVE_SEARCH_API_KEY = os.environ.get("BRAVE_SEARCH_API_KEY", "")
+_BING_SEARCH_API_KEY = os.environ.get("BING_SEARCH_API_KEY", "")
+
 
 async def _duckduckgo(query: str, max_results: int = 5) -> list[dict[str, Any]]:
     async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
@@ -29,8 +34,8 @@ async def _duckduckgo(query: str, max_results: int = 5) -> list[dict[str, Any]]:
 
 
 async def _google(query: str, max_results: int = 5) -> list[dict[str, Any]]:
-    api_key = os.environ.get("GOOGLE_SEARCH_API_KEY", "")
-    cse_id = os.environ.get("GOOGLE_CSE_ID", "")
+    api_key = _GOOGLE_SEARCH_API_KEY
+    cse_id = _GOOGLE_CSE_ID
     if not api_key or not cse_id:
         raise ValueError("GOOGLE_SEARCH_API_KEY and GOOGLE_CSE_ID env vars required")
     async with httpx.AsyncClient(timeout=10) as client:
@@ -47,7 +52,7 @@ async def _google(query: str, max_results: int = 5) -> list[dict[str, Any]]:
 
 
 async def _brave(query: str, max_results: int = 5) -> list[dict[str, Any]]:
-    api_key = os.environ.get("BRAVE_SEARCH_API_KEY", "")
+    api_key = _BRAVE_SEARCH_API_KEY
     if not api_key:
         raise ValueError("BRAVE_SEARCH_API_KEY env var required")
     async with httpx.AsyncClient(timeout=10) as client:
@@ -65,7 +70,7 @@ async def _brave(query: str, max_results: int = 5) -> list[dict[str, Any]]:
 
 
 async def _bing(query: str, max_results: int = 5) -> list[dict[str, Any]]:
-    api_key = os.environ.get("BING_SEARCH_API_KEY", "")
+    api_key = _BING_SEARCH_API_KEY
     if not api_key:
         raise ValueError("BING_SEARCH_API_KEY env var required")
     async with httpx.AsyncClient(timeout=10) as client:

@@ -23,24 +23,22 @@ async def _ensure_db():
         try:
             import chromadb
 
-            _client = chromadb.Client()
-            _collection = _client.get_or_create_collection("raven_memory")
+            _client = await asyncio.to_thread(chromadb.Client)
+            _collection = await asyncio.to_thread(_client.get_or_create_collection, "raven_memory")
             return _collection
         except Exception as e:
             logger.warning("ChromaDB not available, using fallback: {}", e)
             return None
 
 
-# In-memory fallback
 _fallback: dict[str, list[dict[str, Any]]] = {}
 
 
 async def remember(key: str, value: str) -> str:
-    """Store a value in memory. Args: key (str): Memory key, value (str): Value to store"""
     collection = await _ensure_db()
     if collection:
         try:
-            collection.upsert(documents=[value], ids=[key])
+            await asyncio.to_thread(collection.upsert, documents=[value], ids=[key])
             return f"Remembered '{key}'"
         except Exception as e:
             logger.warning("[memory] ChromaDB upsert failed: {}", e)
@@ -49,11 +47,10 @@ async def remember(key: str, value: str) -> str:
 
 
 async def recall(key: str) -> str:
-    """Retrieve a value from memory. Args: key (str): Memory key"""
     collection = await _ensure_db()
     if collection:
         try:
-            result = collection.get(ids=[key])
+            result = await asyncio.to_thread(collection.get, ids=[key])
             docs = result.get("documents", [])
             if docs and isinstance(docs[0], str):
                 return docs[0][:2000]
@@ -68,11 +65,10 @@ async def recall(key: str) -> str:
 
 
 async def forget(key: str) -> str:
-    """Delete a memory. Args: key (str): Memory key to forget"""
     collection = await _ensure_db()
     if collection:
         try:
-            collection.delete(ids=[key])
+            await asyncio.to_thread(collection.delete, ids=[key])
         except Exception as e:
             logger.warning("[memory] ChromaDB delete failed: {}", e)
     _fallback.pop(key, None)
@@ -80,11 +76,10 @@ async def forget(key: str) -> str:
 
 
 async def search_memory(query: str, n_results: int = 5) -> str:
-    """Search memory by semantic similarity. Args: query (str): Search query, n_results (int): Max results"""
     collection = await _ensure_db()
     if collection:
         try:
-            results = collection.query(query_texts=[query], n_results=n_results)
+            results = await asyncio.to_thread(collection.query, query_texts=[query], n_results=n_results)
             docs = results.get("documents", [[]])[0]
             ids = results.get("ids", [[]])[0]
             if docs:
@@ -96,11 +91,10 @@ async def search_memory(query: str, n_results: int = 5) -> str:
 
 
 async def list_keys() -> str:
-    """List all memory keys"""
     collection = await _ensure_db()
     if collection:
         try:
-            all_data = collection.get()
+            all_data = await asyncio.to_thread(collection.get)
             ids = all_data.get("ids", [])
             if ids:
                 return "Memory keys:\n" + "\n".join(f"- `{k}`" for k in ids)
@@ -112,19 +106,16 @@ async def list_keys() -> str:
 
 
 async def store_knowledge(topic: str, content: str) -> str:
-    """Store structured knowledge about a topic. Args: topic (str): Topic name, content (str): Knowledge content"""
     doc = f"# {topic}\n{content}"
     await remember(f"knowledge:{topic}", doc)
     return f"Stored knowledge about '{topic}'"
 
 
 async def retrieve_knowledge(topic: str) -> str:
-    """Retrieve stored knowledge about a topic. Args: topic (str): Topic name"""
     return await recall(f"knowledge:{topic}")
 
 
 async def run_code_and_remember(code: str, key: str) -> str:
-    """Run Python code and remember its result. Args: code (str): Python code, key (str): Key to store under"""
     result = await code_run_python(code)
     await remember(key, result)
     return f"Stored result under '{key}':\n{result[:500]}"

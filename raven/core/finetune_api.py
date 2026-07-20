@@ -37,11 +37,11 @@ def create_finetune_router() -> APIRouter:
     router = APIRouter(prefix="/api/finetune", tags=["finetune"])
 
     @router.get("/dataset/stats")
-    async def dataset_stats():
+    def dataset_stats():
         return _builder.stats()
 
     @router.post("/dataset/conversation")
-    async def add_conversation(req: AddConversationRequest):
+    def add_conversation(req: AddConversationRequest):
         from raven.unique.fine_tuning import ConversationExample
         try:
             import json
@@ -53,13 +53,13 @@ def create_finetune_router() -> APIRouter:
         return {"success": True, "total": _builder.stats()["conversations"]}
 
     @router.post("/dataset/code")
-    async def add_code(req: AddCodeRequest):
+    def add_code(req: AddCodeRequest):
         from raven.unique.fine_tuning import CodeExample
         _builder.add_code(CodeExample(code=req.code, language=req.language, description=req.description))
         return {"success": True, "total": _builder.stats()["code_samples"]}
 
     @router.post("/model/load")
-    async def load_model(req: LoadModelRequest):
+    def load_model(req: LoadModelRequest):
         _pipeline.config.model_type = req.model_type
         _pipeline.config.use_lora = req.use_lora
         _pipeline.config.use_qlora = req.use_qlora
@@ -71,7 +71,7 @@ def create_finetune_router() -> APIRouter:
             raise HTTPException(500, str(e)) from e
 
     @router.post("/train")
-    async def start_training(req: StartTrainingRequest):
+    def start_training(req: StartTrainingRequest):
         _pipeline.config.num_epochs = req.epochs
         _pipeline.config.learning_rate = req.learning_rate
         _pipeline.config.batch_size = req.batch_size
@@ -94,11 +94,11 @@ def create_finetune_router() -> APIRouter:
             raise HTTPException(500, str(e)) from e
 
     @router.get("/model/info")
-    async def model_info():
+    def model_info():
         return _pipeline.get_model_info()
 
     @router.get("/checkpoints")
-    async def list_checkpoints():
+    def list_checkpoints():
         cps = _pipeline.list_checkpoints()
         return {"checkpoints": [{"step": cp.step, "epoch": cp.epoch, "path": str(cp.path)} for cp in cps]}
 

@@ -49,7 +49,7 @@ def create_rag_router() -> APIRouter:
     router = APIRouter(prefix="/api/rag", tags=["rag"])
 
     @router.post("/index")
-    async def index_text(req: IndexTextRequest):
+    def index_text(req: IndexTextRequest):
         rag = _get_rag()
         meta: dict[str, Any] = {}
         if req.metadata:
@@ -64,7 +64,7 @@ def create_rag_router() -> APIRouter:
         return {"document_id": req.document_id, "chunks": len(chunk_ids)}
 
     @router.post("/search")
-    async def search(req: SearchRequest):
+    def search(req: SearchRequest):
         rag = _get_rag()
         try:
             results = rag.search(req.query, top_k=req.top_k, include_images=req.include_images)
@@ -91,12 +91,12 @@ def create_rag_router() -> APIRouter:
         }
 
     @router.get("/stats")
-    async def stats():
+    def stats():
         rag = _get_rag()
         return rag.get_stats()
 
     @router.post("/remove")
-    async def remove_document(req: RemoveDocumentRequest):
+    def remove_document(req: RemoveDocumentRequest):
         rag = _get_rag()
         if rag.remove_document(req.document_id):
             _save_rag(rag)

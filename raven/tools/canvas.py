@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import html
 from typing import Any
 
@@ -20,7 +21,7 @@ def _sanitize_url(url: str) -> str:
     return ""
 
 
-async def canvas_render(components: list[dict[str, Any]]) -> str:
+def canvas_render(components: list[dict[str, Any]]) -> str:
     rendered = []
     for comp in components:
         ctype = comp.get("type", "text")
@@ -62,10 +63,11 @@ async def canvas_show(path: str, width: int = 800, height: int = 600) -> str:
         import tempfile
         import webbrowser
         from pathlib import Path
-        html = Path(path).read_text(encoding="utf-8")
-        tmp = Path(tempfile.mkdtemp()) / "canvas.html"
-        tmp.write_text(html, encoding="utf-8")
-        webbrowser.open(tmp.as_uri())
+        content = await asyncio.to_thread(lambda: Path(path).read_text(encoding="utf-8"))
+        tmp_dir = await asyncio.to_thread(tempfile.mkdtemp)
+        tmp = Path(tmp_dir) / "canvas.html"
+        await asyncio.to_thread(lambda: tmp.write_text(content, encoding="utf-8"))
+        await asyncio.to_thread(webbrowser.open, tmp.as_uri())
         return f"Canvas opened in browser: {tmp}"
     except Exception as exc:
         return f"[error] canvas_show: {exc}"
@@ -75,12 +77,12 @@ async def canvas_save(content: str, path: str, fmt: str = "md") -> str:
     from pathlib import Path
     try:
         p = Path(path)
-        p.parent.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(p.parent.mkdir, parents=True, exist_ok=True)
         if fmt == "html":
-            html = f"<!DOCTYPE html><html><body>{content}</body></html>"
-            p.write_text(html, encoding="utf-8")
+            text = f"<!DOCTYPE html><html><body>{content}</body></html>"
+            await asyncio.to_thread(lambda: p.write_text(text, encoding="utf-8"))
         else:
-            p.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(lambda: p.write_text(content, encoding="utf-8"))
         return f"Canvas saved to {p} ({len(content)} bytes)"
     except Exception as exc:
         return f"[error] canvas_save: {exc}"

@@ -73,7 +73,7 @@ async def run_python(code: str, timeout: int = 30) -> str:
                 shutil.rmtree(tmpdir)
 
 
-async def review_code(code: str, language: str = "auto") -> str:
+def review_code(code: str, language: str = "auto") -> str:
     """Review code for bugs, style issues, and improvements. Args: code (str): Code to review, language (str): Programming language"""
     issues = []
     if len(code) > 500:
@@ -94,7 +94,7 @@ async def review_code(code: str, language: str = "auto") -> str:
     return f"## Code Review — {language}\n\n" + "\n".join(issues) + f"\n\n```\n{code[:1500]}\n```"
 
 
-async def suggest_edit(code: str, goal: str) -> str:
+def suggest_edit(code: str, goal: str) -> str:
     """Suggest an edit to achieve a goal. Args: code (str): Original code, goal (str): What the edit should achieve"""
     import ast
 
@@ -138,7 +138,7 @@ async def suggest_edit(code: str, goal: str) -> str:
     )
 
 
-async def explain_code(code: str, detail: str = "high") -> str:
+def explain_code(code: str, detail: str = "high") -> str:
     """Explain what code does. Args: code (str): Code to explain, detail (str): 'high' for overview or 'low' for line-by-line"""
     import ast
 
@@ -178,7 +178,7 @@ async def explain_code(code: str, detail: str = "high") -> str:
     return f"## Code Explanation ({detail} level)\n\n{section}\n\n```\n{code[:2000]}\n```"
 
 
-async def find_issues(code: str) -> str:
+def find_issues(code: str) -> str:
     """Find potential bugs, vulnerabilities, and anti-patterns. Args: code (str): Code to analyze"""
     import ast
 

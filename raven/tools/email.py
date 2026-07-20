@@ -108,7 +108,7 @@ async def email_inbox(limit: int = 10) -> str:
         return f"[error] Failed to read inbox: {e}"
 
 
-async def email_config_status() -> str:
+def email_config_status() -> str:
     config = _get_config()
     parts = [
         "Email Configuration:",

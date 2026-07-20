@@ -155,7 +155,7 @@ class VoiceConversation:
     async def speak(self, text: str) -> None:
         logger.info("TTS: {}", text[:100])
         try:
-            audio_file = self.tts.synthesize(text)
+            audio_file = await asyncio.to_thread(self.tts.synthesize, text)
             if audio_file and Path(audio_file).exists():
                 import wave
                 with wave.open(audio_file, "rb") as wf:

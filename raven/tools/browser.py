@@ -5,6 +5,7 @@ import base64
 import ipaddress
 import json
 import socket
+from typing import Any
 from urllib.parse import urlparse
 
 from loguru import logger
@@ -35,7 +36,7 @@ def _validate_url(url: str) -> None:
         try:
             addrs = socket.getaddrinfo(host, None)
             for _family, _type, _proto, _cname, sockaddr in addrs:
-                addr = sockaddr[0]
+                addr = str(sockaddr[0])
                 try:
                     ip = ipaddress.ip_address(addr)
                     for r in _PRIVATE_RANGES:
@@ -47,7 +48,7 @@ def _validate_url(url: str) -> None:
             logger.warning("SSRF guard: DNS resolution failed for {}", host)
 
 
-async def _get_playwright():
+async def _get_playwright() -> Any | None:
     global _browser_instance, _browser_context
     async with _lock:
         if _browser_context is not None:
@@ -62,7 +63,7 @@ async def _get_playwright():
             return None
 
 
-async def _close_playwright():
+async def _close_playwright() -> None:
     global _browser_instance, _browser_context
     async with _lock:
         if _browser_instance:
@@ -92,7 +93,7 @@ async def _get_agent() -> BrowserAgent | None:
             return None
 
 
-async def _close_agent():
+async def _close_agent() -> None:
     global _agent
     async with _agent_lock:
         if _agent:
@@ -102,7 +103,7 @@ async def _close_agent():
 
 async def browser_open(url: str) -> str:
     import webbrowser
-    webbrowser.open(url)
+    await asyncio.to_thread(webbrowser.open, url)
     return f"Opened {url} in default browser"
 
 

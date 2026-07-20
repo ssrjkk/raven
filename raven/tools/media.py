@@ -13,6 +13,9 @@ from loguru import logger
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 from raven.tools.file import _confine
 
+_OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+_REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN", "")
+
 
 async def image_generate(prompt: str, size: str = "1024x1024", quality: str = "standard", n: int = 1, model: str = "dall-e-3") -> str:
     if model.startswith("dall-e"):
@@ -24,7 +27,7 @@ async def image_generate(prompt: str, size: str = "1024x1024", quality: str = "s
 
 
 async def _image_generate_dalle(prompt: str, size: str, quality: str, n: int) -> str:
-    api_key = os.environ.get("OPENAI_API_KEY", "")
+    api_key = _OPENAI_API_KEY
     if not api_key:
         return "[error] OPENAI_API_KEY env var required for DALL-E"
     try:
@@ -50,7 +53,7 @@ async def _image_generate_dalle(prompt: str, size: str, quality: str, n: int) ->
 
 
 async def _image_generate_sd(prompt: str, size: str) -> str:
-    api_token = os.environ.get("REPLICATE_API_TOKEN", "")
+    api_token = _REPLICATE_API_TOKEN
     if not api_token:
         return "[error] REPLICATE_API_TOKEN env var required for Stable Diffusion (via Replicate)"
     width, height = 1024, 1024
@@ -117,80 +120,84 @@ async def image_edit(
         return f"[error] Pillow not available: {e}"
     try:
         p = _confine(filepath)
-        src: Any = Image.open(p)
-        orig_size = src.size
-        orig_mode = src.mode
-        operations: list[str] = []
 
-        if crop:
-            vals = [x.strip() for x in crop.split(",")]
-            if len(vals) == 4:
-                left, upper, right, lower = int(vals[0]), int(vals[1]), int(vals[2]), int(vals[3])
-                if right > left and lower > upper:
-                    src = src.crop((left, upper, right, lower))
-                    operations.append(f"crop({crop})")
+        def _process() -> str:
+            src: Any = Image.open(p)
+            orig_size = src.size
+            orig_mode = src.mode
+            operations: list[str] = []
+
+            if crop:
+                vals = [x.strip() for x in crop.split(",")]
+                if len(vals) == 4:
+                    left, upper, right, lower = int(vals[0]), int(vals[1]), int(vals[2]), int(vals[3])
+                    if right > left and lower > upper:
+                        src = src.crop((left, upper, right, lower))
+                        operations.append(f"crop({crop})")
+                    else:
+                        return f"[error] Invalid crop rectangle: {crop} (right must be > left, lower must be > upper)"
                 else:
-                    return f"[error] Invalid crop rectangle: {crop} (right must be > left, lower must be > upper)"
+                    return f"[error] crop expects 4 comma-separated values (left,upper,right,lower), got {len(vals)}"
+
+            if resize:
+                vals = resize.lower().split("x")
+                if len(vals) == 2 and vals[0].strip().isdigit() and vals[1].strip().isdigit():
+                    w, h = int(vals[0]), int(vals[1])
+                    src = src.resize((w, h), Image.Resampling.LANCZOS)
+                    operations.append(f"resize({resize})")
+                else:
+                    return f"[error] resize expects WxH format (e.g. 800x600), got '{resize}'"
+
+            if rotate:
+                src = src.rotate(rotate, expand=True)
+                operations.append(f"rotate({rotate})")
+
+            if flip:
+                if flip == "horizontal":
+                    src = src.transpose(Image.FLIP_LEFT_RIGHT)  # type: ignore[attr-defined]
+                    operations.append("flip(horizontal)")
+                elif flip == "vertical":
+                    src = src.transpose(Image.FLIP_TOP_BOTTOM)  # type: ignore[attr-defined]
+                    operations.append("flip(vertical)")
+                else:
+                    return f"[error] flip expects 'horizontal' or 'vertical', got '{flip}'"
+
+            if format:
+                fmt = format.upper()
+                if fmt not in ("JPEG", "PNG", "GIF", "WEBP", "BMP", "TIFF"):
+                    return f"[error] Unsupported output format: {format}"
+                if fmt == "JPEG" and src.mode in ("RGBA", "P"):
+                    src = src.convert("RGB")
             else:
-                return f"[error] crop expects 4 comma-separated values (left,upper,right,lower), got {len(vals)}"
+                fmt = src.format or "PNG"
 
-        if resize:
-            vals = resize.lower().split("x")
-            if len(vals) == 2 and vals[0].strip().isdigit() and vals[1].strip().isdigit():
-                w, h = int(vals[0]), int(vals[1])
-                src = src.resize((w, h), Image.Resampling.LANCZOS)
-                operations.append(f"resize({resize})")
+            if output:
+                out_path = Path(output)
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                src.save(out_path, format=fmt, quality=quality)
             else:
-                return f"[error] resize expects WxH format (e.g. 800x600), got '{resize}'"
+                suffix = fmt.lower()
+                if suffix == "jpeg":
+                    suffix = "jpg"
+                out_path = Path(filepath).parent / f"{Path(filepath).stem}_edited.{suffix}"
+                src.save(out_path, format=fmt, quality=quality)
 
-        if rotate:
-            src = src.rotate(rotate, expand=True)
-            operations.append(f"rotate({rotate})")
+            buf = BytesIO()
+            src.save(buf, format=fmt, quality=quality)
+            b64 = base64.b64encode(buf.getvalue()).decode()
 
-        if flip:
-            if flip == "horizontal":
-                src = src.transpose(Image.FLIP_LEFT_RIGHT)  # type: ignore[attr-defined]
-                operations.append("flip(horizontal)")
-            elif flip == "vertical":
-                src = src.transpose(Image.FLIP_TOP_BOTTOM)  # type: ignore[attr-defined]
-                operations.append("flip(vertical)")
-            else:
-                return f"[error] flip expects 'horizontal' or 'vertical', got '{flip}'"
+            lines = [
+                f"Image edited: {Path(filepath).name} \u2192 {out_path.name}",
+                f"- Original: {orig_size[0]}x{orig_size[1]}, {orig_mode}",
+                f"- Final: {src.size[0]}x{src.size[1]}, {src.mode}",
+            ]
+            if operations:
+                lines.append(f"- Operations: {', '.join(operations)}")
+            lines.append(f"- Size: {buf.tell()} bytes")
+            lines.append(f"![{out_path.name}](data:image/{fmt.lower()};base64,{b64})")
+            return "\n".join(lines)
 
-        if format:
-            fmt = format.upper()
-            if fmt not in ("JPEG", "PNG", "GIF", "WEBP", "BMP", "TIFF"):
-                return f"[error] Unsupported output format: {format}"
-            if fmt == "JPEG" and src.mode in ("RGBA", "P"):
-                src = src.convert("RGB")
-        else:
-            fmt = src.format or "PNG"
-
-        if output:
-            out_path = Path(output)
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            src.save(out_path, format=fmt, quality=quality)
-        else:
-            suffix = fmt.lower()
-            if suffix == "jpeg":
-                suffix = "jpg"
-            out_path = Path(filepath).parent / f"{Path(filepath).stem}_edited.{suffix}"
-            src.save(out_path, format=fmt, quality=quality)
-
-        buf = BytesIO()
-        src.save(buf, format=fmt, quality=quality)
-        b64 = base64.b64encode(buf.getvalue()).decode()
-
-        lines = [
-            f"Image edited: {Path(filepath).name} \u2192 {out_path.name}",
-            f"- Original: {orig_size[0]}x{orig_size[1]}, {orig_mode}",
-            f"- Final: {src.size[0]}x{src.size[1]}, {src.mode}",
-        ]
-        if operations:
-            lines.append(f"- Operations: {', '.join(operations)}")
-        lines.append(f"- Size: {buf.tell()} bytes")
-        lines.append(f"![{out_path.name}](data:image/{fmt.lower()};base64,{b64})")
-        return "\n".join(lines)
+        return await asyncio.to_thread(_process)
     except Exception as e:
         logger.error("Image edit failed: {}", e)
         return f"[error] Image processing failed: {e}"
@@ -198,19 +205,20 @@ async def image_edit(
 
 async def document_parse(filepath: str, pages: str = "") -> str:
     path = _confine(filepath)
-    if not path.exists():
+    exists = await asyncio.to_thread(path.exists)
+    if not exists:
         return f"[error] File not found: {filepath}"
 
     ext = path.suffix.lower()
     try:
         if ext == ".pdf":
-            return _parse_pdf(path, pages)
+            return await asyncio.to_thread(_parse_pdf, path, pages)
         elif ext == ".docx":
-            return _parse_docx(path)
+            return await asyncio.to_thread(_parse_docx, path)
         elif ext == ".pptx":
-            return _parse_pptx(path)
+            return await asyncio.to_thread(_parse_pptx, path)
         elif ext in (".xlsx", ".xls"):
-            return _parse_xlsx(path)
+            return await asyncio.to_thread(_parse_xlsx, path)
         else:
             return f"[error] Unsupported format: {ext} (supported: .pdf, .docx, .pptx, .xlsx)"
     except ImportError as e:
@@ -344,7 +352,8 @@ async def video_info(filepath: str) -> str:
 
 async def video_thumbnail(filepath: str, time_sec: float = 1.0, size: str = "320x240", output: str = "") -> str:
     path = _confine(filepath)
-    if not path.exists():
+    exists = await asyncio.to_thread(path.exists)
+    if not exists:
         return f"[error] File not found: {filepath}"
     try:
         import ffmpeg
@@ -355,10 +364,10 @@ async def video_thumbnail(filepath: str, time_sec: float = 1.0, size: str = "320
         out_path = Path(output)
     else:
         out_path = path.parent / f"{path.stem}_thumb.jpg"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    await asyncio.to_thread(out_path.parent.mkdir, parents=True, exist_ok=True)
     try:
-        (
-            ffmpeg.input(str(path), ss=time_sec)
+        await asyncio.to_thread(
+            lambda: ffmpeg.input(str(path), ss=time_sec)
             .filter("scale", *size.split("x"))
             .output(str(out_path), vframes=1)
             .overwrite_output()
@@ -369,16 +378,21 @@ async def video_thumbnail(filepath: str, time_sec: float = 1.0, size: str = "320
 
     try:
         from PIL import Image
-        thumb = Image.open(out_path)
-        buf = BytesIO()
-        thumb.save(buf, format="JPEG", quality=85)
-        b64 = base64.b64encode(buf.getvalue()).decode()
+
+        def _encode() -> str:
+            thumb = Image.open(out_path)
+            buf = BytesIO()
+            thumb.save(buf, format="JPEG", quality=85)
+            return base64.b64encode(buf.getvalue()).decode()
+
+        b64 = await asyncio.to_thread(_encode)
     except Exception as e:
         logger.debug("Thumbnail base64 encoding failed: {}", e)
         b64 = ""
 
+    stat = await asyncio.to_thread(out_path.stat)
     lines = [
-        f"Thumbnail saved: {out_path} ({out_path.stat().st_size} bytes)",
+        f"Thumbnail saved: {out_path} ({stat.st_size} bytes)",
         f"- Time: {time_sec}s, Size: {size}",
     ]
     if b64:
@@ -391,7 +405,7 @@ async def video_transcribe(filepath: str, model: str = "whisper-1", language: st
     path = _confine(filepath)
     if not path.exists():
         return f"[error] File not found: {filepath}"
-    api_key = os.environ.get("OPENAI_API_KEY", "")
+    api_key = _OPENAI_API_KEY
     if not api_key:
         return "[error] OPENAI_API_KEY env var required for transcription"
     try:
@@ -405,10 +419,13 @@ async def video_transcribe(filepath: str, model: str = "whisper-1", language: st
         ffmpeg_cmd = ["ffmpeg", "-i", str(path), "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", "-y", tmp_wav]
         proc = await asyncio.create_subprocess_exec(*ffmpeg_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         await proc.communicate()
-        if not os.path.exists(tmp_wav):
+        tmp_exists = await asyncio.to_thread(os.path.exists, tmp_wav)
+        if not tmp_exists:
             return "[error] ffmpeg audio extraction failed (ffmpeg not found or invalid file)"
-        with open(tmp_wav, "rb") as f:
-            audio_data = f.read()
+        def _read_audio() -> bytes:
+            with open(tmp_wav, "rb") as f:
+                return f.read()
+        audio_data = await asyncio.to_thread(_read_audio)
         data = {"model": model}
         if language:
             data["language"] = language
@@ -440,9 +457,9 @@ async def video_transcribe(filepath: str, model: str = "whisper-1", language: st
 
 
 async def video_extract_frames(filepath: str, interval_sec: float = 5.0, max_frames: int = 10, size: str = "640x480", output_dir: str = "") -> str:
-    """Extract frames from a video at regular intervals."""
     path = _confine(filepath)
-    if not path.exists():
+    exists = await asyncio.to_thread(path.exists)
+    if not exists:
         return f"[error] File not found: {filepath}"
 
     try:
@@ -451,9 +468,9 @@ async def video_extract_frames(filepath: str, interval_sec: float = 5.0, max_fra
         return "[error] ffmpeg-python not installed (pip install raven-agent[media])"
 
     out_dir = Path(output_dir) if output_dir else (path.parent / f"{path.stem}_frames")
-    out_dir.mkdir(parents=True, exist_ok=True)
+    await asyncio.to_thread(out_dir.mkdir, parents=True, exist_ok=True)
     try:
-        probe = ffmpeg.probe(str(path))
+        probe = await asyncio.to_thread(lambda: ffmpeg.probe(str(path)))
         duration = float(probe["format"].get("duration", 0))
         if duration <= 0:
             return "[error] Could not determine video duration"
@@ -463,28 +480,28 @@ async def video_extract_frames(filepath: str, interval_sec: float = 5.0, max_fra
         for i in range(n_frames):
             ts = i * interval_sec
             out_path = str(out_dir / f"frame_{i:04d}_{int(ts)}s.jpg")
-            (
-                ffmpeg.input(str(path), ss=ts)
-                .filter("scale", w, h)
-                .output(out_path, vframes=1)
-                .overwrite_output()
-                .run(capture_stdout=True, capture_stderr=True)
-            )
+            def _extract_frame(p: Path = path, t: float = ts, o: str = out_path, w_in: str = w, h_in: str = h) -> None:
+                ffmpeg.input(str(p), ss=t).filter("scale", w_in, h_in).output(o, vframes=1).overwrite_output().run(
+                    capture_stdout=True, capture_stderr=True
+                )
+            await asyncio.to_thread(_extract_frame)
             frame_paths.append(out_path)
-        import base64
         previews = []
         for fp in frame_paths[:5]:
             try:
-                with open(fp, "rb") as f:
-                    b64 = base64.b64encode(f.read()).decode()
+                def _read_frame(fp: str = fp) -> str:
+                    with open(fp, "rb") as f:
+                        return base64.b64encode(f.read()).decode()
+                b64 = await asyncio.to_thread(_read_frame)
                 previews.append(f"data:image/jpeg;base64,{b64}")
             except Exception:
                 logger.warning("Failed to generate preview for frame")
-            lines = [
-                f"Extracted {len(frame_paths)} frames from {path.name}",
-                f"Interval: {interval_sec}s, Size: {size}",
-                f"Output: {out_dir}",
-            ]
+                continue
+        lines = [
+            f"Extracted {len(frame_paths)} frames from {path.name}",
+            f"Interval: {interval_sec}s, Size: {size}",
+            f"Output: {out_dir}",
+        ]
         for p in previews:
             lines.append(f"![frame]({p})")
         return "\n".join(lines)
@@ -495,16 +512,18 @@ async def video_extract_frames(filepath: str, interval_sec: float = 5.0, max_fra
 
 async def image_analyze(filepath: str, prompt: str = "Describe this image in detail") -> str:
     path = _confine(filepath)
-    if not path.exists():
+    exists = await asyncio.to_thread(path.exists)
+    if not exists:
         return f"[error] File not found: {filepath}"
-    import base64
-    api_key = os.environ.get("OPENAI_API_KEY", "")
+    api_key = _OPENAI_API_KEY
     if not api_key:
         return "[error] OPENAI_API_KEY env var required for image analysis"
     try:
         import httpx
-        with open(path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode()
+        def _read_image() -> str:
+            with open(path, "rb") as f:
+                return base64.b64encode(f.read()).decode()
+        b64 = await asyncio.to_thread(_read_image)
         ext = path.suffix.lower().lstrip(".")
         if ext in ("jpg", "jpeg"):
             mime = "image/jpeg"

@@ -46,7 +46,7 @@ LANGUAGE_MAP: dict[str, str] = {
     ".cfg": "ini",
 }
 
-IGNORE_DIRS = {
+IGNORE_DIRS = frozenset({
     ".git",
     "__pycache__",
     "node_modules",
@@ -68,7 +68,7 @@ IGNORE_DIRS = {
     "target",
     "bin",
     "obj",
-}
+})
 
 
 class CodeIndexer:

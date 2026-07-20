@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from loguru import logger
+
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 
@@ -17,6 +19,7 @@ async def notify_telegram(message: str, token: str = "", chat_id: str = "") -> s
         await bot.send_message(chat_id=chat_id, text=message[:4000]) if chat_id else None
         return "Sent Telegram notification"
     except Exception as e:
+        logger.error("Telegram notify failed: {}", e)
         return f"Telegram notify failed: {e}"
 
 

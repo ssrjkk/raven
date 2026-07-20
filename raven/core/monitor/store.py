@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at 
 class MonitorStore(BaseStore):
     SCHEMA = SCHEMA
 
-    def __init__(self, db_path: str | Path):
+    def __init__(self, db_path: str | Path) -> None:
         super().__init__(db_path)
 
     @measure_latency()

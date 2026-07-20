@@ -4,12 +4,12 @@ from raven.core.cost_management import _cost
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 
-async def cost_record(model: str, input_tokens: int, output_tokens: int, user_id: str = "", channel: str = "", session_id: str = "") -> str:
+def cost_record(model: str, input_tokens: int, output_tokens: int, user_id: str = "", channel: str = "", session_id: str = "") -> str:
     rec = _cost.record_usage(model, input_tokens, output_tokens, user_id, channel, session_id)
     return f"Usage recorded: {rec.model} ({rec.input_tokens} in / {rec.output_tokens} out) — ${rec.cost:.6f}"
 
 
-async def cost_summary(hours: int = 24) -> str:
+def cost_summary(hours: int = 24) -> str:
     summary = _cost.get_usage_summary(hours)
     lines = [
         f"Cost Summary (past {hours}h):",
@@ -27,7 +27,7 @@ async def cost_summary(hours: int = 24) -> str:
     return "\n".join(lines)
 
 
-async def cost_pricing() -> str:
+def cost_pricing() -> str:
     pricing = _cost.get_model_pricing()
     lines = ["Model Pricing ($ per 1K tokens):"]
     for model, rates in sorted(pricing.items()):
@@ -35,17 +35,17 @@ async def cost_pricing() -> str:
     return "\n".join(lines)
 
 
-async def cost_set_pricing(model: str, input_per_1k: float, output_per_1k: float) -> str:
+def cost_set_pricing(model: str, input_per_1k: float, output_per_1k: float) -> str:
     _cost.set_model_pricing(model, input_per_1k, output_per_1k)
     return f"Pricing set for '{model}': ${input_per_1k:.5f} in / ${output_per_1k:.5f} out"
 
 
-async def cost_budget_create(name: str, daily_limit: float, monthly_limit: float) -> str:
+def cost_budget_create(name: str, daily_limit: float, monthly_limit: float) -> str:
     budget = _cost.set_budget(name, daily_limit, monthly_limit)
     return f"Budget created [id={budget.id}]: {budget.name} (daily=${daily_limit:.2f}, monthly=${monthly_limit:.2f})"
 
 
-async def cost_budget_list() -> str:
+def cost_budget_list() -> str:
     budgets = _cost.get_budgets()
     if not budgets:
         return "[info] No budgets configured."
@@ -60,14 +60,14 @@ async def cost_budget_list() -> str:
     return "\n".join(lines)
 
 
-async def cost_budget_delete(budget_id: str) -> str:
+def cost_budget_delete(budget_id: str) -> str:
     ok = _cost.delete_budget(budget_id)
     if not ok:
         return f"[error] Budget '{budget_id}' not found."
     return "Budget deleted."
 
 
-async def cost_check() -> str:
+def cost_check() -> str:
     exceeded = _cost.is_budget_exceeded()
     daily = _cost.get_daily_cost()
     monthly = _cost.get_monthly_cost()

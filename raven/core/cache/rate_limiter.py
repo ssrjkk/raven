@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Protocol
 
@@ -13,24 +14,34 @@ class RateLimiterProtocol(Protocol):
 
 
 class InMemoryRateLimiter:
+    _IDLE_TTL = 600.0
+
     def __init__(self) -> None:
         self._windows: dict[str, list[float]] = {}
+        self._lock = asyncio.Lock()
 
     async def is_allowed(self, key: str, limit: int, window_seconds: int) -> bool:
-        now = time.monotonic()
-        window_start = now - window_seconds
-        entries = self._windows.get(key)
-        if entries is None:
-            self._windows[key] = [now]
+        async with self._lock:
+            now = time.monotonic()
+            window_start = now - window_seconds
+            self._evict_stale(window_start)
+            entries = self._windows.get(key)
+            if entries is None:
+                self._windows[key] = [now]
+                return True
+            self._windows[key] = [t for t in entries if t > window_start]
+            if len(self._windows[key]) >= limit:
+                return False
+            self._windows[key].append(now)
             return True
-        self._windows[key] = [t for t in entries if t > window_start]
-        if len(self._windows[key]) >= limit:
-            return False
-        self._windows[key].append(now)
-        return True
 
     def clear(self) -> None:
         self._windows.clear()
+
+    def _evict_stale(self, cutoff: float) -> None:
+        stale = [k for k, v in self._windows.items() if v and v[-1] < cutoff]
+        for k in stale:
+            del self._windows[k]
 
 
 class RedisRateLimiter:
@@ -42,36 +53,20 @@ class RedisRateLimiter:
         if not self._redis.is_healthy:
             return await self._fallback.is_allowed(key, limit, window_seconds)
 
+        client = self._redis._client
+        if client is None:
+            return await self._fallback.is_allowed(key, limit, window_seconds)
+
         now = time.time()
         window_start = now - window_seconds
         try:
-            await self._redis._execute_with_retry(
-                "zremrangebyscore",
-                self._redis._client.zremrangebyscore,  # type: ignore[union-attr]
-                key,
-                0,
-                window_start,
-            )
-            current = await self._redis._execute_with_retry(
-                "zcard",
-                self._redis._client.zcard,  # type: ignore[union-attr]
-                key,
-            )
+            await self._redis._execute_with_retry("zremrangebyscore", client.zremrangebyscore, key, 0, window_start)
+            current = await self._redis._execute_with_retry("zcard", client.zcard, key)
             if current >= limit:
                 return False
-            await self._redis._execute_with_retry(
-                "zadd",
-                self._redis._client.zadd,  # type: ignore[union-attr]
-                key,
-                {str(now): now},
-            )
-            await self._redis._execute_with_retry(
-                "expire",
-                self._redis._client.expire,  # type: ignore[union-attr]
-                key,
-                window_seconds,
-            )
+            await self._redis._execute_with_retry("zadd", client.zadd, key, {str(now): now})
+            await self._redis._execute_with_retry("expire", client.expire, key, window_seconds)
             return True
         except Exception as e:
-            logger.warning("redis_rate_limiter.fallback", error=str(e))
+            logger.warning("redis_rate_limiter.fallback", key=key, error=str(e))
             return await self._fallback.is_allowed(key, limit, window_seconds)

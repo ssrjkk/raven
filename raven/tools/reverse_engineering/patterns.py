@@ -119,7 +119,7 @@ _SUSPICIOUS_API_PATTERNS: dict[str, list[str]] = {
 }
 
 
-async def detect_patterns(path: str, patterns: str = "all") -> str:
+def detect_patterns(path: str, patterns: str = "all") -> str:
     p = Path(path)
     if not p.exists():
         return f"[error] File not found: {path}"

@@ -35,8 +35,6 @@ from raven.core.llm import LLMRouter
 from raven.core.logging import bind_context, clear_context
 from raven.core.metrics import MetricsServer, metrics
 from raven.core.models import IncomingMessage, Message
-from raven.core.monitor.checkers.price import check_price
-from raven.core.monitor.models import Monitor, MonitorType
 from raven.core.plugin_loader import PluginLoader
 from raven.core.sandbox import Sandbox
 from raven.core.security.context_filter import ContextVisibility, filter_context_by_visibility
@@ -303,6 +301,9 @@ class Gateway:
         except Exception as e:
             logger.warning("metrics stop error: {}", e)
 
+    def _get_skill(self, name: str) -> Any:
+        return skills_registry.get(name)
+
     def _register_skill_handlers(self):
         async def _morning_briefing(user_id: str, channel: str) -> str:
             try:
@@ -445,81 +446,9 @@ class Gateway:
         logger.debug("[sandbox] Policy '{}' enforced for channel {}", policy.name, event.channel)
         return True
 
-    _PRICE_PATTERN = re.compile(
-        r"(?:what(?:'s| is| are)?\s+)?(?:the\s+)?(?:price|rate|cost)\s+(?:of\s+)?(\w+)|"
-        r"(\w+)\s+(?:price|rate)(?:\s+now|\s+today)?$|"
-        r"how\s+much\s+is\s+(\w+)"
-    )
-    _MONITOR_PATTERN = re.compile(
-        r"(?:how\s+are\s+my\s+)?monitors?|"
-        r"(?:check|show|list)\s+(?:my\s+)?(?:monitors?|checks?)|"
-        r"(?:monitor|check)\s+(?:status|health)"
-    )
-    _BRIEFING_PATTERN = re.compile(
-        r"(?:good\s+)?morning(?:\s+briefing|\s+summary|\s+report)?$|"
-        r"(?:daily|morning)\s+(?:briefing|summary|update|report)"
-    )
-    _TASK_INTENT = re.compile(
-        r"(?:remind\s+(?:me|us)\s+(?:to|about|that))|"
-        r"(?:set\s+(?:a|an)?\s*(?:reminder|timer|task|alarm))|"
-        r"(?:schedule\s+(?:a|an)?\s*(?:reminder|task))"
-    )
-
     async def _handle_intent(self, event: IncomingMessage) -> bool:
-        text = event.text.strip().lower()
-
-        m = self._PRICE_PATTERN.search(text)
-        if m:
-            coin = m.group(1) or m.group(2) or m.group(3)
-            pseudo = Monitor(
-                name="intent-price",
-                type=MonitorType.PRICE,
-                target=coin,
-                config={"target": coin},
-            )
-            try:
-                result = await check_price(pseudo)
-                if result:
-                    await self._send(event.channel, event.session_id, result)
-            except Exception as e:
-                logger.warning("Price intent failed: {}", e)
-            return True
-
-        if self._MONITOR_PATTERN.search(text):
-            monitors = await self._monitor_store.list_monitors(user_id=event.user_id)
-            if not monitors:
-                await self._send(event.channel, event.session_id, "You have no monitors configured.")
-                return True
-            lines = ["📊 Your Monitors:"]
-            for mon in monitors[:10]:
-                icon = {"active": "🟢", "paused": "⏸", "error": "🔴"}.get(mon.status.value, "❓")
-                lines.append(f"  {icon} {mon.name} [{mon.type.value}] every {mon.interval_seconds}s")
-            await self._send(event.channel, event.session_id, "\n".join(lines))
-            return True
-
-        if self._BRIEFING_PATTERN.search(text):
-            briefing = skills_registry.get("morning_briefing")
-            if briefing:
-                result = await briefing.execute(event.user_id, event.channel)
-                if result:
-                    await self._send(event.channel, event.session_id, str(result))
-                    return True
-            await self._send(event.channel, event.session_id, "Morning briefing skill not loaded.")
-            return True
-
-        if self._TASK_INTENT.search(text):
-            try:
-                await self.tasks.create_and_run(
-                    goal=text,
-                    user_id=event.user_id,
-                    channel=event.channel,
-                    session_id=event.session_id or "",
-                )
-            except Exception as e:
-                logger.error("Intent task planning error: {}", e)
-            return True
-
-        return False
+        from raven.core.gateway.intents import handle_intent
+        return await handle_intent(self, event)
 
     async def _is_user_allowed(self, event: IncomingMessage, user: dict[str, Any]) -> bool:
         policy = settings.dm_policy

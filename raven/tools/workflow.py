@@ -3,7 +3,7 @@ from __future__ import annotations
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 
-async def workflow_list_templates(category: str = "") -> str:
+def workflow_list_templates(category: str = "") -> str:
     from raven.core.workflow.templates import BUILTIN_TEMPLATES
 
     templates = BUILTIN_TEMPLATES if not category else [t for t in BUILTIN_TEMPLATES if t.category.value == category]
@@ -15,14 +15,14 @@ async def workflow_list_templates(category: str = "") -> str:
     return "\n".join(lines)
 
 
-async def workflow_list_categories() -> str:
+def workflow_list_categories() -> str:
     from raven.core.workflow.models import TemplateCategory
 
     cats = [c.value for c in TemplateCategory]
     return f"Categories: {', '.join(cats)}"
 
 
-async def workflow_get_template(template_id: str) -> str:
+def workflow_get_template(template_id: str) -> str:
     from raven.core.workflow.templates import BUILTIN_TEMPLATES
 
     for t in BUILTIN_TEMPLATES:

@@ -9,10 +9,10 @@ from raven.core.monitor.models import Monitor, MonitorCheck
 
 
 class AlertDispatcher:
-    def __init__(self):
+    def __init__(self) -> None:
         self._gateway_ref: Any = None
 
-    async def dispatch(self, monitor: Monitor, check: MonitorCheck, message: str):
+    async def dispatch(self, monitor: Monitor, check: MonitorCheck, message: str) -> None:
         logger.info("Alert: {} — {}", monitor.name, message)
         await audit_logger.log(
             AuditEventType.MESSAGE_RECEIVED,

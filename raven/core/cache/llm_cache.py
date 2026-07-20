@@ -10,12 +10,15 @@ from raven.core.cache.redis_client import RedisClient
 from raven.core.llm.protocol import LLMResponse
 
 _DEFAULT_TTL = 300
+_DEFAULT_SCAN_BATCH = 100
+_MAX_INVALIDATE_KEYS = 10_000
 
 
 class LLMCache:
-    def __init__(self, redis_client: RedisClient, ttl: int = _DEFAULT_TTL) -> None:
+    def __init__(self, redis_client: RedisClient, ttl: int = _DEFAULT_TTL, scan_batch: int = _DEFAULT_SCAN_BATCH) -> None:
         self._redis = redis_client
         self._ttl = ttl
+        self._scan_batch = scan_batch
 
     @staticmethod
     def _build_key(model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> str:
@@ -26,6 +29,14 @@ class LLMCache:
         )
         digest = hashlib.sha256(payload.encode()).hexdigest()
         return f"llm_cache:{model}:{digest}"
+
+    @staticmethod
+    def _serialize_response(response: LLMResponse) -> str:
+        return json.dumps({
+            "content": response.content,
+            "tool_calls": response.tool_calls,
+            "finish_reason": response.finish_reason,
+        })
 
     async def get(self, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> LLMResponse | None:
         if not self._redis.is_healthy:
@@ -39,10 +50,11 @@ class LLMCache:
             if raw is None:
                 return None
             data = json.loads(raw)
-            content = data.get("content", "")
-            tool_calls = data.get("tool_calls", [])
-            finish_reason = data.get("finish_reason", "stop")
-            return LLMResponse(content=content, tool_calls=tool_calls, finish_reason=finish_reason)
+            return LLMResponse(
+                content=data.get("content", ""),
+                tool_calls=data.get("tool_calls", []),
+                finish_reason=data.get("finish_reason", "stop"),
+            )
         except (json.JSONDecodeError, TypeError, ValueError) as e:
             logger.debug("llm_cache.decode_error", key=key, error=str(e))
             return None
@@ -64,18 +76,14 @@ class LLMCache:
             return False
         key = self._build_key(model, messages, tools)
         try:
-            data = json.dumps({
-                "content": response.content,
-                "tool_calls": response.tool_calls,
-                "finish_reason": response.finish_reason,
-            })
+            data = self._serialize_response(response)
             await self._redis._execute_with_retry("set", client.set, key, data, ex=self._ttl)
             return True
         except Exception as e:
-            logger.warning("llm_cache.set_error", key=key, error=str(e))
+            logger.warning("llm_cache.set_error", key=key, model=model, error=str(e))
             return False
 
-    async def invalidate(self, model: str) -> int:
+    async def invalidate(self, model: str, max_keys: int = _MAX_INVALIDATE_KEYS) -> int:
         if not self._redis.is_healthy:
             return 0
         client = self._redis._client
@@ -85,16 +93,20 @@ class LLMCache:
         try:
             cursor = 0
             deleted = 0
+            total_scanned = 0
             while True:
                 cursor, keys = await self._redis._execute_with_retry(
-                    "scan", client.scan, cursor=cursor, match=pattern, count=100,
+                    "scan", client.scan, cursor=cursor, match=pattern, count=self._scan_batch,
                 )
+                total_scanned += len(keys)
                 if keys:
                     count = await self._redis._execute_with_retry("delete", client.delete, *keys)
                     deleted += count
-                if cursor == 0:
+                if cursor == 0 or total_scanned >= max_keys:
+                    if total_scanned >= max_keys:
+                        logger.warning("llm_cache.invalidate_truncated", model=model, max_keys=max_keys)
                     break
             return deleted
         except Exception as e:
-            logger.warning("llm_cache.invalidate_error", model=model, error=str(e))
+            logger.warning("llm_cache.invalidate_error", model=model, pattern=pattern, error=str(e))
             return 0

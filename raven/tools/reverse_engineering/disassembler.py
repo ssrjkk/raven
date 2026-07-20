@@ -6,7 +6,7 @@ from pathlib import Path
 from loguru import logger
 
 
-async def disassemble_bytes(code: bytes, arch: str = "x64", offset: int = 0) -> str:
+def disassemble_bytes(code: bytes, arch: str = "x64", offset: int = 0) -> str:
     try:
         from capstone import (
             CS_ARCH_ARM,
@@ -58,7 +58,7 @@ async def disassemble_bytes(code: bytes, arch: str = "x64", offset: int = 0) -> 
         return f"[error] Disassembly failed: {e}"
 
 
-async def disassemble_file(path: str, symbol: str = "", bytes: int = 0, arch: str = "auto") -> str:
+def disassemble_file(path: str, symbol: str = "", bytes: int = 0, arch: str = "auto") -> str:
     p = Path(path)
     if not p.exists():
         return f"[error] File not found: {path}"
@@ -76,8 +76,7 @@ async def disassemble_file(path: str, symbol: str = "", bytes: int = 0, arch: st
     if isinstance(code, str):
         return code
 
-    result = await disassemble_bytes(code, arch, offset)
-    return result
+    return disassemble_bytes(code, arch, offset)
 
 
 def _guess_arch_from_binary(raw: bytes) -> str | None:
@@ -102,7 +101,8 @@ def _guess_arch_from_binary(raw: bytes) -> str | None:
 
             pe_off = struct.unpack("<I", raw[0x3C:0x40])[0]
             machine = struct.unpack("<H", raw[pe_off + 4 : pe_off + 6])[0]
-        except Exception:
+        except Exception as e:
+            logger.debug("PE machine detection failed: {}", e)
             machine = 0
         if machine == 0x8664:
             return "x64"
@@ -216,7 +216,8 @@ def _find_text_section(raw: bytes) -> int | None:
                 if name.lower() == ".text":
                     raw_ptr: int = struct.unpack("<I", raw[off + 20 : off + 24])[0]
                     return raw_ptr
-        except Exception:
+        except Exception as e:
+            logger.debug("PE .text section lookup failed: {}", e)
             return None
     return None
 

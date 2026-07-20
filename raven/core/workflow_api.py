@@ -40,7 +40,7 @@ def create_workflow_router() -> APIRouter:
     router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
     @router.get("/templates")
-    async def api_workflow_templates(category: str | None = None):
+    def api_workflow_templates(category: str | None = None):
         store = _get_store()
         templates = store.list_templates(category=category) if category else store.list_templates()
         return {
@@ -62,12 +62,12 @@ def create_workflow_router() -> APIRouter:
         }
 
     @router.get("/categories")
-    async def api_workflow_categories():
+    def api_workflow_categories():
         store = _get_store()
         return {"categories": store.list_categories()}
 
     @router.get("/templates/{template_id}")
-    async def api_workflow_get_template(template_id: str):
+    def api_workflow_get_template(template_id: str):
         store = _get_store()
         t = store.get(template_id)
         if not t:

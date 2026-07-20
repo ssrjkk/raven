@@ -30,7 +30,7 @@ def create_knowledge_router() -> APIRouter:
     router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 
     @router.post("/extract")
-    async def extract(text: str, source: str = ""):
+    def extract(text: str, source: str = ""):
         kg = _get_kg()
         doc = Document(text=text, source=source)
         try:
@@ -43,7 +43,7 @@ def create_knowledge_router() -> APIRouter:
             raise HTTPException(500, str(e)) from e
 
     @router.post("/search")
-    async def search(query: str, max_depth: int = 2):
+    def search(query: str, max_depth: int = 2):
         kg = _get_kg()
         stats = kg.get_stats()
         if stats["entities"] == 0:
@@ -56,19 +56,19 @@ def create_knowledge_router() -> APIRouter:
             raise HTTPException(500, str(e)) from e
 
     @router.get("/stats")
-    async def stats():
+    def stats():
         kg = _get_kg()
         return kg.get_stats()
 
     @router.get("/vis")
-    async def vis():
+    def vis():
         kg = _get_kg()
         data = kg.export_vis()
         stats = kg.get_stats()
         return {"graph": data, "stats": stats}
 
     @router.post("/entity")
-    async def add_entity(name: str, type: str = "concept", metadata: str = ""):
+    def add_entity(name: str, type: str = "concept", metadata: str = ""):
         kg = _get_kg()
         meta: dict[str, Any] = {}
         if metadata:
@@ -85,7 +85,7 @@ def create_knowledge_router() -> APIRouter:
             raise HTTPException(500, str(e)) from e
 
     @router.post("/relation")
-    async def add_relation(source: str, target: str, type: str = "related_to"):
+    def add_relation(source: str, target: str, type: str = "related_to"):
         kg = _get_kg()
         source_ent = kg._find_entity(source)
         target_ent = kg._find_entity(target)

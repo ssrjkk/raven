@@ -148,12 +148,12 @@ _register_builtin(
     ),
 )
 
-_SKILL_SEARCH_DIRS = [
+_SKILL_SEARCH_DIRS = (
     Path(".opencode/skills"),
     Path(".claude/skills"),
     Path(".agents/skills"),
     Path.home() / ".config/opencode/skills",
-]
+)
 
 
 def discover_skills() -> dict[str, Skill]:

@@ -8,7 +8,7 @@ from raven.core.coder.analyzer import CodeAnalyzer
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 
-async def analyze_code(path: str, detail: str = "summary") -> str:
+def analyze_code(path: str, detail: str = "summary") -> str:
     """Analyze source code and return structured analysis.
 
     Args:
@@ -47,7 +47,7 @@ async def analyze_code(path: str, detail: str = "summary") -> str:
         return f"Analysis failed: {e}"
 
 
-async def explain_code(path: str, function: str = "") -> str:
+def explain_code(path: str, function: str = "") -> str:
     """Explain what a piece of code does line by line.
 
     Args:

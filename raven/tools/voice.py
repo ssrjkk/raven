@@ -15,7 +15,7 @@ def _get_vb() -> VoiceBiometrics:
     return _vb
 
 
-async def voice_enroll(speaker_id: str, audio_samples: list[list[float]], sample_rate: int = 16000) -> str:
+def voice_enroll(speaker_id: str, audio_samples: list[list[float]], sample_rate: int = 16000) -> str:
     vb = _get_vb()
     try:
         result = vb.enroll(speaker_id, audio_samples, sample_rate)
@@ -27,7 +27,7 @@ async def voice_enroll(speaker_id: str, audio_samples: list[list[float]], sample
         return f"[error] Enrollment failed: {e}"
 
 
-async def voice_verify(speaker_id: str, audio: list[float], sample_rate: int = 16000, anti_spoof: bool = True) -> str:
+def voice_verify(speaker_id: str, audio: list[float], sample_rate: int = 16000, anti_spoof: bool = True) -> str:
     vb = _get_vb()
     try:
         result = vb.verify(speaker_id, audio, sample_rate, anti_spoof)
@@ -47,7 +47,7 @@ async def voice_verify(speaker_id: str, audio: list[float], sample_rate: int = 1
         return f"[error] Verification failed: {e}"
 
 
-async def voice_identify(audio: list[float], sample_rate: int = 16000, top_k: int = 3) -> str:
+def voice_identify(audio: list[float], sample_rate: int = 16000, top_k: int = 3) -> str:
     vb = _get_vb()
     try:
         results = vb.identify(audio, sample_rate, top_k)
@@ -64,7 +64,7 @@ async def voice_identify(audio: list[float], sample_rate: int = 16000, top_k: in
         return f"[error] Identification failed: {e}"
 
 
-async def voice_list_speakers() -> str:
+def voice_list_speakers() -> str:
     vb = _get_vb()
     import time
     speakers = vb.list_speakers()
@@ -77,14 +77,14 @@ async def voice_list_speakers() -> str:
     return "\n".join(lines)
 
 
-async def voice_remove_speaker(speaker_id: str) -> str:
+def voice_remove_speaker(speaker_id: str) -> str:
     vb = _get_vb()
     if vb.remove_speaker(speaker_id):
         return f"Speaker '{speaker_id}' removed."
     return f"[error] Speaker '{speaker_id}' not found."
 
 
-async def voice_stats() -> str:
+def voice_stats() -> str:
     vb = _get_vb()
     stats = vb.get_stats()
     return (
@@ -96,7 +96,7 @@ async def voice_stats() -> str:
     )
 
 
-async def voice_continuous_auth(speaker_id: str, interval_sec: float = 5.0) -> str:
+def voice_continuous_auth(speaker_id: str, interval_sec: float = 5.0) -> str:
     vb = _get_vb()
     try:
         vb.start_continuous_auth(speaker_id, interval_sec)

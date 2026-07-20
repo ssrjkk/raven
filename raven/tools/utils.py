@@ -11,7 +11,7 @@ async def wait_for(seconds: float = 1.0) -> str:
     return f"Waited {seconds}s"
 
 
-async def get_timestamp() -> str:
+def get_timestamp() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
 
 

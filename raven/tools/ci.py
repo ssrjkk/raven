@@ -10,9 +10,16 @@ import httpx
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
+_GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+_GITLAB_TOKEN = os.environ.get("GITLAB_TOKEN", "")
+_GITLAB_URL = os.environ.get("GITLAB_URL", "https://gitlab.com")
+_JENKINS_URL = os.environ.get("JENKINS_URL", "")
+_JENKINS_USER = os.environ.get("JENKINS_USER", "")
+_JENKINS_TOKEN = os.environ.get("JENKINS_TOKEN", "")
+
 
 async def _github_request(path: str, method: str = "GET", body: dict[str, Any] | None = None) -> dict[str, Any]:
-    token = os.environ.get("GITHUB_TOKEN", "")
+    token = _GITHUB_TOKEN
     if not token:
         return {"error": "GITHUB_TOKEN env var required"}
     url = f"https://api.github.com{path}"
@@ -25,8 +32,8 @@ async def _github_request(path: str, method: str = "GET", body: dict[str, Any] |
 
 
 async def _gitlab_request(path: str, method: str = "GET", body: dict[str, Any] | None = None) -> Any:
-    token = os.environ.get("GITLAB_TOKEN", "")
-    base_url = os.environ.get("GITLAB_URL", "https://gitlab.com")
+    token = _GITLAB_TOKEN
+    base_url = _GITLAB_URL
     if not token:
         return {"error": "GITLAB_TOKEN env var required"}
     url = f"{base_url}/api/v4{path}"
@@ -148,8 +155,8 @@ async def ci_trigger_pipeline(project_id: str, ref: str = "main", variables: str
     """Trigger a CI pipeline run (GitLab CI)."""
     if provider != "gitlab":
         return f"Trigger not supported for provider: {provider}"
-    token = os.environ.get("GITLAB_TOKEN", "")
-    base_url = os.environ.get("GITLAB_URL", "https://gitlab.com")
+    token = _GITLAB_TOKEN
+    base_url = _GITLAB_URL
     if not token:
         return "[error] GITLAB_TOKEN env var required"
     payload: dict[str, Any] = {"ref": ref}
@@ -179,9 +186,9 @@ async def ci_trigger_pipeline(project_id: str, ref: str = "main", variables: str
 
 async def ci_jenkins_job(job_name: str, parameters: str = "", wait: bool = False) -> str:
     """Trigger a Jenkins job/build."""
-    url = os.environ.get("JENKINS_URL", "")
-    user = os.environ.get("JENKINS_USER", "")
-    token = os.environ.get("JENKINS_TOKEN", "")
+    url = _JENKINS_URL
+    user = _JENKINS_USER
+    token = _JENKINS_TOKEN
     if not url or not user or not token:
         return "[error] JENKINS_URL, JENKINS_USER, and JENKINS_TOKEN env vars required"
     auth_b64 = base64.b64encode(f"{user}:{token}".encode()).decode()
@@ -227,9 +234,9 @@ async def ci_jenkins_job(job_name: str, parameters: str = "", wait: bool = False
 
 async def ci_jenkins_status(job_name: str, build_number: int = 0) -> str:
     """Get the status of a Jenkins job/build."""
-    url = os.environ.get("JENKINS_URL", "")
-    user = os.environ.get("JENKINS_USER", "")
-    token = os.environ.get("JENKINS_TOKEN", "")
+    url = _JENKINS_URL
+    user = _JENKINS_USER
+    token = _JENKINS_TOKEN
     if not url or not user or not token:
         return "[error] JENKINS_URL, JENKINS_USER, and JENKINS_TOKEN env vars required"
     auth_b64 = base64.b64encode(f"{user}:{token}".encode()).decode()

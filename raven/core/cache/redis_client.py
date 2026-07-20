@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 from collections.abc import Callable
 from typing import Any
 
@@ -31,10 +32,11 @@ class RedisNotAvailableError(RuntimeError):
 
 
 class RedisClient:
-    def __init__(self, url: str, max_connections: int = 50, retry_attempts: int = 3) -> None:
+    def __init__(self, url: str, max_connections: int = 50, retry_attempts: int = 3, retry_base_delay: float = 0.5) -> None:
         self.url = url
         self.max_connections = max_connections
         self.retry_attempts = retry_attempts
+        self._retry_base_delay = retry_base_delay
         self._pool: _ConnectionPool | None = None
         self._client: _Redis | None = None
         self._is_healthy = False
@@ -84,12 +86,19 @@ class RedisClient:
                     "redis_client.retry",
                     operation=operation,
                     attempt=attempt + 1,
+                    max_attempts=self.retry_attempts,
                     error=str(e),
                 )
                 if attempt < self.retry_attempts - 1:
-                    await asyncio.sleep(0.5 * (2**attempt))
+                    delay = self._backoff_delay(attempt)
+                    await asyncio.sleep(delay)
                     await self.connect()
         raise last_error
+
+    def _backoff_delay(self, attempt: int) -> float:
+        delay = self._retry_base_delay * (2**attempt)
+        jitter: float = random.uniform(0.5, 1.5)  # noqa: S311
+        return delay * jitter  # type: ignore[no-any-return]
 
     async def ping(self) -> bool:
         if not self.is_healthy or self._client is None:
@@ -116,3 +125,10 @@ class RedisClient:
         if self._client is None:
             raise RedisNotAvailableError("RedisClient not connected — call connect() first")
         return self._client
+
+    async def __aenter__(self) -> RedisClient:
+        await self.connect()
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        await self.disconnect()

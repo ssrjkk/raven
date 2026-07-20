@@ -5,12 +5,13 @@ import os
 import signal
 import sys
 
+from loguru import logger
+
 PLUGIN_NAME = "process"
 PLUGIN_DESCRIPTION = "Run, list, and manage system processes"
 
 
 async def run(command: str, timeout: int = 30) -> str:
-    """Run a command and return output. Args: command (str): Command to execute, timeout (int): Max execution time"""
     try:
         import shlex
         parts = shlex.split(command)
@@ -36,11 +37,11 @@ async def run(command: str, timeout: int = 30) -> str:
             result += f"\n[exit code: {proc.returncode}]"
         return result[:5000] or "(no output)"
     except Exception as e:
+        logger.error("Process run failed: {}", e)
         return f"Error: {e}"
 
 
 async def run_python(code: str, timeout: int = 15) -> str:
-    """Run Python code in a subprocess. Args: code (str): Python code, timeout (int): Max execution time"""
     try:
         proc = await asyncio.create_subprocess_exec(
             sys.executable, "-c", code,
@@ -63,11 +64,11 @@ async def run_python(code: str, timeout: int = 15) -> str:
             result += f"\n[exit code: {proc.returncode}]"
         return result[:5000] or "(no output)"
     except Exception as e:
+        logger.error("Python run failed: {}", e)
         return f"Error: {e}"
 
 
 async def list_processes(filter: str = "") -> str:
-    """List running processes. Args: filter (str): Optional filter string (e.g. 'python')"""
     if sys.platform == "win32":
         proc = await asyncio.create_subprocess_exec(
             "tasklist", "/FO", "CSV", "/NH",
@@ -94,14 +95,14 @@ async def list_processes(filter: str = "") -> str:
 
 
 async def kill(pid: int, force: bool = False) -> str:
-    """Kill a process by PID. Args: pid (int): Process ID, force (bool): Force kill (SIGKILL)"""
     try:
         sig = getattr(signal, "SIGKILL", signal.SIGTERM) if force else signal.SIGTERM
-        os.kill(pid, sig)
+        await asyncio.to_thread(os.kill, pid, sig)
         return f"Process {pid} {'forcefully ' if force else ''}terminated"
     except ProcessLookupError:
         return f"Process {pid} not found"
     except PermissionError:
         return f"Permission denied to kill process {pid}"
     except Exception as e:
+        logger.error("Kill process {} failed: {}", pid, e)
         return f"Error killing process {pid}: {e}"

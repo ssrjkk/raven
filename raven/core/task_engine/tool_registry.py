@@ -65,6 +65,12 @@ class ToolRegistry:
     def to_llm_tools(self) -> builtins.list[dict[str, Any]]:
         return [t.to_llm_tool() for t in self._tools.values()]
 
+    async def _run_handler(self, name: str, spec: ToolSpec, params: dict[str, Any]) -> Any:
+        handler_fn = spec.handler
+        if asyncio.iscoroutinefunction(handler_fn):
+            return await handler_fn(**params)
+        return await asyncio.to_thread(handler_fn, **params)
+
     async def call(self, name: str, **params: Any) -> Any:
         spec = self.get(name)
         if not spec:
@@ -76,6 +82,7 @@ class ToolRegistry:
             try:
                 error = spec.validator_fn(params)
             except Exception as exc:
+                logger.warning("Tool validator failed for {}: {}", name, exc)
                 return f"[error] Validator failed: {exc}"
             if error:
                 return f"[error] {error}"
@@ -87,7 +94,7 @@ class ToolRegistry:
             span.set_attribute("tool.name", name)
             span.set_attribute("tool.category", spec.category)
             try:
-                result = await asyncio.wait_for(spec.handler(**params), timeout=spec.timeout)
+                result = await asyncio.wait_for(self._run_handler(name, spec, params), timeout=spec.timeout)
                 elapsed = time.monotonic() - t0
                 metrics.observe("tool_call_duration", elapsed, {"tool": name})
                 metrics.inc("tool_calls_success_total", {"tool": name})

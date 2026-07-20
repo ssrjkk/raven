@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -41,7 +42,7 @@ class CodeCommand(CommandHandler):
             root = sub_args[0] if sub_args else str(Path.cwd())
             await gateway._send(ctx.event.channel, ctx.event.session_id, f"Indexing {root}...")
             indexer = CodeIndexer(root)
-            indexer.index(max_files=2000)
+            await asyncio.to_thread(indexer.index, max_files=2000)
             summary = indexer.summary()
             langs = ", ".join(f"{k}:{v}" for k, v in summary.get("languages", {}).items())
             await gateway._send(
@@ -52,7 +53,7 @@ class CodeCommand(CommandHandler):
             query = " ".join(sub_args)
             root = str(Path.cwd())
             indexer = CodeIndexer(root)
-            indexer.index(max_files=2000)
+            await asyncio.to_thread(indexer.index, max_files=2000)
             results = indexer.search(query)
             if not results:
                 await gateway._send(ctx.event.channel, ctx.event.session_id, f"No results for '{query}'")
@@ -70,10 +71,11 @@ class CodeCommand(CommandHandler):
             if ws and not str(p).startswith(str(ws.resolve())):
                 await gateway._send(ctx.event.channel, ctx.event.session_id, "File outside workspace — denied")
                 return True
-            if not p.is_file():
+            is_file = await asyncio.to_thread(p.is_file)
+            if not is_file:
                 await gateway._send(ctx.event.channel, ctx.event.session_id, f"File not found: {p}")
                 return True
-            content = p.read_text(encoding="utf-8", errors="replace")
+            content = await asyncio.to_thread(lambda: p.read_text(encoding="utf-8", errors="replace"))
             reviewer = CodeReviewer()
             comments = await reviewer.review_file(str(p), content)
             if not comments:

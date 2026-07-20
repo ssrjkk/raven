@@ -19,7 +19,7 @@ from raven.core.watermark import canary_html_comment, install_fastapi_watermark
 class WebChatChannel(BaseChannel):
     channel_id = "webchat"
 
-    def __init__(self, db: Database):
+    def __init__(self, db: Database) -> None:
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
         self._db = db
         self._app = FastAPI(title="Raven AI Web Chat")
@@ -28,7 +28,7 @@ class WebChatChannel(BaseChannel):
         install_fastapi_watermark(self._app)
         self._setup_routes()
 
-    def _setup_routes(self):
+    def _setup_routes(self) -> None:
         app = self._app
 
         @app.get("/")

@@ -184,7 +184,7 @@ async def safe_http_request(url: str, **kwargs: Any) -> httpx.Response:
         if response.is_redirect:
             location = response.headers.get("Location")
             if location:
-                error = validate_url(location)
+                error = await validate_url_async(location)
                 if error:
                     raise httpx.ConnectError(f"Redirect blocked by SSRF: {error}")
         return response

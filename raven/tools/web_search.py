@@ -200,7 +200,7 @@ class WebSearchTool:
 _tool_instance: WebSearchTool | None = None
 
 
-async def _get_tool() -> WebSearchTool:
+def _get_tool() -> WebSearchTool:
     global _tool_instance
     if _tool_instance is None:
         _tool_instance = WebSearchTool()
@@ -221,7 +221,7 @@ def _fmt(results: list[SearchResult]) -> str:
 
 
 async def web_search(query: str, max_results: int = 10, provider: str = "duckduckgo", failover: bool = False) -> str:
-    tool = await _get_tool()
+    tool = _get_tool()
     try:
         if failover:
             results = await tool.search_with_failover(query, max_results=max_results)
@@ -236,7 +236,7 @@ async def web_search(query: str, max_results: int = 10, provider: str = "duckduc
 
 
 async def web_search_structured(query: str, max_results: int = 10, provider: str = "duckduckgo", failover: bool = False) -> list[dict[str, Any]]:
-    tool = await _get_tool()
+    tool = _get_tool()
     try:
         if failover:
             results = await tool.search_with_failover(query, max_results=max_results)

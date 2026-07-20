@@ -15,7 +15,7 @@ def create_plugin_router() -> APIRouter:
     router = APIRouter(prefix="/api/plugins", tags=["plugins"])
 
     @router.get("")
-    async def api_plugins_list():
+    def api_plugins_list():
         installed = _manager.list_installed()
         return [
             {

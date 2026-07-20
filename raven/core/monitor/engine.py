@@ -37,10 +37,10 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
     async def count_monitors(self, user_id: str | None = None) -> int:
         return await self._store.count_monitors(user_id=user_id)
 
-    async def add_monitor(self, monitor: Monitor):
+    async def add_monitor(self, monitor: Monitor) -> None:
         await self.add_item(monitor)
 
-    async def remove_monitor(self, monitor_id: str):
+    async def remove_monitor(self, monitor_id: str) -> None:
         await self.remove_item(monitor_id)
 
     async def pause_monitor(self, monitor_id: str) -> bool:
@@ -58,7 +58,7 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
             await self._alert(monitor, alert_text)
         return alert_text
 
-    async def _run_loop(self, monitor: Monitor):
+    async def _run_loop(self, monitor: Monitor) -> None:
         while self._running:
             try:
                 alert_text = await self._run_item(monitor)
@@ -141,13 +141,13 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
     async def _load_item(self, item_id: str) -> Monitor | None:
         return await self._store.load_monitor(item_id)
 
-    async def _save_item(self, item: Monitor):
+    async def _save_item(self, item: Monitor) -> None:
         await self._store.save_monitor(item)
 
-    async def _delete_item(self, item_id: str):
+    async def _delete_item(self, item_id: str) -> None:
         await self._store.delete_monitor(item_id)
 
-    async def _update_status(self, item_id: str, status: MonitorStatus):
+    async def _update_status(self, item_id: str, status: MonitorStatus) -> None:
         await self._store.update_status(item_id, status)
 
     def _get_item_id(self, item: Monitor) -> str:
@@ -169,8 +169,9 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
         from pathlib import Path
 
         path = Path(monitor.config.get("target", monitor.target))
-        if not path.exists():
-            return f"🔴 File not found: {path}"
+        exists = await asyncio.to_thread(path.exists)
+        if not exists:
+            return f"File not found: {path}"
         return None
 
     async def _check_process(self, monitor: Monitor) -> str | None:
@@ -203,7 +204,7 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
             return f"🔴 Process not running: {name}"
         return None
 
-    async def _alert(self, monitor: Monitor, alert_text: str):
+    async def _alert(self, monitor: Monitor, alert_text: str) -> None:
         if not monitor.should_notify():
             logger.debug("Monitor {} cooldown active, skipping alert", monitor.id)
             return

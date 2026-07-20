@@ -157,7 +157,8 @@ class TelegramChannel(BaseChannel):
                 text=text,
                 parse_mode="Markdown",
             )
-        except Exception:
+        except Exception as exc:
+            logger.debug("Telegram edit with Markdown failed, retrying without parse_mode: {}", exc)
             try:
                 await self._app.bot.edit_message_text(
                     chat_id=chat_id,

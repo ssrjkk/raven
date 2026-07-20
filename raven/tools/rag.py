@@ -32,7 +32,7 @@ def _save_rag() -> None:
         logger.error("Failed to save RAG index: {}", e)
 
 
-async def rag_index_text(document_id: str, text: str, source: str = "", metadata: str = "") -> str:
+def rag_index_text(document_id: str, text: str, source: str = "", metadata: str = "") -> str:
     rag = _get_rag()
     meta: dict[str, Any] = {}
     if metadata:
@@ -47,7 +47,7 @@ async def rag_index_text(document_id: str, text: str, source: str = "", metadata
     return f"Indexed {len(chunk_ids)} chunks from document '{document_id}'."
 
 
-async def rag_search(query: str, top_k: int = 5, include_images: bool = True) -> str:
+def rag_search(query: str, top_k: int = 5, include_images: bool = True) -> str:
     rag = _get_rag()
     try:
         results = rag.search(query, top_k=top_k, include_images=include_images)
@@ -69,7 +69,7 @@ async def rag_search(query: str, top_k: int = 5, include_images: bool = True) ->
     return "\n".join(lines)
 
 
-async def rag_stats() -> str:
+def rag_stats() -> str:
     rag = _get_rag()
     stats = rag.get_stats()
     return (
@@ -84,7 +84,7 @@ async def rag_stats() -> str:
     )
 
 
-async def rag_remove_document(document_id: str) -> str:
+def rag_remove_document(document_id: str) -> str:
     rag = _get_rag()
     if rag.remove_document(document_id):
         _save_rag()

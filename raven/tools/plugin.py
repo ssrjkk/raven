@@ -24,7 +24,7 @@ def _get_catalog() -> PluginCatalog:
     return _catalog
 
 
-async def plugin_list_installed() -> str:
+def plugin_list_installed() -> str:
     manager = _get_manager()
     installed = manager.list_installed()
     if not installed:
@@ -39,7 +39,7 @@ async def plugin_list_installed() -> str:
     return "\n".join(lines)
 
 
-async def plugin_search(query: str = "") -> str:
+def plugin_search(query: str = "") -> str:
     if not query:
         return "[info] Provide a search query."
     manager = _get_manager()
@@ -74,7 +74,7 @@ async def plugin_uninstall(name: str) -> str:
         return f"[error] Uninstall failed: {e}"
 
 
-async def plugin_info(name: str) -> str:
+def plugin_info(name: str) -> str:
     manager = _get_manager()
     info = manager.get_plugin_info(name)
     if info is None:

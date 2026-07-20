@@ -47,7 +47,7 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
         return r
 
     @router.post("/process")
-    async def process_image(
+    def process_image(
         filepath: str,
         resize: str = "",
         crop: str = "",
@@ -97,7 +97,7 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
             raise HTTPException(500, str(e)) from e
 
     @router.post("/parse")
-    async def parse_document(filepath: str, pages: str = ""):
+    def parse_document(filepath: str, pages: str = ""):
         target = _confine(Path(filepath), ws)
         if not target.exists():
             raise HTTPException(404, f"File not found: {target}")

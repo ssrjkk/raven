@@ -7,40 +7,40 @@ from raven.coding.git_integration import GitIntegration
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 
-async def _get_git() -> GitIntegration:
+def _get_git() -> GitIntegration:
     return GitIntegration()
 
 
-async def git_status(workspace: str = "") -> dict[str, Any]:
-    git = await _get_git()
+def git_status(workspace: str = "") -> dict[str, Any]:
+    git = _get_git()
     if workspace:
         git._repo = Path(workspace).resolve()
     return git.status()
 
 
-async def git_branch(workspace: str = "") -> dict[str, Any]:
-    git = await _get_git()
+def git_branch(workspace: str = "") -> dict[str, Any]:
+    git = _get_git()
     if workspace:
         git._repo = Path(workspace).resolve()
     return {"branch": git.get_branch(), "is_branch": git.is_branch(), "is_repo": git.is_repo()}
 
 
-async def git_log(count: int = 10, workspace: str = "") -> list[dict[str, str]]:
-    git = await _get_git()
+def git_log(count: int = 10, workspace: str = "") -> list[dict[str, str]]:
+    git = _get_git()
     if workspace:
         git._repo = Path(workspace).resolve()
     return git.get_log(count)
 
 
-async def git_diff(staged: bool = False, workspace: str = "") -> str:
-    git = await _get_git()
+def git_diff(staged: bool = False, workspace: str = "") -> str:
+    git = _get_git()
     if workspace:
         git._repo = Path(workspace).resolve()
     return git.get_diff(staged=staged)
 
 
 async def git_commit(message: str = "", auto: bool = False, workspace: str = "") -> dict[str, Any]:
-    git = await _get_git()
+    git = _get_git()
     if workspace:
         git._repo = Path(workspace).resolve()
     if auto:
@@ -50,32 +50,32 @@ async def git_commit(message: str = "", auto: bool = False, workspace: str = "")
     return {"success": result.success, "message": result.message, "commit_hash": result.commit_hash, "error": result.error}
 
 
-async def git_push(workspace: str = "") -> str:
-    git = await _get_git()
+def git_push(workspace: str = "") -> str:
+    git = _get_git()
     if workspace:
         git._repo = Path(workspace).resolve()
     stdout, stderr = git._run("push")
     return stderr or stdout or "pushed"
 
 
-async def git_pull(workspace: str = "") -> str:
-    git = await _get_git()
+def git_pull(workspace: str = "") -> str:
+    git = _get_git()
     if workspace:
         git._repo = Path(workspace).resolve()
     stdout, stderr = git._run("pull")
     return stderr or stdout or "pulled"
 
 
-async def git_branches(workspace: str = "") -> list[str]:
-    git = await _get_git()
+def git_branches(workspace: str = "") -> list[str]:
+    git = _get_git()
     if workspace:
         git._repo = Path(workspace).resolve()
     stdout, _ = git._run("branch", "-a")
     return [b.strip() for b in stdout.split("\n") if b.strip()]
 
 
-async def git_checkout(branch: str, create: bool = False, workspace: str = "") -> str:
-    git = await _get_git()
+def git_checkout(branch: str, create: bool = False, workspace: str = "") -> str:
+    git = _get_git()
     if workspace:
         git._repo = Path(workspace).resolve()
     args = ["checkout"]
@@ -87,7 +87,7 @@ async def git_checkout(branch: str, create: bool = False, workspace: str = "") -
 
 
 async def git_create_pr(title: str = "", body: str = "", workspace: str = "") -> dict[str, Any]:
-    git = await _get_git()
+    git = _get_git()
     if workspace:
         git._repo = Path(workspace).resolve()
     result = await git.create_pr_async(title=title, body=body)
@@ -95,7 +95,7 @@ async def git_create_pr(title: str = "", body: str = "", workspace: str = "") ->
 
 
 async def git_review(file_path: str = "", workspace: str = "") -> dict[str, Any]:
-    git = await _get_git()
+    git = _get_git()
     if workspace:
         git._repo = Path(workspace).resolve()
     result = await git.llm_review(file_path or None)

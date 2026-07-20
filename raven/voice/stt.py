@@ -9,6 +9,9 @@ from uuid import uuid4
 
 from loguru import logger
 
+_AZURE_SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY", "")
+_AZURE_SPEECH_REGION = os.getenv("AZURE_SPEECH_REGION", "")
+
 
 class STTProvider(StrEnum):
     WHISPER = "whisper"
@@ -88,8 +91,8 @@ class SpeechToText:
         except ImportError:
             logger.warning("azure-cognitiveservices-speech not installed")
             return ""
-        key = self.config.api_key or os.getenv("AZURE_SPEECH_KEY", "")
-        region = self.config.region or os.getenv("AZURE_SPEECH_REGION", "")
+        key = self.config.api_key or _AZURE_SPEECH_KEY
+        region = self.config.region or _AZURE_SPEECH_REGION
         if not key or not region:
             logger.warning("Azure Speech key/region not configured")
             return ""

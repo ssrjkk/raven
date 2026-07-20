@@ -4,7 +4,8 @@ from typing import Any
 
 from pydantic import SecretStr
 
-from raven.core.llm._legacy import (
+from raven.core.llm.protocol import LLMProvider
+from raven.core.llm.providers import (
     AnthropicProvider,
     AzureProvider,
     BedrockProvider,
@@ -15,7 +16,6 @@ from raven.core.llm._legacy import (
     VertexAIProvider,
     VLLMProvider,
 )
-from raven.core.llm.protocol import LLMProvider
 
 
 class LLMProviderFactory:

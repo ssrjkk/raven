@@ -23,7 +23,7 @@ def _get_builder() -> DatasetBuilder:
     return _builder
 
 
-async def finetune_dataset_stats() -> str:
+def finetune_dataset_stats() -> str:
     builder = _get_builder()
     stats = builder.stats()
     return (
@@ -35,7 +35,7 @@ async def finetune_dataset_stats() -> str:
     )
 
 
-async def finetune_add_conversation(system_prompt: str = "", messages_json: str = "") -> str:
+def finetune_add_conversation(system_prompt: str = "", messages_json: str = "") -> str:
     builder = _get_builder()
     from raven.unique.fine_tuning import ConversationExample
     try:
@@ -48,14 +48,14 @@ async def finetune_add_conversation(system_prompt: str = "", messages_json: str 
     return f"Conversation added ({len(messages)} messages). Total: {builder.stats()['conversations']}"
 
 
-async def finetune_add_code(code: str, language: str = "", description: str = "") -> str:
+def finetune_add_code(code: str, language: str = "", description: str = "") -> str:
     builder = _get_builder()
     from raven.unique.fine_tuning import CodeExample
     builder.add_code(CodeExample(code=code, language=language, description=description))
     return f"Code sample added ({language}, {len(code)} chars). Total: {builder.stats()['code_samples']}"
 
 
-async def finetune_load_model(model_type: str = "llama", use_lora: bool = True, use_qlora: bool = False) -> str:
+def finetune_load_model(model_type: str = "llama", use_lora: bool = True, use_qlora: bool = False) -> str:
     pipeline = _get_pipeline()
     pipeline.config.model_type = model_type
     pipeline.config.use_lora = use_lora
@@ -74,7 +74,7 @@ async def finetune_load_model(model_type: str = "llama", use_lora: bool = True, 
         return f"[error] Failed to load model: {e}"
 
 
-async def finetune_start_training(epochs: int = 3, learning_rate: float = 2e-4, batch_size: int = 4) -> str:
+def finetune_start_training(epochs: int = 3, learning_rate: float = 2e-4, batch_size: int = 4) -> str:
     pipeline = _get_pipeline()
     builder = _get_builder()
     pipeline.config.num_epochs = epochs
@@ -103,7 +103,7 @@ async def finetune_start_training(epochs: int = 3, learning_rate: float = 2e-4, 
         return f"[error] Training failed: {e}"
 
 
-async def finetune_model_info() -> str:
+def finetune_model_info() -> str:
     pipeline = _get_pipeline()
     info = pipeline.get_model_info()
     return (
@@ -115,7 +115,7 @@ async def finetune_model_info() -> str:
     )
 
 
-async def finetune_list_checkpoints() -> str:
+def finetune_list_checkpoints() -> str:
     pipeline = _get_pipeline()
     cps = pipeline.list_checkpoints()
     if not cps:

@@ -111,7 +111,8 @@ def _try_pyelftools(path: str) -> dict[str, Any] | None:
                 s = {"name": sec.name, "type": str(sec.header.sh_type), "size": sec.header.sh_size}
                 try:
                     s["addr"] = hex(sec.header.sh_addr)
-                except Exception:
+                except Exception as e:
+                    logger.debug("Section addr extraction failed: {}", e)
                     s["addr"] = "0x0"
                 sections.append(s)
             symbols = []
@@ -238,7 +239,7 @@ def _find_pe_text_section(raw: bytes, pe_offset: int) -> int | None:
     return None
 
 
-async def analyze_binary(path: str) -> str:
+def analyze_binary(path: str) -> str:
     p = Path(path)
     if not p.exists():
         return f"[error] File not found: {path}"

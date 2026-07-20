@@ -10,6 +10,10 @@ from raven.core.cache.redis_client import RedisClient
 from raven.core.models import Session
 
 _DEFAULT_TTL = 86400
+_ALLOWED_UPDATE_FIELDS = frozenset({
+    "channel", "user_id", "agent_id", "agent_skills", "system_prompt",
+})
+_UNSET = object()
 
 
 class SessionStore:
@@ -27,11 +31,12 @@ class SessionStore:
         client = self._redis._client
         if client is None:
             return None
+        key = self._key(session_id)
         try:
-            data = await self._redis._execute_with_retry("hgetall", client.hgetall, self._key(session_id))
+            data = await self._redis._execute_with_retry("hgetall", client.hgetall, key)
             if not data:
                 return None
-            await self._redis._execute_with_retry("expire", client.expire, self._key(session_id), self._ttl)
+            await self._redis._execute_with_retry("expire", client.expire, key, self._ttl)
             return Session(
                 id=data.get("id", session_id),
                 channel=data.get("channel", ""),
@@ -43,7 +48,7 @@ class SessionStore:
                 updated_at=SessionStore._parse_iso(data.get("updated_at", "")),
             )
         except Exception as e:
-            logger.warning("session_store.get_error", session_id=session_id, error=str(e))
+            logger.warning("session_store.get_error", session_id=session_id, key=key, error=str(e))
             return None
 
     async def set(self, session: Session) -> bool:
@@ -69,7 +74,7 @@ class SessionStore:
             await self._redis._execute_with_retry("expire", client.expire, key, self._ttl)
             return True
         except Exception as e:
-            logger.warning("session_store.set_error", session_id=session.id, error=str(e))
+            logger.warning("session_store.set_error", session_id=session.id, key=key, error=str(e))
             return False
 
     async def update(self, session_id: str, **fields: Any) -> bool:
@@ -82,18 +87,43 @@ class SessionStore:
         try:
             mapping: dict[str, str] = {}
             for k, v in fields.items():
-                if k in ("agent_skills",):
+                if k not in _ALLOWED_UPDATE_FIELDS:
+                    logger.warning("session_store.unknown_field", session_id=session_id, field=k)
+                    continue
+                if k == "agent_skills":
                     mapping[k] = SessionStore._to_json_list(v)
-                elif k in ("created_at", "updated_at", "timestamp"):
-                    mapping[k] = v.isoformat() if isinstance(v, datetime) else str(v)
+                elif isinstance(v, datetime):
+                    mapping[k] = v.isoformat()
+                elif v is not None:
+                    mapping[k] = str(v)
                 else:
-                    mapping[k] = v if v is not None else ""
+                    mapping[k] = ""
+            if not mapping:
+                logger.warning("session_store.update_noop", session_id=session_id, fields=set(fields))
+                return False
             mapping["updated_at"] = datetime.now(UTC).isoformat()
             await self._redis._execute_with_retry("hset", client.hset, key, mapping=mapping)
             await self._redis._execute_with_retry("expire", client.expire, key, self._ttl)
             return True
         except Exception as e:
-            logger.warning("session_store.update_error", session_id=session_id, error=str(e))
+            logger.warning("session_store.update_error", session_id=session_id, key=key, error=str(e))
+            return False
+
+    async def touch(self, session_id: str) -> bool:
+        if not self._redis.is_healthy:
+            return False
+        client = self._redis._client
+        if client is None:
+            return False
+        key = self._key(session_id)
+        try:
+            result = await self._redis._execute_with_retry("exists", client.exists, key)
+            if not result:
+                return False
+            await self._redis._execute_with_retry("expire", client.expire, key, self._ttl)
+            return True
+        except Exception as e:
+            logger.warning("session_store.touch_error", session_id=session_id, key=key, error=str(e))
             return False
 
     async def delete(self, session_id: str) -> bool:
@@ -102,11 +132,12 @@ class SessionStore:
         client = self._redis._client
         if client is None:
             return False
+        key = self._key(session_id)
         try:
-            deleted = await self._redis._execute_with_retry("delete", client.delete, self._key(session_id))
+            deleted = await self._redis._execute_with_retry("delete", client.delete, key)
             return bool(deleted)
         except Exception as e:
-            logger.warning("session_store.delete_error", session_id=session_id, error=str(e))
+            logger.warning("session_store.delete_error", session_id=session_id, key=key, error=str(e))
             return False
 
     async def exists(self, session_id: str) -> bool:
@@ -115,11 +146,12 @@ class SessionStore:
         client = self._redis._client
         if client is None:
             return False
+        key = self._key(session_id)
         try:
-            result = await self._redis._execute_with_retry("exists", client.exists, self._key(session_id))
+            result = await self._redis._execute_with_retry("exists", client.exists, key)
             return bool(result)
         except Exception as e:
-            logger.warning("session_store.exists_error", session_id=session_id, error=str(e))
+            logger.warning("session_store.exists_error", session_id=session_id, key=key, error=str(e))
             return False
 
     @staticmethod
