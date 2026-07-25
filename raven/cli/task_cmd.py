@@ -28,6 +28,7 @@ def task_group():
 @click.option("--limit", default=20, type=int, help="Max results")
 def task_list(user: str | None, status: str | None, limit: int):
     """List tasks"""
+
     async def _inner():
         from raven.core.task_engine.store import TaskStore
 
@@ -57,6 +58,7 @@ def task_list(user: str | None, status: str | None, limit: int):
             created = time.strftime("%H:%M", time.localtime(t.created_at))
             table.add_row(t.id[:8], t.goal[:60], f"{icon} {t.status.value}", f"{done}/{total}", created)
         console.print(table)
+
     _run_async(_inner())
 
 
@@ -64,6 +66,7 @@ def task_list(user: str | None, status: str | None, limit: int):
 @click.argument("task_id")
 def task_show(task_id: str):
     """Show detailed task info"""
+
     async def _inner():
         from raven.core.task_engine.store import TaskStore
 
@@ -82,12 +85,17 @@ def task_show(task_id: str):
             )
         )
         for i, step in enumerate(t.steps):
-            icon = {"pending": "[..]", "running": "[..]", "completed": "[OK]", "failed": "[NO]", "cancelled": "[!]"}.get(
-                step.status.value, "[?]"
-            )
+            icon = {
+                "pending": "[..]",
+                "running": "[..]",
+                "completed": "[OK]",
+                "failed": "[NO]",
+                "cancelled": "[!]",
+            }.get(step.status.value, "[?]")
             console.print(f"  {icon} Step {i + 1}: {step.description} [dim]({step.tool})[/dim]")
             if step.error:
                 console.print(f"     [red]Error: {step.error}[/red]")
+
     _run_async(_inner())
 
 
@@ -162,6 +170,7 @@ def task_cancel(task_id: str):
 @click.argument("task_id")
 def task_retry(task_id: str):
     """Retry a failed task"""
+
     async def _retry():
         from raven.core.task_engine.models import TaskStatus
         from raven.core.task_engine.runner import TaskRunner
@@ -192,6 +201,7 @@ def task_retry(task_id: str):
 @click.argument("task_id")
 def task_logs(task_id: str):
     """Show step details for a task"""
+
     async def _inner():
         from raven.core.task_engine.store import TaskStore
 
@@ -209,4 +219,5 @@ def task_logs(task_id: str):
                 console.print(f"  Result: {result_str}")
             if step.error:
                 console.print(f"  [red]Error: {step.error}[/red]")
+
     _run_async(_inner())

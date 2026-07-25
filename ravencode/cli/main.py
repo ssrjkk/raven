@@ -28,7 +28,7 @@ from ravencode.integrations.gitlab import GitLabIntegration, parse_gitlab_webhoo
 
 
 @click.group()
-def cli():
+def cli() -> None:
     """RavenCode — Autonomous AI engineering framework."""
     setup_logging()
 
@@ -69,7 +69,7 @@ def web(host: str, port: int, password: str | None) -> None:
 
 
 @cli.group()
-def session():
+def session() -> None:
     """Manage sessions."""
 
 
@@ -142,8 +142,9 @@ def session_export_func(session_id: str, sessions_dir: str, sanitize: bool, outp
 
 
 def session_import_func(source: str, sessions_dir: str) -> None:
-    if source.startswith("http://") or source.startswith("https://"):
+    if source.startswith(("http://", "https://")):
         import httpx
+
         try:
             resp = httpx.get(source, timeout=30)
             resp.raise_for_status()
@@ -181,7 +182,7 @@ def _sanitize_session(data: dict[str, Any]) -> None:
 
 
 @cli.group()
-def auth():
+def auth() -> None:
     """Manage credentials and API keys."""
 
 
@@ -283,7 +284,7 @@ def upgrade(version: str | None) -> None:
             pip_cmd.append(f"ravencode=={version}")
         else:
             pip_cmd.append("ravencode")
-        result = subprocess.run(pip_cmd, capture_output=True, text=True)  # noqa: S603
+        result = subprocess.run(pip_cmd, capture_output=True, text=True, check=False)
         if result.returncode == 0:
             click.echo("Upgrade successful!")
         else:
@@ -316,12 +317,12 @@ def import_cmd(source: str, sessions_dir: str) -> None:
 
 
 @cli.group()
-def integrations():
+def integrations() -> None:
     """Manage CI/CD integrations."""
 
 
 @integrations.group()
-def github():
+def github() -> None:
     """GitHub integration commands."""
 
 
@@ -404,7 +405,7 @@ def github_run(event_name: str, payload: str, token: str | None) -> None:
 
 
 @integrations.group()
-def gitlab():
+def gitlab() -> None:
     """GitLab integration commands."""
 
 

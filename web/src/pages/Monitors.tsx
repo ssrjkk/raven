@@ -1,43 +1,32 @@
-import { useState, useEffect } from "react";
-import { api, MonitorData } from "../api/client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+
+import { api } from "../api/client";
+import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
+import { useApiQuery } from "../hooks/useApiQuery";
 
 export default function Monitors() {
-  const [monitors, setMonitors] = useState<MonitorData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
   const { toast } = useToast();
+  const { data: monitorsData, isLoading } = useApiQuery<import("../api/client").MonitorData[]>(["monitors"], () => api.monitors());
+  const monitors = monitorsData ?? [];
 
-  useEffect(() => { load(); }, []);
-
-  async function load() {
-    try {
-      setMonitors(await api.monitors());
-    } catch (e) {
-      console.error("Failed to load monitors:", e);
-      toast("Failed to load monitors", "error");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function toggle(action: string, id: string) {
-    try {
-      await api.monitorToggle(action, id);
+  const toggle = useMutation({
+    mutationFn: ({ action, id }: { action: string; id: string }) => api.monitorToggle(action, id),
+    onSuccess: (_data, { action }) => {
       toast(`Monitor ${action}ed`, "success");
-      await load();
-    } catch (e) {
-      console.error("Failed to toggle monitor:", e);
-      toast("Failed to toggle monitor", "error");
-    }
-  }
+      qc.invalidateQueries({ queryKey: ["monitors"] });
+    },
+    onError: (_err, { action }) => {
+      toast(`Failed to ${action} monitor`, "error");
+    },
+  });
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Monitors</h1>
-        <div className="space-y-2 animate-pulse">
-          {[1, 2].map((i) => <div key={i} className="h-20 bg-gray-900/60 rounded-xl" />)}
-        </div>
+        <Skeleton width={140} height={28} />
+        {[1, 2, 3].map((i) => <SkeletonCard key={i} height={80} />)}
       </div>
     );
   }
@@ -63,13 +52,13 @@ export default function Monitors() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-500">{m.interval_seconds}s</span>
                   {m.last_check && <span className="text-xs">{m.last_check.status === "up" ? "✅" : "❌"}</span>}
-                  {m.status === "active" ? (
-                    <button onClick={() => toggle("pause", m.id)}
+                    {m.status === "active" ? (
+                    <button onClick={() => toggle.mutate({ action: "pause", id: m.id })}
                       className="text-xs text-yellow-400 hover:text-yellow-300 px-2 py-1 rounded hover:bg-yellow-900/20 transition">
                       Pause
                     </button>
                   ) : (
-                    <button onClick={() => toggle("resume", m.id)}
+                    <button onClick={() => toggle.mutate({ action: "resume", id: m.id })}
                       className="text-xs text-green-400 hover:text-green-300 px-2 py-1 rounded hover:bg-green-900/20 transition">
                       Resume
                     </button>

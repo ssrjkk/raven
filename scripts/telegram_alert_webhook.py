@@ -58,8 +58,8 @@ class AlertHandler(BaseHTTPRequestHandler):
                 timeout=10,
             )
             log.info("Alert sent to Telegram: %s", text[:80])
-        except Exception as e:
-            log.error("Failed to send Telegram alert: %s", e)
+        except Exception:
+            log.exception("Failed to send Telegram alert")
 
     def log_message(self, format, *args):
         log.info(format, *args)

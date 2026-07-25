@@ -32,5 +32,7 @@ class ShellExecutor:
     async def glob_files(self, pattern: str, path: str | None = None) -> list[str]:
         return await glob_files(pattern=pattern, path=path)
 
-    async def grep_files(self, pattern: str, include: str | None = None, path: str | None = None) -> list[dict[str, Any]]:
+    async def grep_files(
+        self, pattern: str, include: str | None = None, path: str | None = None
+    ) -> list[dict[str, Any]]:
         return await grep_files(pattern=pattern, include=include, path=path)

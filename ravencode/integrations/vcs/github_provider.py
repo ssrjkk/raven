@@ -11,7 +11,7 @@ from ravencode.integrations.vcs.models import Branch, PullRequest, Repository
 
 
 class GitHubProvider:
-    def __init__(self, token: str | None = None, api_url: str = "https://api.github.com"):
+    def __init__(self, token: str | None = None, api_url: str = "https://api.github.com") -> None:
         self._token = token or os.getenv("GITHUB_TOKEN") or ""
         self._api_url = api_url.rstrip("/")
         self._headers = {
@@ -45,7 +45,9 @@ class GitHubProvider:
             for b in cast(list[dict[str, Any]], resp.json())
         ]
 
-    async def create_pull_request(self, identifier: str, title: str, source: str, target: str, body: str = "") -> PullRequest:
+    async def create_pull_request(
+        self, identifier: str, title: str, source: str, target: str, body: str = ""
+    ) -> PullRequest:
         resp = await self._request(
             "POST",
             f"/repos/{identifier}/pulls",
@@ -108,7 +110,9 @@ class GitHubProvider:
             logger.warning("Failed to get PR diff: {}", e)
             return None
 
-    async def set_commit_status(self, identifier: str, sha: str, state: str, description: str, context: str = "ravencode/ci") -> bool:
+    async def set_commit_status(
+        self, identifier: str, sha: str, state: str, description: str, context: str = "ravencode/ci"
+    ) -> bool:
         try:
             await self._request(
                 "POST",

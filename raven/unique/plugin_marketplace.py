@@ -95,6 +95,7 @@ class PluginCatalog:
 
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.get(self.catalog_url)
                 resp.raise_for_status()
@@ -181,7 +182,9 @@ class PluginCatalog:
 
 
 class PluginManager:
-    def __init__(self, plugins_dir: Path | None = None, catalog: PluginCatalog | None = None, allow_real_install: bool = False) -> None:
+    def __init__(
+        self, plugins_dir: Path | None = None, catalog: PluginCatalog | None = None, allow_real_install: bool = False
+    ) -> None:
         self._plugins_dir = plugins_dir or Path.home() / ".raven" / "plugins"
         self._plugins_dir.mkdir(parents=True, exist_ok=True)
         self._registry_file = self._plugins_dir / "registry.json"
@@ -197,7 +200,8 @@ class PluginManager:
     async def install_plugin(self, url_or_path: str, source: str = "remote") -> InstalledPlugin:
         plugin_id = self._name_from_url(url_or_path)
         if plugin_id in self._installed:
-            raise ValueError(f"Plugin '{plugin_id}' is already installed")
+            msg = f"Plugin '{plugin_id}' is already installed"
+            raise ValueError(msg)
 
         metadata = PluginMetadata(
             id=plugin_id,
@@ -213,7 +217,7 @@ class PluginManager:
             if source == "remote":
                 metadata = await self._fetch_remote_metadata(url_or_path) or metadata
             elif source == "local":
-                metadata = await self._read_local_metadata(Path(url_or_path)) or metadata
+                metadata = self._read_local_metadata(Path(url_or_path)) or metadata
 
             if self._allow_real_install:
                 await self._real_install(url_or_path, install_path, metadata)
@@ -234,7 +238,7 @@ class PluginManager:
             logger.error("[plugin] failed to install '{}': {}", plugin_id, exc)
             raise
 
-    async def uninstall_plugin(self, name: str) -> bool:
+    def uninstall_plugin(self, name: str) -> bool:
         installed = self._installed.pop(name, None)
         if installed is None:
             logger.warning("[plugin] '{}' not installed", name)
@@ -243,6 +247,7 @@ class PluginManager:
         try:
             if installed.install_path.exists():
                 import shutil
+
                 shutil.rmtree(installed.install_path)
         except Exception as exc:
             logger.warning("[plugin] failed to remove files for '{}': {}", name, exc)
@@ -254,7 +259,8 @@ class PluginManager:
     async def update_plugin(self, name: str) -> InstalledPlugin:
         installed = self._installed.get(name)
         if installed is None:
-            raise ValueError(f"Plugin '{name}' is not installed")
+            msg = f"Plugin '{name}' is not installed"
+            raise ValueError(msg)
 
         await self._catalog.sync()
         releases = self._catalog.get_releases(installed.metadata.id)
@@ -292,7 +298,10 @@ class PluginManager:
     def search_plugins(self, query: str) -> list[PluginMetadata]:
         local_results: list[PluginMetadata] = []
         for installed in self._installed.values():
-            if query.lower() in installed.metadata.name.lower() or query.lower() in installed.metadata.description.lower():
+            if (
+                query.lower() in installed.metadata.name.lower()
+                or query.lower() in installed.metadata.description.lower()
+            ):
                 local_results.append(installed.metadata)
         remote_results = self._catalog.search(query)
         seen = {p.id for p in local_results}
@@ -367,6 +376,7 @@ class PluginManager:
     async def _fetch_remote_metadata(self, url: str) -> PluginMetadata | None:
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.get(f"{url.rstrip('/')}/plugin.json")
                 if resp.status_code == 200:
@@ -386,7 +396,7 @@ class PluginManager:
             logger.debug("[plugin] could not fetch remote metadata from {}: {}", url, exc)
         return None
 
-    async def _read_local_metadata(self, path: Path) -> PluginMetadata | None:
+    def _read_local_metadata(self, path: Path) -> PluginMetadata | None:
         plugin_json = path / "plugin.json" if path.is_dir() else path.parent / "plugin.json"
         if plugin_json.exists():
             try:
@@ -409,28 +419,37 @@ class PluginManager:
     async def _real_install(self, url_or_path: str, install_path: Path, metadata: PluginMetadata) -> None:
         install_path.mkdir(parents=True, exist_ok=True)
         plugin_json = install_path / "plugin.json"
-        plugin_json.write_text(json.dumps({
-            "id": metadata.id,
-            "name": metadata.name,
-            "version": metadata.version,
-            "description": metadata.description,
-            "author": metadata.author,
-            "tags": metadata.tags,
-            "dependencies": metadata.dependencies,
-            "icon": metadata.icon,
-            "category": metadata.category.value,
-        }, indent=2))
+        plugin_json.write_text(
+            json.dumps(
+                {
+                    "id": metadata.id,
+                    "name": metadata.name,
+                    "version": metadata.version,
+                    "description": metadata.description,
+                    "author": metadata.author,
+                    "tags": metadata.tags,
+                    "dependencies": metadata.dependencies,
+                    "icon": metadata.icon,
+                    "category": metadata.category.value,
+                },
+                indent=2,
+            )
+        )
 
         if metadata.dependencies:
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    "pip", "install", *metadata.dependencies,
+                    "pip",
+                    "install",
+                    *metadata.dependencies,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
                 await proc.wait()
                 if proc.returncode != 0:
-                    logger.warning("[plugin] pip install for deps of '{}' exited with {}", metadata.name, proc.returncode)
+                    logger.warning(
+                        "[plugin] pip install for deps of '{}' exited with {}", metadata.name, proc.returncode
+                    )
             except FileNotFoundError:
                 logger.debug("[plugin] pip not available, skipping dependency install")
             except Exception as exc:
@@ -440,17 +459,22 @@ class PluginManager:
         await asyncio.sleep(0.05)
         install_path.mkdir(parents=True, exist_ok=True)
         plugin_json = install_path / "plugin.json"
-        plugin_json.write_text(json.dumps({
-            "id": metadata.id,
-            "name": metadata.name,
-            "version": metadata.version,
-            "description": metadata.description,
-            "author": metadata.author,
-            "tags": metadata.tags,
-            "dependencies": metadata.dependencies,
-            "icon": metadata.icon,
-            "category": metadata.category.value,
-        }, indent=2))
+        plugin_json.write_text(
+            json.dumps(
+                {
+                    "id": metadata.id,
+                    "name": metadata.name,
+                    "version": metadata.version,
+                    "description": metadata.description,
+                    "author": metadata.author,
+                    "tags": metadata.tags,
+                    "dependencies": metadata.dependencies,
+                    "icon": metadata.icon,
+                    "category": metadata.category.value,
+                },
+                indent=2,
+            )
+        )
         (install_path / "plugin.py").write_text(
-            f'# {metadata.name} v{metadata.version}\n# Auto-generated by Raven Plugin Marketplace\n'
+            f"# {metadata.name} v{metadata.version}\n# Auto-generated by Raven Plugin Marketplace\n"
         )

@@ -58,7 +58,8 @@ class GitLabWebhookNormalizer:
                 payload=raw_payload,
             )
 
-        raise ValueError(f"Unsupported GitLab event: {object_kind}")
+        msg = f"Unsupported GitLab event: {object_kind}"
+        raise ValueError(msg)
 
 
 class GitLabLegacyNormalizer:
@@ -72,7 +73,7 @@ class GitLabLegacyNormalizer:
         if base is None:
             return None
         if raw_event == "Note Hook":
-            noteable = ((payload.get("object_attributes") or {}).get("noteable_type") or "")
+            noteable = (payload.get("object_attributes") or {}).get("noteable_type") or ""
             if noteable == "MergeRequest":
                 return EventType.MERGE_REQUEST_COMMENT
             return EventType.ISSUE_COMMENT

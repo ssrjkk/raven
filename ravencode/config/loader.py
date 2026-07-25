@@ -53,7 +53,7 @@ def strip_jsonc(text: str) -> str:
         if not stripped:
             lines.append("")
             continue
-        if stripped.startswith("//") or stripped.startswith("#"):
+        if stripped.startswith(("//", "#")):
             continue
         m = _COMMENT_RE.match(line)
         if m and m.group(1):
@@ -116,6 +116,7 @@ def _default_config_paths(project_dir: str | Path) -> list[tuple[str, Path]]:
     inline = os.environ.get("RAVENCODE_CONFIG_CONTENT")
     if inline:
         import tempfile
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             f.write(inline)
             tmp_path = Path(f.name)
@@ -220,32 +221,36 @@ class RavenConfig:
     def resolve_providers(self) -> list[ProviderConfig]:
         result = []
         for p in self.providers:
-            result.append(ProviderConfig(
-                id=p.get("id", ""),
-                name=p.get("name", ""),
-                api_key=p.get("api_key", ""),
-                base_url=p.get("base_url", ""),
-                models=p.get("models", []),
-                options=p.get("options", {}),
-            ))
+            result.append(
+                ProviderConfig(
+                    id=p.get("id", ""),
+                    name=p.get("name", ""),
+                    api_key=p.get("api_key", ""),
+                    base_url=p.get("base_url", ""),
+                    models=p.get("models", []),
+                    options=p.get("options", {}),
+                )
+            )
         return result
 
     def resolve_agents(self) -> list[AgentDef]:
         result = []
         for a in self.agents:
-            result.append(AgentDef(
-                name=a.get("name", ""),
-                type=a.get("type", "subagent"),
-                description=a.get("description", ""),
-                prompt=a.get("prompt", ""),
-                model=a.get("model", ""),
-                temperature=a.get("temperature"),
-                max_steps=a.get("max_steps", 30),
-                permissions=a.get("permissions", {}),
-                disabled=a.get("disabled", False),
-                hidden=a.get("hidden", False),
-                options=a.get("options", {}),
-            ))
+            result.append(
+                AgentDef(
+                    name=a.get("name", ""),
+                    type=a.get("type", "subagent"),
+                    description=a.get("description", ""),
+                    prompt=a.get("prompt", ""),
+                    model=a.get("model", ""),
+                    temperature=a.get("temperature"),
+                    max_steps=a.get("max_steps", 30),
+                    permissions=a.get("permissions", {}),
+                    disabled=a.get("disabled", False),
+                    hidden=a.get("hidden", False),
+                    options=a.get("options", {}),
+                )
+            )
         return result
 
 
@@ -255,7 +260,7 @@ _config_instance: RavenConfig | None = None
 class ConfigLoader:
     """Loads and merges config from multiple sources."""
 
-    def __init__(self, project_dir: str | Path | None = None):
+    def __init__(self, project_dir: str | Path | None = None) -> None:
         self._project_dir = Path(project_dir).resolve() if project_dir else Path.cwd().resolve()
         self._sources: list[tuple[str, dict[str, Any]]] = []
         self._merged: RavenConfig | None = None

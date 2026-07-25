@@ -22,6 +22,7 @@ def db_group():
 @click.option("--target", default=None, type=int, help="Target migration version")
 def db_migrate(target: int | None):
     """Run pending database migrations"""
+
     async def _migrate():
         db = DatabaseFactory.create()
         await db.connect()
@@ -47,6 +48,7 @@ def db_backup(output: str | None):
 @db_group.command("version")
 def db_version():
     """Show current database schema version"""
+
     async def _version():
         db = DatabaseFactory.create()
         await db.connect()

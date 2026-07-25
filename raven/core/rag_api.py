@@ -55,6 +55,7 @@ def create_rag_router() -> APIRouter:
         if req.metadata:
             try:
                 import json
+
                 meta = json.loads(req.metadata)
             except json.JSONDecodeError:
                 meta = {"note": req.metadata}
@@ -84,7 +85,9 @@ def create_rag_router() -> APIRouter:
                         "source": r.citation.source if r.citation else "",
                         "page": r.citation.page if r.citation else 0,
                         "modality": r.citation.modality if r.citation else "",
-                    } if r.citation else None,
+                    }
+                    if r.citation
+                    else None,
                 }
                 for r in results
             ]

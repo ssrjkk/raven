@@ -79,7 +79,7 @@ class TestCodeIndexer:
         indexer = CodeIndexer(str(src))
         files = indexer.index()
         assert len(files) == 1
-        key = list(files.keys())[0]
+        key = next(iter(files.keys()))
         assert "hello.py" in key
 
     def test_index_empty_dir(self, tmp_path):

@@ -32,7 +32,9 @@ class RedisNotAvailableError(RuntimeError):
 
 
 class RedisClient:
-    def __init__(self, url: str, max_connections: int = 50, retry_attempts: int = 3, retry_base_delay: float = 0.5) -> None:
+    def __init__(
+        self, url: str, max_connections: int = 50, retry_attempts: int = 3, retry_base_delay: float = 0.5
+    ) -> None:
         self.url = url
         self.max_connections = max_connections
         self.retry_attempts = retry_attempts
@@ -50,9 +52,7 @@ class RedisClient:
             logger.warning("redis package not installed — RedisClient disabled")
             return False
         try:
-            self._pool = _ConnectionPool.from_url(
-                self.url, max_connections=self.max_connections, decode_responses=True
-            )
+            self._pool = _ConnectionPool.from_url(self.url, max_connections=self.max_connections, decode_responses=True)
             self._client = _Redis(connection_pool=self._pool)
             await self._client.ping()
             self._is_healthy = True
@@ -97,7 +97,7 @@ class RedisClient:
 
     def _backoff_delay(self, attempt: int) -> float:
         delay = self._retry_base_delay * (2**attempt)
-        jitter: float = random.uniform(0.5, 1.5)  # noqa: S311
+        jitter: float = random.uniform(0.5, 1.5)
         return delay * jitter  # type: ignore[no-any-return]
 
     async def ping(self) -> bool:

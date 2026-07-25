@@ -1,15 +1,48 @@
-import { useEffect, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+
 import { api } from "../api/client";
+import { useApiQuery } from "../hooks/useApiQuery";
+
+interface CollabUser {
+  id: string;
+  name: string;
+}
+
+interface CollabComment {
+  id: string;
+  user_id: string;
+  line: number;
+  text: string;
+  resolved: boolean;
+}
+
+interface CollabSession {
+  session_id: string;
+  file_path: string;
+  connected_users: number;
+  users: number | CollabUser[];
+  version: string;
+}
+
+interface CollabSessionDetails {
+  session_id: string;
+  file_path: string;
+  connected_users: number;
+  users: number | CollabUser[];
+  version: string;
+  content?: string;
+  comments?: CollabComment[];
+}
 
 type Tab = "sessions" | "session";
 
 export default function Collab() {
+  const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("sessions");
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [selectedSession, setSelectedSession] = useState<any>(null);
+  const [selectedSession, setSelectedSession] = useState<CollabSessionDetails | null>(null);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
-  const [loading, setLoading] = useState(false);
 
   // create form
   const [sessionId, setSessionId] = useState("");
@@ -19,58 +52,35 @@ export default function Collab() {
   const [joinUid, setJoinUid] = useState("");
   const [joinName, setJoinName] = useState("");
 
-  async function loadSessions() {
-    setLoading(true); setError("");
-    try {
-      const r = await api.collabSessions();
-      setSessions(r.sessions);
-    } catch (e: any) {
-      setError(e.message || "Failed to load sessions");
-    } finally { setLoading(false); }
-  }
+  const { data: sessionsData } = useApiQuery<{ sessions: CollabSession[] }>(["collabSessions"], () => api.collabSessions(), { enabled: tab === "sessions" });
+  const sessions = sessionsData?.sessions ?? [];
 
-  async function loadSession(sid: string) {
-    setLoading(true); setError("");
-    try {
-      const r = await api.collabSession(sid);
-      setSelectedSession(r);
-    } catch (e: any) {
-      setError(e.message || "Failed to load session");
-    } finally { setLoading(false); }
-  }
+  const { data: sessionDetail } = useApiQuery<CollabSessionDetails>(["collabSession", selectedSession?.session_id ?? ""], () => api.collabSession(selectedSession!.session_id), { enabled: tab === "session" && !!selectedSession });
 
-  useEffect(() => { if (tab === "sessions") loadSessions(); }, [tab]);
-
-  async function handleCreate() {
-    setMsg(""); setError("");
-    setLoading(true);
-    try {
-      const r: any = await api.collabCreateSession(sessionId, filePath);
+  const createSession = useMutation({
+    mutationFn: () => api.collabCreateSession(sessionId, filePath),
+    onSuccess: (r) => {
       setMsg(`Session '${r.session_id}' created`);
       setSessionId(""); setFilePath("");
-      loadSessions();
-    } catch (e: any) {
-      setError(e.message || "Create failed");
-    } finally { setLoading(false); }
-  }
+      qc.invalidateQueries({ queryKey: ["collabSessions"] });
+    },
+    onError: (e: any) => setError(e.message || "Create failed"),
+  });
 
-  async function handleJoin() {
-    setMsg(""); setError("");
-    setLoading(true);
-    try {
-      await api.collabJoin(joinSid, joinUid, joinName);
+  const joinSession = useMutation({
+    mutationFn: () => api.collabJoin(joinSid, joinUid, joinName),
+    onSuccess: () => {
       setMsg(`Joined session '${joinSid}'`);
-      loadSessions();
-    } catch (e: any) {
-      setError(e.message || "Join failed");
-    } finally { setLoading(false); }
-  }
+      qc.invalidateQueries({ queryKey: ["collabSessions"] });
+    },
+    onError: (e: any) => setError(e.message || "Join failed"),
+  });
 
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Collaboration</h1>
 
-      <div className="flex gap-1 mb-6 border-b" style={{ borderColor: "var(--dt-colors-border-default)" }}>
+      <div className="flex gap-1 mb-6 border-b border-default">
         <button onClick={() => setTab("sessions")} className="px-4 py-2 text-sm font-medium rounded-t-lg transition"
           style={{ color: tab === "sessions" ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)", borderBottom: tab === "sessions" ? "2px solid var(--dt-colors-accent-default)" : "2px solid transparent" }}>
           Sessions
@@ -81,58 +91,58 @@ export default function Collab() {
         </button>
       </div>
 
-      {error && <div className="p-3 mb-4 rounded-lg text-sm" style={{ backgroundColor: "rgba(239,68,68,0.1)", color: "var(--dt-colors-danger-default)" }}>{error}</div>}
-      {msg && <div className="p-3 mb-4 rounded-lg text-sm" style={{ backgroundColor: "rgba(34,197,94,0.1)", color: "var(--dt-colors-success-default)" }}>{msg}</div>}
+      {error && <div className="p-3 mb-4 rounded-lg text-sm bg-danger-muted text-danger">{error}</div>}
+      {msg && <div className="p-3 mb-4 rounded-lg text-sm bg-success-muted text-success">{msg}</div>}
 
       {tab === "sessions" && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="p-4 rounded-lg" style={{ backgroundColor: "var(--dt-colors-bg-secondary)" }}>
+            <div className="p-4 rounded-lg bg-secondary">
               <h2 className="text-lg font-semibold mb-3">Create Session</h2>
               <div className="space-y-3 mb-3">
                 <input placeholder="Session ID" value={sessionId} onChange={e => setSessionId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-sm" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-primary)", border: "1px solid var(--dt-colors-border-default)" }} />
+                  className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
                 <input placeholder="File path" value={filePath} onChange={e => setFilePath(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-sm" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-primary)", border: "1px solid var(--dt-colors-border-default)" }} />
+                  className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
               </div>
-              <button onClick={handleCreate} disabled={loading || !sessionId || !filePath}
-                className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50" style={{ backgroundColor: "var(--dt-colors-accent-default)", color: "#fff" }}>
-                {loading ? "..." : "Create Session"}
+              <button onClick={() => createSession.mutate()} disabled={createSession.isPending || !sessionId || !filePath}
+                className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white">
+                {createSession.isPending ? "..." : "Create Session"}
               </button>
             </div>
 
-            <div className="p-4 rounded-lg" style={{ backgroundColor: "var(--dt-colors-bg-secondary)" }}>
+            <div className="p-4 rounded-lg bg-secondary">
               <h2 className="text-lg font-semibold mb-3">Join Session</h2>
               <div className="space-y-3 mb-3">
                 <input placeholder="Session ID" value={joinSid} onChange={e => setJoinSid(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-sm" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-primary)", border: "1px solid var(--dt-colors-border-default)" }} />
+                  className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
                 <input placeholder="User ID" value={joinUid} onChange={e => setJoinUid(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-sm" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-primary)", border: "1px solid var(--dt-colors-border-default)" }} />
+                  className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
                 <input placeholder="User Name" value={joinName} onChange={e => setJoinName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-sm" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-primary)", border: "1px solid var(--dt-colors-border-default)" }} />
+                  className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
               </div>
-              <button onClick={handleJoin} disabled={loading || !joinSid || !joinUid}
-                className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50" style={{ backgroundColor: "var(--dt-colors-accent-default)", color: "#fff" }}>
+              <button onClick={() => joinSession.mutate()} disabled={joinSession.isPending || !joinSid || !joinUid}
+                className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white">
                 Join Session
               </button>
             </div>
           </div>
 
-          <div className="p-4 rounded-lg" style={{ backgroundColor: "var(--dt-colors-bg-secondary)" }}>
+          <div className="p-4 rounded-lg bg-secondary">
             <h2 className="text-lg font-semibold mb-3">Active Sessions ({sessions.length})</h2>
             {sessions.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--dt-colors-text-tertiary)" }}>No active sessions.</p>
+              <p className="text-sm text-tertiary">No active sessions.</p>
             ) : (
               <div className="space-y-2">
-                {sessions.map((s: any) => (
+                {sessions.map((s) => (
                   <div key={s.session_id}
-                    onClick={() => { setSelectedSession(s); setTab("session"); loadSession(s.session_id); }}
-                    className="flex items-center justify-between p-3 rounded-lg cursor-pointer" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}>
+                    onClick={() => { setSelectedSession(s); setTab("session"); }}
+                    className="flex items-center justify-between p-3 rounded-lg cursor-pointer bg-tertiary">
                     <div>
                       <span className="font-medium">{s.session_id}</span>
-                      <span className="ml-3 text-sm" style={{ color: "var(--dt-colors-text-tertiary)" }}>{s.file_path}</span>
+                      <span className="ml-3 text-sm text-tertiary">{s.file_path}</span>
                     </div>
-                    <span className="text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>{s.connected_users}/{s.users} users v{s.version}</span>
+                    <span className="text-xs text-tertiary">{s.connected_users}/{typeof s.users === "number" ? s.users : s.users.length} users v{s.version}</span>
                   </div>
                 ))}
               </div>
@@ -143,28 +153,28 @@ export default function Collab() {
 
       {tab === "session" && selectedSession && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="p-4 rounded-lg" style={{ backgroundColor: "var(--dt-colors-bg-secondary)" }}>
+          <div className="p-4 rounded-lg bg-secondary">
             <h2 className="text-lg font-semibold mb-3">Document Content</h2>
-            <pre className="p-3 rounded-lg text-xs overflow-auto max-h-96" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}>
-              {selectedSession.content || "(empty)"}
+            <pre className="p-3 rounded-lg text-xs overflow-auto max-h-96 bg-tertiary">
+              {sessionDetail?.content || "(empty)"}
             </pre>
           </div>
           <div className="space-y-4">
-            <div className="p-4 rounded-lg" style={{ backgroundColor: "var(--dt-colors-bg-secondary)" }}>
+            <div className="p-4 rounded-lg bg-secondary">
               <h2 className="text-lg font-semibold mb-3">Users</h2>
-              {selectedSession.users?.map((u: any) => (
-                <div key={u.id} className="p-2 rounded-lg text-sm mb-1" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}>
+              {Array.isArray(sessionDetail?.users) && (sessionDetail!.users as CollabUser[]).map((u: CollabUser) => (
+                <div key={u.id} className="p-2 rounded-lg text-sm mb-1 bg-tertiary">
                   {u.name} ({u.id})
                 </div>
               ))}
             </div>
-            <div className="p-4 rounded-lg" style={{ backgroundColor: "var(--dt-colors-bg-secondary)" }}>
+            <div className="p-4 rounded-lg bg-secondary">
               <h2 className="text-lg font-semibold mb-3">Comments</h2>
-              {selectedSession.comments?.length === 0 && <p className="text-sm" style={{ color: "var(--dt-colors-text-tertiary)" }}>No comments.</p>}
-              {selectedSession.comments?.map((c: any) => (
-                <div key={c.id} className="p-2 rounded-lg text-sm mb-1" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}>
+              {sessionDetail?.comments?.length === 0 && <p className="text-sm text-tertiary">No comments.</p>}
+              {sessionDetail?.comments?.map((c) => (
+                <div key={c.id} className="p-2 rounded-lg text-sm mb-1 bg-tertiary">
                   <span className="font-medium">{c.user_id}</span> L{c.line}: {c.text}
-                  <span className="ml-2 text-xs">{c.resolved ? "✓ resolved" : "○ open"}</span>
+                  <span className="ml-2 text-xs">{c.resolved ? "РІСљвЂњ resolved" : "РІвЂ”вЂ№ open"}</span>
                 </div>
               ))}
             </div>

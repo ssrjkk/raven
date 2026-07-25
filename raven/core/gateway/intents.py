@@ -61,7 +61,9 @@ class MonitorIntent:
             return True
         lines = ["\U0001f4ca Your Monitors:"]
         for mon in monitors[:10]:
-            icon = {"active": "\U0001f7e2", "paused": "\u23f8\ufe0f", "error": "\U0001f534"}.get(mon.status.value, "\u2753")
+            icon = {"active": "\U0001f7e2", "paused": "\u23f8\ufe0f", "error": "\U0001f534"}.get(
+                mon.status.value, "\u2753"
+            )
             lines.append(f"  {icon} {mon.name} [{mon.type.value}] every {mon.interval_seconds}s")
         await gw._send(event.channel, event.session_id, "\n".join(lines))
         return True

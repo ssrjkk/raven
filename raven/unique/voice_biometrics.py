@@ -12,6 +12,7 @@ from loguru import logger
 
 try:
     import numpy as np
+
     _NUMPY_AVAILABLE = True
 except ImportError:
     _NUMPY_AVAILABLE = False
@@ -19,6 +20,7 @@ except ImportError:
 
 try:
     import torch
+
     _TORCH_AVAILABLE = True
 except ImportError:
     _TORCH_AVAILABLE = False
@@ -26,6 +28,7 @@ except ImportError:
 
 try:
     import librosa
+
     _LIBROSA_AVAILABLE = True
 except ImportError:
     _LIBROSA_AVAILABLE = False
@@ -33,6 +36,7 @@ except ImportError:
 
 try:
     import speechbrain as sb
+
     _SPEECHBRAIN_AVAILABLE = True
 except ImportError:
     _SPEECHBRAIN_AVAILABLE = False
@@ -229,7 +233,9 @@ class VoiceVerifier:
             raise ValueError("Threshold must be between 0.0 and 1.0")
         self._threshold = value
 
-    def verify(self, audio: list[float], voiceprint: Voiceprint, sample_rate: int = DEFAULT_SAMPLE_RATE) -> VerificationResult:
+    def verify(
+        self, audio: list[float], voiceprint: Voiceprint, sample_rate: int = DEFAULT_SAMPLE_RATE
+    ) -> VerificationResult:
         start = time.time()
         embedding = self._encoder.encode(audio, sample_rate)
         score = self._encoder.compute_similarity(embedding, voiceprint.embedding)
@@ -276,7 +282,9 @@ class VoiceBiometrics:
         self._voiceprints: dict[str, Voiceprint] = {}
         self._continuous_sessions: dict[str, dict[str, Any]] = {}
 
-    def enroll(self, speaker_id: str, audio_samples: list[list[float]], sample_rate: int = DEFAULT_SAMPLE_RATE) -> EnrollmentResult:
+    def enroll(
+        self, speaker_id: str, audio_samples: list[list[float]], sample_rate: int = DEFAULT_SAMPLE_RATE
+    ) -> EnrollmentResult:
         if not audio_samples:
             return EnrollmentResult(
                 speaker_id=speaker_id,
@@ -316,27 +324,34 @@ class VoiceBiometrics:
             embedding=avg_embedding,
         )
 
-    def verify(self, speaker_id: str, audio: list[float], sample_rate: int = DEFAULT_SAMPLE_RATE, anti_spoof: bool = True) -> VerificationResult:
+    def verify(
+        self, speaker_id: str, audio: list[float], sample_rate: int = DEFAULT_SAMPLE_RATE, anti_spoof: bool = True
+    ) -> VerificationResult:
         voiceprint = self._voiceprints.get(speaker_id)
         if voiceprint is None:
-            raise ValueError(f"Speaker '{speaker_id}' not enrolled")
+            msg = f"Speaker '{speaker_id}' not enrolled"
+            raise ValueError(msg)
         if anti_spoof:
             return self._verifier.verify_with_antispoof(audio, voiceprint, sample_rate)
         return self._verifier.verify(audio, voiceprint, sample_rate)
 
-    def identify(self, audio: list[float], sample_rate: int = DEFAULT_SAMPLE_RATE, top_k: int = 3) -> list[VerificationResult]:
+    def identify(
+        self, audio: list[float], sample_rate: int = DEFAULT_SAMPLE_RATE, top_k: int = 3
+    ) -> list[VerificationResult]:
         if not self._voiceprints:
             raise ValueError("No speakers enrolled")
         results: list[VerificationResult] = []
         embedding = self._encoder.encode(audio, sample_rate)
         for speaker_id, vp in self._voiceprints.items():
             score = self._encoder.compute_similarity(embedding, vp.embedding)
-            results.append(VerificationResult(
-                verified=score >= self._verifier.threshold,
-                score=round(score, 4),
-                threshold=self._verifier.threshold,
-                speaker_id=speaker_id,
-            ))
+            results.append(
+                VerificationResult(
+                    verified=score >= self._verifier.threshold,
+                    score=round(score, 4),
+                    threshold=self._verifier.threshold,
+                    speaker_id=speaker_id,
+                )
+            )
         results.sort(key=lambda r: r.score, reverse=True)
         return results[:top_k]
 
@@ -365,7 +380,8 @@ class VoiceBiometrics:
 
     def start_continuous_auth(self, speaker_id: str, interval_sec: float = 5.0) -> None:
         if speaker_id not in self._voiceprints:
-            raise ValueError(f"Speaker '{speaker_id}' not enrolled")
+            msg = f"Speaker '{speaker_id}' not enrolled"
+            raise ValueError(msg)
         self._continuous_sessions[speaker_id] = {
             "interval": interval_sec,
             "active": True,
@@ -380,7 +396,9 @@ class VoiceBiometrics:
             session["active"] = False
             logger.info("Stopped continuous auth for '{}'", speaker_id)
 
-    def update_continuous_auth(self, speaker_id: str, audio: list[float], sample_rate: int = DEFAULT_SAMPLE_RATE) -> VerificationResult | None:
+    def update_continuous_auth(
+        self, speaker_id: str, audio: list[float], sample_rate: int = DEFAULT_SAMPLE_RATE
+    ) -> VerificationResult | None:
         session = self._continuous_sessions.get(speaker_id)
         if not session or not session["active"]:
             return None
@@ -484,7 +502,7 @@ class ContinuousAuthenticator:
         logger.info("Continuous authenticator started for user {} (interval={}s)", user_id, interval_seconds)
         return session
 
-    async def stop(self) -> None:
+    def stop(self) -> None:
         for uid, session in self._sessions.items():
             session.status = "stopped"
             task = self._tasks.get(uid)

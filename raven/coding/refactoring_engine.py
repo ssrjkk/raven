@@ -18,15 +18,49 @@ try:
 except ImportError:
     _TREE_SITTER_AVAILABLE = False
 
-_KNOWN_TYPES: frozenset[str] = frozenset({
-    "int", "float", "str", "bool", "bytes", "bytearray", "None", "Any",
-    "object", "list", "dict", "set", "tuple", "frozenset", "type",
-    "Optional", "Union", "Literal", "TypeVar", "Generic", "Protocol",
-    "TypedDict", "Callable", "Iterable", "Iterator", "Sequence", "Mapping",
-    "MutableMapping", "Awaitable", "AsyncIterable", "AsyncIterator",
-    "Path", "PathLike", "Self", "Final", "ClassVar", "Never", "NoReturn",
-    "overload",
-})
+_KNOWN_TYPES: frozenset[str] = frozenset(
+    {
+        "int",
+        "float",
+        "str",
+        "bool",
+        "bytes",
+        "bytearray",
+        "None",
+        "Any",
+        "object",
+        "list",
+        "dict",
+        "set",
+        "tuple",
+        "frozenset",
+        "type",
+        "Optional",
+        "Union",
+        "Literal",
+        "TypeVar",
+        "Generic",
+        "Protocol",
+        "TypedDict",
+        "Callable",
+        "Iterable",
+        "Iterator",
+        "Sequence",
+        "Mapping",
+        "MutableMapping",
+        "Awaitable",
+        "AsyncIterable",
+        "AsyncIterator",
+        "Path",
+        "PathLike",
+        "Self",
+        "Final",
+        "ClassVar",
+        "Never",
+        "NoReturn",
+        "overload",
+    }
+)
 
 
 class BreakingChangeError(Exception):
@@ -171,17 +205,19 @@ class TreeSitterParser:
             params_node = n.child_by_field_name("parameters")  # type: ignore[attr-defined]
             return_type_node = n.child_by_field_name("return_type")  # type: ignore[attr-defined]
             if name_node:
-                name = source[name_node.start_byte:name_node.end_byte]
+                name = source[name_node.start_byte : name_node.end_byte]
                 params: list[ParamInfo] = []
                 if params_node:
                     params = self._ts_extract_params(params_node, source)
-                functions.append(FunctionInfo(
-                    name=name,
-                    params=params,
-                    has_return_type=return_type_node is not None,
-                    start_line=n.start_point[0] + 1,  # type: ignore[attr-defined]
-                    end_line=n.end_point[0] + 1,  # type: ignore[attr-defined]
-                ))
+                functions.append(
+                    FunctionInfo(
+                        name=name,
+                        params=params,
+                        has_return_type=return_type_node is not None,
+                        start_line=n.start_point[0] + 1,  # type: ignore[attr-defined]
+                        end_line=n.end_point[0] + 1,  # type: ignore[attr-defined]
+                    )
+                )
         if hasattr(n, "children"):
             for child in n.children:
                 self._ts_walk_functions(child, source, functions)
@@ -193,23 +229,29 @@ class TreeSitterParser:
         for child in params_node.children:
             ct = child.type
             if ct == "identifier":
-                params.append(ParamInfo(name=source[child.start_byte:child.end_byte], has_default=False))
+                params.append(ParamInfo(name=source[child.start_byte : child.end_byte], has_default=False))
             elif ct == "typed_parameter":
                 name_child = child.child_by_field_name("name")
                 if name_child:
-                    params.append(ParamInfo(name=source[name_child.start_byte:name_child.end_byte], has_default=False))
+                    params.append(
+                        ParamInfo(name=source[name_child.start_byte : name_child.end_byte], has_default=False)
+                    )
             elif ct in ("default_parameter", "typed_default_parameter"):
                 name_child = child.child_by_field_name("name")
                 if name_child:
-                    params.append(ParamInfo(name=source[name_child.start_byte:name_child.end_byte], has_default=True))
+                    params.append(ParamInfo(name=source[name_child.start_byte : name_child.end_byte], has_default=True))
             elif ct == "list_splat_pattern":
                 name_child = child.child_by_field_name("name")
                 if name_child:
-                    params.append(ParamInfo(name=f"*{source[name_child.start_byte:name_child.end_byte]}", has_default=False))
+                    params.append(
+                        ParamInfo(name=f"*{source[name_child.start_byte : name_child.end_byte]}", has_default=False)
+                    )
             elif ct == "dictionary_splat_pattern":
                 name_child = child.child_by_field_name("name")
                 if name_child:
-                    params.append(ParamInfo(name=f"**{source[name_child.start_byte:name_child.end_byte]}", has_default=False))
+                    params.append(
+                        ParamInfo(name=f"**{source[name_child.start_byte : name_child.end_byte]}", has_default=False)
+                    )
         return params
 
     def _extract_classes_ts(self, source: str) -> list[ClassInfo]:
@@ -223,7 +265,7 @@ class TreeSitterParser:
         if hasattr(n, "type") and n.type == "class_definition":
             name_node = n.child_by_field_name("name")  # type: ignore[attr-defined]
             if name_node:
-                name = source[name_node.start_byte:name_node.end_byte]
+                name = source[name_node.start_byte : name_node.end_byte]
                 methods: list[FunctionInfo] = []
                 body = n.child_by_field_name("body")  # type: ignore[attr-defined]
                 if body and hasattr(body, "children"):
@@ -233,23 +275,27 @@ class TreeSitterParser:
                             m_params_node = child.child_by_field_name("parameters")
                             m_return_type = child.child_by_field_name("return_type")
                             if m_name_node:
-                                m_name = source[m_name_node.start_byte:m_name_node.end_byte]
+                                m_name = source[m_name_node.start_byte : m_name_node.end_byte]
                                 m_params: list[ParamInfo] = []
                                 if m_params_node:
                                     m_params = self._ts_extract_params(m_params_node, source)
-                                methods.append(FunctionInfo(
-                                    name=m_name,
-                                    params=m_params,
-                                    has_return_type=m_return_type is not None,
-                                    start_line=child.start_point[0] + 1,
-                                    end_line=child.end_point[0] + 1,
-                                ))
-                classes.append(ClassInfo(
-                    name=name,
-                    methods=methods,
-                    start_line=n.start_point[0] + 1,  # type: ignore[attr-defined]
-                    end_line=n.end_point[0] + 1,  # type: ignore[attr-defined]
-                ))
+                                methods.append(
+                                    FunctionInfo(
+                                        name=m_name,
+                                        params=m_params,
+                                        has_return_type=m_return_type is not None,
+                                        start_line=child.start_point[0] + 1,
+                                        end_line=child.end_point[0] + 1,
+                                    )
+                                )
+                classes.append(
+                    ClassInfo(
+                        name=name,
+                        methods=methods,
+                        start_line=n.start_point[0] + 1,  # type: ignore[attr-defined]
+                        end_line=n.end_point[0] + 1,  # type: ignore[attr-defined]
+                    )
+                )
         if hasattr(n, "children"):
             for child in n.children:
                 self._ts_walk_classes(child, source, classes)
@@ -267,11 +313,11 @@ class TreeSitterParser:
         if n.type == "import_statement":
             for child in n.children:  # type: ignore[attr-defined]
                 if hasattr(child, "type") and child.type == "dotted_name":
-                    imports.append(source[child.start_byte:child.end_byte].replace(".", "/") + ".py")
+                    imports.append(source[child.start_byte : child.end_byte].replace(".", "/") + ".py")
         elif n.type == "import_from_statement":
             module_node = n.child_by_field_name("module_name")  # type: ignore[attr-defined]
             if module_node:
-                imports.append(source[module_node.start_byte:module_node.end_byte].replace(".", "/") + ".py")
+                imports.append(source[module_node.start_byte : module_node.end_byte].replace(".", "/") + ".py")
         if hasattr(n, "children"):
             for child in n.children:
                 self._ts_walk_imports(child, source, imports)
@@ -287,13 +333,15 @@ class TreeSitterParser:
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 params = self._ast_extract_params(node)
-                functions.append(FunctionInfo(
-                    name=node.name,
-                    params=params,
-                    has_return_type=node.returns is not None,
-                    start_line=node.lineno,
-                    end_line=node.end_lineno or node.lineno,
-                ))
+                functions.append(
+                    FunctionInfo(
+                        name=node.name,
+                        params=params,
+                        has_return_type=node.returns is not None,
+                        start_line=node.lineno,
+                        end_line=node.end_lineno or node.lineno,
+                    )
+                )
         return functions
 
     @staticmethod
@@ -318,19 +366,23 @@ class TreeSitterParser:
                 for item in node.body:
                     if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         params = self._ast_extract_params(item)
-                        methods.append(FunctionInfo(
-                            name=item.name,
-                            params=params,
-                            has_return_type=item.returns is not None,
-                            start_line=item.lineno,
-                            end_line=item.end_lineno or item.lineno,
-                        ))
-                classes.append(ClassInfo(
-                    name=node.name,
-                    methods=methods,
-                    start_line=node.lineno,
-                    end_line=node.end_lineno or node.lineno,
-                ))
+                        methods.append(
+                            FunctionInfo(
+                                name=item.name,
+                                params=params,
+                                has_return_type=item.returns is not None,
+                                start_line=item.lineno,
+                                end_line=item.end_lineno or item.lineno,
+                            )
+                        )
+                classes.append(
+                    ClassInfo(
+                        name=node.name,
+                        methods=methods,
+                        start_line=node.lineno,
+                        end_line=node.end_lineno or node.lineno,
+                    )
+                )
         return classes
 
     def _extract_imports_ast(self, source: str) -> list[str]:
@@ -358,20 +410,20 @@ class RefactoringEngine:
         search_paths = [self._workspace / p for p in paths] if paths else [self._workspace]
         for search_path in search_paths:
             if not search_path.is_dir() and search_path.is_file():
-                deps = await self._extract_imports(str(search_path))
+                deps = self._extract_imports(str(search_path))
                 g.add_node(str(search_path))
                 for dep in deps:
                     g.add_edge(DependencyEdge(source=str(search_path), target=dep))
             elif search_path.is_dir():
                 for py_file in search_path.rglob("*.py"):
-                    deps = await self._extract_imports(str(py_file))
+                    deps = self._extract_imports(str(py_file))
                     g.add_node(str(py_file))
                     for dep in deps:
                         g.add_edge(DependencyEdge(source=str(py_file), target=dep))
         self._dep_graph = g
         return g
 
-    async def _extract_imports(self, file_path: str) -> list[str]:
+    def _extract_imports(self, file_path: str) -> list[str]:
         try:
             source = Path(file_path).read_text(encoding="utf-8")
         except (FileNotFoundError, OSError):
@@ -395,7 +447,7 @@ class RefactoringEngine:
             safe_to_apply=len(risks) == 0,
         )
 
-    async def apply_changes(self, changes: list[FileChange], backup: bool = True) -> list[str]:
+    def apply_changes(self, changes: list[FileChange], backup: bool = True) -> list[str]:
         results: list[str] = []
         for change in changes:
             full_path = self._workspace / change.path
@@ -413,7 +465,7 @@ class RefactoringEngine:
                 results.append(f"Failed to apply {change.change_type} to {change.path}: {exc}")
         return results
 
-    async def rollback(self, paths: list[str]) -> list[str]:
+    def rollback(self, paths: list[str]) -> list[str]:
         results: list[str] = []
         for path_str in paths:
             path = Path(path_str)
@@ -429,14 +481,17 @@ class RefactoringEngine:
                 results.append(f"No backup found for {path_str}")
         return results
 
-    async def compute_diff(self, old_content: str, new_content: str, path: str) -> str:
-        return "".join(difflib.unified_diff(
-            old_content.splitlines(keepends=True),
-            new_content.splitlines(keepends=True),
-            fromfile=path, tofile=path,
-        ))
+    def compute_diff(self, old_content: str, new_content: str, path: str) -> str:
+        return "".join(
+            difflib.unified_diff(
+                old_content.splitlines(keepends=True),
+                new_content.splitlines(keepends=True),
+                fromfile=path,
+                tofile=path,
+            )
+        )
 
-    async def detect_breaking_changes(self, old_content: str, new_content: str) -> list[str]:
+    def detect_breaking_changes(self, old_content: str, new_content: str) -> list[str]:
         parser = TreeSitterParser()
         old_funcs = parser.extract_functions(old_content)
         new_funcs = parser.extract_functions(new_content)
@@ -495,8 +550,13 @@ class RefactoringEngine:
         if shutil.which("mypy"):
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    sys.executable, "-m", "mypy", "--ignore-missing-imports", str(full_path),
-                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                    sys.executable,
+                    "-m",
+                    "mypy",
+                    "--ignore-missing-imports",
+                    str(full_path),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 stdout, stderr = await proc.communicate()
                 output = stdout.decode() + stderr.decode()
@@ -510,8 +570,10 @@ class RefactoringEngine:
         if shutil.which("pyright"):
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    "pyright", str(full_path),
-                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                    "pyright",
+                    str(full_path),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 stdout, stderr = await proc.communicate()
                 output = stdout.decode() + stderr.decode()
@@ -558,7 +620,9 @@ class RefactoringEngine:
                     if isinstance(arg.annotation, ast.Name):
                         name = arg.annotation.id
                         if name[0].isupper() and name not in _KNOWN_TYPES and name not in defined:
-                            issues.append(f"Unknown type '{name}' for arg '{arg.arg}' in '{node.name}' at line {node.lineno}")
+                            issues.append(
+                                f"Unknown type '{name}' for arg '{arg.arg}' in '{node.name}' at line {node.lineno}"
+                            )
                 if isinstance(node.returns, ast.Name):
                     name = node.returns.id
                     if name[0].isupper() and name not in _KNOWN_TYPES and name not in defined:
@@ -595,14 +659,14 @@ class RefactoringEngine:
             all_breaking: list[str] = []
             for change in changes:
                 if change.old_content:
-                    breaking = await self.detect_breaking_changes(change.old_content, change.new_content)
+                    breaking = self.detect_breaking_changes(change.old_content, change.new_content)
                     all_breaking.extend(f"{change.path}: {b}" for b in breaking)
             if all_breaking:
                 raise BreakingChangeError("Breaking changes detected", changes=all_breaking)
 
         await self.build_dependency_graph()
 
-        apply_results = await self.apply_changes(changes, backup=backup)
+        apply_results = self.apply_changes(changes, backup=backup)
         failed_applies = [r for r in apply_results if r.startswith("Failed")]
         if failed_applies:
             for r in failed_applies:
@@ -616,11 +680,12 @@ class RefactoringEngine:
 
         if type_issues:
             logger.warning("Type checking failed after refactoring, rolling back")
-            rollback_results = await self.rollback([str(self._workspace / c.path) for c in changes])
+            rollback_results = self.rollback([str(self._workspace / c.path) for c in changes])
             for r in rollback_results:
                 logger.info(r)
+            msg_0 = f"Type checking failed: {'; '.join(type_issues[:3])}"
             raise BreakingChangeError(
-                f"Type checking failed: {'; '.join(type_issues[:3])}",
+                msg_0,
                 changes=type_issues,
             )
 

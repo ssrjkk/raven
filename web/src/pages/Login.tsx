@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+
 import { api, setToken } from "../api/client";
+import { useApiQuery } from "../hooks/useApiQuery";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -8,14 +10,10 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
-  const [providers, setProviders] = useState<{ name: string; icon: string; enabled: boolean }[]>([]);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    api.oauthProviders()
-      .then((r: any) => setProviders(r.providers.filter((p: any) => p.enabled)))
-      .catch(() => {});
-  }, []);
+  const { data: providersData } = useApiQuery<{ providers: { name: string; icon: string; enabled: boolean }[] }>(["oauthProviders"], () => api.oauthProviders());
+  const providers = (providersData?.providers ?? []).filter((p) => p.enabled);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -36,7 +34,7 @@ export default function Login() {
 
   async function handleOAuth(provider: string) {
     try {
-      const r: any = await api.oauthAuthorize(provider, window.location.origin + "/login");
+      const r = await api.oauthAuthorize(provider, window.location.origin + "/login");
       const popup = window.open(r.url, "oauth", "width=600,height=700");
       if (!popup) {
         setError("Pop-up blocked. Allow pop-ups for this site.");

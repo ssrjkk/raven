@@ -38,7 +38,9 @@ def voice_verify(speaker_id: str, audio: list[float], sample_rate: int = 16000, 
             f"Latency: {result.latency_ms:.1f}ms",
         ]
         if result.anti_spoof_score is not None:
-            parts.append(f"Anti-spoof score: {result.anti_spoof_score:.4f}{' (spoof detected)' if result.is_spoof else ''}")
+            parts.append(
+                f"Anti-spoof score: {result.anti_spoof_score:.4f}{' (spoof detected)' if result.is_spoof else ''}"
+            )
         return "\n".join(parts)
     except ValueError as e:
         return f"[error] {e}"
@@ -67,6 +69,7 @@ def voice_identify(audio: list[float], sample_rate: int = 16000, top_k: int = 3)
 def voice_list_speakers() -> str:
     vb = _get_vb()
     import time
+
     speakers = vb.list_speakers()
     if not speakers:
         return "[info] No speakers enrolled."
@@ -113,77 +116,119 @@ def voice_continuous_auth(speaker_id: str, interval_sec: float = 5.0) -> str:
 
 
 def register_voice_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="voice_enroll",
-        description="Enroll a speaker by providing multiple audio samples as lists of floats",
-        parameters={
-            "speaker_id": {"type": "string", "description": "Unique speaker identifier", "required": True},
-            "audio_samples": {"type": "array", "description": "List of audio sample arrays (each array is list of floats)", "required": True},
-            "sample_rate": {"type": "integer", "description": "Sample rate in Hz (default 16000)", "required": False},
-        },
-        handler=voice_enroll,
-        category="voice",
-        timeout=30,
-    ))
-    registry.register(ToolSpec(
-        name="voice_verify",
-        description="Verify a speaker against their enrolled voiceprint",
-        parameters={
-            "speaker_id": {"type": "string", "description": "Speaker identifier to verify", "required": True},
-            "audio": {"type": "array", "description": "Audio sample as list of floats", "required": True},
-            "sample_rate": {"type": "integer", "description": "Sample rate in Hz (default 16000)", "required": False},
-            "anti_spoof": {"type": "boolean", "description": "Enable anti-spoofing detection (default true)", "required": False},
-        },
-        handler=voice_verify,
-        category="voice",
-        timeout=15,
-    ))
-    registry.register(ToolSpec(
-        name="voice_identify",
-        description="Identify a speaker among all enrolled speakers",
-        parameters={
-            "audio": {"type": "array", "description": "Audio sample as list of floats", "required": True},
-            "sample_rate": {"type": "integer", "description": "Sample rate in Hz (default 16000)", "required": False},
-            "top_k": {"type": "integer", "description": "Number of top matches to return (default 3)", "required": False},
-        },
-        handler=voice_identify,
-        category="voice",
-        timeout=15,
-    ))
-    registry.register(ToolSpec(
-        name="voice_list_speakers",
-        description="List all enrolled speakers",
-        parameters={},
-        handler=voice_list_speakers,
-        category="voice",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="voice_remove_speaker",
-        description="Remove an enrolled speaker",
-        parameters={
-            "speaker_id": {"type": "string", "description": "Speaker identifier to remove", "required": True},
-        },
-        handler=voice_remove_speaker,
-        category="voice",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="voice_stats",
-        description="Get voice biometrics statistics",
-        parameters={},
-        handler=voice_stats,
-        category="voice",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="voice_continuous_auth",
-        description="Start continuous authentication for a speaker (periodic verification)",
-        parameters={
-            "speaker_id": {"type": "string", "description": "Speaker identifier", "required": True},
-            "interval_sec": {"type": "number", "description": "Verification interval in seconds (default 5.0)", "required": False},
-        },
-        handler=voice_continuous_auth,
-        category="voice",
-        timeout=10,
-    ))
+    registry.register(
+        ToolSpec(
+            name="voice_enroll",
+            description="Enroll a speaker by providing multiple audio samples as lists of floats",
+            parameters={
+                "speaker_id": {"type": "string", "description": "Unique speaker identifier", "required": True},
+                "audio_samples": {
+                    "type": "array",
+                    "description": "List of audio sample arrays (each array is list of floats)",
+                    "required": True,
+                },
+                "sample_rate": {
+                    "type": "integer",
+                    "description": "Sample rate in Hz (default 16000)",
+                    "required": False,
+                },
+            },
+            handler=voice_enroll,
+            category="voice",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="voice_verify",
+            description="Verify a speaker against their enrolled voiceprint",
+            parameters={
+                "speaker_id": {"type": "string", "description": "Speaker identifier to verify", "required": True},
+                "audio": {"type": "array", "description": "Audio sample as list of floats", "required": True},
+                "sample_rate": {
+                    "type": "integer",
+                    "description": "Sample rate in Hz (default 16000)",
+                    "required": False,
+                },
+                "anti_spoof": {
+                    "type": "boolean",
+                    "description": "Enable anti-spoofing detection (default true)",
+                    "required": False,
+                },
+            },
+            handler=voice_verify,
+            category="voice",
+            timeout=15,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="voice_identify",
+            description="Identify a speaker among all enrolled speakers",
+            parameters={
+                "audio": {"type": "array", "description": "Audio sample as list of floats", "required": True},
+                "sample_rate": {
+                    "type": "integer",
+                    "description": "Sample rate in Hz (default 16000)",
+                    "required": False,
+                },
+                "top_k": {
+                    "type": "integer",
+                    "description": "Number of top matches to return (default 3)",
+                    "required": False,
+                },
+            },
+            handler=voice_identify,
+            category="voice",
+            timeout=15,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="voice_list_speakers",
+            description="List all enrolled speakers",
+            parameters={},
+            handler=voice_list_speakers,
+            category="voice",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="voice_remove_speaker",
+            description="Remove an enrolled speaker",
+            parameters={
+                "speaker_id": {"type": "string", "description": "Speaker identifier to remove", "required": True},
+            },
+            handler=voice_remove_speaker,
+            category="voice",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="voice_stats",
+            description="Get voice biometrics statistics",
+            parameters={},
+            handler=voice_stats,
+            category="voice",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="voice_continuous_auth",
+            description="Start continuous authentication for a speaker (periodic verification)",
+            parameters={
+                "speaker_id": {"type": "string", "description": "Speaker identifier", "required": True},
+                "interval_sec": {
+                    "type": "number",
+                    "description": "Verification interval in seconds (default 5.0)",
+                    "required": False,
+                },
+            },
+            handler=voice_continuous_auth,
+            category="voice",
+            timeout=10,
+        )
+    )

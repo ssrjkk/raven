@@ -80,7 +80,8 @@ async def parse_webhook(
     try:
         payload = json.loads(body)
     except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON payload: {e}") from e
+        msg = f"Invalid JSON payload: {e}"
+        raise ValueError(msg) from e
 
     return normalizer.normalize(payload)
 

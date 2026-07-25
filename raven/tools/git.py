@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -47,23 +48,34 @@ async def git_commit(message: str = "", auto: bool = False, workspace: str = "")
         result = await git.auto_commit_async()
     else:
         result = git.commit(message or "auto: commit")
-    return {"success": result.success, "message": result.message, "commit_hash": result.commit_hash, "error": result.error}
+    return {
+        "success": result.success,
+        "message": result.message,
+        "commit_hash": result.commit_hash,
+        "error": result.error,
+    }
 
 
 def git_push(workspace: str = "") -> str:
     git = _get_git()
     if workspace:
         git._repo = Path(workspace).resolve()
-    stdout, stderr = git._run("push")
-    return stderr or stdout or "pushed"
+    try:
+        stdout, stderr = git._run("push")
+        return stderr or stdout or "pushed"
+    except subprocess.CalledProcessError as e:
+        return e.stderr.strip() or f"Push failed (exit {e.returncode})"
 
 
 def git_pull(workspace: str = "") -> str:
     git = _get_git()
     if workspace:
         git._repo = Path(workspace).resolve()
-    stdout, stderr = git._run("pull")
-    return stderr or stdout or "pulled"
+    try:
+        stdout, stderr = git._run("pull")
+        return stderr or stdout or "pulled"
+    except subprocess.CalledProcessError as e:
+        return e.stderr.strip() or f"Pull failed (exit {e.returncode})"
 
 
 def git_branches(workspace: str = "") -> list[str]:
@@ -101,19 +113,130 @@ async def git_review(file_path: str = "", workspace: str = "") -> dict[str, Any]
     result = await git.llm_review(file_path or None)
     return {
         "summary": result.summary,
-        "comments": [{"file": c.file, "line": c.line, "severity": c.severity, "message": c.message} for c in result.comments],
+        "comments": [
+            {"file": c.file, "line": c.line, "severity": c.severity, "message": c.message} for c in result.comments
+        ],
     }
 
 
 def register_git_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(name="git_status", description="Show working tree status", parameters={"workspace": {"type": "string", "description": "Optional workspace path", "required": False}}, handler=git_status, category="coding"))
-    registry.register(ToolSpec(name="git_branch", description="Show current branch name", parameters={"workspace": {"type": "string", "description": "Optional workspace path", "required": False}}, handler=git_branch, category="coding"))
-    registry.register(ToolSpec(name="git_log", description="Show commit log", parameters={"count": {"type": "integer", "description": "Number of commits", "required": False}, "workspace": {"type": "string", "description": "Optional workspace path", "required": False}}, handler=git_log, category="coding"))
-    registry.register(ToolSpec(name="git_diff", description="Show unstaged or staged diff", parameters={"staged": {"type": "boolean", "description": "Show staged diff", "required": False}, "workspace": {"type": "string", "description": "Optional workspace path", "required": False}}, handler=git_diff, category="coding"))
-    registry.register(ToolSpec(name="git_commit", description="Commit staged changes", parameters={"message": {"type": "string", "description": "Commit message", "required": False}, "auto": {"type": "boolean", "description": "Auto-generate message with LLM", "required": False}, "workspace": {"type": "string", "description": "Optional workspace path", "required": False}}, handler=git_commit, category="coding"))
-    registry.register(ToolSpec(name="git_push", description="Push to remote", parameters={"workspace": {"type": "string", "description": "Optional workspace path", "required": False}}, handler=git_push, category="coding"))
-    registry.register(ToolSpec(name="git_pull", description="Pull from remote", parameters={"workspace": {"type": "string", "description": "Optional workspace path", "required": False}}, handler=git_pull, category="coding"))
-    registry.register(ToolSpec(name="git_branches", description="List all branches", parameters={"workspace": {"type": "string", "description": "Optional workspace path", "required": False}}, handler=git_branches, category="coding"))
-    registry.register(ToolSpec(name="git_checkout", description="Switch or create branch", parameters={"branch": {"type": "string", "description": "Branch name", "required": True}, "create": {"type": "boolean", "description": "Create new branch", "required": False}, "workspace": {"type": "string", "description": "Optional workspace path", "required": False}}, handler=git_checkout, category="coding"))
-    registry.register(ToolSpec(name="git_create_pr", description="Create a pull request from current branch", parameters={"title": {"type": "string", "description": "PR title", "required": False}, "body": {"type": "string", "description": "PR body", "required": False}, "workspace": {"type": "string", "description": "Optional workspace path", "required": False}}, handler=git_create_pr, category="coding"))
-    registry.register(ToolSpec(name="git_review", description="LLM-powered code review of unstaged changes", parameters={"file_path": {"type": "string", "description": "Specific file to review", "required": False}, "workspace": {"type": "string", "description": "Optional workspace path", "required": False}}, handler=git_review, category="coding"))
+    registry.register(
+        ToolSpec(
+            name="git_status",
+            description="Show working tree status",
+            parameters={"workspace": {"type": "string", "description": "Optional workspace path", "required": False}},
+            handler=git_status,
+            category="coding",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="git_branch",
+            description="Show current branch name",
+            parameters={"workspace": {"type": "string", "description": "Optional workspace path", "required": False}},
+            handler=git_branch,
+            category="coding",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="git_log",
+            description="Show commit log",
+            parameters={
+                "count": {"type": "integer", "description": "Number of commits", "required": False},
+                "workspace": {"type": "string", "description": "Optional workspace path", "required": False},
+            },
+            handler=git_log,
+            category="coding",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="git_diff",
+            description="Show unstaged or staged diff",
+            parameters={
+                "staged": {"type": "boolean", "description": "Show staged diff", "required": False},
+                "workspace": {"type": "string", "description": "Optional workspace path", "required": False},
+            },
+            handler=git_diff,
+            category="coding",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="git_commit",
+            description="Commit staged changes",
+            parameters={
+                "message": {"type": "string", "description": "Commit message", "required": False},
+                "auto": {"type": "boolean", "description": "Auto-generate message with LLM", "required": False},
+                "workspace": {"type": "string", "description": "Optional workspace path", "required": False},
+            },
+            handler=git_commit,
+            category="coding",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="git_push",
+            description="Push to remote",
+            parameters={"workspace": {"type": "string", "description": "Optional workspace path", "required": False}},
+            handler=git_push,
+            category="coding",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="git_pull",
+            description="Pull from remote",
+            parameters={"workspace": {"type": "string", "description": "Optional workspace path", "required": False}},
+            handler=git_pull,
+            category="coding",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="git_branches",
+            description="List all branches",
+            parameters={"workspace": {"type": "string", "description": "Optional workspace path", "required": False}},
+            handler=git_branches,
+            category="coding",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="git_checkout",
+            description="Switch or create branch",
+            parameters={
+                "branch": {"type": "string", "description": "Branch name", "required": True},
+                "create": {"type": "boolean", "description": "Create new branch", "required": False},
+                "workspace": {"type": "string", "description": "Optional workspace path", "required": False},
+            },
+            handler=git_checkout,
+            category="coding",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="git_create_pr",
+            description="Create a pull request from current branch",
+            parameters={
+                "title": {"type": "string", "description": "PR title", "required": False},
+                "body": {"type": "string", "description": "PR body", "required": False},
+                "workspace": {"type": "string", "description": "Optional workspace path", "required": False},
+            },
+            handler=git_create_pr,
+            category="coding",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="git_review",
+            description="LLM-powered code review of unstaged changes",
+            parameters={
+                "file_path": {"type": "string", "description": "Specific file to review", "required": False},
+                "workspace": {"type": "string", "description": "Optional workspace path", "required": False},
+            },
+            handler=git_review,
+            category="coding",
+        )
+    )

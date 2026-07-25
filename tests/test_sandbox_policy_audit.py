@@ -30,17 +30,17 @@ class TestSandboxPolicy:
         assert "not allowed" in msg
 
     def test_check_tool_allowed_with_channel_logging(self):
-        ok, msg = check_tool_allowed(NON_MAIN_SESSION_POLICY, "browser_open", channel="test_ch")
+        ok, _msg = check_tool_allowed(NON_MAIN_SESSION_POLICY, "browser_open", channel="test_ch")
         assert not ok
 
     def test_check_path_allowed_no_restrictions(self):
-        ok, msg = check_path_allowed(MAIN_SESSION_POLICY, "/any/path")
+        ok, _msg = check_path_allowed(MAIN_SESSION_POLICY, "/any/path")
         assert ok
 
     def test_check_path_allowed_with_allow_read(self):
         policy = MAIN_SESSION_POLICY
         policy.allow_read = ["/allowed"]
-        ok, msg = check_path_allowed(policy, "/allowed/file.txt")
+        ok, _msg = check_path_allowed(policy, "/allowed/file.txt")
         assert ok
         ok2, _ = check_path_allowed(policy, "/other/file.txt")
         assert not ok2

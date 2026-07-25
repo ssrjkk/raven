@@ -37,7 +37,7 @@ async def schedule(cron: str, task: str, task_id: str | None = None) -> str:
 
     async def run_task():
         logger.info("Cron trigger: {} running task: {}", tid, task)
-        for _name, cb in _callbacks.items():
+        for cb in _callbacks.values():
             try:
                 await cb("cron", "system", task)
             except Exception as e:

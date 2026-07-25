@@ -44,10 +44,7 @@ class PermissionManager:
         return self._default_action == PermissionAction.ALLOW, ""
 
     def to_dict(self) -> list[dict[str, str]]:
-        return [
-            {"tool": r.tool, "action": r.action.value, "reason": r.reason}
-            for r in self._rules
-        ]
+        return [{"tool": r.tool, "action": r.action.value, "reason": r.reason} for r in self._rules]
 
     @classmethod
     def from_dict(cls, items: list[dict[str, str]]) -> PermissionManager:
@@ -58,11 +55,13 @@ class PermissionManager:
                 action = PermissionAction(raw)
             except ValueError:
                 action = PermissionAction.DENY
-            rules.append(PermissionRule(
-                tool=item.get("tool", "*"),
-                action=action,
-                reason=item.get("reason", ""),
-            ))
+            rules.append(
+                PermissionRule(
+                    tool=item.get("tool", "*"),
+                    action=action,
+                    reason=item.get("reason", ""),
+                )
+            )
         return cls(rules=rules)
 
 

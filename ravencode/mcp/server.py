@@ -42,11 +42,15 @@ class MCPServer:
         params = req.get("params", {})
 
         if method == "initialize":
-            return {"jsonrpc": "2.0", "id": req_id, "result": {
-                "protocolVersion": "2025-03-26",
-                "capabilities": {"tools": {}},
-                "serverInfo": {"name": "ravencode", "version": "0.4.0"},
-            }}
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {"tools": {}},
+                    "serverInfo": {"name": "ravencode", "version": "0.4.0"},
+                },
+            }
         if method == "tools/list":
             tools = get_tool_definitions()
             return {"jsonrpc": "2.0", "id": req_id, "result": {"tools": tools}}

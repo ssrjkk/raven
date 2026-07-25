@@ -24,7 +24,7 @@ def build_go_services() -> None:
         src = BASE / srcdir
         out = DIST / outname
         print(f"  go build {srcdir} -> {out}")
-        result = subprocess.run(  # noqa: S603 — args hardcoded
+        result = subprocess.run(
             [_SHIM["go"], "build", "-o", str(out), "."],
             cwd=str(src),
             capture_output=True, text=True, timeout=120,
@@ -41,13 +41,13 @@ def build_web() -> None:
         print("==> Web dist already built, skipping npm build")
         return
     print("==> Building web frontend...")
-    result = subprocess.run(  # noqa: S603 — args hardcoded
+    result = subprocess.run(
         [_SHIM["npm"], "install"], cwd=str(web_dir), capture_output=True, text=True, timeout=120,
     )
     if result.returncode != 0:
         print(f"  [WARN] npm install failed: {result.stderr}")
         return
-    result = subprocess.run(  # noqa: S603 — args hardcoded
+    result = subprocess.run(
         [_SHIM["npm"], "run", "build"], cwd=str(web_dir), capture_output=True, text=True, timeout=120,
     )
     if result.returncode != 0:
@@ -131,7 +131,7 @@ exe = EXE(
 )
 '''
     spec_path.write_text(spec_content, encoding="utf-8")
-    result = subprocess.run(  # noqa: S603 — sys.executable is trusted
+    result = subprocess.run(
         [sys.executable, "-m", "PyInstaller", str(spec_path)],
         cwd=str(BASE), capture_output=True, text=True, timeout=300,
     )

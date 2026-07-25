@@ -27,6 +27,7 @@ def monitor_group():
 @click.option("--status", default=None, help="Filter by status (active/paused)")
 def monitor_list(user: str | None, status: str | None):
     """List all monitors"""
+
     async def _inner():
         from raven.core.monitor.store import MonitorStore
 
@@ -49,9 +50,16 @@ def monitor_list(user: str | None, status: str | None):
             if m.last_check:
                 last = f"{'[OK]' if m.last_check.status == 'up' else '[NO]'} {m.last_check.checked_at:.0f}s ago"
             table.add_row(
-                m.id[:8], m.name, m.type.value, m.target[:40], f"{m.interval_seconds}s", f"{icon} {m.status.value}", last
+                m.id[:8],
+                m.name,
+                m.type.value,
+                m.target[:40],
+                f"{m.interval_seconds}s",
+                f"{icon} {m.status.value}",
+                last,
             )
         console.print(table)
+
     _run_async(_inner())
 
 
@@ -64,6 +72,7 @@ def monitor_list(user: str | None, status: str | None):
 @click.option("--user", default="cli", help="User ID")
 def monitor_add(name: str, mon_type: str, target: str, interval: int, conditions: tuple[str], user: str):
     """Add a new monitor"""
+
     async def _inner():
         from raven.core.monitor.models import Condition, ConditionOperator, Monitor, MonitorStatus, MonitorType
         from raven.core.monitor.store import MonitorStore
@@ -97,7 +106,9 @@ def monitor_add(name: str, mon_type: str, target: str, interval: int, conditions
                     with contextlib.suppress(ValueError):
                         parsed_val = float(raw_val)
                 parsed_conditions.append(
-                    Condition(metric=parts[0].strip(), operator=op_map.get(op_str, ConditionOperator.EQ), value=parsed_val)
+                    Condition(
+                        metric=parts[0].strip(), operator=op_map.get(op_str, ConditionOperator.EQ), value=parsed_val
+                    )
                 )
 
         monitor = Monitor(
@@ -115,6 +126,7 @@ def monitor_add(name: str, mon_type: str, target: str, interval: int, conditions
         if parsed_conditions:
             for cond in parsed_conditions:
                 console.print(f"  [!] Condition: {cond.metric} {cond.operator.value} {cond.value}")
+
     _run_async(_inner())
 
 
@@ -122,6 +134,7 @@ def monitor_add(name: str, mon_type: str, target: str, interval: int, conditions
 @click.argument("monitor_id")
 def monitor_remove(monitor_id: str):
     """Remove a monitor"""
+
     async def _inner():
         from raven.core.monitor.store import MonitorStore
 
@@ -132,6 +145,7 @@ def monitor_remove(monitor_id: str):
             return
         await store.delete_monitor(monitor_id)
         console.print(f"[yellow]Monitor '{m.name}' removed[/yellow]")
+
     _run_async(_inner())
 
 
@@ -139,6 +153,7 @@ def monitor_remove(monitor_id: str):
 @click.argument("monitor_id")
 def monitor_pause(monitor_id: str):
     """Pause a monitor"""
+
     async def _inner():
         from raven.core.monitor.models import MonitorStatus
         from raven.core.monitor.store import MonitorStore
@@ -150,6 +165,7 @@ def monitor_pause(monitor_id: str):
             return
         await store.update_status(monitor_id, MonitorStatus.PAUSED)
         console.print(f"[yellow]Monitor '{m.name}' paused[/yellow]")
+
     _run_async(_inner())
 
 
@@ -157,6 +173,7 @@ def monitor_pause(monitor_id: str):
 @click.argument("monitor_id")
 def monitor_resume(monitor_id: str):
     """Resume a paused monitor"""
+
     async def _inner():
         from raven.core.monitor.models import MonitorStatus
         from raven.core.monitor.store import MonitorStore
@@ -168,6 +185,7 @@ def monitor_resume(monitor_id: str):
             return
         await store.update_status(monitor_id, MonitorStatus.ACTIVE)
         console.print(f"[green]Monitor '{m.name}' resumed[/green]")
+
     _run_async(_inner())
 
 
@@ -176,6 +194,7 @@ def monitor_resume(monitor_id: str):
 @click.option("--limit", default=20, type=int, help="Number of checks to show")
 def monitor_logs(monitor_id: str, limit: int):
     """Show check history for a monitor"""
+
     async def _inner():
         from raven.core.monitor.store import MonitorStore
 
@@ -202,4 +221,5 @@ def monitor_logs(monitor_id: str, limit: int):
             err = (c.error or "")[:40]
             table.add_row(t, f"{icon} {c.status}", ms, trig, err)
         console.print(table)
+
     _run_async(_inner())

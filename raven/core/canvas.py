@@ -34,7 +34,8 @@ _COMPONENT_TYPES = frozenset(
 class CanvasComponent:
     def __init__(self, ctype: str, props: dict[str, Any] | None = None, children: list[CanvasComponent] | None = None):
         if ctype not in _COMPONENT_TYPES:
-            raise ValueError(f"Unknown component type: {ctype}")
+            msg = f"Unknown component type: {ctype}"
+            raise ValueError(msg)
         self.id = f"comp_{uuid4().hex[:12]}"
         self.ctype = ctype
         self.props = props or {}
@@ -51,9 +52,6 @@ class CanvasComponent:
             "props": self.props,
             "children": [c.to_dict() for c in self.children],
         }
-
-
-
 
 
 class CanvasSession:
@@ -134,12 +132,12 @@ class CanvasManager:
 
         if action in ("click", "select", "toggle"):
             return {"status": "handled", "action": action}
-        elif action == "change" and data and session.root:
+        if action == "change" and data and session.root:
             comp = _walk(session.root)
             if comp and "value" in data:
                 comp.props["value"] = data["value"]
             return {"status": "updated", "action": action}
-        elif action == "submit":
+        if action == "submit":
             return {"status": "submitted", "data": data or {}}
 
         return {"status": "queued", "action": action}

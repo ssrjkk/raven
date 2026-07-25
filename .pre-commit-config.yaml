@@ -32,3 +32,18 @@ repos:
     rev: v8.18.2
     hooks:
       - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: eslint-web
+        name: eslint (web)
+        entry: npx eslint --fix --no-warn-ignored
+        language: node
+        files: ^web/src/.*\.(ts|tsx)$
+        types: [file]
+        pass_filenames: true
+        args: []
+        additional_dependencies:
+          - eslint
+          - "@typescript-eslint/parser"
+          - eslint-plugin-simple-import-sort

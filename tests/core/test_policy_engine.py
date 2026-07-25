@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from pathlib import Path
+
+import pytest
 
 from raven.core.security.policy_engine import (
     ConditionNode,
@@ -310,9 +313,9 @@ def test_policy_engine_load_json():
         engine = PolicyEngine()
         rs = engine.load_ruleset("test", f.name)
         assert rs is not None
-        effect, name = rs.evaluate({"tool": "exec"})
+        effect, _name = rs.evaluate({"tool": "exec"})
         assert effect == "deny"
-    os.unlink(f.name)
+    Path(f.name).unlink()
 
 
 def test_policy_engine_load_json_with_all_fields():
@@ -342,7 +345,7 @@ def test_policy_engine_load_json_with_all_fields():
         assert rs.rules[0].description == "Allow admins and moderators"
         assert rs.rules[0].tags == ["admin", "moderator"]
         assert rs.rules[0].enabled is True
-    os.unlink(f.name)
+    Path(f.name).unlink()
 
 
 def test_policy_engine_load_yaml():
@@ -357,17 +360,21 @@ def test_policy_engine_load_yaml():
         engine = PolicyEngine()
         rs = engine.load_ruleset("test", f.name)
         assert rs is not None
-        effect, name = rs.evaluate({"tool": "exec"})
+        effect, _name = rs.evaluate({"tool": "exec"})
         assert effect == "deny"
-    os.unlink(f.name)
+    Path(f.name).unlink()
 
 
 def test_policy_engine_check():
     engine = PolicyEngine()
-    rs = RuleSet([Rule("deny-exec", {"tool": "exec"}, "deny", 100)])
+    rs = RuleSet([
+        Rule("deny-exec", {"tool": "exec"}, "deny", 100),
+        Rule("allow-ping", {"tool": "ping"}, "allow", 50),
+    ])
     engine._rulesets["tools"] = rs
     assert not engine.check("tools", {"tool": "exec"})
     assert engine.check("tools", {"tool": "ping"})
+    assert not engine.check("tools", {"tool": "unknown-tool"})
 
 
 def test_policy_engine_missing_ruleset():
@@ -426,3 +433,312 @@ def test_rule_evaluate_exception_safe():
 
     rule = Rule("safe", {"tool": "exec"}, "deny", 100)
     assert not rule.evaluate(ExplodingDict())
+
+
+# ─── Adversarial acceptance tests (Шаг 1-4) ────────────────────────
+
+
+class TestAdversarialNamespacePolicy:
+    """Шаг 1+4: prove namespaced tool names are blocked by policy engine."""
+
+    def test_deny_ruleset_blocks_namespaced_sessions_spawn(self):
+        engine = PolicyEngine()
+        rs = engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+        assert rs is not None
+        assert len(rs.rules) > 0
+        assert not engine.check("tools", {"tool": "sessions.sessions_spawn", "profile": "full", "action": "call"})
+
+    def test_deny_ruleset_blocks_namespaced_api_http_post(self):
+        engine = PolicyEngine()
+        engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+        assert not engine.check("tools", {"tool": "api.http_post", "profile": "full", "action": "call"})
+
+    def test_deny_ruleset_blocks_namespaced_process_kill(self):
+        engine = PolicyEngine()
+        engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+        assert not engine.check("tools", {"tool": "process.kill", "profile": "full", "action": "call"})
+
+    def test_old_non_namespaced_names_not_in_deny_rules(self):
+        engine = PolicyEngine()
+        engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+        rs = engine.get_ruleset("tools")
+        assert rs is not None
+        all_conditions = []
+        for rule in rs.rules:
+            d = rule._condition.__dict__
+            if d.get("op") == Op.OR:
+                for child in d.get("children", []):
+                    if hasattr(child, "value"):
+                        all_conditions.append(child.value)
+            elif hasattr(rule._condition, "value"):
+                all_conditions.append(rule._condition.value)
+        assert "sessions_spawn" not in all_conditions, "Old non-namespaced 'sessions_spawn' still in rules"
+        assert "shell.exec" not in all_conditions, "Old non-namespaced 'shell.exec' still in rules"
+
+    def test_deny_by_default_no_explicit_allow(self):
+        engine = PolicyEngine()
+        engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+        assert not engine.check("tools", {"tool": "totally-unknown-tool", "profile": "full", "action": "call"})
+
+    def test_allow_messaging_profile_access_files_read(self):
+        engine = PolicyEngine()
+        engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+        assert engine.check("tools", {"tool": "files.read", "profile": "messaging", "action": "call"})
+
+    def test_allow_messaging_profile_access_memory_recall(self):
+        engine = PolicyEngine()
+        engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+        assert engine.check("tools", {"tool": "memory.recall", "profile": "messaging", "action": "call"})
+
+
+class TestAdversarialToolPolicyDenyByDefault:
+    """Шаг 3: prove ToolPolicyEvaluator denies unknown tools by default with policy engine."""
+
+    @pytest.mark.asyncio
+    async def test_exec_security_deny_refuses_every_tool(self):
+        from raven.core.security.tool_policy import ExecSecurity, ToolPolicyEvaluator
+
+        p = ToolPolicyEvaluator(exec_security=ExecSecurity.DENY)
+        for tool in ["process.run", "process.kill", "git.git_push", "sessions.sessions_spawn"]:
+            allowed, _reason = await p.check_exec(tool)
+            assert not allowed, f"Expected deny for {tool}, got allowed={allowed}"
+
+    def test_profile_full_allows_unknown_tools_but_deny_list_still_blocks(self):
+        from raven.core.security.tool_policy import ExecSecurity, ToolPolicyEvaluator
+
+        p = ToolPolicyEvaluator(
+            profile="full",
+            deny=["process.kill", "sessions.sessions_spawn"],
+            exec_security=ExecSecurity.FULL,
+        )
+        assert not p.is_tool_allowed("process.kill")
+        assert not p.is_tool_allowed("sessions.sessions_spawn")
+        assert p.is_tool_allowed("process.run")
+
+
+class TestAdversarialConfirmationBlocksExecution:
+    """Шаг 2: prove confirm=True blocks tool execution when user declines."""
+
+    @pytest.mark.asyncio
+    async def test_confirm_blocks_when_user_declines(self):
+        from unittest.mock import AsyncMock
+
+        from raven.core.security.tool_policy import ExecAskMode, ExecSecurity, ToolPolicyEvaluator
+
+        confirm_fn = AsyncMock(return_value=False)
+        p = ToolPolicyEvaluator(exec_security=ExecSecurity.ASK, exec_ask=ExecAskMode.ALWAYS)
+        allowed, reason = await p.check_exec("process.kill", {}, confirm_fn=confirm_fn)
+        assert not allowed
+        assert "cancelled" in (reason or "").lower()
+        confirm_fn.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_confirm_passes_when_user_approves(self):
+        from unittest.mock import AsyncMock
+
+        from raven.core.security.tool_policy import ExecAskMode, ExecSecurity, ToolPolicyEvaluator
+
+        confirm_fn = AsyncMock(return_value=True)
+        p = ToolPolicyEvaluator(exec_security=ExecSecurity.ASK, exec_ask=ExecAskMode.ALWAYS)
+        allowed, _reason = await p.check_exec("process.kill", {}, confirm_fn=confirm_fn)
+        assert allowed
+        confirm_fn.assert_called_once()
+
+
+class TestAdversarialBudgetExceeded:
+    """Шаг 7: prove budget tracker denies when limit exceeded."""
+
+    @pytest.mark.asyncio
+    async def test_budget_denies_when_limit_exceeded(self):
+        from raven.core.budget import TokenBudgetTracker
+
+        tracker = TokenBudgetTracker()
+        allowed = await tracker.check_budget("user1", 400_000, 0, 500_000, 3600)
+        assert allowed
+        allowed = await tracker.check_budget("user1", 200_000, 0, 500_000, 3600)
+        assert not allowed
+
+    @pytest.mark.asyncio
+    async def test_budget_allows_different_users_independently(self):
+        from raven.core.budget import TokenBudgetTracker
+
+        tracker = TokenBudgetTracker()
+        allowed = await tracker.check_budget("user_a", 400_000, 0, 500_000, 3600)
+        assert allowed
+        allowed = await tracker.check_budget("user_b", 400_000, 0, 500_000, 3600)
+        assert allowed
+
+    @pytest.mark.asyncio
+    async def test_budget_load_test_59_msgs_40k_tokens(self):
+        from raven.core.budget import TokenBudgetTracker
+
+        tracker = TokenBudgetTracker()
+        denied_at = None
+        for i in range(59):
+            allowed = await tracker.check_budget("load_user", 40_000, 0, 500_000, 3600)
+            if not allowed:
+                denied_at = i + 1
+                break
+        assert denied_at is not None, "Budget should have been exceeded"
+        assert denied_at == 13, f"Expected denial at msg 13 (13*40k=520k > 500k), got {denied_at}"
+
+
+class TestAdversarialIntegrationSpy:
+    """Доказательство 3: spy on policy_engine.check() proves deny reaches engine.
+
+    We must NOT put the target tool in the local deny list, otherwise
+    is_tool_allowed() short-circuits before reaching policy_engine.check().
+    Instead, we rely solely on the tools.json deny rules.
+    """
+
+    def test_process_run_denied_via_policy_engine_evaluate_spy(self):
+        from unittest.mock import patch
+
+        from raven.core.security.policy_engine import policy_engine
+        from raven.core.security.tool_policy import ToolPolicyEvaluator
+
+        policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+        rs = policy_engine.get_ruleset("tools")
+        assert rs is not None and len(rs.rules) > 0
+
+        eval_calls: list[dict[str, object]] = []
+        original_eval = policy_engine.__class__.evaluate
+
+        def spy_evaluate(self, ruleset_name, input_data):
+            result = original_eval(self, ruleset_name, input_data)
+            eval_calls.append({"ruleset": ruleset_name, "input": input_data, "result": result})
+            return result
+
+        with patch.object(type(policy_engine), "evaluate", spy_evaluate):
+            p = ToolPolicyEvaluator(profile="full")
+            allowed = p.is_tool_allowed("process.run")
+            assert not allowed, "process.run should be denied by policy engine"
+            tool_calls = [c for c in eval_calls if c["input"].get("tool") == "process.run"]
+            assert len(tool_calls) >= 1, "policy_engine.evaluate was never called for process.run"
+            effect, _ = tool_calls[-1]["result"]
+            assert effect == "deny"
+
+    def test_git_push_denied_via_policy_engine_evaluate_spy(self):
+        from unittest.mock import patch
+
+        from raven.core.security.policy_engine import policy_engine
+        from raven.core.security.tool_policy import ToolPolicyEvaluator
+
+        policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+
+        eval_calls: list[dict[str, object]] = []
+        original_eval = policy_engine.__class__.evaluate
+
+        def spy_evaluate(self, ruleset_name, input_data):
+            result = original_eval(self, ruleset_name, input_data)
+            eval_calls.append({"ruleset": ruleset_name, "input": input_data, "result": result})
+            return result
+
+        with patch.object(type(policy_engine), "evaluate", spy_evaluate):
+            p = ToolPolicyEvaluator(profile="full")
+            allowed = p.is_tool_allowed("git.git_push")
+            assert not allowed
+            tool_calls = [c for c in eval_calls if c["input"].get("tool") == "git.git_push"]
+            assert len(tool_calls) >= 1
+            effect, _ = tool_calls[-1]["result"]
+            assert effect == "deny"
+
+    def test_sessions_spawn_denied_via_policy_engine_evaluate_spy(self):
+        from unittest.mock import patch
+
+        from raven.core.security.policy_engine import policy_engine
+        from raven.core.security.tool_policy import ToolPolicyEvaluator
+
+        policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+
+        eval_calls: list[dict[str, object]] = []
+        original_eval = policy_engine.__class__.evaluate
+
+        def spy_evaluate(self, ruleset_name, input_data):
+            result = original_eval(self, ruleset_name, input_data)
+            eval_calls.append({"ruleset": ruleset_name, "input": input_data, "result": result})
+            return result
+
+        with patch.object(type(policy_engine), "evaluate", spy_evaluate):
+            p = ToolPolicyEvaluator(profile="full")
+            allowed = p.is_tool_allowed("sessions.sessions_spawn")
+            assert not allowed
+            tool_calls = [c for c in eval_calls if c["input"].get("tool") == "sessions.sessions_spawn"]
+            assert len(tool_calls) >= 1
+            effect, _ = tool_calls[-1]["result"]
+            assert effect == "deny"
+
+    def test_process_kill_denied_via_policy_engine_evaluate_spy(self):
+        from unittest.mock import patch
+
+        from raven.core.security.policy_engine import policy_engine
+        from raven.core.security.tool_policy import ToolPolicyEvaluator
+
+        policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+
+        eval_calls: list[dict[str, object]] = []
+        original_eval = policy_engine.__class__.evaluate
+
+        def spy_evaluate(self, ruleset_name, input_data):
+            result = original_eval(self, ruleset_name, input_data)
+            eval_calls.append({"ruleset": ruleset_name, "input": input_data, "result": result})
+            return result
+
+        with patch.object(type(policy_engine), "evaluate", spy_evaluate):
+            p = ToolPolicyEvaluator(profile="full")
+            allowed = p.is_tool_allowed("process.kill")
+            assert not allowed
+            tool_calls = [c for c in eval_calls if c["input"].get("tool") == "process.kill"]
+            assert len(tool_calls) >= 1
+            effect, _ = tool_calls[-1]["result"]
+            assert effect == "deny"
+
+    def test_process_run_python_denied_via_policy_engine_evaluate_spy(self):
+        from unittest.mock import patch
+
+        from raven.core.security.policy_engine import policy_engine
+        from raven.core.security.tool_policy import ToolPolicyEvaluator
+
+        policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+
+        eval_calls: list[dict[str, object]] = []
+        original_eval = policy_engine.__class__.evaluate
+
+        def spy_evaluate(self, ruleset_name, input_data):
+            result = original_eval(self, ruleset_name, input_data)
+            eval_calls.append({"ruleset": ruleset_name, "input": input_data, "result": result})
+            return result
+
+        with patch.object(type(policy_engine), "evaluate", spy_evaluate):
+            p = ToolPolicyEvaluator(profile="full")
+            allowed = p.is_tool_allowed("process.run_python")
+            assert not allowed
+            tool_calls = [c for c in eval_calls if c["input"].get("tool") == "process.run_python"]
+            assert len(tool_calls) >= 1
+            effect, _ = tool_calls[-1]["result"]
+            assert effect == "deny"
+
+    def test_git_pull_denied_via_policy_engine_evaluate_spy(self):
+        from unittest.mock import patch
+
+        from raven.core.security.policy_engine import policy_engine
+        from raven.core.security.tool_policy import ToolPolicyEvaluator
+
+        policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+
+        eval_calls: list[dict[str, object]] = []
+        original_eval = policy_engine.__class__.evaluate
+
+        def spy_evaluate(self, ruleset_name, input_data):
+            result = original_eval(self, ruleset_name, input_data)
+            eval_calls.append({"ruleset": ruleset_name, "input": input_data, "result": result})
+            return result
+
+        with patch.object(type(policy_engine), "evaluate", spy_evaluate):
+            p = ToolPolicyEvaluator(profile="full")
+            allowed = p.is_tool_allowed("git.git_pull")
+            assert not allowed
+            tool_calls = [c for c in eval_calls if c["input"].get("tool") == "git.git_pull"]
+            assert len(tool_calls) >= 1
+            effect, _ = tool_calls[-1]["result"]
+            assert effect == "deny"

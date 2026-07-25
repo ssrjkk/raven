@@ -19,7 +19,8 @@ def _check_path(path: str) -> Path:
             allowed = True
             break
     if not allowed:
-        raise PermissionError(f"Access denied: {path} (allowed: ~, cwd, /tmp)")
+        msg = f"Access denied: {path} (allowed: ~, cwd, /tmp)"
+        raise PermissionError(msg)
     return p
 
 
@@ -40,9 +41,11 @@ async def write(path: str, content: str, encoding: str = "utf-8") -> str:
 
 async def append(path: str, content: str, encoding: str = "utf-8") -> str:
     p = _check_path(path)
+
     def _append():
         with p.open("a", encoding=encoding) as f:
             f.write(content)
+
     await asyncio.to_thread(_append)
     return f"Appended {len(content)} bytes to {path}"
 

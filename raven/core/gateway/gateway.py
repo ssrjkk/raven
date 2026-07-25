@@ -11,8 +11,10 @@ from uuid import uuid4
 from loguru import logger
 
 from raven.core.agent.registry import AgentRegistry
+from raven.core.agents.orchestrator import AgentOrchestrator
 from raven.core.auth import RBAC, Permission
 from raven.core.cache.llm_cache import LLMCache
+from raven.core.cache.rate_limiter import InMemoryRateLimiter, RedisRateLimiter
 from raven.core.cache.redis_client import RedisClient
 from raven.core.cache.session_store import SessionStore
 from raven.core.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
@@ -25,6 +27,8 @@ from raven.core.gateway.health_monitor import HealthMonitor
 from raven.core.gateway.mcp_bridge import MCPBridge
 from raven.core.gateway.message_processor import MessageProcessor
 from raven.core.gateway.task_orchestrator import TaskOrchestrator
+from raven.core.services import Chunker, EntityExtractor
+from raven.core.services.persister import get_persister
 
 if TYPE_CHECKING:
     from raven.channels.base import BaseChannel
@@ -37,7 +41,7 @@ from raven.core.metrics import MetricsServer, metrics
 from raven.core.models import IncomingMessage, Message
 from raven.core.plugin_loader import PluginLoader
 from raven.core.sandbox import Sandbox
-from raven.core.security.context_filter import ContextVisibility, filter_context_by_visibility
+from raven.core.security.context_filter import ContextVisibility, filter_context_by_visibility, redact_pii
 from raven.core.security.rate_limiter import RateLimiter
 from raven.core.security.sandbox_policy import (
     MAIN_SESSION_POLICY,
@@ -98,9 +102,22 @@ class Gateway:
             llm_restart=self._llm_restart,
         )
         self._rate_limiter = RateLimiter()
+        self._redis_rate_limiter: RedisRateLimiter | None = None
         self._init_stores()
+        self._extractor = EntityExtractor(llm_provider=self.llm)
+        self._chunker = Chunker(max_chars=800, overlap=100)
+        self._persister = get_persister()
         self.commands = CommandRegistry()
         self._register_commands()
+        from raven.tools.register_all import create_tool_registry
+
+        self._agent_orchestrator = AgentOrchestrator(
+            llm=self.llm,
+            tool_registry=create_tool_registry(),
+            send_fn=lambda data: self._send("webchat", "orchestrator", data, streaming=True),
+            max_total_iterations=50,
+            max_handoffs=5,
+        )
         self._message_processor = MessageProcessor(
             db=self.db,
             registry=self.registry,
@@ -135,7 +152,31 @@ class Gateway:
         self._monitor_store = MonitorStore(self.db.db_path)
         self._routine_store = RoutineStore(self.db.db_path)
 
+    async def _extract_and_store(self, text: str, channel: str, user_id: str) -> None:
+        try:
+            result = await self._extractor.extract(text)
+            if not result.entities:
+                return
+            chunks = self._chunker.chunk(text, strategy="semantic")
+            doc_id = await self._persister.insert("messages", {
+                "channel": channel,
+                "user_id": user_id,
+                "text": text[:500],
+                "entity_count": len(result.entities),
+                "chunk_count": len(chunks.chunks),
+            })
+            for entity in result.entities:
+                await self._persister.insert("entities", {
+                    "doc_id": doc_id,
+                    "text": entity.text,
+                    "label": entity.label,
+                    "score": entity.score,
+                })
+        except Exception as exc:
+            logger.debug("[services] extract_and_store failed: {}", exc)
+
     def _register_commands(self) -> None:
+        from raven.core.gateway.commands.agent import AgentCommand, AgentStatusCommand
         from raven.core.gateway.commands.code import CodeCommand
         from raven.core.gateway.commands.compact import CompactCommand
         from raven.core.gateway.commands.help import HelpCommand
@@ -157,6 +198,8 @@ class Gateway:
         from raven.core.gateway.commands.task import TaskCommand
         from raven.core.gateway.commands.voice import VoiceCommand
 
+        self.commands.register(AgentCommand(self))
+        self.commands.register(AgentStatusCommand(self))
         self.commands.register(StatusCommand(self))
         self.commands.register(NewSessionCommand(self))
         self.commands.register(ResetCommand(self))
@@ -181,9 +224,7 @@ class Gateway:
             raise RuntimeError("Gateway already running")
         self.registry.setup_defaults()
         channel_count = len(await self.channels.list_ids())
-        logger.info(
-            "Starting gateway with {} channels, {} agents", channel_count, len(self.registry.list_agents())
-        )
+        logger.info("Starting gateway with {} channels, {} agents", channel_count, len(self.registry.list_agents()))
         self._running = True
         started: list[str] = []
 
@@ -197,6 +238,7 @@ class Gateway:
                 self._llm_cache = LLMCache(self._redis_client, ttl=300)
                 self.llm = LLMRouter(llm_cache=self._llm_cache)
                 self.failover = ModelFailover(self.llm)
+                self._redis_rate_limiter = RedisRateLimiter(self._redis_client, InMemoryRateLimiter())
             else:
                 logger.warning("redis_connection_failed_falling_back_to_in_memory")
         else:
@@ -300,6 +342,10 @@ class Gateway:
             await self._metrics_server.stop()
         except Exception as e:
             logger.warning("metrics stop error: {}", e)
+        try:
+            await self._persister.close()
+        except Exception as e:
+            logger.warning("persister close error: {}", e)
 
     def _get_skill(self, name: str) -> Any:
         return skills_registry.get(name)
@@ -382,6 +428,13 @@ class Gateway:
                 await self._send(event.channel, event.session_id, "Please slow down.")
                 return
 
+            if self._redis_rate_limiter and not await self._redis_rate_limiter.is_allowed(
+                f"msg:{event.channel}:{event.user_id}", 30, 60
+            ):
+                metrics.inc("messages_rate_limited", {"channel": event.channel, "reason": "distributed"})
+                await self._send(event.channel, event.session_id, "Please slow down.")
+                return
+
             try:
                 await self._message_cb.call(self._handle_message_inner, event, cid)
             except CircuitBreakerOpenError:
@@ -407,6 +460,7 @@ class Gateway:
 
     async def _handle_message_inner(self, event: IncomingMessage, cid: str = ""):
         bind_context(channel_id=event.channel, user_id=event.user_id, session_id=event.session_id or "")
+        event.text = redact_pii(event.text)
         try:
             logger.info("[{}] Processing message from {}[{}]", cid, event.channel, event.user_id)
             user = await self.db.find_or_create_user(event.channel, event.user_id)
@@ -426,9 +480,54 @@ class Gateway:
                 return
 
             session_id = event.session_id or f"{event.channel}:{event.user_id}:default"
-            await self._message_processor.process(event, session_id)
+            agent_profile = user.get("agent_profile", "") if isinstance(user, dict) else ""
+            if agent_profile in ("architect", "planner", "coder", "reviewer", "debugger", "qa"):
+                await self._handle_with_orchestrator(event, session_id, agent_profile)
+            else:
+                await self._message_processor.process(event, session_id)
         finally:
             clear_context()
+
+        _t = asyncio.create_task(self._extract_and_store(event.text, event.channel, event.user_id))
+        self._bg_tasks.add(_t)
+        _t.add_done_callback(self._bg_tasks.discard)
+
+    async def _handle_with_orchestrator(self, event: IncomingMessage, session_id: str, profile: str) -> None:
+        from raven.core.agents.orchestrator import StatusEmitter
+
+        channel_obj = await self.channels.get(event.channel)
+        send_stream = getattr(channel_obj, "send_stream", None) if channel_obj else None
+
+        async def send_status(data: str) -> None:
+            if send_stream is not None:
+                from contextlib import suppress
+
+                with suppress(Exception):
+                    await send_stream(session_id, data)
+
+        emitter = StatusEmitter(send_status if send_stream is not None else None)
+        full_tokens: list[str] = []
+
+        def on_token(t: str) -> None:
+            full_tokens.append(t)
+
+        try:
+            result = await self._agent_orchestrator.execute(
+                query=event.text,
+                context={"additional_context": f"Channel: {event.channel}, User: {event.user_id}"},
+                profile_override=profile,
+                on_token=on_token,
+                status_emitter=emitter,
+            )
+            response_text = "".join(full_tokens) or result.content
+            if send_stream is not None and response_text:
+                await self._send(event.channel, session_id, response_text, streaming=True)
+            elif response_text:
+                await self._send(event.channel, session_id, response_text)
+            self._message_processor.metrics.inc("messages_sent", {"channel": event.channel})
+        except Exception as e:
+            logger.error("Orchestrator error for {}[{}]: {}", event.channel, event.user_id, e)
+            await self._send(event.channel, session_id, "An error occurred while processing your request.")
 
     def _apply_context_filter(self, event, user: dict[str, Any], text: str) -> str:
         visibility = ContextVisibility(settings.context_visibility)
@@ -448,6 +547,7 @@ class Gateway:
 
     async def _handle_intent(self, event: IncomingMessage) -> bool:
         from raven.core.gateway.intents import handle_intent
+
         return await handle_intent(self, event)
 
     async def _is_user_allowed(self, event: IncomingMessage, user: dict[str, Any]) -> bool:
@@ -465,9 +565,9 @@ class Gateway:
                 logger.warning("Failed to parse channel_allow_from config: {}", exc)
 
         if policy == "closed" and not user.get("is_allowed"):
-                metrics.inc("messages_blocked", {"channel": event.channel, "reason": "policy_closed"})
-                await self._send(event.channel, event.session_id, "Access denied. You are not authorized.")
-                return False
+            metrics.inc("messages_blocked", {"channel": event.channel, "reason": "policy_closed"})
+            await self._send(event.channel, event.session_id, "Access denied. You are not authorized.")
+            return False
 
         if policy == "pairing" and not user.get("is_allowed"):
             if event.text.startswith("/pair"):
@@ -476,7 +576,9 @@ class Gateway:
                 if matched and matched["id"] == user["id"]:
                     await self.db.set_user_allowed(user["id"], True)
                     await self.db.set_pairing_code(user["id"], "")
-                    await audit_logger.sensitive("pairing_approve", event.user_id, f"{event.channel}:{event.user_id}", True)
+                    await audit_logger.sensitive(
+                        "pairing_approve", event.user_id, f"{event.channel}:{event.user_id}", True
+                    )
                     await self._send(event.channel, event.session_id, "You are now authorized!")
                     metrics.inc("pairing_approved", {"channel": event.channel})
                     return False
@@ -560,5 +662,3 @@ class Gateway:
         if channel == "discord":
             text = re.sub(r"<@!?\d+>", "", text).strip()
         return text
-
-

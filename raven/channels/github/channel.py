@@ -25,8 +25,8 @@ class GithubChannel(EnterpriseChannel):
             return False
 
         gh_event = (headers or {}).get("x-github-event", "")
-        repo_full = ((body.get("repository") or {}).get("full_name", ""))
-        sender = ((body.get("sender") or {}).get("login", ""))
+        repo_full = (body.get("repository") or {}).get("full_name", "")
+        sender = (body.get("sender") or {}).get("login", "")
 
         if gh_event == "push":
             ref = body.get("ref", "").replace("refs/heads/", "")
@@ -135,7 +135,13 @@ class GithubChannel(EnterpriseChannel):
                     user_id=str(user_id) or f"github:{repo_full}",
                     session_id=f"github:{repo_full}:workflow:{workflow_name}",
                     text=f"Workflow {action}: {workflow_name} ({conclusion or status})",
-                    metadata={"event": gh_event, "repo": repo_full, "workflow": workflow_name, "status": status, "conclusion": conclusion},
+                    metadata={
+                        "event": gh_event,
+                        "repo": repo_full,
+                        "workflow": workflow_name,
+                        "status": status,
+                        "conclusion": conclusion,
+                    },
                 )
             )
             return True
@@ -151,11 +157,16 @@ class GithubChannel(EnterpriseChannel):
         target_id = parts[3] if len(parts) >= 4 else ""
         if target_type == "issue" and target_id and self._token:
             import httpx
+
             repo = parts[1]
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.post(
                     f"https://api.github.com/repos/{repo}/issues/{target_id}/comments",
                     json={"body": message.content[:4000]},
-                    headers={"Authorization": f"Bearer {self._token}", "Accept": "application/vnd.github.v3+json", "User-Agent": "raven-ai/1.0"},
+                    headers={
+                        "Authorization": f"Bearer {self._token}",
+                        "Accept": "application/vnd.github.v3+json",
+                        "User-Agent": "raven-ai/1.0",
+                    },
                 )
                 resp.raise_for_status()

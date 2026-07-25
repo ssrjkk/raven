@@ -51,8 +51,7 @@ class AIOSAdapter:
         from ravencode.agents.orchestrator import AgentType, Orchestrator
 
         orch = Orchestrator()
-        result = await orch.dispatch(task, AgentType(agent))
-        return result
+        return await orch.dispatch(task, AgentType(agent))
 
     # ── RavenCode Shell (ravencode.runtime.shell) ──────────────────
 

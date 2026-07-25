@@ -8,20 +8,27 @@ from loguru import logger
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
+from raven.core.config_discovery import auto_select_model
 from raven.core.watermark import honeytoken_warning, is_honeytoken
 
 
 class SafeSecretStr(SecretStr):
     """SecretStr that is falsy when the secret value is empty."""
+
     def __bool__(self) -> bool:
         return bool(self.get_secret_value())
+
 
 _DEFAULT_TOOLS_DENY = (
     "group:automation",
     "group:runtime",
-    "sessions_spawn",
-    "shell.exec",
-    "browser.control",
+    "sessions.sessions_spawn",
+    "api.http_post",
+    "process.kill",
+    "process.run",
+    "process.run_python",
+    "git.git_push",
+    "git.git_pull",
 )
 
 
@@ -31,9 +38,10 @@ class Settings(BaseSettings):
     openrouter_api_key: SafeSecretStr = SafeSecretStr("")
     anthropic_api_key: SafeSecretStr = SafeSecretStr("")
     openai_api_key: SafeSecretStr = SafeSecretStr("")
+    groq_api_key: SafeSecretStr = SafeSecretStr("")
     ollama_base_url: str = "http://localhost:11434"  # default Ollama URL
     vllm_base_url: str = ""
-    default_model: str = "ollama/llama3"
+    default_model: str = ""  # auto-discovered if empty
 
     # --- Tier / rate limits ---
     tier_default: str = "free"
@@ -104,7 +112,7 @@ class Settings(BaseSettings):
     exec_security: str = "deny"
     exec_ask_mode: str = "always"
     workspace_only: bool = True
-    context_visibility: str = "all"
+    context_visibility: str = "allowlist"
     sandbox_mode: str = "non-main"
     sandbox_backend: str = "subprocess"
 
@@ -117,7 +125,18 @@ class Settings(BaseSettings):
     context_window_reserved_tokens: int = 2000
     context_window_sliding_size: int = 20
 
+    token_budget_per_hour: int = 500_000
+    """Max tokens (input + output) allowed per hour per user_id."""
     ghost_mode: bool = False
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.default_model:
+            self.default_model = auto_select_model()
+            logger.info("Auto-selected model: {}", self.default_model)
+        if not self.web_secret_key:
+            import secrets
+            self.web_secret_key = SafeSecretStr(secrets.token_hex(32))
+            logger.info("Auto-generated WEB_SECRET_KEY")
 
     metrics_port: int = 9090
     otlp_endpoint: str = ""
@@ -151,7 +170,7 @@ class Settings(BaseSettings):
 
     def validate_settings(self) -> bool:
         errors = []
-        if not self.web_secret_key or self.web_secret_key.get_secret_value() == "change-me-in-production":  # noqa: S105
+        if not self.web_secret_key or self.web_secret_key.get_secret_value() == "change-me-in-production":
             errors.append("WEB_SECRET_KEY must be set to a non-default value")
         if self.dm_policy not in ("pairing", "open", "closed"):
             errors.append(f"DM_POLICY must be 'pairing', 'open', or 'closed', got '{self.dm_policy}'")
@@ -175,6 +194,7 @@ _honeytoken_keys = {
     "openrouter_api_key": "OPENROUTER_API_KEY",
     "anthropic_api_key": "ANTHROPIC_API_KEY",
     "openai_api_key": "OPENAI_API_KEY",
+    "groq_api_key": "GROQ_API_KEY",
 }
 for _attr, _env_name in _honeytoken_keys.items():
     _val = getattr(settings, _attr, SafeSecretStr(""))

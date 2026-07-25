@@ -4,6 +4,7 @@ import os
 import tempfile
 from pathlib import Path
 
+import aiofiles
 from loguru import logger
 
 
@@ -15,19 +16,19 @@ async def transcribe_voice(file_path: str) -> str:
         if not api_key:
             return _local_transcribe(file_path)
 
-        with Path(file_path).open("rb") as f:
-            async with httpx.AsyncClient(timeout=60) as c:
-                resp = await c.post(
-                    "https://api.openai.com/v1/audio/transcriptions",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    files={"file": (Path(file_path).name, f, "audio/ogg")},
-                    data={"model": "whisper-1"},
-                )
-                if resp.status_code == 200:
-                    return resp.json().get("text", "")  # type: ignore[no-any-return]
-                else:
-                    logger.warning("Whisper API error: {} {}", resp.status_code, resp.text)
-                    return ""
+        async with aiofiles.open(file_path, "rb") as f:
+            file_data = await f.read()
+        async with httpx.AsyncClient(timeout=60) as c:
+            resp = await c.post(
+                "https://api.openai.com/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                files={"file": (Path(file_path).name, file_data, "audio/ogg")},
+                data={"model": "whisper-1"},
+            )
+            if resp.status_code == 200:
+                return resp.json().get("text", "")  # type: ignore[no-any-return]
+            logger.warning("Whisper API error: {} {}", resp.status_code, resp.text)
+            return ""
     except ImportError:
         return _local_transcribe(file_path)
     except Exception as e:

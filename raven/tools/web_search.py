@@ -42,18 +42,18 @@ class WebSearchTool:
     ) -> list[SearchResult]:
         if provider == SearchProvider.BRAVE:
             return await self._brave(query, max_results)
-        elif provider == SearchProvider.DUCKDUCKGO:
+        if provider == SearchProvider.DUCKDUCKGO:
             return await self._duckduckgo(query, max_results)
-        elif provider == SearchProvider.PERPLEXITY:
+        if provider == SearchProvider.PERPLEXITY:
             return await self._perplexity(query, max_results)
-        elif provider == SearchProvider.GOOGLE:
+        if provider == SearchProvider.GOOGLE:
             return await self._google(query, max_results)
-        elif provider == SearchProvider.BING:
+        if provider == SearchProvider.BING:
             return await self._bing(query, max_results)
-        elif provider == SearchProvider.TAVILY:
+        if provider == SearchProvider.TAVILY:
             return await self._tavily(query, max_results)
-        else:
-            raise ValueError(f"Unknown provider: {provider}")
+        msg = f"Unknown provider: {provider}"
+        raise ValueError(msg)
 
     async def search_with_failover(
         self, query: str, providers: list[SearchProvider] | None = None, max_results: int = 10
@@ -67,7 +67,8 @@ class WebSearchTool:
                 last_error = str(e)
                 logger.warning("[web_search] {} failed: {}", provider.value, e)
                 continue
-        raise RuntimeError(f"All providers failed. Last error: {last_error}")
+        msg = f"All providers failed. Last error: {last_error}"
+        raise RuntimeError(msg)
 
     async def _brave(self, query: str, max_results: int) -> list[SearchResult]:
         api_key = settings.brave_search_api_key.get_secret_value()
@@ -82,7 +83,12 @@ class WebSearchTool:
         resp.raise_for_status()
         data = resp.json()
         return [
-            SearchResult(title=item.get("title", ""), url=item.get("url", ""), snippet=item.get("description", ""), provider=SearchProvider.BRAVE)
+            SearchResult(
+                title=item.get("title", ""),
+                url=item.get("url", ""),
+                snippet=item.get("description", ""),
+                provider=SearchProvider.BRAVE,
+            )
             for item in data.get("web", {}).get("results", [])[:max_results]
         ]
 
@@ -100,12 +106,14 @@ class WebSearchTool:
             snippet_el = result.select_one(".result__snippet")
             if title_el:
                 href = title_el.get("href", "")
-                results.append(SearchResult(
-                    title=title_el.get_text(strip=True),
-                    url=str(href) if href else "",
-                    snippet=snippet_el.get_text(strip=True) if snippet_el else "",
-                    provider=SearchProvider.DUCKDUCKGO,
-                ))
+                results.append(
+                    SearchResult(
+                        title=title_el.get_text(strip=True),
+                        url=str(href) if href else "",
+                        snippet=snippet_el.get_text(strip=True) if snippet_el else "",
+                        provider=SearchProvider.DUCKDUCKGO,
+                    )
+                )
         return results
 
     async def _perplexity(self, query: str, max_results: int) -> list[SearchResult]:
@@ -120,7 +128,15 @@ class WebSearchTool:
                 "model": "sonar-pro",
                 "messages": [
                     {"role": "system", "content": "You are a research assistant. Provide search results with sources."},
-                    {"role": "user", "content": f"Search for: {query}\n\nReturn the results as a numbered list with title, URL, and brief description for each result. Format each result as: 1. [Title](url) - description"},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Search for: {query}\n\n"
+                            "Return the results as a numbered list with title, URL, "
+                            "and brief description for each result. Format each result "
+                            "as: 1. [Title](url) - description"
+                        ),
+                    },
                 ],
                 "max_tokens": 1024,
             },
@@ -130,15 +146,28 @@ class WebSearchTool:
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
         results: list[SearchResult] = []
         import re
+
         for line in content.split("\n"):
             line = line.strip()
             if not line:
                 continue
-            m = re.match(r"\d+\.\s+\[(.+?)\]\((.+?)\)\s*[-–—]\s*(.+)", line)
+            m = re.match(r"\d+\.\s+\[(.+?)\]\((.+?)\)\s*[-–—]\s*(.+)", line)  # noqa: RUF001
             if m:
-                results.append(SearchResult(title=m.group(1), url=m.group(2), snippet=m.group(3), provider=SearchProvider.PERPLEXITY))
+                results.append(
+                    SearchResult(
+                        title=m.group(1), url=m.group(2), snippet=m.group(3), provider=SearchProvider.PERPLEXITY
+                    )
+                )
         if not results and content:
-            results.append(SearchResult(title="Perplexity Response", url="", snippet=content[:500], provider=SearchProvider.PERPLEXITY, source="perplexity"))
+            results.append(
+                SearchResult(
+                    title="Perplexity Response",
+                    url="",
+                    snippet=content[:500],
+                    provider=SearchProvider.PERPLEXITY,
+                    source="perplexity",
+                )
+            )
         return results[:max_results]
 
     async def _google(self, query: str, max_results: int) -> list[SearchResult]:
@@ -154,7 +183,12 @@ class WebSearchTool:
         resp.raise_for_status()
         data = resp.json()
         return [
-            SearchResult(title=item.get("title", ""), url=item.get("link", ""), snippet=item.get("snippet", ""), provider=SearchProvider.GOOGLE)
+            SearchResult(
+                title=item.get("title", ""),
+                url=item.get("link", ""),
+                snippet=item.get("snippet", ""),
+                provider=SearchProvider.GOOGLE,
+            )
             for item in data.get("items", [])[:max_results]
         ]
 
@@ -171,7 +205,12 @@ class WebSearchTool:
         resp.raise_for_status()
         data = resp.json()
         return [
-            SearchResult(title=item.get("name", ""), url=item.get("url", ""), snippet=item.get("snippet", ""), provider=SearchProvider.BING)
+            SearchResult(
+                title=item.get("name", ""),
+                url=item.get("url", ""),
+                snippet=item.get("snippet", ""),
+                provider=SearchProvider.BING,
+            )
             for item in data.get("webPages", {}).get("value", [])[:max_results]
         ]
 
@@ -187,7 +226,12 @@ class WebSearchTool:
         resp.raise_for_status()
         data = resp.json()
         return [
-            SearchResult(title=item.get("title", ""), url=item.get("url", ""), snippet=item.get("content", ""), provider=SearchProvider.TAVILY)
+            SearchResult(
+                title=item.get("title", ""),
+                url=item.get("url", ""),
+                snippet=item.get("content", ""),
+                provider=SearchProvider.TAVILY,
+            )
             for item in data.get("results", [])[:max_results]
         ]
 
@@ -235,7 +279,9 @@ async def web_search(query: str, max_results: int = 10, provider: str = "duckduc
         return f"Search failed: {e}"
 
 
-async def web_search_structured(query: str, max_results: int = 10, provider: str = "duckduckgo", failover: bool = False) -> list[dict[str, Any]]:
+async def web_search_structured(
+    query: str, max_results: int = 10, provider: str = "duckduckgo", failover: bool = False
+) -> list[dict[str, Any]]:
     tool = _get_tool()
     try:
         if failover:
@@ -248,15 +294,45 @@ async def web_search_structured(query: str, max_results: int = 10, provider: str
 
 
 def register_web_search_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(name="web_search", description="Search the web using a configurable provider. Supports: brave, duckduckgo, perplexity, google, bing, tavily. Optional failover tries providers in order until one succeeds.", parameters={
-        "query": {"type": "string", "description": "Search query", "required": True},
-        "max_results": {"type": "integer", "description": "Max results to return", "required": False},
-        "provider": {"type": "string", "description": "Search provider: brave, duckduckgo, perplexity, google, bing, tavily", "required": False},
-        "failover": {"type": "boolean", "description": "Auto-failover across all providers if one fails", "required": False},
-    }, handler=web_search, category="web", timeout=30))
-    registry.register(ToolSpec(name="web_search_structured", description="Search the web and return structured results as list of {title, url, snippet, provider}", parameters={
-        "query": {"type": "string", "description": "Search query", "required": True},
-        "max_results": {"type": "integer", "description": "Max results to return", "required": False},
-        "provider": {"type": "string", "description": "Search provider", "required": False},
-        "failover": {"type": "boolean", "description": "Auto-failover across all providers", "required": False},
-    }, handler=web_search_structured, category="web", timeout=30))
+    registry.register(
+        ToolSpec(
+            name="web_search",
+            description=(
+                "Search the web using a configurable provider. Supports: brave, duckduckgo, "
+                "perplexity, google, bing, tavily. Optional failover tries providers in order "
+                "until one succeeds."
+            ),
+            parameters={
+                "query": {"type": "string", "description": "Search query", "required": True},
+                "max_results": {"type": "integer", "description": "Max results to return", "required": False},
+                "provider": {
+                    "type": "string",
+                    "description": "Search provider: brave, duckduckgo, perplexity, google, bing, tavily",
+                    "required": False,
+                },
+                "failover": {
+                    "type": "boolean",
+                    "description": "Auto-failover across all providers if one fails",
+                    "required": False,
+                },
+            },
+            handler=web_search,
+            category="web",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="web_search_structured",
+            description="Search the web and return structured results as list of {title, url, snippet, provider}",
+            parameters={
+                "query": {"type": "string", "description": "Search query", "required": True},
+                "max_results": {"type": "integer", "description": "Max results to return", "required": False},
+                "provider": {"type": "string", "description": "Search provider", "required": False},
+                "failover": {"type": "boolean", "description": "Auto-failover across all providers", "required": False},
+            },
+            handler=web_search_structured,
+            category="web",
+            timeout=30,
+        )
+    )

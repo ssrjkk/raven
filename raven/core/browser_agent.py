@@ -23,10 +23,12 @@ def validate_url(url: str) -> None:
         ip = ipaddress.ip_address(host)
         for r in _PRIVATE_RANGES:
             if ip in ipaddress.ip_network(r, strict=False):
-                raise ValueError(f"SSRF blocked: private IP {host}")
+                msg = f"SSRF blocked: private IP {host}"
+                raise ValueError(msg)
     except ValueError:
         if host in ("localhost", "0.0.0.0"):
-            raise ValueError(f"SSRF blocked: hostname {host}") from None
+            msg = f"SSRF blocked: hostname {host}"
+            raise ValueError(msg) from None
         try:
             addrs = socket.getaddrinfo(host, None)
             for _family, _type, _proto, _cname, sockaddr in addrs:
@@ -35,7 +37,8 @@ def validate_url(url: str) -> None:
                     ip = ipaddress.ip_address(addr)
                     for r in _PRIVATE_RANGES:
                         if ip in ipaddress.ip_network(r, strict=False):
-                            raise ValueError(f"SSRF blocked: hostname {host} resolves to private IP {addr}")
+                            msg = f"SSRF blocked: hostname {host} resolves to private IP {addr}"
+                            raise ValueError(msg)
                 except ValueError:
                     continue
         except (socket.gaierror, OSError):
@@ -91,6 +94,7 @@ class BrowserAgent:
             return
         try:
             from playwright.async_api import async_playwright
+
             self._playwright = await async_playwright().start()
             self._browser = await self._playwright.chromium.launch(headless=self._headless)
             context_options: dict[str, Any] = {
@@ -251,11 +255,14 @@ class BrowserAgent:
             if (content) return content.innerText;
             const body = document.body;
             const clone = body.cloneNode(true);
-            const removals = clone.querySelectorAll('nav, header, footer, aside, script, style, .sidebar, .nav, .footer, .header, .ad, .advertisement, .menu, .social-share, .comments, noscript');
+            const removals = clone.querySelectorAll(
+                'nav, header, footer, aside, script, style, .sidebar, .nav, '
+                + '.footer, .header, .ad, .advertisement, .menu, .social-share, .comments, noscript'
+            );
             removals.forEach(el => el.remove());
             return clone.innerText;
         })()""")
-        cleaned = re.sub(r'\s+', ' ', str(result or "")).strip()
+        cleaned = re.sub(r"\s+", " ", str(result or "")).strip()
         return cleaned[:10000]
 
     async def get_attributes(self, selector: str) -> str:
@@ -318,13 +325,15 @@ class BrowserAgent:
                 body = str(await request.body())
             except Exception as exc:
                 logger.debug("Failed to read request body: {}", exc)
-            self._intercepted_requests.append(InterceptedRequest(
-                url=request.url,
-                method=request.method,
-                headers=dict(request.headers),
-                body=body,
-                timestamp=__import__("time").time(),
-            ))
+            self._intercepted_requests.append(
+                InterceptedRequest(
+                    url=request.url,
+                    method=request.method,
+                    headers=dict(request.headers),
+                    body=body,
+                    timestamp=__import__("time").time(),
+                )
+            )
 
         async def on_response(response: Any) -> None:
             body = None
@@ -332,13 +341,15 @@ class BrowserAgent:
                 body = str(await response.body())
             except Exception as exc:
                 logger.debug("Failed to read response body: {}", exc)
-            self._intercepted_responses.append(InterceptedResponse(
-                url=response.url,
-                status=response.status,
-                headers=dict(response.headers),
-                body=body,
-                timestamp=__import__("time").time(),
-            ))
+            self._intercepted_responses.append(
+                InterceptedResponse(
+                    url=response.url,
+                    status=response.status,
+                    headers=dict(response.headers),
+                    body=body,
+                    timestamp=__import__("time").time(),
+                )
+            )
 
         self._page.on("request", on_request)
         self._page.on("response", on_response)
@@ -355,6 +366,7 @@ class BrowserAgent:
 
     async def get_intercepted_requests(self) -> str:
         import json
+
         if not self._intercepted_requests:
             return "No intercepted requests"
         data = [
@@ -365,6 +377,7 @@ class BrowserAgent:
 
     async def get_intercepted_responses(self) -> str:
         import json
+
         if not self._intercepted_responses:
             return "No intercepted responses"
         data = [

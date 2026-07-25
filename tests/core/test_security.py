@@ -12,13 +12,13 @@ from raven.core.security.tool_policy import ExecSecurity, ToolPolicyEvaluator
 
 class TestToolPolicyEvaluator:
     def test_deny_overrides_allow(self):
-        p = ToolPolicyEvaluator(deny=["file.read"], allow=["file.read", "notify.send"])
-        assert not p.is_tool_allowed("file.read")
-        assert p.is_tool_allowed("notify.send")
+        p = ToolPolicyEvaluator(deny=["files.read"], allow=["files.read", "api.http_get"])
+        assert not p.is_tool_allowed("files.read")
+        assert p.is_tool_allowed("api.http_get")
 
     def test_allow_empty_uses_profile_defaults(self):
         p = ToolPolicyEvaluator(profile="messaging", allow=[])
-        assert p.is_tool_allowed("notify.send")
+        assert p.is_tool_allowed("api.http_get")
         assert not p.is_tool_allowed("shell.exec")
 
     def test_deny_all(self):
@@ -44,13 +44,13 @@ class TestToolPolicyEvaluator:
     @pytest.mark.asyncio
     async def test_exec_security_full(self):
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL)
-        allowed, reason = await p.check_exec("test_tool")
+        allowed, _reason = await p.check_exec("test_tool")
         assert allowed
 
     def test_profile_minimal(self):
         p = ToolPolicyEvaluator(profile="minimal")
-        assert p.is_tool_allowed("notify.send")
-        assert not p.is_tool_allowed("file.read")
+        assert p.is_tool_allowed("api.http_get")
+        assert not p.is_tool_allowed("files.read")
 
     def test_profile_full(self):
         p = ToolPolicyEvaluator(profile="full")

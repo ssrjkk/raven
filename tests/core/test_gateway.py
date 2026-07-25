@@ -37,6 +37,7 @@ class TestGateway:
         assert len(channel.sent_messages) > 0
         last = channel.sent_messages[-1]
         assert "Test response" in last.content
+        await gateway.stop()
 
     async def test_closed_policy_blocks_user(self, gateway: Gateway, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr("raven.core.gateway.gateway.settings.dm_policy", "closed")
@@ -79,3 +80,12 @@ class TestGateway:
         event = IncomingMessage(channel="mock", user_id="u1", session_id="mock:u1", text="hello")
         await gateway.handle_message(event)
         assert len(channel.sent_messages) == 0
+
+    async def test_gateway_init_has_service_layer(self, gateway: Gateway):
+        assert gateway._extractor is not None
+        assert gateway._chunker is not None
+        assert gateway._persister is not None
+
+    async def test_gateway_has_extractor(self, gateway: Gateway):
+        assert gateway._extractor is not None
+        assert gateway._chunker is not None

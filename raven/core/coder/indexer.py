@@ -46,29 +46,31 @@ LANGUAGE_MAP: dict[str, str] = {
     ".cfg": "ini",
 }
 
-IGNORE_DIRS = frozenset({
-    ".git",
-    "__pycache__",
-    "node_modules",
-    ".venv",
-    "venv",
-    ".tox",
-    ".eggs",
-    "eggs",
-    ".mypy_cache",
-    ".ruff_cache",
-    ".pytest_cache",
-    "dist",
-    "build",
-    ".idea",
-    ".vscode",
-    ".bzr",
-    ".hg",
-    ".svn",
-    "target",
-    "bin",
-    "obj",
-})
+IGNORE_DIRS = frozenset(
+    {
+        ".git",
+        "__pycache__",
+        "node_modules",
+        ".venv",
+        "venv",
+        ".tox",
+        ".eggs",
+        "eggs",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".pytest_cache",
+        "dist",
+        "build",
+        ".idea",
+        ".vscode",
+        ".bzr",
+        ".hg",
+        ".svn",
+        "target",
+        "bin",
+        "obj",
+    }
+)
 
 
 class CodeIndexer:
@@ -133,7 +135,11 @@ class CodeIndexer:
         results = []
         try:
             for entry in self._root.rglob("*"):
-                if entry.is_file() and entry.suffix in LANGUAGE_MAP and not any(part in IGNORE_DIRS for part in entry.relative_to(self._root).parts):
+                if (
+                    entry.is_file()
+                    and entry.suffix in LANGUAGE_MAP
+                    and not any(part in IGNORE_DIRS for part in entry.relative_to(self._root).parts)
+                ):
                     results.append(entry)
         except PermissionError as e:
             logger.debug("[indexer] permission denied walking {}: {}", self._root, e)
@@ -277,7 +283,7 @@ class CodeIndexer:
 
             m = re.match(r"(?:export\s+)?(?:default\s+)?const\s+(\w+)\s*[=:]", stripped)
             if m:
-                rest = stripped[m.end():]
+                rest = stripped[m.end() :]
                 if "=>" in rest or rest.strip().startswith("async"):
                     symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.FUNCTION, line=i))
                 elif m.group(1).isupper():
@@ -315,7 +321,13 @@ class CodeIndexer:
 
             m = re.match(r"(?:const|var)\s+(\w+)", stripped)
             if m:
-                symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CONSTANT if stripped.startswith("const") else SymbolKind.VARIABLE, line=i))
+                symbols.append(
+                    CodeSymbol(
+                        name=m.group(1),
+                        kind=SymbolKind.CONSTANT if stripped.startswith("const") else SymbolKind.VARIABLE,
+                        line=i,
+                    )
+                )
                 continue
 
         # Second pass: methods (func with receiver)
@@ -383,7 +395,10 @@ class CodeIndexer:
         for i, line in enumerate(content.splitlines(), 1):
             stripped = line.strip()
 
-            m = re.match(r"(?:public|private|protected|internal|static|abstract|sealed|partial|\s)*\s+(?:abstract\s+|sealed\s+|static\s+)?(?:class|record|struct)\s+(\w+)", stripped)
+            m = re.match(
+                r"(?:public|private|protected|internal|static|abstract|sealed|partial|\s)*\s+(?:abstract\s+|sealed\s+|static\s+)?(?:class|record|struct)\s+(\w+)",
+                stripped,
+            )
             if m:
                 symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CLASS, line=i))
                 continue
@@ -393,12 +408,18 @@ class CodeIndexer:
                 symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.INTERFACE, line=i))
                 continue
 
-            m = re.match(r"(?:public|private|protected|internal)\s+(?:static\s+|virtual\s+|override\s+|abstract\s+)*(?:\w+(?:<[^>]*>)?)\s+(\w+)\s*\(", stripped)
+            m = re.match(
+                r"(?:public|private|protected|internal)\s+(?:static\s+|virtual\s+|override\s+|abstract\s+)*(?:\w+(?:<[^>]*>)?)\s+(\w+)\s*\(",
+                stripped,
+            )
             if m:
                 symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.METHOD, line=i))
                 continue
 
-            m = re.match(r"(?:public|private|protected|internal)\s+(?:static\s+|readonly\s+|const\s+)*(?:\w+(?:\[\])?(?:<[^>]*>)?)\s+(\w+)\s*\{", stripped)
+            m = re.match(
+                r"(?:public|private|protected|internal)\s+(?:static\s+|readonly\s+|const\s+)*(?:\w+(?:\[\])?(?:<[^>]*>)?)\s+(\w+)\s*\{",
+                stripped,
+            )
             if m:
                 symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.VARIABLE, line=i))
                 continue
@@ -435,7 +456,10 @@ class CodeIndexer:
                 symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.FUNCTION, line=i))
                 continue
 
-            m = re.match(r"(?:public|private|protected)\s+(?:static\s+)?(?:readonly\s+)?(?:int|float|string|bool|array|void|\w+)\s+(\w+)", stripped)
+            m = re.match(
+                r"(?:public|private|protected)\s+(?:static\s+)?(?:readonly\s+)?(?:int|float|string|bool|array|void|\w+)\s+(\w+)",
+                stripped,
+            )
             if m:
                 symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.VARIABLE, line=i))
                 continue
@@ -521,7 +545,10 @@ class CodeIndexer:
         for i, line in enumerate(content.splitlines(), 1):
             stripped = line.strip()
 
-            m = re.match(r"(?:public|private|protected|static|abstract|final|sealed|non-sealed|\s)*\s+(?:abstract\s+|final\s+|sealed\s+)?(?:static\s+)?(?:class|record)\s+(\w+)", stripped)
+            m = re.match(
+                r"(?:public|private|protected|static|abstract|final|sealed|non-sealed|\s)*\s+(?:abstract\s+|final\s+|sealed\s+)?(?:static\s+)?(?:class|record)\s+(\w+)",
+                stripped,
+            )
             if m:
                 symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.CLASS, line=i))
                 continue
@@ -531,12 +558,18 @@ class CodeIndexer:
                 symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.INTERFACE, line=i))
                 continue
 
-            m = re.match(r"(?:public|private|protected)\s+(?:static\s+|abstract\s+|final\s+|synchronized\s+)*(?:\w+(?:<[^>]*>)?)\s+(\w+)\s*\(", stripped)
+            m = re.match(
+                r"(?:public|private|protected)\s+(?:static\s+|abstract\s+|final\s+|synchronized\s+)*(?:\w+(?:<[^>]*>)?)\s+(\w+)\s*\(",
+                stripped,
+            )
             if m:
                 symbols.append(CodeSymbol(name=m.group(1), kind=SymbolKind.METHOD, line=i))
                 continue
 
-            m = re.match(r"(?:public|private|protected)\s+(?:static\s+|final\s+)*(?:\w+(?:\[\])?(?:<[^>]*>)?)\s+(\w+)\s*(?:=|;)", stripped)
+            m = re.match(
+                r"(?:public|private|protected)\s+(?:static\s+|final\s+)*(?:\w+(?:\[\])?(?:<[^>]*>)?)\s+(\w+)\s*(?:=|;)",
+                stripped,
+            )
             if m:
                 kind = SymbolKind.CONSTANT if m.group(1).isupper() else SymbolKind.VARIABLE
                 symbols.append(CodeSymbol(name=m.group(1), kind=kind, line=i))
@@ -626,12 +659,23 @@ class CodeIndexer:
     @staticmethod
     def _lsp_kind_to_symbol_kind(lsp_kind: int) -> SymbolKind:
         mapping = {
-            1: SymbolKind.VARIABLE, 2: SymbolKind.VARIABLE, 3: SymbolKind.VARIABLE,
-            4: SymbolKind.VARIABLE, 5: SymbolKind.CLASS, 6: SymbolKind.METHOD,
-            7: SymbolKind.VARIABLE, 8: SymbolKind.VARIABLE, 9: SymbolKind.METHOD,
-            10: SymbolKind.TYPE, 11: SymbolKind.INTERFACE, 12: SymbolKind.FUNCTION,
-            13: SymbolKind.VARIABLE, 14: SymbolKind.CONSTANT, 22: SymbolKind.CONSTANT,
-            23: SymbolKind.CLASS, 24: SymbolKind.VARIABLE,
+            1: SymbolKind.VARIABLE,
+            2: SymbolKind.VARIABLE,
+            3: SymbolKind.VARIABLE,
+            4: SymbolKind.VARIABLE,
+            5: SymbolKind.CLASS,
+            6: SymbolKind.METHOD,
+            7: SymbolKind.VARIABLE,
+            8: SymbolKind.VARIABLE,
+            9: SymbolKind.METHOD,
+            10: SymbolKind.TYPE,
+            11: SymbolKind.INTERFACE,
+            12: SymbolKind.FUNCTION,
+            13: SymbolKind.VARIABLE,
+            14: SymbolKind.CONSTANT,
+            22: SymbolKind.CONSTANT,
+            23: SymbolKind.CLASS,
+            24: SymbolKind.VARIABLE,
         }
         return mapping.get(lsp_kind, SymbolKind.FUNCTION)
 

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, type ReactNode,useCallback, useEffect, useRef, useState } from "react";
+
 import { getToken } from "../api/client";
 
 
@@ -217,7 +218,7 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
   }
 }
 
-export default function CanvasViewer({ sessionId, className }: { sessionId: string; className?: string }) {
+const CanvasViewer = memo(function CanvasViewer({ sessionId, className }: { sessionId: string; className?: string }) {
   const [canvas, setCanvas] = useState<CanvasState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const ws = useRef<WebSocket | null>(null);
@@ -281,4 +282,6 @@ export default function CanvasViewer({ sessionId, className }: { sessionId: stri
       </div>
     </div>
   );
-}
+});
+
+export default CanvasViewer;

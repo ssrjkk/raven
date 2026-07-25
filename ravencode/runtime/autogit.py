@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-import os
+from pathlib import Path
 
 from loguru import logger
 
 
 async def _git(*args: str, cwd: str | None = None) -> str:
-    cmd = ["git"] + list(args)
+    cmd = ["git", *list(args)]
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
-            cwd=cwd or os.getcwd(),
+            cwd=cwd or Path.cwd(),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -56,7 +56,7 @@ def _summarize_diff(diff: str, max_lines: int = 5) -> str:
     lines = diff.splitlines()
     summary = []
     for line in lines:
-        if line.startswith("+") and not line.startswith("+++") or line.startswith("-") and not line.startswith("---"):
+        if (line.startswith("+") and not line.startswith("+++")) or (line.startswith("-") and not line.startswith("---")):
             summary.append(line[1:80])
         if len(summary) >= max_lines:
             break

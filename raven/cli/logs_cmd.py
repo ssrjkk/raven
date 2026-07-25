@@ -37,7 +37,7 @@ def logs(lines: int, level: str, follow: bool):
         with log_path.open(encoding="utf-8") as f:
             all_lines = f.readlines()
         filtered = []
-        for line in all_lines[-lines * 10:]:
+        for line in all_lines[-lines * 10 :]:
             for lvl, lvl_id in levels.items():
                 if lvl_id >= min_level and f"| {lvl} |" in line:
                     filtered.append((lvl, line.rstrip()))
@@ -56,7 +56,7 @@ def logs(lines: int, level: str, follow: bool):
                         if line:
                             console.print(line.rstrip())
                         else:
-                            time.sleep(0.5)  # noqa: ASYNC100 — sync CLI, not async
+                            time.sleep(0.5)
             except KeyboardInterrupt:
                 logger.debug("[logs] follow interrupted by user")
             except Exception as exc:

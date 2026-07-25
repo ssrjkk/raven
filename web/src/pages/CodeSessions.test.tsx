@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { BrowserRouter } from "react-router-dom";
+import { screen, waitFor } from "@testing-library/react";
+import { beforeEach,describe, expect, it, vi } from "vitest";
+
 import CodeSessions from "./CodeSessions";
+import { renderWithProviders } from "../test/test-utils";
 
 vi.mock("../api/client", () => ({
   api: {
@@ -21,11 +22,7 @@ const mockSessions = [
 ];
 
 function renderCodeSessions() {
-  return render(
-    <BrowserRouter>
-      <CodeSessions />
-    </BrowserRouter>
-  );
+  return renderWithProviders(<CodeSessions />);
 }
 
 describe("CodeSessions Page", () => {
@@ -34,9 +31,9 @@ describe("CodeSessions Page", () => {
     client.api.codeSessions = vi.fn().mockResolvedValue(mockSessions);
   });
 
-  it("renders loading state initially", () => {
+  it("renders loading state initially", async () => {
     renderCodeSessions();
-    expect(screen.getByText("Code Sessions")).toBeInTheDocument();
+    expect(await screen.findByText("Code Sessions")).toBeInTheDocument();
   });
 
   it("renders sessions after loading", async () => {

@@ -47,6 +47,8 @@ class PluginTool(BaseModel):
     description: str
     parameters: dict[str, Any]
     handler: Callable[..., Any]
+    confirm: bool = False
+    """Whether this tool requires user confirmation before execution."""
 
     model_config = {"arbitrary_types_allowed": True}
 

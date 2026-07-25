@@ -49,7 +49,8 @@ class SpeechToText:
         }
         fn = provider_map.get(self.config.provider)
         if not fn:
-            raise ValueError(f"Unsupported STT provider: {self.config.provider}")
+            msg = f"Unsupported STT provider: {self.config.provider}"
+            raise ValueError(msg)
         return fn(audio_path, **kwargs)
 
     def _transcribe_whisper(self, audio_path: str, **kwargs: Any) -> str:
@@ -144,14 +145,11 @@ class SpeechToText:
         with sr.Microphone() as source:
             logger.info("Recording for {}s...", duration)
             audio = recognizer.record(source, duration=duration)
-        with open(temp, "wb") as f:
+        with Path(temp).open("wb") as f:
             f.write(audio.get_wav_data())
         text = self.transcribe(str(temp))
         try:
-            os.unlink(str(temp))
+            Path(temp).unlink()
         except OSError:
             logger.debug("Temp file already removed")
         return text
-
-
-

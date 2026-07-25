@@ -59,7 +59,7 @@ class TestContinuousAuthenticator:
         assert session.user_id == "speaker1"
         assert session.status == "active"
         assert session.start_time > 0
-        await auth.stop()
+        auth.stop()
 
     @pytest.mark.asyncio
     async def test_start_no_enrolled_speakers_raises(self):
@@ -75,14 +75,14 @@ class TestContinuousAuthenticator:
         assert "speaker1" in auth._tasks
         task = auth._tasks["speaker1"]
         assert not task.done()
-        await auth.stop()
+        auth.stop()
 
     @pytest.mark.asyncio
     async def test_stop_cancels_tasks_and_sets_stopped(self):
         auth = ContinuousAuthenticator(self.biometrics)
         session = await auth.start(interval_seconds=0.5)
         assert session.status == "active"
-        await auth.stop()
+        auth.stop()
         assert session.status == "stopped"
         assert len(auth._tasks) == 0
 
@@ -117,12 +117,12 @@ class TestContinuousAuthenticator:
         session = auth.get_session("speaker1")
         assert session is not None
         assert session.status == "active"
-        await auth.stop()
+        auth.stop()
 
     @pytest.mark.asyncio
     async def test_get_active_sessions_returns_only_active(self):
         auth = ContinuousAuthenticator(self.biometrics)
         session1 = await auth.start(interval_seconds=1.0)
         assert session1 in auth.get_active_sessions()
-        await auth.stop()
+        auth.stop()
         assert auth.get_active_sessions() == []

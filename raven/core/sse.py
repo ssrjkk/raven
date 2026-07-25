@@ -36,7 +36,7 @@ def _next_event_id() -> str:
 
 
 class SSEEvent:
-    def __init__(self, event: str, data: Any, retry: int | None = None, event_id: str | None = None):
+    def __init__(self, event: str, data: dict[str, Any] | str | None, retry: int | None = None, event_id: str | None = None):
         self.event = event
         self.data = data
         self.retry = retry
@@ -117,7 +117,7 @@ class SSEStream:
             for sid, info in self._sessions.items()
         }
 
-    async def push(self, event: str, data: Any, session_id: str | None = None):
+    async def push(self, event: str, data: dict[str, Any] | str | None, session_id: str | None = None):
         payload = SSEEvent(event, data)
 
         if session_id:
@@ -129,7 +129,7 @@ class SSEStream:
             for sid, q in list(self._queues.items()):
                 await self._push_to_queue(q, payload, sid)
 
-    async def broadcast(self, event: str, data: Any):
+    async def broadcast(self, event: str, data: dict[str, Any] | str | None):
         await self.push(event, data)
 
     async def _push_to_queue(self, q: asyncio.Queue[Any], payload: SSEEvent, session_id: str):

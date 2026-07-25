@@ -14,11 +14,13 @@ from ravencode.core.prompts import get_prompt
 # memory store
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class MemoryStore:
     path: str = "data/ravencode_memory.json"
     _data: dict[str, Any] = field(default_factory=dict)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    _bg_tasks: set[asyncio.Task[None]] = field(default_factory=set)
 
     def __post_init__(self):
         p = Path(self.path).expanduser().resolve()
@@ -68,11 +70,15 @@ class MemoryStore:
 
     def __setitem__(self, key: str, value: Any) -> None:
         self._data[key] = value
-        asyncio.create_task(self._persist())
+        task = asyncio.create_task(self._persist())
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
 
     def __delitem__(self, key: str) -> None:
         del self._data[key]
-        asyncio.create_task(self._persist())
+        task = asyncio.create_task(self._persist())
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
 
     def to_dict(self) -> dict[str, Any]:
         return dict(self._data)
@@ -81,6 +87,7 @@ class MemoryStore:
 # ---------------------------------------------------------------------------
 # system prompt loader
 # ---------------------------------------------------------------------------
+
 
 def load_system_prompt_from_file(path: str | Path | None = None) -> str | None:
     candidates = [
@@ -102,6 +109,7 @@ def load_system_prompt_from_file(path: str | Path | None = None) -> str | None:
 # conversation
 # ---------------------------------------------------------------------------
 
+
 class Conversation:
     def __init__(
         self,
@@ -109,7 +117,7 @@ class Conversation:
         messages: list[dict[str, Any]] | None = None,
         max_tokens: int = 128_000,
         memory: MemoryStore | None = None,
-    ):
+    ) -> None:
         self.system_prompt = system_prompt or load_system_prompt_from_file() or self._default_system_prompt()
         self.messages: list[dict[str, Any]] = messages or []
         self.max_tokens = max_tokens
@@ -179,15 +187,17 @@ class Conversation:
             )
             resp = await llm.complete(
                 messages=[{"role": "user", "content": summary_prompt}],
-                model="", tools=None,
+                model="",
+                tools=None,
             )
             summary = resp.content.strip() if resp.content else ""
             if summary:
-                self.messages[idx] = {
-                    "role": "user", "content": f"[summarized] {summary}"
-                }
-                logger.debug("Context summarization: compressed {} chars -> {} chars",
-                             len(oldest.get("content", "")), len(summary))
+                self.messages[idx] = {"role": "user", "content": f"[summarized] {summary}"}
+                logger.debug(
+                    "Context summarization: compressed {} chars -> {} chars",
+                    len(oldest.get("content", "")),
+                    len(summary),
+                )
         except Exception as e:
             logger.warning("Context summarization failed, dropping oldest message: {}", e)
             self.messages.pop(idx)
@@ -219,6 +229,7 @@ class Conversation:
 # ---------------------------------------------------------------------------
 # factory
 # ---------------------------------------------------------------------------
+
 
 def create_conversation(
     system_prompt: str | None = None,

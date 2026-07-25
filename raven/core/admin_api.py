@@ -457,6 +457,7 @@ def init_auth_routes(app, db_path: str) -> None:
 
     def _check_login_rate(ip: str) -> bool:
         import time
+
         now = time.monotonic()
         attempts = _login_attempts.get(ip, [])
         attempts[:] = [t for t in attempts if now - t < 60]

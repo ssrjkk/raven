@@ -40,7 +40,12 @@ def create_web_search_router() -> APIRouter:
             raise HTTPException(400, f"Invalid provider: {req.provider}") from None
         try:
             results = await tool.search(req.query, provider=provider, max_results=req.max_results)
-            return {"results": [r.model_dump() for r in results], "count": len(results), "provider": provider.value, "query": req.query}
+            return {
+                "results": [r.model_dump() for r in results],
+                "count": len(results),
+                "provider": provider.value,
+                "query": req.query,
+            }
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
         except Exception as e:

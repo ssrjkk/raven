@@ -5,7 +5,10 @@ from pathlib import Path
 import aiosqlite
 from loguru import logger
 
-MIGRATIONS_TABLE = "CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+MIGRATIONS_TABLE = (
+    "CREATE TABLE IF NOT EXISTS _migrations "
+    "(version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+)
 
 
 class Migration:

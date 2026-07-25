@@ -35,10 +35,12 @@ def _validate_url(url: str) -> None:
         ip = ipaddress.ip_address(host)
         for r in _PRIVATE_RANGES:
             if ip in ipaddress.ip_network(r, strict=False):
-                raise ValueError(f"SSRF blocked: private IP {host}")
+                msg = f"SSRF blocked: private IP {host}"
+                raise ValueError(msg)
     except ValueError:
-        if host in ("localhost", "0.0.0.0"):  # noqa: S104
-            raise ValueError(f"SSRF blocked: hostname {host}") from None
+        if host in ("localhost", "0.0.0.0"):
+            msg = f"SSRF blocked: hostname {host}"
+            raise ValueError(msg) from None
         try:
             addrs = socket.getaddrinfo(host, None)
             for _family, _, _, _, sockaddr in addrs:
@@ -47,7 +49,8 @@ def _validate_url(url: str) -> None:
                     ip = ipaddress.ip_address(addr)
                     for r in _PRIVATE_RANGES:
                         if ip in ipaddress.ip_network(r, strict=False):
-                            raise ValueError(f"SSRF blocked: hostname {host} resolves to private IP {addr}")
+                            msg = f"SSRF blocked: hostname {host} resolves to private IP {addr}"
+                            raise ValueError(msg)
                 except ValueError:
                     continue
         except (socket.gaierror, OSError) as e:

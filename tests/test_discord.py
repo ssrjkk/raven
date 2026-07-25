@@ -148,7 +148,7 @@ async def test_send_with_embed(channel):
     )
     await channel.send("discord:12345:default", msg)
     mock_ch.send.assert_awaited_once()
-    args, kwargs = mock_ch.send.await_args
+    _args, kwargs = mock_ch.send.await_args
     assert "embed" in kwargs
     assert isinstance(kwargs["embed"], discord.Embed)
 

@@ -43,7 +43,8 @@ class AnalyticsEngine:
         logger.info("analytics engine stopped")
 
     async def _ensure_tables(self) -> None:
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("AnalyticsEngine not started")
         await self._db.execute("""
             CREATE TABLE IF NOT EXISTS analytics_snapshots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,7 +74,8 @@ class AnalyticsEngine:
                 logger.warning("analytics snapshot error: {}", e)
 
     async def _snapshot(self) -> None:
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("AnalyticsEngine not started")
         snap = metrics.snapshot()
         now = int(datetime.now(UTC).timestamp())
         rows: list[tuple[int, str, float]] = []
@@ -94,7 +96,8 @@ class AnalyticsEngine:
         since: int | None = None,
         bucket: str = "5m",
     ) -> list[dict[str, Any]]:
-        assert self._db is not None, "AnalyticsEngine not started"
+        if self._db is None:
+            raise RuntimeError("AnalyticsEngine not started")
         since = since or int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
         bucket_sec = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400}.get(bucket, 300)
         rows = await self._db.execute_fetchall(
@@ -124,14 +127,16 @@ class AnalyticsEngine:
         ]
 
     async def query_metrics_list(self) -> list[str]:
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("AnalyticsEngine not started")
         rows = await self._db.execute_fetchall(
             "SELECT DISTINCT metric_name FROM analytics_snapshots ORDER BY metric_name"
         )
         return [r[0] for r in rows]
 
     async def query_summary(self, since: int | None = None) -> dict[str, Any]:
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("AnalyticsEngine not started")
         since = since or int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
         totals = await self._db.execute_fetchall(
             """
@@ -150,11 +155,7 @@ class AnalyticsEngine:
                 (since,),
             )
         )
-        oldest = list(
-            await self._db.execute_fetchall(
-                "SELECT MIN(ts) AS t FROM analytics_snapshots"
-            )
-        )
+        oldest = list(await self._db.execute_fetchall("SELECT MIN(ts) AS t FROM analytics_snapshots"))
         data_rows = [
             {
                 "name": r[0],
@@ -172,14 +173,17 @@ class AnalyticsEngine:
         }
 
     async def query_aggregated(self, since: int | None = None) -> dict[str, Any]:
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("AnalyticsEngine not started")
         since = since or int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
         series = await self.query_series("raven_messages_received_total", since=since)
         error_series = await self.query_series("raven_message_errors_total", since=since)
         total_received = sum(s["avg"] * s["count"] for s in series) if series else 0
         total_errors = sum(s["avg"] * s["count"] for s in error_series) if error_series else 0
         rows = await self._db.execute_fetchall(
-            "SELECT DISTINCT metric_name FROM analytics_snapshots WHERE metric_name LIKE '%latency%' OR metric_name LIKE '%response%' OR metric_name LIKE '%p99%'"
+            "SELECT DISTINCT metric_name FROM analytics_snapshots "
+            "WHERE metric_name LIKE '%latency%' OR metric_name LIKE '%response%' "
+            "OR metric_name LIKE '%p99%'"
         )
         latency_series = {}
         for r in rows:
@@ -195,7 +199,8 @@ class AnalyticsEngine:
         }
 
     async def query_tool_usage(self, since: int | None = None) -> list[dict[str, Any]]:
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("AnalyticsEngine not started")
         since = since or int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
         rows = await self._db.execute_fetchall(
             "SELECT DISTINCT metric_name FROM analytics_snapshots WHERE metric_name LIKE '%tool_calls%' AND ts >= ?",
@@ -207,11 +212,13 @@ class AnalyticsEngine:
             series = await self.query_series(name, since=since)
             total = sum(s["avg"] * s["count"] for s in series) if series else 0
             if total > 0:
-                results.append({
-                    "name": name,
-                    "total": round(total),
-                    "series": series,
-                })
+                results.append(
+                    {
+                        "name": name,
+                        "total": round(total),
+                        "series": series,
+                    }
+                )
         results.sort(key=lambda r: r["total"], reverse=True)
         return results
 
@@ -228,6 +235,3 @@ class AnalyticsEngine:
             "success_series": success,
             "error_series": error_s,
         }
-
-
-

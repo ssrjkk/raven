@@ -27,5 +27,7 @@ def measure_latency(threshold_ms: float = 50.0) -> Callable[[Callable[P, Awaitab
                         duration=duration_ms,
                         threshold=threshold_ms,
                     )
+
         return wrapper
+
     return decorator

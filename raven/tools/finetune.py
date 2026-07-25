@@ -38,8 +38,10 @@ def finetune_dataset_stats() -> str:
 def finetune_add_conversation(system_prompt: str = "", messages_json: str = "") -> str:
     builder = _get_builder()
     from raven.unique.fine_tuning import ConversationExample
+
     try:
         import json
+
         messages = json.loads(messages_json) if messages_json else []
     except json.JSONDecodeError as e:
         return f"[error] Invalid JSON for messages: {e}"
@@ -51,6 +53,7 @@ def finetune_add_conversation(system_prompt: str = "", messages_json: str = "") 
 def finetune_add_code(code: str, language: str = "", description: str = "") -> str:
     builder = _get_builder()
     from raven.unique.fine_tuning import CodeExample
+
     builder.add_code(CodeExample(code=code, language=language, description=description))
     return f"Code sample added ({language}, {len(code)} chars). Total: {builder.stats()['code_samples']}"
 
@@ -83,7 +86,9 @@ def finetune_start_training(epochs: int = 3, learning_rate: float = 2e-4, batch_
     try:
         dataset = builder.build_dataset()
         tokenized = builder.tokenize_dataset(dataset["train"], pipeline._tokenizer)
-        eval_tokenized = builder.tokenize_dataset(dataset["test"], pipeline._tokenizer) if len(dataset["test"]) > 0 else None
+        eval_tokenized = (
+            builder.tokenize_dataset(dataset["test"], pipeline._tokenizer) if len(dataset["test"]) > 0 else None
+        )
     except RuntimeError as e:
         return f"[error] Dataset error: {e}"
     except Exception as e:
@@ -127,74 +132,104 @@ def finetune_list_checkpoints() -> str:
 
 
 def register_finetune_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="finetune_dataset_stats",
-        description="Get statistics about the fine-tuning dataset builder",
-        parameters={},
-        handler=finetune_dataset_stats,
-        category="finetune",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="finetune_add_conversation",
-        description="Add a conversation example to the fine-tuning dataset",
-        parameters={
-            "system_prompt": {"type": "string", "description": "System prompt", "required": False},
-            "messages_json": {"type": "string", "description": "JSON array of {role, content} messages", "required": False},
-        },
-        handler=finetune_add_conversation,
-        category="finetune",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="finetune_add_code",
-        description="Add a code sample to the fine-tuning dataset",
-        parameters={
-            "code": {"type": "string", "description": "Source code", "required": True},
-            "language": {"type": "string", "description": "Programming language", "required": False},
-            "description": {"type": "string", "description": "Description of the code", "required": False},
-        },
-        handler=finetune_add_code,
-        category="finetune",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="finetune_load_model",
-        description="Load a base model for fine-tuning (requires torch, transformers, peft)",
-        parameters={
-            "model_type": {"type": "string", "description": "Model type (llama, mistral, falcon, phi, qwen)", "required": False},
-            "use_lora": {"type": "boolean", "description": "Apply LoRA (default true)", "required": False},
-            "use_qlora": {"type": "boolean", "description": "Use QLoRA quantization (default false)", "required": False},
-        },
-        handler=finetune_load_model,
-        category="finetune",
-        timeout=300,
-    ))
-    registry.register(ToolSpec(
-        name="finetune_start_training",
-        description="Start fine-tuning training with the accumulated dataset",
-        parameters={
-            "epochs": {"type": "integer", "description": "Number of epochs (default 3)", "required": False},
-            "learning_rate": {"type": "number", "description": "Learning rate (default 2e-4)", "required": False},
-            "batch_size": {"type": "integer", "description": "Batch size per device (default 4)", "required": False},
-        },
-        handler=finetune_start_training,
-        category="finetune",
-        timeout=3600,
-    ))
-    registry.register(ToolSpec(
-        name="finetune_model_info",
-        description="Get information about the loaded fine-tuning model",
-        parameters={},
-        handler=finetune_model_info,
-        category="finetune",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="finetune_list_checkpoints",
-        description="List saved fine-tuning checkpoints",
-        parameters={},
-        handler=finetune_list_checkpoints,
-        category="finetune",
-        timeout=10,
-    ))
+    registry.register(
+        ToolSpec(
+            name="finetune_dataset_stats",
+            description="Get statistics about the fine-tuning dataset builder",
+            parameters={},
+            handler=finetune_dataset_stats,
+            category="finetune",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="finetune_add_conversation",
+            description="Add a conversation example to the fine-tuning dataset",
+            parameters={
+                "system_prompt": {"type": "string", "description": "System prompt", "required": False},
+                "messages_json": {
+                    "type": "string",
+                    "description": "JSON array of {role, content} messages",
+                    "required": False,
+                },
+            },
+            handler=finetune_add_conversation,
+            category="finetune",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="finetune_add_code",
+            description="Add a code sample to the fine-tuning dataset",
+            parameters={
+                "code": {"type": "string", "description": "Source code", "required": True},
+                "language": {"type": "string", "description": "Programming language", "required": False},
+                "description": {"type": "string", "description": "Description of the code", "required": False},
+            },
+            handler=finetune_add_code,
+            category="finetune",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="finetune_load_model",
+            description="Load a base model for fine-tuning (requires torch, transformers, peft)",
+            parameters={
+                "model_type": {
+                    "type": "string",
+                    "description": "Model type (llama, mistral, falcon, phi, qwen)",
+                    "required": False,
+                },
+                "use_lora": {"type": "boolean", "description": "Apply LoRA (default true)", "required": False},
+                "use_qlora": {
+                    "type": "boolean",
+                    "description": "Use QLoRA quantization (default false)",
+                    "required": False,
+                },
+            },
+            handler=finetune_load_model,
+            category="finetune",
+            timeout=300,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="finetune_start_training",
+            description="Start fine-tuning training with the accumulated dataset",
+            parameters={
+                "epochs": {"type": "integer", "description": "Number of epochs (default 3)", "required": False},
+                "learning_rate": {"type": "number", "description": "Learning rate (default 2e-4)", "required": False},
+                "batch_size": {
+                    "type": "integer",
+                    "description": "Batch size per device (default 4)",
+                    "required": False,
+                },
+            },
+            handler=finetune_start_training,
+            category="finetune",
+            timeout=3600,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="finetune_model_info",
+            description="Get information about the loaded fine-tuning model",
+            parameters={},
+            handler=finetune_model_info,
+            category="finetune",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="finetune_list_checkpoints",
+            description="List saved fine-tuning checkpoints",
+            parameters={},
+            handler=finetune_list_checkpoints,
+            category="finetune",
+            timeout=10,
+        )
+    )

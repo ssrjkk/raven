@@ -16,12 +16,15 @@ from raven.core.llm.providers.base import _convert_to_bedrock_converse
 
 class BedrockProvider(LLMProvider):
     def __init__(self, **overrides):
-        self.region = overrides.get("region") or os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+        self.region = overrides.get("region") or os.environ.get(
+            "AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+        )
         raw_key = overrides.get("api_key") or os.environ.get("AWS_ACCESS_KEY_ID", "")
         self.access_key = SecretStr(raw_key) if isinstance(raw_key, str) else raw_key
         self.secret_key = overrides.get("secret_key") or os.environ.get("AWS_SECRET_ACCESS_KEY", "")
         self.session_token = overrides.get("session_token") or os.environ.get("AWS_SESSION_TOKEN", "")
         import httpx
+
         self.http = httpx.AsyncClient(
             timeout=overrides.get("timeout", 120),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=20),
@@ -42,11 +45,7 @@ class BedrockProvider(LLMProvider):
         canonical_uri = parsed_url.path or "/"
         canonical_qs = parsed_url.query or ""
         payload_hash = hashlib.sha256(body).hexdigest()
-        canonical_headers = (
-            f"content-type:application/json\n"
-            f"host:{parsed_url.hostname}\n"
-            f"x-amz-date:{amz_date}\n"
-        )
+        canonical_headers = f"content-type:application/json\nhost:{parsed_url.hostname}\nx-amz-date:{amz_date}\n"
         signed_headers = "content-type;host;x-amz-date"
         canonical_request = (
             f"{method}\n{canonical_uri}\n{canonical_qs}\n{canonical_headers}\n{signed_headers}\n{payload_hash}"

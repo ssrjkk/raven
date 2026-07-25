@@ -4,8 +4,15 @@ from raven.voice.tts import TextToSpeech, TTSConfig, TTSProvider
 from raven.voice.wake import WAKE_WORDS, WakeWordDetector
 
 __all__ = [
-    "TextToSpeech", "TTSProvider", "TTSConfig",
-    "SpeechToText", "STTProvider", "STTConfig",
-    "WakeWordDetector", "WAKE_WORDS",
-    "VoiceConversation", "VoiceRecorder", "AudioPlayer",
+    "WAKE_WORDS",
+    "AudioPlayer",
+    "STTConfig",
+    "STTProvider",
+    "SpeechToText",
+    "TTSConfig",
+    "TTSProvider",
+    "TextToSpeech",
+    "VoiceConversation",
+    "VoiceRecorder",
+    "WakeWordDetector",
 ]

@@ -24,13 +24,17 @@ def message_group():
 @click.option(
     "--channel",
     required=True,
-    help="Target channel (telegram, discord, webchat, slack, whatsapp, matrix, googlechat, signal, irc, teams, feishu, line)",
+    help=(
+        "Target channel (telegram, discord, webchat, slack, whatsapp, "
+        "matrix, googlechat, signal, irc, teams, feishu, line)"
+    ),
 )
 @click.option("--user", required=True, help="User ID")
 @click.option("--text", required=True, help="Message text")
 @click.option("--session", default=None, help="Session ID (optional)")
 def msg_send(channel: str, user: str, text: str, session: str | None):
     """Send a message to a user via Raven AI"""
+
     async def _send():
         db = DatabaseFactory.create()
         await db.connect()
@@ -40,7 +44,7 @@ def msg_send(channel: str, user: str, text: str, session: str | None):
 
         plugin_loader = PluginLoader()
         plugins_dir = Path(__file__).parent.parent / "plugins"
-        for pdir in plugins_dir.iterdir():
+        for pdir in sorted(plugins_dir.iterdir(), key=lambda d: d.name):
             if pdir.is_dir() and pdir.name != "__pycache__":
                 plugin_loader.load_from_dir(pdir)
 

@@ -47,6 +47,7 @@ class AIOSClient:
             try:
                 from raven.core.llm import LLMRouter
                 from ravencode.config.loader import get_config
+
                 cfg = get_config()
                 providers_config: dict[str, Any] = {}
                 for p in cfg.resolve_providers():
@@ -105,10 +106,7 @@ class AIOSClient:
         response = await llm.complete(messages=messages, tools=tools, model=model_name)
         content = response.content if hasattr(response, "content") else str(response)
         tool_calls_raw = getattr(response, "tool_calls", [])
-        tool_calls = [
-            {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
-            for tc in (tool_calls_raw or [])
-        ]
+        tool_calls = [{"id": tc.id, "name": tc.name, "arguments": tc.arguments} for tc in (tool_calls_raw or [])]
         return AIResponse(
             text=content,
             model=model_name,

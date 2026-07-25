@@ -1,39 +1,62 @@
-import { useState, useEffect } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+
 import { api } from "../api/client";
+import { Skeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
+import { ACCENT_PRESETS } from "../design/accent";
+import { useTheme } from "../design/ThemeContext";
+import { useApiQuery } from "../hooks/useApiQuery";
 
 export default function Settings() {
-  const [config, setConfig] = useState<Record<string, string>>({});
-  const [shuttingDown, setShuttingDown] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [customHex, setCustomHex] = useState("");
   const { toast } = useToast();
+  const { accentColor, setAccentColor, theme, toggleTheme } = useTheme();
+
+  const { data: configData, isLoading } = useApiQuery<Record<string, string>>(["config"], () => api.config());
+  const config = configData ?? {};
 
   useEffect(() => {
-    api.config().then(setConfig).catch((e: unknown) => { console.error("Failed to load config:", e); toast("Failed to load config", "error"); })
-      .finally(() => setLoading(false));
+    api.getTheme().then((r) => {
+      if (r?.accentColor && r.accentColor !== accentColor) {
+        setAccentColor(r.accentColor);
+      }
+    }).catch(e => console.error("settings:", e));
   }, []);
 
-  async function handleShutdown() {
-    if (window.confirm("Shutdown Raven AI? This will stop the server.")) {
-      setShuttingDown(true);
-      try {
-        await api.shutdown();
-        toast("Server shutting down...", "info");
-      } catch (e) {
-        console.error("Shutdown failed:", e);
-        toast("Shutdown failed", "error");
-        setShuttingDown(false);
-      }
-    }
+  function handleAccentChange(hex: string) {
+    setAccentColor(hex);
+    api.saveTheme(hex).catch(e => console.error("settings:", e));
   }
 
-  if (loading) {
+  const shutdown = useMutation({
+    mutationFn: () => {
+      if (!window.confirm("Shutdown Raven AI? This will stop the server.")) {
+        return Promise.reject(new Error("cancelled"));
+      }
+      return api.shutdown();
+    },
+    onSuccess: () => toast("Server shutting down...", "info"),
+    onError: (err) => {
+      if (err instanceof Error && err.message !== "cancelled") {
+        toast("Shutdown failed", "error");
+      }
+    },
+  });
+
+  if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4 animate-pulse">
-          <div className="h-4 bg-gray-800 rounded w-24 mb-4" />
-          {[1, 2, 3].map((i) => <div key={i} className="h-8 bg-gray-800/50 rounded mb-2" />)}
+        <Skeleton width={120} height={28} />
+        <div
+          className="rounded-xl p-4 space-y-3"
+          style={{
+            backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))",
+            border: "1px solid var(--dt-colors-border-default)",
+          }}
+        >
+          <Skeleton width={96} height={16} />
+          {[1, 2, 3].map((i) => <Skeleton key={i} height={32} rounded="md" />)}
         </div>
       </div>
     );
@@ -43,21 +66,101 @@ export default function Settings() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Settings</h1>
 
-      <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-        <h2 className="text-sm font-semibold text-gray-300 mb-3">Configuration</h2>
+      {/* Theme */}
+      <div className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card)", border: "1px solid var(--dt-colors-border-default)" }}>
+        <h2 className="text-sm font-semibold mb-3 text-primary">Theme</h2>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-secondary">Appearance</span>
+          <button
+            onClick={toggleTheme}
+            className="px-4 py-1.5 rounded-lg text-sm font-medium transition"
+            style={{
+              backgroundColor: "var(--dt-colors-accent-muted)",
+              color: "var(--dt-colors-accent-default)",
+            }}
+          >
+            {theme === "dark" ? "Switch to Light" : "Switch to Dark"}
+          </button>
+        </div>
+      </div>
+
+      {/* Accent Color */}
+      <div className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card)", border: "1px solid var(--dt-colors-border-default)" }}>
+        <h2 className="text-sm font-semibold mb-3 text-primary">Accent Color</h2>
+        <div className="flex flex-wrap gap-3 mb-4">
+          {ACCENT_PRESETS.map((p) => (
+            <button
+              key={p.hex}
+              onClick={() => handleAccentChange(p.hex)}
+              className="w-8 h-8 rounded-full transition-transform hover:scale-110 active:scale-95"
+              style={{
+                backgroundColor: p.hex,
+                boxShadow: accentColor === p.hex ? `0 0 0 2px var(--dt-colors-bg-primary), 0 0 0 4px ${p.hex}` : "none",
+              }}
+              title={p.name}
+            />
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <div
+            className="w-8 h-8 rounded-full flex-shrink-0"
+            style={{ backgroundColor: accentColor }}
+          />
+          <input
+            type="color"
+            value={accentColor}
+            onChange={(e) => handleAccentChange(e.target.value)}
+            className="w-10 h-8 rounded cursor-pointer border-0 p-0"
+            style={{ backgroundColor: "transparent" }}
+          />
+          <input
+            type="text"
+            value={customHex}
+            onChange={(e) => setCustomHex(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && /^#[0-9a-f]{6}$/i.test(customHex)) {
+                handleAccentChange(customHex);
+              }
+            }}
+            placeholder="#7c3aed"
+            className="flex-1 bg-transparent border rounded-lg px-3 py-1.5 text-sm font-mono outline-none"
+            style={{
+              color: "var(--dt-colors-text-primary)",
+              borderColor: "var(--dt-colors-border-default)",
+            }}
+          />
+          <button
+            onClick={() => {
+              if (/^#[0-9a-f]{6}$/i.test(customHex)) handleAccentChange(customHex);
+            }}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-40"
+            style={{
+              backgroundColor: "var(--dt-colors-accent-muted)",
+              color: "var(--dt-colors-accent-default)",
+            }}
+            disabled={!/^#[0-9a-f]{6}$/i.test(customHex)}
+          >
+            Apply
+          </button>
+        </div>
+      </div>
+
+      {/* Config */}
+      <div className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card)", border: "1px solid var(--dt-colors-border-default)" }}>
+        <h2 className="text-sm font-semibold mb-3 text-primary">Configuration</h2>
         <div className="space-y-2 text-sm">
           {Object.entries(config).map(([k, v]) => (
-            <div key={k} className="flex justify-between py-1 border-b border-gray-800/30">
-              <span className="text-gray-500">{k}</span>
-              <span className="text-gray-200 font-mono">{String(v).slice(0, 40)}</span>
+            <div key={k} className="flex justify-between py-1" style={{ borderBottom: "1px solid var(--dt-colors-border-muted)" }}>
+              <span className="text-tertiary">{k}</span>
+              <span className="font-mono text-primary">{String(v).slice(0, 40)}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <button onClick={handleShutdown} disabled={shuttingDown}
+      <button onClick={() => shutdown.mutate()} disabled={shutdown.isPending}
         className="bg-red-700 hover:bg-red-600 disabled:bg-red-900/50 text-white px-5 py-2 rounded-xl text-sm font-medium transition">
-        {shuttingDown ? "Shutting down..." : "Shutdown Raven"}
+        {shutdown.isPending ? "Shutting down..." : "Shutdown Raven"}
       </button>
     </div>
   );

@@ -5,14 +5,15 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator
 
-_SSRF_BLOCKED_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "[::1]", "169.254.169.254", "metadata.google.internal"}  # noqa: S104
+_SSRF_BLOCKED_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "[::1]", "169.254.169.254", "metadata.google.internal"}
 
 
 def _check_ssrf(target: str) -> str:
-    if target.startswith("http://") or target.startswith("https://"):
+    if target.startswith(("http://", "https://")):
         parsed = urlparse(target)
         if parsed.hostname and parsed.hostname.lower() in _SSRF_BLOCKED_HOSTS:
-            raise ValueError(f"SSRF protection: target host '{parsed.hostname}' is forbidden")
+            msg = f"SSRF protection: target host '{parsed.hostname}' is forbidden"
+            raise ValueError(msg)
     return target
 
 

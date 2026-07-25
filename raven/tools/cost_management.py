@@ -4,7 +4,9 @@ from raven.core.cost_management import _cost
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 
-def cost_record(model: str, input_tokens: int, output_tokens: int, user_id: str = "", channel: str = "", session_id: str = "") -> str:
+def cost_record(
+    model: str, input_tokens: int, output_tokens: int, user_id: str = "", channel: str = "", session_id: str = ""
+) -> str:
     rec = _cost.record_usage(model, input_tokens, output_tokens, user_id, channel, session_id)
     return f"Usage recorded: {rec.model} ({rec.input_tokens} in / {rec.output_tokens} out) — ${rec.cost:.6f}"
 
@@ -23,7 +25,9 @@ def cost_summary(hours: int = 24) -> str:
     if summary["by_model"]:
         lines.append("  By model:")
         for model, data in summary["by_model"].items():
-            lines.append(f"    {model}: ${data['cost']:.4f} ({data['calls']} calls, {data['input_tokens']} in / {data['output_tokens']} out)")
+            lines.append(
+                f"    {model}: ${data['cost']:.4f} ({data['calls']} calls, {data['input_tokens']} in / {data['output_tokens']} out)"
+            )
     return "\n".join(lines)
 
 
@@ -53,7 +57,9 @@ def cost_budget_list() -> str:
     for b in budgets:
         daily_pct = (b.current_daily / b.daily_limit * 100) if b.daily_limit > 0 else 0
         monthly_pct = (b.current_monthly / b.monthly_limit * 100) if b.monthly_limit > 0 else 0
-        lines.append(f"  [{b.id}] {b.name}: daily ${b.current_daily:.2f}/{b.daily_limit:.2f} ({daily_pct:.0f}%), monthly ${b.current_monthly:.2f}/{b.monthly_limit:.2f} ({monthly_pct:.0f}%)")
+        lines.append(
+            f"  [{b.id}] {b.name}: daily ${b.current_daily:.2f}/{b.daily_limit:.2f} ({daily_pct:.0f}%), monthly ${b.current_monthly:.2f}/{b.monthly_limit:.2f} ({monthly_pct:.0f}%)"
+        )
     exceeded = _cost.is_budget_exceeded()
     if exceeded:
         lines.append("  ⚠ BUDGET EXCEEDED!")
@@ -82,86 +88,102 @@ def cost_check() -> str:
 
 
 def register_cost_management_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="cost_record",
-        description="Record LLM token usage and calculate cost",
-        parameters={
-            "model": {"type": "string", "description": "Model name", "required": True},
-            "input_tokens": {"type": "number", "description": "Input token count", "required": True},
-            "output_tokens": {"type": "number", "description": "Output token count", "required": True},
-            "user_id": {"type": "string", "description": "User ID (optional)", "required": False},
-            "channel": {"type": "string", "description": "Channel name (optional)", "required": False},
-            "session_id": {"type": "string", "description": "Session ID (optional)", "required": False},
-        },
-        handler=cost_record,
-        category="cost",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="cost_summary",
-        description="Get cost summary for recent usage",
-        parameters={
-            "hours": {"type": "number", "description": "Hours of history (default 24)", "required": False},
-        },
-        handler=cost_summary,
-        category="cost",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="cost_pricing",
-        description="List all model pricing rates",
-        parameters={},
-        handler=cost_pricing,
-        category="cost",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="cost_set_pricing",
-        description="Set or update pricing for a model",
-        parameters={
-            "model": {"type": "string", "description": "Model name", "required": True},
-            "input_per_1k": {"type": "number", "description": "Input cost per 1K tokens", "required": True},
-            "output_per_1k": {"type": "number", "description": "Output cost per 1K tokens", "required": True},
-        },
-        handler=cost_set_pricing,
-        category="cost",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="cost_budget_create",
-        description="Create a budget with daily and monthly limits",
-        parameters={
-            "name": {"type": "string", "description": "Budget name", "required": True},
-            "daily_limit": {"type": "number", "description": "Daily spending limit in USD", "required": True},
-            "monthly_limit": {"type": "number", "description": "Monthly spending limit in USD", "required": True},
-        },
-        handler=cost_budget_create,
-        category="cost",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="cost_budget_list",
-        description="List all budgets and current usage",
-        parameters={},
-        handler=cost_budget_list,
-        category="cost",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="cost_budget_delete",
-        description="Delete a budget",
-        parameters={
-            "budget_id": {"type": "string", "description": "Budget ID", "required": True},
-        },
-        handler=cost_budget_delete,
-        category="cost",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="cost_check",
-        description="Check current costs and budget status",
-        parameters={},
-        handler=cost_check,
-        category="cost",
-        timeout=10,
-    ))
+    registry.register(
+        ToolSpec(
+            name="cost_record",
+            description="Record LLM token usage and calculate cost",
+            parameters={
+                "model": {"type": "string", "description": "Model name", "required": True},
+                "input_tokens": {"type": "number", "description": "Input token count", "required": True},
+                "output_tokens": {"type": "number", "description": "Output token count", "required": True},
+                "user_id": {"type": "string", "description": "User ID (optional)", "required": False},
+                "channel": {"type": "string", "description": "Channel name (optional)", "required": False},
+                "session_id": {"type": "string", "description": "Session ID (optional)", "required": False},
+            },
+            handler=cost_record,
+            category="cost",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="cost_summary",
+            description="Get cost summary for recent usage",
+            parameters={
+                "hours": {"type": "number", "description": "Hours of history (default 24)", "required": False},
+            },
+            handler=cost_summary,
+            category="cost",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="cost_pricing",
+            description="List all model pricing rates",
+            parameters={},
+            handler=cost_pricing,
+            category="cost",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="cost_set_pricing",
+            description="Set or update pricing for a model",
+            parameters={
+                "model": {"type": "string", "description": "Model name", "required": True},
+                "input_per_1k": {"type": "number", "description": "Input cost per 1K tokens", "required": True},
+                "output_per_1k": {"type": "number", "description": "Output cost per 1K tokens", "required": True},
+            },
+            handler=cost_set_pricing,
+            category="cost",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="cost_budget_create",
+            description="Create a budget with daily and monthly limits",
+            parameters={
+                "name": {"type": "string", "description": "Budget name", "required": True},
+                "daily_limit": {"type": "number", "description": "Daily spending limit in USD", "required": True},
+                "monthly_limit": {"type": "number", "description": "Monthly spending limit in USD", "required": True},
+            },
+            handler=cost_budget_create,
+            category="cost",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="cost_budget_list",
+            description="List all budgets and current usage",
+            parameters={},
+            handler=cost_budget_list,
+            category="cost",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="cost_budget_delete",
+            description="Delete a budget",
+            parameters={
+                "budget_id": {"type": "string", "description": "Budget ID", "required": True},
+            },
+            handler=cost_budget_delete,
+            category="cost",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="cost_check",
+            description="Check current costs and budget status",
+            parameters={},
+            handler=cost_check,
+            category="cost",
+            timeout=10,
+        )
+    )

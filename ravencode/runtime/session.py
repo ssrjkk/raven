@@ -28,13 +28,15 @@ class SessionStore:
         for f in self._storage.glob("*.json"):
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
-                sessions.append({
-                    "id": f.stem,
-                    "created": data.get("created", 0),
-                    "updated": data.get("updated", 0),
-                    "summary": data.get("summary", ""),
-                    "steps": data.get("steps", 0),
-                })
+                sessions.append(
+                    {
+                        "id": f.stem,
+                        "created": data.get("created", 0),
+                        "updated": data.get("updated", 0),
+                        "summary": data.get("summary", ""),
+                        "steps": data.get("steps", 0),
+                    }
+                )
             except (json.JSONDecodeError, OSError):
                 continue
         return sorted(sessions, key=lambda s: s["updated"], reverse=True)

@@ -68,7 +68,7 @@ class TestDatasetBuilder:
     def test_build_dataset_raises_without_datasets(self):
         conv = ConversationExample(messages=[{"role": "user", "content": "hello"}])
         self.builder.add_conversation(conv)
-        with pytest.raises(RuntimeError, match="datasets.*required"):
+        with pytest.raises(RuntimeError, match=r"datasets.*required"):
             self.builder.build_dataset()
 
     def test_stats(self):

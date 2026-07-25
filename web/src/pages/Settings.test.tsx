@@ -1,13 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { BrowserRouter } from "react-router-dom";
+import { beforeEach,describe, expect, it, vi } from "vitest";
+
 import Settings from "./Settings";
+import { renderWithProviders } from "../test/test-utils";
 
 vi.mock("../api/client", () => ({
   api: {
     config: vi.fn(),
     shutdown: vi.fn().mockResolvedValue({ ok: true }),
+    getTheme: vi.fn().mockResolvedValue({ accentColor: "#7c3aed" }),
+    saveTheme: vi.fn().mockResolvedValue({ ok: true }),
   },
   isAuthenticated: vi.fn().mockReturnValue(true),
 }));
@@ -18,11 +21,7 @@ vi.mock("../components/Toast", () => ({
 }));
 
 function renderSettings() {
-  return render(
-    <BrowserRouter>
-      <Settings />
-    </BrowserRouter>
-  );
+  return renderWithProviders(<Settings />);
 }
 
 describe("Settings Page", () => {
@@ -36,9 +35,9 @@ describe("Settings Page", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
-  it("renders heading", () => {
+  it("renders heading", async () => {
     renderSettings();
-    expect(screen.getByText("Settings")).toBeInTheDocument();
+    expect(await screen.findByText("Settings")).toBeInTheDocument();
   });
 
   it("renders config after loading", async () => {
@@ -60,6 +59,8 @@ describe("Settings Page", () => {
   });
 
   it("handles shutdown click", async () => {
+    const client = await import("../api/client");
+    client.api.shutdown = vi.fn().mockImplementation(() => new Promise((r) => setTimeout(() => r({ ok: true }), 100)));
     const user = userEvent.setup();
     renderSettings();
     await waitFor(() => {

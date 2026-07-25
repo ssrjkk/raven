@@ -23,6 +23,8 @@ class ToolSpec(BaseModel):
     handler: Any = None
     category: str = "general"
     timeout: int = 60
+    confirm: bool = False
+    """Whether this tool requires user confirmation before execution."""
     validator_fn: ValidatorFn | None = None
     """Optional validation function; returns error message or None."""
 

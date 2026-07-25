@@ -23,10 +23,11 @@ class TaskRunner:
 
     async def submit(self, task: Task) -> Task:
         if len(self._running) >= self.MAX_CONCURRENT:
-            raise RuntimeError(
+            msg = (
                 f"Too many concurrent tasks ({len(self._running)}/{self.MAX_CONCURRENT}). "
                 "Wait for a running task to complete."
             )
+            raise RuntimeError(msg)
         task.status = TaskStatus.PENDING
         task.updated_at = time.time()
         for step in task.steps:
@@ -127,7 +128,8 @@ class TaskRunner:
                 try:
                     spec = self._tools.get(step.tool)
                     if spec is None:
-                        raise ValueError(f"Unknown tool: {step.tool}")
+                        msg = f"Unknown tool: {step.tool}"
+                        raise ValueError(msg)
 
                     timeout = spec.timeout
 

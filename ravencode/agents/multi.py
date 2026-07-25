@@ -36,7 +36,9 @@ class MultiAgentOrchestrator:
         for i, task in enumerate(tasks):
             logger.info("Multi-agent: running task {}/{}: {}", i + 1, len(tasks), task.description[:80])
             start = asyncio.get_event_loop().time()
-            result = await self._orchestrator.dispatch(task.description, task.agent_type, agent_config_override=task.config)
+            result = await self._orchestrator.dispatch(
+                task.description, task.agent_type, agent_config_override=task.config
+            )
             duration = asyncio.get_event_loop().time() - start
             results.append(TaskResult(index=i, description=task.description, result=result, duration=duration))
         return results
@@ -49,7 +51,9 @@ class MultiAgentOrchestrator:
             async with sem:
                 logger.info("Multi-agent: parallel task {}/{}: {}", i + 1, len(tasks), task.description[:80])
                 start = asyncio.get_event_loop().time()
-                result = await self._orchestrator.dispatch(task.description, task.agent_type, agent_config_override=task.config)
+                result = await self._orchestrator.dispatch(
+                    task.description, task.agent_type, agent_config_override=task.config
+                )
                 duration = asyncio.get_event_loop().time() - start
                 results[i] = TaskResult(index=i, description=task.description, result=result, duration=duration)
 
@@ -72,7 +76,8 @@ class MultiAgentOrchestrator:
                     batch.append(i)
                     remaining.remove(i)
             if not batch:
-                raise RuntimeError(f"Circular dependency detected among tasks: {remaining}")
+                msg = f"Circular dependency detected among tasks: {remaining}"
+                raise RuntimeError(msg)
             coros = []
             for i in batch:
                 task = tasks[i]
@@ -81,7 +86,9 @@ class MultiAgentOrchestrator:
 
                 async def run_task(idx: int, t: SubTask, started: float) -> TaskResult:
                     async with sem:
-                        r = await self._orchestrator.dispatch(t.description, t.agent_type, agent_config_override=t.config)
+                        r = await self._orchestrator.dispatch(
+                            t.description, t.agent_type, agent_config_override=t.config
+                        )
                         dur = asyncio.get_event_loop().time() - started
                         return TaskResult(index=idx, description=t.description, result=r, duration=dur)
 

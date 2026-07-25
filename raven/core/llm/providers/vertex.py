@@ -17,6 +17,7 @@ class VertexAIProvider(LLMProvider):
         self.project = overrides.get("project") or os.environ.get("VERTEX_AI_PROJECT", "")
         self.location = overrides.get("location") or os.environ.get("VERTEX_AI_LOCATION", "us-central1")
         import httpx
+
         self.http = httpx.AsyncClient(
             timeout=overrides.get("timeout", 120),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=20),
@@ -30,7 +31,9 @@ class VertexAIProvider(LLMProvider):
             return self._token
         try:
             proc = await asyncio.create_subprocess_exec(
-                "gcloud", "auth", "print-access-token",
+                "gcloud",
+                "auth",
+                "print-access-token",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )

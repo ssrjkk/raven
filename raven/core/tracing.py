@@ -83,9 +83,7 @@ class TracingManager:
                 try:
                     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter as HTTPExporter
 
-                    self._provider.add_span_processor(
-                        BatchSpanProcessor(HTTPExporter(endpoint=self._otlp_endpoint))
-                    )
+                    self._provider.add_span_processor(BatchSpanProcessor(HTTPExporter(endpoint=self._otlp_endpoint)))
                 except ImportError:
                     logger.warning("OTLP exporter not installed — trace export disabled")
         try:
@@ -179,8 +177,7 @@ def trace_tool_call(tool_name: str | None = None) -> Callable[..., Any]:
                 span.set_attribute("tool.name", name)
                 start = time.monotonic()
                 try:
-                    result = await func(*args, **kwargs)
-                    return result
+                    return await func(*args, **kwargs)
                 except Exception as exc:
                     span.set_attribute("error", str(exc))
                     raise

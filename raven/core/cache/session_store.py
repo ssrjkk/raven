@@ -10,9 +10,15 @@ from raven.core.cache.redis_client import RedisClient
 from raven.core.models import Session
 
 _DEFAULT_TTL = 86400
-_ALLOWED_UPDATE_FIELDS = frozenset({
-    "channel", "user_id", "agent_id", "agent_skills", "system_prompt",
-})
+_ALLOWED_UPDATE_FIELDS = frozenset(
+    {
+        "channel",
+        "user_id",
+        "agent_id",
+        "agent_skills",
+        "system_prompt",
+    }
+)
 _UNSET = object()
 
 

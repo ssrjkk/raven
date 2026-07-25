@@ -5,13 +5,13 @@ from raven.core.auth.store import AuthStore
 from raven.core.auth.tokens import TokenManager
 
 __all__ = [
-    "Role",
-    "Permission",
-    "User",
+    "RBAC",
     "AuthSession",
     "AuthStore",
-    "RBAC",
+    "Permission",
+    "Role",
     "TokenManager",
+    "User",
     "hash_password",
     "verify_and_rehash",
     "verify_password",

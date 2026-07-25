@@ -1,23 +1,13 @@
-import { useState, useEffect } from "react";
-import { api, HealthData, MetricsSnapshot, StatusData } from "../api/client";
-import { useToast } from "../components/Toast";
+import { api, type HealthData, type MetricsSnapshot, type StatusData } from "../api/client";
+import { Skeleton, SkeletonCard } from "../components/Skeleton";
+import { useApiQuery } from "../hooks/useApiQuery";
 
 export default function Dashboard() {
-  const [status, setStatus] = useState<StatusData | null>(null);
-  const [health, setHealth] = useState<HealthData | null>(null);
-  const [metrics, setMetrics] = useState<MetricsSnapshot>({});
-  const [sys, setSys] = useState<{ channels: number; agents: number; running: boolean; version: string } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
-
-  useEffect(() => {
-    Promise.all([
-      api.status().then(setStatus).catch((e: unknown) => { console.error("status load failed:", e); toast("Failed to load status", "error"); }),
-      api.health().then(setHealth).catch((e: unknown) => console.error("health load failed:", e)),
-      api.metrics().then(setMetrics).catch((e: unknown) => console.error("metrics load failed:", e)),
-      api.systemStatus().then(setSys).catch((e: unknown) => console.error("system status load failed:", e)),
-    ]).finally(() => setLoading(false));
-  }, []);
+  const { data: status } = useApiQuery<StatusData | null>(["status"], () => api.status().catch((e: unknown) => { console.error("status load failed:", e); return null; }));
+  const { data: health } = useApiQuery<HealthData | null>(["health"], () => api.health().catch((e: unknown) => { console.error("health load failed:", e); return null; }));
+  const { data: metricsData } = useApiQuery<MetricsSnapshot>(["metrics"], () => api.metrics().catch((e: unknown) => { console.error("metrics load failed:", e); return {} as MetricsSnapshot; }));
+  const { data: sys, isLoading } = useApiQuery<{ channels: number; agents: number; running: boolean; version: string } | null>(["systemStatus"], () => api.systemStatus().catch((e: unknown) => { console.error("system status load failed:", e); return null; }));
+  const metrics = metricsData ?? ({} as MetricsSnapshot);
 
   const metricCards = [
     { label: "Channels", value: sys?.channels ?? status?.channels.length ?? "—" },
@@ -26,18 +16,19 @@ export default function Dashboard() {
     { label: "Model", value: status?.model?.split("/").pop() ?? "—" },
   ];
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <Skeleton width={180} height={28} />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4 animate-pulse">
-              <div className="h-3 bg-gray-800 rounded w-16 mb-3" />
-              <div className="h-8 bg-gray-800 rounded w-12" />
+            <div key={i} className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))", border: "1px solid var(--dt-colors-border-default)" }}>
+              <Skeleton width={60} height={12} rounded="md" />
+              <Skeleton width={40} height={32} rounded="md" className="mt-2" />
             </div>
           ))}
         </div>
+        <SkeletonCard height={120} />
       </div>
     );
   }

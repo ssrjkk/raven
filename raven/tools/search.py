@@ -17,7 +17,9 @@ _BING_SEARCH_API_KEY = os.environ.get("BING_SEARCH_API_KEY", "")
 
 async def _duckduckgo(query: str, max_results: int = 5) -> list[dict[str, Any]]:
     async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-        resp = await client.get(f"https://html.duckduckgo.com/html/?q={query.replace(' ', '+')}", headers={"User-Agent": "Mozilla/5.0"})
+        resp = await client.get(
+            f"https://html.duckduckgo.com/html/?q={query.replace(' ', '+')}", headers={"User-Agent": "Mozilla/5.0"}
+        )
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "lxml")
         results = []
@@ -25,11 +27,13 @@ async def _duckduckgo(query: str, max_results: int = 5) -> list[dict[str, Any]]:
             title_el = result.select_one(".result__title a")
             snippet_el = result.select_one(".result__snippet")
             if title_el:
-                results.append({
-                    "title": title_el.get_text(strip=True),
-                    "url": title_el.get("href", ""),
-                    "snippet": snippet_el.get_text(strip=True) if snippet_el else "",
-                })
+                results.append(
+                    {
+                        "title": title_el.get_text(strip=True),
+                        "url": title_el.get("href", ""),
+                        "snippet": snippet_el.get_text(strip=True) if snippet_el else "",
+                    }
+                )
         return results
 
 
@@ -131,5 +135,35 @@ async def web_search_raw(query: str, max_results: int = 5, provider: str = "duck
 
 
 def register_search_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(name="web_search", description="Search the web using a configurable provider (duckduckgo, google, brave, bing)", parameters={"query": {"type": "string", "description": "Search query", "required": True}, "max_results": {"type": "integer", "description": "Max results to return", "required": False}, "provider": {"type": "string", "description": "Search provider (duckduckgo, google, brave, bing)", "required": False}}, handler=web_search, category="web", timeout=30))
-    registry.register(ToolSpec(name="web_search_raw", description="Search the web and return raw structured results (list of {title, url, snippet})", parameters={"query": {"type": "string", "description": "Search query", "required": True}, "max_results": {"type": "integer", "description": "Max results to return", "required": False}, "provider": {"type": "string", "description": "Search provider", "required": False}}, handler=web_search_raw, category="web", timeout=30))
+    registry.register(
+        ToolSpec(
+            name="web_search",
+            description="Search the web using a configurable provider (duckduckgo, google, brave, bing)",
+            parameters={
+                "query": {"type": "string", "description": "Search query", "required": True},
+                "max_results": {"type": "integer", "description": "Max results to return", "required": False},
+                "provider": {
+                    "type": "string",
+                    "description": "Search provider (duckduckgo, google, brave, bing)",
+                    "required": False,
+                },
+            },
+            handler=web_search,
+            category="web",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="web_search_raw",
+            description="Search the web and return raw structured results (list of {title, url, snippet})",
+            parameters={
+                "query": {"type": "string", "description": "Search query", "required": True},
+                "max_results": {"type": "integer", "description": "Max results to return", "required": False},
+                "provider": {"type": "string", "description": "Search provider", "required": False},
+            },
+            handler=web_search_raw,
+            category="web",
+            timeout=30,
+        )
+    )

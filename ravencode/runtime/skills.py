@@ -183,6 +183,7 @@ async def download_skill(skill_id: str) -> str:
         return "[error] no registry URL configured. Use set_skill_registry() first."
     try:
         import httpx
+
         url = f"{_REMOTE_REGISTRY_URL.rstrip('/')}/skills/{skill_id}"
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(url)

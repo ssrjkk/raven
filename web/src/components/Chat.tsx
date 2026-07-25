@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { api, Session, MessageData } from "../api/client";
+import { useCallback,useEffect, useRef, useState } from "react";
+
+import { api, MessageData,Session } from "../api/client";
 import { useWebSocket } from "../hooks/useWebSocket";
-import { useToast } from "./Toast";
 import MessageBubble from "./MessageBubble";
+import { useToast } from "./Toast";
 
 export default function Chat() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -17,24 +18,40 @@ export default function Chat() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const onWsMessage = useCallback((data: { type: string; role: string; content: string; session_id: string }) => {
+  const onWsMessage = useCallback((data: { type: string; role?: string; content?: string; session_id?: string; event?: string; profile?: string; detail?: string }) => {
     if (data.type === "message") {
       setMessages((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role: data.role as "assistant", content: data.content, created_at: new Date().toISOString() },
+        { id: crypto.randomUUID(), role: (data.role ?? "assistant") as "assistant", content: data.content ?? "", created_at: new Date().toISOString() },
       ]);
       setLoading(false);
+      setTimeout(scrollToBottom, 50);
+    }
+    if (data.type === "agent_status" && data.event && data.profile) {
+      const icons: Record<string, string> = {
+        agent_started: "🤖", agent_completed: "✅", tool_call: "🛠", tool_result: "📎",
+        thinking: "💭", error: "❌", handoff: "🔄", plan_created: "📋",
+      };
+      const icon = icons[data.event] ?? "⚡";
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `${icon} **[${data.profile}]** ${data.detail ?? data.event}`,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+      if (data.event === "agent_completed" || data.event === "error") {
+        setLoading(false);
+      }
       setTimeout(scrollToBottom, 50);
     }
   }, []);
 
   const { connected, send } = useWebSocket(onWsMessage);
 
-  useEffect(() => { scrollToBottom(); }, [messages]);
-  useEffect(() => { loadSessions(); }, []);
-  useEffect(() => { if (currentSession) loadMessages(); }, [currentSession]);
-
-  async function loadSessions() {
+  const loadSessions = useCallback(async () => {
     try {
       const list = await api.sessions();
       setSessions(list);
@@ -43,9 +60,9 @@ export default function Chat() {
       console.error("Failed to load sessions:", e);
       toast("Failed to load sessions", "error");
     }
-  }
+  }, [currentSession, toast]);
 
-  async function loadMessages() {
+  const loadMessages = useCallback(async () => {
     if (!currentSession) return;
     try {
       const msgs = await api.sessionMessages(currentSession);
@@ -54,7 +71,11 @@ export default function Chat() {
       console.error("Failed to load messages:", e);
       toast("Failed to load messages", "error");
     }
-  }
+  }, [currentSession, toast]);
+
+  useEffect(() => { scrollToBottom(); }, [messages]);
+  useEffect(() => { loadSessions(); }, [loadSessions]);
+  useEffect(() => { if (currentSession) loadMessages(); }, [currentSession, loadMessages]);
 
   async function sendMessage() {
     if (!input.trim() || loading) return;

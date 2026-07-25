@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from loguru import logger
@@ -40,7 +40,7 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
                     await asyncio.sleep(int(routine.schedule))
                     await self._execute_routine(routine)
                 elif routine.trigger == RoutineTrigger.SCHEDULED:
-                    now = datetime.now()
+                    now = datetime.now(UTC)
                     parts = routine.schedule.split(":")
                     target_hour = int(parts[0]) if len(parts) > 0 else 8
                     target_min = int(parts[1]) if len(parts) > 1 else 0
@@ -146,6 +146,7 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
     async def _execute_email_check(self, routine: Routine) -> str:
         try:
             from raven.core.email_api import _get_config
+
             config = _get_config()
             if not config.get("imap_host"):
                 return "Email check skipped: no IMAP configured"
@@ -167,8 +168,7 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
             if count > 0 and self._gateway_ref:
                 session_id = f"{routine.channel}:{routine.user_id}:email"
                 await self._gateway_ref._send(
-                    routine.channel, session_id,
-                    f"You have {count} unread email(s) in your inbox."
+                    routine.channel, session_id, f"You have {count} unread email(s) in your inbox."
                 )
 
             return f"Email check complete: {count} unread messages"
@@ -183,19 +183,32 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
         organized = 0
 
         rules = {
-            ".txt": "text", ".md": "docs", ".json": "data",
-            ".csv": "data", ".xml": "data", ".yaml": "config",
-            ".yml": "config", ".py": "code", ".js": "code",
-            ".ts": "code", ".jpg": "images", ".jpeg": "images",
-            ".png": "images", ".gif": "images", ".svg": "images",
-            ".pdf": "documents", ".doc": "documents", ".docx": "documents",
-            ".xls": "documents", ".xlsx": "documents",
+            ".txt": "text",
+            ".md": "docs",
+            ".json": "data",
+            ".csv": "data",
+            ".xml": "data",
+            ".yaml": "config",
+            ".yml": "config",
+            ".py": "code",
+            ".js": "code",
+            ".ts": "code",
+            ".jpg": "images",
+            ".jpeg": "images",
+            ".png": "images",
+            ".gif": "images",
+            ".svg": "images",
+            ".pdf": "documents",
+            ".doc": "documents",
+            ".docx": "documents",
+            ".xls": "documents",
+            ".xlsx": "documents",
         }
 
         if not workspace.exists():
             return "No workspace directory found"
 
-        for item in workspace.iterdir():
+        for item in sorted(workspace.iterdir()):
             if not item.is_file():
                 continue
             ext = item.suffix.lower()
@@ -212,8 +225,9 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
         if organized > 0 and self._gateway_ref:
             session_id = f"{routine.channel}:{routine.user_id}:organize"
             await self._gateway_ref._send(
-                routine.channel, session_id,
-                f"File organization complete: moved {organized} file(s) into categorized folders."
+                routine.channel,
+                session_id,
+                f"File organization complete: moved {organized} file(s) into categorized folders.",
             )
 
         return f"File organization complete: {organized} files organized"
@@ -224,7 +238,7 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
         msg = (
             f"Morning Briefing\n"
             f"Good morning! Here's your daily briefing.\n"
-            f"Time: {datetime.now().strftime('%H:%M')}\n"
+            f"Time: {datetime.now(UTC).strftime('%H:%M')}\n"
             f"Your routines are running smoothly."
         )
         session_id = f"{routine.channel}:{routine.user_id}:briefing"

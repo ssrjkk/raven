@@ -1,12 +1,17 @@
-import { useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { AnimatePresence,motion } from "framer-motion";
+import { Suspense,useState } from "react";
+import { NavLink, Outlet, useLocation,useNavigate } from "react-router-dom";
+
 import { clearToken } from "../api/client";
 import { useTheme } from "../design/ThemeContext";
+import { ErrorBoundary } from "./ErrorBoundary";
 import PWAInstallPrompt from "./PWAInstallPrompt";
+import { SkeletonPage } from "./Skeleton";
 
 const nav = [
   { to: "/", label: "Dashboard" },
   { to: "/chat", label: "Chat" },
+  { to: "/chat/history", label: "History" },
   { to: "/admin", label: "Admin" },
   { to: "/tasks", label: "Tasks" },
   { to: "/workflows", label: "Workflows" },
@@ -23,6 +28,10 @@ const nav = [
   { to: "/web-search", label: "Search" },
   { to: "/knowledge", label: "Knowledge" },
   { to: "/analytics", label: "Analytics" },
+  { to: "/insights", label: "Insights" },
+  { to: "/components", label: "UI Kit" },
+  { to: "/scaffold", label: "Scaffold" },
+  { to: "/code-quality", label: "Code Quality" },
   { to: "/abtesting", label: "A/B Test" },
   { to: "/cost", label: "Cost" },
   { to: "/voice", label: "Voice" },
@@ -37,6 +46,7 @@ const nav = [
 
 export default function Layout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { theme, toggleTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -66,17 +76,15 @@ export default function Layout() {
         }}
       >
         <div
-          className="p-4 border-b"
-          style={{ borderColor: "var(--dt-colors-border-default)" }}
+          className="p-4 border-b border-default"
         >
           <div className="flex items-center justify-between">
             <h1 className="text-lg font-bold">Raven AI</h1>
             <button
-              className="md:hidden text-sm"
-              style={{ color: "var(--dt-colors-text-tertiary)" }}
+              className="md:hidden text-sm text-tertiary"
               onClick={() => setSidebarOpen(false)}
             >
-              ✕
+              РІСљвЂў
             </button>
           </div>
         </div>
@@ -109,8 +117,7 @@ export default function Layout() {
           ))}
         </nav>
         <div
-          className="p-3 border-t space-y-2"
-          style={{ borderColor: "var(--dt-colors-border-default)" }}
+          className="p-3 border-t space-y-2 border-default"
         >
           <button
             onClick={toggleTheme}
@@ -120,12 +127,11 @@ export default function Layout() {
               backgroundColor: "var(--dt-colors-bg-tertiary)",
             }}
           >
-            {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
+            {theme === "dark" ? "РІВР‚РїС‘РЏ Light" : "СЂСџРЉв„ў Dark"}
           </button>
           <button
             onClick={handleLogout}
-            className="w-full text-center text-xs transition font-medium"
-            style={{ color: "var(--dt-colors-text-tertiary)" }}
+            className="w-full text-center text-xs transition font-medium text-tertiary"
           >
             Sign Out
           </button>
@@ -139,21 +145,33 @@ export default function Layout() {
       </aside>
 
       <main
-        className="flex-1 overflow-y-auto min-w-0"
-        style={{ backgroundColor: "var(--dt-colors-bg-primary)" }}
+        className="flex-1 overflow-y-auto min-w-0 bg-primary"
       >
-        <div className="flex items-center gap-2 p-2 md:hidden border-b" style={{ borderColor: "var(--dt-colors-border-default)" }}>
+        <div className="flex items-center gap-2 p-2 md:hidden border-b border-default">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="p-1 rounded text-lg"
-            style={{ color: "var(--dt-colors-text-secondary)" }}
+            className="p-1 rounded text-lg text-secondary"
           >
-            ☰
+            РІВВ°
           </button>
           <span className="text-sm font-semibold">Raven AI</span>
         </div>
         <div className="max-w-6xl mx-auto p-4 md:p-6">
-          <Outlet />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+            >
+              <Suspense fallback={<SkeletonPage sections={[{ type: "card" }, { type: "text" }, { type: "table" }]} />}>
+                <ErrorBoundary>
+                  <Outlet />
+                </ErrorBoundary>
+              </Suspense>
+            </motion.div>
+          </AnimatePresence>
         </div>
       </main>
 

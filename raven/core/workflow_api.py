@@ -83,7 +83,9 @@ def create_workflow_router() -> APIRouter:
             "default_schedule": t.default_schedule,
             "default_interval": t.default_interval,
             "steps_goal": t.steps_goal,
-            "predefined_steps": [{"description": s.description, "tool": s.tool, "params": s.params} for s in (t.predefined_steps or [])],
+            "predefined_steps": [
+                {"description": s.description, "tool": s.tool, "params": s.params} for s in (t.predefined_steps or [])
+            ],
         }
 
     @router.post("/templates/{template_id}/instantiate")
@@ -102,7 +104,9 @@ def create_workflow_router() -> APIRouter:
         runner = TaskRunner(task_store, tools)
         tpl_runner = TemplateRunner(runner, task_store, tools, None)
         try:
-            task_id = await tpl_runner.instantiate(template=template, user_id=req.user_id, channel=req.channel, config=req.config)
+            task_id = await tpl_runner.instantiate(
+                template=template, user_id=req.user_id, channel=req.channel, config=req.config
+            )
             return {"ok": True, "task_id": task_id}
         except Exception as e:
             logger.warning("[workflow] instantiate failed: {}", e)
@@ -118,7 +122,11 @@ def create_workflow_router() -> APIRouter:
             raise HTTPException(404, f"Template '{template_id}' not found")
         try:
             routine_id = await TemplateRunner.schedule_as_routine(
-                template=template, db_path=str(settings.resolved_db_path), user_id=req.user_id, channel=req.channel, config=req.config
+                template=template,
+                db_path=str(settings.resolved_db_path),
+                user_id=req.user_id,
+                channel=req.channel,
+                config=req.config,
             )
             return {"ok": True, "routine_id": routine_id}
         except Exception as e:

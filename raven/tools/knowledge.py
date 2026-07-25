@@ -117,6 +117,7 @@ def knowledge_add_entity(name: str, type: str = "concept", metadata: str = "") -
     if metadata:
         try:
             import json
+
             meta = json.loads(metadata)
         except json.JSONDecodeError:
             meta = {"note": metadata}
@@ -151,69 +152,82 @@ def knowledge_graph_vis() -> str:
         return "[info] Knowledge graph is empty."
     data = kg.export_vis()
     import json
+
     return f"[Graph data: {len(data['nodes'])} nodes, {len(data['links'])} links]\n```json\n{json.dumps(data, indent=2)[:3000]}\n```"
 
 
 def register_knowledge_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="knowledge_extract",
-        description="Extract entities and relations from text and add them to the knowledge graph",
-        parameters={
-            "text": {"type": "string", "description": "Text to analyze", "required": True},
-            "source": {"type": "string", "description": "Source label for the text", "required": False},
-        },
-        handler=knowledge_extract,
-        category="knowledge",
-        timeout=30,
-    ))
-    registry.register(ToolSpec(
-        name="knowledge_search",
-        description="Search the knowledge graph for entities and their relationships",
-        parameters={
-            "query": {"type": "string", "description": "Search query", "required": True},
-            "max_depth": {"type": "integer", "description": "Max traversal depth", "required": False},
-        },
-        handler=knowledge_search,
-        category="knowledge",
-        timeout=15,
-    ))
-    registry.register(ToolSpec(
-        name="knowledge_stats",
-        description="Get statistics about the knowledge graph",
-        parameters={},
-        handler=knowledge_stats,
-        category="knowledge",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="knowledge_add_entity",
-        description="Manually add an entity to the knowledge graph",
-        parameters={
-            "name": {"type": "string", "description": "Entity name", "required": True},
-            "type": {"type": "string", "description": "Entity type", "required": False},
-            "metadata": {"type": "string", "description": "JSON metadata string", "required": False},
-        },
-        handler=knowledge_add_entity,
-        category="knowledge",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="knowledge_add_relation",
-        description="Manually add a relation between two entities in the knowledge graph",
-        parameters={
-            "source": {"type": "string", "description": "Source entity name", "required": True},
-            "target": {"type": "string", "description": "Target entity name", "required": True},
-            "type": {"type": "string", "description": "Relation type", "required": False},
-        },
-        handler=knowledge_add_relation,
-        category="knowledge",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="knowledge_graph_vis",
-        description="Export the knowledge graph as JSON for visualization",
-        parameters={},
-        handler=knowledge_graph_vis,
-        category="knowledge",
-        timeout=10,
-    ))
+    registry.register(
+        ToolSpec(
+            name="knowledge_extract",
+            description="Extract entities and relations from text and add them to the knowledge graph",
+            parameters={
+                "text": {"type": "string", "description": "Text to analyze", "required": True},
+                "source": {"type": "string", "description": "Source label for the text", "required": False},
+            },
+            handler=knowledge_extract,
+            category="knowledge",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="knowledge_search",
+            description="Search the knowledge graph for entities and their relationships",
+            parameters={
+                "query": {"type": "string", "description": "Search query", "required": True},
+                "max_depth": {"type": "integer", "description": "Max traversal depth", "required": False},
+            },
+            handler=knowledge_search,
+            category="knowledge",
+            timeout=15,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="knowledge_stats",
+            description="Get statistics about the knowledge graph",
+            parameters={},
+            handler=knowledge_stats,
+            category="knowledge",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="knowledge_add_entity",
+            description="Manually add an entity to the knowledge graph",
+            parameters={
+                "name": {"type": "string", "description": "Entity name", "required": True},
+                "type": {"type": "string", "description": "Entity type", "required": False},
+                "metadata": {"type": "string", "description": "JSON metadata string", "required": False},
+            },
+            handler=knowledge_add_entity,
+            category="knowledge",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="knowledge_add_relation",
+            description="Manually add a relation between two entities in the knowledge graph",
+            parameters={
+                "source": {"type": "string", "description": "Source entity name", "required": True},
+                "target": {"type": "string", "description": "Target entity name", "required": True},
+                "type": {"type": "string", "description": "Relation type", "required": False},
+            },
+            handler=knowledge_add_relation,
+            category="knowledge",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="knowledge_graph_vis",
+            description="Export the knowledge graph as JSON for visualization",
+            parameters={},
+            handler=knowledge_graph_vis,
+            category="knowledge",
+            timeout=10,
+        )
+    )

@@ -48,7 +48,7 @@ class Sandbox:
         if volumes:
             for host, cfg in volumes.items():
                 docker_cmd.extend(["-v", f"{host}:{cfg['bind']}:{cfg['mode']}"])
-        docker_cmd.extend([self.image] + cmd)
+        docker_cmd.extend([self.image, *cmd])
         try:
             proc = await asyncio.create_subprocess_exec(
                 *docker_cmd,

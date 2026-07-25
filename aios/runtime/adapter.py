@@ -9,19 +9,51 @@ from raven.core.config import settings
 from raven.core.rag.retriever import Retriever
 from raven.plugins.files import plugin as files_plugin
 
-_ALLOWED_COMMANDS = frozenset({"ls", "cat", "echo", "pwd", "cd", "mkdir", "rm", "cp", "mv", "grep", "find", "head", "tail", "wc", "sort", "uniq", "diff", "python", "node", "npm", "npx", "git", "pip", "curl", "wget", "docker"})
+_ALLOWED_COMMANDS = frozenset(
+    {
+        "ls",
+        "cat",
+        "echo",
+        "pwd",
+        "cd",
+        "mkdir",
+        "rm",
+        "cp",
+        "mv",
+        "grep",
+        "find",
+        "head",
+        "tail",
+        "wc",
+        "sort",
+        "uniq",
+        "diff",
+        "python",
+        "node",
+        "npm",
+        "npx",
+        "git",
+        "pip",
+        "curl",
+        "wget",
+        "docker",
+    }
+)
 
 
 class RuntimeAdapter:
     @staticmethod
     async def run_command(cmd: str) -> str:
         import shlex
+
         parts = shlex.split(cmd)
         if parts and parts[0] not in _ALLOWED_COMMANDS:
             return f"Command not allowed: {parts[0]}"
         if sys.platform == "win32":
             proc = await asyncio.create_subprocess_exec(
-                "cmd.exe", "/c", cmd,
+                "cmd.exe",
+                "/c",
+                cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
@@ -36,8 +68,7 @@ class RuntimeAdapter:
         except TimeoutError:
             proc.kill()
             return "Command timed out after 120s"
-        output = stdout.decode(errors="replace") + stderr.decode(errors="replace")
-        return output
+        return stdout.decode(errors="replace") + stderr.decode(errors="replace")
 
     @staticmethod
     async def read_file(path: str) -> str:

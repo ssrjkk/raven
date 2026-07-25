@@ -74,6 +74,7 @@ def create_knowledge_router() -> APIRouter:
         if metadata:
             try:
                 import json
+
                 meta = json.loads(metadata)
             except json.JSONDecodeError:
                 meta = {"note": metadata}
@@ -96,7 +97,9 @@ def create_knowledge_router() -> APIRouter:
         try:
             rel = kg.add_relation(source_ent.id, target_ent.id, type)
             _save_kg(kg)
-            return {"relation": {"id": rel.id, "source": source_ent.name, "target": target_ent.name, "type": rel.rel_type}}
+            return {
+                "relation": {"id": rel.id, "source": source_ent.name, "target": target_ent.name, "type": rel.rel_type}
+            }
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
         except Exception as e:

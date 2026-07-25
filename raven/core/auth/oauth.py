@@ -82,7 +82,7 @@ def register_providers() -> None:
             client_id=settings.oauth_google_client_id.get_secret_value() or "",
             client_secret=settings.oauth_google_client_secret.get_secret_value() or "",
             authorize_url="https://accounts.google.com/o/oauth2/v2/auth",
-            token_url="https://oauth2.googleapis.com/token",  # noqa: S106
+            token_url="https://oauth2.googleapis.com/token",
             userinfo_url="https://www.googleapis.com/oauth2/v2/userinfo",
             scopes=["openid", "email", "profile"],
             icon="G",
@@ -92,7 +92,7 @@ def register_providers() -> None:
             client_id=settings.oauth_github_client_id.get_secret_value() or "",
             client_secret=settings.oauth_github_client_secret.get_secret_value() or "",
             authorize_url="https://github.com/login/oauth/authorize",
-            token_url="https://github.com/login/oauth/access_token",  # noqa: S106
+            token_url="https://github.com/login/oauth/access_token",
             userinfo_url="https://api.github.com/user",
             scopes=["read:user", "user:email"],
             icon="GH",
@@ -102,7 +102,7 @@ def register_providers() -> None:
             client_id=settings.oauth_microsoft_client_id.get_secret_value() or "",
             client_secret=settings.oauth_microsoft_client_secret.get_secret_value() or "",
             authorize_url="https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-            token_url="https://login.microsoftonline.com/common/oauth2/v2.0/token",  # noqa: S106
+            token_url="https://login.microsoftonline.com/common/oauth2/v2.0/token",
             userinfo_url="https://graph.microsoft.com/v1.0/me",
             scopes=["User.Read", "email", "openid"],
             icon="MS",
@@ -114,10 +114,7 @@ def register_providers() -> None:
 
 
 def get_enabled_providers() -> list[dict[str, Any]]:
-    return [
-        {"name": p.name, "icon": p.icon, "enabled": p.enabled}
-        for p in _PROVIDERS.values()
-    ]
+    return [{"name": p.name, "icon": p.icon, "enabled": p.enabled} for p in _PROVIDERS.values()]
 
 
 def validate_redirect_uri(uri: str) -> bool:
@@ -203,7 +200,9 @@ async def handle_callback(provider_name: str, code: str, state: str) -> dict[str
     return result
 
 
-async def _exchange_code(provider: OAuthProvider, code: str, redirect_uri: str, code_verifier: str = "") -> dict[str, Any] | None:
+async def _exchange_code(
+    provider: OAuthProvider, code: str, redirect_uri: str, code_verifier: str = ""
+) -> dict[str, Any] | None:
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             headers = {"Accept": "application/json"}
@@ -225,8 +224,7 @@ async def _exchange_code(provider: OAuthProvider, code: str, redirect_uri: str, 
             )
             if resp.status_code != 200:
                 return None
-            data = resp.json()
-            return data
+            return resp.json()  # type: ignore[no-any-return]
     except httpx.RequestError:
         return None
 

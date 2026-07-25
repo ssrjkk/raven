@@ -4,26 +4,79 @@ import asyncio
 import os
 import platform
 import subprocess
+from pathlib import Path
 from typing import Any, cast
 
 from loguru import logger
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
-_UNIX_COMMANDS = frozenset({
-    "ls", "cat", "head", "tail", "echo", "pwd", "whoami", "date",
-    "find", "grep", "wc", "sort", "uniq", "cut", "tr", "diff",
-    "df", "du", "free", "ps", "top", "uptime",
-    "sleep",
-})
+_UNIX_COMMANDS = frozenset(
+    {
+        "ls",
+        "cat",
+        "head",
+        "tail",
+        "echo",
+        "pwd",
+        "whoami",
+        "date",
+        "find",
+        "grep",
+        "wc",
+        "sort",
+        "uniq",
+        "cut",
+        "tr",
+        "diff",
+        "df",
+        "du",
+        "free",
+        "ps",
+        "top",
+        "uptime",
+        "sleep",
+    }
+)
 
-_WIN_COMMANDS = frozenset({
-    "echo", "dir", "type", "copy", "del", "ren", "cd", "cls", "ver", "date", "time", "timeout",
-    "find", "findstr", "sort", "more", "fc", "where",
-    "ping", "tracert", "pathping", "nslookup",
-    "tasklist", "taskkill", "systeminfo", "ipconfig", "netstat",
-    "whoami", "set", "attrib", "xcopy", "robocopy", "mkdir", "rmdir",
-})
+_WIN_COMMANDS = frozenset(
+    {
+        "echo",
+        "dir",
+        "type",
+        "copy",
+        "del",
+        "ren",
+        "cd",
+        "cls",
+        "ver",
+        "date",
+        "time",
+        "timeout",
+        "find",
+        "findstr",
+        "sort",
+        "more",
+        "fc",
+        "where",
+        "ping",
+        "tracert",
+        "pathping",
+        "nslookup",
+        "tasklist",
+        "taskkill",
+        "systeminfo",
+        "ipconfig",
+        "netstat",
+        "whoami",
+        "set",
+        "attrib",
+        "xcopy",
+        "robocopy",
+        "mkdir",
+        "rmdir",
+    }
+)
 
 if platform.system() == "Windows":
     ALLOWED_COMMANDS = _WIN_COMMANDS
@@ -36,12 +89,14 @@ MAX_STDERR_CHARS = 10_000
 
 def _validate_command(command: str) -> list[str]:
     import shlex
+
     parts = shlex.split(command)
     if not parts:
         raise ValueError("empty command")
-    base = os.path.basename(parts[0]) if os.path.sep in parts[0] else parts[0]
+    base = Path(parts[0]).name if os.path.sep in parts[0] else parts[0]
     if base not in ALLOWED_COMMANDS:
-        raise ValueError(f"command '{base}' not in allowlist")
+        msg = f"command '{base}' not in allowlist"
+        raise ValueError(msg)
     return parts
 
 
@@ -53,7 +108,7 @@ async def shell_command(command: str, timeout: int = 30) -> str:
 
     _cmd_builtins = {"echo", "dir", "type", "copy", "del", "ren", "cd", "cls", "ver", "date", "time", "set"}
     if platform.system() == "Windows" and args[0].lower() in _cmd_builtins:
-        args = ["cmd", "/c"] + args
+        args = ["cmd", "/c", *args]
 
     proc = await asyncio.create_subprocess_exec(
         *args,
@@ -75,33 +130,96 @@ async def shell_command(command: str, timeout: int = 30) -> str:
         return f"[timeout after {timeout}s]"
 
 
-_DENIED_MODULES = frozenset({
-    "os", "subprocess", "sys", "shutil", "ctypes", "socket",
-    "operator", "inspect", "importlib", "pickle", "marshal",
-    "code", "codeop", "builtins", "typing",
-})
+_DENIED_MODULES = frozenset(
+    {
+        "os",
+        "subprocess",
+        "sys",
+        "shutil",
+        "ctypes",
+        "socket",
+        "operator",
+        "inspect",
+        "importlib",
+        "pickle",
+        "marshal",
+        "code",
+        "codeop",
+        "builtins",
+        "typing",
+    }
+)
 
 _RESTRICTED_BUILTINS: dict[str, Any] = {
-    "abs": abs, "all": all, "any": any, "ascii": ascii, "bin": bin,
-    "bool": bool, "bytearray": bytearray, "bytes": bytes, "chr": chr,
-    "complex": complex, "dict": dict, "divmod": divmod, "enumerate": enumerate,
-    "filter": filter, "float": float, "format": format, "frozenset": frozenset,
-    "hash": hash, "hex": hex, "int": int,
-    "len": len, "list": list, "map": map, "max": max,
-    "min": min, "next": next, "oct": oct, "ord": ord,
-    "pow": pow, "range": range, "reversed": reversed,
-    "round": round, "set": set, "slice": slice, "sorted": sorted,
-    "str": str, "sum": sum, "tuple": tuple, "zip": zip,
-    "True": True, "False": False, "None": None,
+    "abs": abs,
+    "all": all,
+    "any": any,
+    "ascii": ascii,
+    "bin": bin,
+    "bool": bool,
+    "bytearray": bytearray,
+    "bytes": bytes,
+    "chr": chr,
+    "complex": complex,
+    "dict": dict,
+    "divmod": divmod,
+    "enumerate": enumerate,
+    "filter": filter,
+    "float": float,
+    "format": format,
+    "frozenset": frozenset,
+    "hash": hash,
+    "hex": hex,
+    "int": int,
+    "len": len,
+    "list": list,
+    "map": map,
+    "max": max,
+    "min": min,
+    "next": next,
+    "oct": oct,
+    "ord": ord,
+    "pow": pow,
+    "range": range,
+    "reversed": reversed,
+    "round": round,
+    "set": set,
+    "slice": slice,
+    "sorted": sorted,
+    "str": str,
+    "sum": sum,
+    "tuple": tuple,
+    "zip": zip,
+    "True": True,
+    "False": False,
+    "None": None,
 }
 
-_DENIED_BUILTINS = frozenset({
-    "eval", "exec", "compile", "open", "input", "type",
-    "memoryview", "breakpoint", "callable",
-    "staticmethod", "classmethod", "property", "super",
-    "getattr", "setattr", "delattr", "vars", "dir",
-    "__import__", "globals", "locals",
-})
+_DENIED_BUILTINS = frozenset(
+    {
+        "eval",
+        "exec",
+        "compile",
+        "open",
+        "input",
+        "type",
+        "memoryview",
+        "breakpoint",
+        "callable",
+        "staticmethod",
+        "classmethod",
+        "property",
+        "super",
+        "getattr",
+        "setattr",
+        "delattr",
+        "vars",
+        "dir",
+        "__import__",
+        "globals",
+        "locals",
+    }
+)
 
 
 async def python_code(code: str, timeout: int = 15) -> str:
@@ -112,7 +230,12 @@ async def python_code(code: str, timeout: int = 15) -> str:
         for node in ast.walk(tree):
             if isinstance(node, ast.Name) and node.id in ("__builtins__", "__import__"):
                 return f"[denied] access to '{node.id}' is not allowed"
-            if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.startswith("__") and node.value.endswith("__"):
+            if (
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and node.value.startswith("__")
+                and node.value.endswith("__")
+            ):
                 return f"[denied] dunder string literal '{node.value}' is not allowed"
             if isinstance(node, ast.Call):
                 func = node.func
@@ -137,10 +260,10 @@ async def python_code(code: str, timeout: int = 15) -> str:
                 last_expr = cast(ast.Expr, tree.body.pop())
             compiled = compile(tree, "<sandbox>", "exec")
             ns: dict[str, Any] = {"__builtins__": _RESTRICTED_BUILTINS.copy()}
-            exec(compiled, ns)  # noqa: S102
+            exec(compiled, ns)
             if last_expr:
                 compiled_expr = compile(ast.Expression(last_expr.value), "<sandbox>", "eval")
-                result = eval(compiled_expr, ns)  # noqa: S307
+                result = eval(compiled_expr, ns)
                 return str(result) if result is not None else "(no return value)"
             return "(code executed, no return value)"
 

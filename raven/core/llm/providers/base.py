@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import email.utils
 import time
 from collections.abc import AsyncIterator, Callable
-from datetime import datetime
+from datetime import UTC
+from pathlib import Path
 from typing import Any, cast
 
 import httpx
@@ -21,15 +23,20 @@ def _parse_retry_after(headers: Any, default: int = 5) -> int:
     except (ValueError, TypeError):
         pass
     try:
-        parsed = datetime.strptime(raw, "%a, %d %b %Y %H:%M:%S %Z")
+        parsed = email.utils.parsedate_to_datetime(raw)
+        if parsed is None:
+            return default
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
         return max(int(parsed.timestamp() - time.time()), 0)
     except (ValueError, TypeError):
         return default
 
 
 def _read_json_file(path: str) -> dict[str, Any]:
-    with open(path) as f:
+    with Path(path).open() as f:
         import json as _json
+
         data = _json.load(f)
         return cast("dict[str, Any]", data)
 
@@ -49,7 +56,7 @@ async def _stream_sse(
         resp.raise_for_status()
         async for line in resp.aiter_lines():
             if line.startswith(data_prefix):
-                data = line[len(data_prefix):]
+                data = line[len(data_prefix) :]
                 if data.strip() == done_marker:
                     break
                 try:
@@ -67,7 +74,13 @@ def _parse_openai_response(data: dict[str, Any]) -> LLMResponse:
     content = msg.get("content", "") or ""
     tool_calls_raw = msg.get("tool_calls")
     tool_calls = [ToolCall.from_openai(tc) for tc in tool_calls_raw] if tool_calls_raw else []
-    return LLMResponse(content=content, tool_calls=tool_calls, finish_reason=choice.get("finish_reason", "stop"))
+    usage_raw = data.get("usage", {})
+    usage = {
+        "prompt_tokens": usage_raw.get("prompt_tokens", 0),
+        "completion_tokens": usage_raw.get("completion_tokens", 0),
+        "total_tokens": usage_raw.get("total_tokens", 0),
+    } if usage_raw else {}
+    return LLMResponse(content=content, tool_calls=tool_calls, finish_reason=choice.get("finish_reason", "stop"), usage=usage)
 
 
 def _convert_to_gemini(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -7,3 +7,5 @@ Bridging Raven AI (Python) with:
   - Tauri Desktop Shell (.exe)
   - TypeScript Agent Packages (planner, coder, debugger)
 """
+
+__author__ = "ssrjkk"

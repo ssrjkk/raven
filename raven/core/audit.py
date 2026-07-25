@@ -7,7 +7,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -91,7 +91,7 @@ class AuditEntry:
 
     @property
     def timestamp_dt(self) -> datetime:
-        return datetime.fromtimestamp(self.timestamp)
+        return datetime.fromtimestamp(self.timestamp, tz=UTC)
 
     def __repr__(self) -> str:
         return f"AuditEntry({self.event}, {self.actor}, {self.target})"
@@ -104,9 +104,10 @@ def _restrict_key_file(path: Path):
         if os.name == "nt":
             username = os.environ.get("USERNAME") or os.environ.get("USER", "")
             if username:
-                subprocess.run(  # noqa: S603
-                    ["icacls", str(path), "/inheritance:r", "/grant", f"{username}:F"],  # noqa: S607
+                subprocess.run(
+                    ["icacls", str(path), "/inheritance:r", "/grant", f"{username}:F"],
                     capture_output=True,
+                    check=False,
                 )
     except Exception as exc:
         logger.warning("Failed to restrict key file permissions: {}", exc)
@@ -258,7 +259,9 @@ class AuditLogger:
                 entry.hash = self._compute_hash(
                     {k: v for k, v in entry.to_dict().items() if k not in ("prev_hash", "hash", "signature")}
                 )
-                entry.signature = self._compute_signature(json.dumps(entry.to_dict(), sort_keys=True, default=str).encode())
+                entry.signature = self._compute_signature(
+                    json.dumps(entry.to_dict(), sort_keys=True, default=str).encode()
+                )
                 self._prev_hash = entry.hash
 
             line = json.dumps(entry.to_dict(), default=str)
@@ -351,8 +354,8 @@ class AuditLogger:
             "total": total,
             "by_event": by_event,
             "by_actor": by_actor,
-            "first_event": datetime.fromtimestamp(first_ts).isoformat() if first_ts else None,
-            "last_event": datetime.fromtimestamp(last_ts).isoformat() if last_ts else None,
+            "first_event": datetime.fromtimestamp(first_ts, tz=UTC).isoformat() if first_ts else None,
+            "last_event": datetime.fromtimestamp(last_ts, tz=UTC).isoformat() if last_ts else None,
             "parse_errors": parse_errors,
             "path": str(self._path),
             "size_bytes": self._path.stat().st_size if self._path.exists() else 0,

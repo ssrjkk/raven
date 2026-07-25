@@ -14,7 +14,8 @@ def set_analytics_engine(engine: AnalyticsEngine) -> None:
 
 
 def _get_engine() -> AnalyticsEngine:
-    assert _engine is not None, "analytics engine not initialized"
+    if _engine is None:
+        raise RuntimeError("analytics engine not initialized")
     return _engine
 
 
@@ -73,41 +74,53 @@ async def analytics_overview() -> str:
 
 
 def register_analytics_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="analytics_metrics_list",
-        description="List all available analytics metric names",
-        parameters={},
-        handler=analytics_metrics_list,
-        category="analytics",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="analytics_series",
-        description="Get time-series data for a specific metric",
-        parameters={
-            "metric_name": {"type": "string", "description": "Metric name", "required": True},
-            "bucket": {"type": "string", "description": "Bucket size: 1m, 5m, 15m, 1h, 1d (default 5m)", "required": False},
-            "hours": {"type": "number", "description": "Hours of history (default 1)", "required": False},
-        },
-        handler=analytics_series,
-        category="analytics",
-        timeout=15,
-    ))
-    registry.register(ToolSpec(
-        name="analytics_summary",
-        description="Get summary stats for all metrics",
-        parameters={
-            "hours": {"type": "number", "description": "Hours of history (default 1)", "required": False},
-        },
-        handler=analytics_summary,
-        category="analytics",
-        timeout=15,
-    ))
-    registry.register(ToolSpec(
-        name="analytics_overview",
-        description="Get high-level analytics overview (last hour + last 24h)",
-        parameters={},
-        handler=analytics_overview,
-        category="analytics",
-        timeout=10,
-    ))
+    registry.register(
+        ToolSpec(
+            name="analytics_metrics_list",
+            description="List all available analytics metric names",
+            parameters={},
+            handler=analytics_metrics_list,
+            category="analytics",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="analytics_series",
+            description="Get time-series data for a specific metric",
+            parameters={
+                "metric_name": {"type": "string", "description": "Metric name", "required": True},
+                "bucket": {
+                    "type": "string",
+                    "description": "Bucket size: 1m, 5m, 15m, 1h, 1d (default 5m)",
+                    "required": False,
+                },
+                "hours": {"type": "number", "description": "Hours of history (default 1)", "required": False},
+            },
+            handler=analytics_series,
+            category="analytics",
+            timeout=15,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="analytics_summary",
+            description="Get summary stats for all metrics",
+            parameters={
+                "hours": {"type": "number", "description": "Hours of history (default 1)", "required": False},
+            },
+            handler=analytics_summary,
+            category="analytics",
+            timeout=15,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="analytics_overview",
+            description="Get high-level analytics overview (last hour + last 24h)",
+            parameters={},
+            handler=analytics_overview,
+            category="analytics",
+            timeout=10,
+        )
+    )

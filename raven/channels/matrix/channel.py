@@ -14,7 +14,11 @@ class MatrixChannel(EnterpriseChannel):
     channel_id = "matrix"
 
     async def _start(self):
-        self._homeserver = get_channel_config("matrix").get("homeserver", "").rstrip("/") if get_channel_config("matrix").get("homeserver") else ""
+        self._homeserver = (
+            get_channel_config("matrix").get("homeserver", "").rstrip("/")
+            if get_channel_config("matrix").get("homeserver")
+            else ""
+        )
         self._token = get_channel_config("matrix").get("access_token", "")
         self._sync_token = ""
         self._sync_task: asyncio.Task[None] | None = None
@@ -89,7 +93,7 @@ class MatrixChannel(EnterpriseChannel):
 
     async def handle_event(self, event: dict[str, Any], room_id: str):
         if not self._handler or not self._ready:
-            return
+            return None
         if event.get("type") == "m.room.message" and event.get("content", {}).get("msgtype") == "m.text":
             sender = event.get("sender", "")
             body = event.get("content", {}).get("body", "")

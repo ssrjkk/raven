@@ -1,32 +1,16 @@
-import { useState, useEffect } from "react";
-import { api, CodingSessionData } from "../api/client";
-import { useToast } from "../components/Toast";
+import { api } from "../api/client";
+import { Skeleton, SkeletonCard } from "../components/Skeleton";
+import { useApiQuery } from "../hooks/useApiQuery";
 
 export default function CodeSessions() {
-  const [sessions, setSessions] = useState<CodingSessionData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
+  const { data: sessionsData, isLoading } = useApiQuery<import("../api/client").CodingSessionData[]>(["codeSessions"], () => api.codeSessions());
+  const sessions = sessionsData ?? [];
 
-  useEffect(() => { load(); }, []);
-
-  async function load() {
-    try {
-      setSessions(await api.codeSessions());
-    } catch (e) {
-      console.error("Failed to load code sessions:", e);
-      toast("Failed to load code sessions", "error");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Code Sessions</h1>
-        <div className="space-y-2 animate-pulse">
-          {[1, 2].map((i) => <div key={i} className="h-16 bg-gray-900/60 rounded-xl" />)}
-        </div>
+        <Skeleton width={180} height={28} />
+        {[1, 2, 3].map((i) => <SkeletonCard key={i} height={72} />)}
       </div>
     );
   }

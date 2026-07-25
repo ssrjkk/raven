@@ -32,6 +32,7 @@ class TaskOrchestrator:
         self._store: TaskStore | None = None
         self._planner: TaskPlanner | None = None
         self._runner: TaskRunner | None = None
+        self._bg_tasks: set[asyncio.Task[None]] = set()
 
     async def start(self) -> None:
         self._store = TaskStore(self._db.db_path)
@@ -57,7 +58,8 @@ class TaskOrchestrator:
         channel: str,
         session_id: str = "",
     ) -> Task:
-        assert self._planner is not None and self._runner is not None
+        if self._planner is None or self._runner is None:
+            raise RuntimeError("TaskOrchestrator not started")
 
         task = await self._planner.plan(
             goal,
@@ -69,17 +71,18 @@ class TaskOrchestrator:
             self._tasks[task.id] = task
 
         plan_text = task.plan_summary or goal
-        steps_text = "\n".join(
-            f"  {i + 1}. {s.description}" for i, s in enumerate(task.steps[:10])
-        )
+        steps_text = "\n".join(f"  {i + 1}. {s.description}" for i, s in enumerate(task.steps[:10]))
         await self._notify(channel, session_id, f"📋 Plan: {plan_text}\n{steps_text}")
 
         await self._runner.submit(task)
-        asyncio.create_task(self._wait_and_notify(task, channel, session_id))
+        bg_task = asyncio.create_task(self._wait_and_notify(task, channel, session_id))
+        self._bg_tasks.add(bg_task)
+        bg_task.add_done_callback(self._bg_tasks.discard)
         return task
 
     async def _wait_and_notify(self, task: Task, channel: str, session_id: str) -> None:
-        assert self._runner is not None
+        if self._runner is None:
+            raise RuntimeError("TaskOrchestrator not started")
         try:
             task = await self._runner.wait(task.id, timeout=600)
             msg = self._format_result(task)

@@ -1,4 +1,6 @@
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+
 import { api } from "../api/client";
 
 export default function CICD() {
@@ -13,38 +15,37 @@ export default function CICD() {
   const [statusFilter, setStatusFilter] = useState("");
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<"workflows" | "runs" | "status" | "trigger">("workflows");
 
-  async function loadWorkflows() {
-    setLoading(true); setError(""); setResult("");
-    try { const r = await api.cicdWorkflows(owner, repo, provider); setResult(r.text); }
-    catch (e: any) { setError(e.message || "Failed to list workflows"); }
-    finally { setLoading(false); }
-  }
+  const loadWorkflows = useMutation({
+    mutationFn: () => api.cicdWorkflows(owner, repo, provider),
+    onSuccess: (r) => { setResult(r.text); setError(""); },
+    onError: (e: any) => setError(e.message || "Failed to list workflows"),
+  });
 
-  async function loadRuns() {
-    setLoading(true); setError(""); setResult("");
-    try { const r = await api.cicdRuns(owner, repo, branch, statusFilter, provider); setResult(r.text); }
-    catch (e: any) { setError(e.message || "Failed to list runs"); }
-    finally { setLoading(false); }
-  }
+  const loadRuns = useMutation({
+    mutationFn: () => api.cicdRuns(owner, repo, branch, statusFilter, provider),
+    onSuccess: (r) => { setResult(r.text); setError(""); },
+    onError: (e: any) => setError(e.message || "Failed to list runs"),
+  });
 
-  async function loadStatus() {
-    if (!pipelineId) return;
-    setLoading(true); setError(""); setResult("");
-    try { const r = await api.cicdStatus(pipelineId, owner, repo, provider); setResult(r.text); }
-    catch (e: any) { setError(e.message || "Failed to check status"); }
-    finally { setLoading(false); }
-  }
+  const loadStatus = useMutation({
+    mutationFn: () => {
+      if (!pipelineId) throw new Error("Pipeline ID required");
+      return api.cicdStatus(pipelineId, owner, repo, provider);
+    },
+    onSuccess: (r) => { setResult(r.text); setError(""); },
+    onError: (e: any) => setError(e.message || "Failed to check status"),
+  });
 
-  async function triggerRun() {
-    if (!workflowId) return;
-    setLoading(true); setError(""); setResult("");
-    try { const r = await api.cicdRun(workflowId, owner, repo, ref, inputs, provider); setResult(r.text); }
-    catch (e: any) { setError(e.message || "Failed to trigger run"); }
-    finally { setLoading(false); }
-  }
+  const triggerRun = useMutation({
+    mutationFn: () => {
+      if (!workflowId) throw new Error("Workflow ID required");
+      return api.cicdRun(workflowId, owner, repo, ref, inputs, provider);
+    },
+    onSuccess: (r) => { setResult(r.text); setError(""); },
+    onError: (e: any) => setError(e.message || "Failed to trigger run"),
+  });
 
   const btn = { backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" };
   const inp: React.CSSProperties = {
@@ -56,7 +57,7 @@ export default function CICD() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold" style={{ color: "var(--dt-colors-text-primary)" }}>CI/CD</h1>
+        <h1 className="text-2xl font-bold text-primary">CI/CD</h1>
         <div className="flex items-center gap-2">
           <select style={inp} value={provider} onChange={(e) => setProvider(e.target.value)}>
             <option value="github">GitHub Actions</option>
@@ -68,13 +69,13 @@ export default function CICD() {
       </div>
 
       {error && (
-        <div className="px-4 py-2 rounded text-sm" style={{ backgroundColor: "rgba(239,68,68,0.15)", color: "#ef4444" }}>
+        <div className="px-4 py-2 rounded text-sm bg-danger-subtle text-danger">
           {error}
-          <button onClick={() => setError("")} className="ml-3 text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>dismiss</button>
+          <button onClick={() => setError("")} className="ml-3 text-xs text-tertiary">dismiss</button>
         </div>
       )}
 
-      <div className="flex gap-1 border-b" style={{ borderColor: "var(--dt-colors-border-default)" }}>
+      <div className="flex gap-1 border-b border-default">
         {(["workflows", "runs", "status", "trigger"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className="px-4 py-2 text-sm font-medium transition rounded-t"
@@ -89,9 +90,9 @@ export default function CICD() {
 
       {tab === "workflows" && (
         <div className="space-y-3">
-          <button onClick={loadWorkflows} disabled={loading}
+          <button onClick={() => loadWorkflows.mutate()} disabled={loadWorkflows.isPending}
             className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40" style={btn}>
-            {loading ? "Loading..." : "List Workflows"}
+            {loadWorkflows.isPending ? "Loading..." : "List Workflows"}
           </button>
         </div>
       )}
@@ -106,9 +107,9 @@ export default function CICD() {
               <option value="in_progress">In Progress</option>
               <option value="queued">Queued</option>
             </select>
-            <button onClick={loadRuns} disabled={loading}
+            <button onClick={() => loadRuns.mutate()} disabled={loadRuns.isPending}
               className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40" style={btn}>
-              {loading ? "Loading..." : "List Runs"}
+              {loadRuns.isPending ? "Loading..." : "List Runs"}
             </button>
           </div>
         </div>
@@ -120,10 +121,10 @@ export default function CICD() {
             <input style={{ ...inp, flex: 1 }}
               placeholder="Pipeline / Run ID" value={pipelineId}
               onChange={(e) => setPipelineId(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && loadStatus()} />
-            <button onClick={loadStatus} disabled={loading || !pipelineId}
+              onKeyDown={(e) => e.key === "Enter" && loadStatus.mutate()} />
+            <button onClick={() => loadStatus.mutate()} disabled={loadStatus.isPending || !pipelineId}
               className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40" style={btn}>
-              {loading ? "Loading..." : "Check Status"}
+              {loadStatus.isPending ? "Loading..." : "Check Status"}
             </button>
           </div>
         </div>
@@ -131,7 +132,7 @@ export default function CICD() {
 
       {tab === "trigger" && (
         <div className="space-y-3 max-w-lg">
-          <p className="text-sm" style={{ color: "var(--dt-colors-text-tertiary)" }}>
+          <p className="text-sm text-tertiary">
             Owner: <strong>{owner || "(not set)"}</strong> &middot; Repo: <strong>{repo || "(not set)"}</strong>
           </p>
           <input style={{ ...inp, width: "100%" }}
@@ -146,15 +147,15 @@ export default function CICD() {
             placeholder="Workflow inputs (JSON, optional)" rows={4}
             value={inputs} onChange={(e) => setInputs(e.target.value)}
           />
-          <button onClick={triggerRun} disabled={loading || !workflowId}
+          <button onClick={() => triggerRun.mutate()} disabled={triggerRun.isPending || !workflowId}
             className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40" style={btn}>
-            {loading ? "Triggering..." : "Trigger Workflow"}
+            {triggerRun.isPending ? "Triggering..." : "Trigger Workflow"}
           </button>
         </div>
       )}
 
       {result && (
-        <pre className="p-4 rounded text-sm whitespace-pre-wrap" style={{ backgroundColor: "var(--dt-colors-bg-secondary)", color: "var(--dt-colors-text-primary)" }}>
+        <pre className="p-4 rounded text-sm whitespace-pre-wrap bg-secondary text-primary">
           {result}
         </pre>
       )}

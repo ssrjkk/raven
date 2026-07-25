@@ -13,6 +13,7 @@ class UsageRequest(BaseModel):
     user_id: str = ""
     channel: str = ""
     session_id: str = ""
+    duration_ms: float = 0.0
 
 
 class PricingRequest(BaseModel):
@@ -31,8 +32,21 @@ def create_cost_management_router() -> APIRouter:
 
     @router.post("/usage")
     def record_usage(req: UsageRequest):
-        rec = _cost.record_usage(req.model, req.input_tokens, req.output_tokens, req.user_id, req.channel, req.session_id)
-        return {"id": rec.id, "model": rec.model, "input_tokens": rec.input_tokens, "output_tokens": rec.output_tokens, "cost": rec.cost}
+        rec = _cost.record_usage(
+            req.model, req.input_tokens, req.output_tokens, req.user_id, req.channel, req.session_id, req.duration_ms
+        )
+        return {
+            "id": rec.id,
+            "model": rec.model,
+            "input_tokens": rec.input_tokens,
+            "output_tokens": rec.output_tokens,
+            "cost": rec.cost,
+            "duration_ms": rec.duration_ms,
+        }
+
+    @router.get("/usage/recent")
+    def get_recent_usage(limit: int = 50):
+        return {"usage": _cost.get_recent_usage(limit)}
 
     @router.get("/summary")
     def get_summary(hours: int = 24):
@@ -50,12 +64,29 @@ def create_cost_management_router() -> APIRouter:
     @router.post("/budgets")
     def create_budget(req: BudgetRequest):
         budget = _cost.set_budget(req.name, req.daily_limit, req.monthly_limit)
-        return {"id": budget.id, "name": budget.name, "daily_limit": budget.daily_limit, "monthly_limit": budget.monthly_limit}
+        return {
+            "id": budget.id,
+            "name": budget.name,
+            "daily_limit": budget.daily_limit,
+            "monthly_limit": budget.monthly_limit,
+        }
 
     @router.get("/budgets")
     def list_budgets():
         budgets = _cost.get_budgets()
-        return {"budgets": [{"id": b.id, "name": b.name, "daily_limit": b.daily_limit, "monthly_limit": b.monthly_limit, "current_daily": b.current_daily, "current_monthly": b.current_monthly} for b in budgets]}
+        return {
+            "budgets": [
+                {
+                    "id": b.id,
+                    "name": b.name,
+                    "daily_limit": b.daily_limit,
+                    "monthly_limit": b.monthly_limit,
+                    "current_daily": b.current_daily,
+                    "current_monthly": b.current_monthly,
+                }
+                for b in budgets
+            ]
+        }
 
     @router.delete("/budgets/{budget_id}")
     def delete_budget(budget_id: str):

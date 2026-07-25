@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import aiosqlite
@@ -9,26 +10,39 @@ from loguru import logger
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 
+def _is_allowed_path(p: Path, data_dir: Path, ws: Path) -> bool:
+    try:
+        p.relative_to(data_dir)
+        return True
+    except ValueError:
+        pass
+    try:
+        p.relative_to(ws)
+        return True
+    except ValueError:
+        pass
+    return False
+
+
 async def db_query(query: str, db_path: str = "data/raven.db") -> str:
     from raven.core.config import settings
-    p = Path(db_path)
+
     data_dir = settings.resolved_db_path.parent.resolve()
+    ws = Path(os.environ.get("RAVEN_WORKSPACE", "data")).resolve()
+
+    p = Path(db_path)
     if p.is_absolute() or p.drive or p.root:
         p = p.expanduser().resolve()
         if not p.exists():
             return f"Database not found: {p}"
-        try:
-            p.relative_to(data_dir)
-        except ValueError:
+        if not _is_allowed_path(p, data_dir, ws):
             return f"Access denied: path outside data directory: {p}"
     else:
         base = settings.resolved_db_path.parent.parent.resolve()
         p = (base / p).resolve()
         if not p.exists():
             return f"Database not found: {p}"
-        try:
-            p.relative_to(data_dir)
-        except ValueError:
+        if not _is_allowed_path(p, data_dir, ws):
             return f"Access denied: path outside data directory: {p}"
 
     stripped = query.strip()

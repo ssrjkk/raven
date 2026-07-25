@@ -161,9 +161,7 @@ class MultiModalRAG:
                 self._text_dim = self._text_model.get_sentence_embedding_dimension()
                 logger.info("Loaded SentenceTransformer model: {}", model_name)
             except Exception:
-                logger.warning(
-                    "Failed to load SentenceTransformer '{}', using hash fallback", model_name
-                )
+                logger.warning("Failed to load SentenceTransformer '{}', using hash fallback", model_name)
 
         # CLIP embedder for cross-modal search
         self._clip_processor: CLIPProcessor | None = None
@@ -456,9 +454,7 @@ class MultiModalRAG:
 
     # -- Search --------------------------------------------------------------
 
-    def _rank_chunks(
-        self, query_embedding: list[float], chunks: list[Chunk]
-    ) -> list[tuple[float, Chunk]]:
+    def _rank_chunks(self, query_embedding: list[float], chunks: list[Chunk]) -> list[tuple[float, Chunk]]:
         scored = [(_cosine_similarity(query_embedding, c.embedding), c) for c in chunks]
         scored.sort(key=lambda x: x[0], reverse=True)
         return scored
@@ -523,9 +519,9 @@ class MultiModalRAG:
 
         for i in range(len(raw_ids[0])):
             chunk_id = raw_ids[0][i] if i < len(raw_ids[0]) else ""
-            distance = (raw_distances[0][i] if raw_distances and i < len(raw_distances[0]) else 0.0)
-            meta: dict[str, Any] = (raw_metadatas[0][i] if raw_metadatas and i < len(raw_metadatas[0]) else {})
-            chunk_text = (raw_documents[0][i] if raw_documents and i < len(raw_documents[0]) else "")
+            distance = raw_distances[0][i] if raw_distances and i < len(raw_distances[0]) else 0.0
+            meta: dict[str, Any] = raw_metadatas[0][i] if raw_metadatas and i < len(raw_metadatas[0]) else {}
+            chunk_text = raw_documents[0][i] if raw_documents and i < len(raw_documents[0]) else ""
             modality = meta.get("modality", "text")
             image_path = meta.get("image_path", "")
 
@@ -566,9 +562,7 @@ class MultiModalRAG:
         # ChromaDB path
         self._ensure_chroma()
         if self._chroma_text_collection is not None:
-            text_results = self._chroma_search(
-                self._chroma_text_collection, query_embedding, top_k
-            )
+            text_results = self._chroma_search(self._chroma_text_collection, query_embedding, top_k)
         else:
             scored = self._rank_chunks(
                 query_embedding,
@@ -580,14 +574,9 @@ class MultiModalRAG:
         if include_images and self._clip_model is not None:
             clip_query_emb = self._embed_text_clip(query)
             if clip_query_emb and self._chroma_clip_collection is not None:
-                image_results = self._chroma_search(
-                    self._chroma_clip_collection, clip_query_emb, top_k
-                )
+                image_results = self._chroma_search(self._chroma_clip_collection, clip_query_emb, top_k)
             elif clip_query_emb:
-                clip_chunks = [
-                    c for c in self._chunks
-                    if c.modality == "image" and c.embedding
-                ]
+                clip_chunks = [c for c in self._chunks if c.modality == "image" and c.embedding]
                 if clip_chunks:
                     scored = self._rank_chunks(clip_query_emb, clip_chunks)
                     image_results = self._to_results(scored, top_k)
@@ -616,17 +605,11 @@ class MultiModalRAG:
 
         self._ensure_chroma()
         if self._chroma_text_collection is not None:
-            results = self._chroma_search(
-                self._chroma_text_collection, query_embedding, top_k, metadata_filter
-            )
+            results = self._chroma_search(self._chroma_text_collection, query_embedding, top_k, metadata_filter)
             if results:
                 return results
 
-        filtered = [
-            c
-            for c in self._chunks
-            if all(c.metadata.get(k) == v for k, v in metadata_filter.items())
-        ]
+        filtered = [c for c in self._chunks if all(c.metadata.get(k) == v for k, v in metadata_filter.items())]
         scored = self._rank_chunks(query_embedding, filtered)
         return self._to_results(scored, top_k)
 

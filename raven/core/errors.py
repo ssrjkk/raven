@@ -27,7 +27,7 @@ class ErrorCode(StrEnum):
 
 
 class AppError(Exception):
-    def __init__(self, code: ErrorCode, message: str = "", detail: Any = None, retryable: bool = False):
+    def __init__(self, code: ErrorCode, message: str = "", detail: object = None, retryable: bool = False):
         self.code = code
         self.message = message or code.value
         self.detail = detail
@@ -44,17 +44,17 @@ class ConfigError(AppError):
 
 
 class AuthError(AppError):
-    def __init__(self, message: str = "Access denied", detail: Any = None):
+    def __init__(self, message: str = "Access denied", detail: object = None):
         super().__init__(ErrorCode.AUTH_DENIED, message, detail)
 
 
 class LLMError(AppError):
-    def __init__(self, message: str = "LLM call failed", detail: Any = None, retryable: bool = True):
+    def __init__(self, message: str = "LLM call failed", detail: object = None, retryable: bool = True):
         super().__init__(ErrorCode.LLM_ERROR, message, detail, retryable)
 
 
 class ChannelError(AppError):
-    def __init__(self, channel: str, message: str = "", detail: Any = None):
+    def __init__(self, channel: str, message: str = "", detail: object = None):
         super().__init__(ErrorCode.CHANNEL_ERROR, message or f"Channel {channel} error", detail={"channel": channel})
 
 

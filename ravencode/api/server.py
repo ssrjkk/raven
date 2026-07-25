@@ -130,7 +130,7 @@ async def _run_agent_stream(messages: list[ChatMessage], model: str) -> AsyncIte
     conv = _openai_messages_to_conversation(messages)
     agent = ReActAgent(conversation=conv, max_steps=20)
 
-    yield f'data: {json.dumps({"id": f"chatcmpl-{uuid4().hex[:12]}", "object": "chat.completion.chunk", "created": int(time.time()), "model": model, "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}]})}\n\n'
+    yield f"data: {json.dumps({'id': f'chatcmpl-{uuid4().hex[:12]}', 'object': 'chat.completion.chunk', 'created': int(time.time()), 'model': model, 'choices': [{'index': 0, 'delta': {'role': 'assistant'}, 'finish_reason': None}]})}\n\n"
 
     try:
         result = await agent.run(messages[-1].content or "")
@@ -138,11 +138,11 @@ async def _run_agent_stream(messages: list[ChatMessage], model: str) -> AsyncIte
         logger.error("Agent stream run failed: {}", exc)
         result = "Agent execution error"
 
-    for chunk in [result[i:i + 100] for i in range(0, len(result), 100)]:
-        yield f'data: {json.dumps({"id": f"chatcmpl-{uuid4().hex[:12]}", "object": "chat.completion.chunk", "created": int(time.time()), "model": model, "choices": [{"index": 0, "delta": {"content": chunk}, "finish_reason": None}]})}\n\n'
+    for chunk in [result[i : i + 100] for i in range(0, len(result), 100)]:
+        yield f"data: {json.dumps({'id': f'chatcmpl-{uuid4().hex[:12]}', 'object': 'chat.completion.chunk', 'created': int(time.time()), 'model': model, 'choices': [{'index': 0, 'delta': {'content': chunk}, 'finish_reason': None}]})}\n\n"
         await asyncio.sleep(0)
 
-    yield f'data: {json.dumps({"id": f"chatcmpl-{uuid4().hex[:12]}", "object": "chat.completion.chunk", "created": int(time.time()), "model": model, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})}\n\n'
+    yield f"data: {json.dumps({'id': f'chatcmpl-{uuid4().hex[:12]}', 'object': 'chat.completion.chunk', 'created': int(time.time()), 'model': model, 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
     yield "data: [DONE]\n\n"
 
 
@@ -171,4 +171,5 @@ async def list_models(authorization: str = "") -> dict[str, Any]:
 
 def run_openai_server(host: str = "127.0.0.1", port: int = 8000) -> None:
     import uvicorn
+
     uvicorn.run(app, host=host, port=port, log_level="info")

@@ -26,7 +26,7 @@ def test_validate_url_blocks_localhost():
 
 
 def test_validate_url_allows_public_ip():
-    with patch("raven.core.config.get_settings") as mock_settings:
+    with patch("raven.core.security.ssrf.get_settings") as mock_settings:
         s = type("s", (), {"ghost_mode": False})()
         mock_settings.return_value = s
         result = validate_url("http://93.184.216.34/")
@@ -45,7 +45,7 @@ def test_is_private_url_detects_private_networks():
 
 
 def test_validate_url_ghost_mode_blocks_external():
-    with patch("raven.core.config.get_settings") as mock_settings:
+    with patch("raven.core.security.ssrf.get_settings") as mock_settings:
         s = type("s", (), {"ghost_mode": True})()
         mock_settings.return_value = s
         result = validate_url("http://93.184.216.34/")
@@ -72,7 +72,7 @@ class TestIsPrivateIp:
 
 @pytest.mark.asyncio
 async def test_validate_url_async_allows_public():
-    with patch("raven.core.config.get_settings") as mock_settings:
+    with patch("raven.core.security.ssrf.get_settings") as mock_settings:
         s = type("s", (), {"ghost_mode": False})()
         mock_settings.return_value = s
         result = await validate_url_async("http://93.184.216.34/")

@@ -3,7 +3,7 @@ from __future__ import annotations
 import email
 import fnmatch
 import imaplib
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,9 +14,11 @@ from raven.core.routine.models import Routine
 
 async def execute_briefing(routine: Routine, llm_provider: Any = None) -> str:
     from raven.core.llm import get_default_provider
+
     provider = llm_provider or get_default_provider()
     prompt = (
-        f"You are a personal AI assistant. Generate a concise morning briefing for {datetime.now().strftime('%A, %B %d, %Y')}.\n"
+        f"You are a personal AI assistant. Generate a concise morning briefing "
+        f"for {datetime.now(UTC).strftime('%A, %B %d, %Y')}.\n"
         f"Include: date, a motivational sentence, current time awareness, "
         f"and a suggestion for what the user might focus on today.\n"
         f"Keep it under 200 words. Use plain text."
@@ -27,7 +29,7 @@ async def execute_briefing(routine: Routine, llm_provider: Any = None) -> str:
     except Exception as exc:
         logger.error("Briefing LLM call failed: {}", exc)
         briefing = (
-            f"Morning Briefing — {datetime.now().strftime('%A, %d %B %Y')}\n"
+            f"Morning Briefing — {datetime.now(UTC).strftime('%A, %d %B %Y')}\n"
             f"Good morning! Your Raven assistant is operational.\n"
             f"All systems running. No alerts."
         )
@@ -41,6 +43,7 @@ async def check_email(routine: Routine) -> str:
     if provider == "gmail_api" and config.get("credentials_file"):
         try:
             from raven.integrations.gmail import check_gmail
+
             result = await check_gmail(config["credentials_file"], max_results=config.get("max_emails", 5))
             return str(result)
         except ImportError:
@@ -58,22 +61,23 @@ async def check_email(routine: Routine) -> str:
             unread_ids = data[0].split() if data[0] else []
             count = len(unread_ids)
             previews = []
-            for mid in unread_ids[:config.get("max_emails", 5)]:
+            for mid in unread_ids[: config.get("max_emails", 5)]:
                 status, msg_data = conn.fetch(mid, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
                 if status == "OK" and msg_data and msg_data[0]:
                     raw = msg_data[0][1] if isinstance(msg_data[0], tuple) and len(msg_data[0]) > 1 else msg_data[0]
                     msg = email.message_from_bytes(raw)
-                    previews.append({
-                        "from": msg.get("From", "unknown"),
-                        "subject": msg.get("Subject", "(no subject)"),
-                        "date": msg.get("Date", ""),
-                    })
+                    previews.append(
+                        {
+                            "from": msg.get("From", "unknown"),
+                            "subject": msg.get("Subject", "(no subject)"),
+                            "date": msg.get("Date", ""),
+                        }
+                    )
             conn.logout()
             result = f"Unread: {count} emails"
             if previews:
                 result += "\n" + "\n".join(
-                    f"  • From: {e['from'][:60]} — Subject: {e['subject'][:80]}"
-                    for e in previews
+                    f"  • From: {e['from'][:60]} — Subject: {e['subject'][:80]}" for e in previews
                 )
             return result
         except ImportError:
@@ -87,18 +91,49 @@ async def check_email(routine: Routine) -> str:
 
 
 _EXTENSION_MAP: dict[str, str] = {
-    ".txt": "documents", ".md": "documents", ".rst": "documents",
-    ".pdf": "documents", ".doc": "documents", ".docx": "documents",
-    ".csv": "data", ".json": "data", ".yaml": "data", ".yml": "data", ".xml": "data",
-    ".jpg": "images", ".jpeg": "images", ".png": "images", ".gif": "images",
-    ".svg": "images", ".webp": "images",
-    ".mp3": "audio", ".wav": "audio", ".flac": "audio", ".aac": "audio",
-    ".mp4": "video", ".mkv": "video", ".avi": "video",
-    ".py": "code", ".js": "code", ".ts": "code", ".jsx": "code", ".tsx": "code",
-    ".go": "code", ".rs": "code", ".java": "code", ".c": "code", ".cpp": "code",
-    ".h": "code", ".hpp": "code",
-    ".zip": "archives", ".tar": "archives", ".gz": "archives", ".7z": "archives",
-    ".exe": "binaries", ".msi": "binaries", ".dmg": "binaries",
+    ".txt": "documents",
+    ".md": "documents",
+    ".rst": "documents",
+    ".pdf": "documents",
+    ".doc": "documents",
+    ".docx": "documents",
+    ".csv": "data",
+    ".json": "data",
+    ".yaml": "data",
+    ".yml": "data",
+    ".xml": "data",
+    ".jpg": "images",
+    ".jpeg": "images",
+    ".png": "images",
+    ".gif": "images",
+    ".svg": "images",
+    ".webp": "images",
+    ".mp3": "audio",
+    ".wav": "audio",
+    ".flac": "audio",
+    ".aac": "audio",
+    ".mp4": "video",
+    ".mkv": "video",
+    ".avi": "video",
+    ".py": "code",
+    ".js": "code",
+    ".ts": "code",
+    ".jsx": "code",
+    ".tsx": "code",
+    ".go": "code",
+    ".rs": "code",
+    ".java": "code",
+    ".c": "code",
+    ".cpp": "code",
+    ".h": "code",
+    ".hpp": "code",
+    ".zip": "archives",
+    ".tar": "archives",
+    ".gz": "archives",
+    ".7z": "archives",
+    ".exe": "binaries",
+    ".msi": "binaries",
+    ".dmg": "binaries",
 }
 
 
@@ -144,6 +179,3 @@ async def organize_files(routine: Routine) -> str:
     if errors:
         parts.append(f"({errors} errors)")
     return " ".join(parts)
-
-
-

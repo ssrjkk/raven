@@ -50,6 +50,7 @@ class DiscordChannel(BaseChannel):
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
         self._ready = False
         self._tree: app_commands.CommandTree | None = None
+        self._bg_tasks: set[asyncio.Task[None]] = set()
 
     async def start(self) -> None:
         if not HAS_DISCORD:
@@ -131,7 +132,9 @@ class DiscordChannel(BaseChannel):
             await ctx.reply(embed=embed)
 
         self._register_slash_commands()
-        asyncio.create_task(self._bot.start(self._token))
+        task = asyncio.create_task(self._bot.start(self._token))
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
 
     def _register_slash_commands(self):
         if not self._tree:
@@ -231,6 +234,46 @@ class DiscordChannel(BaseChannel):
 
     async def health_check(self) -> bool:
         return self._ready and self._bot is not None
+
+    async def ask_confirmation(self, user_id: str, action_description: str, session_id: str = "") -> bool:
+        if not self._bot or not self._ready:
+            return True
+        parts = session_id.split(":")
+        channel_id_str = parts[1] if len(parts) >= 2 else user_id
+        try:
+            channel_id = int(channel_id_str)
+            channel = self._bot.get_channel(channel_id)
+        except (ValueError, TypeError):
+            channel = None
+        if channel is None:
+            dm_id = channel_id_str.replace("dm_", "")
+            try:
+                user = await self._bot.fetch_user(int(dm_id))
+                channel = user
+            except Exception as e:
+                logger.debug("[discord] ask_confirmation fetch user failed: {}", e)
+                return True
+        if not channel:
+            return True
+        try:
+            msg = await channel.send(f"🛡️ Allow action: {action_description[:200]}?")  # type: ignore[union-attr]
+            await msg.add_reaction("✅")
+            await msg.add_reaction("❌")
+
+            def check(reaction: discord.Reaction, user: discord.User | discord.Member) -> bool:
+                return (
+                    str(reaction.emoji) in ("✅", "❌")
+                    and reaction.message.id == msg.id
+                    and str(user.id) == user_id
+                )
+
+            reaction, _ = await self._bot.wait_for("reaction_add", timeout=120, check=check)
+            return str(reaction.emoji) == "✅"
+        except TimeoutError:
+            return False
+        except Exception as e:
+            logger.warning("Discord ask_confirmation failed: {}", e)
+            return True
 
     async def on_message(self, handler: Callable[[IncomingMessage], Awaitable[None]]):
         self._handler = handler

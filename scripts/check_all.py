@@ -63,7 +63,7 @@ class CheckResult:
 
 def _run(cmd: list[str], timeout: int = 600, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[Any]:
     merged_env = {**os.environ, "LOGURU_LEVEL": "ERROR", **(env or {})}
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=merged_env)  # noqa: S603 — cmd from trusted callers
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=merged_env)
 
 
 def _strip_ansi(text: str) -> str:
@@ -121,18 +121,16 @@ def check_ruff() -> CheckResult:
 
 
 def _mypy_targets() -> list[str]:
-    result: list[str] = []
+    targets: list[str] = []
     for d in CHECK_DIRS:
         p = ROOT / d
-        if p.is_dir() and list(p.glob("*.py")):
-            py_files = sorted(str(f) for f in p.rglob("*.py") if ".venv" not in str(f) and "__pycache__" not in str(f))
-            if py_files:
-                result.extend(py_files)
-            else:
-                result.append(d)
+        if not p.exists():
+            continue
+        if d == "scripts/":
+            targets.extend(str(f) for f in sorted(p.glob("*.py")))
         else:
-            result.append(d)
-    return result
+            targets.append(str(p))
+    return targets
 
 
 def check_mypy() -> CheckResult:
@@ -155,15 +153,45 @@ def check_imports() -> CheckResult:
     modules = [
         "raven.core.config",
         "raven.core.llm",
+        "raven.core.llm.router",
         "raven.core.db",
+        "raven.core.auth.oauth",
+        "raven.core.auth.password",
+        "raven.core.auth.store",
+        "raven.core.auth.tokens",
+        "raven.core.cache.redis_client",
+        "raven.core.cache.session_store",
+        "raven.core.cache.llm_cache",
+        "raven.core.gateway.gateway",
+        "raven.core.gateway.channel_manager",
+        "raven.core.gateway.message_processor",
+        "raven.core.gateway.task_orchestrator",
+        "raven.core.security.rate_limiter",
+        "raven.core.security.policy_engine",
+        "raven.core.security.sandbox_policy",
+        "raven.core.security.ssrf",
         "raven.core.agent.agent",
         "raven.core.agent.registry",
-        "raven.core.gateway.gateway",
         "raven.core.task_engine.planner",
+        "raven.core.task_engine.runner",
+        "raven.core.task_engine.store",
+        "raven.core.task_engine.models",
         "raven.core.coder.session",
         "raven.core.coder.review",
+        "raven.core.coder.analyzer",
         "raven.core.sandbox",
         "raven.core.rag.retriever",
+        "raven.core.rag.vector_store",
+        "raven.core.rag.embeddings",
+        "raven.core.monitor.engine",
+        "raven.core.monitor.store",
+        "raven.core.channel_guardian",
+        "raven.core.context_router",
+        "raven.core.cost_management",
+        "raven.core.failover",
+        "raven.core.metrics",
+        "raven.tools.file",
+        "raven.tools.shell",
         "aios.api.bridge",
         "aios.agents.orchestrator",
         "aios.runtime.adapter",
@@ -171,6 +199,9 @@ def check_imports() -> CheckResult:
         "ravencode.api.client",
         "ravencode.agents.orchestrator",
         "ravencode.runtime.shell",
+        "ravencode.runtime.context",
+        "ravencode.runtime.tools",
+        "ravencode.integrations.github_webhook",
     ]
 
     failed: list[str] = []
@@ -269,8 +300,7 @@ def check_component(name: str) -> CheckResult:
         "-W", "ignore::RuntimeWarning",
     ]
 
-    for p in cfg["paths"]:
-        cmd.append(p)
+    cmd.extend(cfg["paths"])
     for ig in cfg.get("ignore", []):
         cmd.extend(["--ignore", ig])
     if "mark" in cfg:
@@ -397,7 +427,7 @@ def main() -> int:
 
     run_all = not (args.lint or args.tests or args.component or args.quick)
 
-    global _USE_COV  # noqa: PLW0603
+    global _USE_COV
     _USE_COV = args.cov
 
     print(f"\n{BOLD}{'=' * 62}{RESET}")

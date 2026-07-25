@@ -22,15 +22,9 @@ try:
 except ImportError:
     HAS_CPROFILE = False
 
-try:
-    import py_spy  # noqa: F401
-
-    HAS_PYSPY = True
-except ImportError:
-    HAS_PYSPY = False
-
 import importlib.util
 
+HAS_PYSPY = importlib.util.find_spec("py_spy") is not None
 _LLM_AVAILABLE = importlib.util.find_spec("raven.core.llm") is not None
 
 
@@ -131,9 +125,12 @@ class PerformanceProfiler:
                 try:
                     tmp.write(code_text)
                     tmp.close()
-                    result = subprocess.run(  # noqa: S603
+                    result = subprocess.run(
                         [sys.executable, "-m", "cProfile", "-s", "cumtime", tmp.name],
-                        capture_output=True, text=True, timeout=30,
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                        check=False,
                     )
                     if result.returncode != 0:
                         return 0.0, 0, 0, [], f"Execution error: {result.stderr.strip() or result.stdout.strip()}"
@@ -156,14 +153,16 @@ class PerformanceProfiler:
                                     ncalls = int(parts[0].split("/")[0])
                                     total = float(parts[2])
                                     percall = float(parts[3])
-                                    frames.append(ProfileFrame(
-                                        filename=parts[5] if len(parts) > 5 else "",
-                                        line=0,
-                                        function=parts[4] if len(parts) > 4 else "",
-                                        cumtime=total,
-                                        percall=percall,
-                                        ncalls=ncalls,
-                                    ))
+                                    frames.append(
+                                        ProfileFrame(
+                                            filename=parts[5] if len(parts) > 5 else "",
+                                            line=0,
+                                            function=parts[4] if len(parts) > 4 else "",
+                                            cumtime=total,
+                                            percall=percall,
+                                            ncalls=ncalls,
+                                        )
+                                    )
                     return total_time, total_calls, primitive_calls, frames, None
                 except subprocess.TimeoutExpired:
                     return 0.0, 0, 0, [], "Execution timed out"
@@ -171,7 +170,7 @@ class PerformanceProfiler:
                     return 0.0, 0, 0, [], f"Profiler error: {exc}"
                 finally:
                     with contextlib.suppress(OSError):
-                        os.unlink(tmp.name)
+                        Path(tmp.name).unlink()
 
         total_time, total_calls, primitive_calls, frames, error = await loop.run_in_executor(None, _profile)
         result = ProfileResult(
@@ -238,7 +237,7 @@ class PerformanceProfiler:
 
             return stats.total_tt, stats.total_calls, stats.prim_calls, frames, result, None  # type: ignore[attr-defined]
 
-        total_time, total_calls, primitive_calls, frames, result_val, error = await loop.run_in_executor(
+        total_time, total_calls, primitive_calls, frames, _result_val, error = await loop.run_in_executor(
             None, _profile_func
         )
         profile_result = ProfileResult(
@@ -324,7 +323,9 @@ class PerformanceProfiler:
         except TimeoutError:
             return ProcessProfileResult(pid=pid, duration=duration, output_file="", error="py-spy timed out")
         except FileNotFoundError:
-            return ProcessProfileResult(pid=pid, duration=duration, output_file="", error="py-spy not installed (pip install py-spy)")
+            return ProcessProfileResult(
+                pid=pid, duration=duration, output_file="", error="py-spy not installed (pip install py-spy)"
+            )
         except Exception as exc:
             return ProcessProfileResult(pid=pid, duration=duration, output_file="", error=str(exc))
 
@@ -460,7 +461,7 @@ class PerformanceProfiler:
         all_bottlenecks.sort(key=lambda b: b.cumulative_time, reverse=True)
         return [b for b in all_bottlenecks if b.cumulative_time >= threshold][:20]
 
-    async def clear_history(self) -> None:
+    def clear_history(self) -> None:
         self._profile_history.clear()
 
     async def suggest_llm_optimizations(self, bottlenecks: list[Bottleneck], llm_provider: Any = None) -> list[str]:
@@ -482,7 +483,8 @@ class PerformanceProfiler:
 
     def _build_llm_optimization_prompt(self, bottlenecks: list[Bottleneck]) -> str:
         parts = [
-            "You are a performance optimization expert. Analyze the following bottlenecks and provide specific, actionable optimization suggestions.",
+            "You are a performance optimization expert. Analyze the following bottlenecks and provide "
+            "specific, actionable optimization suggestions.",
             "",
             "Bottlenecks:",
         ]
@@ -491,11 +493,13 @@ class PerformanceProfiler:
                 f"  - Function: {b.function} | File: {b.filename} | "
                 f"Cumulative: {b.cumulative_time:.4f}s | Calls: {b.call_count} | Severity: {b.severity}"
             )
-        parts.extend([
-            "",
-            "For each bottleneck, suggest a specific code change or algorithmic improvement.",
-            "Return each suggestion on a new line, prefixed with '- '.",
-        ])
+        parts.extend(
+            [
+                "",
+                "For each bottleneck, suggest a specific code change or algorithmic improvement.",
+                "Return each suggestion on a new line, prefixed with '- '.",
+            ]
+        )
         return "\n".join(parts)
 
     async def auto_profile(self, code_or_func: str | Any, llm_provider: Any = None) -> ProfileResult:

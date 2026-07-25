@@ -55,18 +55,20 @@ class TUIEventEmitter(EventEmitter):
 
 def _print_welcome() -> None:
     console.print()
-    console.print(Panel.fit(
-        "[bold]Raven Code Agent[/bold]\n"
-        "Type your coding task, or use commands:\n"
-        "  /multisession  — list parallel sessions\n"
-        "  /plan          — plan-only mode (read-only)\n"
-        "  /safe          — safe mode (confirm dangerous)\n"
-        "  /fast          — fast mode (no confirm, no preview)\n"
-        "  /exit  /quit   — exit\n"
-        "  Ctrl+C — abort current request\n"
-        "  Ctrl+D — exit",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold]Raven Code Agent[/bold]\n"
+            "Type your coding task, or use commands:\n"
+            "  /multisession  — list parallel sessions\n"
+            "  /plan          — plan-only mode (read-only)\n"
+            "  /safe          — safe mode (confirm dangerous)\n"
+            "  /fast          — fast mode (no confirm, no preview)\n"
+            "  /exit  /quit   — exit\n"
+            "  Ctrl+C — abort current request\n"
+            "  Ctrl+D — exit",
+            border_style="cyan",
+        )
+    )
     console.print()
 
 
@@ -180,13 +182,7 @@ async def _run_interactive(
 
 
 def _read_input() -> str | None:
-    try:
-        line = input(f"\n{_STYLE_MUTED}raven> {_STYLE_SYSTEM}")
-        return line
-    except EOFError:
-        raise
-    except KeyboardInterrupt:
-        raise
+    return input(f"\n{_STYLE_MUTED}raven> {_STYLE_SYSTEM}")
 
 
 def _show_multisessions() -> None:

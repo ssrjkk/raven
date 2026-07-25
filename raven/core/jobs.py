@@ -59,6 +59,7 @@ class JobManager:
     def __init__(self):
         self._jobs: dict[str, Job] = {}
         self._lock = asyncio.Lock()
+
     async def submit(self, name: str, fn: Callable[..., Awaitable[Any]], *args, **kwargs) -> Job:
         job = Job(name, fn, *args, **kwargs)
         async with self._lock:

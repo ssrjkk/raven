@@ -38,10 +38,23 @@ class ToolCall:
 
 
 class LLMResponse:
-    def __init__(self, content: str = "", tool_calls: list[ToolCall] | None = None, finish_reason: str = "stop"):
+    def __init__(self, content: str = "", tool_calls: list[ToolCall] | None = None, finish_reason: str = "stop", usage: dict[str, int] | None = None):
         self.content = content
         self.tool_calls = tool_calls or []
         self.finish_reason = finish_reason
+        self.usage = usage or {}
+
+    @property
+    def prompt_tokens(self) -> int:
+        return self.usage.get("prompt_tokens", 0)
+
+    @property
+    def completion_tokens(self) -> int:
+        return self.usage.get("completion_tokens", 0)
+
+    @property
+    def total_tokens(self) -> int:
+        return self.usage.get("total_tokens", 0) or (self.prompt_tokens + self.completion_tokens)
 
 
 class LLMProvider(ABC):

@@ -18,7 +18,8 @@ STRUCTURED_OUTPUT_INSTRUCTION = "structured_output_instruction"
 def get_prompt(prompt_type: PromptType, **kwargs: str) -> str:
     prompt = _PROMPTS.get(prompt_type)
     if prompt is None:
-        raise ValueError(f"Unknown prompt type: {prompt_type}")
+        msg = f"Unknown prompt type: {prompt_type}"
+        raise ValueError(msg)
     if kwargs:
         prompt = prompt.format(**kwargs)
     return prompt
@@ -51,9 +52,7 @@ _PROMPTS: dict[str, str] = {
         "You are a debugging agent. Diagnose issues in code by examining file contents, "
         "running tests, and analyzing error messages. Use bash to run tests when needed."
     ),
-    DELEGATE: (
-        "You are a sub-agent handling a delegated task. Complete it efficiently and return the result."
-    ),
+    DELEGATE: ("You are a sub-agent handling a delegated task. Complete it efficiently and return the result."),
     PLAN_MODE_INSTRUCTION: (
         "You are in PLAN MODE. You may ONLY read, search, and explore the codebase. "
         "You MUST NOT write, edit, execute shell commands, or make any changes. "

@@ -14,12 +14,14 @@ from raven.core.models import IncomingMessage, Message
 
 try:
     import aioimaplib
+
     _AIOIMAP_AVAILABLE = True
 except ImportError:
     _AIOIMAP_AVAILABLE = False
 
 try:
     import aiosmtplib
+
     _AIOSMTP_AVAILABLE = True
 except ImportError:
     _AIOSMTP_AVAILABLE = False

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
 import { getToken, WsMessage } from "../api/client";
 
 type Handler = (msg: WsMessage) => void;
@@ -9,6 +10,7 @@ export function useWebSocket(onMessage: Handler) {
   const handlerRef = useRef(onMessage);
   handlerRef.current = onMessage;
   const reconnectAttempt = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
 
   const connect = useCallback(() => {
@@ -25,13 +27,17 @@ export function useWebSocket(onMessage: Handler) {
       if (!mountedRef.current) return;
       const delay = Math.min(1000 * Math.pow(2, reconnectAttempt.current), 30000);
       reconnectAttempt.current++;
-      setTimeout(connect, delay);
+      timerRef.current = setTimeout(connect, delay);
     };
     ws.onerror = () => ws.close();
     ws.onmessage = (e) => {
       try {
         const parsed = JSON.parse(e.data);
         if (!parsed || typeof parsed !== "object") return;
+        if (parsed.type === "agent_status") {
+          handlerRef.current(parsed as WsMessage);
+          return;
+        }
         if (typeof parsed.type !== "string" || typeof parsed.content !== "string") return;
         const msg: WsMessage = {
           type: parsed.type as WsMessage["type"],
@@ -40,7 +46,7 @@ export function useWebSocket(onMessage: Handler) {
           session_id: String(parsed.session_id ?? ""),
         };
         handlerRef.current(msg);
-      } catch (e) { console.error("WS malformed message:", e, (e as any)?.data?.slice(0,200) ?? ""); }
+      } catch (e) { console.error("WS malformed message:", e, e instanceof Error ? e.message : String(e)); }
     };
     wsRef.current = ws;
   }, []);
@@ -50,6 +56,7 @@ export function useWebSocket(onMessage: Handler) {
     connect();
     return () => {
       mountedRef.current = false;
+      if (timerRef.current) clearTimeout(timerRef.current);
       wsRef.current?.close();
     };
   }, [connect]);

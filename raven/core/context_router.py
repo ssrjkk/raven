@@ -12,34 +12,38 @@ class TaskType(StrEnum):
 
 
 class ContextRouter:
-    CODING_PATTERNS: list[re.Pattern[str]] = [
-        re.compile(r"\b(write|create|implement|refactor|fix|debug|test|lint|type.?check|compile|function|class|method|file)\b", re.IGNORECASE),
-        re.compile(r"(add|change|update|remove|delete)\s+(a\s+)?(function|class|method|file|test)", re.IGNORECASE),
-        re.compile(r"pull.?(request|req)|pr\s|merge|commit|push|branch", re.IGNORECASE),
-        re.compile(r"install|pip|npm|go\s+get|cargo|nuget", re.IGNORECASE),
-        re.compile(r"read|edit|patch|diff|undo|redo", re.IGNORECASE),
-        re.compile(r"performance|profiling|memory.?leak|optimize|bottleneck", re.IGNORECASE),
-    ]
-
-    AUTOMATION_PATTERNS: list[re.Pattern[str]] = [
-        re.compile(r"\bschedule\b|cron|every\s+\d+\s+(hour|minute|day|week)", re.IGNORECASE),
-        re.compile(r"send\s+(a\s+)?(message|notification|alert|email)", re.IGNORECASE),
-        re.compile(r"monitor|watch|alert|notif(y|ication)|webhook|callback", re.IGNORECASE),
-        re.compile(r"deploy|release|publish|rollback|ci/cd", re.IGNORECASE),
-        re.compile(r"workflow|pipeline|dag|trigger|event.?driven", re.IGNORECASE),
-        re.compile(r"backup|sync|migrate|import|export|transfer", re.IGNORECASE),
-    ]
-
-    HYBRID_PATTERNS: list[re.Pattern[str]] = [
-        re.compile(r"(write|create)\s+.*(and|then)\s+(run|execute|schedule|deploy)", re.IGNORECASE),
-        re.compile(r"script\s+.*(cron|schedule|daemon|service)", re.IGNORECASE),
-        re.compile(r"(test|build|compile)\s+.*(deploy|release|publish)", re.IGNORECASE),
-        re.compile(r"(fix|patch|update)\s+.*(deploy|rollout)", re.IGNORECASE),
-        re.compile(r"(write|create).+(monitor|watch|alert|notif)", re.IGNORECASE),
-    ]
-
     _CONFIDENCE_THRESHOLD = 0.4
     _QUERY_CONFIDENCE = 0.3
+
+    def __init__(self) -> None:
+        self.CODING_PATTERNS: list[re.Pattern[str]] = [
+            re.compile(
+                r"\b(write|create|implement|refactor|fix|debug|test|lint|type.?check|compile|function|class|method|file)\b",
+                re.IGNORECASE,
+            ),
+            re.compile(r"(add|change|update|remove|delete)\s+(a\s+)?(function|class|method|file|test)", re.IGNORECASE),
+            re.compile(r"pull.?(request|req)|pr\s|merge|commit|push|branch", re.IGNORECASE),
+            re.compile(r"install|pip|npm|go\s+get|cargo|nuget", re.IGNORECASE),
+            re.compile(r"read|edit|patch|diff|undo|redo", re.IGNORECASE),
+            re.compile(r"performance|profiling|memory.?leak|optimize|bottleneck", re.IGNORECASE),
+        ]
+
+        self.AUTOMATION_PATTERNS: list[re.Pattern[str]] = [
+            re.compile(r"\bschedule\b|cron|every\s+\d+\s+(hour|minute|day|week)", re.IGNORECASE),
+            re.compile(r"send\s+(a\s+)?(message|notification|alert|email)", re.IGNORECASE),
+            re.compile(r"monitor|watch|alert|notif(y|ication)|webhook|callback", re.IGNORECASE),
+            re.compile(r"deploy|release|publish|rollback|ci/cd", re.IGNORECASE),
+            re.compile(r"workflow|pipeline|dag|trigger|event.?driven", re.IGNORECASE),
+            re.compile(r"backup|sync|migrate|import|export|transfer", re.IGNORECASE),
+        ]
+
+        self.HYBRID_PATTERNS: list[re.Pattern[str]] = [
+            re.compile(r"(write|create)\s+.*(and|then)\s+(run|execute|schedule|deploy)", re.IGNORECASE),
+            re.compile(r"script\s+.*(cron|schedule|daemon|service)", re.IGNORECASE),
+            re.compile(r"(test|build|compile)\s+.*(deploy|release|publish)", re.IGNORECASE),
+            re.compile(r"(fix|patch|update)\s+.*(deploy|rollout)", re.IGNORECASE),
+            re.compile(r"(write|create).+(monitor|watch|alert|notif)", re.IGNORECASE),
+        ]
 
     def classify(self, message: str) -> TaskType:
         coding_score = sum(1 for p in self.CODING_PATTERNS if p.search(message))

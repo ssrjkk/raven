@@ -132,9 +132,7 @@ def suggest_edit(code: str, goal: str) -> str:
     return (
         f"## Suggested Edit\n\n"
         f"**Goal:** {goal}\n\n"
-        f"**Code Analysis:**\n"
-        + "\n".join(hints)
-        + f"\n\n**Current code:**\n```\n{code[:1500]}\n```\n"
+        f"**Code Analysis:**\n" + "\n".join(hints) + f"\n\n**Current code:**\n```\n{code[:1500]}\n```\n"
     )
 
 

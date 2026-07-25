@@ -113,27 +113,31 @@ class _ImportTracker(ast.NodeVisitor):
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
             origin, src = self._resolve_origin(alias.name)
-            self.imports.append(ResolvedImport(
-                module=alias.name,
-                name=alias.name,
-                alias=alias.asname,
-                origin=origin,
-                source_path=src,
-                line=node.lineno,
-            ))
+            self.imports.append(
+                ResolvedImport(
+                    module=alias.name,
+                    name=alias.name,
+                    alias=alias.asname,
+                    origin=origin,
+                    source_path=src,
+                    line=node.lineno,
+                )
+            )
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         module = node.module or ""
         for alias in node.names:
             origin, src = self._resolve_origin(module)
-            self.imports.append(ResolvedImport(
-                module=module,
-                name=alias.name,
-                alias=alias.asname,
-                origin=origin,
-                source_path=src,
-                line=node.lineno,
-            ))
+            self.imports.append(
+                ResolvedImport(
+                    module=module,
+                    name=alias.name,
+                    alias=alias.asname,
+                    origin=origin,
+                    source_path=src,
+                    line=node.lineno,
+                )
+            )
 
 
 class _CallCollector(ast.NodeVisitor):
@@ -142,19 +146,23 @@ class _CallCollector(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:
         if isinstance(node.func, ast.Name):
-            self.calls.append(CalledFunction(
-                name=node.func.id,
-                line=node.lineno,
-                column=node.col_offset,
-                is_builtin=node.func.id in _BUILTIN_NAMES,
-            ))
+            self.calls.append(
+                CalledFunction(
+                    name=node.func.id,
+                    line=node.lineno,
+                    column=node.col_offset,
+                    is_builtin=node.func.id in _BUILTIN_NAMES,
+                )
+            )
         elif isinstance(node.func, ast.Attribute):
             name = self._format_attr(node.func)
-            self.calls.append(CalledFunction(
-                name=name,
-                line=node.lineno,
-                column=node.col_offset,
-            ))
+            self.calls.append(
+                CalledFunction(
+                    name=name,
+                    line=node.lineno,
+                    column=node.col_offset,
+                )
+            )
         self.generic_visit(node)
 
     def _format_attr(self, node: ast.Attribute) -> str:
@@ -260,21 +268,25 @@ class _DefCollector(ast.NodeVisitor):
         for target in node.targets:
             if isinstance(target, ast.Name):
                 if target.id.isupper():
-                    self.symbols.append(SymbolDef(
-                        name=target.id,
-                        kind="constant",
-                        line=target.lineno,
-                        column=target.col_offset,
-                        end_line=node.end_lineno or target.lineno,
-                    ))
+                    self.symbols.append(
+                        SymbolDef(
+                            name=target.id,
+                            kind="constant",
+                            line=target.lineno,
+                            column=target.col_offset,
+                            end_line=node.end_lineno or target.lineno,
+                        )
+                    )
                 else:
-                    self.symbols.append(SymbolDef(
-                        name=target.id,
-                        kind="variable",
-                        line=target.lineno,
-                        column=target.col_offset,
-                        end_line=node.end_lineno or target.lineno,
-                    ))
+                    self.symbols.append(
+                        SymbolDef(
+                            name=target.id,
+                            kind="variable",
+                            line=target.lineno,
+                            column=target.col_offset,
+                            end_line=node.end_lineno or target.lineno,
+                        )
+                    )
 
 
 class CodeAnalyzer:
@@ -345,7 +357,9 @@ class CodeAnalyzer:
             tree = ast.parse(source, filename=str(path))
         except SyntaxError as e:
             return AnalysisResult(
-                file_path=path, language="Python", total_lines=len(lines),
+                file_path=path,
+                language="Python",
+                total_lines=len(lines),
                 summary=f"Syntax error: {e}",
             )
         import_tracker = _ImportTracker(self.root, path)
@@ -398,21 +412,48 @@ class CodeAnalyzer:
         except Exception as e:
             return AnalysisResult(file_path=path, language="", total_lines=0, summary=f"Read error: {e}")
         lines = source.splitlines()
-        ext_map = {".js": "JavaScript", ".ts": "TypeScript", ".go": "Go", ".rs": "Rust",
-                   ".java": "Java", ".c": "C", ".cpp": "C++", ".h": "C", ".hpp": "C++",
-                   ".cs": "C#", ".rb": "Ruby", ".php": "PHP", ".swift": "Swift",
-                   ".kt": "Kotlin", ".scala": "Scala", ".lua": "Lua", ".r": "R",
-                   ".sql": "SQL", ".md": "Markdown", ".json": "JSON", ".yaml": "YAML",
-                   ".yml": "YAML", ".xml": "XML", ".html": "HTML", ".css": "CSS",
-                   ".sh": "Shell", ".bat": "Batch", ".ps1": "PowerShell", ".py": "Python"}
+        ext_map = {
+            ".js": "JavaScript",
+            ".ts": "TypeScript",
+            ".go": "Go",
+            ".rs": "Rust",
+            ".java": "Java",
+            ".c": "C",
+            ".cpp": "C++",
+            ".h": "C",
+            ".hpp": "C++",
+            ".cs": "C#",
+            ".rb": "Ruby",
+            ".php": "PHP",
+            ".swift": "Swift",
+            ".kt": "Kotlin",
+            ".scala": "Scala",
+            ".lua": "Lua",
+            ".r": "R",
+            ".sql": "SQL",
+            ".md": "Markdown",
+            ".json": "JSON",
+            ".yaml": "YAML",
+            ".yml": "YAML",
+            ".xml": "XML",
+            ".html": "HTML",
+            ".css": "CSS",
+            ".sh": "Shell",
+            ".bat": "Batch",
+            ".ps1": "PowerShell",
+            ".py": "Python",
+        }
         lang = ext_map.get(path.suffix, "Unknown")
         return AnalysisResult(
-            file_path=path, language=lang, total_lines=len(lines),
+            file_path=path,
+            language=lang,
+            total_lines=len(lines),
             summary=f"File: {path.name}\nLanguage: {lang}\nLines: {len(lines)}",
         )
 
-    def _annotate_lines(self, lines: list[str], imports: list[ResolvedImport],
-                        symbols: list[SymbolDef]) -> list[AnnotatedLine]:
+    def _annotate_lines(
+        self, lines: list[str], imports: list[ResolvedImport], symbols: list[SymbolDef]
+    ) -> list[AnnotatedLine]:
         import_lines: dict[int, ResolvedImport] = {}
         for imp in imports:
             import_lines[imp.line] = imp
@@ -447,8 +488,13 @@ class CodeAnalyzer:
             if i in def_lines:
                 sym = def_lines[i]
                 al.is_definition = True
-                kind_labels = {"function": "def", "method": "def", "class": "class",
-                               "variable": "var", "constant": "const"}
+                kind_labels = {
+                    "function": "def",
+                    "method": "def",
+                    "class": "class",
+                    "variable": "var",
+                    "constant": "const",
+                }
                 label = kind_labels.get(sym.kind, sym.kind)
                 ctx = f" in {sym.parent}" if sym.parent else ""
                 al.explanation = f"definition: {label} `{sym.name}`{ctx}"
@@ -504,8 +550,9 @@ class CodeAnalyzer:
         total_lines = sum(r.total_lines for r in results.values())
         total_imports = sum(len(r.imports) for r in results.values())
         total_calls = sum(len(r.call_graph) for r in results.values())
-        output.append(f"Analysis of {total_files} files ({total_lines} lines, "
-                      f"{total_imports} imports, {total_calls} calls)")
+        output.append(
+            f"Analysis of {total_files} files ({total_lines} lines, {total_imports} imports, {total_calls} calls)"
+        )
         output.append("")
         by_lang: dict[str, int] = {}
         for r in results.values():

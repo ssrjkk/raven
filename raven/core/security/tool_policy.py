@@ -65,15 +65,16 @@ class ToolPolicyEvaluator:
         self._workspace_root = _resolve_safe(workspace_root) if workspace_root else None
 
         self._profiles: dict[str, set[str]] = {
-            "messaging": {"file.read", "notify.send", "memory.search", "web.search"},
-            "minimal": {"notify.send"},
+            "messaging": {"files.read", "api.http_get", "memory.recall", "browser.search"},
+            "minimal": {"api.http_get"},
             "full": set(),
         }
 
     def set_workspace_root(self, path: str | Path):
         root = _resolve_safe(str(path)) if isinstance(path, Path) else _resolve_safe(path)
         if root is None:
-            raise ValueError(f"Invalid workspace root: {path}")
+            msg = f"Invalid workspace root: {path}"
+            raise ValueError(msg)
         self._workspace_root = root
 
     def _profile_tools(self) -> set[str]:
@@ -84,8 +85,10 @@ class ToolPolicyEvaluator:
             from raven.core.security.policy_engine import policy_engine
 
             rs = policy_engine.get_ruleset("tools")
-            if rs is not None and len(rs.rules) > 0 and not policy_engine.check("tools", {"tool": tool_name, "profile": self.profile, "action": "call"}):
-                return False
+            if rs is not None and len(rs.rules) > 0:
+                effect, _ = policy_engine.evaluate("tools", {"tool": tool_name, "profile": self.profile, "action": "call"})
+                if effect == "deny":
+                    return False
         except ImportError as e:
             logger.debug("policy_engine not available: {}", e)
 
@@ -121,10 +124,11 @@ class ToolPolicyEvaluator:
         try:
             from raven.core.security.policy_engine import policy_engine
 
-            allowed = policy_engine.check(
-                "exec", {"tool": tool_name, "args": args, "exec_security": self.exec_security.value}
-            )
-            if not allowed:
+            rs = policy_engine.get_ruleset("exec")
+            if rs is not None and len(rs.rules) > 0 and not policy_engine.check(
+                "exec",
+                {"tool": tool_name, "args": args, "exec_security": self.exec_security.value},
+            ):
                 return False, "exec denied by policy engine"
         except ImportError as e:
             logger.debug("policy_engine not available: {}", e)
@@ -133,7 +137,7 @@ class ToolPolicyEvaluator:
             return False, "exec denied by policy (security=deny)"
 
         if self.workspace_only:
-            for _k, v in args.items():
+            for v in args.values():
                 if isinstance(v, str):
                     resolved = _resolve_safe(v, self._workspace_root)
                     if resolved is None:

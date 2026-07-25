@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from enum import Enum, auto
 from typing import Any
 
 from loguru import logger
 
+from raven.core.budget import TokenBudgetTracker, estimate_tokens
+from raven.core.config import settings
 from raven.core.db import Database
 from raven.core.llm import LLMRouter, ToolCall
 from raven.core.models import Message, PluginTool, Session
@@ -188,9 +190,11 @@ class Agent:
         self,
         user_message: str,
         recall_context: str | None = None,
+        confirm_fn: Callable[[str, dict[str, Any]], Awaitable[bool]] | None = None,
     ) -> AsyncIterator[str]:
         state = AgentState.INIT
         messages: list[dict[str, Any]] = [{"role": "system", "content": await self._build_system_prompt()}]
+        self._confirm_fn = confirm_fn
         tool_used = False
         final_content = ""
         consecutive_errors = 0
@@ -209,6 +213,9 @@ class Agent:
         if not self.config.stateless and len(messages) > self.config.max_history + 3:
             messages = await self._compress(messages)
 
+        _budget_tracker = TokenBudgetTracker()
+        _budget_limit = settings.token_budget_per_hour
+
         schemas = self._tool_schemas() if self.tools else None
         state = AgentState.THINK
 
@@ -223,31 +230,50 @@ class Agent:
             try:
                 if self._detect_loop(messages):
                     logger.warning("Agent: detected tool call loop at round {}", round_i)
-                    messages.append({
-                        "role": "system",
-                        "content": "You are repeating the same tool call. Try a different approach or respond directly."
-                    })
+                    messages.append(
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are repeating the same tool call. Try a different approach or respond directly."
+                            ),
+                        }
+                    )
+
+                input_tokens = estimate_tokens("".join(m.get("content", "") or "" for m in messages))
+                if not await _budget_tracker.check_budget(self.session.user_id, input_tokens, 0, _budget_limit, 3600):
+                    logger.warning("Token budget exceeded for user {}", self.session.user_id)
+                    yield "Your token budget has been exceeded for this hour. Please try again later."
+                    state = AgentState.DONE
+                    break
 
                 resp = await self.llm.complete(messages, tools=schemas)
                 consecutive_errors = 0
                 delay = 0.5
                 content = resp.content or ""
 
+                actual_input = resp.prompt_tokens or input_tokens
+                actual_output = resp.completion_tokens or estimate_tokens(content)
+                await _budget_tracker.record_usage(self.session.user_id, actual_input + actual_output, _budget_limit, 3600)
+
                 if resp.tool_calls:
                     state = AgentState.TOOL_CALL
                     tool_used = True
-                    messages.append({
-                        "role": "assistant",
-                        "content": content,
-                        "tool_calls": [tc.to_dict() for tc in resp.tool_calls],
-                    })
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "content": content,
+                            "tool_calls": [tc.to_dict() for tc in resp.tool_calls],
+                        }
+                    )
                     for tc in resp.tool_calls:
                         tool_result = await self._execute_tool(tc)
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tc.id,
-                            "content": json.dumps(tool_result),
-                        })
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc.id,
+                                "content": json.dumps(tool_result),
+                            }
+                        )
                         yield f"[{tc.name} → ok]\n"
                     state = AgentState.THINK
                     continue
@@ -298,7 +324,16 @@ class Agent:
         if not allowed:
             logger.warning("Tool '{}' denied by policy", tc.name)
             return {"error": f"Tool '{tc.name}' is denied by security policy"}
-        path_arg = (tc.arguments or {}).get("path") or (tc.arguments or {}).get("file") or (tc.arguments or {}).get("directory")
+        if tool.confirm and self._confirm_fn:
+            confirmed = await self._confirm_fn(tc.name, tc.arguments or {})
+            if not confirmed:
+                logger.info("Tool '{}' cancelled by user", tc.name)
+                return {"error": f"Tool '{tc.name}' cancelled — user denied confirmation"}
+        path_arg = (
+            (tc.arguments or {}).get("path")
+            or (tc.arguments or {}).get("file")
+            or (tc.arguments or {}).get("directory")
+        )
         if path_arg and not self._tool_policy.check_path(str(path_arg)):
             return {"error": "Path outside workspace root — denied by security policy"}
         try:

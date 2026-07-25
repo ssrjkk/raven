@@ -37,6 +37,7 @@ async def _compute_diff(img_a: bytes, img_b: bytes) -> float:
         from io import BytesIO
 
         from PIL import Image
+
         a = Image.open(BytesIO(img_a)).convert("RGB")
         b = Image.open(BytesIO(img_b)).convert("RGB")
         if a.size != b.size:

@@ -4,7 +4,6 @@ import ast
 import re
 import subprocess
 import sys
-import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,6 +13,7 @@ from loguru import logger
 
 try:
     from raven.core.llm import LLMProvider
+
     _LLM_AVAILABLE = True
 except ImportError:
     _LLM_AVAILABLE = False
@@ -144,7 +144,7 @@ class TestGenerator:
             logger.warning("LLM test generation failed: {}", exc)
             return ""
 
-    async def extract_types(self, file_path: str) -> list[FunctionInfo | ClassInfo]:
+    def extract_types(self, file_path: str) -> list[FunctionInfo | ClassInfo]:
         full_path = self._resolve_path(file_path)
         try:
             tree = ast.parse(full_path.read_text(encoding="utf-8"))
@@ -183,7 +183,12 @@ class TestGenerator:
         if isinstance(node.slice, ast.Constant):
             return f"{value}[{node.slice.value}]"  # type: ignore[str-bytes-safe]
         if isinstance(node.slice, ast.Tuple):
-            elts = [self._subscript_to_str(e) if isinstance(e, ast.Subscript) else (e.id if isinstance(e, ast.Name) else str(getattr(e, 'value', ''))) for e in node.slice.elts]
+            elts = [
+                self._subscript_to_str(e)
+                if isinstance(e, ast.Subscript)
+                else (e.id if isinstance(e, ast.Name) else str(getattr(e, "value", "")))
+                for e in node.slice.elts
+            ]
             return f"{value}[{', '.join(elts)}]"
         return value
 
@@ -225,14 +230,16 @@ class TestGenerator:
         for item in node.body:
             if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 item.parent = node  # type: ignore[union-attr]
-                methods.append(FunctionInfo(
-                    name=item.name,
-                    args=[TypeInfo(name=a.arg, type_hint=self._get_type_hint(a)) for a in item.args.args],
-                    return_type=self._get_return_type(item),
-                    docstring=ast.get_docstring(item) or "",
-                    is_async=isinstance(item, ast.AsyncFunctionDef),
-                    is_method=True,
-                ))
+                methods.append(
+                    FunctionInfo(
+                        name=item.name,
+                        args=[TypeInfo(name=a.arg, type_hint=self._get_type_hint(a)) for a in item.args.args],
+                        return_type=self._get_return_type(item),
+                        docstring=ast.get_docstring(item) or "",
+                        is_async=isinstance(item, ast.AsyncFunctionDef),
+                        is_method=True,
+                    )
+                )
         return ClassInfo(name=node.name, methods=methods, docstring=ast.get_docstring(node) or "")
 
     def generate_test_for_function(self, func: FunctionInfo, module_path: str) -> str:
@@ -244,8 +251,7 @@ class TestGenerator:
             f"from {module_name} import {func.name}",
             "",
         ]
-        for imp in self._get_type_imports(func):
-            lines.append(imp)
+        lines.extend(self._get_type_imports(func))
         lines.append("")
         lines.append(f"class Test{func.name.capitalize()}:")
 
@@ -287,7 +293,7 @@ class TestGenerator:
         if not full_path.exists():
             return f"# File not found: {file_path}"
 
-        types = await self.extract_types(file_path)
+        types = self.extract_types(file_path)
         output: list[str] = [f"# Auto-generated tests for {file_path}", ""]
 
         for t in types:
@@ -309,10 +315,7 @@ class TestGenerator:
         for method in cls.methods:
             if method.name.startswith("_"):
                 continue
-            args = [
-                self._generate_test_value(a.type_hint)
-                for a in method.args if a.name != "self"
-            ]
+            args = [self._generate_test_value(a.type_hint) for a in method.args if a.name != "self"]
             args_str = ", ".join(args) if args else ""
             lines.append(f"    def test_{method.name}_basic(self):")
             lines.append(f"        instance = {cls.name}()")
@@ -380,7 +383,7 @@ class TestGenerator:
                 result.append(ec)
         return result
 
-    async def optimize_for_coverage(self, source_path: str, test_path: str) -> TestResult:
+    def optimize_for_coverage(self, source_path: str, test_path: str) -> TestResult:
         src = self._resolve_path(source_path)
         test_file = self._resolve_path(test_path)
 
@@ -389,9 +392,12 @@ class TestGenerator:
             return TestResult(passed=False, coverage=0.0, test_count=0)
 
         try:
-            result = subprocess.run(  # noqa: S603
+            result = subprocess.run(
                 [
-                    sys.executable, "-m", "pytest", str(test_file),
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    str(test_file),
                     f"--cov={src.parent}",
                     "--cov-report=xml",
                     "--cov-branch",
@@ -400,6 +406,7 @@ class TestGenerator:
                 capture_output=True,
                 text=True,
                 timeout=120,
+                check=False,
             )
         except subprocess.TimeoutExpired:
             logger.warning("Coverage run timed out for {}", test_file)
@@ -430,11 +437,13 @@ class TestGenerator:
     @staticmethod
     def _parse_coverage_xml(xml_path: Path) -> float:
         try:
-            tree = ET.parse(xml_path)  # noqa: S314
+            from defusedxml.ElementTree import parse as safe_parse
+
+            tree = safe_parse(xml_path)
             root = tree.getroot()
             line_rate = root.get("line-rate")
             if line_rate is not None:
                 return float(line_rate) * 100.0
-        except (ET.ParseError, FileNotFoundError):
+        except Exception:
             logger.warning("Failed to parse coverage XML: {}", xml_path)
         return 0.0

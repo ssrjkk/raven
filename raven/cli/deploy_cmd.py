@@ -106,7 +106,6 @@ volumes:
   prometheus-data:
 """
 
-
     # Substitute port in healthcheck URLs
     for key in COMPOSE_CONTENT:
         COMPOSE_CONTENT[key] = COMPOSE_CONTENT[key].replace(

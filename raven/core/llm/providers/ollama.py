@@ -11,6 +11,7 @@ class OllamaProvider(LLMProvider):
     def __init__(self, **overrides):
         self.base_url = overrides.get("base_url") or settings.ollama_base_url
         import httpx
+
         self.http = httpx.AsyncClient(
             timeout=overrides.get("timeout", 120),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=20),
@@ -58,4 +59,9 @@ class OllamaProvider(LLMProvider):
             )
             for tc in tool_calls_raw
         ]
-        return LLMResponse(content=content, tool_calls=tool_calls, finish_reason="stop")
+        usage = {
+            "prompt_tokens": data.get("prompt_eval_count", 0),
+            "completion_tokens": data.get("eval_count", 0),
+            "total_tokens": data.get("prompt_eval_count", 0) + data.get("eval_count", 0),
+        }
+        return LLMResponse(content=content, tool_calls=tool_calls, finish_reason="stop", usage=usage)

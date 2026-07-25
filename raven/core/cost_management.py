@@ -37,6 +37,7 @@ class UsageRecord:
     user_id: str
     channel: str
     session_id: str
+    duration_ms: float = 0.0
     timestamp: float = field(default_factory=time.time)
 
 
@@ -61,7 +62,16 @@ class CostManager:
         self._last_reset_day = ""
         self._last_reset_month = ""
 
-    def record_usage(self, model: str, input_tokens: int, output_tokens: int, user_id: str = "", channel: str = "", session_id: str = "") -> UsageRecord:
+    def record_usage(
+        self,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        user_id: str = "",
+        channel: str = "",
+        session_id: str = "",
+        duration_ms: float = 0.0,
+    ) -> UsageRecord:
         pricing = MODEL_PRICING.get(model, DEFAULT_PRICING)
         cost = (input_tokens / 1000) * pricing["input_per_1k"] + (output_tokens / 1000) * pricing["output_per_1k"]
         rec = UsageRecord(
@@ -73,6 +83,7 @@ class CostManager:
             user_id=user_id,
             channel=channel,
             session_id=session_id,
+            duration_ms=duration_ms,
         )
         self._records.append(rec)
         self._check_reset()
@@ -118,26 +129,50 @@ class CostManager:
         total_cost = 0.0
         total_input = 0
         total_output = 0
+        total_duration = 0.0
         for r in recent:
             total_cost += r.cost
             total_input += r.input_tokens
             total_output += r.output_tokens
+            total_duration += r.duration_ms
             if r.model not in by_model:
-                by_model[r.model] = {"cost": 0.0, "input_tokens": 0, "output_tokens": 0, "calls": 0}
+                by_model[r.model] = {"cost": 0.0, "input_tokens": 0, "output_tokens": 0, "calls": 0, "duration_ms": 0.0}
             by_model[r.model]["cost"] += r.cost
             by_model[r.model]["input_tokens"] += r.input_tokens
             by_model[r.model]["output_tokens"] += r.output_tokens
             by_model[r.model]["calls"] += 1
+            by_model[r.model]["duration_ms"] += r.duration_ms
 
         return {
             "total_cost": round(total_cost, 4),
             "total_input_tokens": total_input,
             "total_output_tokens": total_output,
             "total_calls": len(recent),
-            "by_model": {m: {k: round(v, 4) if isinstance(v, float) else v for k, v in d.items()} for m, d in by_model.items()},
+            "total_duration_ms": round(total_duration, 1),
+            "by_model": {
+                m: {k: round(v, 4) if isinstance(v, float) else v for k, v in d.items()} for m, d in by_model.items()
+            },
             "daily_cost": round(self.get_daily_cost(), 4),
             "monthly_cost": round(self.get_monthly_cost(), 4),
         }
+
+    def get_recent_usage(self, limit: int = 50) -> list[dict[str, Any]]:
+        records = sorted(self._records, key=lambda r: r.timestamp, reverse=True)[:limit]
+        return [
+            {
+                "id": r.id,
+                "model": r.model,
+                "input_tokens": r.input_tokens,
+                "output_tokens": r.output_tokens,
+                "cost": r.cost,
+                "duration_ms": r.duration_ms,
+                "user_id": r.user_id,
+                "channel": r.channel,
+                "session_id": r.session_id,
+                "timestamp": r.timestamp,
+            }
+            for r in records
+        ]
 
     def set_budget(self, name: str, daily_limit: float, monthly_limit: float) -> BudgetLimit:
         budget = BudgetLimit(

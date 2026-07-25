@@ -6,6 +6,7 @@ from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 def ab_create(name: str, description: str, variants_json: str, metric_name: str = "conversion") -> str:
     import json
+
     try:
         variants = json.loads(variants_json)
     except json.JSONDecodeError as e:
@@ -42,7 +43,7 @@ def ab_get(experiment_id: str) -> str:
         f"- Description: {exp.description}\n"
         f"- Status: {exp.status}\n"
         f"- Metric: {exp.metric_name}\n"
-        f"- Variants: {', '.join(f'{v.name} ({v.weight*100:.0f}%)' for v in exp.variants)}\n"
+        f"- Variants: {', '.join(f'{v.name} ({v.weight * 100:.0f}%)' for v in exp.variants)}\n"
         f"- Created: {exp.created_at}"
     )
 
@@ -82,7 +83,9 @@ def ab_assign(experiment_id: str, user_id: str = "") -> str:
     return variant
 
 
-def ab_record(experiment_id: str, variant: str, metric_name: str = "conversion", value: float = 1.0, user_id: str = "") -> str:
+def ab_record(
+    experiment_id: str, variant: str, metric_name: str = "conversion", value: float = 1.0, user_id: str = ""
+) -> str:
     _engine.record_event(experiment_id, variant, metric_name, value, user_id)
     return f"Event recorded: {experiment_id}/{variant}/{metric_name}={value}"
 
@@ -106,109 +109,137 @@ def ab_results(experiment_id: str) -> str:
 
 
 def register_ab_testing_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="ab_create",
-        description="Create an A/B test experiment with variants (JSON array)",
-        parameters={
-            "name": {"type": "string", "description": "Experiment name", "required": True},
-            "description": {"type": "string", "description": "Experiment description", "required": True},
-            "variants_json": {"type": "string", "description": "JSON array of variants [{\"name\":\"A\",\"weight\":0.5,\"config\":{}},...]", "required": True},
-            "metric_name": {"type": "string", "description": "Primary metric name (default conversion)", "required": False},
-        },
-        handler=ab_create,
-        category="ab_testing",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="ab_list",
-        description="List all A/B experiments",
-        parameters={},
-        handler=ab_list,
-        category="ab_testing",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="ab_get",
-        description="Get experiment details",
-        parameters={
-            "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
-        },
-        handler=ab_get,
-        category="ab_testing",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="ab_start",
-        description="Start an experiment",
-        parameters={
-            "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
-        },
-        handler=ab_start,
-        category="ab_testing",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="ab_pause",
-        description="Pause an experiment",
-        parameters={
-            "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
-        },
-        handler=ab_pause,
-        category="ab_testing",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="ab_complete",
-        description="Complete an experiment",
-        parameters={
-            "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
-        },
-        handler=ab_complete,
-        category="ab_testing",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="ab_delete",
-        description="Delete an experiment",
-        parameters={
-            "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
-        },
-        handler=ab_delete,
-        category="ab_testing",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="ab_assign",
-        description="Assign a user to a variant for an experiment",
-        parameters={
-            "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
-            "user_id": {"type": "string", "description": "User ID (optional, deterministic)", "required": False},
-        },
-        handler=ab_assign,
-        category="ab_testing",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="ab_record",
-        description="Record an event/metric for an experiment variant",
-        parameters={
-            "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
-            "variant": {"type": "string", "description": "Variant name", "required": True},
-            "metric_name": {"type": "string", "description": "Metric name (default conversion)", "required": False},
-            "value": {"type": "number", "description": "Metric value (default 1.0)", "required": False},
-            "user_id": {"type": "string", "description": "User ID (optional)", "required": False},
-        },
-        handler=ab_record,
-        category="ab_testing",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="ab_results",
-        description="Get experiment results with statistical significance",
-        parameters={
-            "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
-        },
-        handler=ab_results,
-        category="ab_testing",
-        timeout=10,
-    ))
+    registry.register(
+        ToolSpec(
+            name="ab_create",
+            description="Create an A/B test experiment with variants (JSON array)",
+            parameters={
+                "name": {"type": "string", "description": "Experiment name", "required": True},
+                "description": {"type": "string", "description": "Experiment description", "required": True},
+                "variants_json": {
+                    "type": "string",
+                    "description": 'JSON array of variants [{"name":"A","weight":0.5,"config":{}},...]',
+                    "required": True,
+                },
+                "metric_name": {
+                    "type": "string",
+                    "description": "Primary metric name (default conversion)",
+                    "required": False,
+                },
+            },
+            handler=ab_create,
+            category="ab_testing",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="ab_list",
+            description="List all A/B experiments",
+            parameters={},
+            handler=ab_list,
+            category="ab_testing",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="ab_get",
+            description="Get experiment details",
+            parameters={
+                "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
+            },
+            handler=ab_get,
+            category="ab_testing",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="ab_start",
+            description="Start an experiment",
+            parameters={
+                "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
+            },
+            handler=ab_start,
+            category="ab_testing",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="ab_pause",
+            description="Pause an experiment",
+            parameters={
+                "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
+            },
+            handler=ab_pause,
+            category="ab_testing",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="ab_complete",
+            description="Complete an experiment",
+            parameters={
+                "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
+            },
+            handler=ab_complete,
+            category="ab_testing",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="ab_delete",
+            description="Delete an experiment",
+            parameters={
+                "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
+            },
+            handler=ab_delete,
+            category="ab_testing",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="ab_assign",
+            description="Assign a user to a variant for an experiment",
+            parameters={
+                "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
+                "user_id": {"type": "string", "description": "User ID (optional, deterministic)", "required": False},
+            },
+            handler=ab_assign,
+            category="ab_testing",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="ab_record",
+            description="Record an event/metric for an experiment variant",
+            parameters={
+                "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
+                "variant": {"type": "string", "description": "Variant name", "required": True},
+                "metric_name": {"type": "string", "description": "Metric name (default conversion)", "required": False},
+                "value": {"type": "number", "description": "Metric value (default 1.0)", "required": False},
+                "user_id": {"type": "string", "description": "User ID (optional)", "required": False},
+            },
+            handler=ab_record,
+            category="ab_testing",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="ab_results",
+            description="Get experiment results with statistical significance",
+            parameters={
+                "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
+            },
+            handler=ab_results,
+            category="ab_testing",
+            timeout=10,
+        )
+    )

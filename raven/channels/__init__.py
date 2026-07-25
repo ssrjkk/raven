@@ -16,8 +16,8 @@ from raven.channels.whatsapp.channel import WhatsAppChannel
 
 __all__ = [
     "BaseChannel",
-    "EnterpriseChannel",
     "DiscordChannel",
+    "EnterpriseChannel",
     "FeishuChannel",
     "GitlabChannel",
     "GoogleChatChannel",

@@ -1,12 +1,14 @@
+import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
+
 import { MessageData } from "../api/client";
 
 interface MessageBubbleProps {
   message: MessageData;
 }
 
-export default function MessageBubble({ message }: MessageBubbleProps) {
+const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const isSystem = message.role === "system";
   const isTool = message.role === "tool";
@@ -54,7 +56,9 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
       </div>
     </div>
   );
-}
+});
+
+export default MessageBubble;
 
 function MarkdownContent({ content }: { content: string }) {
   return <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{content}</ReactMarkdown>;

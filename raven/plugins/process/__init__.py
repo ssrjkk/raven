@@ -1,1 +1,6 @@
-from raven.plugins.process.plugin import *  # noqa: F401, F403
+from raven.plugins.process.plugin import (
+    kill,
+    list_processes,
+    run,
+    run_python,
+)

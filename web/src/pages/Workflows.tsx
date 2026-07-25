@@ -1,10 +1,11 @@
-import { useEffect, useState, useRef } from "react";
-import { request } from "../api/client";
+import { useEffect, useRef,useState } from "react";
+
+import { api } from "../api/client";
 
 interface TemplateStep {
   description: string;
   tool: string | null;
-  params: Record<string, any>;
+  params: Record<string, string>;
 }
 
 interface WorkflowTemplate {
@@ -16,7 +17,7 @@ interface WorkflowTemplate {
   icon: string;
   default_schedule: string | null;
   default_interval: number | null;
-  config_schema: Record<string, any>;
+  config_schema: { properties?: Record<string, { title?: string; type?: string; default?: string }> };
   predefined_steps: TemplateStep[];
   steps_goal: string | null;
   system_prompt: string | null;
@@ -35,7 +36,7 @@ export default function Workflows() {
   const [categories, setCategories] = useState<string[]>([]);
   const [activeCat, setActiveCat] = useState("all");
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [configs, setConfigs] = useState<Record<string, any>>({});
+  const [configs, setConfigs] = useState<Record<string, Record<string, string>>>({});
   const [msg, setMsg] = useState("");
   const [showBuilder, setShowBuilder] = useState<string | null>(null);
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
@@ -45,26 +46,23 @@ export default function Workflows() {
   const dragOverIdx = useRef<number | null>(null);
 
   useEffect(() => {
-    request<WorkflowTemplate[]>("/api/admin/workflows").then(setTemplates);
-    request<{ categories: string[] }>("/api/admin/workflow-categories").then((d) => setCategories(d.categories));
-    request<{ runs: WorkflowRun[] } | WorkflowRun[]>("/api/admin/workflow-runs")
-      .then((d) => setRuns(Array.isArray(d) ? d : d.runs ?? []))
+    api.workflowsList().then((r) => setTemplates(r as WorkflowTemplate[])).catch(e => console.error("templates:", e));
+    api.workflowCategories().then((d) => setCategories(d.categories)).catch(e => console.error("categories:", e));
+    api.workflowRuns()
+      .then((d) => setRuns(d.runs ?? []))
       .catch(() => setRuns([]));
   }, []);
 
   const filtered = activeCat === "all" ? templates : templates.filter((t) => t.category === activeCat);
 
-  function updateConfig(tid: string, key: string, value: any) {
+  function updateConfig(tid: string, key: string, value: string) {
     setConfigs((prev) => ({ ...prev, [tid]: { ...(prev[tid] || {}), [key]: value } }));
   }
 
   async function runNow(t: WorkflowTemplate) {
     setMsg(`Running ${t.name}...`);
     try {
-      const r = await request<{ ok: boolean; task_id: string }>(`/api/admin/workflows/${t.id}/instantiate`, {
-        method: "POST",
-        body: JSON.stringify({ config: configs[t.id] || {} }),
-      });
+      const r = await api.workflowInstantiate(t.id, configs[t.id] || {});
       setMsg(r.ok ? `Task created: ${r.task_id}` : "Failed");
     } catch (e) {
       setMsg(`Error: ${e}`);
@@ -74,17 +72,14 @@ export default function Workflows() {
   async function schedule(t: WorkflowTemplate) {
     setMsg(`Scheduling ${t.name}...`);
     try {
-      const r = await request<{ ok: boolean; routine_id: string }>(`/api/admin/workflows/${t.id}/schedule`, {
-        method: "POST",
-        body: JSON.stringify({ config: configs[t.id] || {} }),
-      });
+      const r = await api.workflowSchedule(t.id, configs[t.id] || {});
       setMsg(r.ok ? `Scheduled: ${r.routine_id}` : "Failed");
     } catch (e) {
       setMsg(`Error: ${e}`);
     }
   }
 
-  // ── Drag & Drop step reorder ──────────────────────────
+  // РІвЂќР‚РІвЂќР‚ Drag & Drop step reorder РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
   function openBuilder(t: WorkflowTemplate) {
     setShowBuilder(t.id);
     setEditSteps(t.predefined_steps ? t.predefined_steps.map((s) => ({ ...s, params: { ...s.params } })) : []);
@@ -103,7 +98,7 @@ export default function Workflows() {
     setEditSteps((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  function updateStep(idx: number, field: keyof TemplateStep, value: any) {
+  function updateStep(idx: number, field: keyof TemplateStep, value: string | null) {
     setEditSteps((prev) => prev.map((s, i) => (i === idx ? { ...s, [field]: value } : s)));
   }
 
@@ -136,10 +131,7 @@ export default function Workflows() {
 
   async function saveSteps(t: WorkflowTemplate) {
     try {
-      await request(`/api/admin/workflows/${t.id}/steps`, {
-        method: "PUT",
-        body: JSON.stringify({ steps: editSteps }),
-      });
+      await api.workflowSteps(t.id, editSteps);
       setMsg(`Steps saved for ${t.name}`);
       closeBuilder();
     } catch (e) {
@@ -147,22 +139,20 @@ export default function Workflows() {
     }
   }
 
-  // ── Generate steps from goal ──────────────────────────
+  // РІвЂќР‚РІвЂќР‚ Generate steps from goal РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
   async function generateSteps(t: WorkflowTemplate) {
     if (!t.steps_goal) return;
     setMsg(`Generating steps for ${t.name}...`);
     try {
-      const r = await request<{ steps: TemplateStep[] }>(`/api/admin/workflows/${t.id}/generate-steps`, {
-        method: "POST",
-      });
-      setEditSteps(r.steps);
+      const r = await api.workflowGenerateSteps(t.id);
+      setEditSteps(r.steps as TemplateStep[]);
       setMsg("Steps generated");
     } catch (e) {
       setMsg(`Error: ${e}`);
     }
   }
 
-  // ── Edit step params as JSON ──────────────────────────
+  // РІвЂќР‚РІвЂќР‚ Edit step params as JSON РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
   function updateStepParam(idx: number, key: string, value: string) {
     setEditSteps((prev) => {
       const next = [...prev];
@@ -199,28 +189,27 @@ export default function Workflows() {
         <h1 className="text-2xl font-bold">Workflows</h1>
         <button
           onClick={() => setShowRuns(!showRuns)}
-          className="px-3 py-1.5 rounded-lg text-sm font-medium transition"
-          style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-secondary)" }}
+          className="px-3 py-1.5 rounded-lg text-sm font-medium transition btn-secondary-text"
         >
           {showRuns ? "Templates" : `Runs (${runs.length})`}
         </button>
       </div>
 
       {msg && (
-        <div className="px-4 py-2 rounded text-sm flex items-center justify-between" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-primary)" }}>
+        <div className="px-4 py-2 rounded text-sm flex items-center justify-between btn-tertiary">
           <span>{msg}</span>
-          <button onClick={() => setMsg("")} className="text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>dismiss</button>
+          <button onClick={() => setMsg("")} className="text-xs text-tertiary">dismiss</button>
         </div>
       )}
 
       {showRuns ? (
         <div className="space-y-2">
-          {runs.length === 0 && <p className="text-sm" style={{ color: "var(--dt-colors-text-tertiary)" }}>No runs yet</p>}
+          {runs.length === 0 && <p className="text-sm text-tertiary">No runs yet</p>}
           {runs.map((run) => (
-            <div key={run.id} className="flex items-center justify-between p-3 rounded-lg border" style={{ backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)" }}>
+            <div key={run.id} className="flex items-center justify-between p-3 rounded-lg border bg-secondary border-default">
               <div>
                 <span className="font-medium text-sm">{run.template_name}</span>
-                <span className="ml-3 text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>{run.started_at}</span>
+                <span className="ml-3 text-xs text-tertiary">{run.started_at}</span>
               </div>
               <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: statusColor[run.status] || "#a1a1aa", color: "#fff" }}>
                 {run.status}
@@ -249,46 +238,46 @@ export default function Workflows() {
           {/* Template cards */}
           <div className="grid gap-4">
             {filtered.map((t) => (
-              <div key={t.id} className="rounded-lg border" style={{ backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)" }}>
+              <div key={t.id} className="rounded-lg border bg-secondary border-default">
                 <button
                   onClick={() => setExpanded(expanded === t.id ? null : t.id)}
                   className="w-full flex items-center justify-between p-4 text-left"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-xl">{t.icon || "⚙"}</span>
+                    <span className="text-xl">{t.icon || "РІС™в„ў"}</span>
                     <div>
                       <div className="font-semibold">{t.name}</div>
-                      <div className="text-sm" style={{ color: "var(--dt-colors-text-tertiary)" }}>{t.description}</div>
+                      <div className="text-sm text-tertiary">{t.description}</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     {t.predefined_steps && t.predefined_steps.length > 0 && (
-                      <span className="text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>
+                      <span className="text-xs text-tertiary">
                         {t.predefined_steps.length} steps
                       </span>
                     )}
-                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-secondary)" }}>
+                    <span className="text-xs px-2 py-0.5 rounded-full btn-secondary-text">
                       {t.trigger}
                     </span>
-                    <span className={`text-lg transition ${expanded === t.id ? "rotate-180" : ""}`} style={{ color: "var(--dt-colors-text-tertiary)" }}>▼</span>
+                    <span className={`text-lg transition text-tertiary ${expanded === t.id ? "rotate-180" : ""}`}>РІвЂ“С</span>
                   </div>
                 </button>
 
                 {expanded === t.id && (
-                  <div className="px-4 pb-4 space-y-4 border-t pt-4" style={{ borderColor: "var(--dt-colors-border-default)" }}>
+                  <div className="px-4 pb-4 space-y-4 border-t pt-4 border-default">
                     {/* System prompt / Steps goal */}
                     {(t.system_prompt || t.steps_goal) && (
                       <div className="space-y-1">
                         {t.system_prompt && (
                           <div>
-                            <span className="text-xs font-medium" style={{ color: "var(--dt-colors-text-tertiary)" }}>System prompt: </span>
-                            <span className="text-xs" style={{ color: "var(--dt-colors-text-secondary)" }}>{t.system_prompt}</span>
+                            <span className="text-xs font-medium text-tertiary">System prompt: </span>
+                            <span className="text-xs text-secondary">{t.system_prompt}</span>
                           </div>
                         )}
                         {t.steps_goal && (
                           <div>
-                            <span className="text-xs font-medium" style={{ color: "var(--dt-colors-text-tertiary)" }}>Goal: </span>
-                            <span className="text-xs" style={{ color: "var(--dt-colors-text-secondary)" }}>{t.steps_goal}</span>
+                            <span className="text-xs font-medium text-tertiary">Goal: </span>
+                            <span className="text-xs text-secondary">{t.steps_goal}</span>
                           </div>
                         )}
                       </div>
@@ -297,21 +286,21 @@ export default function Workflows() {
                     {/* Predefined steps visualization */}
                     {t.predefined_steps && t.predefined_steps.length > 0 && (
                       <div className="space-y-1.5">
-                        <h4 className="text-sm font-medium" style={{ color: "var(--dt-colors-text-secondary)" }}>Steps</h4>
+                        <h4 className="text-sm font-medium text-secondary">Steps</h4>
                         <div className="space-y-1">
                           {t.predefined_steps.map((step, si) => (
-                            <div key={si} className="flex items-center gap-3 text-xs p-2 rounded" style={{ backgroundColor: "var(--dt-colors-bg-primary)" }}>
-                              <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium" style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
+                            <div key={si} className="flex items-center gap-3 text-xs p-2 rounded bg-primary">
+                              <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium bg-accent-muted text-accent">
                                 {si + 1}
                               </span>
-                              <span style={{ color: "var(--dt-colors-text-primary)" }}>{step.description}</span>
+                              <span className="text-primary">{step.description}</span>
                               {step.tool && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-tertiary)" }}>
+                                <span className="px-1.5 py-0.5 rounded text-[10px] bg-tertiary text-tertiary">
                                   {step.tool}
                                 </span>
                               )}
                               {Object.keys(step.params).length > 0 && (
-                                <span className="text-[10px]" style={{ color: "var(--dt-colors-text-tertiary)" }}>
+                                <span className="text-[10px] text-tertiary">
                                   {Object.entries(step.params).map(([k, v]) => `${k}=${v}`).join(", ")}
                                 </span>
                               )}
@@ -324,10 +313,10 @@ export default function Workflows() {
                     {/* Config form from schema */}
                     {t.config_schema?.properties && Object.keys(t.config_schema.properties).length > 0 && (
                       <div className="space-y-3">
-                        <h4 className="text-sm font-medium" style={{ color: "var(--dt-colors-text-secondary)" }}>Configuration</h4>
-                        {Object.entries(t.config_schema.properties).map(([key, prop]: [string, any]) => (
+                        <h4 className="text-sm font-medium text-secondary">Configuration</h4>
+                        {Object.entries(t.config_schema.properties).map(([key, prop]) => (
                           <div key={key}>
-                            <label className="block text-xs mb-1" style={{ color: "var(--dt-colors-text-tertiary)" }}>
+                            <label className="block text-xs mb-1 text-tertiary">
                               {prop.title || key}
                             </label>
                             {prop.type === "boolean" ? (
@@ -335,7 +324,7 @@ export default function Workflows() {
                                 className="w-full px-3 py-1.5 rounded border text-sm"
                                 style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
                                 value={configs[t.id]?.[key] ?? prop.default ?? ""}
-                                onChange={(e) => updateConfig(t.id, key, e.target.value === "true")}
+                                onChange={(e) => updateConfig(t.id, key, e.target.value)}
                               >
                                 <option value="false">No</option>
                                 <option value="true">Yes</option>
@@ -357,21 +346,18 @@ export default function Workflows() {
                     {/* Actions */}
                     <div className="flex gap-3 pt-2 flex-wrap">
                       <button onClick={() => runNow(t)}
-                        className="px-5 py-2 rounded-lg text-sm font-medium transition"
-                        style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
-                        ▶ Run Now
+                        className="px-5 py-2 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
+                        РІвЂ“В¶ Run Now
                       </button>
                       {(t.trigger === "scheduled" || t.trigger === "interval") && (
                         <button onClick={() => schedule(t)}
-                          className="px-5 py-2 rounded-lg text-sm font-medium transition"
-                          style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-secondary)" }}>
-                          📅 Schedule
+                          className="px-5 py-2 rounded-lg text-sm font-medium transition btn-secondary-text">
+                          СЂСџвЂњвЂ¦ Schedule
                         </button>
                       )}
                       <button onClick={() => openBuilder(t)}
-                        className="px-5 py-2 rounded-lg text-sm font-medium transition"
-                        style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-secondary)" }}>
-                        🎨 Edit Steps
+                        className="px-5 py-2 rounded-lg text-sm font-medium transition btn-secondary-text">
+                        СЂСџР‹РЃ Edit Steps
                       </button>
                     </div>
 
@@ -379,36 +365,32 @@ export default function Workflows() {
                     {showBuilder === t.id && (
                       <div className="mt-4 p-4 rounded-lg border" style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)" }}>
                         <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-sm font-semibold">Step Builder — {t.name}</h4>
+                          <h4 className="text-sm font-semibold">Step Builder РІР‚вЂќ {t.name}</h4>
                           <div className="flex gap-2">
                             {t.steps_goal && (
                               <button onClick={() => generateSteps(t)}
-                                className="px-3 py-1 text-xs rounded transition"
-                                style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
+                                className="px-3 py-1 text-xs rounded transition bg-accent-muted text-accent">
                                 Auto-generate
                               </button>
                             )}
                             <button onClick={addStep}
-                              className="px-3 py-1 text-xs rounded transition"
-                              style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-secondary)" }}>
+                              className="px-3 py-1 text-xs rounded transition btn-secondary-text">
                               + Add Step
                             </button>
                             <button onClick={() => saveSteps(t)}
-                              className="px-3 py-1 text-xs rounded transition"
-                              style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
-                              💾 Save
+                              className="px-3 py-1 text-xs rounded transition bg-accent-muted text-accent">
+                              СЂСџвЂ™С• Save
                             </button>
                             <button onClick={closeBuilder}
-                              className="px-3 py-1 text-xs rounded transition"
-                              style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-tertiary)" }}>
-                              ✕
+                              className="px-3 py-1 text-xs rounded transition bg-tertiary text-tertiary">
+                              РІСљвЂў
                             </button>
                           </div>
                         </div>
 
                         <div className="space-y-2">
                           {editSteps.length === 0 && (
-                            <p className="text-xs py-4 text-center" style={{ color: "var(--dt-colors-text-tertiary)" }}>
+                            <p className="text-xs py-4 text-center text-tertiary">
                               No steps yet. Click "+ Add Step" to start building your workflow.
                             </p>
                           )}
@@ -427,10 +409,10 @@ export default function Workflows() {
                                 opacity: dragIdx === idx ? 0.5 : 1,
                               }}
                             >
-                              <span className="text-xs font-medium mt-2 w-5 text-center" style={{ color: "var(--dt-colors-text-tertiary)" }}>⠿</span>
+                              <span className="text-xs font-medium mt-2 w-5 text-center text-tertiary">РІВ С—</span>
                               <div className="flex-1 space-y-2">
                                 <div className="flex items-center gap-2">
-                                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0" style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
+                                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 bg-accent-muted text-accent">
                                     {idx + 1}
                                   </span>
                                   <input
@@ -448,9 +430,8 @@ export default function Workflows() {
                                     onChange={(e) => updateStep(idx, "tool", e.target.value || null)}
                                   />
                                   <button onClick={() => removeStep(idx)}
-                                    className="text-xs px-2 py-1 rounded"
-                                    style={{ color: "var(--dt-colors-text-tertiary)" }}>
-                                    ✕
+                                    className="text-xs px-2 py-1 rounded text-tertiary">
+                                    РІСљвЂў
                                   </button>
                                 </div>
 
@@ -470,23 +451,22 @@ export default function Workflows() {
                                         }}
                                         placeholder="key"
                                       />
-                                      <span className="text-[10px]" style={{ color: "var(--dt-colors-text-tertiary)" }}>=</span>
+                                      <span className="text-[10px] text-tertiary">=</span>
                                       <input
                                         className="w-20 px-1.5 py-0.5 rounded border text-[10px]"
                                         style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
-                                        value={v as string}
+                                        value={v}
                                         onChange={(e) => updateStepParam(idx, k, e.target.value)}
                                         placeholder="value"
                                       />
                                       <button onClick={() => removeStepParam(idx, k)}
-                                        className="text-[10px]" style={{ color: "var(--dt-colors-text-tertiary)" }}>
-                                        ✕
+                                        className="text-[10px] text-tertiary">
+                                        РІСљвЂў
                                       </button>
                                     </div>
                                   ))}
                                   <button onClick={() => addStepParam(idx)}
-                                    className="text-[10px] px-1.5 py-0.5 rounded"
-                                    style={{ color: "var(--dt-colors-text-tertiary)", backgroundColor: "var(--dt-colors-bg-tertiary)" }}>
+                                    className="text-[10px] px-1.5 py-0.5 rounded text-tertiary bg-tertiary">
                                     + param
                                   </button>
                                 </div>

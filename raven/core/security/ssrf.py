@@ -7,6 +7,9 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
+from loguru import logger
+
+from raven.core.config import get_settings
 
 PRIVATE_NETS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
     ipaddress.ip_network("10.0.0.0/8"),
@@ -42,8 +45,7 @@ def _resolve_host(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Addre
                 except ValueError:
                     continue
         return result
-    except Exception as exc:
-        from loguru import logger
+    except (socket.gaierror, OSError) as exc:
         logger.debug("SSRF DNS resolution failed for {}: {}", host, exc)
         return []
 
@@ -63,8 +65,7 @@ async def _resolve_host_async(host: str) -> list[ipaddress.IPv4Address | ipaddre
                 except ValueError:
                     continue
         return result
-    except Exception as exc:
-        from loguru import logger
+    except (socket.gaierror, OSError) as exc:
         logger.debug("SSRF async DNS resolution failed for {}: {}", host, exc)
         return []
 
@@ -74,7 +75,7 @@ def is_private_url(url: str) -> bool:
     if parsed.scheme not in ("http", "https"):
         return False
     host = parsed.hostname or ""
-    if host in ("localhost", "localhost.localdomain", "127.0.0.1", "::1", "0.0.0.0"):  # noqa: S104
+    if host in ("localhost", "localhost.localdomain", "127.0.0.1", "::1", "0.0.0.0"):
         return True
     try:
         ips = _resolve_host(host)
@@ -82,21 +83,17 @@ def is_private_url(url: str) -> bool:
             if any(ip in net for net in PRIVATE_NETS):
                 return True
     except Exception as exc:
-        from loguru import logger
         logger.debug("SSRF IP resolution error for {}: {}", host, exc)
     try:
         ip = ipaddress.ip_address(host)
         if any(ip in net for net in PRIVATE_NETS):
             return True
     except ValueError:
-        from loguru import logger
         logger.debug("SSRF host '{}' is not an IP and DNS resolution failed", host)
-    return host.endswith(".local") or host.endswith(".internal")
+    return host.endswith((".local", ".internal"))
 
 
 def validate_url(url: str) -> str | None:
-    from raven.core.config import get_settings
-
     if get_settings().ghost_mode:
         if not is_private_url(url):
             return f"Ghost mode: external URL blocked: {url[:100]}"
@@ -107,9 +104,6 @@ def validate_url(url: str) -> str | None:
 
 
 async def validate_url_async(url: str) -> str | None:
-    """Асинхронная версия validate_url с DNS resolution."""
-    from raven.core.config import get_settings
-
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         return f"Invalid scheme: {parsed.scheme}"
@@ -117,7 +111,6 @@ async def validate_url_async(url: str) -> str | None:
     if not host:
         return "Missing hostname"
 
-    # Проверка, не IP ли это
     try:
         ipaddress.ip_address(host)
         if _is_private_ip(host):
@@ -129,7 +122,6 @@ async def validate_url_async(url: str) -> str | None:
     if get_settings().ghost_mode:
         return f"Ghost mode: external URL blocked: {url[:100]}"
 
-    # Резолвим hostname асинхронно
     ips = await _resolve_host_async(host)
     if not ips:
         return f"Failed to resolve hostname: {host}"
@@ -142,35 +134,28 @@ async def validate_url_async(url: str) -> str | None:
 
 
 class SSRFSafeTransport(httpx.AsyncHTTPTransport):
-    """Custom HTTP transport с DNS pinning для защиты от DNS rebinding.
-
-    1. Резолвит hostname один раз перед подключением
-    2. Проверяет resolved IP на приватность
-    3. Подключается к resolved IP (Host header остаётся оригинальным)
-    """
-
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         hostname = request.url.host
 
-        # Проверка, не IP ли это
         try:
             ipaddress.ip_address(hostname)
             if _is_private_ip(hostname):
-                raise httpx.ConnectError(f"Request to private IP blocked: {hostname}")
+                msg = f"Request to private IP blocked: {hostname}"
+                raise httpx.ConnectError(msg)
             return await super().handle_async_request(request)
         except ValueError:
             pass
 
-        # Это hostname — резолвим асинхронно
         ips = await _resolve_host_async(hostname)
         if not ips:
-            raise httpx.ConnectError(f"Failed to resolve hostname: {hostname}")
+            msg = f"Failed to resolve hostname: {hostname}"
+            raise httpx.ConnectError(msg)
 
         for ip in ips:
             if _is_private_ip(str(ip)):
-                raise httpx.ConnectError(f"SSRF protection: hostname {hostname} resolves to private IP: {ip}")
+                msg = f"SSRF protection: hostname {hostname} resolves to private IP: {ip}"
+                raise httpx.ConnectError(msg)
 
-        # DNS pinning: подставляем первый публичный IP вместо hostname
         pinned = str(ips[0])
         request.url = request.url.copy_with(host=pinned)
 
@@ -186,5 +171,6 @@ async def safe_http_request(url: str, **kwargs: Any) -> httpx.Response:
             if location:
                 error = await validate_url_async(location)
                 if error:
-                    raise httpx.ConnectError(f"Redirect blocked by SSRF: {error}")
+                    msg = f"Redirect blocked by SSRF: {error}"
+                    raise httpx.ConnectError(msg)
         return response

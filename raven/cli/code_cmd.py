@@ -115,6 +115,7 @@ def code_review(path: str, language: str):
 @click.option("--user", default="cli", help="User ID")
 def code_start(goal: str, project: str, user: str):
     """Start a coding session"""
+
     async def _inner():
         from raven.core.coder.models import CodingSession
         from raven.core.coder.session import CodingSessionManager
@@ -127,6 +128,7 @@ def code_start(goal: str, project: str, user: str):
         console.print(f"  Goal: {goal}")
         console.print(f"  Project: {p}")
         console.print(f"  [dim]Run 'raven code status {session.id[:8]}' to check[/dim]")
+
     _run_async(_inner())
 
 
@@ -134,6 +136,7 @@ def code_start(goal: str, project: str, user: str):
 @click.argument("session_id")
 def code_status(session_id: str):
     """Show coding session status"""
+
     async def _inner():
         from raven.core.coder.session import CodingSessionManager
 
@@ -152,6 +155,7 @@ def code_status(session_id: str):
                 f"[cyan]Messages:[/cyan] {len(session.history)}"
             )
         )
+
     _run_async(_inner())
 
 
@@ -159,6 +163,7 @@ def code_status(session_id: str):
 @click.argument("session_id")
 def code_end(session_id: str):
     """End a coding session"""
+
     async def _inner():
         from raven.core.coder.models import SessionStatus
         from raven.core.coder.session import CodingSessionManager
@@ -171,6 +176,7 @@ def code_end(session_id: str):
         session.status = SessionStatus.COMPLETED
         await mgr.update_session(session)
         console.print(f"[green]Session {session_id[:8]} ended[/green]")
+
     _run_async(_inner())
 
 
@@ -187,11 +193,15 @@ def code_analyze(path: str, show_all: bool):
         result = analyzer.explain_file(p)
         console.print(result.summary)
         if result.symbols:
-            console.print(Panel.fit(
-                "\n".join(f"  {s.name} ({s.kind}, line {s.line})" + (f" — {s.docstring[:50]}" if s.docstring else "")
-                          for s in result.symbols),
-                title="Symbols",
-            ))
+            console.print(
+                Panel.fit(
+                    "\n".join(
+                        f"  {s.name} ({s.kind}, line {s.line})" + (f" — {s.docstring[:50]}" if s.docstring else "")
+                        for s in result.symbols
+                    ),
+                    title="Symbols",
+                )
+            )
         if result.call_graph:
             table = Table(title="Call Graph")
             table.add_column("Caller", style="cyan")

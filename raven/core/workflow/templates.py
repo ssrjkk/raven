@@ -16,7 +16,11 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
         config_schema={
             "type": "object",
             "properties": {
-                "news_topics": {"type": "string", "description": "Comma-separated news topics of interest", "default": "technology,ai"},
+                "news_topics": {
+                    "type": "string",
+                    "description": "Comma-separated news topics of interest",
+                    "default": "technology,ai",
+                },
                 "include_weather": {"type": "boolean", "description": "Include weather forecast", "default": True},
                 "summary_length": {"type": "string", "enum": ["brief", "detailed"], "default": "brief"},
             },

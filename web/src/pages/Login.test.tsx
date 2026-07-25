@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { BrowserRouter } from "react-router-dom";
+import { describe, expect, it, vi } from "vitest";
+
 import Login from "./Login";
+import { renderWithProviders } from "../test/test-utils";
 
 // Mock api client
 vi.mock("../api/client", () => ({
@@ -15,11 +16,7 @@ vi.mock("../api/client", () => ({
 }));
 
 function renderLogin() {
-  return render(
-    <BrowserRouter>
-      <Login />
-    </BrowserRouter>
-  );
+  return renderWithProviders(<Login />);
 }
 
 describe("Login Page", () => {

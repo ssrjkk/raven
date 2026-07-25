@@ -104,8 +104,14 @@ def create_collab_router() -> APIRouter:
         return {
             **session.get_state(),
             "content": session.document.content,
-            "cursors": [{"user_id": c.user_id, "file": c.file, "line": c.line, "column": c.column} for c in session.get_cursors()],
-            "comments": [{"id": c.id, "user_id": c.user_id, "text": c.text, "resolved": c.resolved, "line": c.line} for c in session.get_comments()],
+            "cursors": [
+                {"user_id": c.user_id, "file": c.file, "line": c.line, "column": c.column}
+                for c in session.get_cursors()
+            ],
+            "comments": [
+                {"id": c.id, "user_id": c.user_id, "text": c.text, "resolved": c.resolved, "line": c.line}
+                for c in session.get_comments()
+            ],
             "users": session.get_user_list(),
         }
 
@@ -160,12 +166,14 @@ def create_collab_router() -> APIRouter:
             mgr = _get_manager()
             session = mgr.get_session(session_id)
             if session:
-                await websocket.send_json({
-                    "kind": "state",
-                    "content": session.document.content,
-                    "version": session.document.version,
-                    "users": session.get_user_list(),
-                })
+                await websocket.send_json(
+                    {
+                        "kind": "state",
+                        "content": session.document.content,
+                        "version": session.document.version,
+                        "users": session.get_user_list(),
+                    }
+                )
             while True:
                 data = await websocket.receive_json()
                 kind = data.get("kind", "")
@@ -182,27 +190,35 @@ def create_collab_router() -> APIRouter:
                     )
                     ok = session.apply_change(change)
                     if ok:
-                        await wsm.broadcast_json(session_id, {
-                            "kind": "change",
-                            "user_id": user_id,
-                            "file": change.file,
-                            "start_line": change.start_line,
-                            "start_col": change.start_col,
-                            "end_line": change.end_line,
-                            "end_col": change.end_col,
-                            "old_text": change.old_text,
-                            "new_text": change.new_text,
-                            "version": session.document.version,
-                        }, exclude=websocket)
+                        await wsm.broadcast_json(
+                            session_id,
+                            {
+                                "kind": "change",
+                                "user_id": user_id,
+                                "file": change.file,
+                                "start_line": change.start_line,
+                                "start_col": change.start_col,
+                                "end_line": change.end_line,
+                                "end_col": change.end_col,
+                                "old_text": change.old_text,
+                                "new_text": change.new_text,
+                                "version": session.document.version,
+                            },
+                            exclude=websocket,
+                        )
                         await websocket.send_json({"kind": "ack", "version": session.document.version})
                 elif kind == "cursor":
-                    await wsm.broadcast_json(session_id, {
-                        "kind": "cursor",
-                        "user_id": user_id,
-                        "file": data.get("file", ""),
-                        "line": data.get("line", 0),
-                        "column": data.get("column", 0),
-                    }, exclude=websocket)
+                    await wsm.broadcast_json(
+                        session_id,
+                        {
+                            "kind": "cursor",
+                            "user_id": user_id,
+                            "file": data.get("file", ""),
+                            "line": data.get("line", 0),
+                            "column": data.get("column", 0),
+                        },
+                        exclude=websocket,
+                    )
                 elif kind == "ping":
                     await websocket.send_json({"kind": "pong"})
         except WebSocketDisconnect:

@@ -13,6 +13,7 @@ from raven.core.llm.providers.base import _parse_openai_response, _stream_sse
 class CopilotProvider(LLMProvider):
     def __init__(self, **overrides):
         import httpx
+
         self.http = httpx.AsyncClient(
             timeout=overrides.get("timeout", 120),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=20),

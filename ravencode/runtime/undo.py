@@ -45,8 +45,7 @@ class UndoManager:
         entry = self._undo_stack.pop()
         try:
             self._redo_stack.append(UndoEntry(entry.path, entry.original, entry.modified, entry.tool_name))
-            result = self._apply(UndoEntry(entry.path, "", entry.original, entry.tool_name), action="undo")
-            return result
+            return self._apply(UndoEntry(entry.path, "", entry.original, entry.tool_name), action="undo")
         except OSError as exc:
             logger.error("Undo failed: {}", exc)
             return f"[error] undo failed: {exc}"
@@ -59,8 +58,7 @@ class UndoManager:
             p = Path(entry.path).expanduser().resolve()
             current = p.read_text(encoding="utf-8")
             self._undo_stack.append(UndoEntry(entry.path, current, entry.modified, entry.tool_name))
-            result = self._apply(UndoEntry(entry.path, "", entry.modified, entry.tool_name), action="redo")
-            return result
+            return self._apply(UndoEntry(entry.path, "", entry.modified, entry.tool_name), action="redo")
         except OSError as exc:
             logger.error("Redo failed: {}", exc)
             return f"[error] redo failed: {exc}"

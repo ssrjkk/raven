@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 import tempfile
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
+import aiofiles
 from loguru import logger
 
 WakeCallback = Callable[[str], Awaitable[str]]
@@ -62,13 +62,14 @@ class WakeWordDetector:
                 with mic as source:
                     audio = recognizer.listen(source, timeout=1, phrase_time_limit=3)
                 temp = Path(tempfile.gettempdir()) / "raven_wake.wav"
-                with open(temp, "wb") as f:
-                    f.write(audio.get_wav_data())
+                async with aiofiles.open(temp, "wb") as f:
+                    await f.write(audio.get_wav_data())
 
                 from raven.voice.stt import SpeechToText
+
                 stt = SpeechToText()
                 text = stt.transcribe(str(temp))
-                os.unlink(str(temp))
+                temp.unlink()
 
                 if not text:
                     continue

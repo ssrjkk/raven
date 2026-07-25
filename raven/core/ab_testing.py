@@ -40,12 +40,17 @@ class ABTestEngine:
         self._experiments: dict[str, Experiment] = {}
         self._events: list[ExperimentEvent] = []
 
-    def create_experiment(self, name: str, description: str, variants: list[dict[str, Any]], metric_name: str = "conversion") -> Experiment:
+    def create_experiment(
+        self, name: str, description: str, variants: list[dict[str, Any]], metric_name: str = "conversion"
+    ) -> Experiment:
         exp = Experiment(
             id=uuid4().hex[:12],
             name=name,
             description=description,
-            variants=[ExperimentVariant(name=v["name"], weight=v.get("weight", 1.0), config=v.get("config", {})) for v in variants],
+            variants=[
+                ExperimentVariant(name=v["name"], weight=v.get("weight", 1.0), config=v.get("config", {}))
+                for v in variants
+            ],
             metric_name=metric_name,
         )
         self._experiments[exp.id] = exp
@@ -64,7 +69,14 @@ class ABTestEngine:
         for key, value in kwargs.items():
             if hasattr(exp, key):
                 if key == "variants":
-                    setattr(exp, key, [ExperimentVariant(name=v["name"], weight=v.get("weight", 1.0), config=v.get("config", {})) for v in value])
+                    setattr(
+                        exp,
+                        key,
+                        [
+                            ExperimentVariant(name=v["name"], weight=v.get("weight", 1.0), config=v.get("config", {}))
+                            for v in value
+                        ],
+                    )
                 else:
                     setattr(exp, key, value)
         exp.updated_at = time.time()
@@ -90,6 +102,7 @@ class ABTestEngine:
         if total_weight <= 0:
             return exp.variants[0].name if exp.variants else None
         import hashlib
+
         key = f"{experiment_id}:{user_id or uuid4().hex}"
         h = int(hashlib.sha256(key.encode()).hexdigest(), 16)
         r = (h % 10000) / 10000 * total_weight
@@ -100,7 +113,9 @@ class ABTestEngine:
                 return v.name
         return exp.variants[-1].name if exp.variants else None
 
-    def record_event(self, experiment_id: str, variant: str, metric_name: str, value: float = 1.0, user_id: str = "") -> None:
+    def record_event(
+        self, experiment_id: str, variant: str, metric_name: str, value: float = 1.0, user_id: str = ""
+    ) -> None:
         self._events.append(ExperimentEvent(variant=variant, metric_name=metric_name, value=value, user_id=user_id))
 
     def get_results(self, experiment_id: str) -> dict[str, Any] | None:
@@ -117,20 +132,29 @@ class ABTestEngine:
         result_variants: list[dict[str, Any]] = []
         for v in exp.variants:
             data = variants[v.name]
-            result_variants.append({
-                "name": v.name,
-                "weight": v.weight,
-                "config": v.config,
-                "events": data["events"],
-                "total_value": round(data["total_value"], 4),
-                "avg_value": round(data["total_value"] / data["count"], 4) if data["count"] > 0 else 0,
-                "sample_count": data["count"],
-            })
+            result_variants.append(
+                {
+                    "name": v.name,
+                    "weight": v.weight,
+                    "config": v.config,
+                    "events": data["events"],
+                    "total_value": round(data["total_value"], 4),
+                    "avg_value": round(data["total_value"] / data["count"], 4) if data["count"] > 0 else 0,
+                    "sample_count": data["count"],
+                }
+            )
 
-        control = next((r for r in result_variants if r["name"] == exp.variants[0].name), result_variants[0] if result_variants else None)
+        control = next(
+            (r for r in result_variants if r["name"] == exp.variants[0].name),
+            result_variants[0] if result_variants else None,
+        )
         for r in result_variants:
             if control and control["sample_count"] > 0 and r["sample_count"] > 0:
-                r["lift"] = round((r["avg_value"] - control["avg_value"]) / control["avg_value"] * 100, 2) if control["avg_value"] != 0 else 0
+                r["lift"] = (
+                    round((r["avg_value"] - control["avg_value"]) / control["avg_value"] * 100, 2)
+                    if control["avg_value"] != 0
+                    else 0
+                )
             else:
                 r["lift"] = 0
 

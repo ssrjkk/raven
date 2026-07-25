@@ -15,7 +15,8 @@ def set_analytics_engine(engine: AnalyticsEngine) -> None:
 
 
 def _get_engine() -> AnalyticsEngine:
-    assert _engine is not None, "analytics engine not initialized"
+    if _engine is None:
+        raise RuntimeError("analytics engine not initialized")
     return _engine
 
 

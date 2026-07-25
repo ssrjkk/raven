@@ -55,7 +55,7 @@ def _get_noninteractive() -> bool:
     return "--non-interactive" in sys.argv or "--yes" in sys.argv
 
 
-async def _prompt_llm(config: dict[str, Any]) -> dict[str, Any]:
+def _prompt_llm(config: dict[str, Any]) -> dict[str, Any]:
     console.print(Rule(style="bold blue"))
     console.print(Panel.fit("[bold][brain] LLM Provider[/bold]", border_style="blue"))
     console.print(
@@ -114,7 +114,7 @@ async def _prompt_telegram(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
-async def _prompt_channels(config: dict[str, Any]) -> dict[str, Any]:
+def _prompt_channels(config: dict[str, Any]) -> dict[str, Any]:
     console.print(Rule(style="bold yellow"))
     console.print(Panel.fit("[bold]🔌 Additional Channels[/bold]", border_style="yellow"))
     console.print("You can configure more channels now or later via [bold]raven onboard[/bold]")
@@ -132,7 +132,7 @@ async def _prompt_channels(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
-async def _prompt_security(config: dict[str, Any]) -> dict[str, Any]:
+def _prompt_security(config: dict[str, Any]) -> dict[str, Any]:
     console.print(Rule(style="bold red"))
     console.print(Panel.fit("[bold][lock] Security Settings[/bold]", border_style="red"))
 
@@ -150,7 +150,7 @@ async def _prompt_security(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
-async def _prompt_port(config: dict[str, Any]) -> dict[str, Any]:
+def _prompt_port(config: dict[str, Any]) -> dict[str, Any]:
     port_str = Prompt.ask("Web UI port", default=str(settings.web_port))
     try:
         config["web_port"] = int(port_str)
@@ -201,11 +201,11 @@ async def onboard() -> None:
     config_store.load()
     config: dict[str, Any] = {}
 
-    config = await _prompt_llm(config)
+    config = _prompt_llm(config)
     config = await _prompt_telegram(config)
-    config = await _prompt_channels(config)
-    config = await _prompt_security(config)
-    config = await _prompt_port(config)
+    config = _prompt_channels(config)
+    config = _prompt_security(config)
+    config = _prompt_port(config)
 
     config_store.save(config)
     config_store.apply_to_env()

@@ -10,6 +10,7 @@ from raven.core.llm.providers import (
     AzureProvider,
     BedrockProvider,
     CopilotProvider,
+    GroqProvider,
     OllamaProvider,
     OpenAIProvider,
     OpenRouterProvider,
@@ -31,9 +32,11 @@ class LLMProviderFactory:
             "copilot": CopilotProvider,
             "vertex": VertexAIProvider,
             "bedrock": BedrockProvider,
+            "groq": GroqProvider,
         }
         if provider not in providers:
-            raise ValueError(f"Unknown provider: {provider}")
+            msg = f"Unknown provider: {provider}"
+            raise ValueError(msg)
         if api_key is not None:
             kwargs["api_key"] = api_key
         return providers[provider](**kwargs)

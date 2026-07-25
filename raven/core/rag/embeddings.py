@@ -54,7 +54,7 @@ class EmbeddingEngine:
             all_results: list[list[float]] = []
             async with httpx.AsyncClient(timeout=60) as c:
                 for i in range(0, len(texts), chunk_size):
-                    chunk = texts[i:i + chunk_size]
+                    chunk = texts[i : i + chunk_size]
                     resp = await c.post(
                         "https://api.openai.com/v1/embeddings",
                         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},

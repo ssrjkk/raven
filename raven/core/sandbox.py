@@ -66,9 +66,9 @@ class Sandbox:
 
         if self.config.mode == "none":
             return await self._exec_direct(code)
-        elif self.config.mode == "subprocess":
+        if self.config.mode == "subprocess":
             return await self._exec_subprocess(code)
-        elif self.config.mode == "docker":
+        if self.config.mode == "docker":
             return await self._exec_docker(code)
         return "Unknown sandbox mode"
 
@@ -80,17 +80,31 @@ class Sandbox:
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
         safe_builtins = {
-            k: v for k, v in builtins.__dict__.items()
-            if k not in frozenset({
-                "__import__", "exec", "eval", "compile", "open",
-                "getattr", "setattr", "delattr", "globals", "locals",
-                "breakpoint", "exit", "quit",
-            })
+            k: v
+            for k, v in builtins.__dict__.items()
+            if k
+            not in frozenset(
+                {
+                    "__import__",
+                    "exec",
+                    "eval",
+                    "compile",
+                    "open",
+                    "getattr",
+                    "setattr",
+                    "delattr",
+                    "globals",
+                    "locals",
+                    "breakpoint",
+                    "exit",
+                    "quit",
+                }
+            )
         }
         restricted_globals: dict[str, object] = {"__builtins__": safe_builtins}
         try:
             with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-                exec(code, restricted_globals)  # noqa: S102
+                exec(code, restricted_globals)
             result = stdout_capture.getvalue()
             stderr_val = stderr_capture.getvalue()
             if stderr_val.strip():
@@ -166,7 +180,7 @@ class Sandbox:
             if domain == "*":
                 continue
             parts.append(f"iptables -A OUTPUT -d {domain} -j DROP")
-        parts.append("exec \"$@\"")
+        parts.append('exec "$@"')
         return "\n".join(parts)
 
     async def _exec_docker(self, code: str) -> str:

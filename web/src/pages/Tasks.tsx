@@ -1,60 +1,45 @@
-import { useState, useEffect } from "react";
-import { api, TaskData } from "../api/client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+
+import { api } from "../api/client";
+import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
+import { useApiQuery } from "../hooks/useApiQuery";
 
 export default function Tasks() {
-  const [tasks, setTasks] = useState<TaskData[]>([]);
+  const qc = useQueryClient();
   const [goal, setGoal] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [pageLoading, setPageLoading] = useState(true);
   const { toast } = useToast();
+  const { data: tasksData, isLoading } = useApiQuery<import("../api/client").TaskData[]>(["tasks"], () => api.tasks());
+  const tasks = tasksData ?? [];
 
-  useEffect(() => { load(); }, []);
-
-  async function load() {
-    try {
-      setTasks(await api.tasks());
-    } catch (e) {
-      console.error("Failed to load tasks:", e);
-      toast("Failed to load tasks", "error");
-    } finally {
-      setPageLoading(false);
-    }
-  }
-
-  async function runTask() {
-    if (!goal.trim()) return;
-    setLoading(true);
-    try {
-      await api.taskRun(goal);
+  const startTask = useMutation({
+    mutationFn: (g: string) => api.taskRun(g),
+    onSuccess: () => {
       setGoal("");
       toast("Task started", "success");
-      await load();
-    } catch (e) {
-      console.error("Failed to start task:", e);
-      toast("Failed to start task", "error");
-    }
-    setLoading(false);
-  }
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
+    onError: () => toast("Failed to start task", "error"),
+  });
 
-  async function cancelTask(id: string) {
-    try {
-      await api.taskCancel(id);
+  const cancelTask = useMutation({
+    mutationFn: (id: string) => api.taskCancel(id),
+    onSuccess: () => {
       toast("Task cancelled", "info");
-      await load();
-    } catch (e) {
-      console.error("Failed to cancel task:", e);
-      toast("Failed to cancel task", "error");
-    }
-  }
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
+    onError: () => toast("Failed to cancel task", "error"),
+  });
 
-  if (pageLoading) {
+  if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Tasks</h1>
-        <div className="space-y-2 animate-pulse">
-          {[1, 2].map((i) => <div key={i} className="h-24 bg-gray-900/60 rounded-xl" />)}
+        <div className="flex items-center justify-between">
+          <Skeleton width={100} height={28} />
+          <Skeleton width={120} height={36} rounded="md" />
         </div>
+        {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
       </div>
     );
   }
@@ -63,14 +48,14 @@ export default function Tasks() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Tasks</h1>
 
-      <form onSubmit={(e) => { e.preventDefault(); runTask(); }} className="flex gap-3">
+      <form onSubmit={(e) => { e.preventDefault(); startTask.mutate(goal); }} className="flex gap-3">
         <input
           value={goal}
           onChange={(e) => setGoal(e.target.value)}
           placeholder="Describe a task goal..."
           className="flex-1 bg-gray-800/60 border border-gray-700/50 rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-violet-500/50"
         />
-        <button type="submit" disabled={loading}
+        <button type="submit" disabled={startTask.isPending}
           className="bg-violet-600 hover:bg-violet-500 disabled:bg-violet-800/50 text-white px-5 py-2 rounded-xl text-sm font-medium transition">
           Run Task
         </button>
@@ -95,7 +80,7 @@ export default function Tasks() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-500">{t.status}</span>
                   {(t.status === "pending" || t.status === "running") && (
-                    <button onClick={() => cancelTask(t.id)}
+                    <button onClick={() => cancelTask.mutate(t.id)}
                       className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-900/20 transition">
                       Cancel
                     </button>

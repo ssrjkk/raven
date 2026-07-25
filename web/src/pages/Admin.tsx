@@ -1,6 +1,9 @@
-import { useState, useEffect, useRef } from "react";
-import { api, getToken, ChannelInfo } from "../api/client";
+import { useEffect, useRef, useState } from "react";
+
+import { api, type ChannelInfo, getToken } from "../api/client";
+import { Skeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
+import { useApiQuery } from "../hooks/useApiQuery";
 
 interface LogEntry {
   timestamp: string;
@@ -16,24 +19,16 @@ interface AuditResult {
 }
 
 export default function Admin() {
-  const [channels, setChannels] = useState<ChannelInfo[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [audit, setAudit] = useState<AuditResult[]>([]);
   const [runningAudit, setRunningAudit] = useState(false);
   const [modelKey, setModelKey] = useState("");
   const [keyFeedback, setKeyFeedback] = useState<{ok: boolean; msg: string} | null>(null);
-  const [channelsLoading, setChannelsLoading] = useState(true);
   const logEnd = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    api.channels().then(setChannels).catch(() => toast("Failed to load channels", "error"))
-      .finally(() => setChannelsLoading(false));
-    const interval = setInterval(() => {
-      api.channels().then(setChannels).catch((e: unknown) => console.error("channel poll failed:", e));
-    }, 10000);
-    return () => clearInterval(interval);
-  }, []);
+  const { data: channelsData, isLoading: channelsLoading } = useApiQuery<ChannelInfo[]>(["adminChannels"], () => api.channels(), { refetchInterval: 10000 });
+  const channels = channelsData ?? [];
 
   useEffect(() => {
     logEnd.current?.scrollIntoView({ behavior: "smooth" });
@@ -70,7 +65,7 @@ export default function Admin() {
       } else {
         toast("Audit failed", "error");
       }
-    } catch {
+    } catch (e) { console.error("audit:", e);
       toast("Audit request failed", "error");
     }
     setRunningAudit(false);
@@ -108,8 +103,8 @@ export default function Admin() {
         <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
           <h2 className="text-sm font-semibold text-gray-300 mb-3">Channels</h2>
           {channelsLoading ? (
-            <div className="space-y-2 animate-pulse">
-              {[1, 2, 3].map((i) => <div key={i} className="h-10 bg-gray-800/50 rounded-lg" />)}
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => <Skeleton key={i} height={40} rounded="lg" />)}
             </div>
           ) : (
             <div className="space-y-2">

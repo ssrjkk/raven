@@ -157,12 +157,16 @@ async def aios_websocket(ws: WebSocket):
                 model = msg.get("model")
 
                 result = await _client.ask(prompt=prompt, task=task, model=model)
-                await ws.send_text(json.dumps({
-                    "type": "result",
-                    "text": result.text,
-                    "model": result.model,
-                    "provider": result.provider,
-                }))
+                await ws.send_text(
+                    json.dumps(
+                        {
+                            "type": "result",
+                            "text": result.text,
+                            "model": result.model,
+                            "provider": result.provider,
+                        }
+                    )
+                )
             elif action == "ask_stream":
                 messages = msg.get("messages", [])
                 tools = msg.get("tools")
@@ -176,13 +180,17 @@ async def aios_websocket(ws: WebSocket):
                 task_text = msg.get("task", "")
                 agent_type = msg.get("agent_type", "autonomous")
                 agent_result = await _orch.dispatch(task=task_text, agent_type=AgentType(agent_type))
-                await ws.send_text(json.dumps({
-                    "type": "agent_result",
-                    "success": agent_result.success,
-                    "data": agent_result.data,
-                    "error": agent_result.error,
-                    "steps": agent_result.steps,
-                }))
+                await ws.send_text(
+                    json.dumps(
+                        {
+                            "type": "agent_result",
+                            "success": agent_result.success,
+                            "data": agent_result.data,
+                            "error": agent_result.error,
+                            "steps": agent_result.steps,
+                        }
+                    )
+                )
             elif action == "ping":
                 await ws.send_text(json.dumps({"type": "pong"}))
             else:
@@ -198,11 +206,13 @@ async def aios_agent_ws(ws: WebSocket):
 
     async def send_event(event: AgentEvent) -> None:
         try:
-            await ws.send_json({
-                "type": event.type,
-                "data": event.data,
-                "timestamp": event.timestamp,
-            })
+            await ws.send_json(
+                {
+                    "type": event.type,
+                    "data": event.data,
+                    "timestamp": event.timestamp,
+                }
+            )
         except Exception as exc:
             logger.debug("Failed to send WS event {}: {}", event.type, exc)
 
@@ -249,10 +259,12 @@ async def aios_health():
 @router.get("/metrics")
 async def aios_metrics():
     from raven.core.metrics import metrics
+
     return metrics.snapshot()
 
 
 @router.get("/metrics/prometheus", response_class=PlainTextResponse)
 async def aios_metrics_prometheus():
     from raven.core.metrics import metrics
+
     return metrics.prometheus()

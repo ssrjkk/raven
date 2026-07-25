@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -19,9 +20,12 @@ IS_MACOS = sys.platform == "darwin"
 def _find_raven() -> str:
     """Return the path to the 'raven' executable."""
     try:
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(
             ["which", "raven"] if not IS_WINDOWS else ["where", "raven"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
         )
         path = result.stdout.strip()
         if path:
@@ -35,7 +39,7 @@ def _find_project_root() -> Path | None:
     """Search upward from cwd or module for pyproject.toml."""
     start = Path(sys.argv[0] if getattr(sys, "frozen", False) else __file__).resolve().parent
     for d in [start, Path.cwd()]:
-        for parent in [d] + list(d.parents):
+        for parent in [d, *list(d.parents)]:
             if (parent / "pyproject.toml").exists():
                 return parent
     return None
@@ -112,9 +116,7 @@ def service_restart():
 
 
 def _install_windows():
-    try:
-        import win32serviceutil  # noqa: F401
-    except ImportError:
+    if not importlib.util.find_spec("win32serviceutil"):
         console.print("[red]pywin32 is required. Install: pip install pywin32[/red]")
         sys.exit(1)
     _run_python("daemon.windows_service", "install")
@@ -240,7 +242,7 @@ def _uninstall_launchd():
 
 def _run_python(module: str, *args: str):
     cmd = [sys.executable, "-m", module, *args]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)  # noqa: S603
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
     if result.returncode != 0:
         console.print(f"[yellow]Command failed ({result.returncode}): {' '.join(cmd)}[/yellow]")
         if result.stderr:
@@ -248,18 +250,24 @@ def _run_python(module: str, *args: str):
 
 
 def _run_systemctl(action: str):
-    result = subprocess.run(  # noqa: S603
-        ["systemctl", action, "raven.service"],  # noqa: S607
-        capture_output=True, text=True, timeout=30,
+    result = subprocess.run(
+        ["systemctl", action, "raven.service"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
     )
     if result.returncode != 0:
         console.print(f"[yellow]systemctl {action} failed: {result.stderr.strip()}[/yellow]")
 
 
 def _run_launchctl(action: str, target: str = "com.raven.ai"):
-    result = subprocess.run(  # noqa: S603
-        ["launchctl", action, target],  # noqa: S607
-        capture_output=True, text=True, timeout=15,
+    result = subprocess.run(
+        ["launchctl", action, target],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
     )
     if result.returncode != 0 and action != "list":
         console.print(f"[yellow]launchctl {action} {target} failed: {result.stderr.strip()}[/yellow]")

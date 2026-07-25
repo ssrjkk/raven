@@ -98,8 +98,6 @@ async def request_id_middleware(request: Request, call_next):
 
 
 async def rate_limit_middleware(request: Request, call_next):
-    if request.method == "GET":
-        return await call_next(request)
     client_ip = request.client.host if request.client else request.headers.get("X-Forwarded-For", "unknown")
     allowed = await rate_limiter.check(client_ip)
     if not allowed:
@@ -137,7 +135,9 @@ async def auth_middleware(request: Request, call_next):
         if session:
             request.state.user_role = session["role"]
             request.state.user_id = session["user_id"]
-        elif settings.web_secret_key.get_secret_value() and hmac.compare_digest(token, settings.web_secret_key.get_secret_value()):
+        elif settings.web_secret_key.get_secret_value() and hmac.compare_digest(
+            token, settings.web_secret_key.get_secret_value()
+        ):
             request.state.user_role = Role.ADMIN.value
             request.state.user_id = "admin"
 
@@ -166,7 +166,7 @@ async def input_sanitize_middleware(request: Request, call_next):
                     if isinstance(obj, dict):
                         for k, v in obj.items():
                             if not isinstance(k, str):
-                                raise ValueError(f"Non-string key: {k}")
+                                raise TypeError(f"Non-string key: {k}")
                             _check_depth(v, depth + 1)
                     elif isinstance(obj, list):
                         for item in obj:

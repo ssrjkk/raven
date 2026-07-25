@@ -133,7 +133,10 @@ def create_github_router() -> APIRouter:
         if not token:
             raise HTTPException(401, "GitHub token not configured")
         async with _client() as c:
-            resp = await c.get("https://api.github.com/user/repos", params={"page": page, "per_page": per_page, "sort": sort, "type": "owner"})
+            resp = await c.get(
+                "https://api.github.com/user/repos",
+                params={"page": page, "per_page": per_page, "sort": sort, "type": "owner"},
+            )
             resp.raise_for_status()
             return resp.json()
 
@@ -168,9 +171,15 @@ def create_github_router() -> APIRouter:
 
     @router.post("/repos/{owner}/{repo}/pulls")
     async def create_pr(body: CreatePRRequest):
-        result = await _post(f"/repos/{body.owner}/{body.repo}/pulls", {
-            "title": body.title, "body": body.body, "head": body.head, "base": body.base,
-        })
+        result = await _post(
+            f"/repos/{body.owner}/{body.repo}/pulls",
+            {
+                "title": body.title,
+                "body": body.body,
+                "head": body.head,
+                "base": body.base,
+            },
+        )
         logger.info("Created PR #{} in {}/{}", result.get("number"), body.owner, body.repo)
         return result
 
@@ -199,7 +208,9 @@ def create_github_router() -> APIRouter:
         if not token:
             raise HTTPException(401, "GitHub token not configured")
         async with _client() as c:
-            resp = await c.get("https://api.github.com/search/repositories", params={"q": q, "page": page, "per_page": per_page})
+            resp = await c.get(
+                "https://api.github.com/search/repositories", params={"q": q, "page": page, "per_page": per_page}
+            )
             resp.raise_for_status()
             return resp.json()
 
@@ -253,12 +264,18 @@ def create_github_router() -> APIRouter:
         target.mkdir(parents=True, exist_ok=True)
         try:
             proc = await asyncio.create_subprocess_exec(
-                "git", "clone", "--branch", body.branch, "--depth", "1",
-                repo_url, str(target),
+                "git",
+                "clone",
+                "--branch",
+                body.branch,
+                "--depth",
+                "1",
+                repo_url,
+                str(target),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await proc.communicate()
+            _stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
                 raise HTTPException(500, f"Clone failed: {stderr.decode()[:500]}")
             logger.info("Cloned {}/{} -> {}", owner, repo, target)
@@ -319,7 +336,9 @@ def create_github_router() -> APIRouter:
             raise HTTPException(401, "GitHub token not configured")
         query = f"repo:{owner}/{repo} {q}"
         async with _client() as c:
-            resp = await c.get("https://api.github.com/search/code", params={"q": query, "page": page, "per_page": per_page})
+            resp = await c.get(
+                "https://api.github.com/search/code", params={"q": query, "page": page, "per_page": per_page}
+            )
             if resp.status_code == 403:
                 raise HTTPException(403, "Code search requires a GitHub token with repo scope")
             resp.raise_for_status()

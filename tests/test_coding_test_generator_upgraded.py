@@ -177,7 +177,7 @@ class TestOptimizeForCoverage:
             patch("pathlib.Path.cwd", return_value=tmp_path),
         ):
             mock_run.return_value = MagicMock(returncode=0, stdout="4 passed in 0.1s", stderr="")
-            result = await gen.optimize_for_coverage("module.py", str(test_file))
+            result = gen.optimize_for_coverage("module.py", str(test_file))
 
         assert result.passed is True
         assert result.coverage == 85.0
@@ -196,14 +196,14 @@ class TestOptimizeForCoverage:
             patch("pathlib.Path.cwd", return_value=tmp_path),
         ):
             mock_run.return_value = MagicMock(returncode=1, stdout="1 failed in 0.1s", stderr="")
-            result = await gen.optimize_for_coverage("module.py", str(test_file))
+            result = gen.optimize_for_coverage("module.py", str(test_file))
 
         assert result.passed is False
 
     @pytest.mark.asyncio
     async def test_optimize_coverage_missing_test_file(self, tmp_path):
         gen = TestGenerator(str(tmp_path))
-        result = await gen.optimize_for_coverage("module.py", "nonexistent.py")
+        result = gen.optimize_for_coverage("module.py", "nonexistent.py")
         assert result.passed is False
         assert result.coverage == 0.0
         assert result.test_count == 0
@@ -215,7 +215,7 @@ class TestOptimizeForCoverage:
         test_file.write_text("def test_foo(): pass")
 
         with patch("raven.coding.test_generator.subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="pytest", timeout=1)):
-            result = await gen.optimize_for_coverage("module.py", str(test_file))
+            result = gen.optimize_for_coverage("module.py", str(test_file))
 
         assert result.passed is False
         assert result.coverage == 0.0
@@ -227,7 +227,7 @@ class TestOptimizeForCoverage:
         test_file.write_text("def test_foo(): pass")
 
         with patch("raven.coding.test_generator.subprocess.run", side_effect=FileNotFoundError):
-            result = await gen.optimize_for_coverage("module.py", str(test_file))
+            result = gen.optimize_for_coverage("module.py", str(test_file))
 
         assert result.passed is False
         assert result.coverage == 0.0
@@ -275,7 +275,7 @@ def greet(name: str) -> str:
     return f"Hello {name}"
 """)
         gen = TestGenerator(str(tmp_path))
-        types = await gen.extract_types("example.py")
+        types = gen.extract_types("example.py")
         assert len(types) >= 1
         assert types[0].name == "greet"
         assert isinstance(types[0], FunctionInfo)

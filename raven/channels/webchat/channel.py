@@ -81,6 +81,7 @@ class WebChatChannel(BaseChannel):
             if token:
                 try:
                     from raven.core.auth.auth_handler import auth_handler
+
                     payload = await auth_handler.decode_token(token)
                     if payload:
                         websocket.state.user_id = payload.get("sub", "unknown")
@@ -96,24 +97,22 @@ class WebChatChannel(BaseChannel):
             client_id = str(uuid4().hex[:8])
             self._connections[client_id] = websocket
             session_id = f"webchat:{client_id}:default"
-            from raven.channels.webchat.streaming import AgentStreamHandler
             try:
                 while True:
                     data = await websocket.receive_text()
                     msg_data = json.loads(data)
                     text = msg_data.get("text", "")
                     session_id = msg_data.get("session_id", session_id)
-                    if text:
-                        handler = AgentStreamHandler(websocket, session_id)
-                        result = await handler.handle_message(text)
-                        if result:
-                            msg = Message(
-                                session_id=session_id,
-                                channel="webchat",
-                                role="assistant",
-                                content=result,
-                            )
-                            await self._db.save_message(msg)
+                    if text and self._handler:
+                        event = IncomingMessage(
+                            channel="webchat",
+                            user_id=websocket.state.user_id,
+                            text=text,
+                            session_id=session_id,
+                        )
+                        await self._handler(event)
+                    elif text and not self._handler:
+                        logger.warning("[webchat] no handler registered, dropping message")
             except WebSocketDisconnect:
                 logger.debug("[webchat] client disconnected")
             finally:
@@ -125,6 +124,7 @@ class WebChatChannel(BaseChannel):
             if token:
                 try:
                     from raven.core.auth.auth_handler import auth_handler
+
                     payload = await auth_handler.decode_token(token)
                     if not payload:
                         await websocket.close(code=1008, reason="Authentication required")
@@ -136,6 +136,7 @@ class WebChatChannel(BaseChannel):
             client_id = str(uuid4().hex[:8])
             session_id = f"webchat:{client_id}:stream"
             from raven.channels.webchat.streaming import AgentStreamHandler
+
             handler = AgentStreamHandler(websocket, session_id)
             try:
                 while True:
@@ -155,6 +156,7 @@ class WebChatChannel(BaseChannel):
             if token:
                 try:
                     from raven.core.auth.auth_handler import auth_handler
+
                     payload = await auth_handler.decode_token(token)
                     if not payload:
                         await websocket.close(code=1008, reason="Authentication required")
@@ -249,12 +251,21 @@ class WebChatChannel(BaseChannel):
         client_id = parts[1] if len(parts) >= 2 else None
         if client_id and client_id in self._connections:
             try:
-                await self._connections[client_id].send_json({
-                    "type": "stream",
-                    "content": text,
-                    "session_id": session_id,
-                })
-            except Exception as e:
+                if text.startswith("{") and text.endswith("}"):
+                    import json as _json
+
+                    parsed = _json.loads(text)
+                    parsed["session_id"] = session_id
+                    await self._connections[client_id].send_json(parsed)
+                else:
+                    await self._connections[client_id].send_json(
+                        {
+                            "type": "stream",
+                            "content": text,
+                            "session_id": session_id,
+                        }
+                    )
+            except (json.JSONDecodeError, Exception) as e:
                 logger.error("WebChat send_stream failed: {}", e)
 
     @property
@@ -286,8 +297,10 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
 .chat-area { background: var(--bg); }
 .message { max-width: 80%; margin-bottom: 0.75rem; line-height: 1.5; }
 .message.user { background: var(--accent); color: white; border-radius: 1rem 1rem 0.25rem 1rem; padding: 0.75rem 1rem; }
-.message.assistant { background: var(--surface); border: 1px solid #2a2a4a; border-radius: 1rem 1rem 1rem 0.25rem; padding: 0.75rem 1rem; }
-.message.system { background: #2d1b4e; border: 1px solid #4a2d6e; border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; color: #c4a0e0; }
+.message.assistant { background: var(--surface); border: 1px solid #2a2a4a;
+  border-radius: 1rem 1rem 1rem 0.25rem; padding: 0.75rem 1rem; }
+.message.system { background: #2d1b4e; border: 1px solid #4a2d6e;
+  border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; color: #c4a0e0; }
 .input-area { background: var(--surface); border-top: 1px solid #2a2a4a; }
 input { background: #1e1e3a; border: 1px solid #2a2a4a; color: var(--text); }
 input:focus { outline: none; border-color: var(--accent); }
@@ -336,7 +349,8 @@ raven-ai v0.1.0
 </template>
 <div x-show="isLoading" class="message assistant" style="max-width:80%">
             <span class="typing"></span>
-<div x-show="streamingEvent" class="message assistant streaming-event" style="max-width:80%" x-html="streamingEvent"></div>
+<div x-show="streamingEvent" class="message assistant streaming-event"
+  style="max-width:80%" x-html="streamingEvent"></div>
 <div x-show="streamingToolCalls.length > 0" class="message system" style="max-width:80%">
 <template x-for="tc in streamingToolCalls" :key="tc.id">
 <div class="text-xs"><span x-text="tc.name"></span> <span x-text="tc.status"></span></div>
@@ -346,8 +360,10 @@ raven-ai v0.1.0
 </div>
 <div class="input-area p-4">
 <form @submit.prevent="sendMessage()" class="flex gap-2">
-<input type="text" x-model="inputText" placeholder="Type a message..." class="flex-1 rounded-xl px-4 py-3 text-sm" @keydown.enter.prevent="sendMessage()">
-<button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-sm font-medium transition">Send</button>
+<input type="text" x-model="inputText" placeholder="Type a message..."
+  class="flex-1 rounded-xl px-4 py-3 text-sm" @keydown.enter.prevent="sendMessage()">
+<button type="submit"
+  class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-sm font-medium transition">Send</button>
 </form>
 </div>
 </div>

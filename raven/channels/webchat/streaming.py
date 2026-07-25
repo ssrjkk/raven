@@ -32,44 +32,54 @@ class AgentStreamHandler:
             logger.debug("Stream send failed (client disconnected): {}", e)
 
     async def _on_step_start(self, event: AgentEvent) -> None:
-        await self._send({
-            "type": "step_start",
-            "session_id": self._session_id,
-            "data": event.data,
-            "timestamp": event.timestamp,
-        })
+        await self._send(
+            {
+                "type": "step_start",
+                "session_id": self._session_id,
+                "data": event.data,
+                "timestamp": event.timestamp,
+            }
+        )
 
     async def _on_tool_call(self, event: AgentEvent) -> None:
-        await self._send({
-            "type": "tool_call",
-            "session_id": self._session_id,
-            "data": event.data,
-            "timestamp": event.timestamp,
-        })
+        await self._send(
+            {
+                "type": "tool_call",
+                "session_id": self._session_id,
+                "data": event.data,
+                "timestamp": event.timestamp,
+            }
+        )
 
     async def _on_tool_result(self, event: AgentEvent) -> None:
-        await self._send({
-            "type": "tool_result",
-            "session_id": self._session_id,
-            "data": event.data,
-            "timestamp": event.timestamp,
-        })
+        await self._send(
+            {
+                "type": "tool_result",
+                "session_id": self._session_id,
+                "data": event.data,
+                "timestamp": event.timestamp,
+            }
+        )
 
     async def _on_message(self, event: AgentEvent) -> None:
-        await self._send({
-            "type": "message",
-            "session_id": self._session_id,
-            "data": event.data,
-            "timestamp": event.timestamp,
-        })
+        await self._send(
+            {
+                "type": "message",
+                "session_id": self._session_id,
+                "data": event.data,
+                "timestamp": event.timestamp,
+            }
+        )
 
     async def _on_done(self, event: AgentEvent) -> None:
-        await self._send({
-            "type": "done",
-            "session_id": self._session_id,
-            "data": event.data,
-            "timestamp": event.timestamp,
-        })
+        await self._send(
+            {
+                "type": "done",
+                "session_id": self._session_id,
+                "data": event.data,
+                "timestamp": event.timestamp,
+            }
+        )
 
     async def handle_message(self, text: str) -> str:
         config = AgentConfig(
@@ -79,5 +89,4 @@ class AgentStreamHandler:
             proactive_scan=True,
         )
         agent = ReActAgent(config=config)
-        result = await agent.run(text)
-        return result
+        return await agent.run(text)

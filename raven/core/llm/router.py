@@ -67,24 +67,49 @@ class LLMRouter:
             key = "ollama"
         elif model.startswith("openrouter/"):
             key = "openrouter"
-        elif model.startswith("claude") or model.startswith("anthropic/"):
+        elif model.startswith(("claude", "anthropic/")):
             key = "anthropic"
         elif model.startswith("ollama/"):
             key = "ollama"
-        elif model.startswith("gpt") or model.startswith("o1") or model.startswith("o3"):
+        elif model.startswith(("gpt", "o1", "o3")):
             key = "openai"
         elif model.startswith("vllm/"):
             key = "vllm"
         elif model.startswith("copilot/"):
             key = "copilot"
-        elif model.startswith("vertex/") or model.startswith("gemini/"):
+        elif model.startswith(("vertex/", "gemini/")):
             key = "vertex"
         elif model.startswith("bedrock/"):
             key = "bedrock"
+        elif model.startswith("groq/"):
+            key = "groq"
         else:
             key = "ollama"
+        _requires_key = {"openai", "anthropic", "openrouter", "groq", "vertex", "bedrock", "copilot", "azure"}
+        if key in _requires_key:
+            from raven.core.config_discovery import get_discovered_keys
+
+            discovery = get_discovered_keys()
+            env_map = {
+                "openai": "OPENAI_API_KEY",
+                "anthropic": "ANTHROPIC_API_KEY",
+                "openrouter": "OPENROUTER_API_KEY",
+                "groq": "GROQ_API_KEY",
+                "vertex": "GOOGLE_API_KEY",
+                "bedrock": "AWS_ACCESS_KEY_ID",
+                "copilot": "GITHUB_TOKEN",
+                "azure": "AZURE_API_KEY",
+            }
+            env_name = env_map.get(key, "")
+            if env_name and not discovery.is_available(env_name):
+                raise RuntimeError(
+                    f"Provider '{key}' requires {env_name} which is not set. "
+                    f"Available providers: {', '.join(discovery.providers_available) or 'ollama (local)'}. "
+                    f"Set the key in .env or use an available provider."
+                )
         if key not in self._providers:
             from raven.core.llm.factory import LLMProviderFactory
+
             overrides = dict(self._providers_config.get(key, {}))
             api_key = overrides.pop("api_key", None)
             raw = LLMProviderFactory.create(key, api_key=api_key, **overrides)
@@ -105,36 +130,40 @@ class LLMRouter:
                         async for token in provider.complete_stream(messages, model, tools):
                             yield token
                 return
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 429:
+            except (RuntimeError, httpx.HTTPStatusError, httpx.TimeoutException, httpx.NetworkError) as e:
+                last_exc = e
+                if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429:
                     retry_after = _parse_retry_after(e.response.headers, 5)
                     logger.warning("LLM rate limited (429), retrying in {}s", retry_after)
                     await asyncio.sleep(retry_after)
                     continue
-                last_exc = e
                 if attempt < settings.llm_retry_max - 1:
                     delay = settings.llm_retry_delay * (2**attempt)
                     logger.warning(
                         "LLM stream failed (attempt {}/{}): {}, retrying in {}s",
-                        attempt + 1, settings.llm_retry_max, e, delay,
+                        attempt + 1,
+                        settings.llm_retry_max,
+                        e,
+                        delay,
                     )
                     await asyncio.sleep(delay)
                 else:
-                    logger.error("LLM stream failed after {} attempts: {}", settings.llm_retry_max, e)
-                    metrics.inc("llm_stream_error", {"model": model, "error": type(e).__name__})
-            except (httpx.TimeoutException, httpx.NetworkError) as e:
-                last_exc = e
-                if attempt < settings.llm_retry_max - 1:
-                    delay = settings.llm_retry_delay * (2**attempt)
                     logger.warning(
-                        "LLM stream failed (attempt {}/{}): {}, retrying in {}s",
-                        attempt + 1, settings.llm_retry_max, e, delay,
+                        "Primary stream '{}' failed after {} attempts: {}", model, settings.llm_retry_max, e
                     )
-                    await asyncio.sleep(delay)
-                else:
-                    logger.error("LLM stream failed after {} attempts: {}", settings.llm_retry_max, e)
                     metrics.inc("llm_stream_error", {"model": model, "error": type(e).__name__})
-        raise last_exc or RuntimeError("LLM stream failed")
+
+        logger.info("Stream failover for model '{}'", model)
+        try:
+            failover = ModelFailover(self)
+            async for token in failover.complete_stream(messages, tools=tools):
+                yield token
+            return
+        except Exception as f:
+            msg = str(last_exc or f)
+            raise RuntimeError(
+                f"All LLM providers exhausted for streaming. Primary '{model}' failed: {msg[:200]}."
+            ) from f
 
     async def complete(
         self, messages: list[dict[str, Any]], model: str | None = None, tools: list[dict[str, Any]] | None = None
@@ -151,7 +180,8 @@ class LLMRouter:
                 await self._set_cached(key, redis_cached)
                 metrics.inc("llm_cache_hit", {"model": model})
                 return redis_cached
-        last_exc: Exception | None = None
+
+        primary_exc: Exception | None = None
         for attempt in range(max(1, settings.llm_retry_max)):
             try:
                 async with self._rate_semaphore:
@@ -163,53 +193,46 @@ class LLMRouter:
                     await self._llm_cache.set(model, messages, resp, tools)
                 await self._set_cached(key, resp)
                 return resp
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 429:
+            except (RuntimeError, httpx.HTTPStatusError, httpx.TimeoutException, httpx.NetworkError) as e:
+                primary_exc = e
+                if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429:
                     retry_after = _parse_retry_after(e.response.headers, 5)
                     logger.warning("LLM rate limited (429), retrying in {}s", retry_after)
                     await asyncio.sleep(retry_after)
                     continue
-                last_exc = e
-                metrics.inc("llm_complete", {"model": model, "status": "retry"})
                 if attempt < settings.llm_retry_max - 1:
                     delay = settings.llm_retry_delay * (2**attempt)
                     logger.warning(
                         "LLM call failed (attempt {}/{}): {}, retrying in {}s",
-                        attempt + 1, settings.llm_retry_max, e, delay,
+                        attempt + 1,
+                        settings.llm_retry_max,
+                        e,
+                        delay,
                     )
                     await asyncio.sleep(delay)
                 else:
-                    logger.error("LLM call failed after {} attempts: {}", settings.llm_retry_max, e)
-                    try:
-                        logger.info("Failover: trying alternative models")
-                        failover = ModelFailover(self)
-                        return await failover.complete(messages, tools=tools)
-                    except Exception as f:
-                        last_exc = f
-            except (httpx.TimeoutException, httpx.NetworkError) as e:
-                last_exc = e
-                metrics.inc("llm_complete", {"model": model, "status": "retry"})
-                if attempt < settings.llm_retry_max - 1:
-                    delay = settings.llm_retry_delay * (2**attempt)
-                    logger.warning(
-                        "LLM call failed (attempt {}/{}): {}, retrying in {}s",
-                        attempt + 1, settings.llm_retry_max, e, delay,
-                    )
-                    await asyncio.sleep(delay)
-                else:
-                    logger.error("LLM call failed after {} attempts: {}", settings.llm_retry_max, e)
-                    try:
-                        logger.info("Failover: trying alternative models")
-                        failover = ModelFailover(self)
-                        return await failover.complete(messages, tools=tools)
-                    except Exception as f:
-                        last_exc = f
-        metrics.inc("llm_complete", {"model": model, "status": "error"})
-        raise last_exc or RuntimeError("LLM call failed")
+                    logger.warning("Primary model '{}' failed after {} attempts: {}", model, settings.llm_retry_max, e)
+            except Exception as e:
+                primary_exc = e
+                logger.warning("LLM call failed: {}", e)
+                break
+
+        logger.info("Trying failover models for request (primary: {})", model)
+        try:
+            failover = ModelFailover(self)
+            return await failover.complete(messages, tools=tools)
+        except Exception as f:
+            metrics.inc("llm_complete", {"model": model, "status": "error"})
+            msg = str(primary_exc or f)
+            raise RuntimeError(
+                f"All LLM providers exhausted. Primary model '{model}' failed: {msg[:200]}. "
+                f"Check your API keys in .env or try a different model."
+            ) from f
 
 
 def _parse_retry_after(headers: Any, default: int = 5) -> int:
     from raven.core.llm.providers.base import _parse_retry_after as _parse
+
     return _parse(headers, default)
 
 

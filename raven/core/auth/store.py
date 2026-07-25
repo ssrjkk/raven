@@ -54,7 +54,9 @@ class AuthStore(BaseStore):
         uid = f"user:{username}"
         pwd_hash = hash_password(password) if password else ""
         await self._execute(
-            "INSERT OR IGNORE INTO auth_users (id, username, display_name, role, password_hash, api_tokens, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO auth_users "
+            "(id, username, display_name, role, password_hash, api_tokens, "
+            "is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (uid, username, display_name, role, pwd_hash, "[]", 1, now, now),
         )
         await self._commit()
@@ -106,9 +108,7 @@ class AuthStore(BaseStore):
 
     async def update_role(self, username: str, role: str):
         now = time.time()
-        await self._execute(
-            "UPDATE auth_users SET role = ?, updated_at = ? WHERE username = ?", (role, now, username)
-        )
+        await self._execute("UPDATE auth_users SET role = ?, updated_at = ? WHERE username = ?", (role, now, username))
         await self._commit()
 
     async def update_password(self, username: str, password: str):

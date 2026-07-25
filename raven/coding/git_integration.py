@@ -10,6 +10,7 @@ from loguru import logger
 
 try:
     from raven.core.llm import LLMProvider
+
     _LLM_AVAILABLE = True
 except ImportError:
     _LLM_AVAILABLE = False
@@ -63,9 +64,12 @@ class GitIntegration:
         self._llm = llm_provider
 
     def _run(self, *args: str) -> tuple[str, str]:
-        result = subprocess.run(  # noqa: S603
-            ["git", "-C", str(self._repo), *args],  # noqa: S607
-            capture_output=True, text=True, timeout=_GIT_TIMEOUT,
+        result = subprocess.run(
+            ["git", "-C", str(self._repo), *args],
+            capture_output=True,
+            text=True,
+            timeout=_GIT_TIMEOUT,
+            check=True,
         )
         return result.stdout.strip(), result.stderr.strip()
 
@@ -79,14 +83,19 @@ class GitIntegration:
         return files
 
     def _count_changes(self, diff: str) -> tuple[int, int]:
-        lines = [line for line in diff.split("\n") if line.startswith(("+", "-")) and not line.startswith(("---", "+++"))]
+        lines = [
+            line for line in diff.split("\n") if line.startswith(("+", "-")) and not line.startswith(("---", "+++"))
+        ]
         additions = sum(1 for line in lines if line.startswith("+"))
         removals = sum(1 for line in lines if line.startswith("-"))
         return additions, removals
 
     def is_repo(self) -> bool:
-        stdout, _ = self._run("rev-parse", "--git-dir")
-        return bool(stdout)
+        try:
+            stdout, _ = self._run("rev-parse", "--git-dir")
+            return bool(stdout)
+        except subprocess.CalledProcessError:
+            return False
 
     def get_branch(self) -> str:
         stdout, _ = self._run("rev-parse", "--abbrev-ref", "HEAD")
@@ -223,35 +232,47 @@ class GitIntegration:
 
             stripped = line[1:].strip()
             if len(stripped) > _LONG_LINE_THRESHOLD:
-                comments.append(ReviewComment(
-                    file=file_path or "(unknown)", line=0,
-                    severity="warning",
-                    message=f"Line too long ({len(stripped)} chars, max {_LONG_LINE_THRESHOLD})",
-                ))
+                comments.append(
+                    ReviewComment(
+                        file=file_path or "(unknown)",
+                        line=0,
+                        severity="warning",
+                        message=f"Line too long ({len(stripped)} chars, max {_LONG_LINE_THRESHOLD})",
+                    )
+                )
                 issues_found.append("long_line")
 
             if not stripped.endswith(("}", ")", ";", ":", ",")) and "print(" in stripped:
-                comments.append(ReviewComment(
-                    file=file_path or "(unknown)", line=0,
-                    severity="info",
-                    message="Consider using logger instead of print()",
-                ))
+                comments.append(
+                    ReviewComment(
+                        file=file_path or "(unknown)",
+                        line=0,
+                        severity="info",
+                        message="Consider using logger instead of print()",
+                    )
+                )
                 issues_found.append("print")
 
             if "TODO" in stripped or "FIXME" in stripped:
-                comments.append(ReviewComment(
-                    file=file_path or "(unknown)", line=0,
-                    severity="info",
-                    message=f"Unresolved marker: {stripped}",
-                ))
+                comments.append(
+                    ReviewComment(
+                        file=file_path or "(unknown)",
+                        line=0,
+                        severity="info",
+                        message=f"Unresolved marker: {stripped}",
+                    )
+                )
                 issues_found.append("marker")
 
             if ("except:" in stripped or "except Exception:" in stripped) and "pass" in stripped:
-                comments.append(ReviewComment(
-                    file=file_path or "(unknown)", line=0,
-                    severity="warning",
-                    message="Bare except with pass — silent error swallowing",
-                ))
+                comments.append(
+                    ReviewComment(
+                        file=file_path or "(unknown)",
+                        line=0,
+                        severity="warning",
+                        message="Bare except with pass — silent error swallowing",
+                    )
+                )
                 issues_found.append("silent_except")
 
         summary = f"Found {len(comments)} issue(s)"
@@ -271,7 +292,7 @@ class GitIntegration:
         resolved: list[str] = []
         skip = False
         for line in content.split("\n"):
-            if line.startswith("<<<<<<<") or line.startswith("======="):
+            if line.startswith(("<<<<<<<", "=======")):
                 skip = True
             elif line.startswith(">>>>>>>"):
                 skip = False
@@ -315,7 +336,7 @@ class GitIntegration:
             user_prompt += f"\n\nAdditional context: {context}"
         result = await self._call_llm(
             system_prompt="You are a git commit message generator. "
-                          "Respond with only the commit message (single line subject + optional body).",
+            "Respond with only the commit message (single line subject + optional body).",
             user_prompt=user_prompt,
         )
         return result or self._generate_commit_message(diff, context)
@@ -323,7 +344,7 @@ class GitIntegration:
     async def _generate_llm_pr_description(self, diff: str) -> str:
         result = await self._call_llm(
             system_prompt="You are a PR description generator. "
-                          "Provide a markdown summary with sections for changes, rationale, and risks.",
+            "Provide a markdown summary with sections for changes, rationale, and risks.",
             user_prompt=f"Generate a detailed PR description for this diff:\n\n{diff[:4000]}",
         )
         return result or self._generate_pr_description(diff)
@@ -394,7 +415,11 @@ class GitIntegration:
             f"\nDiff:\n```\n{diff[:6000]}\n```\n"
         )
         response = await self._call_llm(
-            system_prompt="You are a senior code reviewer. Analyze code changes and provide constructive feedback. Respond with valid JSON only.",
+            system_prompt=(
+                "You are a senior code reviewer. Analyze code changes "
+                "and provide constructive feedback. Respond with valid "
+                "JSON only."
+            ),
             user_prompt=prompt,
         )
         if not response:

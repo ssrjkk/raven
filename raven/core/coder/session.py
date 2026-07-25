@@ -68,18 +68,17 @@ class CodingSessionManager(BaseStore):
         return self._row_to_session(row)
 
     @measure_latency()
-    async def list_sessions(
-        self, user_id: str | None = None, limit: int = 20, offset: int = 0
-    ) -> list[CodingSession]:
+    async def list_sessions(self, user_id: str | None = None, limit: int = 20, offset: int = 0) -> list[CodingSession]:
         where = "1=1"
         params: list[Any] = []
         if user_id:
             where = "user_id = ?"
             params.append(user_id)
         if where not in self._ALLOWED_WHERE:
-            raise ValueError(f"Disallowed WHERE clause: {where}")
+            msg = f"Disallowed WHERE clause: {where}"
+            raise ValueError(msg)
         rows = await self._fetchall(
-            f"SELECT * FROM coding_sessions WHERE {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",  # noqa: S608
+            f"SELECT * FROM coding_sessions WHERE {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
             (*params, limit, offset),
         )
         return [self._row_to_session(r) for r in rows]
@@ -92,9 +91,10 @@ class CodingSessionManager(BaseStore):
             where = "user_id = ?"
             params.append(user_id)
         if where not in self._ALLOWED_WHERE:
-            raise ValueError(f"Disallowed WHERE clause: {where}")
+            msg = f"Disallowed WHERE clause: {where}"
+            raise ValueError(msg)
         row = await self._fetchone(
-            f"SELECT COUNT(*) as cnt FROM coding_sessions WHERE {where}",  # noqa: S608
+            f"SELECT COUNT(*) as cnt FROM coding_sessions WHERE {where}",
             params,
         )
         return row["cnt"] if row else 0

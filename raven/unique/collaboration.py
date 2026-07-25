@@ -11,7 +11,7 @@ from typing import Any
 from loguru import logger
 
 try:
-    from y_py import YDoc, YText  # noqa: F401
+    from y_py import YDoc
 
     HAS_YPY = True
 except ImportError:
@@ -412,7 +412,7 @@ class CollaborationManager:
         users: dict[str, str] = {}
         for session in self._sessions.values():
             for uid, name in session.users.items():
-                users[uid] = name
+                users[uid] = name  # noqa: PERF403
         return [{"id": uid, "name": name} for uid, name in users.items()]
 
 
@@ -467,7 +467,7 @@ class RealTimeCollaboration:
                 return sid
         return None
 
-    async def create_session(self, session_id: str, file_path: str) -> CollaborationSession:
+    def create_session(self, session_id: str, file_path: str) -> CollaborationSession:
         session = self._manager.create_session(session_id, file_path)
         logger.info("Session created: {} (file: {})", session_id, file_path)
         return session
@@ -601,7 +601,7 @@ class RealTimeCollaboration:
             )
         return ok
 
-    async def get_session_summary(self, session_id: str) -> dict[str, Any] | None:
+    def get_session_summary(self, session_id: str) -> dict[str, Any] | None:
         session = self._manager.get_session(session_id)
         if not session:
             return None
@@ -626,7 +626,7 @@ class RealTimeCollaboration:
             "connections": self._ws_manager.connection_count(session_id),
         }
 
-    async def sync_crdt_state(self, session_id: str, target_session_id: str | None = None) -> bytes | None:
+    def sync_crdt_state(self, session_id: str, target_session_id: str | None = None) -> bytes | None:
         session = self._manager.get_session(session_id)
         if not session:
             return None

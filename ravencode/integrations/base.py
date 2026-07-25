@@ -10,7 +10,7 @@ from ravencode.integrations.models import WorkflowResult as WorkflowResult
 class CIProvider(ABC):
     """Base class for CI/CD provider integrations (GitHub, GitLab, etc.)."""
 
-    def __init__(self, token: str | None = None, api_url: str | None = None):
+    def __init__(self, token: str | None = None, api_url: str | None = None) -> None:
         self._token = token
         self._api_url = api_url
 

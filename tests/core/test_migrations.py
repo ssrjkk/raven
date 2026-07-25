@@ -22,8 +22,8 @@ def db_path(tmp_path):
 
 @pytest.mark.asyncio
 async def test_migration_3_creates_checkpoints_table(tmp_db):
-    db_path, conn = tmp_db
-    mig3 = [m for m in _MIGRATIONS if m.version == 3][0]
+    _db_path, conn = tmp_db
+    mig3 = next(m for m in _MIGRATIONS if m.version == 3)
     await mig3.migrate_fn(conn)
     await conn.commit()
     async with conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='checkpoints'") as c:
@@ -34,8 +34,8 @@ async def test_migration_3_creates_checkpoints_table(tmp_db):
 
 @pytest.mark.asyncio
 async def test_migration_4_creates_routines_and_logs(tmp_db):
-    db_path, conn = tmp_db
-    mig4 = [m for m in _MIGRATIONS if m.version == 4][0]
+    _db_path, conn = tmp_db
+    mig4 = next(m for m in _MIGRATIONS if m.version == 4)
     await mig4.migrate_fn(conn)
     await conn.commit()
     async with conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='routines'") as c:

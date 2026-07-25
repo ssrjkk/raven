@@ -6,6 +6,7 @@ Injected into:
 - Canary HTML comments (web UI responses)
 - Honeytoken keys (fake credentials that trigger alerts if used)
 """
+
 from __future__ import annotations
 
 from raven.core._deploy import DEPLOY_ID, DEPLOY_ORIGIN, DEPLOY_TIMESTAMP
@@ -77,4 +78,3 @@ def install_fastapi_watermark(app):
             await self.inner(scope, receive, send_with_headers)
 
     app.add_middleware(WatermarkMiddleware)
-

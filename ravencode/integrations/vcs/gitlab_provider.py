@@ -11,7 +11,7 @@ from ravencode.integrations.vcs.models import Branch, PullRequest, Repository
 
 
 class GitLabProvider:
-    def __init__(self, token: str | None = None, api_url: str = ""):
+    def __init__(self, token: str | None = None, api_url: str = "") -> None:
         self._token = token or os.getenv("GITLAB_TOKEN") or ""
         base = api_url or os.getenv("CI_SERVER_URL", "https://gitlab.com/api/v4") or "https://gitlab.com/api/v4"
         self._api_url = base.rstrip("/")
@@ -65,7 +65,9 @@ class GitLabProvider:
             for b in cast(list[dict[str, Any]], resp.json())
         ]
 
-    async def create_pull_request(self, identifier: str, title: str, source: str, target: str, body: str = "") -> PullRequest:
+    async def create_pull_request(
+        self, identifier: str, title: str, source: str, target: str, body: str = ""
+    ) -> PullRequest:
         pid = await self._ensure_id(identifier)
         resp = await self._request(
             "POST",
@@ -140,7 +142,9 @@ class GitLabProvider:
             logger.warning("Failed to get MR diff: {}", e)
             return None
 
-    async def set_commit_status(self, identifier: str, sha: str, state: str, description: str, context: str = "ravencode/ci") -> bool:
+    async def set_commit_status(
+        self, identifier: str, sha: str, state: str, description: str, context: str = "ravencode/ci"
+    ) -> bool:
         pid = await self._ensure_id(identifier)
         try:
             await self._request(

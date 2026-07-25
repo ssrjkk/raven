@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from raven.core.llm import LLMResponse, LLMRouter, ToolCall
+from raven.core.llm import LLMProvider, LLMResponse, LLMRouter, ToolCall
 
 
 class TestToolCall:
@@ -58,30 +58,36 @@ class TestLLMResponse:
 
 
 class TestLLMRouter:
+    def _unwrapped(self, prov: LLMProvider) -> type[LLMProvider]:
+        from raven.core.metrics import InstrumentedLLMProvider
+        if isinstance(prov, InstrumentedLLMProvider):
+            return type(prov._wrapped)
+        return type(prov)
+
     def test_get_provider_openrouter(self):
         router = LLMRouter()
         prov = router._get_provider("openrouter/anthropic/claude-3")
-        assert prov.__class__.__name__ == "OpenRouterProvider"
+        assert self._unwrapped(prov).__name__ == "OpenRouterProvider"
 
     def test_get_provider_anthropic(self):
         router = LLMRouter()
         prov = router._get_provider("claude-3-haiku-20240307")
-        assert prov.__class__.__name__ == "AnthropicProvider"
+        assert self._unwrapped(prov).__name__ == "AnthropicProvider"
 
     def test_get_provider_openai(self):
         router = LLMRouter()
         prov = router._get_provider("gpt-4o")
-        assert prov.__class__.__name__ == "OpenAIProvider"
+        assert self._unwrapped(prov).__name__ == "OpenAIProvider"
 
     def test_get_provider_ollama(self):
         router = LLMRouter()
         prov = router._get_provider("ollama/llama3")
-        assert prov.__class__.__name__ == "OllamaProvider"
+        assert self._unwrapped(prov).__name__ == "OllamaProvider"
 
     def test_get_provider_fallback(self):
         router = LLMRouter()
         prov = router._get_provider("unknown/model")
-        assert prov.__class__.__name__ == "OllamaProvider"
+        assert self._unwrapped(prov).__name__ == "OllamaProvider"
 
     def test_get_provider_empty_default(self):
         router = LLMRouter()

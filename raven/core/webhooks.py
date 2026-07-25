@@ -34,10 +34,14 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
         body_bytes = await request.body()
         signature = request.headers.get("X-Webhook-Signature", "")
         if settings.web_secret_key.get_secret_value():
-            if not signature or not _verify_hmac_sha256(body_bytes, signature, settings.web_secret_key.get_secret_value()):
+            if not signature or not _verify_hmac_sha256(
+                body_bytes, signature, settings.web_secret_key.get_secret_value()
+            ):
                 raise HTTPException(status_code=403, detail="Invalid or missing webhook signature")
         elif signature:
-            raise HTTPException(status_code=403, detail="Webhook signature not supported — WEB_SECRET_KEY not configured")
+            raise HTTPException(
+                status_code=403, detail="Webhook signature not supported — WEB_SECRET_KEY not configured"
+            )
         source = request.headers.get("X-Webhook-Source", "unknown")
         text = body.get("text", "") or body.get("message", "") or body.get("content", "")
         user_id = body.get("user_id", "") or body.get("user", "") or f"webhook:{source}"
@@ -71,9 +75,12 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
             except (ValueError, TypeError) as err:
                 raise HTTPException(status_code=403, detail="Invalid Slack timestamp") from err
             sig_basestring = f"v0:{slack_ts}:{body_bytes.decode()}"
-            expected = "v0=" + hmac_mod.new(
-                settings.web_secret_key.get_secret_value().encode(), sig_basestring.encode(), hashlib.sha256
-            ).hexdigest()
+            expected = (
+                "v0="
+                + hmac_mod.new(
+                    settings.web_secret_key.get_secret_value().encode(), sig_basestring.encode(), hashlib.sha256
+                ).hexdigest()
+            )
             if not hmac_mod.compare_digest(expected, slack_sig):
                 raise HTTPException(status_code=403, detail="Invalid Slack signature")
         logger.debug("Slack webhook event: {}", body.get("type", ""))
@@ -89,7 +96,11 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
     async def whatsapp_webhook(body: dict[str, Any], request: Request):
         body_bytes = await request.body()
         wa_sig = request.headers.get("X-Hub-Signature-256", "")
-        if settings.web_secret_key.get_secret_value() and wa_sig and not _verify_hmac_sha256(body_bytes, wa_sig, settings.web_secret_key.get_secret_value()):
+        if (
+            settings.web_secret_key.get_secret_value()
+            and wa_sig
+            and not _verify_hmac_sha256(body_bytes, wa_sig, settings.web_secret_key.get_secret_value())
+        ):
             raise HTTPException(status_code=403, detail="Invalid WhatsApp signature")
         wa_ch = request.app.state.whatsapp_channel if hasattr(request.app.state, "whatsapp_channel") else None
         if wa_ch:
@@ -101,7 +112,11 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
         mode = request.query_params.get("hub.mode")
         token = request.query_params.get("hub.verify_token")
         challenge = request.query_params.get("hub.challenge")
-        if mode == "subscribe" and settings.web_secret_key.get_secret_value() and hmac_mod.compare_digest(token or "", settings.web_secret_key.get_secret_value()):
+        if (
+            mode == "subscribe"
+            and settings.web_secret_key.get_secret_value()
+            and hmac_mod.compare_digest(token or "", settings.web_secret_key.get_secret_value())
+        ):
             return int(challenge)  # type: ignore[arg-type]
         raise HTTPException(status_code=403, detail="Verify token failed")
 
@@ -202,7 +217,10 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
                 TestFailure(
                     test_name=f"workflow:{workflow_run.get('name', 'unknown')}",
                     test_file="",
-                    error_message=f"Workflow '{workflow_run.get('name', '')}' failed on branch '{head_branch}' (commit {head_sha[:8]})",
+                    error_message=(
+                        f"Workflow '{workflow_run.get('name', '')}' "
+                        f"failed on branch '{head_branch}' (commit {head_sha[:8]})"
+                    ),
                 )
             )
             result = await heal_test_failure(report.failures[0], ".")

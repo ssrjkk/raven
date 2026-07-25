@@ -59,6 +59,7 @@ def cli(ctx: click.Context):
     """Raven AI — Personal AI Assistant 24/7"""
     if ctx.invoked_subcommand is None:
         from raven.cli.coding import code
+
         code(task="", project=None, agent="raven", max_steps=50, safe=False, plan=False, model=None, parallel=None)
 
 
@@ -105,6 +106,7 @@ def start(daemon: bool, port: int | None, stateless: bool, ghost: bool):
 
     if ghost:
         from raven.core.config import apply_ghost_mode
+
         apply_ghost_mode()
         console.print("[dim]Ghost mode: 100% offline, local LLM only[/dim]")
 
@@ -150,6 +152,7 @@ def stop():
 @cli.command()
 def status():
     """Show status of all channels and plugins"""
+
     async def _status():
         db = DatabaseFactory.create()
         await db.connect()
@@ -160,7 +163,8 @@ def status():
 
         api_ok = False
         try:
-            r = httpx.get(f"http://localhost:{settings.web_port}/api/status", timeout=3)
+            async with httpx.AsyncClient(timeout=3) as client:
+                r = await client.get(f"http://localhost:{settings.web_port}/api/status")
             api_ok = r.is_success
         except Exception as e:
             logger.debug("Status health check failed: {}", e)
@@ -181,11 +185,11 @@ def status():
     asyncio.run(_status())
 
 
-
 @cli.command()
 def onboard():
     """Interactive setup wizard"""
     from raven.cli.onboard import onboard as _onboard_async
+
     asyncio.run(_onboard_async())
 
 
@@ -195,13 +199,16 @@ def init(template: str | None):
     """Initialize a new Raven project (scaffold raven.json + .env.example)"""
     if template == "plugin":
         from raven.cli.init_cmd import init_plugin_template
+
         init_plugin_template()
         return
     if template == "skill":
         from raven.cli.init_cmd import init_skill_template
+
         init_skill_template()
         return
     from raven.cli.init_cmd import init as _init
+
     _init()
 
 
@@ -209,6 +216,7 @@ def init(template: str | None):
 def deploy():
     """Generate Docker Compose deployment files"""
     from raven.cli.deploy_cmd import deploy as _deploy
+
     _deploy()
 
 
@@ -223,6 +231,7 @@ def update(dry_run: bool):
             capture_output=True,
             text=True,
             timeout=30,
+            check=False,
         )
         if "Would install" in result.stdout or "Requirement already satisfied" not in result.stdout:
             console.print(
@@ -235,6 +244,7 @@ def update(dry_run: bool):
                     capture_output=True,
                     text=True,
                     timeout=120,
+                    check=False,
                 )
                 if upg.returncode == 0:
                     console.print("[green][OK] Update complete![/green]")
@@ -271,17 +281,19 @@ def repl(
     from raven.cli.coding import code as _code
 
     if not task and not project and not parallel:
-        console.print(Panel.fit(
-            "[bold]Raven Code Agent[/bold]\n\n"
-            "Usage:\n"
-            "  raven repl                       # interactive REPL\n"
-            "  raven repl \"fix this bug\"        # one-shot + REPL\n"
-            "  raven repl -p /path/to/project   # specify project root\n"
-            "  raven repl --parallel \"task\"     # parallel session\n"
-            "  raven repl --safe                # safe mode (confirm)\n"
-            "  raven repl --plan                # read-only plan mode",
-            border_style="cyan",
-        ))
+        console.print(
+            Panel.fit(
+                "[bold]Raven Code Agent[/bold]\n\n"
+                "Usage:\n"
+                "  raven repl                       # interactive REPL\n"
+                '  raven repl "fix this bug"        # one-shot + REPL\n'
+                "  raven repl -p /path/to/project   # specify project root\n"
+                '  raven repl --parallel "task"     # parallel session\n'
+                "  raven repl --safe                # safe mode (confirm)\n"
+                "  raven repl --plan                # read-only plan mode",
+                border_style="cyan",
+            )
+        )
         return
     _code(task, project, agent, max_steps, safe, plan, model, parallel)
 
@@ -292,12 +304,13 @@ def repl(
 @click.option("--channel", default="cli", help="Channel to simulate")
 def agent(message: str, agent_id: str, channel: str):
     """Send a message to the Raven AI agent and get a response"""
+
     async def _agent():
         db = DatabaseFactory.create()
         await db.connect()
         plugin_loader = PluginLoader()
         plugins_dir = Path(__file__).parent.parent / "plugins"
-        for pdir in plugins_dir.iterdir():
+        for pdir in sorted(plugins_dir.iterdir(), key=lambda d: d.name):
             if pdir.is_dir() and pdir.name != "__pycache__":
                 plugin_loader.load_from_dir(pdir)
         from raven.plugins.sessions import plugin as sessions_plugin
@@ -324,6 +337,7 @@ def agent(message: str, agent_id: str, channel: str):
 @click.argument("session_id")
 def history(session_id: str):
     """View message history for a session"""
+
     async def _history():
         db = DatabaseFactory.create()
         await db.connect()
@@ -356,9 +370,6 @@ def tui():
     except Exception as e:
         console.print(f"[red]TUI error: {e}[/red]")
         raise SystemExit(1) from e
-
-
-
 
 
 if __name__ == "__main__":

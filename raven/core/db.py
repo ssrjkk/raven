@@ -169,7 +169,9 @@ class Database:
             id=session_id, channel=channel, user_id=user_id, agent_id=agent_id, created_at=now, updated_at=now
         )
         await self.conn.execute(
-            "INSERT OR IGNORE INTO sessions (id, channel, user_id, agent_id, agent_skills, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO sessions "
+            "(id, channel, user_id, agent_id, agent_skills, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 session.id,
                 session.channel,
@@ -187,7 +189,9 @@ class Database:
         await self.conn.execute("BEGIN")
         try:
             await self.conn.execute(
-                "INSERT OR IGNORE INTO messages (id, session_id, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO messages "
+                "(id, session_id, role, content, metadata, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
                 (msg.id, msg.session_id, msg.role, msg.content, json.dumps(msg.metadata), msg.created_at.isoformat()),
             )
             await self.conn.execute(
@@ -218,9 +222,7 @@ class Database:
                     role=row["role"],
                     content=row["content"],
                     metadata=json.loads(row["metadata"]) if row["metadata"] else {},
-                    created_at=datetime.fromisoformat(row["created_at"])
-                    if row["created_at"]
-                    else datetime.now(UTC),
+                    created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.now(UTC),
                 )
             )
         return result
@@ -293,12 +295,8 @@ class Database:
                     agent_id=r["agent_id"] or "default",
                     agent_skills=skills,
                     system_prompt=r["system_prompt"],
-                    created_at=datetime.fromisoformat(r["created_at"])
-                    if r["created_at"]
-                    else datetime.now(UTC),
-                    updated_at=datetime.fromisoformat(r["updated_at"])
-                    if r["updated_at"]
-                    else datetime.now(UTC),
+                    created_at=datetime.fromisoformat(r["created_at"]) if r["created_at"] else datetime.now(UTC),
+                    updated_at=datetime.fromisoformat(r["updated_at"]) if r["updated_at"] else datetime.now(UTC),
                 )
             )
         return result
@@ -344,7 +342,9 @@ class Database:
                     created_at=msg.get("created_at", datetime.now(UTC)),
                 )
                 await self.conn.execute(
-                    "INSERT INTO messages (id, session_id, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO messages "
+                    "(id, session_id, role, content, metadata, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
                     (m.id, m.session_id, m.role, m.content, json.dumps(m.metadata), m.created_at.isoformat()),
                 )
             await self.conn.execute("COMMIT")
@@ -365,9 +365,7 @@ class Database:
         await self.conn.commit()
 
     async def get_secret(self, key: str) -> str | None:
-        async with self.conn.execute(
-            "SELECT value_enc FROM secrets WHERE key = ?", (key,)
-        ) as c:
+        async with self.conn.execute("SELECT value_enc FROM secrets WHERE key = ?", (key,)) as c:
             row = await c.fetchone()
         return row["value_enc"] if row else None
 

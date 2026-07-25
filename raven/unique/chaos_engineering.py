@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import re
 import secrets
 import time
 import uuid
@@ -37,7 +38,7 @@ class FaultConfig:
     fault_type: FaultType
     target: str = ""
     duration_sec: float = 30.0
-    intensity: float = 0.5  # 0.0–1.0
+    intensity: float = 0.5  # 0.0-1.0
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -120,10 +121,10 @@ class SystemMonitor:
             await asyncio.sleep(self._interval)
 
     async def _collect_snapshot(self) -> SystemSnapshot:
-        cpu = await self._get_cpu()
-        mem = await self._get_memory()
-        disk = await self._get_disk()
-        procs = await self._get_process_count()
+        cpu = self._get_cpu()
+        mem = self._get_memory()
+        disk = self._get_disk()
+        procs = self._get_process_count()
         latency = await self._get_network_latency()
         return SystemSnapshot(
             cpu_percent=cpu,
@@ -134,30 +135,34 @@ class SystemMonitor:
             timestamp=time.time(),
         )
 
-    async def _get_cpu(self) -> float:
+    def _get_cpu(self) -> float:
         try:
             import psutil
+
             return float(psutil.cpu_percent(interval=0.1))
         except ImportError:
             return secrets.SystemRandom().uniform(10.0, 80.0)
 
-    async def _get_memory(self) -> float:
+    def _get_memory(self) -> float:
         try:
             import psutil
+
             return float(psutil.virtual_memory().percent)
         except ImportError:
             return secrets.SystemRandom().uniform(20.0, 70.0)
 
-    async def _get_disk(self) -> float:
+    def _get_disk(self) -> float:
         try:
             import psutil
+
             return float(psutil.disk_usage("/").percent)
         except ImportError:
             return secrets.SystemRandom().uniform(30.0, 80.0)
 
-    async def _get_process_count(self) -> int:
+    def _get_process_count(self) -> int:
         try:
             import psutil
+
             return len(psutil.pids())
         except ImportError:
             return secrets.SystemRandom().randint(100, 500)
@@ -169,7 +174,10 @@ class SystemMonitor:
 
             param = "-n" if platform.system().lower() == "windows" else "-c"
             proc = await asyncio.create_subprocess_exec(
-                "ping", param, "1", "8.8.8.8",
+                "ping",
+                param,
+                "1",
+                "8.8.8.8",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
             )
@@ -178,6 +186,7 @@ class SystemMonitor:
             for line in out.split("\n"):
                 if "time=" in line or "time<" in line:
                     import re
+
                     match = re.search(r"time[=<>]\s*(\d+\.?\d*)", line, re.IGNORECASE)
                     if match:
                         return float(match.group(1))
@@ -208,6 +217,7 @@ class FaultInjector:
     def __init__(self) -> None:
         self._active_faults: dict[str, dict[str, Any]] = {}
         self._fault_history: list[dict[str, Any]] = []
+        self._bg_tasks: set[asyncio.Task[None]] = set()
 
     @property
     def active_faults(self) -> dict[str, dict[str, Any]]:
@@ -215,8 +225,14 @@ class FaultInjector:
 
     async def inject(self, config: FaultConfig) -> dict[str, Any]:
         fault_id = uuid.uuid4().hex[:12]
-        logger.info("Injecting fault [{}]: type={}, target='{}', duration={}s, intensity={}",
-                     fault_id, config.fault_type.value, config.target, config.duration_sec, config.intensity)
+        logger.info(
+            "Injecting fault [{}]: type={}, target='{}', duration={}s, intensity={}",
+            fault_id,
+            config.fault_type.value,
+            config.target,
+            config.duration_sec,
+            config.intensity,
+        )
         fault_record: dict[str, Any] = {
             "id": fault_id,
             "config": {
@@ -233,17 +249,17 @@ class FaultInjector:
 
         try:
             if config.fault_type == FaultType.SERVICE_KILL:
-                await self._inject_service_kill(fault_record)
+                self._inject_service_kill(fault_record)
             elif config.fault_type == FaultType.NETWORK_LATENCY:
-                await self._inject_network_latency(fault_record)
+                self._inject_network_latency(fault_record)
             elif config.fault_type == FaultType.DISK_FILL:
-                await self._inject_disk_fill(fault_record)
+                self._inject_disk_fill(fault_record)
             elif config.fault_type == FaultType.CPU_STORM:
-                await self._inject_cpu_storm(fault_record)
+                self._inject_cpu_storm(fault_record)
             elif config.fault_type == FaultType.MEMORY_LEAK:
-                await self._inject_memory_leak(fault_record)
+                self._inject_memory_leak(fault_record)
             elif config.fault_type == FaultType.PROCESS_KILL:
-                await self._inject_process_kill(fault_record)
+                self._inject_process_kill(fault_record)
         except Exception as exc:
             fault_record["error"] = str(exc)
             logger.error("Fault injection failed [{}]: {}", fault_id, exc)
@@ -261,7 +277,7 @@ class FaultInjector:
 
         logger.info("Recovering fault [{}]: type={}", fault_id, fault["config"]["fault_type"])
         try:
-            await self._recover_fault(fault)
+            self._recover_fault(fault)
             fault["recovered"] = True
             fault["recovery_time"] = time.time()
             logger.info("Fault [{}] recovered successfully", fault_id)
@@ -279,7 +295,7 @@ class FaultInjector:
                 results.append(result)
         return results
 
-    async def _inject_service_kill(self, fault: dict[str, Any]) -> None:
+    def _inject_service_kill(self, fault: dict[str, Any]) -> None:
         service = fault["config"]["target"]
         if not service:
             fault["error"] = "No service target specified"
@@ -287,6 +303,7 @@ class FaultInjector:
         logger.warning("[SIMULATED] Killing service: {}", service)
         try:
             import psutil
+
             for proc in psutil.process_iter(["pid", "name"]):
                 if service.lower() in proc.info["name"].lower():
                     proc.kill()
@@ -299,9 +316,8 @@ class FaultInjector:
             logger.warning("[SIMULATED] Killing service '{}' (psutil not available)", service)
             fault["details"] = {"service": service, "simulated": True}
 
-    async def _inject_network_latency(self, fault: dict[str, Any]) -> None:
+    def _inject_network_latency(self, fault: dict[str, Any]) -> None:
         import platform
-        import shlex
         import shutil
         import subprocess as _subprocess
 
@@ -310,14 +326,20 @@ class FaultInjector:
         system = platform.system().lower()
         iface = target if target != "all interfaces" else None
         if system == "linux" and shutil.which("tc"):
-            iface_arg = f"dev {shlex.quote(iface)}" if iface else "dev lo"
+            iface_str = iface or "lo"
+            if not re.match(r"^[\w.\-:]+$", iface_str):
+                raise ValueError(f"Invalid network interface: {iface_str}")
+            _tc_path = shutil.which("tc")
+            assert _tc_path is not None
             try:
-                _subprocess.run(  # noqa: S602
-                    f"tc qdisc add {iface_arg} root netem delay {latency_ms}ms",
-                    shell=True, capture_output=True, timeout=5,
+                _subprocess.run(
+                    [_tc_path, "qdisc", "add", "dev", iface_str, "root", "netem", "delay", f"{latency_ms}ms"],
+                    capture_output=True,
+                    timeout=5,
+                    check=False,
                 )
-                fault["details"] = {"latency_ms": round(latency_ms, 1), "target": iface or "lo", "method": "tc"}
-                logger.warning("Added {}ms latency via tc {} (real)", round(latency_ms, 1), iface_arg)
+                fault["details"] = {"latency_ms": round(latency_ms, 1), "target": iface_str, "method": "tc"}
+                logger.warning("Added {}ms latency via tc {} (real)", round(latency_ms, 1), iface_str)
                 return
             except Exception as exc:
                 logger.warning("tc failed: {}", exc)
@@ -325,7 +347,7 @@ class FaultInjector:
             logger.warning("Network latency injection requires Linux+tc or a proxy (real not available)")
         fault["details"] = {"latency_ms": round(latency_ms, 1), "target": target, "simulated": True}
 
-    async def _inject_disk_fill(self, fault: dict[str, Any]) -> None:
+    def _inject_disk_fill(self, fault: dict[str, Any]) -> None:
         import shutil
         import tempfile
 
@@ -343,19 +365,29 @@ class FaultInjector:
                     while written < target_free:
                         f.write(chunk)
                         written += len(chunk)
-                fault["details"] = {"fill_percent": round(fill_percent, 1), "target": str(target_dir), "bytes_written": written}
+                fault["details"] = {
+                    "fill_percent": round(fill_percent, 1),
+                    "target": str(target_dir),
+                    "bytes_written": written,
+                }
                 logger.warning("Filled disk to ~{}% in {} ({} bytes)", round(fill_percent, 1), target_dir, written)
             else:
-                fault["details"] = {"fill_percent": round(fill_percent, 1), "target": str(target_dir), "error": "no free space"}
+                fault["details"] = {
+                    "fill_percent": round(fill_percent, 1),
+                    "target": str(target_dir),
+                    "error": "no free space",
+                }
         except Exception as exc:
             logger.warning("Disk fill failed: {}", exc)
             fault["details"] = {"fill_percent": round(fill_percent, 1), "target": str(target_dir), "error": str(exc)}
 
-    async def _inject_cpu_storm(self, fault: dict[str, Any]) -> None:
+    def _inject_cpu_storm(self, fault: dict[str, Any]) -> None:
         cores = max(1, int(fault["config"]["intensity"] * 8))
         logger.warning("Consuming {} CPU cores (real)", cores)
         fault["details"] = {"cores": cores}
-        asyncio.create_task(self._cpu_burn(cores, fault["config"]["duration_sec"], fault["id"]))
+        bg_task = asyncio.create_task(self._cpu_burn(cores, fault["config"]["duration_sec"], fault["id"]))
+        self._bg_tasks.add(bg_task)
+        bg_task.add_done_callback(self._bg_tasks.discard)
 
     async def _cpu_burn(self, cores: int, duration: float, fault_id: str) -> None:
         async def _burn() -> None:
@@ -371,11 +403,13 @@ class FaultInjector:
             for t in tasks:
                 t.cancel()
 
-    async def _inject_memory_leak(self, fault: dict[str, Any]) -> None:
+    def _inject_memory_leak(self, fault: dict[str, Any]) -> None:
         mb = max(1, int(fault["config"]["intensity"] * 1024))
         logger.warning("Allocating {}MB memory (real)", mb)
         fault["details"] = {"mb": mb}
-        asyncio.create_task(self._memory_burn(mb, fault["config"]["duration_sec"], fault["id"]))
+        bg_task = asyncio.create_task(self._memory_burn(mb, fault["config"]["duration_sec"], fault["id"]))
+        self._bg_tasks.add(bg_task)
+        bg_task.add_done_callback(self._bg_tasks.discard)
 
     async def _memory_burn(self, mb: int, duration: float, fault_id: str) -> None:
         chunk_size = 1024 * 1024
@@ -393,7 +427,7 @@ class FaultInjector:
         finally:
             chunks.clear()
 
-    async def _inject_process_kill(self, fault: dict[str, Any]) -> None:
+    def _inject_process_kill(self, fault: dict[str, Any]) -> None:
         process_name = fault["config"]["target"]
         if not process_name:
             fault["error"] = "No process target specified"
@@ -401,6 +435,7 @@ class FaultInjector:
         logger.warning("[SIMULATED] Killing process: {}", process_name)
         try:
             import psutil
+
             for proc in psutil.process_iter(["pid", "name"]):
                 if process_name.lower() in proc.info["name"].lower():
                     proc.kill()
@@ -413,7 +448,7 @@ class FaultInjector:
             logger.warning("[SIMULATED] Killing process '{}' (psutil not available)", process_name)
             fault["details"] = {"process": process_name, "simulated": True}
 
-    async def _recover_fault(self, fault: dict[str, Any]) -> None:
+    def _recover_fault(self, fault: dict[str, Any]) -> None:
         fault_type = FaultType(fault["config"]["fault_type"])
         if fault_type == FaultType.CPU_STORM:
             logger.info("[RECOVER] CPU storm ended")
@@ -421,6 +456,7 @@ class FaultInjector:
             logger.info("[RECOVER] Memory released")
         elif fault_type == FaultType.DISK_FILL:
             import tempfile
+
             target = fault["config"].get("target") or tempfile.gettempdir()
             fill_file = Path(target) / f".chaos_disk_fill_{fault['id']}.tmp"
             if fill_file.exists():
@@ -430,11 +466,18 @@ class FaultInjector:
             details = fault.get("details", {})
             if details.get("method") == "tc":
                 import platform
-                import shlex
+                import shutil
                 import subprocess as _subprocess
+
                 if platform.system().lower() == "linux":
                     iface = details.get("target", "lo")
-                    _subprocess.run(f"tc qdisc del dev {shlex.quote(iface)} root", shell=True, capture_output=True, timeout=5)  # noqa: S602
+                    if not re.match(r"^[\w.\-:]+$", iface):
+                        raise ValueError(f"Invalid network interface: {iface}")
+                    _tc_path = shutil.which("tc")
+                    if _tc_path:
+                        _subprocess.run(
+                            [_tc_path, "qdisc", "del", "dev", iface, "root"], capture_output=True, timeout=5, check=False
+                        )
                     logger.info("[RECOVER] tc qdisc removed from {}", iface)
             else:
                 logger.info("[RECOVER] Network latency removed")
@@ -492,17 +535,19 @@ class ChaosEngineering:
                 result.faults_injected.append(injected)
 
                 snapshot = await self._monitor._collect_snapshot()
-                result.metrics_during.append({
-                    "fault_index": i,
-                    "fault_type": fault_config.fault_type.value,
-                    "snapshot": {
-                        "cpu": snapshot.cpu_percent,
-                        "memory": snapshot.memory_percent,
-                        "disk": snapshot.disk_percent,
-                        "processes": snapshot.processes_running,
-                    },
-                    "timestamp": snapshot.timestamp,
-                })
+                result.metrics_during.append(
+                    {
+                        "fault_index": i,
+                        "fault_type": fault_config.fault_type.value,
+                        "snapshot": {
+                            "cpu": snapshot.cpu_percent,
+                            "memory": snapshot.memory_percent,
+                            "disk": snapshot.disk_percent,
+                            "processes": snapshot.processes_running,
+                        },
+                        "timestamp": snapshot.timestamp,
+                    }
+                )
 
                 await asyncio.sleep(fault_config.duration_sec)
 
@@ -522,8 +567,12 @@ class ChaosEngineering:
             result.hypothesis_validated = self._validate_hypothesis(result)
             result.resilience_score = self._compute_resilience_score(result)
             result.status = ExperimentStatus.COMPLETED
-            logger.info("Experiment '{}' completed: resilience={}, hypothesis_validated={}",
-                        config.name, result.resilience_score, result.hypothesis_validated)
+            logger.info(
+                "Experiment '{}' completed: resilience={}, hypothesis_validated={}",
+                config.name,
+                result.resilience_score,
+                result.hypothesis_validated,
+            )
 
         except asyncio.CancelledError:
             result.status = ExperimentStatus.ABORTED
@@ -546,7 +595,11 @@ class ChaosEngineering:
 
     async def abort_experiment(self, experiment_id: str) -> bool:
         result = self._experiments.get(experiment_id)
-        if not result or result.status in (ExperimentStatus.COMPLETED, ExperimentStatus.FAILED, ExperimentStatus.ABORTED):
+        if not result or result.status in (
+            ExperimentStatus.COMPLETED,
+            ExperimentStatus.FAILED,
+            ExperimentStatus.ABORTED,
+        ):
             return False
         result.status = ExperimentStatus.ABORTED
         await self._injector.recover_all()
@@ -568,7 +621,8 @@ class ChaosEngineering:
     def generate_report(self, experiment_id: str) -> dict[str, Any]:
         result = self._experiments.get(experiment_id)
         if not result:
-            raise ValueError(f"Experiment not found: {experiment_id}")
+            msg = f"Experiment not found: {experiment_id}"
+            raise ValueError(msg)
 
         duration = result.end_time - result.start_time if result.end_time > 0 else 0.0
         steadiness = self._compute_steadiness(result)

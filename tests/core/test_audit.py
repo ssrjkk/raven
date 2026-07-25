@@ -92,10 +92,10 @@ async def test_audit_log_chain_tamper_detection():
     await logger.log(AuditEventType.MESSAGE_SENT, "system")
     await logger.stop()
 
-    with open(log_path) as f:
+    with Path(log_path).open() as f:
         lines = f.readlines()
     modified = lines[0].replace("system.startup", "tampered")
-    with open(log_path, "w") as f:
+    with Path(log_path).open("w") as f:
         f.write(modified)
         f.writelines(lines[1:])
 

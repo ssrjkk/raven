@@ -380,7 +380,7 @@ class PIIEngine:
                         text=m.group(),
                         score=round(score, 2),
                         context=text[max(0, start - 20) : min(len(text), end + 20)],
-                    )
+                    ),
                 )
 
         if pii_types is None or "presidio" in pii_types:
@@ -401,7 +401,7 @@ class PIIEngine:
                                 end=end,
                                 text=text[start:end],
                                 score=round(r.score, 2),
-                            )
+                            ),
                         )
             except Exception as exc:
                 logger.debug("Presidio analysis failed: {}", exc)
@@ -422,7 +422,8 @@ class PIIEngine:
         last_end = 0
         for f in finds:
             label = replacements.get(f.entity_type) or _PII_CATEGORY_LABELS.get(
-                self._category_for(f.entity_type), f"[{f.entity_type.upper()}]"
+                self._category_for(f.entity_type),
+                f"[{f.entity_type.upper()}]",
             )
             if operators and f.entity_type in operators:
                 label = operators[f.entity_type]
@@ -487,7 +488,7 @@ def sanitize_external_content(text: str, source: str = "unknown", channel: str =
     cleaned = _ROLE_MARKERS.sub("", text)
     cleaned = _SYS_PROMPT_PATTERNS.sub("[REDACTED]", cleaned)
     cleaned = redact_pii(cleaned)
-    wrapped = (
+    return (
         f"<<<EXTERNAL_UNTRUSTED_CONTENT>>>\n"
         f"Source: {source}\n"
         f"Channel: {channel}\n"
@@ -496,7 +497,6 @@ def sanitize_external_content(text: str, source: str = "unknown", channel: str =
         f"{cleaned}\n"
         f"<<<END_EXTERNAL_CONTENT>>>"
     )
-    return wrapped
 
 
 def filter_context_by_visibility(
@@ -522,9 +522,9 @@ __all__ = [
     "ContextVisibility",
     "PIIDetection",
     "PIIEngine",
-    "redact_pii",
-    "mask_pii",
     "analyze_pii",
-    "sanitize_external_content",
     "filter_context_by_visibility",
+    "mask_pii",
+    "redact_pii",
+    "sanitize_external_content",
 ]

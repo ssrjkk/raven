@@ -114,9 +114,7 @@ class RavenFlowDaemon:
         async def send_to_agent(req: AgentRequest):
             if not await self._agent_bucket.acquire():
                 return {"error": "Rate limit exceeded", "session_id": ""}
-            session = await self._get_or_create_session(
-                req.session_id or str(uuid.uuid4())[:8], req.channel, req.mode
-            )
+            session = await self._get_or_create_session(req.session_id or str(uuid.uuid4())[:8], req.channel, req.mode)
             if session.agent is None:
                 return {"error": "agent not initialized", "session_id": session.id}
             if req.mode == "plan":
@@ -159,10 +157,7 @@ class RavenFlowDaemon:
         async def list_tools():
             defs = get_tool_definitions()
             return {
-                "tools": [
-                    {"name": t["function"]["name"], "description": t["function"]["description"]}
-                    for t in defs
-                ]
+                "tools": [{"name": t["function"]["name"], "description": t["function"]["description"]} for t in defs]
             }
 
         @app.post("/api/tools/{name}")
@@ -211,9 +206,7 @@ class RavenFlowDaemon:
                             msg.get("mode", "build"),
                         )
                         if session.agent is None:
-                            await ws.send_text(
-                                json.dumps({"type": "error", "content": "agent not initialized"})
-                            )
+                            await ws.send_text(json.dumps({"type": "error", "content": "agent not initialized"}))
                             continue
                         result = await session.agent.run(msg.get("content", ""))
                         await ws.send_text(
@@ -232,9 +225,7 @@ class RavenFlowDaemon:
             except Exception as exc:
                 logger.exception("RavenFlow WebSocket error: {}", exc)
 
-    async def _get_or_create_session(
-        self, session_id: str, channel: str, mode: str = "build"
-    ) -> FlowSession:
+    async def _get_or_create_session(self, session_id: str, channel: str, mode: str = "build") -> FlowSession:
         async with self._lock:
             if session_id in self.sessions:
                 return self.sessions[session_id]
@@ -263,7 +254,7 @@ class RavenFlowDaemon:
         import uvicorn
 
         logger.warning("Binding to 0.0.0.0:{}. Ensure firewall/reverse proxy is configured.", self.port)
-        config = uvicorn.Config(self.app, host="0.0.0.0", port=self.port, log_level="info")  # noqa: S104
+        config = uvicorn.Config(self.app, host="0.0.0.0", port=self.port, log_level="info")
         server = uvicorn.Server(config)
         logger.info("RavenFlow Gateway starting on port {}", self.port)
         await server.serve()

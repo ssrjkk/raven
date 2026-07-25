@@ -14,6 +14,7 @@ _VECTORS_PATH = "vectors.json"
 
 try:
     import hnswlib
+
     HAS_HNSW = True
 except ImportError:
     HAS_HNSW = False
@@ -37,7 +38,7 @@ class VectorStore:
         self._index = None
         if HAS_HNSW and len(self._vectors) > 0:
             try:
-                idx = hnswlib.Index(space='cosine', dim=self._dim)
+                idx = hnswlib.Index(space="cosine", dim=self._dim)
                 idx.init_index(max_elements=max(len(self._vectors) * 2, 1000), ef_construction=200, M=16)
                 labels = []
                 data = []
@@ -89,6 +90,7 @@ class VectorStore:
             if isinstance(v, list):
                 return [_to_plain(x) for x in v]
             return v
+
         serializable = {k: _to_plain(v) for k, v in self._vectors.items()}
         with self._vectors_path().open("w") as f:
             json.dump(serializable, f)
@@ -124,7 +126,7 @@ class VectorStore:
             self._index = None
             return
         try:
-            idx = hnswlib.Index(space='cosine', dim=self._dim)
+            idx = hnswlib.Index(space="cosine", dim=self._dim)
             idx.init_index(max_elements=max(len(self._vectors) * 2, 1000), ef_construction=200, M=16)
             labels = []
             data = []
@@ -161,12 +163,14 @@ class VectorStore:
                 meta = self._metadata.get(doc_id, {})
                 if filter_meta and not all(meta.get(k) == v for k, v in filter_meta.items()):
                     continue
-                results.append({
-                    "id": doc_id,
-                    "text": meta.get("text", ""),
-                    "score": float(1.0 - dist),
-                    "metadata": meta,
-                })
+                results.append(
+                    {
+                        "id": doc_id,
+                        "text": meta.get("text", ""),
+                        "score": float(1.0 - dist),
+                        "metadata": meta,
+                    }
+                )
             return results
 
         ids = list(self._vectors.keys())
@@ -180,7 +184,7 @@ class VectorStore:
             doc_id = ids[idx]
             meta = self._metadata.get(doc_id, {})
             if filter_meta and not all(meta.get(k) == v for k, v in filter_meta.items()):
-                    continue
+                continue
             results.append(
                 {
                     "id": doc_id,

@@ -14,6 +14,7 @@ PLUGIN_DESCRIPTION = "Run, list, and manage system processes"
 async def run(command: str, timeout: int = 30) -> str:
     try:
         import shlex
+
         parts = shlex.split(command)
         proc = await asyncio.create_subprocess_exec(
             *parts,
@@ -44,7 +45,9 @@ async def run(command: str, timeout: int = 30) -> str:
 async def run_python(code: str, timeout: int = 15) -> str:
     try:
         proc = await asyncio.create_subprocess_exec(
-            sys.executable, "-c", code,
+            sys.executable,
+            "-c",
+            code,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -71,13 +74,18 @@ async def run_python(code: str, timeout: int = 15) -> str:
 async def list_processes(filter: str = "") -> str:
     if sys.platform == "win32":
         proc = await asyncio.create_subprocess_exec(
-            "tasklist", "/FO", "CSV", "/NH",
+            "tasklist",
+            "/FO",
+            "CSV",
+            "/NH",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
     else:
         proc = await asyncio.create_subprocess_exec(
-            "ps", "aux", "--sort=-%mem",
+            "ps",
+            "aux",
+            "--sort=-%mem",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

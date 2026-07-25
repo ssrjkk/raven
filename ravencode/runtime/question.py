@@ -4,6 +4,8 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 
+from loguru import logger
+
 _QUESTION_CALLBACK: Any = None
 
 
@@ -33,25 +35,27 @@ async def ask_question(q: Question) -> str:
         if isinstance(result, str):
             return result
         return str(result)
-    raise QuestionError({
-        "question": q.question,
-        "header": q.header,
-        "options": q.options,
-        "multiple": q.multiple,
-    })
+    raise QuestionError(
+        {
+            "question": q.question,
+            "header": q.header,
+            "options": q.options,
+            "multiple": q.multiple,
+        }
+    )
 
 
 async def stdin_question_callback(q: Question) -> str:
-    print()
-    print(f"  [Question] {q.question}")
+    logger.info("")
+    logger.info(f"  [Question] {q.question}")
     if q.options:
         for i, opt in enumerate(q.options, 1):
             desc = opt.get("description", "")
             line = f"  {i}. {opt['label']}"
             if desc:
                 line += f"  ({desc})"
-            print(line)
-        print("  0. Type your own answer")
+            logger.info(line)
+        logger.info("  0. Type your own answer")
     loop = asyncio.get_event_loop()
     answer = await loop.run_in_executor(None, lambda: input("  Your choice (0/custom): ").strip())
     if q.options and answer.isdigit():

@@ -24,7 +24,8 @@ def _check_no_symlinks_in_path(p: Path, ws: Path) -> None:
     for part in p.relative_to(ws).parts:
         current = current / part
         if current.is_symlink():
-            raise PermissionError(f"Symlink detected in path: {current}")
+            msg = f"Symlink detected in path: {current}"
+            raise PermissionError(msg)
 
 
 def _confine(path: str) -> Path:
@@ -33,7 +34,8 @@ def _confine(path: str) -> Path:
     try:
         p.relative_to(ws)
     except ValueError:
-        raise PermissionError(f"Access denied: path outside workspace: {p}") from None
+        msg = f"Access denied: path outside workspace: {p}"
+        raise PermissionError(msg) from None
     _check_no_symlinks_in_path(p, ws)
     return p
 
@@ -44,14 +46,16 @@ def _confine_fd(path: str, flags: int) -> int:
     try:
         p.relative_to(ws)
     except ValueError:
-        raise PermissionError(f"Access denied: path outside workspace: {p}") from None
+        msg = f"Access denied: path outside workspace: {p}"
+        raise PermissionError(msg) from None
     _check_no_symlinks_in_path(p, ws)
     p.parent.mkdir(parents=True, exist_ok=True)
     try:
         fd = os.open(str(p), flags | _O_NOFOLLOW, 0o644)
     except OSError as e:
         if e.errno == 34:
-            raise PermissionError(f"Symlink detected: {p}") from e
+            msg = f"Symlink detected: {p}"
+            raise PermissionError(msg) from e
         raise
     return fd
 
@@ -89,11 +93,34 @@ async def file_append(path: str, content: str) -> str:
     return f"Appended {len(content)} bytes to {path}"
 
 
+async def file_edit(path: str, old_string: str, new_string: str) -> str:
+    fd = _confine_fd(path, os.O_RDONLY)
+    try:
+        size = await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_END)
+        await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_SET)
+        raw = await asyncio.to_thread(os.read, fd, size)
+        content = raw.decode("utf-8", errors="replace")
+    finally:
+        await asyncio.to_thread(os.close, fd)
+
+    if old_string not in content:
+        return f"[error] old_string not found in {path}"
+
+    new_content = content.replace(old_string, new_string, 1)
+    fd = _confine_fd(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _O_NOFOLLOW)
+    try:
+        await asyncio.to_thread(os.write, fd, new_content.encode("utf-8"))
+    finally:
+        await asyncio.to_thread(os.close, fd)
+    return f"Applied edit to {path} ({len(new_content)} bytes, {len(content) - len(new_content)} delta)"
+
+
 async def file_list(path: str = ".", pattern: str = "*") -> str:
     p = _confine(path)
     exists = await asyncio.to_thread(p.exists)
     if not exists:
-        raise FileNotFoundError(f"Directory not found: {p}")
+        msg = f"Directory not found: {p}"
+        raise FileNotFoundError(msg)
     items: list[str] = []
     depth = 0
     for f in await asyncio.to_thread(lambda: list(p.glob(pattern))):
@@ -126,18 +153,19 @@ async def file_delete(path: str) -> str:
 
         await asyncio.to_thread(shutil.rmtree, p)
         return f"Deleted directory {p}"
-    raise FileNotFoundError(f"Not found: {p}")
+    msg = f"Not found: {p}"
+    raise FileNotFoundError(msg)
 
 
 def register_file_tools(registry: ToolRegistry) -> None:
     registry.register(
-            ToolSpec(
-                name="file_read",
-                description="Read the contents of a file (max 50KB by default)",
-                parameters={
-                    "path": {"type": "string", "description": "Path to the file", "required": True},
-                    "max_size": {"type": "integer", "description": "Max bytes to read", "required": False},
-                },
+        ToolSpec(
+            name="file_read",
+            description="Read the contents of a file (max 50KB by default)",
+            parameters={
+                "path": {"type": "string", "description": "Path to the file", "required": True},
+                "max_size": {"type": "integer", "description": "Max bytes to read", "required": False},
+            },
             handler=file_read,
             category="file",
         )
@@ -186,6 +214,19 @@ def register_file_tools(registry: ToolRegistry) -> None:
                 "path": {"type": "string", "description": "Path to delete", "required": True},
             },
             handler=file_delete,
+            category="file",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="file_edit",
+            description="Edit a file by replacing exact text (diff-safe, no full rewrite)",
+            parameters={
+                "path": {"type": "string", "description": "Path to the file", "required": True},
+                "old_string": {"type": "string", "description": "Exact text to replace", "required": True},
+                "new_string": {"type": "string", "description": "Replacement text", "required": True},
+            },
+            handler=file_edit,
             category="file",
         )
     )

@@ -19,6 +19,7 @@ def pairing_group():
 @pairing_group.command("list")
 def pairing_list():
     """List pending pairing requests"""
+
     async def _list():
         db = DatabaseFactory.create()
         await db.connect()
@@ -42,6 +43,7 @@ def pairing_list():
 @click.argument("code")
 def pairing_approve(code: str):
     """Approve a user by pairing code"""
+
     async def _approve():
         db = DatabaseFactory.create()
         await db.connect()

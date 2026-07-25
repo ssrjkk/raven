@@ -115,7 +115,7 @@ class TestFineTuningPipelineWandbIntegration:
         with patch("raven.unique.fine_tuning._WANDB_AVAILABLE", False), patch.object(
             self.pipeline, "load_model"
         ) as mock_load, patch.object(self.pipeline, "train", return_value={"train_loss": 0.5}):
-            result_model, result_metrics = await self.pipeline.train_with_wandb(
+            _result_model, result_metrics = await self.pipeline.train_with_wandb(
                 TrainingConfig(), MagicMock()
             )
             mock_load.assert_called_once()

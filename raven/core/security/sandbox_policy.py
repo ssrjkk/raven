@@ -36,8 +36,16 @@ MAIN_SESSION_POLICY = SandboxPolicy(
 NON_MAIN_SESSION_POLICY = SandboxPolicy(
     name="non-main",
     allowed_tools=["bash", "process", "read", "write", "edit", "glob", "grep", "sessions_list", "sessions_history"],
-    denied_tools=["browser_open", "browser_screenshot", "canvas_render", "canvas_show",
-                  "nodes_register", "nodes_exec", "cron_schedule", "gateway"],
+    denied_tools=[
+        "browser_open",
+        "browser_screenshot",
+        "canvas_render",
+        "canvas_show",
+        "nodes_register",
+        "nodes_exec",
+        "cron_schedule",
+        "gateway",
+    ],
     allow_network=False,
     max_memory_mb=128,
     timeout_seconds=15,
@@ -47,8 +55,17 @@ NON_MAIN_SESSION_POLICY = SandboxPolicy(
 CODE_EXECUTION_POLICY = SandboxPolicy(
     name="code-exec",
     allowed_tools=["read", "write", "bash", "process"],
-    denied_tools=["browser_open", "browser_screenshot", "web_search", "web_fetch",
-                  "network", "nodes", "cron", "gateway", "canvas"],
+    denied_tools=[
+        "browser_open",
+        "browser_screenshot",
+        "web_search",
+        "web_fetch",
+        "network",
+        "nodes",
+        "cron",
+        "gateway",
+        "canvas",
+    ],
     allow_network=True,
     max_memory_mb=256,
     max_cpu_percent=50,
@@ -115,9 +132,11 @@ def check_path_allowed(policy: SandboxPolicy, path: str, mode: str = "read") -> 
 def get_policy_for_channel(channel_id: str) -> SandboxPolicy:
     try:
         from raven.core.config import settings
+
         raw = settings.channel_sandbox_policy
         if raw:
             import json
+
             mapping = json.loads(raw)
             policy_name = mapping.get(channel_id, "")
             if policy_name and policy_name in POLICY_REGISTRY:

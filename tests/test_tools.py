@@ -130,9 +130,19 @@ class TestShellTools:
 # ---------------------------------------------------------------------------
 
 class TestDBTools:
-    async def test_db_query_select(self, tmp_path: Path) -> None:
+    @pytest.fixture
+    def tmp_workspace(self, tmp_path: Path) -> Generator[Path, None, None]:
+        old = os.environ.get("RAVEN_WORKSPACE")
+        os.environ["RAVEN_WORKSPACE"] = str(tmp_path)
+        yield tmp_path
+        if old:
+            os.environ["RAVEN_WORKSPACE"] = old
+        else:
+            os.environ.pop("RAVEN_WORKSPACE", None)
+
+    async def test_db_query_select(self, tmp_workspace: Path) -> None:
         import sqlite3
-        db = tmp_path / "test.db"
+        db = tmp_workspace / "test.db"
         conn = sqlite3.connect(str(db))
         conn.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, val TEXT)")
         conn.execute("INSERT INTO t VALUES (1, 'hello')")
@@ -141,9 +151,9 @@ class TestDBTools:
         result = await db_query("SELECT * FROM t", db_path=str(db))
         assert "hello" in result
 
-    async def test_db_query_not_select(self, tmp_path: Path) -> None:
+    async def test_db_query_not_select(self, tmp_workspace: Path) -> None:
         import sqlite3
-        db = tmp_path / "test.db"
+        db = tmp_workspace / "test.db"
         conn = sqlite3.connect(str(db))
         conn.execute("CREATE TABLE t (id INT)")
         conn.commit()
@@ -155,9 +165,9 @@ class TestDBTools:
         result = await db_query("SELECT 1", db_path="/nonexistent/db.sqlite")
         assert "not found" in result
 
-    async def test_db_query_empty(self, tmp_path: Path) -> None:
+    async def test_db_query_empty(self, tmp_workspace: Path) -> None:
         import sqlite3
-        db = tmp_path / "empty.db"
+        db = tmp_workspace / "empty.db"
         conn = sqlite3.connect(str(db))
         conn.execute("CREATE TABLE t (id INT)")
         conn.commit()
@@ -176,7 +186,7 @@ class TestUtilTools:
         assert "Waited" in result
 
     async def test_timestamp(self) -> None:
-        result = await get_timestamp()
+        result = get_timestamp()
         assert "UTC" in result
         assert "20" in result
 
@@ -199,11 +209,14 @@ class TestToolRegistryIntegration:
         assert "content" in result
 
     async def test_registry_call_timeout(self) -> None:
+        async def hung() -> str:
+            await asyncio.sleep(999)
+            return "done"
         spec = ToolSpec(
             name="hung",
             description="hung tool",
             parameters={},
-            handler=lambda: asyncio.sleep(999),
+            handler=hung,
             timeout=1,
         )
         registry = ToolRegistry()

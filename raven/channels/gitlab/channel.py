@@ -98,7 +98,11 @@ class GitlabChannel(EnterpriseChannel):
             description = obj.get("description", "")
             action = obj.get("action", "") or obj.get("state", "")
             source_branch = obj.get("source_branch", "")
-            text = f"MR {action}: {title}\n{description}" if description else f"MR {action}: {title} (branch: {source_branch})"
+            text = (
+                f"MR {action}: {title}\n{description}"
+                if description
+                else f"MR {action}: {title} (branch: {source_branch})"
+            )
             if not title:
                 return False
             self._stats["received"] += 1
@@ -181,6 +185,7 @@ class GitlabChannel(EnterpriseChannel):
         if not project_id or not self._token:
             return
         import httpx
+
         async with httpx.AsyncClient(base_url=f"{self._gitlab_url}/api/v4", timeout=15) as client:
             resp = await client.post(
                 f"/projects/{project_id}/issues",

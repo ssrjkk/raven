@@ -125,13 +125,29 @@ class ThemeColors:
 
 DEFAULT_THEMES: dict[str, ThemeColors] = {
     "opencode": ThemeColors.default_dark(),
-    "tokyonight": ThemeColors(primary="#7aa2f7", secondary="#ff9e64", background="#1a1b26", panel="#24283b", border="#414868"),
-    "everforest": ThemeColors(primary="#83c092", secondary="#e69875", background="#2d353b", panel="#343f44", border="#475258"),
-    "catppuccin": ThemeColors(primary="#89b4fa", secondary="#fab387", background="#1e1e2e", panel="#313244", border="#45475a"),
-    "gruvbox": ThemeColors(primary="#83a598", secondary="#fe8019", background="#282828", panel="#3c3836", border="#504945"),
-    "nord": ThemeColors(primary="#81a1c1", secondary="#d08770", background="#2e3440", panel="#3b4252", border="#4c566a"),
+    "tokyonight": ThemeColors(
+        primary="#7aa2f7", secondary="#ff9e64", background="#1a1b26", panel="#24283b", border="#414868"
+    ),
+    "everforest": ThemeColors(
+        primary="#83c092", secondary="#e69875", background="#2d353b", panel="#343f44", border="#475258"
+    ),
+    "catppuccin": ThemeColors(
+        primary="#89b4fa", secondary="#fab387", background="#1e1e2e", panel="#313244", border="#45475a"
+    ),
+    "gruvbox": ThemeColors(
+        primary="#83a598", secondary="#fe8019", background="#282828", panel="#3c3836", border="#504945"
+    ),
+    "nord": ThemeColors(
+        primary="#81a1c1", secondary="#d08770", background="#2e3440", panel="#3b4252", border="#4c566a"
+    ),
     "ayu": ThemeColors(primary="#39bae6", secondary="#f29668", background="#0a0e14", panel="#0f1920", border="#1a2b36"),
-    "kanagawa": ThemeColors(primary="#7fb4ca", secondary="#e6c384", background="#1f1f28", panel="#2a2a37", border="#363646"),
-    "one-dark": ThemeColors(primary="#61afef", secondary="#d19a66", background="#282c34", panel="#2c323c", border="#3e4451"),
-    "matrix": ThemeColors(primary="#00ff41", secondary="#008f11", background="#000000", panel="#001a00", border="#003300"),
+    "kanagawa": ThemeColors(
+        primary="#7fb4ca", secondary="#e6c384", background="#1f1f28", panel="#2a2a37", border="#363646"
+    ),
+    "one-dark": ThemeColors(
+        primary="#61afef", secondary="#d19a66", background="#282c34", panel="#2c323c", border="#3e4451"
+    ),
+    "matrix": ThemeColors(
+        primary="#00ff41", secondary="#008f11", background="#000000", panel="#001a00", border="#003300"
+    ),
 }

@@ -11,7 +11,7 @@ from ravencode.integrations.vcs.webhook import WebhookEvent, parse_legacy_webhoo
 
 
 class GitLabIntegration(CIProvider):
-    def __init__(self, token: str | None = None, api_url: str | None = None):
+    def __init__(self, token: str | None = None, api_url: str | None = None) -> None:
         super().__init__(token=token, api_url=api_url)
         self._provider = GitLabProvider(token=token, api_url=api_url or "") if token else None
 

@@ -8,11 +8,11 @@ from raven.tools.reverse_engineering.patterns import detect_patterns
 
 __all__ = [
     "analyze_binary",
+    "detect_patterns",
     "disassemble_bytes",
     "disassemble_file",
     "extract_strings",
     "get_file_type",
-    "detect_patterns",
     "register_re_tools",
 ]
 

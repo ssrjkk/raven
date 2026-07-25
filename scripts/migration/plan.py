@@ -55,7 +55,7 @@ def run_step(step: dict[str, str], dry_run: bool = False) -> None:
         return
 
     print("  Enabling shadow mode...")
-    subprocess.run([sys.executable, "scripts/migration/promote.py", "--shadow-only", "--service", step["name"]])  # noqa: S603 — sys.executable trusted
+    subprocess.run([sys.executable, "scripts/migration/promote.py", "--shadow-only", "--service", step["name"]])
     print(f"  ✅ Shadow mode active for {step['name']}")
     print(f"  Monitor for drift. Run '--service {step['name']}' again to switch traffic.")
 
@@ -73,7 +73,7 @@ if __name__ == "__main__":
     if not dry:
         for step in STEPS:
             run_step(step, dry_run=False)
-            time.sleep(1)  # noqa: ASYNC100 — sync migration script
+            time.sleep(1)
     else:
         for step in STEPS:
             run_step(step, dry_run=True)

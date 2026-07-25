@@ -8,12 +8,14 @@ from pydantic import BaseModel
 
 try:
     import aiosmtplib
+
     _AIOSMTP_AVAILABLE = True
 except ImportError:
     _AIOSMTP_AVAILABLE = False
 
 try:
     import aioimaplib
+
     _AIOIMAP_AVAILABLE = True
 except ImportError:
     _AIOIMAP_AVAILABLE = False
@@ -22,6 +24,7 @@ except ImportError:
 def _get_config() -> dict[str, str]:
     try:
         from raven.core.config import settings
+
         return {
             "smtp_host": getattr(settings, "EMAIL_SMTP_HOST", ""),
             "smtp_port": str(getattr(settings, "EMAIL_SMTP_PORT", "587")),
@@ -59,6 +62,7 @@ def create_email_router() -> APIRouter:
             raise HTTPException(400, "SMTP not configured")
         try:
             from email.mime.text import MIMEText
+
             msg = MIMEText(req.body)
             msg["From"] = smtp_user
             msg["To"] = req.to
@@ -89,6 +93,7 @@ def create_email_router() -> APIRouter:
             raise HTTPException(400, "IMAP not configured")
         try:
             import email
+
             client = aioimaplib.IMAP4_SSL(imap_host, imap_port)
             await client.wait_hello_from_server()
             await client.login(imap_user, imap_pass)
@@ -119,12 +124,14 @@ def create_email_router() -> APIRouter:
                     payload = parsed.get_payload(decode=True)
                 if isinstance(payload, bytes):
                     body = payload.decode("utf-8", errors="replace")[:500]
-                emails.append({
-                    "from": parsed.get("From", ""),
-                    "subject": parsed.get("Subject", ""),
-                    "date": parsed.get("Date", ""),
-                    "body_preview": body,
-                })
+                emails.append(
+                    {
+                        "from": parsed.get("From", ""),
+                        "subject": parsed.get("Subject", ""),
+                        "date": parsed.get("Date", ""),
+                        "body_preview": body,
+                    }
+                )
             await client.logout()
             return {"emails": emails, "total": len(msg_ids)}
         except Exception as e:

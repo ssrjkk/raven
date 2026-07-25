@@ -57,8 +57,7 @@ def create_chaos_router() -> APIRouter:
             raise HTTPException(400, f"Unknown fault type '{req.fault_type}'") from e
         config = FaultConfig(fault_type=ft, target=req.target, duration_sec=req.duration_sec, intensity=req.intensity)
         try:
-            result = await ce.injector.inject(config)
-            return result
+            return await ce.injector.inject(config)
         except Exception as e:
             logger.error("Inject failed: {}", e)
             raise HTTPException(500, str(e)) from e
@@ -95,6 +94,7 @@ def create_chaos_router() -> APIRouter:
     async def run_experiment(req: RunExperimentRequest):
         ce = _get_ce()
         import json
+
         try:
             faults_data = json.loads(req.faults_json)
         except json.JSONDecodeError as e:
@@ -105,12 +105,14 @@ def create_chaos_router() -> APIRouter:
                 ft = FaultType(f["fault_type"])
             except (ValueError, KeyError) as e:
                 raise HTTPException(400, f"Invalid fault_type: {f.get('fault_type', 'missing')}") from e
-            fault_configs.append(FaultConfig(
-                fault_type=ft,
-                target=f.get("target", ""),
-                duration_sec=f.get("duration_sec", 30.0),
-                intensity=f.get("intensity", 0.5),
-            ))
+            fault_configs.append(
+                FaultConfig(
+                    fault_type=ft,
+                    target=f.get("target", ""),
+                    duration_sec=f.get("duration_sec", 30.0),
+                    intensity=f.get("intensity", 0.5),
+                )
+            )
         hyp = ExperimentHypothesis(description=req.hypothesis or "No hypothesis specified")
         config = ExperimentConfig(name=req.name, hypothesis=hyp, faults=fault_configs)
         try:

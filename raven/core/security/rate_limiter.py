@@ -104,7 +104,10 @@ class RateLimiter:
         return bucket
 
     async def check_rate_limit(
-        self, channel_id: str, user_id: str | None = None, channel_type: str | None = None
+        self,
+        channel_id: str,
+        user_id: str | None = None,
+        channel_type: str | None = None,
     ) -> bool:
         self._evict_idle()
         cb = self._get_or_create_channel_bucket(channel_id, channel_type)

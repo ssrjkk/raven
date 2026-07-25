@@ -38,6 +38,7 @@ def rag_index_text(document_id: str, text: str, source: str = "", metadata: str 
     if metadata:
         try:
             import json
+
             meta = json.loads(metadata)
         except json.JSONDecodeError:
             meta = {"note": metadata}
@@ -93,46 +94,58 @@ def rag_remove_document(document_id: str) -> str:
 
 
 def register_rag_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="rag_index_text",
-        description="Index text into the multi-modal RAG system",
-        parameters={
-            "document_id": {"type": "string", "description": "Unique document identifier", "required": True},
-            "text": {"type": "string", "description": "Document text content", "required": True},
-            "source": {"type": "string", "description": "Source label", "required": False},
-            "metadata": {"type": "string", "description": "JSON metadata string", "required": False},
-        },
-        handler=rag_index_text,
-        category="rag",
-        timeout=30,
-    ))
-    registry.register(ToolSpec(
-        name="rag_search",
-        description="Search across text and image content using cross-modal retrieval",
-        parameters={
-            "query": {"type": "string", "description": "Search query", "required": True},
-            "top_k": {"type": "integer", "description": "Number of results (default 5)", "required": False},
-            "include_images": {"type": "boolean", "description": "Include image results (default true)", "required": False},
-        },
-        handler=rag_search,
-        category="rag",
-        timeout=15,
-    ))
-    registry.register(ToolSpec(
-        name="rag_stats",
-        description="Get statistics about the RAG index",
-        parameters={},
-        handler=rag_stats,
-        category="rag",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="rag_remove_document",
-        description="Remove a document and its chunks from the RAG index",
-        parameters={
-            "document_id": {"type": "string", "description": "Document identifier to remove", "required": True},
-        },
-        handler=rag_remove_document,
-        category="rag",
-        timeout=10,
-    ))
+    registry.register(
+        ToolSpec(
+            name="rag_index_text",
+            description="Index text into the multi-modal RAG system",
+            parameters={
+                "document_id": {"type": "string", "description": "Unique document identifier", "required": True},
+                "text": {"type": "string", "description": "Document text content", "required": True},
+                "source": {"type": "string", "description": "Source label", "required": False},
+                "metadata": {"type": "string", "description": "JSON metadata string", "required": False},
+            },
+            handler=rag_index_text,
+            category="rag",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="rag_search",
+            description="Search across text and image content using cross-modal retrieval",
+            parameters={
+                "query": {"type": "string", "description": "Search query", "required": True},
+                "top_k": {"type": "integer", "description": "Number of results (default 5)", "required": False},
+                "include_images": {
+                    "type": "boolean",
+                    "description": "Include image results (default true)",
+                    "required": False,
+                },
+            },
+            handler=rag_search,
+            category="rag",
+            timeout=15,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="rag_stats",
+            description="Get statistics about the RAG index",
+            parameters={},
+            handler=rag_stats,
+            category="rag",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="rag_remove_document",
+            description="Remove a document and its chunks from the RAG index",
+            parameters={
+                "document_id": {"type": "string", "description": "Document identifier to remove", "required": True},
+            },
+            handler=rag_remove_document,
+            category="rag",
+            timeout=10,
+        )
+    )

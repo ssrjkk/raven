@@ -32,9 +32,7 @@ def plugin_list_installed() -> str:
     lines = [f"Installed plugins ({len(installed)}):"]
     for p in installed:
         lines.append(
-            f"  - {p.metadata.name} v{p.metadata.version} "
-            f"[{p.metadata.category.value}] "
-            f"status={p.status.value}"
+            f"  - {p.metadata.name} v{p.metadata.version} [{p.metadata.category.value}] status={p.status.value}"
         )
     return "\n".join(lines)
 
@@ -65,7 +63,7 @@ async def plugin_install(url_or_path: str, source: str = "remote") -> str:
 async def plugin_uninstall(name: str) -> str:
     manager = _get_manager()
     try:
-        ok = await manager.uninstall_plugin(name)
+        ok = manager.uninstall_plugin(name)
         if ok:
             return f"Uninstalled '{name}'."
         return f"[error] Plugin '{name}' not found."
@@ -118,72 +116,90 @@ async def plugin_catalog_browse(category: str = "") -> str:
 
 
 def register_plugin_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="plugin_list_installed",
-        description="List all installed plugins",
-        parameters={},
-        handler=plugin_list_installed,
-        category="plugins",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="plugin_search",
-        description="Search plugins in catalog and installed list",
-        parameters={
-            "query": {"type": "string", "description": "Search query", "required": True},
-        },
-        handler=plugin_search,
-        category="plugins",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="plugin_install",
-        description="Install a plugin from URL, path, or catalog ID",
-        parameters={
-            "url_or_path": {"type": "string", "description": "Git URL, path, or catalog ID", "required": True},
-            "source": {"type": "string", "description": "Source type: remote or local", "required": False},
-        },
-        handler=plugin_install,
-        category="plugins",
-        timeout=120,
-    ))
-    registry.register(ToolSpec(
-        name="plugin_uninstall",
-        description="Uninstall a plugin by name",
-        parameters={
-            "name": {"type": "string", "description": "Plugin name to uninstall", "required": True},
-        },
-        handler=plugin_uninstall,
-        category="plugins",
-        timeout=30,
-    ))
-    registry.register(ToolSpec(
-        name="plugin_info",
-        description="Get detailed information about a plugin",
-        parameters={
-            "name": {"type": "string", "description": "Plugin name", "required": True},
-        },
-        handler=plugin_info,
-        category="plugins",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="plugin_catalog_top",
-        description="List top-rated plugins from the catalog",
-        parameters={
-            "limit": {"type": "integer", "description": "Number of results (default 10)", "required": False},
-        },
-        handler=plugin_catalog_top,
-        category="plugins",
-        timeout=30,
-    ))
-    registry.register(ToolSpec(
-        name="plugin_catalog_browse",
-        description="Browse all plugins in the catalog, optionally by category",
-        parameters={
-            "category": {"type": "string", "description": "Filter by category (coding, automation, unique, voice, channel)", "required": False},
-        },
-        handler=plugin_catalog_browse,
-        category="plugins",
-        timeout=30,
-    ))
+    registry.register(
+        ToolSpec(
+            name="plugin_list_installed",
+            description="List all installed plugins",
+            parameters={},
+            handler=plugin_list_installed,
+            category="plugins",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="plugin_search",
+            description="Search plugins in catalog and installed list",
+            parameters={
+                "query": {"type": "string", "description": "Search query", "required": True},
+            },
+            handler=plugin_search,
+            category="plugins",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="plugin_install",
+            description="Install a plugin from URL, path, or catalog ID",
+            parameters={
+                "url_or_path": {"type": "string", "description": "Git URL, path, or catalog ID", "required": True},
+                "source": {"type": "string", "description": "Source type: remote or local", "required": False},
+            },
+            handler=plugin_install,
+            category="plugins",
+            timeout=120,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="plugin_uninstall",
+            description="Uninstall a plugin by name",
+            parameters={
+                "name": {"type": "string", "description": "Plugin name to uninstall", "required": True},
+            },
+            handler=plugin_uninstall,
+            category="plugins",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="plugin_info",
+            description="Get detailed information about a plugin",
+            parameters={
+                "name": {"type": "string", "description": "Plugin name", "required": True},
+            },
+            handler=plugin_info,
+            category="plugins",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="plugin_catalog_top",
+            description="List top-rated plugins from the catalog",
+            parameters={
+                "limit": {"type": "integer", "description": "Number of results (default 10)", "required": False},
+            },
+            handler=plugin_catalog_top,
+            category="plugins",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="plugin_catalog_browse",
+            description="Browse all plugins in the catalog, optionally by category",
+            parameters={
+                "category": {
+                    "type": "string",
+                    "description": "Filter by category (coding, automation, unique, voice, channel)",
+                    "required": False,
+                },
+            },
+            handler=plugin_catalog_browse,
+            category="plugins",
+            timeout=30,
+        )
+    )

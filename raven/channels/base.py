@@ -31,3 +31,12 @@ class BaseChannel(ABC):
 
     async def health_check(self) -> bool:
         return True
+
+    async def ask_confirmation(self, user_id: str, action_description: str, session_id: str = "") -> bool:
+        """Ask user for confirmation before executing an action that requires approval.
+
+        Default implementation auto-confirms (returns True).
+        Channels that support interactive confirmation should override this
+        to send a yes/no prompt to the user and return their decision.
+        """
+        return True

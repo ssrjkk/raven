@@ -14,6 +14,7 @@ def _get_chaos() -> Any:
     global _chaos
     if _chaos is None:
         from raven.unique.chaos_engineering import ChaosEngineering
+
         _chaos = ChaosEngineering()
     return _chaos
 
@@ -21,6 +22,7 @@ def _get_chaos() -> Any:
 async def chaos_inject(fault_type: str, target: str = "", duration_sec: float = 30.0, intensity: float = 0.5) -> str:
     ce = _get_chaos()
     from raven.unique.chaos_engineering import FaultConfig, FaultType
+
     try:
         ft = FaultType(fault_type)
     except ValueError:
@@ -72,6 +74,7 @@ def chaos_list_active() -> str:
 def chaos_list_history(fault_type: str = "") -> str:
     ce = _get_chaos()
     from raven.unique.chaos_engineering import FaultType
+
     ft = None
     if fault_type:
         with contextlib.suppress(ValueError):
@@ -81,15 +84,19 @@ def chaos_list_history(fault_type: str = "") -> str:
         return "[info] No fault history."
     lines = [f"Fault history ({len(history)}):"]
     for h in history:
-        lines.append(f"  [{h['id']}] {h['config']['fault_type']} — {'recovered' if h['recovered'] else 'active'} — {h['config']['target']}")
+        lines.append(
+            f"  [{h['id']}] {h['config']['fault_type']} — {'recovered' if h['recovered'] else 'active'} — {h['config']['target']}"
+        )
     return "\n".join(lines)
 
 
 async def chaos_run_experiment(name: str, faults_json: str, hypothesis: str = "") -> str:
     ce = _get_chaos()
     from raven.unique.chaos_engineering import ExperimentConfig, ExperimentHypothesis, FaultConfig, FaultType
+
     try:
         import json
+
         faults_data = json.loads(faults_json)
     except json.JSONDecodeError as e:
         return f"[error] Invalid faults JSON: {e}"
@@ -99,12 +106,14 @@ async def chaos_run_experiment(name: str, faults_json: str, hypothesis: str = ""
             ft = FaultType(f["fault_type"])
         except (ValueError, KeyError):
             return f"[error] Invalid fault_type in config: {f.get('fault_type', 'missing')}"
-        fault_configs.append(FaultConfig(
-            fault_type=ft,
-            target=f.get("target", ""),
-            duration_sec=f.get("duration_sec", 30.0),
-            intensity=f.get("intensity", 0.5),
-        ))
+        fault_configs.append(
+            FaultConfig(
+                fault_type=ft,
+                target=f.get("target", ""),
+                duration_sec=f.get("duration_sec", 30.0),
+                intensity=f.get("intensity", 0.5),
+            )
+        )
     hyp = ExperimentHypothesis(description=hypothesis or "No hypothesis specified")
     config = ExperimentConfig(name=name, hypothesis=hyp, faults=fault_configs)
     try:
@@ -157,82 +166,102 @@ def chaos_resilience_summary() -> str:
 
 
 def register_chaos_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="chaos_inject",
-        description="Inject a fault into the system (service_kill, network_latency, disk_fill, cpu_storm, memory_leak, process_kill)",
-        parameters={
-            "fault_type": {"type": "string", "description": "Fault type", "required": True},
-            "target": {"type": "string", "description": "Target service/process name", "required": False},
-            "duration_sec": {"type": "number", "description": "Duration in seconds (default 30)", "required": False},
-            "intensity": {"type": "number", "description": "Intensity 0-1 (default 0.5)", "required": False},
-        },
-        handler=chaos_inject,
-        category="chaos",
-        timeout=60,
-    ))
-    registry.register(ToolSpec(
-        name="chaos_recover",
-        description="Recover a specific fault by ID",
-        parameters={
-            "fault_id": {"type": "string", "description": "Fault ID to recover", "required": True},
-        },
-        handler=chaos_recover,
-        category="chaos",
-        timeout=15,
-    ))
-    registry.register(ToolSpec(
-        name="chaos_recover_all",
-        description="Recover all active faults",
-        parameters={},
-        handler=chaos_recover_all,
-        category="chaos",
-        timeout=15,
-    ))
-    registry.register(ToolSpec(
-        name="chaos_list_active",
-        description="List all active (unrecovered) faults",
-        parameters={},
-        handler=chaos_list_active,
-        category="chaos",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="chaos_list_history",
-        description="List fault injection history",
-        parameters={
-            "fault_type": {"type": "string", "description": "Optional fault type filter", "required": False},
-        },
-        handler=chaos_list_history,
-        category="chaos",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="chaos_run_experiment",
-        description="Run a full chaos experiment with multiple faults, monitoring, and resilience scoring",
-        parameters={
-            "name": {"type": "string", "description": "Experiment name", "required": True},
-            "faults_json": {"type": "string", "description": "JSON array of fault configs", "required": True},
-            "hypothesis": {"type": "string", "description": "Hypothesis description", "required": False},
-        },
-        handler=chaos_run_experiment,
-        category="chaos",
-        timeout=600,
-    ))
-    registry.register(ToolSpec(
-        name="chaos_experiment_report",
-        description="Generate a report for a completed experiment",
-        parameters={
-            "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
-        },
-        handler=chaos_experiment_report,
-        category="chaos",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="chaos_resilience_summary",
-        description="Get resilience summary across all experiments",
-        parameters={},
-        handler=chaos_resilience_summary,
-        category="chaos",
-        timeout=10,
-    ))
+    registry.register(
+        ToolSpec(
+            name="chaos_inject",
+            description="Inject a fault into the system (service_kill, network_latency, disk_fill, cpu_storm, memory_leak, process_kill)",
+            parameters={
+                "fault_type": {"type": "string", "description": "Fault type", "required": True},
+                "target": {"type": "string", "description": "Target service/process name", "required": False},
+                "duration_sec": {
+                    "type": "number",
+                    "description": "Duration in seconds (default 30)",
+                    "required": False,
+                },
+                "intensity": {"type": "number", "description": "Intensity 0-1 (default 0.5)", "required": False},
+            },
+            handler=chaos_inject,
+            category="chaos",
+            timeout=60,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="chaos_recover",
+            description="Recover a specific fault by ID",
+            parameters={
+                "fault_id": {"type": "string", "description": "Fault ID to recover", "required": True},
+            },
+            handler=chaos_recover,
+            category="chaos",
+            timeout=15,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="chaos_recover_all",
+            description="Recover all active faults",
+            parameters={},
+            handler=chaos_recover_all,
+            category="chaos",
+            timeout=15,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="chaos_list_active",
+            description="List all active (unrecovered) faults",
+            parameters={},
+            handler=chaos_list_active,
+            category="chaos",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="chaos_list_history",
+            description="List fault injection history",
+            parameters={
+                "fault_type": {"type": "string", "description": "Optional fault type filter", "required": False},
+            },
+            handler=chaos_list_history,
+            category="chaos",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="chaos_run_experiment",
+            description="Run a full chaos experiment with multiple faults, monitoring, and resilience scoring",
+            parameters={
+                "name": {"type": "string", "description": "Experiment name", "required": True},
+                "faults_json": {"type": "string", "description": "JSON array of fault configs", "required": True},
+                "hypothesis": {"type": "string", "description": "Hypothesis description", "required": False},
+            },
+            handler=chaos_run_experiment,
+            category="chaos",
+            timeout=600,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="chaos_experiment_report",
+            description="Generate a report for a completed experiment",
+            parameters={
+                "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
+            },
+            handler=chaos_experiment_report,
+            category="chaos",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="chaos_resilience_summary",
+            description="Get resilience summary across all experiments",
+            parameters={},
+            handler=chaos_resilience_summary,
+            category="chaos",
+            timeout=10,
+        )
+    )

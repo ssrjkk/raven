@@ -25,10 +25,12 @@ class TaskCommand(CommandHandler):
             await gateway._send(ctx.event.channel, ctx.event.session_id, "Usage: /task <goal description>")
             return True
         await gateway._send(ctx.event.channel, ctx.event.session_id, f"Planning task: {goal[:100]}...")
-        await gateway._bg_task(gateway.tasks.create_and_run(
-            goal=goal,
-            user_id=ctx.event.user_id,
-            channel=ctx.event.channel,
-            session_id=ctx.event.session_id or "",
-        ))
+        await gateway._bg_task(
+            gateway.tasks.create_and_run(
+                goal=goal,
+                user_id=ctx.event.user_id,
+                channel=ctx.event.channel,
+                session_id=ctx.event.session_id or "",
+            )
+        )
         return True

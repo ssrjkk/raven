@@ -44,12 +44,14 @@ class MCPBridge:
                         raw_name = tool.get("name", "unknown")
                         wrapped = f"mcp_{name}_{raw_name}"
                         params = tool.get("inputSchema") or tool.get("parameters") or {}
-                        plugin_loader.tools.append(PluginTool(
-                            name=wrapped,
-                            description=tool.get("description", ""),
-                            parameters=params.get("properties", {}),
-                            handler=self._make_handler(name, raw_name),
-                        ))
+                        plugin_loader.tools.append(
+                            PluginTool(
+                                name=wrapped,
+                                description=tool.get("description", ""),
+                                parameters=params.get("properties", {}),
+                                handler=self._make_handler(name, raw_name),
+                            )
+                        )
                 logger.info("MCP server '{}' connected with {} tools", name, len(client.tools))
             except Exception as exc:
                 logger.error("Failed to connect MCP server '{}': {}", name, exc)
@@ -72,6 +74,7 @@ class MCPBridge:
             except Exception as exc:
                 logger.error("MCP tool {}.{} failed: {}", pool_name, tool_name, exc)
                 return f"[error] MCP tool call failed: {exc}"
+
         return handler
 
     @property

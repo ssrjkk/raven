@@ -23,7 +23,7 @@ _FORMATTERS: dict[str, list[str]] = {
 
 
 async def _run_formatter(cmd: list[str], path: str) -> str:
-    full_cmd = cmd + [path]
+    full_cmd = [*cmd, path]
     try:
         proc = await asyncio.create_subprocess_exec(
             *full_cmd,

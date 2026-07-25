@@ -55,7 +55,9 @@ class WorkflowTemplate:
             "config_schema": self.config_schema,
             "system_prompt": self.system_prompt,
             "steps_goal": self.steps_goal,
-            "predefined_steps": [{"description": s.description, "tool": s.tool, "params": s.params} for s in self.predefined_steps],
+            "predefined_steps": [
+                {"description": s.description, "tool": s.tool, "params": s.params} for s in self.predefined_steps
+            ],
             "icon": self.icon,
         }
 

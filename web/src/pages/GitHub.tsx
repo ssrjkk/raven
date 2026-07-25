@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+
 import { api } from "../api/client";
 
 interface Repo {
@@ -50,6 +51,21 @@ interface Issue {
   labels: { name: string; color: string }[];
 }
 
+interface GitHubUser {
+  login: string;
+  avatar_url: string;
+  public_repos: number;
+}
+
+interface TokenStatus {
+  configured: boolean;
+}
+
+interface CodeSearchResult {
+  path: string;
+  name: string;
+}
+
 export default function GitHub() {
   const [repos, setRepos] = useState<Repo[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
@@ -61,7 +77,7 @@ export default function GitHub() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [tab, setTab] = useState<"files" | "pulls" | "issues" | "new-pr" | "new-issue" | "search">("files");
   const [searchQuery, setSearchQuery] = useState("");
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<GitHubUser | null>(null);
   const [msg, setMsg] = useState("");
   const [prTitle, setPrTitle] = useState("");
   const [prBody, setPrBody] = useState("");
@@ -71,10 +87,10 @@ export default function GitHub() {
   const [issueBody, setIssueBody] = useState("");
   const [issueLabels, setIssueLabels] = useState("");
   const [newToken, setNewToken] = useState("");
-  const [tokenStatus, setTokenStatus] = useState<any>(null);
+  const [tokenStatus, setTokenStatus] = useState<TokenStatus | null>(null);
   const [fileViewer, setFileViewer] = useState<{ path: string; content: string } | null>(null);
   const [codeQuery, setCodeQuery] = useState("");
-  const [codeResults, setCodeResults] = useState<any[]>([]);
+  const [codeResults, setCodeResults] = useState<CodeSearchResult[]>([]);
   const [cloning, setCloning] = useState(false);
 
   useEffect(() => {
@@ -145,7 +161,7 @@ export default function GitHub() {
     const [owner, repo] = selectedRepo.split("/");
     try {
       const data = await api.githubContents(owner, repo, path, currentBranch);
-      if (data.content) {
+      if (!Array.isArray(data) && data.content) {
         const decoded = atob(data.content.replace(/\n/g, ""));
         setFileViewer({ path, content: decoded });
       }
@@ -237,9 +253,9 @@ export default function GitHub() {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">GitHub</h1>
-        <div className="p-6 rounded-lg border" style={{ backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)" }}>
+        <div className="p-6 rounded-lg border bg-secondary border-default">
           <h2 className="text-lg font-semibold mb-4">Configure GitHub Token</h2>
-          <p className="text-sm mb-4" style={{ color: "var(--dt-colors-text-tertiary)" }}>
+          <p className="text-sm mb-4 text-tertiary">
             Enter a GitHub personal access token with <code>repo</code> scope to browse repositories, create PRs, and more.
           </p>
           <div className="flex gap-2">
@@ -252,8 +268,7 @@ export default function GitHub() {
               onKeyDown={(e) => e.key === "Enter" && setToken()}
             />
             <button onClick={setToken}
-              className="px-4 py-1.5 rounded-lg text-sm font-medium transition"
-              style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
+              className="px-4 py-1.5 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
               Save Token
             </button>
           </div>
@@ -268,17 +283,17 @@ export default function GitHub() {
       <h1 className="text-2xl font-bold">GitHub</h1>
 
       {msg && (
-        <div className="px-4 py-2 rounded text-sm flex items-center justify-between" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-primary)" }}>
+        <div className="px-4 py-2 rounded text-sm flex items-center justify-between btn-tertiary">
           <span>{msg}</span>
-          <button onClick={() => setMsg("")} className="text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>dismiss</button>
+          <button onClick={() => setMsg("")} className="text-xs text-tertiary">dismiss</button>
         </div>
       )}
 
       {user && (
-        <div className="flex items-center gap-3 text-sm p-3 rounded-lg" style={{ backgroundColor: "var(--dt-colors-bg-secondary)" }}>
+        <div className="flex items-center gap-3 text-sm p-3 rounded-lg bg-secondary">
           <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full" />
           <span className="font-medium">{user.login}</span>
-          <span style={{ color: "var(--dt-colors-text-tertiary)" }}>{user.public_repos} public repos</span>
+          <span className="text-tertiary">{user.public_repos} public repos</span>
         </div>
       )}
 
@@ -293,8 +308,7 @@ export default function GitHub() {
           disabled={!user}
         />
         <button onClick={searchRepos}
-          className="px-4 py-1.5 rounded-lg text-sm font-medium transition"
-          style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
+          className="px-4 py-1.5 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
           Search
         </button>
       </div>
@@ -313,10 +327,10 @@ export default function GitHub() {
               }}
             >
               <div className="font-medium text-sm truncate">{r.full_name}</div>
-              {r.description && <div className="truncate mt-0.5" style={{ color: "var(--dt-colors-text-tertiary)" }}>{r.description}</div>}
+              {r.description && <div className="truncate mt-0.5 text-tertiary">{r.description}</div>}
               <div className="flex gap-2 mt-1">
-                {r.language && <span className="text-[10px] px-1 py-0.5 rounded" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}>{r.language}</span>}
-                <span className="text-[10px]" style={{ color: "var(--dt-colors-text-tertiary)" }}>S {r.stargazers_count}</span>
+                {r.language && <span className="text-[10px] px-1 py-0.5 rounded bg-tertiary">{r.language}</span>}
+                <span className="text-[10px] text-tertiary">S {r.stargazers_count}</span>
               </div>
             </button>
           ))}
@@ -324,7 +338,7 @@ export default function GitHub() {
 
         <div className="flex-1 min-w-0">
           {!selectedRepo ? (
-            <div className="text-sm py-8 text-center" style={{ color: "var(--dt-colors-text-tertiary)" }}>
+            <div className="text-sm py-8 text-center text-tertiary">
               Select a repository to browse
             </div>
           ) : (
@@ -333,8 +347,7 @@ export default function GitHub() {
                 <h2 className="text-lg font-semibold truncate">{selectedRepo}</h2>
                 <div className="flex items-center gap-2">
                   <button onClick={cloneRepo} disabled={cloning}
-                    className="text-xs px-3 py-1 rounded-lg transition"
-                    style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
+                    className="text-xs px-3 py-1 rounded-lg transition bg-accent-muted text-accent">
                     {cloning ? "Cloning..." : "Clone"}
                   </button>
                   <select
@@ -350,7 +363,7 @@ export default function GitHub() {
                 </div>
               </div>
 
-              <div className="flex gap-1 mb-3 border-b pb-1" style={{ borderColor: "var(--dt-colors-border-default)" }}>
+              <div className="flex gap-1 mb-3 border-b pb-1 border-default">
                 {(["files", "pulls", "issues", "new-pr", "new-issue", "search"] as const).map((t) => (
                   <button key={t} onClick={() => setTab(t)}
                     className="px-3 py-1 text-xs rounded-t transition"
@@ -372,9 +385,9 @@ export default function GitHub() {
                         style={{ backgroundColor: "var(--dt-colors-bg-secondary)", color: "var(--dt-colors-text-secondary)" }}>
                         &larr; Back to files
                       </button>
-                      <div className="p-3 rounded-lg border" style={{ backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)" }}>
-                        <div className="text-xs font-mono mb-2" style={{ color: "var(--dt-colors-text-tertiary)" }}>{fileViewer.path}</div>
-                        <pre className="text-xs font-mono whitespace-pre-wrap overflow-x-auto max-h-[60vh] overflow-y-auto" style={{ color: "var(--dt-colors-text-primary)" }}>{fileViewer.content}</pre>
+                      <div className="p-3 rounded-lg border bg-secondary border-default">
+                        <div className="text-xs font-mono mb-2 text-tertiary">{fileViewer.path}</div>
+                        <pre className="text-xs font-mono whitespace-pre-wrap overflow-x-auto max-h-[60vh] overflow-y-auto text-primary">{fileViewer.content}</pre>
                       </div>
                     </div>
                   ) : (
@@ -390,18 +403,17 @@ export default function GitHub() {
                         <div
                           key={item.path}
                           onClick={() => item.type === "dir" ? navigateDir(item.name) : openFile(item.path)}
-                          className="flex items-center gap-2 p-2 rounded text-sm cursor-pointer transition"
-                          style={{ backgroundColor: "var(--dt-colors-bg-secondary)", color: "var(--dt-colors-text-primary)" }}
+                          className="flex items-center gap-2 p-2 rounded text-sm cursor-pointer transition bg-secondary text-primary"
                         >
                           <span>{item.type === "dir" ? "D" : "F"}</span>
                           <span className="flex-1">{item.name}</span>
                           {item.type === "file" && (
-                            <span className="text-[10px]" style={{ color: "var(--dt-colors-text-tertiary)" }}>{(item.size / 1024).toFixed(1)} KB</span>
+                            <span className="text-[10px] text-tertiary">{(item.size / 1024).toFixed(1)} KB</span>
                           )}
                         </div>
                       ))}
                       {contents.length === 0 && (
-                        <p className="text-xs py-4 text-center" style={{ color: "var(--dt-colors-text-tertiary)" }}>Empty directory</p>
+                        <p className="text-xs py-4 text-center text-tertiary">Empty directory</p>
                       )}
                     </>
                   )}
@@ -410,15 +422,15 @@ export default function GitHub() {
 
               {tab === "pulls" && (
                 <div className="space-y-2">
-                  {pulls.length === 0 && <p className="text-xs py-4 text-center" style={{ color: "var(--dt-colors-text-tertiary)" }}>No pull requests</p>}
+                  {pulls.length === 0 && <p className="text-xs py-4 text-center text-tertiary">No pull requests</p>}
                   {pulls.map((pr) => (
-                    <div key={pr.number} className="p-3 rounded-lg border" style={{ backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)" }}>
+                    <div key={pr.number} className="p-3 rounded-lg border bg-secondary border-default">
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="font-medium text-sm" style={{ color: "var(--dt-colors-accent-default)" }}>
                             #{pr.number} {pr.title}
                           </div>
-                          <div className="text-xs mt-0.5" style={{ color: "var(--dt-colors-text-tertiary)" }}>
+                          <div className="text-xs mt-0.5 text-tertiary">
                             {pr.user.login} &mdash; {pr.head.ref} &rarr; {pr.base.ref}
                           </div>
                         </div>
@@ -445,14 +457,14 @@ export default function GitHub() {
 
               {tab === "issues" && (
                 <div className="space-y-2">
-                  {issues.length === 0 && <p className="text-xs py-4 text-center" style={{ color: "var(--dt-colors-text-tertiary)" }}>No issues</p>}
+                  {issues.length === 0 && <p className="text-xs py-4 text-center text-tertiary">No issues</p>}
                   {issues.map((iss) => (
-                    <div key={iss.number} className="p-3 rounded-lg border" style={{ backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)" }}>
+                    <div key={iss.number} className="p-3 rounded-lg border bg-secondary border-default">
                       <div className="flex items-center gap-2">
                         <span>{iss.state === "open" ? "O" : "C"}</span>
                         <div className="flex-1">
                           <span className="font-medium text-sm">#{iss.number} {iss.title}</span>
-                          <div className="text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>{iss.user.login}</div>
+                          <div className="text-xs text-tertiary">{iss.user.login}</div>
                         </div>
                         <div className="flex gap-1">
                           {iss.labels?.map((l) => (
@@ -468,7 +480,7 @@ export default function GitHub() {
               )}
 
               {tab === "new-pr" && (
-                <div className="space-y-3 p-4 rounded-lg border" style={{ backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)" }}>
+                <div className="space-y-3 p-4 rounded-lg border bg-secondary border-default">
                   <h3 className="text-sm font-semibold">New Pull Request</h3>
                   <input
                     className="w-full px-3 py-1.5 rounded border text-sm"
@@ -493,7 +505,7 @@ export default function GitHub() {
                       value={prHead}
                       onChange={(e) => setPrHead(e.target.value)}
                     />
-                    <span className="self-center text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>&rarr;</span>
+                    <span className="self-center text-xs text-tertiary">&rarr;</span>
                     <input
                       className="flex-1 px-3 py-1.5 rounded border text-sm"
                       style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
@@ -503,15 +515,14 @@ export default function GitHub() {
                     />
                   </div>
                   <button onClick={createPR}
-                    className="px-5 py-2 rounded-lg text-sm font-medium transition"
-                    style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
+                    className="px-5 py-2 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
                     Create Pull Request
                   </button>
                 </div>
               )}
 
               {tab === "new-issue" && (
-                <div className="space-y-3 p-4 rounded-lg border" style={{ backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)" }}>
+                <div className="space-y-3 p-4 rounded-lg border bg-secondary border-default">
                   <h3 className="text-sm font-semibold">New Issue</h3>
                   <input
                     className="w-full px-3 py-1.5 rounded border text-sm"
@@ -536,8 +547,7 @@ export default function GitHub() {
                     onChange={(e) => setIssueLabels(e.target.value)}
                   />
                   <button onClick={createIssue}
-                    className="px-5 py-1.5 rounded-lg text-sm font-medium transition"
-                    style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
+                    className="px-5 py-1.5 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
                     Create Issue
                   </button>
                 </div>
@@ -555,23 +565,22 @@ export default function GitHub() {
                       onKeyDown={(e) => e.key === "Enter" && searchCode()}
                     />
                     <button onClick={searchCode}
-                      className="px-4 py-1.5 rounded-lg text-sm font-medium transition"
-                      style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
+                      className="px-4 py-1.5 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
                       Search
                     </button>
                   </div>
                   {codeResults.length > 0 && (
                     <div className="space-y-1">
-                      {codeResults.map((item: any, i: number) => (
-                        <div key={i} className="p-2 rounded text-xs" style={{ backgroundColor: "var(--dt-colors-bg-secondary)", color: "var(--dt-colors-text-primary)" }}>
+                      {codeResults.map((item, i) => (
+                        <div key={i} className="p-2 rounded text-xs bg-secondary text-primary">
                           <span style={{ color: "var(--dt-colors-accent-default)" }}>{item.path}</span>
-                          <span className="ml-2" style={{ color: "var(--dt-colors-text-tertiary)" }}>{item.name}</span>
+                          <span className="ml-2 text-tertiary">{item.name}</span>
                         </div>
                       ))}
                     </div>
                   )}
                   {codeResults.length === 0 && codeQuery && (
-                    <p className="text-xs py-4 text-center" style={{ color: "var(--dt-colors-text-tertiary)" }}>No results</p>
+                    <p className="text-xs py-4 text-center text-tertiary">No results</p>
                   )}
                 </div>
               )}

@@ -27,6 +27,7 @@ from ravencode.runtime.tools import (
 # event system
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AgentEvent:
     type: str
@@ -48,9 +49,11 @@ class EventEmitter:
             except Exception as exc:
                 logger.exception("Event handler failed for {}: {}", event.type, exc)
 
+
 # ---------------------------------------------------------------------------
 # config
 # ---------------------------------------------------------------------------
+
 
 class AgentConfig:
     def __init__(
@@ -121,7 +124,6 @@ _last_agent_var: contextvars.ContextVar[ReActAgent | None] = contextvars.Context
 
 
 class ReActAgent:
-
     @classmethod
     def last_agent(cls) -> ReActAgent | None:
         return _last_agent_var.get()
@@ -196,12 +198,15 @@ class ReActAgent:
     async def run(self, user_input: str) -> str:
         self._task = asyncio.current_task()
         from ravencode.runtime.tools import set_agent_memory
+
         _last_agent_var.set(self)
-        set_agent_memory({
-            "name": self.name,
-            "config": {k: v for k, v in self.config.__dict__.items() if not callable(v) and not k.startswith("_")},
-            "messages": self.conversation.messages[-6:] if self.conversation.messages else [],
-        })
+        set_agent_memory(
+            {
+                "name": self.name,
+                "config": {k: v for k, v in self.config.__dict__.items() if not callable(v) and not k.startswith("_")},
+                "messages": self.conversation.messages[-6:] if self.conversation.messages else [],
+            }
+        )
         async with self._lock:
             try:
                 return await self._run_impl(user_input)
@@ -285,11 +290,13 @@ class ReActAgent:
                     await ee.emit(AgentEvent("tool_result", {"name": name, "result": result_truncated, "step": step}))
 
                 if self.config.on_message:
-                    await self.config.on_message({
-                        "role": "tool",
-                        "tool_call_id": tc.get("id", ""),
-                        "content": result_truncated,
-                    })
+                    await self.config.on_message(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc.get("id", ""),
+                            "content": result_truncated,
+                        }
+                    )
 
                 if self.config.on_step:
                     await self.config.on_step(f"[tool] {name}: {result_truncated[:200]}", step)
@@ -314,9 +321,7 @@ class ReActAgent:
             response = await self._llm_call(messages)
             content = response.get("content", "")
             if content:
-                self.conversation.add_user_message(
-                    f"[proactive scan of task: {user_input}]\n{content}"
-                )
+                self.conversation.add_user_message(f"[proactive scan of task: {user_input}]\n{content}")
         except Exception as exc:
             logger.debug("Proactive scan failed: {}", exc)
 
@@ -374,6 +379,7 @@ class ReActAgent:
                     if path:
                         try:
                             from ravencode.runtime.formatters import format_file
+
                             fmt_result = await format_file(path)
                             if fmt_result and not fmt_result.startswith("[skipped"):
                                 logger.info("Auto-formatted: {}", fmt_result)
@@ -385,7 +391,7 @@ class ReActAgent:
             except Exception as exc:
                 last_err = str(exc)
                 logger.warning("Tool call attempt {}/{} failed: {}", attempt + 1, self.config.max_tool_retries, exc)
-                delay = 2 ** attempt
+                delay = 2**attempt
                 await asyncio.sleep(delay)
         return f"[error after {self.config.max_tool_retries} attempts]: {last_err}"
 
@@ -430,8 +436,11 @@ class ReActAgent:
     async def _auto_save(self, reason: str) -> None:
         try:
             from ravencode.runtime.session import get_session_store
+
             store = get_session_store()
-            summary = self.conversation.get_messages()[-1].get("content", "")[:200] if self.conversation.messages else reason
+            summary = (
+                self.conversation.get_messages()[-1].get("content", "")[:200] if self.conversation.messages else reason
+            )
             await store.save(self, summary=summary)
         except Exception as exc:
             logger.debug("Auto-save skipped: {}", exc)
@@ -441,20 +450,18 @@ class ReActAgent:
     # -----------------------------------------------------------------------
 
     def dump_state(self) -> dict[str, Any]:
-        cfg = {k: v for k, v in self.config.__dict__.items()
-               if not callable(v) and not k.startswith("_")}
+        cfg = {k: v for k, v in self.config.__dict__.items() if not callable(v) and not k.startswith("_")}
         return {
             "name": self.name,
             "config": cfg,
             "conversation": self.conversation.messages,
-            "memory": self.conversation.memory.to_dict() if hasattr(self.conversation, 'memory') else {},
+            "memory": self.conversation.memory.to_dict() if hasattr(self.conversation, "memory") else {},
         }
 
     @classmethod
     def load_state(cls, state: dict[str, Any], llm_provider: Any = None) -> Self:
         cfg_data = state.get("config", {})
-        cfg_data = {k: v for k, v in cfg_data.items()
-                    if not callable(v) and not k.startswith("_")}
+        cfg_data = {k: v for k, v in cfg_data.items() if not callable(v) and not k.startswith("_")}
         cfg = AgentConfig(**cfg_data)
         conv = Conversation(messages=state.get("conversation", []))
         return cls(config=cfg, conversation=conv, llm_provider=llm_provider, name=state.get("name", "raven"))

@@ -43,8 +43,10 @@ def create_finetune_router() -> APIRouter:
     @router.post("/dataset/conversation")
     def add_conversation(req: AddConversationRequest):
         from raven.unique.fine_tuning import ConversationExample
+
         try:
             import json
+
             messages = json.loads(req.messages_json) if req.messages_json else []
         except json.JSONDecodeError as e:
             raise HTTPException(400, f"Invalid messages JSON: {e}") from e
@@ -55,6 +57,7 @@ def create_finetune_router() -> APIRouter:
     @router.post("/dataset/code")
     def add_code(req: AddCodeRequest):
         from raven.unique.fine_tuning import CodeExample
+
         _builder.add_code(CodeExample(code=req.code, language=req.language, description=req.description))
         return {"success": True, "total": _builder.stats()["code_samples"]}
 
@@ -83,12 +86,13 @@ def create_finetune_router() -> APIRouter:
             raise HTTPException(500, f"Dataset build failed: {e}") from e
         try:
             tokenized = _builder.tokenize_dataset(dataset["train"], _pipeline._tokenizer)
-            eval_tokenized = _builder.tokenize_dataset(dataset["test"], _pipeline._tokenizer) if len(dataset["test"]) > 0 else None
+            eval_tokenized = (
+                _builder.tokenize_dataset(dataset["test"], _pipeline._tokenizer) if len(dataset["test"]) > 0 else None
+            )
         except Exception as e:
             raise HTTPException(500, f"Tokenization failed: {e}") from e
         try:
-            metrics = _pipeline.train(tokenized, eval_tokenized)
-            return metrics
+            return _pipeline.train(tokenized, eval_tokenized)
         except Exception as e:
             logger.error("Training failed: {}", e)
             raise HTTPException(500, str(e)) from e

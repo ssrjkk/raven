@@ -43,7 +43,7 @@ def get_file_type(path: str) -> dict[str, Any]:
             243: "RISC-V",
             253: "BPF",
         }
-        offset = 16 if info["bits"] == 32 else 16
+        offset = 16
         e_type = struct.unpack("<H" if endian == "little" else ">H", raw[offset : offset + 2])[0]
         e_machine = struct.unpack("<H" if endian == "little" else ">H", raw[offset + 2 : offset + 4])[0]
         info["file_type"] = e_type_map.get(e_type, f"unknown({e_type})")
@@ -104,7 +104,7 @@ def _try_pyelftools(path: str) -> dict[str, Any] | None:
     try:
         from elftools.elf.elffile import ELFFile
 
-        with open(path, "rb") as f:
+        with Path(path).open("rb") as f:
             elf = ELFFile(f)
             sections = []
             for sec in elf.iter_sections():
@@ -340,7 +340,7 @@ def extract_strings(path: str, min_length: int = 4, classify: bool = False) -> s
         for s in all_strings:
             if re.match(r"https?://", s, re.IGNORECASE):
                 classified["urls"].append(s)
-            elif re.match(r"[a-zA-Z]:\\\\", s) or s.startswith("/") or s.startswith("./"):
+            elif re.match(r"[a-zA-Z]:\\\\", s) or s.startswith(("/", "./")):
                 classified["paths"].append(s)
             elif re.match(r"^[A-Fa-f0-9]{32,64}$", s):
                 classified["crypto"].append(s[:64])
@@ -348,7 +348,7 @@ def extract_strings(path: str, min_length: int = 4, classify: bool = False) -> s
                 classified["ip"].append(s)
             elif re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", s) and 2 < len(s) < 60:
                 classified["function_names"].append(s)
-            elif s.startswith("HK") or s.startswith("HKEY"):
+            elif s.startswith(("HK", "HKEY")):
                 classified["registry"].append(s)
             else:
                 classified["other"].append(s)

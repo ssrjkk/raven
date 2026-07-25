@@ -77,9 +77,10 @@ class SecretsManager:
         key = self._get_or_create_key()
         f = Fernet(key)
         try:
-            return f.decrypt(ciphertext[len(_MARKER):].encode()).decode()
+            return f.decrypt(ciphertext[len(_MARKER) :].encode()).decode()
         except Exception as e:
-            raise RuntimeError(f"Secrets decryption failed: {e}") from e
+            msg = f"Secrets decryption failed: {e}"
+            raise RuntimeError(msg) from e
 
     async def load(self):
         async with self._lock:

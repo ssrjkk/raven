@@ -53,7 +53,8 @@ class TextToSpeech:
         }
         fn = provider_map.get(self.config.provider)
         if not fn:
-            raise ValueError(f"Unsupported TTS provider: {self.config.provider}")
+            msg = f"Unsupported TTS provider: {self.config.provider}"
+            raise ValueError(msg)
         return fn(text, output_path)
 
     def _synthesize_elevenlabs(self, text: str, output_path: str = "") -> str:
@@ -72,7 +73,7 @@ class TextToSpeech:
             model=self.config.model or "eleven_monolingual_v1",
             api_key=self.config.api_key,
         )
-        with open(out, "wb") as f:
+        with Path(out).open("wb") as f:
             f.write(audio)
         logger.info("ElevenLabs TTS saved to {}", out)
         return out
@@ -115,6 +116,7 @@ class TextToSpeech:
             logger.warning("win32com not available, writing silence WAV")
             import struct
             import wave
+
             sample_rate = 22050
             duration = max(len(text) * 0.06, 1.0)
             num_samples = int(sample_rate * duration)
@@ -131,9 +133,11 @@ class TextToSpeech:
             f.write(text)
             tmp = f.name
         try:
-            subprocess.run(  # noqa: S603
-                ["say", "-o", output_path, "-f", tmp],  # noqa: S607
-                capture_output=True, timeout=30,
+            subprocess.run(
+                ["say", "-o", output_path, "-f", tmp],
+                capture_output=True,
+                timeout=30,
+                check=False,
             )
         finally:
             Path(tmp).unlink(missing_ok=True)
@@ -170,6 +174,3 @@ class TextToSpeech:
         except ImportError as e:
             logger.debug("elevenlabs voices not available: {}", e)
             return []
-
-
-

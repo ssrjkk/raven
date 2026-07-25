@@ -22,7 +22,7 @@ def _collect_tools(module):
 
 _CRON_SKIP = False
 try:
-    import apscheduler  # noqa: F401
+    import apscheduler
 except ImportError:
     _CRON_SKIP = True
 
@@ -235,6 +235,8 @@ class TestApiPlugin:
             mock_response.reason_phrase = "OK"
             mock_response.text = '{"ok": true}'
             mock_response.headers = {"content-type": "application/json"}
+            mock_response.has_redirect_location = False
+            mock_response.is_redirect = False
             mock_request.return_value = mock_response
             result = await p.http_get("https://example.com")
             assert "200" in result
@@ -271,6 +273,8 @@ class TestApiPlugin:
             mock_response.reason_phrase = "Created"
             mock_response.text = '{"id": 1}'
             mock_response.headers = {}
+            mock_response.has_redirect_location = False
+            mock_response.is_redirect = False
             mock_request.return_value = mock_response
             result = await p.http_post("https://example.com/api", data='{"name": "test"}')
             assert "201" in result

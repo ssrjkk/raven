@@ -25,23 +25,21 @@ def analyze_code(path: str, detail: str = "summary") -> str:
             result = analyzer.explain_file(p)
             if detail == "summary":
                 return result.summary
-            elif detail == "symbols":
+            if detail == "symbols":
                 lines: list[str] = [result.summary, ""]
                 for sym in result.symbols:
                     ctx = f" in {sym.parent}" if sym.parent else ""
                     doc = f" — {sym.docstring[:80]}" if sym.docstring else ""
                     lines.append(f"  {sym.name} ({sym.kind}{ctx}) L{sym.line}{doc}")
                 return "\n".join(lines)
-            elif detail == "calls":
+            if detail == "calls":
                 lines = [result.summary, "", "Call graph:"]
                 for caller, callee, line in sorted(result.call_graph, key=lambda x: x[2]):
                     lines.append(f"  {caller} → {callee}  (L{line})")
                 return "\n".join(lines)
-            else:
-                return analyzer.format_explain(result, show_all=True)
-        else:
-            results = analyzer.analyze(p)
-            return analyzer.format_analysis(results)
+            return analyzer.format_explain(result, show_all=True)
+        results = analyzer.analyze(p)
+        return analyzer.format_analysis(results)
     except Exception as e:
         logger.exception("analyze_code failed")
         return f"Analysis failed: {e}"

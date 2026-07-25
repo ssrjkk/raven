@@ -13,6 +13,7 @@ async def _ensure_page() -> Any:
     global _BROWSER, _BROWSER_CONTEXT, _PAGE
     if _PAGE is None:
         from playwright.async_api import async_playwright
+
         p = await async_playwright().start()
         _BROWSER = await p.chromium.launch(headless=True)
         _BROWSER_CONTEXT = await _BROWSER.new_context()

@@ -11,22 +11,26 @@ from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 async def process_list() -> str:
     if os.name == "nt":
         proc = await asyncio.create_subprocess_exec(
-            "tasklist", "/FO", "CSV", "/NH",
+            "tasklist",
+            "/FO",
+            "CSV",
+            "/NH",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15.0)
         lines = stdout.decode("utf-8", errors="replace").splitlines()[:50]
         return "\n".join(line.strip('"') for line in lines)
-    else:
-        proc = await asyncio.create_subprocess_exec(
-            "ps", "aux", "--sort=-%mem",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15.0)
-        lines = stdout.decode("utf-8", errors="replace").splitlines()[:50]
-        return "\n".join(lines)
+    proc = await asyncio.create_subprocess_exec(
+        "ps",
+        "aux",
+        "--sort=-%mem",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15.0)
+    lines = stdout.decode("utf-8", errors="replace").splitlines()[:50]
+    return "\n".join(lines)
 
 
 async def process_kill(pid: int) -> str:

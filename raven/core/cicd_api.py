@@ -37,7 +37,9 @@ def create_cicd_router() -> APIRouter:
         return {"text": text}
 
     @router.get("/runs")
-    async def api_cicd_runs(owner: str = "", repo: str = "", branch: str = "", status: str = "", provider: str = "github"):
+    async def api_cicd_runs(
+        owner: str = "", repo: str = "", branch: str = "", status: str = "", provider: str = "github"
+    ):
         logger.debug("cicd_runs owner={} repo={} branch={} status={}", owner, repo, branch, status)
         text = await ci_list_runs(owner=owner, repo=repo, branch=branch, status=status, provider=provider)
         return {"text": text}

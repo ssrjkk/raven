@@ -52,7 +52,7 @@ def _validate_url(url: str) -> tuple[str, ValueError | None]:
         return url, ValueError("URL missing hostname")
     if _is_private_ip(host):
         return url, ValueError(f"SSRF blocked: private IP {host}")
-    if host in ("localhost", "0.0.0.0"):  # noqa: S104
+    if host in ("localhost", "0.0.0.0"):
         return url, ValueError(f"SSRF blocked: hostname {host}")
     try:
         addrs = socket.getaddrinfo(host, None)

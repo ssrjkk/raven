@@ -14,17 +14,17 @@ class ConditionEvaluator:
 
         if condition.operator == ConditionOperator.EQ:
             return str(actual) == str(condition.value)
-        elif condition.operator == ConditionOperator.NE:
+        if condition.operator == ConditionOperator.NE:
             return str(actual) != str(condition.value)
-        elif condition.operator == ConditionOperator.GT:
+        if condition.operator == ConditionOperator.GT:
             return float(actual) > float(condition.value)
-        elif condition.operator == ConditionOperator.LT:
+        if condition.operator == ConditionOperator.LT:
             return float(actual) < float(condition.value)
-        elif condition.operator == ConditionOperator.CONTAINS:
+        if condition.operator == ConditionOperator.CONTAINS:
             return str(condition.value) in str(actual)
-        elif condition.operator == ConditionOperator.MATCHES:
+        if condition.operator == ConditionOperator.MATCHES:
             return bool(re.search(str(condition.value), str(actual)))
-        elif condition.operator == ConditionOperator.CHANGED:
+        if condition.operator == ConditionOperator.CHANGED:
             return bool(data.get("changed", False))
         return False
 

@@ -31,7 +31,8 @@ class WorkerProcess:
             return
         worker_script = Path(__file__).resolve().parent / "plugin_worker.py"
         self._process = await asyncio.create_subprocess_exec(
-            sys.executable, str(worker_script),
+            sys.executable,
+            str(worker_script),
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -40,11 +41,12 @@ class WorkerProcess:
     async def send_command(self, cmd: dict[str, Any], timeout: float = 60.0) -> dict[str, Any]:
         await self._ensure_started()
         proc = self._process
-        assert proc is not None
+        if proc is None:
+            raise RuntimeError("Plugin subprocess not started")
         stdin = proc.stdin
         stdout = proc.stdout
-        assert stdin is not None
-        assert stdout is not None
+        if stdin is None or stdout is None:
+            raise RuntimeError("Plugin subprocess pipes not available")
 
         raw = json.dumps(cmd) + "\n"
         stdin.write(raw.encode("utf-8"))
@@ -76,6 +78,7 @@ class WorkerProcess:
 
 async def _handle_capability_from_worker(msg: dict[str, Any]) -> str:
     from raven.core.plugin_context import handle_capability
+
     plugin = msg.get("plugin", "unknown")
     capability = msg.get("capability", "")
     args = msg.get("args", {})
@@ -90,11 +93,14 @@ async def register_untrusted_plugin(plugin_dir: Path, register_timeout: float = 
         return None
     worker = WorkerProcess(plugin_file)
     try:
-        resp = await worker.send_command({
-            "type": "register",
-            "path": str(plugin_file),
-            "register_timeout": register_timeout,
-        }, timeout=register_timeout + 2.0)
+        resp = await worker.send_command(
+            {
+                "type": "register",
+                "path": str(plugin_file),
+                "register_timeout": register_timeout,
+            },
+            timeout=register_timeout + 2.0,
+        )
         if resp.get("type") == "register_ok":
             key = str(plugin_file)
             _WORKER_POOL[key] = worker
@@ -103,10 +109,9 @@ async def register_untrusted_plugin(plugin_dir: Path, register_timeout: float = 
                 "name": plugin_dir.name,
                 "tools": resp.get("tools", []),
             }
-        else:
-            logger.error("Plugin registration failed: {} — {}", plugin_dir.name, resp.get("error"))
-            await worker.stop()
-            return None
+        logger.error("Plugin registration failed: {} — {}", plugin_dir.name, resp.get("error"))
+        await worker.stop()
+        return None
     except Exception as e:
         logger.error("Plugin registration error for {}: {}", plugin_dir.name, e)
         await worker.stop()
@@ -116,14 +121,18 @@ async def register_untrusted_plugin(plugin_dir: Path, register_timeout: float = 
 async def call_untrusted_tool(plugin_file: str, tool_name: str, args: dict[str, Any], timeout: float = 30.0) -> str:
     worker = _WORKER_POOL.get(plugin_file)
     if not worker:
-        raise RuntimeError(f"Plugin not registered: {plugin_file}")
-    resp = await worker.send_command({
-        "type": "call_tool",
-        "path": plugin_file,
-        "tool": tool_name,
-        "args": args,
-        "tool_timeout": timeout,
-    }, timeout=timeout + 10.0)
+        msg = f"Plugin not registered: {plugin_file}"
+        raise RuntimeError(msg)
+    resp = await worker.send_command(
+        {
+            "type": "call_tool",
+            "path": plugin_file,
+            "tool": tool_name,
+            "args": args,
+            "tool_timeout": timeout,
+        },
+        timeout=timeout + 10.0,
+    )
     if resp.get("type") == "result":
         result: Any = resp["result"]
         return str(result) if result is not None else ""
@@ -140,6 +149,7 @@ async def stop_untrusted_plugins() -> None:
 # ---------------------------------------------------------------------------
 # Trusted plugin loading (existing importlib)
 # ---------------------------------------------------------------------------
+
 
 def _type_to_json_schema(tp: Any) -> dict[str, Any]:
     if isinstance(tp, str):
@@ -236,10 +246,12 @@ class PluginLoader:
         spec.loader.exec_module(mod)
 
         tools = []
+        namespace = path.name
         for name, obj in inspect.getmembers(mod, inspect.iscoroutinefunction):
             if name.startswith("_"):
                 continue
             tool = func_to_tool(obj)
+            tool.name = f"{namespace}.{tool.name}"
             self._tools[tool.name] = tool
             tools.append(tool)
             logger.debug("Loaded tool: {}", tool.name)
@@ -291,4 +303,5 @@ class PluginLoader:
 def _make_untrusted_handler(plugin_file: str, tool_name: str) -> Callable[..., Any]:
     async def handler(**kwargs: Any) -> str:
         return await call_untrusted_tool(plugin_file, tool_name, kwargs)
+
     return handler

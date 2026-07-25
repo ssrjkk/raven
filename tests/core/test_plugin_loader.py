@@ -68,7 +68,7 @@ async def add(a: int, b: int) -> int:
         tools = loader.load_from_dir(plugin_dir)
         assert len(tools) == 2
         names = {t.name for t in tools}
-        assert names == {"hello", "add"}
+        assert names == {"testplugin.hello", "testplugin.add"}
 
     def test_existing_tools(self, loader, tmp_path):
         plugin_dir = tmp_path / "p1"
@@ -80,7 +80,7 @@ async def foo() -> str:
 """)
         loader.load_from_dir(plugin_dir)
         assert len(loader.tools) == 1
-        assert loader.get_tool("foo") is not None
+        assert loader.get_tool("p1.foo") is not None
 
         plugin_dir2 = tmp_path / "p2"
         plugin_dir2.mkdir()
@@ -104,7 +104,7 @@ async def test_tool(x: str) -> str:
         openai = loader.to_openai_tools()
         assert len(openai) == 1
         assert openai[0]["type"] == "function"
-        assert openai[0]["function"]["name"] == "test_tool"
+        assert openai[0]["function"]["name"] == "p1.test_tool"
 
     def test_clear(self, loader, tmp_path):
         plugin_dir = tmp_path / "p1"

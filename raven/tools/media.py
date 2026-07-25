@@ -17,13 +17,14 @@ _OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 _REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN", "")
 
 
-async def image_generate(prompt: str, size: str = "1024x1024", quality: str = "standard", n: int = 1, model: str = "dall-e-3") -> str:
+async def image_generate(
+    prompt: str, size: str = "1024x1024", quality: str = "standard", n: int = 1, model: str = "dall-e-3"
+) -> str:
     if model.startswith("dall-e"):
         return await _image_generate_dalle(prompt, size, quality, n)
-    elif model in ("stable-diffusion", "sdxl", "sd"):
+    if model in ("stable-diffusion", "sdxl", "sd"):
         return await _image_generate_sd(prompt, size)
-    else:
-        return f"[error] Unknown model '{model}'. Supported: dall-e-3, stable-diffusion"
+    return f"[error] Unknown model '{model}'. Supported: dall-e-3, stable-diffusion"
 
 
 async def _image_generate_dalle(prompt: str, size: str, quality: str, n: int) -> str:
@@ -32,6 +33,7 @@ async def _image_generate_dalle(prompt: str, size: str, quality: str, n: int) ->
         return "[error] OPENAI_API_KEY env var required for DALL-E"
     try:
         import httpx
+
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
                 "https://api.openai.com/v1/images/generations",
@@ -61,10 +63,12 @@ async def _image_generate_sd(prompt: str, size: str) -> str:
         parts = size.lower().split("x")
         if len(parts) == 2:
             import contextlib
+
             with contextlib.suppress(ValueError):
                 width, height = int(parts[0]), int(parts[1])
     try:
         import httpx
+
         model_version = "stability-ai/stable-diffusion-3.5-large-turbo"
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
@@ -96,7 +100,7 @@ async def _image_generate_sd(prompt: str, size: str) -> str:
                             lines.append(f"{i}. ![Generated Image {i}]({url})")
                         return "\n".join(lines)
                     return "[error] No output from Stable Diffusion"
-                elif status["status"] == "failed":
+                if status["status"] == "failed":
                     return f"[error] Stable Diffusion prediction failed: {status.get('error', 'unknown')}"
             return "[error] Stable Diffusion prediction timed out"
     except Exception as e:
@@ -213,14 +217,13 @@ async def document_parse(filepath: str, pages: str = "") -> str:
     try:
         if ext == ".pdf":
             return await asyncio.to_thread(_parse_pdf, path, pages)
-        elif ext == ".docx":
+        if ext == ".docx":
             return await asyncio.to_thread(_parse_docx, path)
-        elif ext == ".pptx":
+        if ext == ".pptx":
             return await asyncio.to_thread(_parse_pptx, path)
-        elif ext in (".xlsx", ".xls"):
+        if ext in (".xlsx", ".xls"):
             return await asyncio.to_thread(_parse_xlsx, path)
-        else:
-            return f"[error] Unsupported format: {ext} (supported: .pdf, .docx, .pptx, .xlsx)"
+        return f"[error] Unsupported format: {ext} (supported: .pdf, .docx, .pptx, .xlsx)"
     except ImportError as e:
         return f"[error] Missing dependency for {ext}: {e}"
     except Exception as e:
@@ -230,6 +233,7 @@ async def document_parse(filepath: str, pages: str = "") -> str:
 
 def _parse_pdf(path: Path, pages: str = "") -> str:
     import fitz
+
     doc = fitz.open(str(path))
     total_pages = len(doc)
     page_nums: list[int] = []
@@ -263,6 +267,7 @@ def _parse_pdf(path: Path, pages: str = "") -> str:
 
 def _parse_docx(path: Path) -> str:
     from docx import Document
+
     doc = Document(str(path))
     lines = [f"Document: {path.name}"]
     char_count = 0
@@ -276,6 +281,7 @@ def _parse_docx(path: Path) -> str:
 
 def _parse_pptx(path: Path) -> str:
     from pptx import Presentation
+
     prs = Presentation(str(path))
     lines = [f"Presentation: {path.name} ({len(prs.slides)} slides)"]
     char_count = 0
@@ -296,6 +302,7 @@ def _parse_pptx(path: Path) -> str:
 
 def _parse_xlsx(path: Path) -> str:
     from openpyxl import load_workbook
+
     wb = load_workbook(str(path), read_only=True, data_only=True)
     lines = [f"Workbook: {path.name} ({len(wb.sheetnames)} sheets)"]
     char_count = 0
@@ -322,6 +329,7 @@ async def video_info(filepath: str) -> str:
         return f"[error] File not found: {filepath}"
     try:
         import ffmpeg
+
         probe = await ffmpeg.probe(str(path))
     except ImportError:
         return "[error] ffmpeg-python not installed (pip install raven-agent[media])"
@@ -342,9 +350,11 @@ async def video_info(filepath: str) -> str:
         codec = s.get("codec_name", "?")
         stype = s.get("codec_type", "?")
         if stype == "video":
-            lines.append(f"  Stream {i}: {stype} {codec}, {s.get('width','?')}x{s.get('height','?')}, {s.get('r_frame_rate','?')} fps")
+            lines.append(
+                f"  Stream {i}: {stype} {codec}, {s.get('width', '?')}x{s.get('height', '?')}, {s.get('r_frame_rate', '?')} fps"
+            )
         elif stype == "audio":
-            lines.append(f"  Stream {i}: {stype} {codec}, {s.get('sample_rate','?')} Hz, {s.get('channels','?')} ch")
+            lines.append(f"  Stream {i}: {stype} {codec}, {s.get('sample_rate', '?')} Hz, {s.get('channels', '?')} ch")
         else:
             lines.append(f"  Stream {i}: {stype} {codec}")
     return "\n".join(lines)
@@ -367,11 +377,13 @@ async def video_thumbnail(filepath: str, time_sec: float = 1.0, size: str = "320
     await asyncio.to_thread(out_path.parent.mkdir, parents=True, exist_ok=True)
     try:
         await asyncio.to_thread(
-            lambda: ffmpeg.input(str(path), ss=time_sec)
-            .filter("scale", *size.split("x"))
-            .output(str(out_path), vframes=1)
-            .overwrite_output()
-            .run(capture_stdout=True, capture_stderr=True)
+            lambda: (
+                ffmpeg.input(str(path), ss=time_sec)
+                .filter("scale", *size.split("x"))
+                .output(str(out_path), vframes=1)
+                .overwrite_output()
+                .run(capture_stdout=True, capture_stderr=True)
+            )
         )
     except Exception as e:
         return f"[error] Thumbnail extraction failed: {e}"
@@ -415,16 +427,33 @@ async def video_transcribe(filepath: str, model: str = "whisper-1", language: st
 
     tmp_wav = ""
     try:
-        tmp_wav = os.path.join(tempfile.gettempdir(), f"raven_audio_{os.urandom(4).hex()}.wav")
-        ffmpeg_cmd = ["ffmpeg", "-i", str(path), "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", "-y", tmp_wav]
-        proc = await asyncio.create_subprocess_exec(*ffmpeg_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        tmp_wav = str(Path(tempfile.gettempdir()) / f"raven_audio_{os.urandom(4).hex()}.wav")
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-i",
+            str(path),
+            "-vn",
+            "-acodec",
+            "pcm_s16le",
+            "-ar",
+            "16000",
+            "-ac",
+            "1",
+            "-y",
+            tmp_wav,
+        ]
+        proc = await asyncio.create_subprocess_exec(
+            *ffmpeg_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
         await proc.communicate()
         tmp_exists = await asyncio.to_thread(os.path.exists, tmp_wav)
         if not tmp_exists:
             return "[error] ffmpeg audio extraction failed (ffmpeg not found or invalid file)"
+
         def _read_audio() -> bytes:
-            with open(tmp_wav, "rb") as f:
+            with Path(tmp_wav).open("rb") as f:
                 return f.read()
+
         audio_data = await asyncio.to_thread(_read_audio)
         data = {"model": model}
         if language:
@@ -452,11 +481,13 @@ async def video_transcribe(filepath: str, model: str = "whisper-1", language: st
         logger.error("Video transcription failed: {}", e)
         return f"[error] Transcription failed: {e}"
     finally:
-        if tmp_wav and os.path.exists(tmp_wav):
-            os.unlink(tmp_wav)
+        if tmp_wav and Path(tmp_wav).exists():
+            Path(tmp_wav).unlink()
 
 
-async def video_extract_frames(filepath: str, interval_sec: float = 5.0, max_frames: int = 10, size: str = "640x480", output_dir: str = "") -> str:
+async def video_extract_frames(
+    filepath: str, interval_sec: float = 5.0, max_frames: int = 10, size: str = "640x480", output_dir: str = ""
+) -> str:
     path = _confine(filepath)
     exists = await asyncio.to_thread(path.exists)
     if not exists:
@@ -480,18 +511,22 @@ async def video_extract_frames(filepath: str, interval_sec: float = 5.0, max_fra
         for i in range(n_frames):
             ts = i * interval_sec
             out_path = str(out_dir / f"frame_{i:04d}_{int(ts)}s.jpg")
+
             def _extract_frame(p: Path = path, t: float = ts, o: str = out_path, w_in: str = w, h_in: str = h) -> None:
                 ffmpeg.input(str(p), ss=t).filter("scale", w_in, h_in).output(o, vframes=1).overwrite_output().run(
                     capture_stdout=True, capture_stderr=True
                 )
+
             await asyncio.to_thread(_extract_frame)
             frame_paths.append(out_path)
         previews = []
         for fp in frame_paths[:5]:
             try:
+
                 def _read_frame(fp: str = fp) -> str:
-                    with open(fp, "rb") as f:
+                    with Path(fp).open("rb") as f:
                         return base64.b64encode(f.read()).decode()
+
                 b64 = await asyncio.to_thread(_read_frame)
                 previews.append(f"data:image/jpeg;base64,{b64}")
             except Exception:
@@ -520,9 +555,11 @@ async def image_analyze(filepath: str, prompt: str = "Describe this image in det
         return "[error] OPENAI_API_KEY env var required for image analysis"
     try:
         import httpx
+
         def _read_image() -> str:
-            with open(path, "rb") as f:
+            with Path(path).open("rb") as f:
                 return base64.b64encode(f.read()).decode()
+
         b64 = await asyncio.to_thread(_read_image)
         ext = path.suffix.lower().lstrip(".")
         if ext in ("jpg", "jpeg"):
@@ -542,10 +579,16 @@ async def image_analyze(filepath: str, prompt: str = "Describe this image in det
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [
-                        {"role": "user", "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "low"}},
-                        ]},
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "low"},
+                                },
+                            ],
+                        },
                     ],
                     "max_tokens": 1000,
                 },
@@ -560,117 +603,159 @@ async def image_analyze(filepath: str, prompt: str = "Describe this image in det
 
 
 def register_media_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="image_generate",
-        description="Generate an image from a text prompt using DALL-E 3 or Stable Diffusion",
-        parameters={
-            "prompt": {"type": "string", "description": "Image description", "required": True},
-            "size": {"type": "string", "description": "Image size: 1024x1024, 1792x1024, or 1024x1792", "required": False},
-            "quality": {"type": "string", "description": "standard or hd", "required": False},
-            "n": {"type": "integer", "description": "Number of images (1)", "required": False},
-            "model": {"type": "string", "description": "Model: dall-e-3 (default) or stable-diffusion", "required": False},
-        },
-        handler=image_generate,
-        category="media",
-        timeout=120,
-    ))
-    registry.register(ToolSpec(
-        name="image_edit",
-        description="Edit an image file: resize, crop, rotate, flip, convert format",
-        parameters={
-            "filepath": {"type": "string", "description": "Path to image file", "required": True},
-            "resize": {"type": "string", "description": "New size as WxH (e.g. 800x600)", "required": False},
-            "crop": {"type": "string", "description": "Crop rect as left,upper,right,lower", "required": False},
-            "rotate": {"type": "integer", "description": "Rotation angle in degrees", "required": False},
-            "flip": {"type": "string", "description": "horizontal or vertical", "required": False},
-            "format": {"type": "string", "description": "Output format: JPEG, PNG, GIF, WEBP", "required": False},
-            "quality": {"type": "integer", "description": "Output quality 1-100", "required": False},
-            "output": {"type": "string", "description": "Output file path (optional)", "required": False},
-        },
-        handler=image_edit,
-        category="media",
-        timeout=60,
-    ))
-    registry.register(ToolSpec(
-        name="image_analyze",
-        description="Analyze an image using GPT-4o Vision (describe, caption, or answer questions about an image)",
-        parameters={
-            "filepath": {"type": "string", "description": "Path to image file", "required": True},
-            "prompt": {"type": "string", "description": "Question or prompt about the image", "required": False},
-        },
-        handler=image_analyze,
-        category="media",
-        timeout=60,
-    ))
-    registry.register(ToolSpec(
-        name="document_parse",
-        description="Extract text content from documents (PDF, DOCX, PPTX, XLSX)",
-        parameters={
-            "filepath": {"type": "string", "description": "Path to document file", "required": True},
-            "pages": {"type": "string", "description": "Page range for PDFs, e.g. 1-3,5 (optional)", "required": False},
-        },
-        handler=document_parse,
-        category="media",
-        timeout=60,
-    ))
-    registry.register(ToolSpec(
-        name="video_transcribe",
-        description="Transcribe audio from a video file using OpenAI Whisper API",
-        parameters={
-            "filepath": {"type": "string", "description": "Path to video file", "required": True},
-            "model": {"type": "string", "description": "Whisper model (whisper-1)", "required": False},
-            "language": {"type": "string", "description": "Language code (optional, e.g. en)", "required": False},
-        },
-        handler=video_transcribe,
-        category="media",
-        timeout=300,
-    ))
-    registry.register(ToolSpec(
-        name="audio_transcribe",
-        description="Transcribe audio from an audio file using OpenAI Whisper API",
-        parameters={
-            "filepath": {"type": "string", "description": "Path to audio file (mp3, wav, ogg, flac, m4a)", "required": True},
-            "model": {"type": "string", "description": "Whisper model (whisper-1)", "required": False},
-            "language": {"type": "string", "description": "Language code (optional, e.g. en)", "required": False},
-        },
-        handler=video_transcribe,
-        category="media",
-        timeout=300,
-    ))
-    registry.register(ToolSpec(
-        name="video_extract_frames",
-        description="Extract frames from a video at regular intervals as JPEG images",
-        parameters={
-            "filepath": {"type": "string", "description": "Path to video file", "required": True},
-            "interval_sec": {"type": "number", "description": "Interval between frames in seconds (default 5.0)", "required": False},
-            "max_frames": {"type": "integer", "description": "Maximum number of frames to extract (default 10)", "required": False},
-            "size": {"type": "string", "description": "Frame size as WxH (default 640x480)", "required": False},
-            "output_dir": {"type": "string", "description": "Output directory (optional)", "required": False},
-        },
-        handler=video_extract_frames,
-        category="media",
-        timeout=120,
-    ))
-    registry.register(ToolSpec(
-        name="video_info",
-        description="Get metadata information about a video file (duration, codec, resolution, streams)",
-        parameters={
-            "filepath": {"type": "string", "description": "Path to video file", "required": True},
-        },
-        handler=video_info,
-        category="media",
-        timeout=30,
-    ))
-    registry.register(ToolSpec(
-        name="video_thumbnail",
-        description="Extract a thumbnail image from a video at a specific timestamp",
-        parameters={
-            "filepath": {"type": "string", "description": "Path to video file", "required": True},
-            "time_sec": {"type": "number", "description": "Timestamp in seconds", "required": False},
-            "size": {"type": "string", "description": "Thumbnail size as WxH", "required": False},
-            "output": {"type": "string", "description": "Output file path (optional)", "required": False},
-        },
-        handler=video_thumbnail,
-        category="media",
-        timeout=60,
-    ))
+    registry.register(
+        ToolSpec(
+            name="image_generate",
+            description="Generate an image from a text prompt using DALL-E 3 or Stable Diffusion",
+            parameters={
+                "prompt": {"type": "string", "description": "Image description", "required": True},
+                "size": {
+                    "type": "string",
+                    "description": "Image size: 1024x1024, 1792x1024, or 1024x1792",
+                    "required": False,
+                },
+                "quality": {"type": "string", "description": "standard or hd", "required": False},
+                "n": {"type": "integer", "description": "Number of images (1)", "required": False},
+                "model": {
+                    "type": "string",
+                    "description": "Model: dall-e-3 (default) or stable-diffusion",
+                    "required": False,
+                },
+            },
+            handler=image_generate,
+            category="media",
+            timeout=120,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="image_edit",
+            description="Edit an image file: resize, crop, rotate, flip, convert format",
+            parameters={
+                "filepath": {"type": "string", "description": "Path to image file", "required": True},
+                "resize": {"type": "string", "description": "New size as WxH (e.g. 800x600)", "required": False},
+                "crop": {"type": "string", "description": "Crop rect as left,upper,right,lower", "required": False},
+                "rotate": {"type": "integer", "description": "Rotation angle in degrees", "required": False},
+                "flip": {"type": "string", "description": "horizontal or vertical", "required": False},
+                "format": {"type": "string", "description": "Output format: JPEG, PNG, GIF, WEBP", "required": False},
+                "quality": {"type": "integer", "description": "Output quality 1-100", "required": False},
+                "output": {"type": "string", "description": "Output file path (optional)", "required": False},
+            },
+            handler=image_edit,
+            category="media",
+            timeout=60,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="image_analyze",
+            description="Analyze an image using GPT-4o Vision (describe, caption, or answer questions about an image)",
+            parameters={
+                "filepath": {"type": "string", "description": "Path to image file", "required": True},
+                "prompt": {"type": "string", "description": "Question or prompt about the image", "required": False},
+            },
+            handler=image_analyze,
+            category="media",
+            timeout=60,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="document_parse",
+            description="Extract text content from documents (PDF, DOCX, PPTX, XLSX)",
+            parameters={
+                "filepath": {"type": "string", "description": "Path to document file", "required": True},
+                "pages": {
+                    "type": "string",
+                    "description": "Page range for PDFs, e.g. 1-3,5 (optional)",
+                    "required": False,
+                },
+            },
+            handler=document_parse,
+            category="media",
+            timeout=60,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="video_transcribe",
+            description="Transcribe audio from a video file using OpenAI Whisper API",
+            parameters={
+                "filepath": {"type": "string", "description": "Path to video file", "required": True},
+                "model": {"type": "string", "description": "Whisper model (whisper-1)", "required": False},
+                "language": {"type": "string", "description": "Language code (optional, e.g. en)", "required": False},
+            },
+            handler=video_transcribe,
+            category="media",
+            timeout=300,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="audio_transcribe",
+            description="Transcribe audio from an audio file using OpenAI Whisper API",
+            parameters={
+                "filepath": {
+                    "type": "string",
+                    "description": "Path to audio file (mp3, wav, ogg, flac, m4a)",
+                    "required": True,
+                },
+                "model": {"type": "string", "description": "Whisper model (whisper-1)", "required": False},
+                "language": {"type": "string", "description": "Language code (optional, e.g. en)", "required": False},
+            },
+            handler=video_transcribe,
+            category="media",
+            timeout=300,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="video_extract_frames",
+            description="Extract frames from a video at regular intervals as JPEG images",
+            parameters={
+                "filepath": {"type": "string", "description": "Path to video file", "required": True},
+                "interval_sec": {
+                    "type": "number",
+                    "description": "Interval between frames in seconds (default 5.0)",
+                    "required": False,
+                },
+                "max_frames": {
+                    "type": "integer",
+                    "description": "Maximum number of frames to extract (default 10)",
+                    "required": False,
+                },
+                "size": {"type": "string", "description": "Frame size as WxH (default 640x480)", "required": False},
+                "output_dir": {"type": "string", "description": "Output directory (optional)", "required": False},
+            },
+            handler=video_extract_frames,
+            category="media",
+            timeout=120,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="video_info",
+            description="Get metadata information about a video file (duration, codec, resolution, streams)",
+            parameters={
+                "filepath": {"type": "string", "description": "Path to video file", "required": True},
+            },
+            handler=video_info,
+            category="media",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="video_thumbnail",
+            description="Extract a thumbnail image from a video at a specific timestamp",
+            parameters={
+                "filepath": {"type": "string", "description": "Path to video file", "required": True},
+                "time_sec": {"type": "number", "description": "Timestamp in seconds", "required": False},
+                "size": {"type": "string", "description": "Thumbnail size as WxH", "required": False},
+                "output": {"type": "string", "description": "Output file path (optional)", "required": False},
+            },
+            handler=video_thumbnail,
+            category="media",
+            timeout=60,
+        )
+    )

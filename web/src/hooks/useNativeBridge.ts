@@ -1,4 +1,23 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+interface CapacitorPlugin {
+  PushNotifications?: {
+    requestPermissions: () => Promise<{ receive: string }>;
+    register: () => void;
+    addListener: (event: "registration", cb: (data: { token?: { value?: string } }) => void) => { remove: () => void };
+  };
+  Network?: {
+    addListener: (event: "networkStatusChange", cb: (data: { connected: boolean; connectionType: string }) => void) => { remove: () => void };
+  };
+  SplashScreen?: { hide: () => void };
+  StatusBar?: { setStyle: (style: { style: string }) => void };
+  LocalNotifications?: { schedule: (opts: { notifications: { title: string; body: string; id: number; schedule?: { at: Date } }[] }) => Promise<void> };
+  Haptics?: { impact: (opts: { style: string }) => Promise<void> };
+  Camera?: { getPhoto: (opts: { resultType: string; source: string; quality: number }) => Promise<{ dataUrl?: string }> };
+  Geolocation?: { getCurrentPosition: () => Promise<{ coords: { latitude: number; longitude: number } }> };
+}
+interface CapacitorGlobal { Capacitor?: { isNativePlatform: () => boolean; Plugins: CapacitorPlugin; getPlatform: () => string } }
+declare global { interface Window { Capacitor?: CapacitorGlobal['Capacitor'] } }
 
 export interface NativeBridgeState {
   platform: "ios" | "android" | "web";
@@ -21,38 +40,43 @@ export function useNativeBridge() {
     connectionType: navigator.onLine ? "wifi" : "none",
   });
 
-  const isCapacitor = typeof (window as any).Capacitor !== "undefined"
-    && (window as any).Capacitor.isNativePlatform();
+  const isCapacitor = typeof window.Capacitor !== "undefined"
+    && window.Capacitor!.isNativePlatform();
+
+  const capListeners = useRef<Array<{ remove: () => void }>>([]);
 
   useEffect(() => {
     if (!isCapacitor) return;
 
-    // Detect platform
-    const cap = (window as any).Capacitor;
+    const cap = window.Capacitor!;
     const platform = cap.getPlatform();
 
-    // Register push
-    cap.Plugins.PushNotifications?.requestPermissions().then((perm: any) => {
-      if (perm.receive === "granted") {
-        cap.Plugins.PushNotifications.register();
-        cap.Plugins.PushNotifications.addListener("registration", (r: any) => {
-          setState((s) => ({ ...s, pushToken: r.token?.value || null }));
-        });
-      }
-    });
+    cap.Plugins.PushNotifications?.requestPermissions()
+      .then((perm) => {
+        if (perm.receive === "granted") {
+          cap.Plugins.PushNotifications?.register();
+          const pushListener = cap.Plugins.PushNotifications?.addListener("registration", (r) => {
+            setState((s) => ({ ...s, pushToken: r.token?.value || null }));
+          });
+          if (pushListener) capListeners.current.push(pushListener);
+        }
+      })
+      .catch((e) => console.error("push permissions:", e));
 
-    // Network listener
-    cap.Plugins.Network?.addListener("networkStatusChange", (s: any) => {
+    const netListener = cap.Plugins.Network?.addListener("networkStatusChange", (s) => {
       setState((st) => ({ ...st, isOnline: s.connected, connectionType: s.connectionType }));
     });
+    if (netListener) capListeners.current.push(netListener);
 
-    // Hide splash
     cap.Plugins.SplashScreen?.hide();
-
-    // Set status bar
     cap.Plugins.StatusBar?.setStyle({ style: "DARK" });
 
-    setState((s) => ({ ...s, platform, isNative: true }));
+    setState((s) => ({ ...s, platform: platform as "ios" | "android" | "web", isNative: true }));
+
+    return () => {
+      for (const l of capListeners.current) l.remove();
+      capListeners.current = [];
+    };
   }, [isCapacitor]);
 
   const takePhoto = useCallback(async (): Promise<string | null> => {
@@ -74,14 +98,14 @@ export function useNativeBridge() {
       });
     }
     try {
-      const cap = (window as any).Capacitor;
-      const image = await cap.Plugins.Camera.getPhoto({
+      const cap = window.Capacitor!;
+      const image = await cap.Plugins.Camera?.getPhoto({
         resultType: "DataUrl",
         source: "Camera",
         quality: 90,
       });
-      return image.dataUrl || null;
-    } catch {
+      return image?.dataUrl || null;
+    } catch (e) { console.error("useNativeBridge:", e);
       return null;
     }
   }, [isCapacitor]);
@@ -104,14 +128,14 @@ export function useNativeBridge() {
       });
     }
     try {
-      const cap = (window as any).Capacitor;
-      const image = await cap.Plugins.Camera.getPhoto({
+      const cap = window.Capacitor!;
+      const image = await cap.Plugins.Camera?.getPhoto({
         resultType: "DataUrl",
         source: "Photos",
         quality: 90,
       });
-      return image.dataUrl || null;
-    } catch {
+      return image?.dataUrl || null;
+    } catch (e) { console.error("useNativeBridge:", e);
       return null;
     }
   }, [isCapacitor]);
@@ -127,10 +151,10 @@ export function useNativeBridge() {
       });
     }
     try {
-      const cap = (window as any).Capacitor;
-      const pos = await cap.Plugins.Geolocation.getCurrentPosition();
-      return { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    } catch {
+      const cap = window.Capacitor!;
+      const pos = await cap.Plugins.Geolocation?.getCurrentPosition();
+      return pos ? { lat: pos.coords.latitude, lng: pos.coords.longitude } : null;
+    } catch (e) { console.error("useNativeBridge:", e);
       return null;
     }
   }, [isCapacitor]);
@@ -142,12 +166,14 @@ export function useNativeBridge() {
       }
       return;
     }
-    const cap = (window as any).Capacitor;
-    await cap.Plugins.LocalNotifications.schedule({
-      notifications: [
-        { title, body, id: Date.now(), schedule: delayMs ? { at: new Date(Date.now() + delayMs) } : undefined },
-      ],
-    });
+    const cap = window.Capacitor!;
+    try {
+      await cap.Plugins.LocalNotifications?.schedule({
+        notifications: [
+          { title, body, id: Date.now(), schedule: delayMs ? { at: new Date(Date.now() + delayMs) } : undefined },
+        ],
+      });
+    } catch (e) { console.error("scheduleNotification:", e); }
   }, [isCapacitor]);
 
   const vibrate = useCallback(async (style: "light" | "medium" | "heavy" = "medium") => {
@@ -155,9 +181,11 @@ export function useNativeBridge() {
       navigator.vibrate?.(style === "heavy" ? 50 : style === "medium" ? 25 : 10);
       return;
     }
-    const cap = (window as any).Capacitor;
+    const cap = window.Capacitor!;
     const impactMap = { light: "Light", medium: "Medium", heavy: "Heavy" };
-    await cap.Plugins.Haptics?.impact({ style: impactMap[style] });
+    try {
+      await cap.Plugins.Haptics?.impact({ style: impactMap[style] });
+    } catch (e) { console.error("vibrate:", e); }
   }, [isCapacitor]);
 
   return {

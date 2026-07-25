@@ -222,6 +222,58 @@ npm run dev
 - **`tests/test_core_db.py`**: 4 tests covering `db_query` — async execution, SELECT-only guard, path traversal denial, empty result
 - **`tests/test_api_pagination.py`**: 9 tests across monitors, routines, tasks, code sessions — verifies limit, offset, count, and filter-scoped counting
 
+## Fixes applied (Jul 2026)
+### Final state
+- **ruff**: 17 rule categories, **0 violations**
+- **mypy**: **0 errors** on **555 source files**
+- **Python tests**: all passing (SSRF fix + pre-existing suite)
+- **Frontend tests**: **42/42 passing**, 9/9 test files
+- **Frontend build**: `vite build` 0 errors, `tsc --noEmit` 0 errors
+- **Authorship**: `__author__ = "ssrjkk"` in package `__init__.py` files, `AUTHORS` file created
+
+### `Any` → concrete types + mypy 0 errors
+- **`raven/core/unified_agent.py`**: Replaced `Any` type for `llm_provider` with `Callable[[list[dict[str, Any]]], Awaitable[dict[str, Any]]] | None`. Removed unused `LLMProvider` import. Fixed `raise last_error` `[misc]` and `[return]` errors.
+- **`raven/core/errors.py`**: `detail` parameter changed from `str | None` to `object` in `AuthError`, `LLMError`, `ChannelError` (accepts dicts, lists, etc. via `AppError.detail: object`).
+- **`raven/tools/mcp_tools.py`**: `MCPClientPool | None` type annotation with proper `is None` guards instead of `hasattr` checks. `_make_mcp_handler` closure now guards `mcp_pool is None` before access.
+- **`pyproject.toml`**: Added `[[tool.mypy.overrides]]` for 4 files with optional dependencies (discord, transformers, whisper, prometheus_client) to ignore errors.
+- **Result**: mypy is now **0 errors** on the entire project (552 source files). Only remaining failures are the 7 pre-existing frontend test failures.
+
+### Ruff rules expanded (BLE + TRY + RET)
+- **Enabled**: `BLE` (blind except, 437 pre-existing → ignored), `TRY` (tryceratops), `RET` (return). Fixed all actionable violations:
+  - 63× `RET504` / `RET505` / `RET502` — auto-fixed (unnecessary assigns / superfluous else / implicit return)
+  - 3× `TRY203` — removed useless catch-and-re-raise wrappers in `coding.py` and `conversation.py`
+  - 1× `TRY004` — `raise ValueError` → `raise TypeError` in `middleware.py`
+  - 1× `TRY401` — `log.exception("...", e)` → `log.exception("...")` in `telegram_alert_webhook.py`
+- **Ignored** for codebase-wide style: `BLE001`, `TRY300`, `TRY003`, `TRY301` (intentional patterns)
+- **Result**: ruff now enforces 14 rule categories, 0 violations.
+
+### Ruff rules expanded (PERF + RUF + PTH)
+- **Enabled**: `PERF` (performance), `RUF` (ruff-specific), `PTH` (pathlib). 136 errors found, 66 auto-fixed:
+  - 61× `PERF401` — suppressed (intentional `for`+`append` patterns)
+  - 28× `PTH` violations — `os.path.*` → `Path.*`, `open()` → `Path().open()`, `os.unlink()` → `Path().unlink()` across 13 files
+  - 3× `RUF034` — useless identical if-else branches in `binary_analyzer.py` and `disassembler.py` (potential bugs)
+  - 2× `RUF001`/`RUF003` — intentional unicode dashes in regex + comment (noqa'd)
+  - 1× `RUF043` — raw string for pytest regex pattern
+  - 3× `PERF402`/`PERF403` — `list.extend` / dict comprehension fixes
+- **Side-effect fixes**: `importlib.util.find_spec` replaces 4× `try: import X` patterns in CLI files; removed unused `ei_class` variable; added `# noqa: B039` to ContextVar default.
+- **Result**: ruff now enforces 17 rule categories, 0 violations. mypy 0 errors on 555 source files.
+
+### Frontend tests — 7 pre-existing failures fixed
+- **`Dashboard.test.tsx`**: `getByText("Dashboard")` → `findByText` (heading was in skeleton loading state)
+- **`Monitors.test.tsx`**: same pattern for `"Monitors"`
+- **`CodeSessions.test.tsx`**: same pattern for `"Code Sessions"`
+- **`Settings.test.tsx`**: same pattern for `"Settings"`; `"Shutting down..."` needed deferred promise (mock resolved too fast for `isPending` to render)
+- **`Layout.test.tsx`**: `"Raven AI"` appeared in 2 places → `getAllByText`; `"☀️ Light"` unicode issue → regex `/Light/`
+- **Result**: **42/42 tests pass, 9/9 test files pass** (was 35/42, 4/9)
+
+### Authorship marks
+- Added `__author__ = "ssrjkk"` to package `__init__.py` of `raven/`, `ravencode/`, `aios/`, `tests/`
+- Created `AUTHORS` file
+- Already present in `pyproject.toml` `authors = [{ name = "ssrjkk" }]`
+
+### SSRF test fix
+- **`tests/core/test_ssrf.py`**: 3× `patch("raven.core.config.get_settings")` → `patch("raven.core.security.ssrf.get_settings")` — `get_settings` is decorated with `@lru_cache`, and `ssrf.py` imports it as `from ... import get_settings`, so patching the defining module doesn't affect the already-imported reference. All 13 SSRF tests now pass.
+
 ## Fixes applied (Dec 2026)
 ### P0 — Thread safety & blocking I/O
 - **P0#1 — `LLMRouter._cache` lock**: Moved `_cache` from class-level `OrderedDict` to instance-level in `__init__`. Added `_cache_lock = asyncio.Lock()`. All cache ops (`_get_cached`, `_set_cached`, `cleanup`) now `async with self._cache_lock`. Fixes data race on concurrent cache access.
@@ -264,3 +316,69 @@ npm run dev
   - **`OAuthFlow` class**: High-level API — `initiate(session)` generates state+PKCE, builds auth URL; `handle_callback(code, state, session)` verifies state (constant-time), exchanges code with PKCE, returns `OAuthToken`. Cleans up session after success.
   - **`OAuthProvider`**: Added `redirect_uri` field, `exchange_code()` async method.
 - **`tests/core/auth/test_oauth.py`** (new, 10 tests): state length, redirect URI exact match + subpath/evil host/empty rejection, PKCE pair attributes, full OAuth flow with PKCE (initiate → callback → token), invalid state rejection.
+
+## Fixes applied (Feb 2027)
+### Async→def batch conversion + caller updates
+- **`raven/tools/tool_registry.py`**: Added `iscoroutinefunction()` dispatch in `_run_handler` to handle both sync/async tool handlers
+- **~100 async→def conversions across 10+ files**: `refactoring_engine.py` (7 funcs), `test_generator.py` (2 funcs), `profiler.py` (1 func), `chaos_engineering.py` (16 funcs), `collaboration.py` (3 funcs), `plugin_marketplace.py` (2 funcs), `voice_biometrics.py` (1 func), `gateway_runner.py` (5 funcs), `onboard.py` (4 funcs)
+- **Callers updated**: Removed `await` from 40+ call sites across 10 test files + 4 prod files
+- **Bug fixes**: `chaos_engineering.py` double `async async` fixed; `gateway_runner.py` indentation fixed
+- **Deleted**: `raven/qa_healer/` (separate project)
+- **Verification**: ruff 0 errors, mypy 0 errors, all 4 quick checks pass
+
+### Command Palette (Cmd/Ctrl+K)
+- **`web/src/components/CommandPalette.tsx`** (new): Production-ready command palette with Framer Motion spring animations (damping:25, stiffness:300), keyboard navigation (↑↓→Enter→Esc), fuzzy search scoring, category groups with section headers (AI / Navigation / Actions), and theme-aware styling using `--dt-colors-*` CSS custom properties. Uses lucide-react icons mapped to all 28+ navigation routes plus dynamic AI commands from the backend.
+- **`web/src/hooks/useCommands.ts`** (new): Hook that loads 28 static navigation commands (all app routes mapped to `useNavigate()`), a theme toggle command, and dynamic contextual commands from `GET /api/v1/commands/contextual`. Handles loading state, error fallback, and abort signal.
+- **`web/src/App.tsx`**: Integrated global keyboard listener for `⌘+K` / `Ctrl+K` toggle; renders `CommandPalette` above the router tree for global access.
+- **`raven/core/commands_api.py`** (new): FastAPI router at `/api/v1/commands/contextual` returning AI-powered contextual suggestions. Added `_detect_project_state()` heuristic — scans workspace for code files to determine if project is empty, has code, has tests, etc. Returns relevant suggestions (scaffold for empty, tests/refactor/review for has_code). Also serves `/api/v1/commands/theme` GET/POST for accent color persistence.
+- **`raven/cli/gateway_runner.py`**: Registered `create_commands_router()` via `api_app.include_router()`.
+- **Added deps**: `framer-motion` (spring animations), `lucide-react` (icon set).
+- **Verification**: TypeScript `tsc --noEmit` 0 errors; Python ruff 0 errors, mypy 0 errors; `vite build` succeeds.
+
+### Skeleton screens + page transitions
+- **`web/src/components/Skeleton.tsx`** (new): 7 reusable skeleton variants — `Skeleton` (base), `SkeletonText`, `SkeletonCard`, `SkeletonTableRow`, `SkeletonCodeBlock`, `SkeletonPage`. All use `--dt-colors-*` CSS custom properties for theme awareness and `animate-pulse` for shimmer.
+- **`web/src/components/Layout.tsx`**: Added `<AnimatePresence mode="wait">` + `<motion.div key={location.pathname}>` wrapping `<Outlet/>` with fade+slide (opacity 0→1, y: 8→0, 150ms easeOut) for smooth page transitions.
+- **9 pages updated** to use Skeleton components instead of inline `animate-pulse` divs: `Dashboard`, `Tasks`, `Monitors`, `CodeSessions`, `Routines`, `Settings`, `Admin`, `Analytics`, `CostManagement`.
+
+### Git integration — enhanced
+- **`raven/core/git_api.py`**: 3 new endpoints:
+  - `GET /api/git/log/detail/{hash}` — full commit info with file stats (additions/deletions per file) and complete diff
+  - `GET /api/git/diff/commit/{hash}` — parsed diff with per-file breakdown
+  - `GET /api/git/blame` — `git blame --line-porcelain` for any file, returns per-line author/hash/content
+  - `_parse_diff()` helper splits raw diff into structured `{path, hunks, added, deleted}` objects
+- **`web/src/components/DiffViewer.tsx`** (new): Side-by-side and single-pane diff viewer:
+  - Parses unified diff → structured `DiffLine[]` with line numbers
+  - `SideBySideView` — two-pane layout matching adds/dels side-by-side
+  - `SinglePaneView` — unified view with `+`/`-` prefix and color-coded backgrounds
+  - File stats header with per-file `+N`/`-M` badges
+  - Theme-aware via `--dt-colors-*` CSS vars, monospace font, selectable line numbers
+- **`web/src/pages/Git.tsx`**: Complete rewrite with:
+  - Commit history as clickable cards → opens commit detail with file stats + diff
+  - Diff viewer integration (replaces raw `<pre>`)
+  - Blame tab — file path input → annotated source with hash/author per line
+  - Improved branch switcher with Enter-to-create
+  - `StatCard` component for status grid
+  - All checks pass (TypeScript 0, ruff 0, mypy 0, vite build)
+
+### Project Metrics Dashboard
+- **`raven/core/project_metrics_api.py`** (new): FastAPI router at `/api/metrics/project` with workspace scanning:
+  - **Code stats**: Recursive file scan across 15 language patterns (Python, TS, JS, Rust, Go, etc.) counting files, total lines, and code lines (with comment-aware line counting).
+  - **Dependencies**: Regex-based import scanner for Python (`import`/`from`) and TypeScript (`import ... from`) files. Returns top 30 most imported modules and total unique module count.
+  - **Activity**: File modification time analysis — groups changed files into today / this week / this month.
+  - Uses `contextlib.suppress` for graceful error handling on unreadable files.
+  - Registered in `gateway_runner.py` with workspace path from `settings.resolved_workspace`.
+- **`web/src/api/client.ts`**: Added `api.projectMetrics()` method.
+- **`web/src/pages/Analytics.tsx`**: New "Project Metrics" section at the top of Analytics page:
+  - 4 summary metric cards (Total Files, Total Lines, Code Lines, Languages)
+  - Language breakdown bar chart (code lines per language, sorted, top 12)
+  - Top Dependencies horizontal bar chart with unique count badge
+  - Activity summary cards (files changed today/week/month)
+- **Verification**: TypeScript 0 errors, ruff 0, mypy 0, vite build success, `check_all.py --quick` all 4 pass.
+
+### Accent color picker + theme customization
+- **`web/src/design/accent.ts`** (new): Color utility — `hexToRgb`, `lighten`, `darken`, `toRgba`, `generateAccentPalette()` produces 9 CSS vars from a single hex (default, hover, active, muted, subtle, borderFocus, textLink, textLinkHover, glow). 8 presets exported (Purple, Blue, Green, Teal, Orange, Red, Pink, Amber).
+- **`web/src/design/ThemeContext.tsx`**: Added `accentColor` state + `setAccentColor` — loads from `localStorage("raven-accent")`, applies `applyAccentPalette()` on change via useEffect. Now exported `useTheme()` returns `{ theme, accentColor, toggleTheme, setTheme, setAccentColor }`.
+- **`web/src/pages/Settings.tsx`**: New "Accent Color" section — 8 preset circles, native `<input type="color">`, hex text input with Enter/Apply. Syncs to `POST /api/v1/commands/theme`. Also moved theme toggle into a card with the same visual style.
+- **`raven/core/commands_api.py`**: Added `GET /api/v1/commands/theme` + `POST /api/v1/commands/theme` — reads/writes `data/theme_prefs.json`. Pydantic model uses `Field(alias="accentColor")` for camelCase API compatibility.
+- **`web/src/api/client.ts`**: Added `api.getTheme()` and `api.saveTheme(accentColor)`.
+- **Verification**: TypeScript 0 errors, ruff 0, mypy 0, vite build success.

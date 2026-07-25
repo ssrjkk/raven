@@ -34,7 +34,7 @@ class Adder:
         return x + y
 """)
         gen = TestGenerator(str(tmp_path))
-        types = await gen.extract_types("example.py")
+        types = gen.extract_types("example.py")
         assert len(types) >= 2
         funcs = [t for t in types if hasattr(t, 'args') and not isinstance(t, ClassInfo)]
         classes = [t for t in types if isinstance(t, ClassInfo)]

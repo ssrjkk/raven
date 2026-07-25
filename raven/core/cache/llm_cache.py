@@ -15,7 +15,9 @@ _MAX_INVALIDATE_KEYS = 10_000
 
 
 class LLMCache:
-    def __init__(self, redis_client: RedisClient, ttl: int = _DEFAULT_TTL, scan_batch: int = _DEFAULT_SCAN_BATCH) -> None:
+    def __init__(
+        self, redis_client: RedisClient, ttl: int = _DEFAULT_TTL, scan_batch: int = _DEFAULT_SCAN_BATCH
+    ) -> None:
         self._redis = redis_client
         self._ttl = ttl
         self._scan_batch = scan_batch
@@ -32,13 +34,17 @@ class LLMCache:
 
     @staticmethod
     def _serialize_response(response: LLMResponse) -> str:
-        return json.dumps({
-            "content": response.content,
-            "tool_calls": response.tool_calls,
-            "finish_reason": response.finish_reason,
-        })
+        return json.dumps(
+            {
+                "content": response.content,
+                "tool_calls": response.tool_calls,
+                "finish_reason": response.finish_reason,
+            }
+        )
 
-    async def get(self, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> LLMResponse | None:
+    async def get(
+        self, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
+    ) -> LLMResponse | None:
         if not self._redis.is_healthy:
             return None
         client = self._redis._client
@@ -96,7 +102,11 @@ class LLMCache:
             total_scanned = 0
             while True:
                 cursor, keys = await self._redis._execute_with_retry(
-                    "scan", client.scan, cursor=cursor, match=pattern, count=self._scan_batch,
+                    "scan",
+                    client.scan,
+                    cursor=cursor,
+                    match=pattern,
+                    count=self._scan_batch,
                 )
                 total_scanned += len(keys)
                 if keys:

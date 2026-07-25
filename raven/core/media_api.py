@@ -19,6 +19,7 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
             raise HTTPException(400, "OPENAI_API_KEY not configured")
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=60) as client:
                 resp = await client.post(
                     "https://api.openai.com/v1/images/generations",
@@ -64,6 +65,7 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
             from io import BytesIO
 
             from PIL import Image as PILImage
+
             src: Any = PILImage.open(target)
             if crop:
                 vals = [x.strip() for x in crop.split(",")]
@@ -107,6 +109,7 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
             meta: dict[str, Any] = {"filename": target.name, "format": ext.lstrip(".")}
             if ext == ".pdf":
                 import fitz
+
                 doc = fitz.open(str(target))
                 meta["pages"] = len(doc)
                 selected: list[int] | range = range(len(doc))
@@ -126,18 +129,20 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
                         p = doc[i]
                         t = p.get_text().strip()
                         if t:
-                            chunks.append(f"--- Page {i+1} ---\n{t}")
+                            chunks.append(f"--- Page {i + 1} ---\n{t}")
                 doc.close()
                 text = "\n".join(chunks)
                 meta["extracted_pages"] = len(selected)
             elif ext == ".docx":
                 from docx import Document
+
                 doc = Document(str(target))
                 paras = [p.text for p in doc.paragraphs if p.text.strip()]
                 text = "\n".join(paras)
                 meta["paragraphs"] = len(paras)
             elif ext == ".pptx":
                 from pptx import Presentation
+
                 prs = Presentation(str(target))
                 meta["slides"] = len(prs.slides)
                 slide_chunks: list[str] = []
@@ -153,6 +158,7 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
                 text = "\n".join(slide_chunks)
             elif ext in (".xlsx", ".xls"):
                 from openpyxl import load_workbook
+
                 wb = load_workbook(str(target), read_only=True, data_only=True)
                 meta["sheets"] = wb.sheetnames
                 sheet_chunks: list[str] = []
@@ -198,30 +204,37 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
     @router.post("/analyze")
     async def analyze_image(filepath: str, prompt: str = "Describe this image in detail"):
         from raven.tools.media import image_analyze
+
         result = await image_analyze(filepath, prompt)
         return {"result": result}
 
     @router.post("/video-info")
     async def video_info_endpoint(filepath: str):
         from raven.tools.media import video_info
+
         result = await video_info(filepath)
         return {"result": result}
 
     @router.post("/video-thumbnail")
     async def video_thumbnail_endpoint(filepath: str, time_sec: float = 1.0, size: str = "320x240"):
         from raven.tools.media import video_thumbnail
+
         result = await video_thumbnail(filepath, time_sec, size)
         return {"result": result}
 
     @router.post("/video-transcribe")
     async def video_transcribe_endpoint(filepath: str, language: str = ""):
         from raven.tools.media import video_transcribe
+
         result = await video_transcribe(filepath, "whisper-1", language)
         return {"result": result}
 
     @router.post("/video-extract-frames")
-    async def video_extract_frames_endpoint(filepath: str, interval_sec: float = 5.0, max_frames: int = 10, size: str = "640x480"):
+    async def video_extract_frames_endpoint(
+        filepath: str, interval_sec: float = 5.0, max_frames: int = 10, size: str = "640x480"
+    ):
         from raven.tools.media import video_extract_frames
+
         result = await video_extract_frames(filepath, interval_sec, max_frames, size)
         return {"result": result}
 

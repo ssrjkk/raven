@@ -11,6 +11,7 @@ from raven.core.cache.redis_client import RedisClient
 
 class RateLimiterProtocol(Protocol):
     async def is_allowed(self, key: str, limit: int, window_seconds: int) -> bool: ...
+    async def is_allowed_weighted(self, key: str, amount: int, limit: int, window_seconds: int) -> bool: ...
 
 
 class InMemoryRateLimiter:
@@ -18,6 +19,7 @@ class InMemoryRateLimiter:
 
     def __init__(self) -> None:
         self._windows: dict[str, list[float]] = {}
+        self._weighted_windows: dict[str, list[tuple[float, int]]] = {}
         self._lock = asyncio.Lock()
 
     async def is_allowed(self, key: str, limit: int, window_seconds: int) -> bool:
@@ -35,13 +37,37 @@ class InMemoryRateLimiter:
             self._windows[key].append(now)
             return True
 
+    async def is_allowed_weighted(self, key: str, amount: int, limit: int, window_seconds: int) -> bool:
+        """Check if `amount` fits within the weighted budget for `key` over `window_seconds`.
+
+        Tracks weighted events (timestamp, amount) instead of simple timestamps.
+        Returns True if total sum of amounts within window is below limit.
+        """
+        async with self._lock:
+            now = time.monotonic()
+            cutoff = now - window_seconds
+            entries = self._weighted_windows.get(key)
+            if entries is None:
+                self._weighted_windows[key] = [(now, amount)]
+                return amount <= limit
+            self._weighted_windows[key] = [(t, a) for t, a in entries if t > cutoff]
+            total = sum(a for _, a in self._weighted_windows[key])
+            if total + amount > limit:
+                return False
+            self._weighted_windows[key].append((now, amount))
+            return True
+
     def clear(self) -> None:
         self._windows.clear()
+        self._weighted_windows.clear()
 
     def _evict_stale(self, cutoff: float) -> None:
         stale = [k for k, v in self._windows.items() if v and v[-1] < cutoff]
         for k in stale:
             del self._windows[k]
+        stale_w = [k for k, v in self._weighted_windows.items() if v and v[-1][0] < cutoff]
+        for k in stale_w:
+            del self._weighted_windows[k]
 
 
 class RedisRateLimiter:

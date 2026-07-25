@@ -47,7 +47,8 @@ class TemplateRunner:
         try:
             goal = (template.steps_goal or template.description).format(**cfg)
         except (KeyError, ValueError) as e:
-            raise ValueError(f"Invalid config for template '{template.id}': {e}") from e
+            msg = f"Invalid config for template '{template.id}': {e}"
+            raise ValueError(msg) from e
 
         task_id = uuid.uuid4().hex[:16]
 
@@ -82,16 +83,20 @@ class TemplateRunner:
 
             planner = TaskPlanner(self._tools)
             try:
-                planned = await planner.plan(goal=goal, llm=self._llm, task_id=task_id, user_id=user_id, channel=channel)
+                planned = await planner.plan(
+                    goal=goal, llm=self._llm, task_id=task_id, user_id=user_id, channel=channel
+                )
             except Exception as e:
-                raise RuntimeError(f"Task planning failed for template '{template.id}': {e}") from e
+                msg = f"Task planning failed for template '{template.id}': {e}"
+                raise RuntimeError(msg) from e
             task.steps = planned.steps
             task.plan_summary = planned.plan_summary
         else:
-            raise ValueError(
+            msg = (
                 f"Template '{template.id}' has no predefined steps and no LLM is configured. "
                 "Provide predefined_steps or configure an LLM."
             )
+            raise ValueError(msg)
 
         await self._task_runner.submit(task)
         logger.info("Instantiated workflow '{}' -> task {}", template.name, task_id)

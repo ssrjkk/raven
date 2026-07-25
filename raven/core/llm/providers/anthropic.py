@@ -15,6 +15,7 @@ class AnthropicProvider(LLMProvider):
         self.api_key = SecretStr(raw) if isinstance(raw, str) else raw
         self.base_url = overrides.get("base_url") or "https://api.anthropic.com"
         import httpx
+
         self.http = httpx.AsyncClient(
             timeout=overrides.get("timeout", 120),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=20),
@@ -39,7 +40,11 @@ class AnthropicProvider(LLMProvider):
         return body
 
     def _headers(self) -> dict[str, Any]:
-        return {"x-api-key": self.api_key.get_secret_value(), "anthropic-version": "2023-06-01", "Content-Type": "application/json"}
+        return {
+            "x-api-key": self.api_key.get_secret_value(),
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
 
     async def complete_stream(
         self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None

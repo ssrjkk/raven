@@ -1,4 +1,6 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import { createContext, type ReactNode,useCallback, useContext, useEffect, useState } from "react";
+
+import { applyAccentPalette,generateAccentPalette } from "./accent";
 import darkTokens from "./tokens.json";
 import lightTokens from "./tokens.light.json";
 
@@ -6,20 +8,26 @@ type Theme = "dark" | "light";
 
 type ThemeContextValue = {
   theme: Theme;
+  accentColor: string;
   toggleTheme: () => void;
   setTheme: (t: Theme) => void;
+  setAccentColor: (hex: string) => void;
 };
+
+const DEFAULT_ACCENT = "#7c3aed";
 
 const ThemeContext = createContext<ThemeContextValue>({
   theme: "dark",
+  accentColor: DEFAULT_ACCENT,
   toggleTheme: () => {},
   setTheme: () => {},
+  setAccentColor: () => {},
 });
 
 function safeGetItem(key: string): string | null {
   try {
     return localStorage.getItem(key);
-  } catch {
+  } catch (e) { console.error("ThemeContext:", e);
     return null;
   }
 }
@@ -27,7 +35,7 @@ function safeGetItem(key: string): string | null {
 function safeSetItem(key: string, value: string) {
   try {
     localStorage.setItem(key, value);
-  } catch {
+  } catch (e) { console.error("ThemeContext:", e);
     /* quota exceeded or private mode */
   }
 }
@@ -37,10 +45,16 @@ function getInitialTheme(): Theme {
   if (stored === "light" || stored === "dark") return stored;
   try {
     if (window.matchMedia("(prefers-color-scheme: light)").matches) return "light";
-  } catch {
+  } catch (e) { console.error("ThemeContext:", e);
     /* matchMedia not supported */
   }
   return "dark";
+}
+
+function getInitialAccent(): string {
+  const stored = safeGetItem("raven-accent");
+  if (stored && /^#[0-9a-f]{6}$/i.test(stored)) return stored;
+  return DEFAULT_ACCENT;
 }
 
 function applyTokens(theme: Theme) {
@@ -62,6 +76,7 @@ function applyTokens(theme: Theme) {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(getInitialTheme);
+  const [accentColor, setAccentColorState] = useState<string>(getInitialAccent);
 
   useEffect(() => {
     applyTokens(theme);
@@ -70,6 +85,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       meta.setAttribute("content", theme === "dark" ? "#0f1117" : "#f8f9fc");
     }
   }, [theme]);
+
+  useEffect(() => {
+    const palette = generateAccentPalette(accentColor);
+    applyAccentPalette(palette);
+  }, [accentColor]);
 
   const toggleTheme = useCallback(() => {
     setThemeState((prev) => {
@@ -84,8 +104,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setThemeState(t);
   }, []);
 
+  const setAccentColor = useCallback((hex: string) => {
+    safeSetItem("raven-accent", hex);
+    setAccentColorState(hex);
+  }, []);
+
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, accentColor, toggleTheme, setTheme, setAccentColor }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -201,10 +201,12 @@ def _write_env_example(llm: dict[str, str], channels: dict[str, Any], security: 
                 channel_lines_parts.append(f"# {token_var}=your_token_here")
     channel_lines = "\n".join(channel_lines_parts)
 
-    security_lines = "\n".join([
-        f"RAVEN_DM_POLICY={security['dm_policy']}",
-        f"# RAVEN_WEB_PORT={security['web_port']}",
-    ])
+    security_lines = "\n".join(
+        [
+            f"RAVEN_DM_POLICY={security['dm_policy']}",
+            f"# RAVEN_WEB_PORT={security['web_port']}",
+        ]
+    )
 
     content = ENV_EXAMPLE_TEMPLATE.format(
         provider=llm["provider"],
@@ -266,7 +268,7 @@ def init() -> None:
     )
 
 
-PLUGIN_TEMPLATE = '''\
+PLUGIN_TEMPLATE = """\
 from __future__ import annotations
 
 from typing import Any
@@ -287,10 +289,10 @@ def on_load() -> None:
 def on_unload() -> None:
     \"\"\"Called when the plugin is unloaded.\"\"\"
     pass
-'''
+"""
 
 
-SKILL_TEMPLATE = '''\
+SKILL_TEMPLATE = """\
 from __future__ import annotations
 
 from typing import Any
@@ -306,7 +308,7 @@ def get_metadata() -> dict[str, Any]:
         "name": "my_skill",
         "description": "A custom Raven skill",
     }
-'''
+"""
 
 
 def init_plugin_template() -> None:

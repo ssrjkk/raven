@@ -55,7 +55,7 @@ async def main() -> None:
     logger.info("RavenFlow: http://localhost:{}", args.flow_port)
     logger.info("Press Ctrl+C to stop.")
 
-    done, pending = await asyncio.wait(
+    _done, pending = await asyncio.wait(
         [asyncio.create_task(t) for t in tasks] + [asyncio.create_task(stop_event.wait())],
         return_when=asyncio.FIRST_COMPLETED,
     )

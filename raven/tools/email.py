@@ -6,12 +6,14 @@ from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 try:
     import aiosmtplib
+
     _AIOSMTP_AVAILABLE = True
 except ImportError:
     _AIOSMTP_AVAILABLE = False
 
 try:
     import aioimaplib
+
     _AIOIMAP_AVAILABLE = True
 except ImportError:
     _AIOIMAP_AVAILABLE = False
@@ -20,6 +22,7 @@ except ImportError:
 def _get_config() -> dict[str, str]:
     try:
         from raven.core.config import settings
+
         return {
             "smtp_host": getattr(settings, "EMAIL_SMTP_HOST", ""),
             "smtp_port": str(getattr(settings, "EMAIL_SMTP_PORT", "587")),
@@ -47,6 +50,7 @@ async def email_send(to: str, subject: str, body: str) -> str:
         return "[error] SMTP not configured. Set EMAIL_SMTP_HOST and EMAIL_SMTP_USER env vars."
     try:
         from email.mime.text import MIMEText
+
         msg = MIMEText(body)
         msg["From"] = smtp_user
         msg["To"] = to
@@ -77,6 +81,7 @@ async def email_inbox(limit: int = 10) -> str:
         return "[error] IMAP not configured. Set EMAIL_IMAP_HOST and EMAIL_IMAP_USER env vars."
     try:
         import email
+
         client = aioimaplib.IMAP4_SSL(imap_host, imap_port)
         await client.wait_hello_from_server()
         await client.login(imap_user, imap_pass)
@@ -121,33 +126,39 @@ def email_config_status() -> str:
 
 
 def register_email_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="email_send",
-        description="Send an email via SMTP",
-        parameters={
-            "to": {"type": "string", "description": "Recipient email address", "required": True},
-            "subject": {"type": "string", "description": "Email subject", "required": True},
-            "body": {"type": "string", "description": "Email body text", "required": True},
-        },
-        handler=email_send,
-        category="email",
-        timeout=30,
-    ))
-    registry.register(ToolSpec(
-        name="email_inbox",
-        description="List recent emails from the IMAP inbox",
-        parameters={
-            "limit": {"type": "integer", "description": "Number of recent emails (default 10)", "required": False},
-        },
-        handler=email_inbox,
-        category="email",
-        timeout=30,
-    ))
-    registry.register(ToolSpec(
-        name="email_config_status",
-        description="Check email configuration status",
-        parameters={},
-        handler=email_config_status,
-        category="email",
-        timeout=10,
-    ))
+    registry.register(
+        ToolSpec(
+            name="email_send",
+            description="Send an email via SMTP",
+            parameters={
+                "to": {"type": "string", "description": "Recipient email address", "required": True},
+                "subject": {"type": "string", "description": "Email subject", "required": True},
+                "body": {"type": "string", "description": "Email body text", "required": True},
+            },
+            handler=email_send,
+            category="email",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="email_inbox",
+            description="List recent emails from the IMAP inbox",
+            parameters={
+                "limit": {"type": "integer", "description": "Number of recent emails (default 10)", "required": False},
+            },
+            handler=email_inbox,
+            category="email",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="email_config_status",
+            description="Check email configuration status",
+            parameters={},
+            handler=email_config_status,
+            category="email",
+            timeout=10,
+        )
+    )

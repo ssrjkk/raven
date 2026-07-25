@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -52,11 +53,12 @@ class TelegramChannel(BaseChannel):
         self._app: Application[Any, Any, Any, Any, Any, Any] | None = None
         self._handler: Callable[[IncomingMessage], Awaitable[None]] | None = None
         self._ready = False
+        self._confirm_events: dict[str, asyncio.Event] = {}
+        self._confirm_results: dict[str, bool] = {}
 
     @staticmethod
     def _build_test_app(token: str) -> Application[Any, Any, Any, Any, Any, Any]:
-        app = Application.builder().token(token).build()
-        return app
+        return Application.builder().token(token).build()
 
     async def start(self):
         if not self._token:
@@ -97,6 +99,38 @@ class TelegramChannel(BaseChannel):
 
     async def health_check(self) -> bool:
         return self._ready and self._app is not None
+
+    async def ask_confirmation(self, user_id: str, action_description: str, session_id: str = "") -> bool:
+        if not self._app:
+            return True
+        parts = session_id.split(":")
+        chat_id = parts[1] if len(parts) >= 2 else user_id
+        confirm_id = uuid4().hex[:12]
+        event = asyncio.Event()
+        self._confirm_events[confirm_id] = event
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Yes", callback_data=f"cy:{confirm_id}"),
+                InlineKeyboardButton("❌ No", callback_data=f"cn:{confirm_id}"),
+            ]
+        ]
+        try:
+            await self._app.bot.send_message(
+                chat_id=int(chat_id),
+                text=f"🛡️ Allow action: {action_description[:200]}?",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+        except Exception as e:
+            logger.warning("Telegram ask_confirmation failed: {}", e)
+            return True
+        try:
+            await asyncio.wait_for(event.wait(), timeout=120)
+            return self._confirm_results.pop(confirm_id, False)
+        except TimeoutError:
+            return False
+        finally:
+            self._confirm_events.pop(confirm_id, None)
+            self._confirm_results.pop(confirm_id, None)
 
     async def on_message(self, handler: Callable[[IncomingMessage], Awaitable[None]]):
         self._handler = handler
@@ -235,6 +269,19 @@ class TelegramChannel(BaseChannel):
         await query.answer()
         data = query.data or ""
 
+        if data.startswith("cy:") or data.startswith("cn:"):
+            prefix = "cy:" if data.startswith("cy:") else "cn:"
+            cid = data[len(prefix):]
+            event = self._confirm_events.get(cid)
+            if event:
+                self._confirm_results[cid] = data.startswith("cy:")
+                event.set()
+                await query.edit_message_text(
+                    "✅ Confirmed — executing." if data.startswith("cy:") else "❌ Cancelled."
+                )
+            else:
+                await query.edit_message_text("⏳ This confirmation has expired.")
+            return
         if data == "menu_new":
             await self._incoming(
                 update,

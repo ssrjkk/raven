@@ -32,6 +32,7 @@ class VoiceCommand(CommandHandler):
                 await gateway._send(ctx.event.channel, ctx.event.session_id, "Usage: /voice tts <text>")
                 return True
             from raven.voice import TextToSpeech
+
             tts = TextToSpeech()
             try:
                 output = await asyncio.to_thread(tts.synthesize, text)
@@ -41,9 +42,12 @@ class VoiceCommand(CommandHandler):
 
         elif sub == "providers":
             from raven.voice import TTSProvider
+
             providers = [p.value for p in TTSProvider]
             await gateway._send(
-                ctx.event.channel, ctx.event.session_id, "🔊 TTS Providers:\n" + "\n".join(f"  • {p}" for p in providers)
+                ctx.event.channel,
+                ctx.event.session_id,
+                "🔊 TTS Providers:\n" + "\n".join(f"  • {p}" for p in providers),
             )
 
         else:

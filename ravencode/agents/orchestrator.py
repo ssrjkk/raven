@@ -98,7 +98,9 @@ class Orchestrator:
             logger.exception("Agent dispatch failed")
             return AgentResult(agent=agent_type.value, success=False, error=str(exc))
 
-    async def _run_planner(self, task: str, memory_path: str | None = None, agent_config_override: AgentConfig | None = None) -> AgentResult:
+    async def _run_planner(
+        self, task: str, memory_path: str | None = None, agent_config_override: AgentConfig | None = None
+    ) -> AgentResult:
         agent = self._build_with_override(
             agent_config_override,
             system_prompt=get_prompt("planner"),
@@ -107,28 +109,36 @@ class Orchestrator:
         result = await agent.run(task)
         return AgentResult(agent="planner", success=True, data={"plan": result}, steps=agent.conversation.message_count)
 
-    async def _run_planner_readonly(self, task: str, memory_path: str | None = None, agent_config_override: AgentConfig | None = None) -> AgentResult:
+    async def _run_planner_readonly(
+        self, task: str, memory_path: str | None = None, agent_config_override: AgentConfig | None = None
+    ) -> AgentResult:
         if agent_config_override:
             cfg = agent_config_override
         else:
             cfg = AgentConfig(memory_path=memory_path, plan_mode=True)
-        conv = Conversation(
-            system_prompt=get_prompt("planner_readonly")
-        )
+        conv = Conversation(system_prompt=get_prompt("planner_readonly"))
         agent = ReActAgent(config=cfg, conversation=conv)
         result = await agent.run(task)
-        return AgentResult(agent="planner_readonly", success=True, data={"plan": result}, steps=agent.conversation.message_count)
+        return AgentResult(
+            agent="planner_readonly", success=True, data={"plan": result}, steps=agent.conversation.message_count
+        )
 
-    async def _run_coder(self, task: str, memory_path: str | None = None, agent_config_override: AgentConfig | None = None) -> AgentResult:
+    async def _run_coder(
+        self, task: str, memory_path: str | None = None, agent_config_override: AgentConfig | None = None
+    ) -> AgentResult:
         agent = self._build_with_override(
             agent_config_override,
             system_prompt=get_prompt("coder"),
             memory_path=memory_path,
         )
         result = await agent.run(task)
-        return AgentResult(agent="coder", success=True, data={"code_result": result}, steps=agent.conversation.message_count)
+        return AgentResult(
+            agent="coder", success=True, data={"code_result": result}, steps=agent.conversation.message_count
+        )
 
-    async def _run_debugger(self, task: str, memory_path: str | None = None, agent_config_override: AgentConfig | None = None) -> AgentResult:
+    async def _run_debugger(
+        self, task: str, memory_path: str | None = None, agent_config_override: AgentConfig | None = None
+    ) -> AgentResult:
         if agent_config_override:
             config = agent_config_override
         else:
@@ -142,10 +152,14 @@ class Orchestrator:
         result = await agent.run(task)
         return AgentResult(agent="debugger", success=True, data={"debug_result": result})
 
-    async def _run_autonomous_loop(self, task: str, memory_path: str | None = None, agent_config_override: AgentConfig | None = None) -> AgentResult:
+    async def _run_autonomous_loop(
+        self, task: str, memory_path: str | None = None, agent_config_override: AgentConfig | None = None
+    ) -> AgentResult:
         agent = self._build_with_override(agent_config_override, memory_path=memory_path)
         result = await agent.run(task)
-        return AgentResult(agent="autonomous", success=True, data={"result": result}, steps=agent.conversation.message_count)
+        return AgentResult(
+            agent="autonomous", success=True, data={"result": result}, steps=agent.conversation.message_count
+        )
 
     @staticmethod
     async def delegate(task: str, context: str | None = None, memory_path: str | None = None) -> str:

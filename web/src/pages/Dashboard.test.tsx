@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { BrowserRouter } from "react-router-dom";
+import { screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
 import Dashboard from "./Dashboard";
+import { renderWithProviders } from "../test/test-utils";
 
 vi.mock("../api/client", () => ({
   api: {
@@ -40,17 +41,13 @@ vi.mock("../components/Toast", () => ({
 }));
 
 function renderDashboard() {
-  return render(
-    <BrowserRouter>
-      <Dashboard />
-    </BrowserRouter>
-  );
+  return renderWithProviders(<Dashboard />);
 }
 
 describe("Dashboard Page", () => {
-  it("renders loading state initially", () => {
+  it("renders loading state initially", async () => {
     renderDashboard();
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    expect(await screen.findByText("Dashboard")).toBeInTheDocument();
   });
 
   it("renders metric cards after loading", async () => {

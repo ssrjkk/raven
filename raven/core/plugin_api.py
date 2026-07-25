@@ -92,7 +92,7 @@ def create_plugin_router() -> APIRouter:
     @router.post("/uninstall/{name}")
     async def api_plugins_uninstall(name: str):
         try:
-            ok = await _manager.uninstall_plugin(name)
+            ok = _manager.uninstall_plugin(name)
             return {"ok": ok}
         except Exception as e:
             return {"error": str(e)}

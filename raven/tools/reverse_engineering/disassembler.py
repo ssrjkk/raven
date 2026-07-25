@@ -47,7 +47,7 @@ def disassemble_bytes(code: bytes, arch: str = "x64", offset: int = 0) -> str:
     lines = [f"; Disassembly ({arch}) - {len(code)} bytes", "; addr     | bytes            | instruction"]
     try:
         for insn in md.disasm(code, offset):
-            bytes_hex = insn.bytes.hex() if hasattr(insn.bytes, "hex") else insn.bytes.hex()
+            bytes_hex = insn.bytes.hex()
             op_str = insn.op_str if insn.op_str else ""
             lines.append(f"  {insn.address:#010x}  {bytes_hex:20s} {insn.mnemonic:8s} {op_str}")
 
@@ -85,13 +85,13 @@ def _guess_arch_from_binary(raw: bytes) -> str | None:
         machine = struct_unpack_elf_machine(raw)
         if machine == 62:
             return "x64"
-        elif machine == 3:
+        if machine == 3:
             return "x86"
-        elif machine == 40 or machine == 0x28:
+        if machine == 40 or machine == 0x28:
             return "arm"
-        elif machine == 183:
+        if machine == 183:
             return "arm64"
-        elif machine == 8:
+        if machine == 8:
             return "mips"
         return "x64"
     if raw[:2] == b"MZ":
@@ -106,11 +106,11 @@ def _guess_arch_from_binary(raw: bytes) -> str | None:
             machine = 0
         if machine == 0x8664:
             return "x64"
-        elif machine == 0x14C:
+        if machine == 0x14C:
             return "x86"
-        elif machine == 0xAA64:
+        if machine == 0xAA64:
             return "arm64"
-        elif machine in (0x1C0, 0x1C4):
+        if machine in (0x1C0, 0x1C4):
             return "arm"
         return "x64"
     return None
@@ -119,9 +119,8 @@ def _guess_arch_from_binary(raw: bytes) -> str | None:
 def struct_unpack_elf_machine(raw: bytes) -> int:
     import struct
 
-    ei_class = raw[4] if len(raw) > 4 else 1
     endian = "<" if raw[5] == 1 else ">"
-    offset = 18 if ei_class == 2 else 18
+    offset = 18
     if offset + 2 <= len(raw):
         return int(struct.unpack(endian + "H", raw[offset : offset + 2])[0])
     return 0

@@ -12,6 +12,7 @@ from loguru import logger
 
 try:
     import torch
+
     _TORCH_AVAILABLE = True
 except ImportError:
     _TORCH_AVAILABLE = False
@@ -25,6 +26,7 @@ try:
         PreTrainedTokenizerBase,
         TrainingArguments,
     )
+
     _TRANSFORMERS_AVAILABLE = True
 except ImportError:
     _TRANSFORMERS_AVAILABLE = False
@@ -36,6 +38,7 @@ except ImportError:
 
 try:
     from peft import LoraConfig, PeftModel, TaskType, get_peft_model
+
     _PEFT_AVAILABLE = True
 except ImportError:
     _PEFT_AVAILABLE = False
@@ -46,6 +49,7 @@ except ImportError:
 
 try:
     from datasets import Dataset, load_dataset
+
     _DATASETS_AVAILABLE = True
 except ImportError:
     _DATASETS_AVAILABLE = False
@@ -54,6 +58,7 @@ except ImportError:
 
 try:
     import wandb
+
     _WANDB_AVAILABLE = True
 except ImportError:
     _WANDB_AVAILABLE = False
@@ -160,7 +165,8 @@ class DatasetBuilder:
     def add_from_jsonl(self, path: str | Path, source_type: str = "conversation") -> int:
         path_obj = Path(path)
         if not path_obj.exists():
-            raise FileNotFoundError(f"Dataset file not found: {path}")
+            msg = f"Dataset file not found: {path}"
+            raise FileNotFoundError(msg)
         count = 0
         with path_obj.open("r", encoding="utf-8") as f:
             for line in f:
@@ -169,18 +175,22 @@ class DatasetBuilder:
                     continue
                 data = json.loads(line)
                 if source_type == "conversation":
-                    self._conversations.append(ConversationExample(
-                        messages=data.get("messages", []),
-                        system_prompt=data.get("system_prompt", ""),
-                        metadata=data.get("metadata", {}),
-                    ))
+                    self._conversations.append(
+                        ConversationExample(
+                            messages=data.get("messages", []),
+                            system_prompt=data.get("system_prompt", ""),
+                            metadata=data.get("metadata", {}),
+                        )
+                    )
                 elif source_type == "code":
-                    self._code_samples.append(CodeExample(
-                        code=data.get("code", ""),
-                        language=data.get("language", ""),
-                        description=data.get("description", ""),
-                        metadata=data.get("metadata", {}),
-                    ))
+                    self._code_samples.append(
+                        CodeExample(
+                            code=data.get("code", ""),
+                            language=data.get("language", ""),
+                            description=data.get("description", ""),
+                            metadata=data.get("metadata", {}),
+                        )
+                    )
                 count += 1
         logger.info("Loaded {} {} samples from {}", count, source_type, path)
         return count
@@ -307,7 +317,8 @@ class FineTuningPipeline:
         model_id = SUPPORTED_MODEL_TYPES.get(self._config.model_type)
         if model_id:
             return model_id
-        raise ValueError(f"Unknown model type '{self._config.model_type}'. Supported: {list(SUPPORTED_MODEL_TYPES)}")
+        msg = f"Unknown model type '{self._config.model_type}'. Supported: {list(SUPPORTED_MODEL_TYPES)}"
+        raise ValueError(msg)
 
     def _validate_dependencies(self) -> None:
         missing: list[str] = []
@@ -318,7 +329,8 @@ class FineTuningPipeline:
         if self._config.use_lora and not _PEFT_AVAILABLE:
             missing.append("peft")
         if missing:
-            raise RuntimeError(f"Missing required dependencies: {', '.join(missing)}. Install with: pip install {' '.join(missing)}")
+            msg = f"Missing required dependencies: {', '.join(missing)}. Install with: pip install {' '.join(missing)}"
+            raise RuntimeError(msg)
 
     def load_model(self, model_name: str | None = None) -> None:
         self._validate_dependencies()
@@ -328,6 +340,7 @@ class FineTuningPipeline:
         if self._config.use_qlora and _TORCH_AVAILABLE:
             try:
                 from transformers import BitsAndBytesConfig
+
                 quantization_kwargs["quantization_config"] = BitsAndBytesConfig(
                     load_in_4bit=True,
                     bnb_4bit_quant_type=self._config.bnb_4bit_quant_type,
@@ -381,7 +394,9 @@ class FineTuningPipeline:
             task_type=TaskType.CAUSAL_LM,
         )
         self._model = get_peft_model(self._model, lora_config)
-        logger.info("LoRA applied: rank={}, alpha={}, targets={}", self._config.lora_r, self._config.lora_alpha, target_modules)
+        logger.info(
+            "LoRA applied: rank={}, alpha={}, targets={}", self._config.lora_r, self._config.lora_alpha, target_modules
+        )
 
     def _compute_perplexity(self, eval_loss: float) -> float:
         if eval_loss < 0:
@@ -402,6 +417,7 @@ class FineTuningPipeline:
         total = 0
 
         from torch.utils.data import DataLoader
+
         eval_loader = DataLoader(eval_dataset, batch_size=self._config.batch_size)
 
         with torch.no_grad():
@@ -472,6 +488,7 @@ class FineTuningPipeline:
         )
 
         from transformers import Trainer
+
         trainer = Trainer(
             model=self._model,
             args=training_args,
@@ -513,7 +530,9 @@ class FineTuningPipeline:
 
         return metrics
 
-    def save_checkpoint(self, path: str | Path, step: int = 0, epoch: int = 0, metrics: dict[str, float] | None = None) -> Checkpoint:
+    def save_checkpoint(
+        self, path: str | Path, step: int = 0, epoch: int = 0, metrics: dict[str, float] | None = None
+    ) -> Checkpoint:
         save_path = Path(path)
         save_path.mkdir(parents=True, exist_ok=True)
         if self._model is not None:
@@ -540,7 +559,8 @@ class FineTuningPipeline:
     def load_checkpoint(self, path: str | Path) -> None:
         load_path = Path(path)
         if not load_path.exists():
-            raise FileNotFoundError(f"Checkpoint not found: {load_path}")
+            msg = f"Checkpoint not found: {load_path}"
+            raise FileNotFoundError(msg)
         self._validate_dependencies()
 
         meta_path = load_path / "checkpoint_meta.json"

@@ -54,12 +54,22 @@ def collab_leave_session(session_id: str, user_id: str) -> str:
     return f"User '{user_id}' left session '{session_id}'."
 
 
-def collab_apply_change(session_id: str, file: str, start_line: int, start_col: int, end_line: int, end_col: int, old_text: str, new_text: str) -> str:
+def collab_apply_change(
+    session_id: str,
+    file: str,
+    start_line: int,
+    start_col: int,
+    end_line: int,
+    end_col: int,
+    old_text: str,
+    new_text: str,
+) -> str:
     mgr = _get_manager()
     session = mgr.get_session(session_id)
     if not session:
         return f"[error] Session '{session_id}' not found."
     from raven.unique.collaboration import TextChange
+
     change = TextChange(
         user_id="system",
         file=file,
@@ -105,86 +115,100 @@ def collab_session_state(session_id: str) -> str:
 
 
 def register_collaboration_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="collab_create_session",
-        description="Create a new collaboration session for real-time co-editing",
-        parameters={
-            "session_id": {"type": "string", "description": "Unique session identifier", "required": True},
-            "file_path": {"type": "string", "description": "File path being edited", "required": True},
-        },
-        handler=collab_create_session,
-        category="collaboration",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="collab_list_sessions",
-        description="List all active collaboration sessions",
-        parameters={},
-        handler=collab_list_sessions,
-        category="collaboration",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="collab_join_session",
-        description="Join a collaboration session",
-        parameters={
-            "session_id": {"type": "string", "description": "Session identifier", "required": True},
-            "user_id": {"type": "string", "description": "User ID", "required": True},
-            "user_name": {"type": "string", "description": "Display name", "required": True},
-        },
-        handler=collab_join_session,
-        category="collaboration",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="collab_leave_session",
-        description="Leave a collaboration session",
-        parameters={
-            "session_id": {"type": "string", "description": "Session identifier", "required": True},
-            "user_id": {"type": "string", "description": "User ID", "required": True},
-        },
-        handler=collab_leave_session,
-        category="collaboration",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="collab_apply_change",
-        description="Apply a text change to a collaboration session document",
-        parameters={
-            "session_id": {"type": "string", "description": "Session identifier", "required": True},
-            "file": {"type": "string", "description": "File path", "required": True},
-            "start_line": {"type": "integer", "description": "Start line", "required": True},
-            "start_col": {"type": "integer", "description": "Start column", "required": True},
-            "end_line": {"type": "integer", "description": "End line", "required": True},
-            "end_col": {"type": "integer", "description": "End column", "required": True},
-            "old_text": {"type": "string", "description": "Text being replaced", "required": True},
-            "new_text": {"type": "string", "description": "New text", "required": True},
-        },
-        handler=collab_apply_change,
-        category="collaboration",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="collab_add_comment",
-        description="Add a review comment on a specific line in a collaboration session",
-        parameters={
-            "session_id": {"type": "string", "description": "Session identifier", "required": True},
-            "user_id": {"type": "string", "description": "User ID", "required": True},
-            "file": {"type": "string", "description": "File path", "required": True},
-            "line": {"type": "integer", "description": "Line number", "required": True},
-            "text": {"type": "string", "description": "Comment text", "required": True},
-        },
-        handler=collab_add_comment,
-        category="collaboration",
-        timeout=10,
-    ))
-    registry.register(ToolSpec(
-        name="collab_session_state",
-        description="Get the current state of a collaboration session",
-        parameters={
-            "session_id": {"type": "string", "description": "Session identifier", "required": True},
-        },
-        handler=collab_session_state,
-        category="collaboration",
-        timeout=10,
-    ))
+    registry.register(
+        ToolSpec(
+            name="collab_create_session",
+            description="Create a new collaboration session for real-time co-editing",
+            parameters={
+                "session_id": {"type": "string", "description": "Unique session identifier", "required": True},
+                "file_path": {"type": "string", "description": "File path being edited", "required": True},
+            },
+            handler=collab_create_session,
+            category="collaboration",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="collab_list_sessions",
+            description="List all active collaboration sessions",
+            parameters={},
+            handler=collab_list_sessions,
+            category="collaboration",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="collab_join_session",
+            description="Join a collaboration session",
+            parameters={
+                "session_id": {"type": "string", "description": "Session identifier", "required": True},
+                "user_id": {"type": "string", "description": "User ID", "required": True},
+                "user_name": {"type": "string", "description": "Display name", "required": True},
+            },
+            handler=collab_join_session,
+            category="collaboration",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="collab_leave_session",
+            description="Leave a collaboration session",
+            parameters={
+                "session_id": {"type": "string", "description": "Session identifier", "required": True},
+                "user_id": {"type": "string", "description": "User ID", "required": True},
+            },
+            handler=collab_leave_session,
+            category="collaboration",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="collab_apply_change",
+            description="Apply a text change to a collaboration session document",
+            parameters={
+                "session_id": {"type": "string", "description": "Session identifier", "required": True},
+                "file": {"type": "string", "description": "File path", "required": True},
+                "start_line": {"type": "integer", "description": "Start line", "required": True},
+                "start_col": {"type": "integer", "description": "Start column", "required": True},
+                "end_line": {"type": "integer", "description": "End line", "required": True},
+                "end_col": {"type": "integer", "description": "End column", "required": True},
+                "old_text": {"type": "string", "description": "Text being replaced", "required": True},
+                "new_text": {"type": "string", "description": "New text", "required": True},
+            },
+            handler=collab_apply_change,
+            category="collaboration",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="collab_add_comment",
+            description="Add a review comment on a specific line in a collaboration session",
+            parameters={
+                "session_id": {"type": "string", "description": "Session identifier", "required": True},
+                "user_id": {"type": "string", "description": "User ID", "required": True},
+                "file": {"type": "string", "description": "File path", "required": True},
+                "line": {"type": "integer", "description": "Line number", "required": True},
+                "text": {"type": "string", "description": "Comment text", "required": True},
+            },
+            handler=collab_add_comment,
+            category="collaboration",
+            timeout=10,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="collab_session_state",
+            description="Get the current state of a collaboration session",
+            parameters={
+                "session_id": {"type": "string", "description": "Session identifier", "required": True},
+            },
+            handler=collab_session_state,
+            category="collaboration",
+            timeout=10,
+        )
+    )

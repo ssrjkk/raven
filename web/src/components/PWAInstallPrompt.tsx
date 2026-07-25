@@ -21,10 +21,14 @@ export default function PWAInstallPrompt() {
 
   async function handleInstall() {
     if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") {
-      setShowPrompt(false);
+    try {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === "accepted") {
+        setShowPrompt(false);
+      }
+    } catch (e) {
+      console.error("PWA install prompt failed:", e);
     }
     setDeferredPrompt(null);
   }
@@ -40,10 +44,10 @@ export default function PWAInstallPrompt() {
       }}
     >
       <div className="flex items-center gap-3 mb-3">
-        <span className="text-2xl">📲</span>
+        <span className="text-2xl">СЂСџвЂњР†</span>
         <div>
           <div className="font-medium">Install Raven AI</div>
-          <div style={{ color: "var(--dt-colors-text-tertiary)" }}>
+          <div className="text-tertiary">
             Add to home screen for the best experience
           </div>
         </div>
@@ -51,15 +55,13 @@ export default function PWAInstallPrompt() {
       <div className="flex gap-2 justify-end">
         <button
           onClick={() => setShowPrompt(false)}
-          className="px-3 py-1.5 rounded-lg text-sm"
-          style={{ color: "var(--dt-colors-text-secondary)" }}
+          className="px-3 py-1.5 rounded-lg text-sm text-secondary"
         >
           Not now
         </button>
         <button
           onClick={handleInstall}
-          className="px-3 py-1.5 rounded-lg text-sm font-medium"
-          style={{ backgroundColor: "var(--dt-colors-accent-default)", color: "#fff" }}
+          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-accent text-white"
         >
           Install
         </button>

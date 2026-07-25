@@ -67,7 +67,9 @@ class AudioPlayer:
 
 
 class VoiceRecorder:
-    def __init__(self, sample_rate: int = 16000, chunk_sec: float = 0.5, silence_sec: float = 1.5, energy_threshold: float = 500) -> None:
+    def __init__(
+        self, sample_rate: int = 16000, chunk_sec: float = 0.5, silence_sec: float = 1.5, energy_threshold: float = 500
+    ) -> None:
         self.sample_rate = sample_rate
         self.chunk_size = int(sample_rate * chunk_sec)
         self.silence_chunks = int(silence_sec / chunk_sec)
@@ -90,7 +92,9 @@ class VoiceRecorder:
         started = False
         start_time = time.time()
         try:
-            with sd.RawInputStream(samplerate=self.sample_rate, blocksize=self.chunk_size, channels=1, dtype="int16") as stream:
+            with sd.RawInputStream(
+                samplerate=self.sample_rate, blocksize=self.chunk_size, channels=1, dtype="int16"
+            ) as stream:
                 while time.time() - start_time < timeout:
                     data, _ = stream.read(self.chunk_size)
                     energy = self._get_energy(data)
@@ -124,6 +128,7 @@ class VoiceRecorder:
 
     def save_to_temp(self, audio_data: bytes) -> str:
         import wave
+
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp, wave.open(tmp.name, "wb") as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
@@ -158,6 +163,7 @@ class VoiceConversation:
             audio_file = await asyncio.to_thread(self.tts.synthesize, text)
             if audio_file and Path(audio_file).exists():
                 import wave
+
                 with wave.open(audio_file, "rb") as wf:
                     frames = wf.readframes(wf.getnframes())
                     sr = wf.getframerate()
@@ -225,8 +231,6 @@ class VoiceConversation:
                 response = await self.think_and_respond(text)
                 if response:
                     await self.speak(response)
-        except asyncio.CancelledError:
-            raise
         finally:
             self.stop()
 

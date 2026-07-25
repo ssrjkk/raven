@@ -63,6 +63,7 @@ async def canvas_show(path: str, width: int = 800, height: int = 600) -> str:
         import tempfile
         import webbrowser
         from pathlib import Path
+
         content = await asyncio.to_thread(lambda: Path(path).read_text(encoding="utf-8"))
         tmp_dir = await asyncio.to_thread(tempfile.mkdtemp)
         tmp = Path(tmp_dir) / "canvas.html"
@@ -75,6 +76,7 @@ async def canvas_show(path: str, width: int = 800, height: int = 600) -> str:
 
 async def canvas_save(content: str, path: str, fmt: str = "md") -> str:
     from pathlib import Path
+
     try:
         p = Path(path)
         await asyncio.to_thread(p.parent.mkdir, parents=True, exist_ok=True)
@@ -89,51 +91,57 @@ async def canvas_save(content: str, path: str, fmt: str = "md") -> str:
 
 
 def register_canvas_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="canvas_render",
-        description="Render visual components (text, code, table, mermaid, link, image, list, alert) into formatted output",
-        parameters={
-            "components": {
-                "type": "array",
-                "description": "List of component dicts with type, content, and optional fields",
-                "required": True,
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "type": {"type": "string", "description": "text|code|table|mermaid|link|image|list|alert"},
-                        "content": {"type": "string", "description": "Component content"},
-                        "language": {"type": "string", "description": "Language for code blocks"},
-                        "headers": {"type": "array", "items": {"type": "string"}},
-                        "rows": {"type": "array", "items": {"type": "array"}},
-                        "url": {"type": "string"},
-                        "items": {"type": "array", "items": {"type": "string"}},
-                        "level": {"type": "string", "description": "info|warning|danger|success"},
+    registry.register(
+        ToolSpec(
+            name="canvas_render",
+            description="Render visual components (text, code, table, mermaid, link, image, list, alert) into formatted output",
+            parameters={
+                "components": {
+                    "type": "array",
+                    "description": "List of component dicts with type, content, and optional fields",
+                    "required": True,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {"type": "string", "description": "text|code|table|mermaid|link|image|list|alert"},
+                            "content": {"type": "string", "description": "Component content"},
+                            "language": {"type": "string", "description": "Language for code blocks"},
+                            "headers": {"type": "array", "items": {"type": "string"}},
+                            "rows": {"type": "array", "items": {"type": "array"}},
+                            "url": {"type": "string"},
+                            "items": {"type": "array", "items": {"type": "string"}},
+                            "level": {"type": "string", "description": "info|warning|danger|success"},
+                        },
                     },
-                },
-            }
-        },
-        handler=canvas_render,
-        category="visual",
-    ))
-    registry.register(ToolSpec(
-        name="canvas_show",
-        description="Open an HTML file as a visual canvas in the browser",
-        parameters={
-            "path": {"type": "string", "description": "Path to HTML file", "required": True},
-            "width": {"type": "integer", "description": "Canvas width", "required": False},
-            "height": {"type": "integer", "description": "Canvas height", "required": False},
-        },
-        handler=canvas_show,
-        category="visual",
-    ))
-    registry.register(ToolSpec(
-        name="canvas_save",
-        description="Save rendered content to a file (md or html)",
-        parameters={
-            "content": {"type": "string", "description": "Content to save", "required": True},
-            "path": {"type": "string", "description": "File path", "required": True},
-            "fmt": {"type": "string", "description": "Format: md or html", "required": False},
-        },
-        handler=canvas_save,
-        category="visual",
-    ))
+                }
+            },
+            handler=canvas_render,
+            category="visual",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="canvas_show",
+            description="Open an HTML file as a visual canvas in the browser",
+            parameters={
+                "path": {"type": "string", "description": "Path to HTML file", "required": True},
+                "width": {"type": "integer", "description": "Canvas width", "required": False},
+                "height": {"type": "integer", "description": "Canvas height", "required": False},
+            },
+            handler=canvas_show,
+            category="visual",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="canvas_save",
+            description="Save rendered content to a file (md or html)",
+            parameters={
+                "content": {"type": "string", "description": "Content to save", "required": True},
+                "path": {"type": "string", "description": "File path", "required": True},
+                "fmt": {"type": "string", "description": "Format: md or html", "required": False},
+            },
+            handler=canvas_save,
+            category="visual",
+        )
+    )

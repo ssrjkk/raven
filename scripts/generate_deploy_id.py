@@ -15,7 +15,7 @@ _GIT = shutil.which("git") or "git"
 
 def _git_describe() -> str:
     try:
-        return subprocess.check_output(  # noqa: S603 — args hardcoded
+        return subprocess.check_output(
             [_GIT, "describe", "--always", "--dirty", "--long"],
             stderr=subprocess.DEVNULL,
             timeout=5,
@@ -26,24 +26,22 @@ def _git_describe() -> str:
 
 def _git_origin() -> str:
     try:
-        out = subprocess.check_output(  # noqa: S603 — args hardcoded
+        return subprocess.check_output(
             [_GIT, "remote", "get-url", "origin"],
             stderr=subprocess.DEVNULL,
             timeout=5,
         ).decode().strip()
-        return out
     except Exception:
         return "unknown"
 
 
 def _git_branch() -> str:
     try:
-        out = subprocess.check_output(  # noqa: S603 — args hardcoded
+        return subprocess.check_output(
             [_GIT, "rev-parse", "--abbrev-ref", "HEAD"],
             stderr=subprocess.DEVNULL,
             timeout=5,
         ).decode().strip()
-        return out
     except Exception:
         return "unknown"
 

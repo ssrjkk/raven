@@ -3,6 +3,7 @@
 Provides ~3-10x faster loads/dumps than stdlib json.
 Usage: replace `import json` with `from raven.core._json import json`.
 """
+
 from __future__ import annotations
 
 import json as _stdlib_json

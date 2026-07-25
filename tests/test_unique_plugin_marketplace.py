@@ -171,13 +171,13 @@ class TestPluginManager:
     async def test_uninstall_plugin(self) -> None:
         installed = await self.manager.install_plugin("https://example.com/to-uninstall", source="local")
         assert installed.metadata.id in self.manager._installed
-        result = await self.manager.uninstall_plugin(installed.metadata.id)
+        result = self.manager.uninstall_plugin(installed.metadata.id)
         assert result is True
         assert installed.metadata.id not in self.manager._installed
 
     @pytest.mark.asyncio
     async def test_uninstall_nonexistent(self) -> None:
-        result = await self.manager.uninstall_plugin("nonexistent-plugin")
+        result = self.manager.uninstall_plugin("nonexistent-plugin")
         assert result is False
 
     @pytest.mark.asyncio

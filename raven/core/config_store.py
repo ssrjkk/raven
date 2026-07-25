@@ -12,6 +12,7 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 
 def _defaults_from_settings() -> dict[str, Any]:
     from raven.core.config import Settings
+
     s = Settings()
     return {
         "openrouter_api_key": s.openrouter_api_key,
@@ -19,7 +20,6 @@ def _defaults_from_settings() -> dict[str, Any]:
         "openai_api_key": s.openai_api_key,
         "ollama_base_url": s.ollama_base_url,
         "default_model": s.default_model,
-
         "web_port": s.web_port,
         "web_secret_key": s.web_secret_key,
         "web_cors_origins": s.web_cors_origins,
@@ -61,10 +61,10 @@ class ConfigStore:
             encoding="utf-8",
         )
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str, default: object = None) -> object:
         return self._data.get(key, default)
 
-    def set(self, key: str, value: Any) -> None:
+    def set(self, key: str, value: object) -> None:
         self._data[key] = value
 
     @property

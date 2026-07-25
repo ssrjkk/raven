@@ -1,61 +1,91 @@
 import { useEffect, useState } from "react";
+
 import { api } from "../api/client";
 
+interface PluginManifest {
+  id?: string;
+  name: string;
+  version: string;
+  description?: string;
+  author?: string;
+  category?: string;
+  status?: string;
+  installed_at?: string;
+  rating?: number;
+  tags?: string[];
+}
+
 export default function Plugins() {
-  const [installed, setInstalled] = useState<any[]>([]);
-  const [catalog, setCatalog] = useState<any[]>([]);
-  const [topRated, setTopRated] = useState<any[]>([]);
+  const [installed, setInstalled] = useState<PluginManifest[]>([]);
+  const [catalog, setCatalog] = useState<PluginManifest[]>([]);
+  const [topRated, setTopRated] = useState<PluginManifest[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<any[] | null>(null);
+  const [searchResults, setSearchResults] = useState<PluginManifest[] | null>(null);
   const [installUrl, setInstallUrl] = useState("");
   const [msg, setMsg] = useState("");
   const [tab, setTab] = useState<"installed" | "catalog" | "search" | "install">("installed");
 
   function refresh() {
-    api.plugins().then(setInstalled);
-    api.pluginsCatalog().then(setCatalog);
-    api.pluginsTop(5).then(setTopRated);
+    api.plugins().then(setInstalled).catch(e => console.error("plugins installed:", e));
+    api.pluginsCatalog().then(setCatalog).catch(e => console.error("plugins catalog:", e));
+    api.pluginsTop(5).then(setTopRated).catch(e => console.error("plugins top:", e));
   }
 
   useEffect(() => { refresh(); }, []);
 
   async function handleInstall() {
-    if (!installUrl) return;
-    setMsg("");
-    const r = await api.pluginsInstall(installUrl);
-    if (r.ok) {
-      setMsg(`Installed ${r.name} v${r.version}`);
-      setInstallUrl("");
-      refresh();
-    } else {
-      setMsg(`Error: ${r.error}`);
+    try {
+      if (!installUrl) return;
+      setMsg("");
+      const r = await api.pluginsInstall(installUrl);
+      if (r.ok) {
+        setMsg(`Installed ${r.name} v${r.version}`);
+        setInstallUrl("");
+        refresh();
+      } else {
+        setMsg(`Error: ${r.error}`);
+      }
+    } catch (e) {
+      console.error("install plugin:", e);
     }
   }
 
   async function handleUninstall(name: string) {
-    const r = await api.pluginsUninstall(name);
-    if (r.ok) {
-      setMsg(`Uninstalled ${name}`);
-      refresh();
-    } else {
-      setMsg(`Error: ${r.error}`);
+    try {
+      const r = await api.pluginsUninstall(name);
+      if (r.ok) {
+        setMsg(`Uninstalled ${name}`);
+        refresh();
+      } else {
+        setMsg(`Error: ${r.error}`);
+      }
+    } catch (e) {
+      console.error("uninstall plugin:", e);
     }
   }
 
   async function handleUpdate(name: string) {
-    const r = await api.pluginsUpdate(name);
-    if (r.ok) {
-      setMsg(`Updated ${name}`);
-      refresh();
-    } else {
-      setMsg(`Error: ${r.error}`);
+    try {
+      const r = await api.pluginsUpdate(name);
+      if (r.ok) {
+        setMsg(`Updated ${name}`);
+        refresh();
+      } else {
+        setMsg(`Error: ${r.error}`);
+      }
+    } catch (e) {
+      console.error("update plugin:", e);
     }
   }
 
   async function handleSearch() {
-    if (!searchQuery) { setSearchResults(null); return; }
-    const r = await api.pluginsSearch(searchQuery);
-    setSearchResults(r);
+    try {
+      if (!searchQuery) { setSearchResults(null); return; }
+      const r = await api.pluginsSearch(searchQuery);
+      setSearchResults(r);
+    } catch (e) {
+      console.error("search plugins:", e);
+    }
   }
 
   const categoryColor = (cat: string) => {
@@ -71,13 +101,13 @@ export default function Plugins() {
       <h1 className="text-2xl font-bold">Plugins</h1>
 
       {msg && (
-        <div className="px-4 py-2 rounded text-sm" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-primary)" }}>
+        <div className="px-4 py-2 rounded text-sm btn-tertiary">
           {msg}
-          <button onClick={() => setMsg("")} className="ml-3 text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>dismiss</button>
+          <button onClick={() => setMsg("")} className="ml-3 text-xs text-tertiary">dismiss</button>
         </div>
       )}
 
-      <div className="flex gap-1 border-b" style={{ borderColor: "var(--dt-colors-border-default)" }}>
+      <div className="flex gap-1 border-b border-default">
         {(["installed", "catalog", "search", "install"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium transition rounded-t ${tab === t ? "border-b-2" : ""}`}
@@ -93,32 +123,29 @@ export default function Plugins() {
       {tab === "installed" && (
         <div className="space-y-3">
           {installed.length === 0 ? (
-            <p className="text-sm" style={{ color: "var(--dt-colors-text-tertiary)" }}>No plugins installed</p>
+            <p className="text-sm text-tertiary">No plugins installed</p>
           ) : (
             installed.map((p) => (
-              <div key={p.id || p.name} className="p-4 rounded border text-sm"
-                style={{ backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)" }}>
+              <div key={p.id || p.name} className="p-4 rounded border text-sm bg-secondary border-default">
                 <div className="flex items-center justify-between mb-2">
                   <div>
                     <span className="font-semibold">{p.name}</span>
-                    <span className="ml-2 text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>v{p.version}</span>
-                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: categoryColor(p.category), color: "#fff" }}>{p.category}</span>
+                    <span className="ml-2 text-xs text-tertiary">v{p.version}</span>
+                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: categoryColor(p.category ?? ""), color: "#fff" }}>{p.category}</span>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => handleUpdate(p.name)}
-                      className="px-2 py-1 rounded text-xs font-medium transition"
-                      style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
+                      className="px-2 py-1 rounded text-xs font-medium transition bg-accent-muted text-accent">
                       Update
                     </button>
                     <button onClick={() => handleUninstall(p.name)}
-                      className="px-2 py-1 rounded text-xs font-medium transition"
-                      style={{ backgroundColor: "rgba(239,68,68,0.15)", color: "#ef4444" }}>
+                      className="px-2 py-1 rounded text-xs font-medium transition bg-danger-subtle text-danger">
                       Uninstall
                     </button>
                   </div>
                 </div>
-                <p style={{ color: "var(--dt-colors-text-secondary)" }}>{p.description}</p>
-                <div className="mt-1 text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>
+                <p className="text-secondary">{p.description}</p>
+                <div className="mt-1 text-xs text-tertiary">
                   {p.author && <span>by {p.author} &middot; </span>}
                   <span>Status: {p.status}</span>
                   {p.installed_at && <span> &middot; {new Date(p.installed_at).toLocaleDateString()}</span>}
@@ -133,16 +160,15 @@ export default function Plugins() {
         <div className="space-y-4">
           {topRated.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold mb-2" style={{ color: "var(--dt-colors-text-secondary)" }}>Top Rated</h3>
+              <h3 className="text-sm font-semibold mb-2 text-secondary">Top Rated</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {topRated.map((p) => (
-                  <div key={p.id} className="p-3 rounded border text-sm"
-                    style={{ backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)" }}>
+                  <div key={p.id} className="p-3 rounded border text-sm bg-secondary border-default">
                     <div className="font-semibold">{p.name}</div>
-                    <div className="text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>{p.description.slice(0, 100)}</div>
-                    <div className="mt-1 flex items-center gap-2 text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>
-                      <span style={{ color: "#f59e0b" }}>★ {p.rating.toFixed(1)}</span>
-                      <span className="px-1 py-0.5 rounded text-[10px]" style={{ backgroundColor: categoryColor(p.category), color: "#fff" }}>{p.category}</span>
+                    <div className="text-xs text-tertiary">{(p.description ?? "").slice(0, 100)}</div>
+                    <div className="mt-1 flex items-center gap-2 text-xs text-tertiary">
+                      <span style={{ color: "#f59e0b" }}>РІВвЂ¦ {(p.rating ?? 0).toFixed(1)}</span>
+                      <span className="px-1 py-0.5 rounded text-[10px]" style={{ backgroundColor: categoryColor(p.category ?? ""), color: "#fff" }}>{p.category}</span>
                     </div>
                   </div>
                 ))}
@@ -151,30 +177,28 @@ export default function Plugins() {
           )}
 
           <div>
-            <h3 className="text-sm font-semibold mb-2" style={{ color: "var(--dt-colors-text-secondary)" }}>All Plugins ({catalog.length})</h3>
+            <h3 className="text-sm font-semibold mb-2 text-secondary">All Plugins ({catalog.length})</h3>
             {catalog.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--dt-colors-text-tertiary)" }}>Catalog empty (no remote configured)</p>
+              <p className="text-sm text-tertiary">Catalog empty (no remote configured)</p>
             ) : (
               catalog.map((p) => (
-                <div key={p.id} className="p-3 rounded border text-sm mb-2"
-                  style={{ backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)" }}>
+                <div key={p.id} className="p-3 rounded border text-sm mb-2 bg-secondary border-default">
                   <div className="flex items-center justify-between">
                     <div>
                       <span className="font-semibold">{p.name}</span>
-                      <span className="ml-2 text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>v{p.version}</span>
-                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: categoryColor(p.category), color: "#fff" }}>{p.category}</span>
+                      <span className="ml-2 text-xs text-tertiary">v{p.version}</span>
+                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: categoryColor(p.category ?? ""), color: "#fff" }}>{p.category}</span>
                     </div>
-                    <button onClick={() => { setInstallUrl(p.id); setTab("install"); }}
-                      className="px-3 py-1 rounded text-xs font-medium transition"
-                      style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
+                    <button onClick={() => { setInstallUrl(p.id ?? ""); setTab("install"); }}
+                      className="px-3 py-1 rounded text-xs font-medium transition bg-accent-muted text-accent">
                       Install
                     </button>
                   </div>
-                  <p className="mt-1 text-xs" style={{ color: "var(--dt-colors-text-secondary)" }}>{p.description}</p>
-                  {p.tags?.length > 0 && (
+                  <p className="mt-1 text-xs text-secondary">{p.description}</p>
+                  {p.tags && p.tags.length > 0 && (
                     <div className="mt-1 flex gap-1">
                       {p.tags.map((t: string) => (
-                        <span key={t} className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-tertiary)" }}>{t}</span>
+                        <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-tertiary text-tertiary">{t}</span>
                       ))}
                     </div>
                   )}
@@ -189,30 +213,27 @@ export default function Plugins() {
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <input
-              className="flex-1 px-3 py-2 rounded border text-sm"
-              style={{ backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+              className="flex-1 px-3 py-2 rounded border text-sm card-bordered text-primary"
               placeholder="Search plugins..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             />
             <button onClick={handleSearch}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition"
-              style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
+              className="px-4 py-2 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
               Search
             </button>
           </div>
           {searchResults !== null && (
             <div className="space-y-2">
               {searchResults.length === 0 ? (
-                <p className="text-sm" style={{ color: "var(--dt-colors-text-tertiary)" }}>No results</p>
+                <p className="text-sm text-tertiary">No results</p>
               ) : (
                 searchResults.map((p) => (
-                  <div key={p.id} className="p-3 rounded border text-sm"
-                    style={{ backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)" }}>
+                  <div key={p.id} className="p-3 rounded border text-sm bg-secondary border-default">
                     <span className="font-semibold">{p.name}</span>
-                    <span className="ml-2 text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>v{p.version}</span>
-                    <p className="text-xs mt-1" style={{ color: "var(--dt-colors-text-secondary)" }}>{p.description}</p>
+                    <span className="ml-2 text-xs text-tertiary">v{p.version}</span>
+                    <p className="text-xs mt-1 text-secondary">{p.description}</p>
                   </div>
                 ))
               )}
@@ -224,16 +245,14 @@ export default function Plugins() {
       {tab === "install" && (
         <div className="space-y-3 max-w-lg">
           <input
-            className="w-full px-3 py-2 rounded border text-sm"
-            style={{ backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+            className="w-full px-3 py-2 rounded border text-sm card-bordered text-primary"
             placeholder="Plugin URL or path"
             value={installUrl}
             onChange={(e) => setInstallUrl(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleInstall()}
           />
           <button onClick={handleInstall}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition"
-            style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
+            className="px-4 py-2 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
             Install Plugin
           </button>
         </div>

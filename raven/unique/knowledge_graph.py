@@ -63,7 +63,38 @@ _RELATION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 ]
 
 _TECH_KEYWORDS: dict[str, list[str]] = {
-    "TECHNOLOGY": ["flask", "django", "fastapi", "react", "vue", "spring", "rails", "express", "docker", "kubernetes", "git", "npm", "pip", "yarn", "webpack", "vite", "postgresql", "mysql", "sqlite", "mongodb", "redis", "elasticsearch", "python", "javascript", "typescript", "java", "go", "rust", "c++", "ruby"],
+    "TECHNOLOGY": [
+        "flask",
+        "django",
+        "fastapi",
+        "react",
+        "vue",
+        "spring",
+        "rails",
+        "express",
+        "docker",
+        "kubernetes",
+        "git",
+        "npm",
+        "pip",
+        "yarn",
+        "webpack",
+        "vite",
+        "postgresql",
+        "mysql",
+        "sqlite",
+        "mongodb",
+        "redis",
+        "elasticsearch",
+        "python",
+        "javascript",
+        "typescript",
+        "java",
+        "go",
+        "rust",
+        "c++",
+        "ruby",
+    ],
 }
 
 _SPACY_LABEL_MAP: dict[str, str] = {
@@ -132,13 +163,17 @@ class KnowledgeGraph:
                 return entity
         return None
 
-    def add_relation(self, source_id: str, target_id: str, rel_type: str, metadata: dict[str, Any] | None = None) -> Relation:
+    def add_relation(
+        self, source_id: str, target_id: str, rel_type: str, metadata: dict[str, Any] | None = None
+    ) -> Relation:
         if source_id not in self._entities or target_id not in self._entities:
             raise ValueError("Both source and target must exist")
         relation = Relation(
             id=uuid.uuid4().hex[:12],
-            source_id=source_id, target_id=target_id,
-            rel_type=rel_type, metadata=metadata or {},
+            source_id=source_id,
+            target_id=target_id,
+            rel_type=rel_type,
+            metadata=metadata or {},
         )
         self._relations.append(relation)
         self._graph.setdefault(source_id, set()).add(target_id)
@@ -158,7 +193,9 @@ class KnowledgeGraph:
 
         return {"entities": entities_added, "relations": relations_added}
 
-    def _extract_with_spacy(self, nlp: Any, document: Document, entities_added: list[str], relations_added: list[str]) -> None:
+    def _extract_with_spacy(
+        self, nlp: Any, document: Document, entities_added: list[str], relations_added: list[str]
+    ) -> None:
         doc: Doc = nlp(document.text)
 
         for ent in doc.ents:
@@ -178,7 +215,9 @@ class KnowledgeGraph:
                             self.add_relation(subj_ent.id, obj_ent.id, rel_type, {"source": document.source})
                             relations_added.append(f"{subj_ent.name} --{rel_type}--> {obj_ent.name}")
                         except ValueError:
-                            logger.debug("Duplicate relation skipped: {} --{}--> {}", subj_ent.name, rel_type, obj_ent.name)
+                            logger.debug(
+                                "Duplicate relation skipped: {} --{}--> {}", subj_ent.name, rel_type, obj_ent.name
+                            )
 
     def _get_entity_span(self, token: Any, doc: Doc) -> str:
         for ent in doc.ents:
@@ -211,7 +250,9 @@ class KnowledgeGraph:
                             self.add_relation(source.id, target.id, rel_type)
                             relations_added.append(f"{source.name} --{rel_type}--> {target.name}")
                         except ValueError:
-                            logger.debug("Duplicate relation skipped: {} --{}--> {}", source.name, rel_type, target.name)
+                            logger.debug(
+                                "Duplicate relation skipped: {} --{}--> {}", source.name, rel_type, target.name
+                            )
 
     def _extract_tech_keywords(self, document: Document, entities_added: list[str]) -> None:
         text_lower = document.text.lower()
@@ -225,8 +266,7 @@ class KnowledgeGraph:
     def search(self, query: str, max_depth: int = 2) -> list[dict[str, Any]]:
         query_lower = query.lower()
         seed_entities = [
-            e for e in self._entities.values()
-            if query_lower in e.name.lower() or query_lower in e.type.lower()
+            e for e in self._entities.values() if query_lower in e.name.lower() or query_lower in e.type.lower()
         ]
         if not seed_entities:
             return []
@@ -257,11 +297,15 @@ class KnowledgeGraph:
                 continue
 
             neighbors = self._get_neighbors(current_id)
-            results.append({
-                "id": entity.id, "name": entity.name,
-                "type": entity.type, "metadata": entity.metadata,
-                "neighbors": neighbors[:10],
-            })
+            results.append(
+                {
+                    "id": entity.id,
+                    "name": entity.name,
+                    "type": entity.type,
+                    "metadata": entity.metadata,
+                    "neighbors": neighbors[:10],
+                }
+            )
 
             if depth < max_depth:
                 for nid in self._graph.get(current_id, set()) | self._reverse_graph.get(current_id, set()):
@@ -278,17 +322,16 @@ class KnowledgeGraph:
             elif rel.target_id == entity_id:
                 source = self._entities.get(rel.source_id)
                 if source:
-                    neighbors.append({"entity": source.name, "type": source.type, "relation": f"inverse_{rel.rel_type}"})
+                    neighbors.append(
+                        {"entity": source.name, "type": source.type, "relation": f"inverse_{rel.rel_type}"}
+                    )
         return neighbors
 
     def get_entity(self, entity_id: str) -> Entity | None:
         return self._entities.get(entity_id)
 
     def get_relations(self, entity_id: str) -> list[Relation]:
-        return [
-            rel for rel in self._relations
-            if rel.source_id == entity_id or rel.target_id == entity_id
-        ]
+        return [rel for rel in self._relations if rel.source_id == entity_id or rel.target_id == entity_id]
 
     def get_stats(self) -> dict[str, Any]:
         type_counts: dict[str, int] = {}
@@ -305,10 +348,7 @@ class KnowledgeGraph:
         }
 
     def export_vis(self) -> dict[str, Any]:
-        nodes = [
-            {"id": e.id, "name": e.name, "type": e.type, "metadata": e.metadata}
-            for e in self._entities.values()
-        ]
+        nodes = [{"id": e.id, "name": e.name, "type": e.type, "metadata": e.metadata} for e in self._entities.values()]
         links = [
             {
                 "source": r.source_id,
@@ -322,11 +362,18 @@ class KnowledgeGraph:
 
     def save(self, path: str | Path) -> None:
         data = {
-            "entities": {eid: {"id": e.id, "name": e.name, "type": e.type, "metadata": e.metadata}
-                         for eid, e in self._entities.items()},
+            "entities": {
+                eid: {"id": e.id, "name": e.name, "type": e.type, "metadata": e.metadata}
+                for eid, e in self._entities.items()
+            },
             "relations": [
-                {"id": r.id, "source_id": r.source_id, "target_id": r.target_id,
-                 "rel_type": r.rel_type, "metadata": r.metadata}
+                {
+                    "id": r.id,
+                    "source_id": r.source_id,
+                    "target_id": r.target_id,
+                    "rel_type": r.rel_type,
+                    "metadata": r.metadata,
+                }
                 for r in self._relations
             ],
         }

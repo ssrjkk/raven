@@ -33,14 +33,9 @@ class ContextWindowManager:
             total += self._count_tokens_estimate(str(content)) + 10
         return total
 
-    async def summarize_messages(
-        self, messages: list[dict[str, Any]], llm: LLMRouter | None = None
-    ) -> str:
+    async def summarize_messages(self, messages: list[dict[str, Any]], llm: LLMRouter | None = None) -> str:
         router = llm or self._llm
-        history = "\n".join(
-            f"{m.get('role', '?')}: {(str(m.get('content', ''))[:500])}"
-            for m in messages
-        )
+        history = "\n".join(f"{m.get('role', '?')}: {(str(m.get('content', ''))[:500])}" for m in messages)
         prompt = (
             "Summarize the following conversation history in 2-3 concise sentences. "
             "Preserve all key facts, decisions, user requirements, constraints, and partial work.\n\n"
@@ -73,19 +68,20 @@ class ContextWindowManager:
 
         logger.info(
             "Context at {:.1f}% of token limit ({} / {})",
-            ratio * 100, total, self._config.max_tokens,
+            ratio * 100,
+            total,
+            self._config.max_tokens,
         )
 
         if ratio <= self._config.summarization_threshold:
             note = {
                 "role": "system",
                 "content": (
-                    f"[Note: Context usage is at {ratio*100:.0f}%. "
+                    f"[Note: Context usage is at {ratio * 100:.0f}%. "
                     "Please be concise in responses to conserve context.]"
                 ),
             }
-            result = system_msgs + [note] + non_system if non_system else system_msgs + [note]
-            return result
+            return [*system_msgs, note, *non_system] if non_system else [*system_msgs, note]
 
         if ratio <= self._config.hard_limit_threshold:
             keep_count = min(self._config.sliding_window_size, len(non_system))
@@ -98,7 +94,7 @@ class ContextWindowManager:
                         "content": f"[Summarized earlier context: {summary_text}]",
                     }
                     keep = non_system[-keep_count:] if keep_count > 0 else []
-                    return system_msgs + [summary_msg] + keep
+                    return [*system_msgs, summary_msg, *keep]
                 logger.info("Summarization returned empty, dropping oldest batch")
             keep = non_system[-keep_count:] if keep_count > 0 else []
             return system_msgs + keep

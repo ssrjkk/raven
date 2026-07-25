@@ -6,7 +6,9 @@ from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 _SENSITIVE_KEYWORDS = frozenset({"key", "token", "secret", "password", "auth", "credential"})
 
-_SENSITIVE_VALUES = frozenset({"", "0", "false", "null", "none", "sk-or-...", "sk-ant-...", "sk-...", "change-me-in-production"})
+_SENSITIVE_VALUES = frozenset(
+    {"", "0", "false", "null", "none", "sk-or-...", "sk-ant-...", "sk-...", "change-me-in-production"}
+)
 
 
 def _is_sensitive(name: str) -> bool:

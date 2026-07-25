@@ -67,13 +67,15 @@ def apply_patch(path: str, diff_text: str) -> str:
     return f"[ok] applied patch to {path} ({len(hunks)} hunks)"
 
 
-def smart_edit(path: str, *,
-               old_text: str | None = None,
-               new_text: str | None = None,
-               insert_after: str | None = None,
-               insert_before: str | None = None,
-               append: bool = False,
-               ) -> str:
+def smart_edit(
+    path: str,
+    *,
+    old_text: str | None = None,
+    new_text: str | None = None,
+    insert_after: str | None = None,
+    insert_before: str | None = None,
+    append: bool = False,
+) -> str:
     p = Path(path).expanduser().resolve()
     if not p.is_file():
         return f"[error] file not found: {path}"

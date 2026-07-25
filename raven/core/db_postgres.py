@@ -72,9 +72,16 @@ class PostgresDatabase:
             except (TimeoutError, OSError, asyncpg.PostgresError) as e:
                 last_error = e
                 if attempt < _MAX_CONNECT_RETRIES:
-                    logger.warning("Postgres connect attempt {}/{} failed: {} — retrying in {}s", attempt, _MAX_CONNECT_RETRIES, e, _CONNECT_RETRY_DELAY_S)
+                    logger.warning(
+                        "Postgres connect attempt {}/{} failed: {} — retrying in {}s",
+                        attempt,
+                        _MAX_CONNECT_RETRIES,
+                        e,
+                        _CONNECT_RETRY_DELAY_S,
+                    )
                     await asyncio.sleep(_CONNECT_RETRY_DELAY_S)
-        raise RuntimeError(f"Postgres connect failed after {_MAX_CONNECT_RETRIES} attempts") from last_error
+        msg = f"Postgres connect failed after {_MAX_CONNECT_RETRIES} attempts"
+        raise RuntimeError(msg) from last_error
 
     async def reconnect(self):
         await self.disconnect()
@@ -206,7 +213,9 @@ class PostgresDatabase:
         )
         async with self._p.acquire() as conn:
             await conn.execute(
-                "INSERT INTO sessions (id, channel, user_id, agent_id, agent_skills, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                "INSERT INTO sessions "
+                "(id, channel, user_id, agent_id, agent_skills, created_at, updated_at) "
+                "VALUES ($1, $2, $3, $4, $5, $6, $7)",
                 session.id,
                 session.channel,
                 session.user_id,
@@ -220,7 +229,9 @@ class PostgresDatabase:
     async def save_message(self, msg: Message):
         async with self._p.acquire() as conn, conn.transaction():
             await conn.execute(
-                "INSERT INTO messages (id, session_id, role, content, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+                "INSERT INTO messages "
+                "(id, session_id, role, content, metadata, created_at) "
+                "VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
                 msg.id,
                 msg.session_id,
                 msg.role,
@@ -303,9 +314,7 @@ class PostgresDatabase:
     async def get_sessions(self, channel: str | None = None) -> list[Session]:
         if channel:
             async with self._p.acquire() as conn:
-                rows = await conn.fetch(
-                    "SELECT * FROM sessions WHERE channel = $1 ORDER BY updated_at DESC", channel
-                )
+                rows = await conn.fetch("SELECT * FROM sessions WHERE channel = $1 ORDER BY updated_at DESC", channel)
         else:
             async with self._p.acquire() as conn:
                 rows = await conn.fetch("SELECT * FROM sessions ORDER BY updated_at DESC")

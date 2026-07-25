@@ -59,7 +59,7 @@ async def ci_list_workflows(owner: str = "", repo: str = "", provider: str = "gi
         for w in workflows[:20]:
             lines.append(f"  {w['name']} ({w['state']}) — {w['id']}")
         return "\n".join(lines)
-    elif provider == "gitlab":
+    if provider == "gitlab":
         pid = owner or repo
         if not pid:
             return "project ID or path required for GitLab"
@@ -78,18 +78,23 @@ async def ci_list_workflows(owner: str = "", repo: str = "", provider: str = "gi
     return f"Unknown provider: {provider}"
 
 
-async def ci_run_workflow(workflow_id: str, owner: str = "", repo: str = "", ref: str = "main", inputs: str = "", provider: str = "github") -> str:
+async def ci_run_workflow(
+    workflow_id: str, owner: str = "", repo: str = "", ref: str = "main", inputs: str = "", provider: str = "github"
+) -> str:
     if provider == "github":
         if not owner or not repo:
             return "owner and repo required for GitHub"
         payload: dict[str, Any] = {"ref": ref}
         if inputs:
             import json
+
             try:
                 payload["inputs"] = json.loads(inputs)
             except json.JSONDecodeError:
                 return f"Invalid JSON inputs: {inputs}"
-        data = await _github_request(f"/repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches", method="POST", body=payload)
+        data = await _github_request(
+            f"/repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches", method="POST", body=payload
+        )
         if isinstance(data, dict) and "error" in data:
             return str(data.get("error", ""))
         return f"Triggered workflow {workflow_id} on {ref}"
@@ -111,7 +116,7 @@ async def ci_pipeline_status(pipeline_id: str, owner: str = "", repo: str = "", 
             f"  Commit: {data['head_sha'][:8]}\n"
             f"  URL: {data['html_url']}"
         )
-    elif provider == "gitlab":
+    if provider == "gitlab":
         pid = owner or repo
         if not pid:
             return "project ID required for GitLab"
@@ -129,7 +134,9 @@ async def ci_pipeline_status(pipeline_id: str, owner: str = "", repo: str = "", 
     return f"Unknown provider: {provider}"
 
 
-async def ci_list_runs(owner: str = "", repo: str = "", branch: str = "", status: str = "", provider: str = "github") -> str:
+async def ci_list_runs(
+    owner: str = "", repo: str = "", branch: str = "", status: str = "", provider: str = "github"
+) -> str:
     if provider != "github":
         return f"List runs not supported for provider: {provider}"
     if not owner or not repo:
@@ -147,7 +154,9 @@ async def ci_list_runs(owner: str = "", repo: str = "", branch: str = "", status
         return f"No runs found for {owner}/{repo}"
     lines = [f"Recent runs for {owner}/{repo}:\n"]
     for r in runs[:10]:
-        lines.append(f"  #{r['run_number']} {r['name']} — {r['status']}/{r.get('conclusion', '-')} ({r['head_branch']})")
+        lines.append(
+            f"  #{r['run_number']} {r['name']} — {r['status']}/{r.get('conclusion', '-')} ({r['head_branch']})"
+        )
     return "\n".join(lines)
 
 
@@ -192,7 +201,11 @@ async def ci_jenkins_job(job_name: str, parameters: str = "", wait: bool = False
     if not url or not user or not token:
         return "[error] JENKINS_URL, JENKINS_USER, and JENKINS_TOKEN env vars required"
     auth_b64 = base64.b64encode(f"{user}:{token}".encode()).decode()
-    build_url = f"{url.rstrip('/')}/job/{job_name}/buildWithParameters" if parameters else f"{url.rstrip('/')}/job/{job_name}/build"
+    build_url = (
+        f"{url.rstrip('/')}/job/{job_name}/buildWithParameters"
+        if parameters
+        else f"{url.rstrip('/')}/job/{job_name}/build"
+    )
     params = {}
     if parameters:
         try:
@@ -222,10 +235,7 @@ async def ci_jenkins_job(job_name: str, parameters: str = "", wait: bool = False
                     if qdata.get("executable"):
                         build_num = qdata["executable"]["number"]
                         build_url_full = qdata["executable"]["url"]
-                        return (
-                            f"Jenkins job '{job_name}' build #{build_num} started\n"
-                            f"  URL: {build_url_full}"
-                        )
+                        return f"Jenkins job '{job_name}' build #{build_num} started\n  URL: {build_url_full}"
                 return f"Jenkins job '{job_name}' triggered (build queued, timed out waiting)"
             return f"Jenkins job '{job_name}' triggered{queue_item}"
     except Exception as e:
@@ -261,10 +271,123 @@ async def ci_jenkins_status(job_name: str, build_number: int = 0) -> str:
 
 
 def register_ci_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(name="ci_list_workflows", description="List CI/CD workflows or pipelines (GitHub Actions or GitLab CI)", parameters={"owner": {"type": "string", "description": "Repository owner/namespace", "required": False}, "repo": {"type": "string", "description": "Repository name or project ID", "required": False}, "provider": {"type": "string", "description": "Provider: github or gitlab", "required": False}}, handler=ci_list_workflows, category="automation", timeout=30))
-    registry.register(ToolSpec(name="ci_run_workflow", description="Trigger a CI/CD workflow run (GitHub Actions workflow_dispatch)", parameters={"workflow_id": {"type": "string", "description": "Workflow file name or ID", "required": True}, "owner": {"type": "string", "description": "Repository owner", "required": False}, "repo": {"type": "string", "description": "Repository name", "required": False}, "ref": {"type": "string", "description": "Branch/tag to run on", "required": False}, "inputs": {"type": "string", "description": "JSON string of workflow inputs", "required": False}, "provider": {"type": "string", "description": "Provider: github", "required": False}}, handler=ci_run_workflow, category="automation", timeout=30))
-    registry.register(ToolSpec(name="ci_pipeline_status", description="Get status of a pipeline/run (GitHub Actions or GitLab CI)", parameters={"pipeline_id": {"type": "string", "description": "Run ID or pipeline ID", "required": True}, "owner": {"type": "string", "description": "Repository owner", "required": False}, "repo": {"type": "string", "description": "Repository name or project ID", "required": False}, "provider": {"type": "string", "description": "Provider: github or gitlab", "required": False}}, handler=ci_pipeline_status, category="automation", timeout=30))
-    registry.register(ToolSpec(name="ci_list_runs", description="List recent workflow runs (GitHub Actions only)", parameters={"owner": {"type": "string", "description": "Repository owner", "required": False}, "repo": {"type": "string", "description": "Repository name", "required": False}, "branch": {"type": "string", "description": "Filter by branch", "required": False}, "status": {"type": "string", "description": "Filter by status (completed, queued, in_progress)", "required": False}, "provider": {"type": "string", "description": "Provider: github", "required": False}}, handler=ci_list_runs, category="automation", timeout=30))
-    registry.register(ToolSpec(name="ci_trigger_pipeline", description="Trigger a GitLab CI pipeline", parameters={"project_id": {"type": "string", "description": "GitLab project ID or URL-encoded path", "required": True}, "ref": {"type": "string", "description": "Branch/tag to run on (default main)", "required": False}, "variables": {"type": "string", "description": "JSON object of pipeline variables", "required": False}, "provider": {"type": "string", "description": "Provider: gitlab", "required": False}}, handler=ci_trigger_pipeline, category="automation", timeout=30))
-    registry.register(ToolSpec(name="ci_jenkins_job", description="Trigger a Jenkins job/build", parameters={"job_name": {"type": "string", "description": "Jenkins job name", "required": True}, "parameters": {"type": "string", "description": "JSON object of build parameters", "required": False}, "wait": {"type": "boolean", "description": "Wait for build to start (default false)", "required": False}}, handler=ci_jenkins_job, category="automation", timeout=120))
-    registry.register(ToolSpec(name="ci_jenkins_status", description="Get status of a Jenkins job/build", parameters={"job_name": {"type": "string", "description": "Jenkins job name", "required": True}, "build_number": {"type": "integer", "description": "Build number (0 for last build)", "required": False}}, handler=ci_jenkins_status, category="automation", timeout=15))
+    registry.register(
+        ToolSpec(
+            name="ci_list_workflows",
+            description="List CI/CD workflows or pipelines (GitHub Actions or GitLab CI)",
+            parameters={
+                "owner": {"type": "string", "description": "Repository owner/namespace", "required": False},
+                "repo": {"type": "string", "description": "Repository name or project ID", "required": False},
+                "provider": {"type": "string", "description": "Provider: github or gitlab", "required": False},
+            },
+            handler=ci_list_workflows,
+            category="automation",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="ci_run_workflow",
+            description="Trigger a CI/CD workflow run (GitHub Actions workflow_dispatch)",
+            parameters={
+                "workflow_id": {"type": "string", "description": "Workflow file name or ID", "required": True},
+                "owner": {"type": "string", "description": "Repository owner", "required": False},
+                "repo": {"type": "string", "description": "Repository name", "required": False},
+                "ref": {"type": "string", "description": "Branch/tag to run on", "required": False},
+                "inputs": {"type": "string", "description": "JSON string of workflow inputs", "required": False},
+                "provider": {"type": "string", "description": "Provider: github", "required": False},
+            },
+            handler=ci_run_workflow,
+            category="automation",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="ci_pipeline_status",
+            description="Get status of a pipeline/run (GitHub Actions or GitLab CI)",
+            parameters={
+                "pipeline_id": {"type": "string", "description": "Run ID or pipeline ID", "required": True},
+                "owner": {"type": "string", "description": "Repository owner", "required": False},
+                "repo": {"type": "string", "description": "Repository name or project ID", "required": False},
+                "provider": {"type": "string", "description": "Provider: github or gitlab", "required": False},
+            },
+            handler=ci_pipeline_status,
+            category="automation",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="ci_list_runs",
+            description="List recent workflow runs (GitHub Actions only)",
+            parameters={
+                "owner": {"type": "string", "description": "Repository owner", "required": False},
+                "repo": {"type": "string", "description": "Repository name", "required": False},
+                "branch": {"type": "string", "description": "Filter by branch", "required": False},
+                "status": {
+                    "type": "string",
+                    "description": "Filter by status (completed, queued, in_progress)",
+                    "required": False,
+                },
+                "provider": {"type": "string", "description": "Provider: github", "required": False},
+            },
+            handler=ci_list_runs,
+            category="automation",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="ci_trigger_pipeline",
+            description="Trigger a GitLab CI pipeline",
+            parameters={
+                "project_id": {
+                    "type": "string",
+                    "description": "GitLab project ID or URL-encoded path",
+                    "required": True,
+                },
+                "ref": {"type": "string", "description": "Branch/tag to run on (default main)", "required": False},
+                "variables": {"type": "string", "description": "JSON object of pipeline variables", "required": False},
+                "provider": {"type": "string", "description": "Provider: gitlab", "required": False},
+            },
+            handler=ci_trigger_pipeline,
+            category="automation",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="ci_jenkins_job",
+            description="Trigger a Jenkins job/build",
+            parameters={
+                "job_name": {"type": "string", "description": "Jenkins job name", "required": True},
+                "parameters": {"type": "string", "description": "JSON object of build parameters", "required": False},
+                "wait": {
+                    "type": "boolean",
+                    "description": "Wait for build to start (default false)",
+                    "required": False,
+                },
+            },
+            handler=ci_jenkins_job,
+            category="automation",
+            timeout=120,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="ci_jenkins_status",
+            description="Get status of a Jenkins job/build",
+            parameters={
+                "job_name": {"type": "string", "description": "Jenkins job name", "required": True},
+                "build_number": {
+                    "type": "integer",
+                    "description": "Build number (0 for last build)",
+                    "required": False,
+                },
+            },
+            handler=ci_jenkins_status,
+            category="automation",
+            timeout=15,
+        )
+    )

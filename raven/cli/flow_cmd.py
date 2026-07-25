@@ -34,6 +34,7 @@ def serve(port: int):
 @click.option("--session", default="", help="Session ID")
 def flow_ask(message: str, channel: str, mode: str, session: str):
     """Send a message to RavenFlow agent"""
+
     async def _ask():
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -53,6 +54,7 @@ def flow_ask(message: str, channel: str, mode: str, session: str):
 @flow_group.command(name="sessions")
 def flow_sessions():
     """List RavenFlow sessions"""
+
     async def _list():
         async with httpx.AsyncClient() as client:
             resp = await client.get(f"http://localhost:{settings.ravenflow_port}/api/sessions", timeout=10)
@@ -62,7 +64,9 @@ def flow_sessions():
             if mgr_sessions:
                 console.print("[bold]Multi-agent sessions:[/bold]")
                 for s in mgr_sessions:
-                    console.print(f"  {s['id'][:8]} | {s.get('name', '?')} | {s['status']} | msgs: {s['message_count']}")
+                    console.print(
+                        f"  {s['id'][:8]} | {s.get('name', '?')} | {s['status']} | msgs: {s['message_count']}"
+                    )
             if flow_sessions:
                 console.print("[bold]Flow sessions:[/bold]")
                 for s in flow_sessions:

@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { BrowserRouter } from "react-router-dom";
+import { beforeEach,describe, expect, it, vi } from "vitest";
+
 import Monitors from "./Monitors";
+import { renderWithProviders } from "../test/test-utils";
 
 const mockMonitorsData = [
   { id: "m1", name: "Production API", type: "http", target: "https://api.example.com/health", interval_seconds: 60, status: "active", last_check: { status: "up", checked_at: 1700000000 } },
@@ -23,11 +24,7 @@ vi.mock("../components/Toast", () => ({
 }));
 
 function renderMonitors() {
-  return render(
-    <BrowserRouter>
-      <Monitors />
-    </BrowserRouter>
-  );
+  return renderWithProviders(<Monitors />);
 }
 
 describe("Monitors Page", () => {
@@ -36,9 +33,9 @@ describe("Monitors Page", () => {
     client.api.monitors = vi.fn().mockResolvedValue(mockMonitorsData);
   });
 
-  it("renders loading state initially", () => {
+  it("renders loading state initially", async () => {
     renderMonitors();
-    expect(screen.getByText("Monitors")).toBeInTheDocument();
+    expect(await screen.findByText("Monitors")).toBeInTheDocument();
   });
 
   it("renders monitor list after loading", async () => {

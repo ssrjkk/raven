@@ -12,13 +12,13 @@ class SharedMemory:
         self._facts: OrderedDict[str, Any] = OrderedDict()
         self._lock = Lock()
 
-    def store(self, key: str, value: Any) -> None:
+    def store(self, key: str, value: object) -> None:
         with self._lock:
             self._facts[key] = value
             self._facts.move_to_end(key)
             self._evict_oldest()
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str, default: object = None) -> object:
         with self._lock:
             return self._facts.get(key, default)
 

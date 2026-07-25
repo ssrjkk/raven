@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+from collections.abc import Callable
+from typing import Any, ClassVar
 
 from httpx import AsyncClient
 from loguru import logger
@@ -82,7 +83,7 @@ class RavenTUI(App[Any]):
     TITLE = "Raven AI"
     SUB_TITLE = "v0.4.0"
 
-    SCREENS = {
+    SCREENS: ClassVar[dict[str, Callable[[], Screen[Any]]]] = {
         "dashboard": DashboardScreen,
     }
 

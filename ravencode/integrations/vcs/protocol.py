@@ -13,7 +13,8 @@ class VCSProvider(Protocol):
     async def list_branches(self, identifier: str) -> list[Branch]: ...
 
     async def create_pull_request(
-        self, identifier: str,
+        self,
+        identifier: str,
         title: str,
         source: str,
         target: str,
@@ -21,31 +22,36 @@ class VCSProvider(Protocol):
     ) -> PullRequest: ...
 
     async def get_file(
-        self, identifier: str,
+        self,
+        identifier: str,
         path: str,
         ref: str | None = None,
     ) -> str | None: ...
 
     async def create_branch(
-        self, identifier: str,
+        self,
+        identifier: str,
         name: str,
         source: str,
     ) -> bool: ...
 
     async def create_comment(
-        self, identifier: str,
+        self,
+        identifier: str,
         resource_id: int,
         body: str,
         resource_type: str = "issue",
     ) -> bool: ...
 
     async def get_pull_request_diff(
-        self, identifier: str,
+        self,
+        identifier: str,
         pr_number: int,
     ) -> str | None: ...
 
     async def set_commit_status(
-        self, identifier: str,
+        self,
+        identifier: str,
         sha: str,
         state: str,
         description: str,

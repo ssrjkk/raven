@@ -38,7 +38,9 @@ class TokenBucket:
 
 
 class ChannelGuardian:
-    def __init__(self, on_channel_dead: Callable[[str], Awaitable[None]] | None = None, backoff_base: float = BACKOFF_BASE):
+    def __init__(
+        self, on_channel_dead: Callable[[str], Awaitable[None]] | None = None, backoff_base: float = BACKOFF_BASE
+    ):
         self._on_channel_dead = on_channel_dead
         self._backoff_base = backoff_base
         self._channels: dict[str, BaseChannel] = {}
@@ -56,6 +58,7 @@ class ChannelGuardian:
         self._channels[cid] = channel
         try:
             from raven.core.config import settings
+
             rate = float(settings.rate_limit_max) / max(float(settings.rate_limit_window), 1.0)
         except Exception as e:
             logger.debug("Failed to load rate_limit config: {}, defaulting to 10.0", e)

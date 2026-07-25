@@ -22,7 +22,7 @@ def plugins_list():
     gateway = create_gateway()
     plugins_dir = Path(__file__).parent.parent / "plugins"
     loader = gateway.plugin_loader
-    for pdir in plugins_dir.iterdir():
+    for pdir in sorted(plugins_dir.iterdir(), key=lambda d: d.name):
         if pdir.is_dir() and pdir.name != "__pycache__":
             loader.load_from_dir(pdir)
     table = Table(title="Loaded Plugins")

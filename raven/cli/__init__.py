@@ -1,1 +1,1 @@
-from raven.cli.main import cli  # noqa: F401
+from raven.cli.main import cli

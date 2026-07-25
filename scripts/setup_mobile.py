@@ -14,25 +14,25 @@ Requirements:
 """
 
 import argparse
-import os
 import subprocess
 import sys
+from pathlib import Path
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-WEB_DIR = os.path.join(ROOT, "web")
+ROOT = Path(__file__).resolve().parent.parent
+WEB_DIR = ROOT / "web"
 
 
-def run(cmd: list[str], cwd: str = WEB_DIR) -> None:
+def run(cmd: list[str], cwd: Path | str = WEB_DIR) -> None:
     print(f"[mobile] Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=cwd)  # noqa: S603 — cmd from trusted callers
+    result = subprocess.run(cmd, cwd=cwd)
     if result.returncode != 0:
         print(f"[mobile] ERROR: Command failed with code {result.returncode}")
         sys.exit(result.returncode)
 
 
 def check_capacitor_config() -> None:
-    config_path = os.path.join(WEB_DIR, "capacitor.config.ts")
-    if not os.path.exists(config_path):
+    config_path = WEB_DIR / "capacitor.config.ts"
+    if not config_path.exists():
         print(f"[mobile] ERROR: {config_path} not found")
         sys.exit(1)
 

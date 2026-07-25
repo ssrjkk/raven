@@ -48,7 +48,7 @@ class UnifiedAgent:
         on_step: Callable[[str, int], Awaitable[None]] | None = None,
         on_message: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
         memory_path: str | None = None,
-        llm_provider: Any = None,
+        llm_provider: Callable[[list[dict[str, Any]]], Awaitable[dict[str, Any]]] | None = None,
         max_context_tokens: int = 128_000,
     ):
         self.name = name
@@ -142,10 +142,7 @@ class UnifiedAgent:
             return False
 
         logger.info("Context approaching limit ({} tokens), summarizing...", self._total_tokens)
-        history = "\n".join(
-            f"{m.get('role', '?')}: {(str(m.get('content', ''))[:300])}"
-            for m in messages[:-5]
-        )
+        history = "\n".join(f"{m.get('role', '?')}: {(str(m.get('content', ''))[:300])}" for m in messages[:-5])
         summary_prompt = (
             "Summarize the key facts, decisions, and progress from this conversation history "
             "in 2-3 concise sentences. Preserve any user requirements, constraints, and partial work.\n\n"
@@ -158,14 +155,13 @@ class UnifiedAgent:
                 summary = result.get("content", "") if isinstance(result, dict) else str(result)
             else:
                 from ravencode.api.client import AIOSClient
+
                 client = AIOSClient()
                 resp = await client.ask_messages([{"role": "user", "content": summary_prompt}])
                 summary = resp.text or ""
             if summary and hasattr(agent.conversation, "messages"):
                 keep = messages[-5:] if len(messages) > 5 else messages
-                agent.conversation.messages = [
-                    {"role": "system", "content": f"[Previous context summarized: {summary[:500]}]"}
-                ] + keep
+                agent.conversation.messages = [{"role": "system", "content": f"[Previous context summarized: {summary[:500]}]"}, *keep]
                 logger.info("Context summarized from {} messages to {}", len(messages), len(keep) + 1)
                 return True
         except Exception as exc:
@@ -179,10 +175,30 @@ class UnifiedAgent:
 
     def _build_agent_config(self, task_type: TaskType) -> AgentConfig:
         mode_configs: dict[TaskType, dict[str, bool]] = {
-            TaskType.CODING: {"diff_preview": True, "proactive_scan": True, "plan_mode": False, "structured_output": False},
-            TaskType.AUTOMATION: {"diff_preview": False, "proactive_scan": False, "plan_mode": False, "structured_output": False},
-            TaskType.HYBRID: {"diff_preview": True, "proactive_scan": True, "plan_mode": False, "structured_output": False},
-            TaskType.QUERY: {"diff_preview": True, "proactive_scan": True, "plan_mode": True, "structured_output": True},
+            TaskType.CODING: {
+                "diff_preview": True,
+                "proactive_scan": True,
+                "plan_mode": False,
+                "structured_output": False,
+            },
+            TaskType.AUTOMATION: {
+                "diff_preview": False,
+                "proactive_scan": False,
+                "plan_mode": False,
+                "structured_output": False,
+            },
+            TaskType.HYBRID: {
+                "diff_preview": True,
+                "proactive_scan": True,
+                "plan_mode": False,
+                "structured_output": False,
+            },
+            TaskType.QUERY: {
+                "diff_preview": True,
+                "proactive_scan": True,
+                "plan_mode": True,
+                "structured_output": True,
+            },
         }
         mode_opts = mode_configs.get(task_type, mode_configs[TaskType.QUERY])
         from ravencode.runtime.agent_core import AgentConfig
@@ -240,7 +256,9 @@ class UnifiedAgent:
             if not task.done():
                 task.cancel()
 
-    async def _run_and_signal(self, queue: asyncio.Queue[str | None], message: str, stream_used: list[bool] | None = None) -> None:
+    async def _run_and_signal(
+        self, queue: asyncio.Queue[str | None], message: str, stream_used: list[bool] | None = None
+    ) -> None:
         try:
             result = await self.process(message)
             if result and stream_used is not None and not stream_used[0]:
@@ -261,13 +279,15 @@ class UnifiedAgent:
             except Exception as exc:
                 last_error = exc
                 if attempt < max_retries:
-                    delay = 2 ** attempt
-                    logger.warning("Process attempt {}/{} failed: {} -- retrying in {}s", attempt + 1, max_retries + 1, exc, delay)
+                    delay = 2**attempt
+                    logger.warning(
+                        "Process attempt {}/{} failed: {} -- retrying in {}s", attempt + 1, max_retries + 1, exc, delay
+                    )
                     await asyncio.sleep(delay)
                     self._agent = None
                 else:
                     logger.error("All {} process attempts failed: {}", max_retries + 1, exc)
-        raise last_error  # type: ignore[misc]
+        raise last_error  # type: ignore[misc]  # always set after loop
 
     async def _classify(self, message: str) -> None:
         task_type, confidence = self._router.classify_with_confidence(message)
@@ -361,7 +381,8 @@ class UnifiedAgent:
         session = self._sessions.get(session_id)
         if not session:
             logger.error("Session not found: {}", session_id)
-            raise ValueError(f"Hybrid session '{session_id}' not found")
+            msg = f"Hybrid session '{session_id}' not found"
+            raise ValueError(msg)
 
         session.add_message("user", message)
 

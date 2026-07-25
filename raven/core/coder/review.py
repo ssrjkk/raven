@@ -75,7 +75,7 @@ class CodeReviewer:
         comments = []
         for i, line in enumerate(diff.splitlines(), 1):
             stripped = line.strip()
-            if stripped.endswith(" ") or stripped.endswith("\t"):
+            if stripped.endswith((" ", "\t")):
                 comments.append(
                     ReviewComment(
                         file=file_path,
@@ -120,7 +120,7 @@ class CodeReviewer:
     def _check_import_wildcard(self, content: str, file_path: str) -> list[ReviewComment]:
         comments = []
         for i, line in enumerate(content.splitlines(), 1):
-            if "import *" in line or "from " in line and " import *" in line:
+            if "import *" in line or ("from " in line and " import *" in line):
                 comments.append(
                     ReviewComment(
                         file=file_path,

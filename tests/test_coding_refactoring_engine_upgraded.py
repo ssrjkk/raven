@@ -102,42 +102,42 @@ class TestDetectBreakingChanges:
     async def test_removed_public_function(self, engine):
         old = "def foo(): pass\ndef bar(): pass\n"
         new = "def bar(): pass\n"
-        changes = await engine.detect_breaking_changes(old, new)
+        changes = engine.detect_breaking_changes(old, new)
         assert any("foo" in c for c in changes)
 
     async def test_removed_private_function_not_reported(self, engine):
         old = "def _internal(): pass\ndef bar(): pass\n"
         new = "def bar(): pass\n"
-        changes = await engine.detect_breaking_changes(old, new)
+        changes = engine.detect_breaking_changes(old, new)
         assert not any("_internal" in c for c in changes)
 
     async def test_removed_param(self, engine):
         old = "def foo(x, y): pass\n"
         new = "def foo(x): pass\n"
-        changes = await engine.detect_breaking_changes(old, new)
+        changes = engine.detect_breaking_changes(old, new)
         assert any("y" in c and "Removed" in c for c in changes)
 
     async def test_added_required_param(self, engine):
         old = "def foo(x): pass\n"
         new = "def foo(x, y): pass\n"
-        changes = await engine.detect_breaking_changes(old, new)
+        changes = engine.detect_breaking_changes(old, new)
         assert any("y" in c and "required" in c for c in changes)
 
     async def test_added_optional_param_not_breaking(self, engine):
         old = "def foo(x): pass\n"
         new = "def foo(x, y=None): pass\n"
-        changes = await engine.detect_breaking_changes(old, new)
+        changes = engine.detect_breaking_changes(old, new)
         assert not any("y" in c for c in changes)
 
     async def test_param_changed_to_required(self, engine):
         old = "def foo(x=1): pass\n"
         new = "def foo(x): pass\n"
-        changes = await engine.detect_breaking_changes(old, new)
+        changes = engine.detect_breaking_changes(old, new)
         assert any("required" in c for c in changes)
 
     async def test_no_changes_for_identical(self, engine):
         source = "def foo(x): pass\n"
-        changes = await engine.detect_breaking_changes(source, source)
+        changes = engine.detect_breaking_changes(source, source)
         assert changes == []
 
 

@@ -139,9 +139,10 @@ class TaskStore(BaseStore):
             params.append(status)
         clause = " AND ".join(where) if where else "1=1"
         if clause not in self._ALLOWED_CLAUSES:
-            raise ValueError(f"Disallowed WHERE clause: {clause}")
+            msg = f"Disallowed WHERE clause: {clause}"
+            raise ValueError(msg)
         rows = await self._fetchall(
-            f"SELECT * FROM tasks WHERE {clause} ORDER BY created_at DESC LIMIT ? OFFSET ?",  # noqa: S608
+            f"SELECT * FROM tasks WHERE {clause} ORDER BY created_at DESC LIMIT ? OFFSET ?",
             (*params, limit, offset),
         )
         return [self._row_to_task(r) for r in rows]
@@ -188,9 +189,10 @@ class TaskStore(BaseStore):
             params.append(status)
         clause = " AND ".join(where) if where else "1=1"
         if clause not in self._ALLOWED_CLAUSES:
-            raise ValueError(f"Disallowed WHERE clause: {clause}")
+            msg = f"Disallowed WHERE clause: {clause}"
+            raise ValueError(msg)
         row = await self._fetchone(
-            f"SELECT COUNT(*) as cnt FROM tasks WHERE {clause}",  # noqa: S608
+            f"SELECT COUNT(*) as cnt FROM tasks WHERE {clause}",
             params,
         )
         return row["cnt"] if row else 0

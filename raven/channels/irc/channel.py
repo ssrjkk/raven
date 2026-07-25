@@ -26,6 +26,7 @@ class IRCChannel(EnterpriseChannel):
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._reconnect_delay = 1.0
+        self._bg_tasks: set[asyncio.Task[None]] = set()
 
     async def _start(self):
         cfg = get_channel_config("irc")
@@ -55,7 +56,9 @@ class IRCChannel(EnterpriseChannel):
             self._writer.write(f"JOIN {ch}\r\n".encode())
         await self._writer.drain()
         self._reconnect_delay = 1.0
-        asyncio.create_task(self._read_loop())
+        task = asyncio.create_task(self._read_loop())
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
 
     async def _read_loop(self):
         while self._ready and self._reader:
@@ -83,7 +86,7 @@ class IRCChannel(EnterpriseChannel):
             nick, target, text = m.group(1), m.group(2), m.group(3)
             if nick != self._nick and text and self._handler:
                 self._stats["received"] += 1
-                asyncio.ensure_future(
+                task = asyncio.ensure_future(
                     self._handler(
                         IncomingMessage(
                             channel="irc",
@@ -94,6 +97,8 @@ class IRCChannel(EnterpriseChannel):
                         )
                     )
                 )
+                self._bg_tasks.add(task)
+                task.add_done_callback(self._bg_tasks.discard)
 
     async def handle_message(self, nick: str, channel: str, text: str):
         if not self._handler or not self._ready or nick == self._nick:

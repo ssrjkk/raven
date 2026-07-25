@@ -25,6 +25,7 @@ def routine_group():
 @click.option("--user", default=None, help="Filter by user ID")
 def routine_list(user: str | None):
     """List configured routines"""
+
     async def _inner():
         from raven.core.routine.store import RoutineStore
 
@@ -45,6 +46,7 @@ def routine_list(user: str | None):
             last = r.last_run_status if r.last_run_status else "—"
             table.add_row(r.id[:8], r.name, r.action.value, r.schedule, f"{icon} {r.status.value}", last)
         console.print(table)
+
     _run_async(_inner())
 
 
@@ -59,6 +61,7 @@ def routine_list(user: str | None):
 @click.option("--channel", default="telegram", help="Channel")
 def routine_add(name: str, action: str, schedule: str, description: str, user: str, channel: str):
     """Add a new automated routine"""
+
     async def _inner():
         from raven.core.routine.models import Routine, RoutineAction, RoutineStatus, RoutineTrigger
         from raven.core.routine.store import RoutineStore
@@ -83,6 +86,7 @@ def routine_add(name: str, action: str, schedule: str, description: str, user: s
         console.print(f"  Action: {action}")
         console.print(f"  Schedule: {schedule}")
         console.print(f"  Trigger: {trigger.value}")
+
     _run_async(_inner())
 
 
@@ -90,6 +94,7 @@ def routine_add(name: str, action: str, schedule: str, description: str, user: s
 @click.argument("routine_id")
 def routine_remove(routine_id: str):
     """Remove a routine"""
+
     async def _inner():
         from raven.core.routine.store import RoutineStore
 
@@ -100,6 +105,7 @@ def routine_remove(routine_id: str):
             return
         await store.delete_routine(routine_id)
         console.print(f"[yellow]Routine '{r.name}' removed[/yellow]")
+
     _run_async(_inner())
 
 
@@ -107,6 +113,7 @@ def routine_remove(routine_id: str):
 @click.argument("routine_id")
 def routine_pause(routine_id: str):
     """Pause a routine"""
+
     async def _inner():
         from raven.core.routine.models import RoutineStatus
         from raven.core.routine.store import RoutineStore
@@ -118,6 +125,7 @@ def routine_pause(routine_id: str):
             return
         await store.update_status(routine_id, RoutineStatus.PAUSED)
         console.print(f"[yellow]Routine '{r.name}' paused[/yellow]")
+
     _run_async(_inner())
 
 
@@ -125,6 +133,7 @@ def routine_pause(routine_id: str):
 @click.argument("routine_id")
 def routine_resume(routine_id: str):
     """Resume a paused routine"""
+
     async def _inner():
         from raven.core.routine.models import RoutineStatus
         from raven.core.routine.store import RoutineStore
@@ -136,6 +145,7 @@ def routine_resume(routine_id: str):
             return
         await store.update_status(routine_id, RoutineStatus.ACTIVE)
         console.print(f"[green]Routine '{r.name}' resumed[/green]")
+
     _run_async(_inner())
 
 
@@ -143,6 +153,7 @@ def routine_resume(routine_id: str):
 @click.argument("routine_id")
 def routine_logs(routine_id: str):
     """Show execution logs for a routine"""
+
     async def _inner():
         from raven.core.routine.store import RoutineStore
 
@@ -162,4 +173,5 @@ def routine_logs(routine_id: str):
             ms = f"{log.duration_ms:.0f}ms"
             table.add_row(t, f"{icon} {log.status}", log.message[:80], ms)
         console.print(table)
+
     _run_async(_inner())

@@ -36,11 +36,14 @@ class MCPClient:
         self._writer = self._process.stdin
         self._reader = self._process.stdout
 
-        result = await self._send_request("initialize", {
-            "protocolVersion": "2025-03-26",
-            "capabilities": {},
-            "clientInfo": {"name": "raven-mcp-client", "version": "0.4.0"},
-        })
+        result = await self._send_request(
+            "initialize",
+            {
+                "protocolVersion": "2025-03-26",
+                "capabilities": {},
+                "clientInfo": {"name": "raven-mcp-client", "version": "0.4.0"},
+            },
+        )
         self._server_info = result.get("serverInfo", {})
         logger.info("MCP server connected: {}", self._server_info)
 
@@ -48,7 +51,8 @@ class MCPClient:
             self._tools = await self.list_tools()
         except Exception as exc:
             await self.disconnect()
-            raise MCPClientError(f"Connected but failed to list tools: {exc}") from exc
+            msg = f"Connected but failed to list tools: {exc}"
+            raise MCPClientError(msg) from exc
 
     async def disconnect(self) -> None:
         if self._process and self._process.returncode is None:
@@ -67,10 +71,13 @@ class MCPClient:
         return result.get("tools", [])  # type: ignore[no-any-return]
 
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
-        result = await self._send_request("tools/call", {
-            "name": name,
-            "arguments": arguments or {},
-        })
+        result = await self._send_request(
+            "tools/call",
+            {
+                "name": name,
+                "arguments": arguments or {},
+            },
+        )
         return result.get("content", [])
 
     async def _send_request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -103,7 +110,8 @@ class MCPClient:
 
         if "error" in response:
             err = response["error"]
-            raise MCPClientError(f"MCP error {err.get('code', '?')}: {err.get('message', 'unknown')}")
+            msg = f"MCP error {err.get('code', '?')}: {err.get('message', 'unknown')}"
+            raise MCPClientError(msg)
 
         return response.get("result", {})  # type: ignore[no-any-return]
 
@@ -115,7 +123,9 @@ class MCPClient:
                 "function": {
                     "name": f"mcp_{tool.get('name', 'unknown')}",
                     "description": tool.get("description", ""),
-                    "parameters": tool.get("inputSchema") or tool.get("parameters") or {"type": "object", "properties": {}},
+                    "parameters": tool.get("inputSchema")
+                    or tool.get("parameters")
+                    or {"type": "object", "properties": {}},
                 },
             }
             for tool in tools

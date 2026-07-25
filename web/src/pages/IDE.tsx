@@ -1,6 +1,9 @@
-import { useState, useRef, useCallback } from "react"
 import Editor from "@monaco-editor/react"
-import { request } from "../api/client"
+import { Bot,Bug } from "lucide-react"
+import { useCallback,useRef, useState } from "react"
+
+import { api } from "../api/client"
+import DebugPanel from "../components/DebugPanel"
 
 interface TerminalLine {
   input: string
@@ -25,6 +28,7 @@ export default function IDEPage() {
   const [terminalHistory, setTerminalHistory] = useState<TerminalLine[]>([])
   const [workspaceFiles] = useState<WorkspaceFile[]>([])
   const [indexStatus, setIndexStatus] = useState<string>("")
+  const [sidebarTab, setSidebarTab] = useState<"ai" | "debug">("ai")
   const terminalEndRef = useRef<HTMLDivElement>(null)
 
   const scrollTerminal = useCallback(() => {
@@ -34,10 +38,7 @@ export default function IDEPage() {
   async function runAI() {
     setOutput("Thinking...")
     try {
-      const data = await request<{ response?: string }>("/api/v1/agent/run", {
-        method: "POST",
-        body: JSON.stringify({ task: aiPrompt, mode: agentMode, workspace: "." }),
-      })
+      const data = await api.ideAgentRun(aiPrompt, agentMode, ".")
       setOutput(data.response || JSON.stringify(data))
     } catch (e) {
       console.error("Agent run failed:", e);
@@ -48,10 +49,7 @@ export default function IDEPage() {
   async function indexCodebase() {
     setIndexStatus("Indexing...")
     try {
-      const data = await request<{ indexed: number }>("/api/v1/context/index", {
-        method: "POST",
-        body: JSON.stringify({ workspace: "." }),
-      })
+      const data = await api.ideContextIndex(".")
       setIndexStatus(`Indexed ${data.indexed} files`)
     } catch (e) {
       console.error("Indexing failed:", e);
@@ -63,10 +61,7 @@ export default function IDEPage() {
     if (!aiPrompt.trim()) return
     setOutput("Searching...")
     try {
-      const data = await request<{ results: { content: string; file: string; score: number }[] }>("/api/v1/context/search", {
-        method: "POST",
-        body: JSON.stringify({ query: aiPrompt, top_k: 5 }),
-      })
+      const data = await api.ideContextSearch(aiPrompt, 5)
       const results = data.results || []
       setOutput(results.map(r => `[${r.score.toFixed(2)}] ${r.file}\n${r.content.slice(0, 200)}`).join("\n\n"))
     } catch (e) {
@@ -82,10 +77,7 @@ export default function IDEPage() {
     setTerminalHistory(h => [...h, { input: cmd, output: "Processing..." }])
     scrollTerminal()
     try {
-      const data = await request<{ output?: string; error?: string }>("/api/v1/agent/execute", {
-        method: "POST",
-        body: JSON.stringify({ command: cmd, context: "ide-terminal" }),
-      })
+      const data = await api.ideAgentExecute(cmd, "ide-terminal")
       setTerminalHistory(h => {
         const copy = [...h]
         copy[copy.length - 1] = { input: cmd, output: data.output || data.error || JSON.stringify(data) }
@@ -148,68 +140,89 @@ export default function IDEPage() {
       </div>
 
       <div className="border-l border-[#333] flex flex-col bg-[#0d0d0d]">
-        <div className="p-3 border-b border-[#333] flex flex-col gap-2">
-          <div className="text-sm font-semibold">AI Agent</div>
-          <div className="flex gap-1">
-            {AGENT_MODES.map(m => (
-              <button key={m.value} onClick={() => setAgentMode(m.value)}
-                className={`text-xs px-2.5 py-1 rounded border-none cursor-pointer transition ${
-                  agentMode === m.value
-                    ? "bg-white text-black font-semibold"
-                    : "bg-[#333] text-gray-300 hover:bg-[#444]"
-                }`}
-                title={m.desc}>
-                {m.label}
-              </button>
-            ))}
-          </div>
-          <div className="text-[10px] text-gray-500">{AGENT_MODES.find(m => m.value === agentMode)?.desc}</div>
+        <div className="flex border-b border-[#333]">
+          <button onClick={() => setSidebarTab("ai")}
+            className={`flex items-center gap-1.5 flex-1 px-3 py-2 border-none cursor-pointer text-xs font-medium transition ${
+              sidebarTab === "ai" ? "bg-[#1e1e1e] text-gray-100" : "bg-transparent text-gray-500 hover:text-gray-300"
+            }`}>
+            <Bot className="w-3.5 h-3.5" /> AI
+          </button>
+          <button onClick={() => setSidebarTab("debug")}
+            className={`flex items-center gap-1.5 flex-1 px-3 py-2 border-none cursor-pointer text-xs font-medium transition ${
+              sidebarTab === "debug" ? "bg-[#1e1e1e] text-gray-100" : "bg-transparent text-gray-500 hover:text-gray-300"
+            }`}>
+            <Bug className="w-3.5 h-3.5" /> Debug
+          </button>
         </div>
 
-        <div className="flex-1 p-3 overflow-auto flex flex-col gap-3">
-          {output && (
-            <div className="bg-[#1a1a2e] rounded-lg p-3 text-sm leading-relaxed text-gray-300 whitespace-pre-wrap">
-              {output}
-            </div>
-          )}
-          {workspaceFiles.length > 0 && (
-            <div>
-              <div className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Workspace</div>
-              <div className="flex flex-wrap gap-1">
-                {workspaceFiles.map(f => (
-                  <span key={f.path} className="text-[10px] bg-[#1e1e1e] px-2 py-0.5 rounded text-gray-400">
-                    {f.name}
-                  </span>
+        {sidebarTab === "ai" ? (
+          <>
+            <div className="p-3 border-b border-[#333] flex flex-col gap-2">
+              <div className="text-sm font-semibold">AI Agent</div>
+              <div className="flex gap-1">
+                {AGENT_MODES.map(m => (
+                  <button key={m.value} onClick={() => setAgentMode(m.value)}
+                    className={`text-xs px-2.5 py-1 rounded border-none cursor-pointer transition ${
+                      agentMode === m.value
+                        ? "bg-white text-black font-semibold"
+                        : "bg-[#333] text-gray-300 hover:bg-[#444]"
+                    }`}
+                    title={m.desc}>
+                    {m.label}
+                  </button>
                 ))}
               </div>
+              <div className="text-[10px] text-gray-500">{AGENT_MODES.find(m => m.value === agentMode)?.desc}</div>
             </div>
-          )}
-          {indexStatus && (
-            <div className="text-xs text-gray-500">{indexStatus}</div>
-          )}
-        </div>
 
-        <div className="p-3 border-t border-[#333] flex flex-col gap-2">
-          <div className="flex gap-2">
-            <input
-              value={aiPrompt}
-              onChange={(e) => setAiPrompt(e.target.value)}
-              placeholder="Ask AI to build anything..."
-              className="flex-1 bg-[#1e1e1e] border border-[#333] rounded-lg px-3 py-2 text-gray-100 text-sm outline-none"
-              onKeyDown={(e) => e.key === "Enter" && (agentMode === "general" ? searchCodebase() : runAI())}
-            />
-            <button onClick={() => agentMode === "general" ? searchCodebase() : runAI()}
-              className="bg-white hover:bg-gray-200 text-black border-none rounded-lg px-4 py-2 font-semibold cursor-pointer text-sm transition">
-              {agentMode === "general" ? "Search" : "Run"}
-            </button>
-          </div>
-          <div className="flex gap-1">
-            <button onClick={indexCodebase}
-              className="bg-[#2a2a2a] hover:bg-[#3a3a3a] text-gray-300 border border-[#444] rounded px-2 py-1 text-[10px] cursor-pointer transition">
-              Index
-            </button>
-          </div>
-        </div>
+            <div className="flex-1 p-3 overflow-auto flex flex-col gap-3">
+              {output && (
+                <div className="bg-[#1a1a2e] rounded-lg p-3 text-sm leading-relaxed text-gray-300 whitespace-pre-wrap">
+                  {output}
+                </div>
+              )}
+              {workspaceFiles.length > 0 && (
+                <div>
+                  <div className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Workspace</div>
+                  <div className="flex flex-wrap gap-1">
+                    {workspaceFiles.map(f => (
+                      <span key={f.path} className="text-[10px] bg-[#1e1e1e] px-2 py-0.5 rounded text-gray-400">
+                        {f.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {indexStatus && (
+                <div className="text-xs text-gray-500">{indexStatus}</div>
+              )}
+            </div>
+
+            <div className="p-3 border-t border-[#333] flex flex-col gap-2">
+              <div className="flex gap-2">
+                <input
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  placeholder="Ask AI to build anything..."
+                  className="flex-1 bg-[#1e1e1e] border border-[#333] rounded-lg px-3 py-2 text-gray-100 text-sm outline-none"
+                  onKeyDown={(e) => e.key === "Enter" && (agentMode === "general" ? searchCodebase() : runAI())}
+                />
+                <button onClick={() => agentMode === "general" ? searchCodebase() : runAI()}
+                  className="bg-white hover:bg-gray-200 text-black border-none rounded-lg px-4 py-2 font-semibold cursor-pointer text-sm transition">
+                  {agentMode === "general" ? "Search" : "Run"}
+                </button>
+              </div>
+              <div className="flex gap-1">
+                <button onClick={indexCodebase}
+                  className="bg-[#2a2a2a] hover:bg-[#3a3a3a] text-gray-300 border border-[#444] rounded px-2 py-1 text-[10px] cursor-pointer transition">
+                  Index
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <DebugPanel />
+        )}
       </div>
     </div>
   )

@@ -23,6 +23,7 @@ class OpenRouterProvider(LLMProvider):
     @staticmethod
     def _build_http_client(overrides: dict[str, Any]):
         import httpx
+
         return httpx.AsyncClient(
             timeout=overrides.get("timeout", 120),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=20),
@@ -67,6 +68,7 @@ class OpenAIProvider(LLMProvider):
         self.api_key = SecretStr(raw) if isinstance(raw, str) else raw
         self.base_url = overrides.get("base_url") or "https://api.openai.com/v1"
         import httpx
+
         self.http = httpx.AsyncClient(
             timeout=overrides.get("timeout", 120),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=20),
@@ -117,6 +119,7 @@ class VLLMProvider(LLMProvider):
         raw = overrides.get("api_key") or ""
         self.api_key = SecretStr(raw) if isinstance(raw, str) else raw
         import httpx
+
         self.http = httpx.AsyncClient(
             timeout=overrides.get("timeout", 120),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=20),
@@ -156,9 +159,12 @@ class AzureProvider(LLMProvider):
     def __init__(self, **overrides):
         raw = overrides.get("api_key") or os.environ.get("AZURE_OPENAI_API_KEY", "")
         self.api_key = SecretStr(raw) if isinstance(raw, str) else raw
-        self.endpoint = overrides.get("base_url") or os.environ.get("AZURE_OPENAI_ENDPOINT", "https://your-resource.openai.azure.com")
+        self.endpoint = overrides.get("base_url") or os.environ.get(
+            "AZURE_OPENAI_ENDPOINT", "https://your-resource.openai.azure.com"
+        )
         self.api_version = overrides.get("api_version") or os.environ.get("AZURE_OPENAI_API_VERSION", "2024-06-01")
         import httpx
+
         self.http = httpx.AsyncClient(
             timeout=overrides.get("timeout", 120),
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=20),
@@ -177,7 +183,9 @@ class AzureProvider(LLMProvider):
     async def _headers(self) -> dict[str, str]:
         return {"Content-Type": "application/json", "api-key": self.api_key.get_secret_value()}
 
-    async def complete_stream(self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None) -> Any:
+    async def complete_stream(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> Any:
         deployment = self._deployment(model)
         body = {"messages": messages, "stream": True}
         if tools:
@@ -185,7 +193,9 @@ class AzureProvider(LLMProvider):
         async for token in _stream_sse(self.http, self._url(deployment), body, await self._headers()):
             yield token
 
-    async def complete(self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None) -> LLMResponse:
+    async def complete(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> LLMResponse:
         deployment = self._deployment(model)
         body = {"messages": messages}
         if tools:

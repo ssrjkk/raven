@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from typing import Any
+from typing import Any, ClassVar
 
 from ravencode.integrations.models import EventType
 from ravencode.integrations.vcs.webhook import (
@@ -33,11 +33,7 @@ class GitHubWebhookNormalizer:
 
         if "pull_request" in raw_payload:
             pr = raw_payload["pull_request"]
-            et = (
-                WebhookEventType.PULL_REQUEST_OPENED
-                if action == "opened"
-                else WebhookEventType.PULL_REQUEST_CLOSED
-            )
+            et = WebhookEventType.PULL_REQUEST_OPENED if action == "opened" else WebhookEventType.PULL_REQUEST_CLOSED
             return WebhookEvent(
                 event_type=et,
                 repository=raw_payload["repository"]["full_name"],
@@ -48,11 +44,7 @@ class GitHubWebhookNormalizer:
 
         if "issue" in raw_payload:
             issue = raw_payload["issue"]
-            et = (
-                WebhookEventType.ISSUE_OPENED
-                if action == "opened"
-                else WebhookEventType.ISSUE_CLOSED
-            )
+            et = WebhookEventType.ISSUE_OPENED if action == "opened" else WebhookEventType.ISSUE_CLOSED
             return WebhookEvent(
                 event_type=et,
                 repository=raw_payload["repository"]["full_name"],
@@ -64,7 +56,7 @@ class GitHubWebhookNormalizer:
 
 
 class GitHubLegacyNormalizer:
-    EVENT_MAP: dict[str, EventType] = {
+    EVENT_MAP: ClassVar[dict[str, EventType]] = {
         "issues": EventType.ISSUE_OPENED,
         "issue_comment": EventType.ISSUE_COMMENT,
         "pull_request": EventType.PR_OPENED,

@@ -40,22 +40,26 @@ class ChannelBridge:
         )
 
     def register_tools(self, registry: ToolRegistry) -> None:
-        registry.register(ToolSpec(
-            name="send_message",
-            description="Send a message to a specific channel (telegram, slack, discord, etc.)",
-            parameters={
-                "channel": {"type": "string", "description": "Target channel id", "required": True},
-                "message": {"type": "string", "description": "Message text to send", "required": True},
-                "session_id": {"type": "string", "description": "Optional session id", "required": False},
-            },
-            handler=self._send_message,
-            category="communication",
-            timeout=15,
-        ))
-        registry.register(ToolSpec(
-            name="list_channels",
-            description="List available communication channels",
-            parameters={},
-            handler=self._list_channels,
-            category="communication",
-        ))
+        registry.register(
+            ToolSpec(
+                name="send_message",
+                description="Send a message to a specific channel (telegram, slack, discord, etc.)",
+                parameters={
+                    "channel": {"type": "string", "description": "Target channel id", "required": True},
+                    "message": {"type": "string", "description": "Message text to send", "required": True},
+                    "session_id": {"type": "string", "description": "Optional session id", "required": False},
+                },
+                handler=self._send_message,
+                category="communication",
+                timeout=15,
+            )
+        )
+        registry.register(
+            ToolSpec(
+                name="list_channels",
+                description="List available communication channels",
+                parameters={},
+                handler=self._list_channels,
+                category="communication",
+            )
+        )

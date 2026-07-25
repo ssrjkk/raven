@@ -4,9 +4,13 @@
       "name": "deny-dangerous-tools",
       "condition": {
         "or": [
-          {"tool": "shell.exec"},
-          {"tool": "sessions_spawn"},
-          {"tool": "browser.control"}
+          {"tool": "api.http_post"},
+          {"tool": "sessions.sessions_spawn"},
+          {"tool": "process.kill"},
+          {"tool": "process.run"},
+          {"tool": "process.run_python"},
+          {"tool": "git.git_push"},
+          {"tool": "git.git_pull"}
         ]
       },
       "effect": "deny",
@@ -24,10 +28,10 @@
       "name": "allow-messaging-tools",
       "condition": {
         "or": [
-          {"tool": "file.read", "profile": "messaging"},
-          {"tool": "notify.send", "profile": "messaging"},
-          {"tool": "memory.search", "profile": "messaging"},
-          {"tool": "web.search", "profile": "messaging"}
+          {"tool": "files.read", "profile": "messaging"},
+          {"tool": "memory.recall", "profile": "messaging"},
+          {"tool": "memory.search_memory", "profile": "messaging"},
+          {"tool": "browser.search", "profile": "messaging"}
         ]
       },
       "effect": "allow",

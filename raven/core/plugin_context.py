@@ -29,22 +29,24 @@ async def _cap_safe_http(plugin_name: str, args: dict[str, Any]) -> str:
         return f"[blocked] {blocked}"
 
     from raven.tools.http import _fetch
+
     kwargs: dict[str, Any] = {"headers": headers}
     if body:
         kwargs["content"] = body
     if method.upper() == "POST":
         return await _fetch(url, "POST", **kwargs)
-    elif method.upper() == "GET":
+    if method.upper() == "GET":
         return await _fetch(url, "GET", **kwargs)
-    else:
-        return f"[error] unsupported method: {method}"
+    return f"[error] unsupported method: {method}"
 
 
 async def _cap_safe_file_read(plugin_name: str, args: dict[str, Any]) -> str:
     from raven.tools.file import file_read
+
     return await file_read(args.get("path", ""), max_size=args.get("max_size", 50000))
 
 
 async def _cap_safe_file_write(plugin_name: str, args: dict[str, Any]) -> str:
     from raven.tools.file import file_write
+
     return await file_write(args.get("path", ""), args.get("content", ""))

@@ -248,6 +248,7 @@ class PolicyEngine:
         raw = filepath.read_text(encoding="utf-8")
         if filepath.suffix in (".yaml", ".yml"):
             import yaml
+
             data = yaml.safe_load(raw)
         else:
             data = json.loads(raw)
@@ -264,7 +265,7 @@ class PolicyEngine:
                     tags=item.get("tags", []),
                     enabled=item.get("enabled", True),
                     metadata=item.get("metadata", {}),
-                )
+                ),
             )
 
         rs = RuleSet(rules, name=name)
@@ -282,7 +283,7 @@ class PolicyEngine:
 
     def check(self, ruleset: str, input_data: dict[str, Any]) -> bool:
         effect, _ = self.evaluate(ruleset, input_data)
-        return effect != "deny"
+        return effect == "allow"
 
     def to_dict(self) -> dict[str, Any]:
         return {name: rs.to_dict() for name, rs in self._rulesets.items()}

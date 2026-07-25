@@ -14,7 +14,7 @@ class Skill:
     paths: list[Path] = field(default_factory=list)
     _handler: Callable[..., Any] | None = None
 
-    async def execute(self, *args: Any, **kwargs: Any) -> Any:
+    async def execute(self, *args: object, **kwargs: object) -> Any:
         if self._handler:
             return await self._handler(*args, **kwargs)
         return None

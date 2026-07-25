@@ -6,7 +6,7 @@ from typing import Any
 from loguru import logger
 
 from raven.core.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
-from raven.core.config import settings
+from raven.core.config_discovery import auto_model_list, get_discovered_keys
 from raven.core.llm.protocol import LLMClientProtocol, LLMResponse
 from raven.core.metrics import metrics
 
@@ -36,19 +36,20 @@ class ModelFailover:
 
     def _build_models(self):
         models = []
-        if settings.ollama_base_url:
-            models.append(ModelConfig("ollama", "qwen3:8b", 1.0))
-            models.append(ModelConfig("ollama", "llama3", 0.9))
-            models.append(ModelConfig("ollama", "mistral", 0.8))
-        if settings.vllm_base_url:
-            models.append(ModelConfig("vllm", "qwen3-8b", 0.7))
-        if settings.openrouter_api_key.get_secret_value():
-            m = settings.default_model or "openrouter/openai/gpt-4o-mini"
-            models.append(ModelConfig("openrouter", m, 0.6))
-        if settings.anthropic_api_key.get_secret_value():
-            models.append(ModelConfig("anthropic", "claude-sonnet-4-20250514", 0.5))
-        if settings.openai_api_key.get_secret_value():
-            models.append(ModelConfig("openai", "gpt-4o", 0.4))
+        discovery = get_discovered_keys()
+        available = set(discovery.providers_available)
+        pool = auto_model_list()
+
+        weights = {"ollama": 1.0, "groq": 0.9, "openrouter": 0.8, "anthropic": 0.7, "openai": 0.6, "vllm": 0.5}
+        for full_model in pool:
+            provider = full_model.split("/")[0] if "/" in full_model else "openai"
+            if provider not in available and provider != "ollama":
+                continue
+            weight = weights.get(provider, 0.5)
+            models.append(ModelConfig(provider, full_model, weight))
+
+        if not models:
+            models.append(ModelConfig("ollama", "llama3", 1.0))
         self._models = models
 
     async def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> LLMResponse:
@@ -66,7 +67,9 @@ class ModelFailover:
                 if resp.content or resp.tool_calls:
                     metrics.inc("failover_success", {"provider": model_cfg.provider, "model": model_cfg.model})
                     return resp  # type: ignore[no-any-return]
-                logger.warning("Failover: model {}/{} returned empty response, trying next", model_cfg.provider, model_cfg.model)
+                logger.warning(
+                    "Failover: model {}/{} returned empty response, trying next", model_cfg.provider, model_cfg.model
+                )
             except CircuitBreakerOpenError as e:
                 last_error = e
                 continue
@@ -77,9 +80,7 @@ class ModelFailover:
                 continue
         raise last_error or RuntimeError("All models exhausted")
 
-    async def complete_stream(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
-    ):
+    async def complete_stream(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None):
         last_error: Exception | None = None
         for model_cfg in self._models:
             cb = self._get_circuit(model_cfg.provider)
@@ -119,4 +120,4 @@ class ModelFailover:
         if not self._models:
             raise RuntimeError("No models configured")
         weights = [m.weight for m in self._models]
-        return random.choices(self._models, weights=weights, k=1)[0]  # noqa: S311
+        return random.choices(self._models, weights=weights, k=1)[0]

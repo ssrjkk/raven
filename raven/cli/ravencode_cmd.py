@@ -20,6 +20,7 @@ def ravencode_group():
 @click.option("--task", default="code", help="Task type: code, architecture, fast, debug, refactor")
 def ask(prompt: str, task: str):
     """Ask RavenCode AI a question"""
+
     async def _run():
         result = await get_aios_adapter().ask(prompt, task=task)
         click.echo(f"[{result.provider}/{result.model}]")
@@ -33,6 +34,7 @@ def ask(prompt: str, task: str):
 @click.option("--agent", default="autonomous", type=click.Choice(["planner", "coder", "debugger", "autonomous"]))
 def agent_run(task: str, agent: str):
     """Run an agent task"""
+
     async def _run():
         result = await get_aios_adapter().run_agent_task(task, agent)
         if result.success:
@@ -48,6 +50,7 @@ def agent_run(task: str, agent: str):
 @click.argument("cmd")
 def shell(cmd: str):
     """Execute a shell command"""
+
     async def _run():
         result = await get_aios_adapter().run_shell(cmd)
         click.echo(result)

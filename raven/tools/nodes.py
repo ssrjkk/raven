@@ -21,8 +21,12 @@ class NodeManager:
         nid = uuid.uuid4().hex[:8]
         async with self._lock:
             self._nodes[nid] = NodeInfo(
-                id=nid, name=name, endpoint=endpoint, capabilities=capabilities or [],
-                status="online", last_seen=datetime.now(UTC).isoformat(),
+                id=nid,
+                name=name,
+                endpoint=endpoint,
+                capabilities=capabilities or [],
+                status="online",
+                last_seen=datetime.now(UTC).isoformat(),
             )
         logger.info("Node registered: {} ({}) at {}", name, nid, endpoint)
         return nid
@@ -49,6 +53,7 @@ class NodeManager:
             return f"[error] node not found: {nid}"
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
                     f"{node.endpoint}/exec",
@@ -92,8 +97,7 @@ async def nodes_list() -> str:
     if not nodes:
         return "(no nodes registered)"
     return "\n".join(
-        f"• {n['name']} ({n['id']}) — {n['endpoint']} [{n['status']}] — {', '.join(n['capabilities'])}"
-        for n in nodes
+        f"• {n['name']} ({n['id']}) — {n['endpoint']} [{n['status']}] — {', '.join(n['capabilities'])}" for n in nodes
     )
 
 
@@ -117,30 +121,47 @@ async def nodes_exec(node_id: str, action: str, payload_json: str = "{}") -> str
 
 
 def register_nodes_tools(registry: ToolRegistry) -> None:
-    registry.register(ToolSpec(
-        name="nodes_list", description="List all registered execution nodes",
-        parameters={}, handler=nodes_list, category="system",
-    ))
-    registry.register(ToolSpec(
-        name="nodes_register", description="Register a new execution node",
-        parameters={
-            "name": {"type": "string", "description": "Node name", "required": True},
-            "endpoint": {"type": "string", "description": "Node API endpoint", "required": True},
-            "capabilities": {"type": "string", "description": "Comma-separated capabilities", "required": False},
-        },
-        handler=nodes_register, category="system",
-    ))
-    registry.register(ToolSpec(
-        name="nodes_unregister", description="Remove a registered node",
-        parameters={"node_id": {"type": "string", "description": "Node ID", "required": True}},
-        handler=nodes_unregister, category="system",
-    ))
-    registry.register(ToolSpec(
-        name="nodes_exec", description="Execute an action on a remote node",
-        parameters={
-            "node_id": {"type": "string", "description": "Node ID", "required": True},
-            "action": {"type": "string", "description": "Action to execute", "required": True},
-            "payload_json": {"type": "string", "description": "JSON payload", "required": False},
-        },
-        handler=nodes_exec, category="system",
-    ))
+    registry.register(
+        ToolSpec(
+            name="nodes_list",
+            description="List all registered execution nodes",
+            parameters={},
+            handler=nodes_list,
+            category="system",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="nodes_register",
+            description="Register a new execution node",
+            parameters={
+                "name": {"type": "string", "description": "Node name", "required": True},
+                "endpoint": {"type": "string", "description": "Node API endpoint", "required": True},
+                "capabilities": {"type": "string", "description": "Comma-separated capabilities", "required": False},
+            },
+            handler=nodes_register,
+            category="system",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="nodes_unregister",
+            description="Remove a registered node",
+            parameters={"node_id": {"type": "string", "description": "Node ID", "required": True}},
+            handler=nodes_unregister,
+            category="system",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="nodes_exec",
+            description="Execute an action on a remote node",
+            parameters={
+                "node_id": {"type": "string", "description": "Node ID", "required": True},
+                "action": {"type": "string", "description": "Action to execute", "required": True},
+                "payload_json": {"type": "string", "description": "JSON payload", "required": False},
+            },
+            handler=nodes_exec,
+            category="system",
+        )
+    )

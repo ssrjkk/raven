@@ -41,9 +41,17 @@ class MessageProcessor:
         channel_obj = await self.channels.get(event.channel)
         supports_stream = hasattr(channel_obj, "send_stream") if channel_obj else False
 
+        async def confirm_fn(tool_name: str, args: dict[str, Any]) -> bool:
+            ch = await self.channels.get(event.channel)
+            if not ch:
+                return True
+            action_desc = f"Execute tool '{tool_name}' with args: {str(args)[:200]}"
+            result = await ch.ask_confirmation(event.user_id, action_desc, event.session_id or "")
+            return bool(result)
+
         full_response = ""
         buffer = ""
-        gen = agent.run(event.text)
+        gen = agent.run(event.text, confirm_fn=confirm_fn)
         timed_out = False
         error_hint = ""
         try:
@@ -105,7 +113,10 @@ class MessageProcessor:
 
         logger.info(
             "Context at {:.1f}% for session {} ({} / {} tokens)",
-            ratio * 100, session_id, total, self._ctxmgr._config.max_tokens,
+            ratio * 100,
+            session_id,
+            total,
+            self._ctxmgr._config.max_tokens,
         )
         self.metrics.inc("context_window_urgent", {"session_id": session_id})
 
@@ -115,5 +126,6 @@ class MessageProcessor:
             self.metrics.inc("context_window_managed", {"session_id": session_id})
             logger.info(
                 "Context window management applied for session {} ({:.1f}%)",
-                session_id, ratio * 100,
+                session_id,
+                ratio * 100,
             )

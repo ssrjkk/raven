@@ -26,6 +26,7 @@ def _get_workspace() -> Path:
     global _WORKSPACE_ROOT
     if _WORKSPACE_ROOT is None:
         import os
+
         _WORKSPACE_ROOT = Path(os.environ.get("RAVEN_WORKSPACE", "workspace")).expanduser().resolve()
     return _WORKSPACE_ROOT
 
@@ -36,7 +37,8 @@ def _confine(path: str) -> Path:
     try:
         p.relative_to(ws)
     except ValueError as exc:
-        raise PermissionError(f"Path {path} is outside workspace {ws}") from exc
+        msg = f"Path {path} is outside workspace {ws}"
+        raise PermissionError(msg) from exc
     return p
 
 
@@ -45,7 +47,8 @@ def _compute_diff(original: str, modified: str, path: str) -> str:
         difflib.unified_diff(
             original.splitlines(keepends=True),
             modified.splitlines(keepends=True),
-            fromfile=path, tofile=path,
+            fromfile=path,
+            tofile=path,
         )
     )
 
@@ -77,6 +80,7 @@ async def _safe_write(path: str, content: str) -> None:
 # ---------------------------------------------------------------------------
 # tool implementations
 # ---------------------------------------------------------------------------
+
 
 async def read_file(path: str, max_chars: int = 50_000) -> str:
     content, err = await _safe_read(path, max_chars)
@@ -145,14 +149,59 @@ async def grep_files(pattern: str, include: str | None = None, path: str | None 
     return results
 
 
-_BASH_ALLOWLIST = frozenset({
-    "ls", "cat", "head", "tail", "echo", "pwd", "whoami", "date",
-    "find", "grep", "rg", "wc", "sort", "uniq", "cut", "tr", "diff",
-    "curl", "wget", "df", "du", "free", "ps", "top", "uptime",
-    "git", "make", "npm", "pip", "go", "rustc", "cargo",
-    "python", "python3", "node", "mkdir", "cp", "mv", "rm", "chmod", "touch",
-    "docker", "kubectl", "which", "type", "env", "npx", "pwsh", "powershell",
-})
+_BASH_ALLOWLIST = frozenset(
+    {
+        "ls",
+        "cat",
+        "head",
+        "tail",
+        "echo",
+        "pwd",
+        "whoami",
+        "date",
+        "find",
+        "grep",
+        "rg",
+        "wc",
+        "sort",
+        "uniq",
+        "cut",
+        "tr",
+        "diff",
+        "curl",
+        "wget",
+        "df",
+        "du",
+        "free",
+        "ps",
+        "top",
+        "uptime",
+        "git",
+        "make",
+        "npm",
+        "pip",
+        "go",
+        "rustc",
+        "cargo",
+        "python",
+        "python3",
+        "node",
+        "mkdir",
+        "cp",
+        "mv",
+        "rm",
+        "chmod",
+        "touch",
+        "docker",
+        "kubectl",
+        "which",
+        "type",
+        "env",
+        "npx",
+        "pwsh",
+        "powershell",
+    }
+)
 
 
 async def bash_exec(command: str, timeout: int = 30) -> str:
@@ -201,6 +250,7 @@ async def _httpx_search(query: str, num_results: int) -> list[dict[str, str]] | 
     try:
         import httpx
         from bs4 import BeautifulSoup
+
         url = f"https://html.duckduckgo.com/html/?q={_urlencode(query)}"
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
             resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -226,6 +276,7 @@ async def _httpx_search(query: str, num_results: int) -> list[dict[str, str]] | 
 
 def _urlencode(q: str) -> str:
     import urllib.parse
+
     return urllib.parse.quote(q)
 
 
@@ -233,10 +284,7 @@ async def web_search(query: str, num_results: int = 5) -> str:
     results = await _ddg_search(query, num_results) or await _httpx_search(query, num_results)
     if not results:
         return "(no results)"
-    return "\n\n".join(
-        f"• {r.get('title', '')}\n  {r.get('body', '')[:200]}\n  {r.get('href', '')}"
-        for r in results
-    )
+    return "\n\n".join(f"• {r.get('title', '')}\n  {r.get('body', '')[:200]}\n  {r.get('href', '')}" for r in results)
 
 
 async def web_fetch(url: str) -> str:
@@ -244,6 +292,7 @@ async def web_fetch(url: str) -> str:
         return f"[denied] URL blocked by SSRF guard: {url}"
     try:
         import httpx
+
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
             resp = await client.get(url, headers={"User-Agent": "Raven/1.0"})
             resp.raise_for_status()
@@ -275,6 +324,7 @@ async def task_delegate(description: str, context: str | None = None) -> str:
         from ravencode.core.prompts import get_prompt
         from ravencode.runtime.agent_core import AgentConfig, ReActAgent
         from ravencode.runtime.context import Conversation
+
         parent_memory = _AGENT_MEMORY.get()
         sub_prompt = get_prompt("delegate")
         if context:
@@ -292,8 +342,9 @@ async def task_delegate(description: str, context: str | None = None) -> str:
 # git tools
 # ---------------------------------------------------------------------------
 
+
 async def _git_cmd(*args: str, cwd: str | None = None) -> str:
-    cmd = ["git"] + list(args)
+    cmd = ["git", *list(args)]
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -337,6 +388,7 @@ async def git_add(files: str, path: str | None = None) -> str:
 # image / multimodal
 # ---------------------------------------------------------------------------
 
+
 async def read_image(path: str) -> str:
     try:
         p = _confine(path)
@@ -348,6 +400,7 @@ async def read_image(path: str) -> str:
     if ext not in (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg"):
         return f"[error] unsupported image format: {ext}"
     import base64
+
     data = base64.b64encode(p.read_bytes()[:500_000]).decode("ascii")
     return f"Image ({p.stat().st_size} bytes, {ext}): data:image/{ext[1:]};base64,{data}"
 
@@ -355,6 +408,7 @@ async def read_image(path: str) -> str:
 # ---------------------------------------------------------------------------
 # undo / redo tools
 # ---------------------------------------------------------------------------
+
 
 async def undo_action() -> str:
     result = get_undo_manager().undo()
@@ -370,18 +424,22 @@ async def redo_action() -> str:
 # checkpoint tools
 # ---------------------------------------------------------------------------
 
+
 async def checkpoint_save_tool(description: str = "") -> str:
     from ravencode.runtime.checkpoints import get_checkpoint_manager
+
     return await get_checkpoint_manager().save(description)
 
 
 async def checkpoint_restore_tool(cid: str) -> str:
     from ravencode.runtime.checkpoints import get_checkpoint_manager
+
     return await get_checkpoint_manager().restore(cid)
 
 
 async def checkpoint_list_tool() -> str:
     from ravencode.runtime.checkpoints import get_checkpoint_manager
+
     cps = get_checkpoint_manager().list()
     if not cps:
         return "(no checkpoints)"
@@ -392,23 +450,28 @@ async def checkpoint_list_tool() -> str:
 # LSP tools
 # ---------------------------------------------------------------------------
 
+
 async def lsp_completion_tool(path: str, line: int, col: int) -> str:
     from ravencode.runtime.lsp import lsp_completion
+
     return await lsp_completion(path, line, col)
 
 
 async def lsp_definition_tool(path: str, line: int, col: int) -> str:
     from ravencode.runtime.lsp import lsp_definition
+
     return await lsp_definition(path, line, col)
 
 
 async def lsp_references_tool(path: str, line: int, col: int) -> str:
     from ravencode.runtime.lsp import lsp_references
+
     return await lsp_references(path, line, col)
 
 
 async def lsp_hover_tool(path: str, line: int, col: int) -> str:
     from ravencode.runtime.lsp import lsp_hover
+
     return await lsp_hover(path, line, col)
 
 
@@ -416,8 +479,10 @@ async def lsp_hover_tool(path: str, line: int, col: int) -> str:
 # sandbox tools
 # ---------------------------------------------------------------------------
 
+
 async def sandbox_exec_tool(code: str, language: str = "python") -> str:
     from ravencode.runtime.sandbox import get_sandbox
+
     return await get_sandbox().run_code(code, language)
 
 
@@ -425,16 +490,30 @@ async def sandbox_exec_tool(code: str, language: str = "python") -> str:
 # smart diff tools
 # ---------------------------------------------------------------------------
 
-async def smart_edit_tool(path: str, old_text: str | None = None, new_text: str | None = None,
-                          insert_after: str | None = None, insert_before: str | None = None,
-                          append: bool = False) -> str:
+
+async def smart_edit_tool(
+    path: str,
+    old_text: str | None = None,
+    new_text: str | None = None,
+    insert_after: str | None = None,
+    insert_before: str | None = None,
+    append: bool = False,
+) -> str:
     from ravencode.runtime.diff import smart_edit
-    return smart_edit(path, old_text=old_text, new_text=new_text,
-                      insert_after=insert_after, insert_before=insert_before, append=append)
+
+    return smart_edit(
+        path,
+        old_text=old_text,
+        new_text=new_text,
+        insert_after=insert_after,
+        insert_before=insert_before,
+        append=append,
+    )
 
 
 async def patch_file_tool(path: str, diff_text: str) -> str:
     from ravencode.runtime.diff import apply_patch
+
     return apply_patch(path, diff_text)
 
 
@@ -442,13 +521,16 @@ async def patch_file_tool(path: str, diff_text: str) -> str:
 # auto-format tools
 # ---------------------------------------------------------------------------
 
+
 async def format_file_tool(path: str) -> str:
     from ravencode.runtime.formatters import format_file
+
     return await format_file(path)
 
 
 async def format_files_tool(paths: list[str]) -> str:
     from ravencode.runtime.formatters import format_files
+
     return await format_files(paths)
 
 
@@ -456,43 +538,52 @@ async def format_files_tool(paths: list[str]) -> str:
 # auto-git tools
 # ---------------------------------------------------------------------------
 
+
 async def auto_commit_tool(message: str | None = None, path: str | None = None) -> str:
     from ravencode.runtime.autogit import auto_commit
+
     return await auto_commit(path=path, message=message)
 
 
 async def load_skill(name: str) -> str:
     from ravencode.runtime.skills import load_skill as _load_skill
+
     return _load_skill(name)
 
 
 async def download_skill(name: str) -> str:
     from ravencode.runtime.skills import download_skill as _download_skill
+
     return await _download_skill(name)
 
 
 async def set_skill_registry(url: str) -> str:
     from ravencode.runtime.skills import set_skill_registry as _set_registry
+
     return _set_registry(url)
 
 
 async def todo_write(tasks: list[dict[str, str]]) -> str:
     from ravencode.runtime.todo import todo_write as _todo_write
+
     return _todo_write(tasks)
 
 
 async def todo_list(status_filter: str | None = None) -> str:
     from ravencode.runtime.todo import todo_list as _todo_list
+
     return _todo_list(status_filter)
 
 
 async def todo_update(tid: str, status: str) -> str:
     from ravencode.runtime.todo import todo_update as _todo_update
+
     return _todo_update(tid, status)
 
 
 async def todo_clear() -> str:
     from ravencode.runtime.todo import todo_clear as _todo_clear
+
     _todo_clear()
     return "(todo list cleared)"
 
@@ -504,6 +595,7 @@ async def question_tool(
     multiple: bool = False,
 ) -> str:
     from ravencode.runtime.question import Question, ask_question
+
     q = Question(
         question=question,
         header=header,
@@ -515,63 +607,75 @@ async def question_tool(
 
 async def anchored_summary_read() -> str:
     from ravencode.runtime.anchored import anchored_summary
+
     val = anchored_summary()
     return val if val else "(no anchored summary)"
 
 
 async def anchored_summary_write(text: str) -> str:
     from ravencode.runtime.anchored import update_anchored_summary
+
     return update_anchored_summary(text)
 
 
 async def anchored_summary_append(text: str) -> str:
     from ravencode.runtime.anchored import append_anchored_summary
+
     return append_anchored_summary(text)
 
 
 async def anchored_summary_clear() -> str:
     from ravencode.runtime.anchored import clear_anchored_summary
+
     return clear_anchored_summary()
 
 
 async def browser_navigate(url: str) -> str:
     from ravencode.runtime.browser import browser_navigate as _navigate
+
     return await _navigate(url)
 
 
 async def browser_click(selector: str) -> str:
     from ravencode.runtime.browser import browser_click as _click
+
     return await _click(selector)
 
 
 async def browser_type(selector: str, text: str) -> str:
     from ravencode.runtime.browser import browser_type as _type
+
     return await _type(selector, text)
 
 
 async def browser_screenshot(path: str = "screenshot.png") -> str:
     from ravencode.runtime.browser import browser_screenshot as _screenshot
+
     return await _screenshot(path)
 
 
 async def browser_get_html(selector: str = "body") -> str:
     from ravencode.runtime.browser import browser_get_html as _get_html
+
     return await _get_html(selector)
 
 
 async def browser_evaluate(script: str) -> str:
     from ravencode.runtime.browser import browser_evaluate as _evaluate
+
     return await _evaluate(script)
 
 
 async def browser_close() -> str:
     from ravencode.runtime.browser import browser_close as _close
+
     return await _close()
 
 
 # ---------------------------------------------------------------------------
 # RavenFlow tools
 # ---------------------------------------------------------------------------
+
 
 async def _canvas_render_handler(components: list[dict[str, Any]]) -> str:
     rendered = []
@@ -584,8 +688,13 @@ async def _canvas_render_handler(components: list[dict[str, Any]]) -> str:
         elif ctype == "table":
             headers = comp.get("headers", [])
             rows = comp.get("rows", [])
-            rendered.append(" | ".join(headers) + "\n" + " | ".join(["---"] * len(headers)) + "\n" +
-                            "\n".join(" | ".join(str(c) for c in row) for row in rows))
+            rendered.append(
+                " | ".join(headers)
+                + "\n"
+                + " | ".join(["---"] * len(headers))
+                + "\n"
+                + "\n".join(" | ".join(str(c) for c in row) for row in rows)
+            )
         elif ctype == "mermaid":
             rendered.append(f"```mermaid\n{content}\n```")
         elif ctype == "alert":
@@ -602,6 +711,7 @@ async def _canvas_render_handler(components: list[dict[str, Any]]) -> str:
 async def _nodes_list_handler() -> str:
     try:
         from raven.tools.nodes import nodes_list
+
         return await nodes_list()
     except ImportError:
         return "(nodes module not available)"
@@ -610,6 +720,7 @@ async def _nodes_list_handler() -> str:
 async def _cron_schedule_handler(cron: str, task: str, task_id: str | None = None) -> str:
     try:
         from raven.plugins.cron.plugin import schedule
+
         return await schedule(cron, task, task_id)
     except ImportError:
         return "[error] cron plugin not available"
@@ -618,6 +729,7 @@ async def _cron_schedule_handler(cron: str, task: str, task_id: str | None = Non
 async def _cron_list_handler() -> str:
     try:
         from raven.plugins.cron.plugin import list_schedules
+
         return await list_schedules()
     except ImportError:
         return "(cron plugin not available)"
@@ -626,6 +738,7 @@ async def _cron_list_handler() -> str:
 async def _cron_cancel_handler(task_id: str) -> str:
     try:
         from raven.plugins.cron.plugin import cancel_schedule
+
         return await cancel_schedule(task_id)
     except ImportError:
         return "[error] cron plugin not available"
@@ -664,20 +777,26 @@ async def _talk_handler(text: str, voice: str = "", provider: str = "") -> str:
 
 MODULE_TOOLS: dict[str, dict[str, Any]] = {
     "read": {
-        "name": "read", "dangerous": False,
+        "name": "read",
+        "dangerous": False,
         "description": "Read the contents of a file. Returns up to 50,000 characters.",
         "parameters": {
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "Absolute path to the file"},
-                "max_chars": {"type": "integer", "description": "Max chars to return (default 50000)", "default": 50000},
+                "max_chars": {
+                    "type": "integer",
+                    "description": "Max chars to return (default 50000)",
+                    "default": 50000,
+                },
             },
             "required": ["path"],
         },
         "handler": read_file,
     },
     "write": {
-        "name": "write", "dangerous": True,
+        "name": "write",
+        "dangerous": True,
         "description": "Write content to a file (overwrites existing). Confined to workspace.",
         "parameters": {
             "type": "object",
@@ -690,7 +809,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": write_file,
     },
     "edit": {
-        "name": "edit", "dangerous": True,
+        "name": "edit",
+        "dangerous": True,
         "description": "Edit a file by finding and replacing text. Confined to workspace.",
         "parameters": {
             "type": "object",
@@ -705,7 +825,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": edit_file,
     },
     "glob": {
-        "name": "glob", "dangerous": False,
+        "name": "glob",
+        "dangerous": False,
         "description": "Search for files matching a glob pattern. Confined to workspace.",
         "parameters": {
             "type": "object",
@@ -718,7 +839,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": glob_files,
     },
     "grep": {
-        "name": "grep", "dangerous": False,
+        "name": "grep",
+        "dangerous": False,
         "description": "Search file contents for a string pattern. Confined to workspace.",
         "parameters": {
             "type": "object",
@@ -732,7 +854,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": grep_files,
     },
     "bash": {
-        "name": "bash", "dangerous": True,
+        "name": "bash",
+        "dangerous": True,
         "description": "Execute a shell command from the allowlist. Supports quoted arguments.",
         "parameters": {
             "type": "object",
@@ -745,7 +868,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": bash_exec,
     },
     "web_search": {
-        "name": "web_search", "dangerous": False,
+        "name": "web_search",
+        "dangerous": False,
         "description": "Search the web for current information (DuckDuckGo).",
         "parameters": {
             "type": "object",
@@ -758,7 +882,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": web_search,
     },
     "web_fetch": {
-        "name": "web_fetch", "dangerous": False,
+        "name": "web_fetch",
+        "dangerous": False,
         "description": "Fetch URL contents. SSRF-guarded against private IP ranges.",
         "parameters": {
             "type": "object",
@@ -770,7 +895,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": web_fetch,
     },
     "think": {
-        "name": "think", "dangerous": False,
+        "name": "think",
+        "dangerous": False,
         "description": "Use this tool to reason about the problem before taking action. No external effect.",
         "parameters": {
             "type": "object",
@@ -782,7 +908,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": think,
     },
     "task": {
-        "name": "task", "dangerous": False,
+        "name": "task",
+        "dangerous": False,
         "description": "Delegate a sub-task to a new agent (max depth 5). Use for parallel work.",
         "parameters": {
             "type": "object",
@@ -795,7 +922,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": task_delegate,
     },
     "git_status": {
-        "name": "git_status", "dangerous": False,
+        "name": "git_status",
+        "dangerous": False,
         "description": "Show git working tree status.",
         "parameters": {
             "type": "object",
@@ -807,7 +935,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": git_status,
     },
     "git_diff": {
-        "name": "git_diff", "dangerous": False,
+        "name": "git_diff",
+        "dangerous": False,
         "description": "Show git diff of unstaged changes, or staged changes with staged=true.",
         "parameters": {
             "type": "object",
@@ -820,7 +949,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": git_diff,
     },
     "git_log": {
-        "name": "git_log", "dangerous": False,
+        "name": "git_log",
+        "dangerous": False,
         "description": "Show recent git commit history (one-line format).",
         "parameters": {
             "type": "object",
@@ -833,7 +963,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": git_log,
     },
     "git_commit": {
-        "name": "git_commit", "dangerous": True,
+        "name": "git_commit",
+        "dangerous": True,
         "description": "Create a git commit with the given message.",
         "parameters": {
             "type": "object",
@@ -846,7 +977,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": git_commit,
     },
     "git_add": {
-        "name": "git_add", "dangerous": True,
+        "name": "git_add",
+        "dangerous": True,
         "description": "Stage files for commit.",
         "parameters": {
             "type": "object",
@@ -859,7 +991,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": git_add,
     },
     "read_image": {
-        "name": "read_image", "dangerous": False,
+        "name": "read_image",
+        "dangerous": False,
         "description": "Read an image file (png, jpg, gif, webp, svg) confined to workspace.",
         "parameters": {
             "type": "object",
@@ -871,7 +1004,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": read_image,
     },
     "undo": {
-        "name": "undo", "dangerous": False,
+        "name": "undo",
+        "dangerous": False,
         "description": "Undo the last file write or edit operation.",
         "parameters": {
             "type": "object",
@@ -881,7 +1015,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": undo_action,
     },
     "redo": {
-        "name": "redo", "dangerous": False,
+        "name": "redo",
+        "dangerous": False,
         "description": "Redo the last undone file operation.",
         "parameters": {
             "type": "object",
@@ -891,7 +1026,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": redo_action,
     },
     "checkpoint_save": {
-        "name": "checkpoint_save", "dangerous": False,
+        "name": "checkpoint_save",
+        "dangerous": False,
         "description": "Save a snapshot of the workspace as a restore point.",
         "parameters": {
             "type": "object",
@@ -903,7 +1039,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": checkpoint_save_tool,
     },
     "checkpoint_restore": {
-        "name": "checkpoint_restore", "dangerous": True,
+        "name": "checkpoint_restore",
+        "dangerous": True,
         "description": "Restore workspace files from a saved checkpoint.",
         "parameters": {
             "type": "object",
@@ -915,7 +1052,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": checkpoint_restore_tool,
     },
     "checkpoint_list": {
-        "name": "checkpoint_list", "dangerous": False,
+        "name": "checkpoint_list",
+        "dangerous": False,
         "description": "List all saved checkpoints.",
         "parameters": {
             "type": "object",
@@ -925,7 +1063,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": checkpoint_list_tool,
     },
     "lsp_completion": {
-        "name": "lsp_completion", "dangerous": False,
+        "name": "lsp_completion",
+        "dangerous": False,
         "description": "Get code completion suggestions via LSP at a given file position.",
         "parameters": {
             "type": "object",
@@ -939,7 +1078,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": lsp_completion_tool,
     },
     "lsp_definition": {
-        "name": "lsp_definition", "dangerous": False,
+        "name": "lsp_definition",
+        "dangerous": False,
         "description": "Find definition location of a symbol via LSP.",
         "parameters": {
             "type": "object",
@@ -953,7 +1093,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": lsp_definition_tool,
     },
     "lsp_references": {
-        "name": "lsp_references", "dangerous": False,
+        "name": "lsp_references",
+        "dangerous": False,
         "description": "Find all references to a symbol via LSP.",
         "parameters": {
             "type": "object",
@@ -967,7 +1108,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": lsp_references_tool,
     },
     "lsp_hover": {
-        "name": "lsp_hover", "dangerous": False,
+        "name": "lsp_hover",
+        "dangerous": False,
         "description": "Get type info and documentation for a symbol via LSP.",
         "parameters": {
             "type": "object",
@@ -981,21 +1123,30 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": lsp_hover_tool,
     },
     "sandbox_exec": {
-        "name": "sandbox_exec", "dangerous": True,
+        "name": "sandbox_exec",
+        "dangerous": True,
         "description": "Execute code in a Docker sandbox (isolated environment). Language: python|javascript|bash.",
         "parameters": {
             "type": "object",
             "properties": {
                 "code": {"type": "string", "description": "Code to execute"},
-                "language": {"type": "string", "description": "Language (python, javascript, bash)", "default": "python"},
+                "language": {
+                    "type": "string",
+                    "description": "Language (python, javascript, bash)",
+                    "default": "python",
+                },
             },
             "required": ["code"],
         },
         "handler": sandbox_exec_tool,
     },
     "smart_edit": {
-        "name": "smart_edit", "dangerous": True,
-        "description": "Edit a file using smart modes: old_text+new_text (replace), insert_after/new_text+insert_before, or append.",
+        "name": "smart_edit",
+        "dangerous": True,
+        "description": (
+            "Edit a file using smart modes: old_text+new_text (replace), "
+            "insert_after/new_text+insert_before, or append."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
@@ -1003,7 +1154,11 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
                 "old_text": {"type": "string", "description": "Text to replace (exact match)", "default": None},
                 "new_text": {"type": "string", "description": "Replacement text", "default": None},
                 "insert_after": {"type": "string", "description": "Insert new_text after this string", "default": None},
-                "insert_before": {"type": "string", "description": "Insert new_text before this string", "default": None},
+                "insert_before": {
+                    "type": "string",
+                    "description": "Insert new_text before this string",
+                    "default": None,
+                },
                 "append": {"type": "boolean", "description": "Append new_text to file", "default": False},
             },
             "required": ["path"],
@@ -1011,7 +1166,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": smart_edit_tool,
     },
     "patch": {
-        "name": "patch", "dangerous": True,
+        "name": "patch",
+        "dangerous": True,
         "description": "Apply a unified diff/patch to a file.",
         "parameters": {
             "type": "object",
@@ -1024,7 +1180,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": patch_file_tool,
     },
     "format_file": {
-        "name": "format_file", "dangerous": False,
+        "name": "format_file",
+        "dangerous": False,
         "description": "Auto-format a file using the appropriate formatter (ruff for .py, prettier for .ts/.js, etc.).",
         "parameters": {
             "type": "object",
@@ -1036,7 +1193,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": format_file_tool,
     },
     "format_files": {
-        "name": "format_files", "dangerous": False,
+        "name": "format_files",
+        "dangerous": False,
         "description": "Auto-format multiple files.",
         "parameters": {
             "type": "object",
@@ -1048,7 +1206,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": format_files_tool,
     },
     "auto_commit": {
-        "name": "auto_commit", "dangerous": True,
+        "name": "auto_commit",
+        "dangerous": True,
         "description": "Automatically stage all changes and create a smart commit message.",
         "parameters": {
             "type": "object",
@@ -1061,8 +1220,12 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": auto_commit_tool,
     },
     "skill": {
-        "name": "skill", "dangerous": False,
-        "description": "Load a SKILL.md file for reusable instructions. Skills are discovered from .opencode/skills/, ~/.config/opencode/skills/, .claude/skills/, or .agents/skills/.",
+        "name": "skill",
+        "dangerous": False,
+        "description": (
+            "Load a SKILL.md file for reusable instructions. Skills are discovered from "
+            ".opencode/skills/, ~/.config/opencode/skills/, .claude/skills/, or .agents/skills/."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
@@ -1073,7 +1236,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": load_skill,
     },
     "download_skill": {
-        "name": "download_skill", "dangerous": False,
+        "name": "download_skill",
+        "dangerous": False,
         "description": "Download a skill from the remote skill registry (ClawHub-like). Requires set_skill_registry first.",
         "parameters": {
             "type": "object",
@@ -1085,7 +1249,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": download_skill,
     },
     "set_skill_registry": {
-        "name": "set_skill_registry", "dangerous": False,
+        "name": "set_skill_registry",
+        "dangerous": False,
         "description": "Set the URL for the remote skill registry to download skills from.",
         "parameters": {
             "type": "object",
@@ -1097,20 +1262,28 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": set_skill_registry,
     },
     "todowrite": {
-        "name": "todowrite", "dangerous": False,
+        "name": "todowrite",
+        "dangerous": False,
         "description": "Create or update tasks in a structured todo list. Each task needs content and optional id/status.",
         "parameters": {
             "type": "object",
             "properties": {
                 "tasks": {
                     "type": "array",
-                    "description": "List of task dicts with content, optional id (defaults to incremental), and optional status (pending/in_progress/completed/cancelled)",
+                    "description": (
+                        "List of task dicts with content, optional id (defaults to incremental), "
+                        "and optional status (pending/in_progress/completed/cancelled)"
+                    ),
                     "items": {
                         "type": "object",
                         "properties": {
                             "content": {"type": "string", "description": "Task description"},
                             "id": {"type": "string", "description": "Optional task ID"},
-                            "status": {"type": "string", "description": "Status: pending, in_progress, completed, cancelled", "default": "pending"},
+                            "status": {
+                                "type": "string",
+                                "description": "Status: pending, in_progress, completed, cancelled",
+                                "default": "pending",
+                            },
                         },
                         "required": ["content"],
                     },
@@ -1121,19 +1294,25 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": todo_write,
     },
     "todolist": {
-        "name": "todolist", "dangerous": False,
+        "name": "todolist",
+        "dangerous": False,
         "description": "Show the todo list, optionally filtered by status.",
         "parameters": {
             "type": "object",
             "properties": {
-                "status_filter": {"type": "string", "description": "Filter by status: pending, in_progress, completed, cancelled", "default": None},
+                "status_filter": {
+                    "type": "string",
+                    "description": "Filter by status: pending, in_progress, completed, cancelled",
+                    "default": None,
+                },
             },
             "required": [],
         },
         "handler": todo_list,
     },
     "todoupdate": {
-        "name": "todoupdate", "dangerous": False,
+        "name": "todoupdate",
+        "dangerous": False,
         "description": "Update the status of a todo item.",
         "parameters": {
             "type": "object",
@@ -1146,7 +1325,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": todo_update,
     },
     "todoclear": {
-        "name": "todoclear", "dangerous": False,
+        "name": "todoclear",
+        "dangerous": False,
         "description": "Clear all todo items.",
         "parameters": {
             "type": "object",
@@ -1156,8 +1336,12 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": todo_clear,
     },
     "question": {
-        "name": "question", "dangerous": False,
-        "description": "Ask the user a question with optional multiple-choice options. Use when you need clarification, preferences, or decisions.",
+        "name": "question",
+        "dangerous": False,
+        "description": (
+            "Ask the user a question with optional multiple-choice options. "
+            "Use when you need clarification, preferences, or decisions."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
@@ -1183,13 +1367,18 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": question_tool,
     },
     "anchored_summary_read": {
-        "name": "anchored_summary_read", "dangerous": False,
-        "description": "Read the current anchored summary. The summary persists across conversations and tracks progress, decisions, and context.",
+        "name": "anchored_summary_read",
+        "dangerous": False,
+        "description": (
+            "Read the current anchored summary. The summary persists across "
+            "conversations and tracks progress, decisions, and context."
+        ),
         "parameters": {"type": "object", "properties": {}, "required": []},
         "handler": anchored_summary_read,
     },
     "anchored_summary_write": {
-        "name": "anchored_summary_write", "dangerous": False,
+        "name": "anchored_summary_write",
+        "dangerous": False,
         "description": "Replace the entire anchored summary with new text. Use this to set or reset the persistent session note.",
         "parameters": {
             "type": "object",
@@ -1201,7 +1390,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": anchored_summary_write,
     },
     "anchored_summary_append": {
-        "name": "anchored_summary_append", "dangerous": False,
+        "name": "anchored_summary_append",
+        "dangerous": False,
         "description": "Append text to the existing anchored summary. Use this to log progress, decisions, or completed items.",
         "parameters": {
             "type": "object",
@@ -1213,13 +1403,15 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": anchored_summary_append,
     },
     "anchored_summary_clear": {
-        "name": "anchored_summary_clear", "dangerous": False,
+        "name": "anchored_summary_clear",
+        "dangerous": False,
         "description": "Clear the anchored summary.",
         "parameters": {"type": "object", "properties": {}, "required": []},
         "handler": anchored_summary_clear,
     },
     "browser_navigate": {
-        "name": "browser_navigate", "dangerous": False,
+        "name": "browser_navigate",
+        "dangerous": False,
         "description": "Navigate a browser to a URL using Playwright.",
         "parameters": {
             "type": "object",
@@ -1231,7 +1423,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": browser_navigate,
     },
     "browser_click": {
-        "name": "browser_click", "dangerous": False,
+        "name": "browser_click",
+        "dangerous": False,
         "description": "Click an element on the page using a CSS selector.",
         "parameters": {
             "type": "object",
@@ -1243,7 +1436,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": browser_click,
     },
     "browser_type": {
-        "name": "browser_type", "dangerous": False,
+        "name": "browser_type",
+        "dangerous": False,
         "description": "Type text into an element on the page.",
         "parameters": {
             "type": "object",
@@ -1256,7 +1450,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": browser_type,
     },
     "browser_screenshot": {
-        "name": "browser_screenshot", "dangerous": False,
+        "name": "browser_screenshot",
+        "dangerous": False,
         "description": "Take a screenshot of the current page.",
         "parameters": {
             "type": "object",
@@ -1268,7 +1463,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": browser_screenshot,
     },
     "browser_get_html": {
-        "name": "browser_get_html", "dangerous": False,
+        "name": "browser_get_html",
+        "dangerous": False,
         "description": "Get the inner HTML of an element (default: body).",
         "parameters": {
             "type": "object",
@@ -1280,7 +1476,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": browser_get_html,
     },
     "browser_evaluate": {
-        "name": "browser_evaluate", "dangerous": True,
+        "name": "browser_evaluate",
+        "dangerous": True,
         "description": "Run JavaScript in the browser page and return the result.",
         "parameters": {
             "type": "object",
@@ -1292,13 +1489,15 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": browser_evaluate,
     },
     "browser_close": {
-        "name": "browser_close", "dangerous": False,
+        "name": "browser_close",
+        "dangerous": False,
         "description": "Close the browser and release resources.",
         "parameters": {"type": "object", "properties": {}, "required": []},
         "handler": browser_close,
     },
     "canvas_render": {
-        "name": "canvas_render", "dangerous": False,
+        "name": "canvas_render",
+        "dangerous": False,
         "description": "Render visual components (text, code, table, mermaid, link, image, list, alert) into formatted output",
         "parameters": {
             "type": "object",
@@ -1314,13 +1513,15 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": _canvas_render_handler,
     },
     "nodes_list": {
-        "name": "nodes_list", "dangerous": False,
+        "name": "nodes_list",
+        "dangerous": False,
         "description": "List all registered execution nodes for distributed task execution",
         "parameters": {"type": "object", "properties": {}, "required": []},
         "handler": _nodes_list_handler,
     },
     "cron_schedule": {
-        "name": "cron_schedule", "dangerous": True,
+        "name": "cron_schedule",
+        "dangerous": True,
         "description": "Schedule a recurring task using a cron expression",
         "parameters": {
             "type": "object",
@@ -1334,13 +1535,15 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": _cron_schedule_handler,
     },
     "cron_list": {
-        "name": "cron_list", "dangerous": False,
+        "name": "cron_list",
+        "dangerous": False,
         "description": "List all active scheduled tasks",
         "parameters": {"type": "object", "properties": {}, "required": []},
         "handler": _cron_list_handler,
     },
     "cron_cancel": {
-        "name": "cron_cancel", "dangerous": True,
+        "name": "cron_cancel",
+        "dangerous": True,
         "description": "Cancel a scheduled task by its ID",
         "parameters": {
             "type": "object",
@@ -1352,8 +1555,12 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": _cron_cancel_handler,
     },
     "sandbox_policy": {
-        "name": "sandbox_policy", "dangerous": False,
-        "description": "Show or change the current sandbox security policy. Available: main, non-main, code-exec, web-browsing, read-only",
+        "name": "sandbox_policy",
+        "dangerous": False,
+        "description": (
+            "Show or change the current sandbox security policy. Available: main, "
+            "non-main, code-exec, web-browsing, read-only"
+        ),
         "parameters": {
             "type": "object",
             "properties": {
@@ -1364,7 +1571,8 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         "handler": _sandbox_policy_handler,
     },
     "talk": {
-        "name": "talk", "dangerous": False,
+        "name": "talk",
+        "dangerous": False,
         "description": "Read text aloud using text-to-speech. Supports system, gtts, edge, elevenlabs providers.",
         "parameters": {
             "type": "object",
@@ -1390,6 +1598,7 @@ def _ensure_plugin_tools() -> None:
     if not _plugin_tools_loaded:
         try:
             from ravencode.runtime.plugins import get_plugin_registry
+
             reg = get_plugin_registry()
             for name, tool in reg.all_tools().items():
                 if name not in MODULE_TOOLS:

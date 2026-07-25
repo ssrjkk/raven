@@ -13,13 +13,13 @@ from raven.core.coder.session import CodingSessionManager
 
 __all__ = [
     "CodeFile",
+    "CodeIndexer",
+    "CodeReviewer",
     "CodeSymbol",
-    "SymbolKind",
     "CodingSession",
-    "SessionStatus",
+    "CodingSessionManager",
     "ReviewComment",
     "ReviewSeverity",
-    "CodeIndexer",
-    "CodingSessionManager",
-    "CodeReviewer",
+    "SessionStatus",
+    "SymbolKind",
 ]

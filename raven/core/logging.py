@@ -117,7 +117,14 @@ def setup_logging(log_file: str | Path | None = None, level: str = "INFO", json_
     if json_format or os.environ.get("RAVEN_JSON_LOG"):
         if log_target:
             log_target.parent.mkdir(parents=True, exist_ok=True)
-            logger.add(str(log_target), level="DEBUG", format=_serialize, rotation="100 MB", retention="30 days", filter=_mask_secret_str)
+            logger.add(
+                str(log_target),
+                level="DEBUG",
+                format=_serialize,
+                rotation="100 MB",
+                retention="30 days",
+                filter=_mask_secret_str,
+            )
             logger.add(
                 str(log_target.with_suffix(".err.log")),
                 level="WARNING",
@@ -128,15 +135,27 @@ def setup_logging(log_file: str | Path | None = None, level: str = "INFO", json_
             )
         console_fmt = "{time:HH:mm:ss} | {level: <8} | {name} - {message}"
     else:
-        console_fmt = "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan> - <level>{message}</level>"
+        console_fmt = (
+            "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | "
+            "<cyan>{name}</cyan> - <level>{message}</level>"
+        )
 
-    logger.add(sys.stderr, level=log_level, format=console_fmt, colorize=not (json_format or os.environ.get("RAVEN_JSON_LOG")), filter=_mask_secret_str)
+    logger.add(
+        sys.stderr,
+        level=log_level,
+        format=console_fmt,
+        colorize=not (json_format or os.environ.get("RAVEN_JSON_LOG")),
+        filter=_mask_secret_str,
+    )
 
     if HAS_STRUCTLOG:
         import logging as _stdlib_logging
+
         _structlog.configure(
             processors=_structlog_processors(json_format or bool(os.environ.get("RAVEN_JSON_LOG"))),
-            wrapper_class=_structlog.make_filtering_bound_logger(getattr(_stdlib_logging, log_level, _stdlib_logging.INFO)),
+            wrapper_class=_structlog.make_filtering_bound_logger(
+                getattr(_stdlib_logging, log_level, _stdlib_logging.INFO)
+            ),
             context_class=dict,
             logger_factory=_structlog.PrintLoggerFactory(),
             cache_logger_on_first_use=False,

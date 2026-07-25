@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { describe, expect, it, vi } from "vitest";
+
 import Layout from "./Layout";
 
 vi.mock("../design/ThemeContext", () => ({
@@ -27,7 +28,7 @@ function renderLayout(route = "/") {
 describe("Layout", () => {
   it("renders sidebar with brand", () => {
     renderLayout();
-    expect(screen.getByText("Raven AI")).toBeInTheDocument();
+    expect(screen.getAllByText("Raven AI").length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders all navigation items", () => {
@@ -45,7 +46,7 @@ describe("Layout", () => {
 
   it("renders theme toggle and sign out", () => {
     renderLayout();
-    expect(screen.getByText("☀️ Light")).toBeInTheDocument();
+    expect(screen.getByText(/Light/)).toBeInTheDocument();
     expect(screen.getByText("Sign Out")).toBeInTheDocument();
   });
 

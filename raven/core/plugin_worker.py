@@ -7,22 +7,71 @@ import json
 import sys
 from typing import Any
 
-_BUILTINS_ALLOWLIST = frozenset({
-    "None", "True", "False",
-    "str", "int", "float", "bool", "bytes", "bytearray",
-    "list", "dict", "tuple", "set", "frozenset",
-    "Exception", "ValueError", "TypeError", "KeyError", "IndexError",
-    "AttributeError", "RuntimeError", "StopIteration", "KeyboardInterrupt", "EOFError",
-    "len", "range", "enumerate", "zip", "map", "filter",
-    "iter", "next", "min", "max", "sum", "any", "all",
-    "sorted", "reversed", "slice",
-    "isinstance", "issubclass", "hasattr",
-    "abs", "pow", "round", "ord", "chr", "hex", "oct", "bin",
-    "repr", "hash", "id", "print",
-    "object", "property",
-    "super", "staticmethod", "classmethod",
-    "type",
-})
+_BUILTINS_ALLOWLIST = frozenset(
+    {
+        "None",
+        "True",
+        "False",
+        "str",
+        "int",
+        "float",
+        "bool",
+        "bytes",
+        "bytearray",
+        "list",
+        "dict",
+        "tuple",
+        "set",
+        "frozenset",
+        "Exception",
+        "ValueError",
+        "TypeError",
+        "KeyError",
+        "IndexError",
+        "AttributeError",
+        "RuntimeError",
+        "StopIteration",
+        "KeyboardInterrupt",
+        "EOFError",
+        "len",
+        "range",
+        "enumerate",
+        "zip",
+        "map",
+        "filter",
+        "iter",
+        "next",
+        "min",
+        "max",
+        "sum",
+        "any",
+        "all",
+        "sorted",
+        "reversed",
+        "slice",
+        "isinstance",
+        "issubclass",
+        "hasattr",
+        "abs",
+        "pow",
+        "round",
+        "ord",
+        "chr",
+        "hex",
+        "oct",
+        "bin",
+        "repr",
+        "hash",
+        "id",
+        "print",
+        "object",
+        "property",
+        "super",
+        "staticmethod",
+        "classmethod",
+        "type",
+    }
+)
 
 for _name in list(_builtins_module.__dict__):
     if _name not in _BUILTINS_ALLOWLIST:
@@ -30,6 +79,7 @@ for _name in list(_builtins_module.__dict__):
 
 
 _cap_futures: dict[str, asyncio.Future[Any]] = {}
+_bg_tasks: set[asyncio.Task[None]] = set()
 
 
 class PluginContext:
@@ -41,19 +91,26 @@ class PluginContext:
         cid = f"cap_{id(fut)}"
         _cap_futures[cid] = fut
         try:
-            sys.stdout.write(json.dumps({
-                "type": "capability",
-                "id": cid,
-                "capability": capability,
-                "plugin": self._plugin_name,
-                "args": args,
-            }) + "\n")
+            sys.stdout.write(
+                json.dumps(
+                    {
+                        "type": "capability",
+                        "id": cid,
+                        "capability": capability,
+                        "plugin": self._plugin_name,
+                        "args": args,
+                    }
+                )
+                + "\n"
+            )
             sys.stdout.flush()
             return await asyncio.wait_for(fut, timeout=60.0)
         finally:
             _cap_futures.pop(cid, None)
 
-    async def safe_http(self, method: str, url: str, headers: dict[str, str] | None = None, body: str | None = None) -> str:
+    async def safe_http(
+        self, method: str, url: str, headers: dict[str, str] | None = None, body: str | None = None
+    ) -> str:
         result = await self._request_capability("safe_http", method=method, url=url, headers=headers, body=body)
         return str(result) if result is not None else ""
 
@@ -105,7 +162,9 @@ async def _background_stdin_reader() -> None:
         if cmd.get("type") == "capability_response":
             _deliver_capability_response(raw)
         else:
-            asyncio.create_task(_handle_command(cmd))
+            bg_task = asyncio.create_task(_handle_command(cmd))
+            _bg_tasks.add(bg_task)
+            bg_task.add_done_callback(_bg_tasks.discard)
 
 
 async def _handle_command(cmd: dict[str, Any]) -> None:
@@ -146,7 +205,10 @@ async def _do_register(cmd: dict[str, Any]) -> dict[str, Any]:
     try:
         plugin = await asyncio.wait_for(
             asyncio.get_event_loop().run_in_executor(
-                None, _call_register, mod, PluginContext(path.parent.name),
+                None,
+                _call_register,
+                mod,
+                PluginContext(path.parent.name),
             ),
             timeout=with_timeout,
         )
@@ -156,12 +218,14 @@ async def _do_register(cmd: dict[str, Any]) -> dict[str, Any]:
         return {"type": "error", "error": str(e)}
     tools_meta = []
     for tname, tdef in (plugin.tools or {}).items():
-        tools_meta.append({
-            "name": tname,
-            "dangerous": tdef.get("dangerous", False),
-            "description": tdef.get("description", ""),
-            "parameters": tdef.get("parameters", {}),
-        })
+        tools_meta.append(
+            {
+                "name": tname,
+                "dangerous": tdef.get("dangerous", False),
+                "description": tdef.get("description", ""),
+                "parameters": tdef.get("parameters", {}),
+            }
+        )
     return {"type": "register_ok", "tools": tools_meta}
 
 
