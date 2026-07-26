@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 import json
@@ -13,12 +12,12 @@ from ravencode.runtime.agent_core import AgentEvent, EventEmitter
 class TestAiosAgentWebSocket:
     @pytest.mark.asyncio
     async def test_router_includes_ws_agent(self):
-        routes = [r.path for r in router.routes]
+        routes = [r.path for r in router.routes]  # type: ignore[attr-defined]
         assert "/aios/ws/agent" in routes
 
     @pytest.mark.asyncio
     async def test_router_includes_existing_routes(self):
-        routes = [r.path for r in router.routes]
+        routes = [r.path for r in router.routes]  # type: ignore[attr-defined]
         assert "/aios/ws" in routes
         assert "/aios/health" in routes
         assert "/aios/ai" in routes

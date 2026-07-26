@@ -454,6 +454,11 @@ class Gateway:
         def _done(t: asyncio.Task[None]) -> None:
             self._bg_tasks.discard(t)
             self._bg_semaphore.release()
+            if t.cancelled():
+                return
+            exc = t.exception()
+            if exc is not None:
+                logger.error("Background task failed: {}", exc)
 
         task.add_done_callback(_done)
         return task
@@ -490,7 +495,15 @@ class Gateway:
 
         _t = asyncio.create_task(self._extract_and_store(event.text, event.channel, event.user_id))
         self._bg_tasks.add(_t)
-        _t.add_done_callback(self._bg_tasks.discard)
+
+        def _extract_done(t: asyncio.Task[None]) -> None:
+            self._bg_tasks.discard(t)
+            if not t.cancelled():
+                exc = t.exception()
+                if exc is not None:
+                    logger.debug("Extract-and-store failed: {}", exc)
+
+        _t.add_done_callback(_extract_done)
 
     async def _handle_with_orchestrator(self, event: IncomingMessage, session_id: str, profile: str) -> None:
         from raven.core.agents.orchestrator import StatusEmitter

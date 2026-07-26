@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from pathlib import Path
@@ -105,8 +106,8 @@ class VectorStore:
             "timestamp": time.time(),
             **(metadata or {}),
         }
-        self._save()
-        self._rebuild_index()
+        await asyncio.to_thread(self._save)
+        await asyncio.to_thread(self._rebuild_index)
 
     async def upsert_batch(self, items: list[tuple[str, str, dict[str, Any] | None]]):
         texts = [item[1] for item in items]
@@ -118,8 +119,8 @@ class VectorStore:
                 "timestamp": time.time(),
                 **(meta or {}),
             }
-        self._save()
-        self._rebuild_index()
+        await asyncio.to_thread(self._save)
+        await asyncio.to_thread(self._rebuild_index)
 
     def _rebuild_index(self) -> None:
         if not HAS_HNSW or len(self._vectors) < 10:
@@ -143,11 +144,11 @@ class VectorStore:
             logger.warning("HNSW rebuild failed: {}", e)
             self._index = None
 
-    def delete(self, doc_id: str):
+    async def delete(self, doc_id: str):
         self._vectors.pop(doc_id, None)
         self._metadata.pop(doc_id, None)
-        self._save()
-        self._rebuild_index()
+        await asyncio.to_thread(self._save)
+        await asyncio.to_thread(self._rebuild_index)
 
     async def search(self, query: str, k: int = 5, filter_meta: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         if not self._vectors:
@@ -204,7 +205,7 @@ class VectorStore:
     def get_metadata(self, doc_id: str) -> dict[str, Any] | None:
         return self._metadata.get(doc_id)
 
-    def clear(self):
+    async def clear(self):
         self._vectors.clear()
         self._metadata.clear()
-        self._save()
+        await asyncio.to_thread(self._save)

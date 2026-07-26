@@ -88,5 +88,5 @@ class Retriever:
     def count(self) -> int:
         return self.store.count()
 
-    def clear(self):
-        self.store.clear()
+    async def clear(self):
+        await self.store.clear()

@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -19,12 +18,12 @@ from raven.tools.ci import (
 
 class TestCITools:
     @pytest.fixture
-    def mock_github_token(self) -> None:
+    def mock_github_token(self):
         with patch("raven.tools.ci._GITHUB_TOKEN", "fake-token"):
             yield
 
     @pytest.fixture
-    def mock_gitlab_token(self) -> None:
+    def mock_gitlab_token(self):
         with patch("raven.tools.ci._GITLAB_TOKEN", "fake-token"):
             yield
 

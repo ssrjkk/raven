@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import secrets as _secrets
 
 _PBKDF2_ITERATIONS = 600_000
 _LEGACY_ITERATIONS = 100_000
@@ -19,10 +20,10 @@ def verify_password(password: str, hashed: str) -> bool:
         salt = bytes.fromhex(salt_hex)
         expected = bytes.fromhex(key_hex)
         actual = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, _PBKDF2_ITERATIONS)
-        if actual == expected:
+        if _secrets.compare_digest(actual, expected):
             return True
         actual = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, _LEGACY_ITERATIONS)
-        return actual == expected
+        return _secrets.compare_digest(actual, expected)
     except (ValueError, AttributeError):
         return False
 
@@ -33,10 +34,10 @@ def verify_and_rehash(password: str, hashed: str) -> tuple[str | None, bool]:
         salt = bytes.fromhex(salt_hex)
         expected = bytes.fromhex(key_hex)
         actual = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, _PBKDF2_ITERATIONS)
-        if actual == expected:
+        if _secrets.compare_digest(actual, expected):
             return None, True
         actual = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, _LEGACY_ITERATIONS)
-        if actual == expected:
+        if _secrets.compare_digest(actual, expected):
             return hash_password(password), True
         return None, False
     except (ValueError, AttributeError):

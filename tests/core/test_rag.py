@@ -61,14 +61,14 @@ class TestVectorStore:
         await vs.upsert("keep", "keep me")
         await vs.upsert("gone", "delete me")
         assert vs.count() == 2
-        vs.delete("gone")
+        await vs.delete("gone")
         assert vs.count() == 1
         assert vs.list_ids() == ["keep"]
 
     async def test_clear(self, vs: VectorStore):
         await vs.upsert("a", "alpha")
         await vs.upsert("b", "beta")
-        vs.clear()
+        await vs.clear()
         assert vs.count() == 0
 
     async def test_upsert_batch(self, vs: VectorStore):
@@ -86,7 +86,7 @@ class TestVectorStore:
         vs2 = VectorStore(tmp_db, eng)  # type: ignore[arg-type]
         assert vs2.count() == 1
         assert vs2.get_metadata("persist") is not None
-        vs2.delete("persist")
+        await vs2.delete("persist")
         vs3 = VectorStore(tmp_db, eng)  # type: ignore[arg-type]
         assert vs3.count() == 0
 
@@ -94,7 +94,7 @@ class TestVectorStore:
         assert vs.get_metadata("nonexistent") is None
 
     async def test_delete_nonexistent(self, vs: VectorStore):
-        vs.delete("does_not_exist")
+        await vs.delete("does_not_exist")
         assert vs.count() == 0
 
 

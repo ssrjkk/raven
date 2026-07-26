@@ -3,10 +3,17 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import re
 from collections.abc import Callable
 from pathlib import Path
 
 from loguru import logger
+
+_ENV_KEY_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+_BLOCKED_KEYS = frozenset({
+    "PATH", "HOME", "USER", "SHELL", "COMSPEC", "PYTHONPATH",
+    "VIRTUAL_ENV", "RAVEN_ADMIN_KEY", "RAVEN_SECRET_KEY",
+})
 
 
 class ConfigWatcher:
@@ -18,9 +25,13 @@ class ConfigWatcher:
         self._task: asyncio.Task[None] | None = None
         self._running = False
 
+    def _get_mtime(self) -> float:
+        return self._env_path.stat().st_mtime
+
     async def start(self):
         if self._env_path.exists():
-            self._last_mtime = self._env_path.stat().st_mtime
+            mtime = await asyncio.to_thread(self._get_mtime)
+            self._last_mtime = mtime
         self._running = True
         self._task = asyncio.create_task(self._watch_loop())
 
@@ -29,7 +40,7 @@ class ConfigWatcher:
             await asyncio.sleep(self._check_interval)
             try:
                 if self._env_path.exists():
-                    mtime = self._env_path.stat().st_mtime
+                    mtime = await asyncio.to_thread(self._get_mtime)
                     if mtime > self._last_mtime:
                         self._last_mtime = mtime
                         logger.info("[config] {} changed, reloading...", self._env_path.name)
@@ -51,7 +62,14 @@ class ConfigWatcher:
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 key, value = line.split("=", 1)
-                os.environ[key.strip()] = value.strip()
+                key = key.strip()
+                if not _ENV_KEY_PATTERN.match(key):
+                    logger.warning("[config] skipping invalid env key: {}", key)
+                    continue
+                if key in _BLOCKED_KEYS:
+                    logger.warning("[config] skipping blocked env key: {}", key)
+                    continue
+                os.environ[key] = value.strip()
 
     async def stop(self):
         self._running = False

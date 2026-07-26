@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import threading
 import time
 from dataclasses import dataclass
 from enum import StrEnum
@@ -27,12 +28,15 @@ class SessionInfo:
 
 
 _EVENT_ID_COUNTER: int = 0
+_event_id_lock = threading.Lock()
 
 
 def _next_event_id() -> str:
     global _EVENT_ID_COUNTER
-    _EVENT_ID_COUNTER += 1
-    return f"evt-{int(time.time() * 1000)}-{_EVENT_ID_COUNTER}"
+    with _event_id_lock:
+        _EVENT_ID_COUNTER += 1
+        counter = _EVENT_ID_COUNTER
+    return f"evt-{int(time.time() * 1000)}-{counter}"
 
 
 class SSEEvent:

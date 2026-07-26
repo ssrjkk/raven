@@ -10,17 +10,22 @@ from raven.core.config import settings
 from raven.core.security.sandbox_policy import get_policy_for_channel
 
 if TYPE_CHECKING:
+    from raven.core.agent.registry import AgentRegistry
+    from raven.core.context_window import ContextWindowManager
+    from raven.core.db import Database
+    from raven.core.gateway.channel_manager import ChannelManager
+    from raven.core.metrics import MetricsCollector
     from raven.core.models import IncomingMessage
 
 
 class MessageProcessor:
     def __init__(
         self,
-        db: Any,
-        registry: Any,
-        channels: Any,
-        ctxmgr: Any | None,
-        metrics: Any,
+        db: Database,
+        registry: AgentRegistry,
+        channels: ChannelManager,
+        ctxmgr: ContextWindowManager | None,
+        metrics: MetricsCollector,
         send_fn: Callable[..., Any],
     ):
         self.db = db

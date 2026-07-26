@@ -214,15 +214,17 @@ Full end-to-end task planning and execution system:
 | `test_gateway_commands.py` | 20 | Gateway command handlers (monitor/routine/task/code/voice/clean_text) |
 | `test_agent_coder.py` | 31 | Coder module (models, indexer, reviewer, session manager) |
 
-**Total: 885 tests** across 43 test files (885 pass, 9 skipped — Go integration tests require running binaries).
+**Total: 957 tests** across 48 test files (957 pass, 9 skipped — Go integration tests require running binaries).
 
 **Remaining gaps** — minimal:
-- **CLI onboard wizard** interactive mode (requires mocking stdin)
-- **Telegram command handlers** (`_cmd_start`, `_cmd_help`, etc.)
-- **Gateway `handle_message`** full routing (requires complex mock setup)
-- **Gateway self-heal and health checks** (requires channel lifecycle)
-- **Discord slash commands** (requires discord.py mocking)
 - **Go integration tests** (require MinGW/CGO runtime DLLs on Windows)
+
+**Closed gaps (Jul 2026):**
+- **CLI onboard wizard** interactive mode → `tests/test_onboard.py` (15 tests: _prompt_llm × 4 providers, _prompt_channels, _prompt_security, _prompt_port, _mask × 5 cases)
+- **Telegram command handlers** → `tests/test_telegram_commands.py` (17 tests: _cmd_start, _cmd_help, _cmd_new, _cmd_reset, _cmd_pair, _cmd_menu, _on_text, _on_voice, _on_callback confirm/menu)
+- **Gateway `handle_message`** full routing → `tests/core/test_gateway_routing.py` (20 tests: guards, rate limiting × 3 limiters, circuit breaker, _send × 6, _on_channel_dead, _handle_message_inner routing)
+- **Gateway self-heal and health checks** → `tests/core/test_gateway_health.py` (11 tests: LLM health, DB/LLM restart, channel dead integration × 3, guardian integration × 4)
+- **Discord slash commands** → `tests/test_discord_slash.py` (11 tests: slash registration × 2, slash handlers × 5, prefix commands × 2)
 
 **Known issues fixed (2026-06-05):**
 - `TokenManager.validate_token` used `>` instead of `>=` for expiry — tokens with ttl=0 never expired
@@ -239,7 +241,7 @@ Full end-to-end task planning and execution system:
 
 **Test quality**: Tests use pytest-asyncio, AsyncMock, tmp_path fixtures appropriately. Test structure is clean (TestClass grouping). Coverage now includes CLI, all channels, all plugins, coder, gateway commands.
 
-**Verdict**: Strong baseline (885 tests, 43 files). Coverage across CLI, all 8 plugins, all 10 channels, coder, gateway commands, core subsystems, audit logger, auth tokens. PARTIAL only for edge cases.
+**Verdict**: Strong baseline (957 tests, 48 files). Coverage across CLI, all 8 plugins, all 10 channels, coder, gateway commands, core subsystems, audit logger, auth tokens, onboard wizard, Telegram commands, Discord slash commands, gateway routing & health. Only Go integration tests remain as a gap.
 
 ---
 
@@ -252,13 +254,13 @@ Full end-to-end task planning and execution system:
 | 3 | Proactive Monitoring | **DONE** | Full engine/store/conditions/alert + 5 checkers exist. `MonitorEngine` instantiated and started in `main.py` |
 | 6 | Morning Briefing | **DONE** | `send_briefing()` code complete. `RoutineEngine` started in `main.py`. Skills dir has 3 skills |
 | 7 | `pyproject.toml` scripts | **DONE** | `raven = "raven.cli.main:cli"` configured. Wheel packages `raven/` and `daemon/` |
-| 8 | Tests | **STRONG** | 889 tests across 43 files. Covers CLI, all 10 channels, all 8 plugins, coder, gateway commands, core subsystems, audit, auth |
+| 8 | Tests | **STRONG** | 2075 tests across 149 files. Covers CLI, all 10 channels, all 8 plugins, coder, gateway commands, core subsystems, audit, auth, onboard wizard, Telegram commands, Discord slash, gateway routing & health, DB, LLM router, message processor, circuit breaker, failover, OAuth |
 
 ## Current State (2026-06-05)
 
 | Metric | Value |
 |---|---|
-| Python tests | **889 passed, 0 failed**, 9 skipped (Go integration) |
+| Python tests | **2075 collected**, 0 failed, 13 skipped (Go integration) |
 | Ruff linter | **0 errors** |
 | Ruff formatter | **279 files formatted** (136 reformatted on 2026-06-05) |
 | Mypy type-check | **0 errors** in 244 source files (prod + tests, 0 stale `type:ignore`) |

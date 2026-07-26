@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 import json
@@ -12,7 +11,7 @@ from raven.core.mcp.http_transport import create_mcp_router
 
 class TestMCPHttp:
     @pytest.fixture
-    def router(self) -> None:
+    def router(self):
         return create_mcp_router()
 
     def test_router_routes(self, router) -> None:

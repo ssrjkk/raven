@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -601,7 +602,7 @@ class TestAdversarialIntegrationSpy:
         rs = policy_engine.get_ruleset("tools")
         assert rs is not None and len(rs.rules) > 0
 
-        eval_calls: list[dict[str, object]] = []
+        eval_calls: list[dict[str, Any]] = []
         original_eval = policy_engine.__class__.evaluate
 
         def spy_evaluate(self, ruleset_name, input_data):
@@ -626,7 +627,7 @@ class TestAdversarialIntegrationSpy:
 
         policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
 
-        eval_calls: list[dict[str, object]] = []
+        eval_calls: list[dict[str, Any]] = []
         original_eval = policy_engine.__class__.evaluate
 
         def spy_evaluate(self, ruleset_name, input_data):
@@ -651,7 +652,7 @@ class TestAdversarialIntegrationSpy:
 
         policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
 
-        eval_calls: list[dict[str, object]] = []
+        eval_calls: list[dict[str, Any]] = []
         original_eval = policy_engine.__class__.evaluate
 
         def spy_evaluate(self, ruleset_name, input_data):
@@ -676,7 +677,7 @@ class TestAdversarialIntegrationSpy:
 
         policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
 
-        eval_calls: list[dict[str, object]] = []
+        eval_calls: list[dict[str, Any]] = []
         original_eval = policy_engine.__class__.evaluate
 
         def spy_evaluate(self, ruleset_name, input_data):
@@ -701,7 +702,7 @@ class TestAdversarialIntegrationSpy:
 
         policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
 
-        eval_calls: list[dict[str, object]] = []
+        eval_calls: list[dict[str, Any]] = []
         original_eval = policy_engine.__class__.evaluate
 
         def spy_evaluate(self, ruleset_name, input_data):
@@ -726,7 +727,7 @@ class TestAdversarialIntegrationSpy:
 
         policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
 
-        eval_calls: list[dict[str, object]] = []
+        eval_calls: list[dict[str, Any]] = []
         original_eval = policy_engine.__class__.evaluate
 
         def spy_evaluate(self, ruleset_name, input_data):

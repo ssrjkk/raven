@@ -291,17 +291,26 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         }
 
     @router.get("/secrets")
-    def admin_secrets():
+    async def admin_secrets(request: Request):
+        user_role = getattr(request.state, "user_role", None)
+        if user_role not in ("admin", "superadmin"):
+            raise HTTPException(403, "Secrets require admin role")
         return {"keys": secrets.list_keys()}
 
     @router.post("/secrets/{key}")
-    async def admin_set_secret(key: str, body: SecretRequest):
+    async def admin_set_secret(key: str, body: SecretRequest, request: Request):
+        user_role = getattr(request.state, "user_role", None)
+        if user_role not in ("admin", "superadmin"):
+            raise HTTPException(403, "Secrets require admin role")
         await secrets.set(key, body.value)
         await audit_logger.sensitive("secrets.set", "admin", key, True)
         return {"ok": True}
 
     @router.delete("/secrets/{key}")
-    async def admin_delete_secret(key: str):
+    async def admin_delete_secret(key: str, request: Request):
+        user_role = getattr(request.state, "user_role", None)
+        if user_role not in ("admin", "superadmin"):
+            raise HTTPException(403, "Secrets require admin role")
         await secrets.unset(key)
         return {"ok": True}
 
@@ -344,6 +353,9 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
 
     @router.post("/shutdown")
     async def admin_shutdown(request: Request):
+        user_role = getattr(request.state, "user_role", None)
+        if user_role not in ("admin", "superadmin"):
+            raise HTTPException(403, "Shutdown requires admin role")
         logger.warning("Admin shutdown requested")
         await audit_logger.log(AuditEventType.SYSTEM_SHUTDOWN, "admin", "system")
         stop_event = request.app.state.stop_event if hasattr(request.app.state, "stop_event") else None
@@ -431,9 +443,18 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         return {"token": token, **user_info}
 
     @router.post("/config/key")
-    async def admin_update_config_key(body: ConfigUpdateRequest):
+    async def admin_update_config_key(body: ConfigUpdateRequest, request: Request):
+        user_role = getattr(request.state, "user_role", None)
+        if user_role not in ("admin", "superadmin"):
+            raise HTTPException(403, "Config update requires admin role")
         from raven.core.config_store import config_store
 
+        allowed_config_keys = frozenset({
+            "default_model", "dm_policy", "rate_limit_max",
+            "log_level", "json_log", "web_port", "context_visibility",
+        })
+        if body.key not in allowed_config_keys:
+            raise HTTPException(403, f"Key '{body.key}' is not in the allowed config keys")
         config_store.set(body.key, body.value)
         config_store.save()
         await audit_logger.log(AuditEventType.COMMAND, "admin", "config.update", detail={"key": body.key})

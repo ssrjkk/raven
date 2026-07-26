@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -11,7 +10,7 @@ from raven.tools.search import web_search, web_search_raw
 
 class TestWebSearch:
     @pytest.fixture(autouse=True)
-    def _mock_httpx(self) -> None:
+    def _mock_httpx(self):
         patcher = patch("raven.tools.search.httpx.AsyncClient")
         self.mock_client_cls = patcher.start()
         self.mock_client = AsyncMock()

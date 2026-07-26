@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import re
 import sys
 import threading
 import traceback
@@ -7,8 +9,46 @@ from pathlib import Path
 from types import FrameType
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+
+_SANITIZE_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"(api[_-]?key|secret|token|password|credential)\s*[=:]\s*\S+", re.IGNORECASE),
+    re.compile(r"(eyJ[A-Za-z0-9_-]{10,}\.)"),  # JWT tokens
+]
+_MAX_FILE_SIZE = 512_000  # 500 KB — debug only, not arbitrary file read
+_ALLOWED_EXTENSIONS = frozenset({".py", ".pyw"})
+_WORKSPACE: Path | None = None
+
+
+def _get_workspace() -> Path:
+    global _WORKSPACE
+    if _WORKSPACE is None:
+        _WORKSPACE = Path(os.environ.get("RAVEN_WORKSPACE", Path(__file__).parent.parent.parent / "workspace")).resolve()
+    return _WORKSPACE
+
+
+def _confine_path(file_path: Path) -> Path:
+    ws = _get_workspace()
+    resolved = file_path.resolve()
+    try:
+        resolved.relative_to(ws)
+    except ValueError as exc:
+        raise HTTPException(403, f"Access denied: {resolved} is outside workspace {ws}") from exc
+    return resolved
+
+
+def _sanitize_traceback(tb_str: str) -> str:
+    for pat in _SANITIZE_PATTERNS:
+        tb_str = pat.sub(lambda m: f"{m.group(1).split('=')[0].split(':')[0]}=***", tb_str)
+    return tb_str
+
+
+async def _require_admin(request: Request) -> dict[str, Any]:
+    user_role = getattr(request.state, "user_role", None)
+    if user_role not in ("admin", "superadmin"):
+        raise HTTPException(403, "Debug endpoints require admin role")
+    return {"role": user_role}
 
 
 class BreakpointRequest(BaseModel):
@@ -38,15 +78,20 @@ def create_debugger_router() -> APIRouter:
     router = APIRouter(prefix="/api/debug", tags=["debug"])
 
     @router.post("/start")
-    async def debug_start(req: DebugStartRequest) -> DebuggerState:
+    async def debug_start(req: DebugStartRequest, _admin: dict[str, Any] = Depends(_require_admin)) -> DebuggerState:
         global _active_debugger
+        file_path = Path(req.file)
+        file_path = _confine_path(file_path)
+        if not file_path.is_file():
+            raise HTTPException(404, f"File not found: {req.file}")
+        if file_path.suffix.lower() not in _ALLOWED_EXTENSIONS:
+            raise HTTPException(403, f"Only .py files can be debugged, got: {file_path.suffix}")
+        if file_path.stat().st_size > _MAX_FILE_SIZE:
+            raise HTTPException(400, f"File too large for debugging ({file_path.stat().st_size} > {_MAX_FILE_SIZE} bytes)")
         with _debug_lock:
             if _active_debugger is not None:
                 _active_debugger.stop()
                 _active_debugger = None
-        file_path = Path(req.file).resolve()
-        if not file_path.is_file():
-            raise HTTPException(404, f"File not found: {req.file}")
         session = _DebugSession(file_path, req.breakpoints)
         with _debug_lock:
             _active_debugger = session
@@ -54,7 +99,7 @@ def create_debugger_router() -> APIRouter:
         return session.get_state()
 
     @router.post("/stop")
-    async def debug_stop() -> DebuggerState:
+    async def debug_stop(_admin: dict[str, Any] = Depends(_require_admin)) -> DebuggerState:
         global _active_debugger
         with _debug_lock:
             if _active_debugger is None:
@@ -64,14 +109,14 @@ def create_debugger_router() -> APIRouter:
         return DebuggerState(status="idle")
 
     @router.get("/state")
-    async def debug_state() -> DebuggerState:
+    async def debug_state(_admin: dict[str, Any] = Depends(_require_admin)) -> DebuggerState:
         with _debug_lock:
             if _active_debugger is None:
                 return DebuggerState(status="idle")
             return _active_debugger.get_state()
 
     @router.post("/breakpoints")
-    async def set_breakpoints(bps: list[BreakpointRequest]) -> DebuggerState:
+    async def set_breakpoints(bps: list[BreakpointRequest], _admin: dict[str, Any] = Depends(_require_admin)) -> DebuggerState:
         with _debug_lock:
             if _active_debugger is None:
                 raise HTTPException(400, "No active debug session")
@@ -79,7 +124,7 @@ def create_debugger_router() -> APIRouter:
             return _active_debugger.get_state()
 
     @router.post("/continue")
-    async def debug_continue() -> DebuggerState:
+    async def debug_continue(_admin: dict[str, Any] = Depends(_require_admin)) -> DebuggerState:
         with _debug_lock:
             if _active_debugger is None:
                 raise HTTPException(400, "No active debug session")
@@ -87,7 +132,7 @@ def create_debugger_router() -> APIRouter:
             return _active_debugger.get_state()
 
     @router.post("/step-over")
-    async def debug_step_over() -> DebuggerState:
+    async def debug_step_over(_admin: dict[str, Any] = Depends(_require_admin)) -> DebuggerState:
         with _debug_lock:
             if _active_debugger is None:
                 raise HTTPException(400, "No active debug session")
@@ -95,7 +140,7 @@ def create_debugger_router() -> APIRouter:
             return _active_debugger.get_state()
 
     @router.post("/step-into")
-    async def debug_step_into() -> DebuggerState:
+    async def debug_step_into(_admin: dict[str, Any] = Depends(_require_admin)) -> DebuggerState:
         with _debug_lock:
             if _active_debugger is None:
                 raise HTTPException(400, "No active debug session")
@@ -237,7 +282,19 @@ class _DebugSession:
         compiled = compile(code, str(self._file_path), "exec")
         sys.settrace(self._trace_dispatch)
         try:
-            exec(compiled, {"__name__": "__main__", "__file__": str(self._file_path)})
+            import builtins as _builtins
+
+            safe_builtins = {
+                k: v
+                for k, v in vars(_builtins).items()
+                if k not in frozenset({"__import__", "exec", "eval", "compile", "open", "exit", "quit"})
+            }
+            ns: dict[str, object] = {
+                "__name__": "__main__",
+                "__file__": str(self._file_path),
+                "__builtins__": safe_builtins,
+            }
+            exec(compiled, ns)
             with self._lock:
                 if self._status not in ("stopped", "error"):
                     self._status = "running"
@@ -248,7 +305,7 @@ class _DebugSession:
             with self._lock:
                 self._status = "stopped"
         except Exception:
-            tb = traceback.format_exc()
+            tb = _sanitize_traceback(traceback.format_exc())
             frames = _capture_frames(exception=True)
             with self._lock:
                 self._status = "error"
@@ -285,7 +342,10 @@ def _frame_info(frame: FrameType, lineno: int) -> dict[str, Any]:
     locals_safe: dict[str, str] = {}
     for k, v in frame.f_locals.items():
         try:
-            locals_safe[k] = repr(v)[:200]
+            raw = repr(v)[:200]
+            for pat in _SANITIZE_PATTERNS:
+                raw = pat.sub(lambda m: f"{m.group(1).split('=')[0].split(':')[0]}=***", raw)
+            locals_safe[k] = raw
         except Exception:
             locals_safe[k] = "<unrepresentable>"
     return {

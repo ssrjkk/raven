@@ -5,6 +5,8 @@ from pathlib import Path
 import aiosqlite
 from loguru import logger
 
+_AIOSQLITE_TIMEOUT = 30.0
+
 MIGRATIONS_TABLE = (
     "CREATE TABLE IF NOT EXISTS _migrations "
     "(version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
@@ -35,7 +37,7 @@ def register(version: int, description: str, sql: str | None = None):
 async def _migration_1(conn):
     try:
         await conn.execute("ALTER TABLE sessions ADD COLUMN agent_skills TEXT DEFAULT '[]'")
-    except Exception:
+    except aiosqlite.OperationalError:
         logger.debug("Migration 1: column already exists")
 
 
@@ -43,7 +45,7 @@ async def _migration_1(conn):
 async def _migration_2(conn):
     try:
         await conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
-    except Exception:
+    except aiosqlite.OperationalError:
         logger.debug("Migration 2: column already exists")
 
 
@@ -103,7 +105,7 @@ async def _migration_5(conn):
     for idx in indexes:
         try:
             await conn.execute(idx)
-        except Exception:
+        except aiosqlite.OperationalError:
             logger.debug("Migration 5: index already exists")
 
 
@@ -147,7 +149,7 @@ async def _migration_6(conn):
     for idx in indexes:
         try:
             await conn.execute(idx)
-        except Exception:
+        except aiosqlite.OperationalError:
             logger.debug("Migration 6: index already exists")
 
 
@@ -196,7 +198,7 @@ async def _migration_7(conn):
     for idx in indexes:
         try:
             await conn.execute(idx)
-        except Exception:
+        except aiosqlite.OperationalError:
             logger.debug("Migration 7: index already exists")
 
 
@@ -223,7 +225,7 @@ async def _migration_8(conn):
     for idx in indexes:
         try:
             await conn.execute(idx)
-        except Exception:
+        except aiosqlite.OperationalError:
             logger.debug("Migration 8: index already exists")
 
 
@@ -263,9 +265,7 @@ class Migrator:
         self.db_path = db_path
 
     async def get_current_version(self):
-        import aiosqlite
-
-        conn = await aiosqlite.connect(str(self.db_path))
+        conn = await aiosqlite.connect(str(self.db_path), timeout=_AIOSQLITE_TIMEOUT)
         try:
             await conn.execute(MIGRATIONS_TABLE)
             await conn.commit()
@@ -276,8 +276,6 @@ class Migrator:
             await conn.close()
 
     async def migrate(self, target: int | None = None):
-        import aiosqlite
-
         current = await self.get_current_version()
         pending = sorted([m for m in _MIGRATIONS if m.version > current], key=lambda m: m.version)
         if target:
@@ -287,7 +285,7 @@ class Migrator:
             logger.info("DB is up-to-date (version {})", current)
             return
 
-        conn = await aiosqlite.connect(str(self.db_path))
+        conn = await aiosqlite.connect(str(self.db_path), timeout=_AIOSQLITE_TIMEOUT)
         try:
             await conn.execute("PRAGMA foreign_keys=OFF")
             for mig in pending:

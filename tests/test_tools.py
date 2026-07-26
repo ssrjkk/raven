@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 import asyncio
@@ -6,6 +5,7 @@ import os
 import tempfile
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -225,7 +225,7 @@ class TestToolRegistryIntegration:
         assert "timed out" in result
 
     async def test_registry_call_validate_fail(self) -> None:
-        def validate(params: dict) -> str | None:
+        def validate(params: dict[str, Any]) -> str | None:
             if params.get("x") == "bad":
                 return "x cannot be bad"
             return None
@@ -246,7 +246,7 @@ class TestToolRegistryIntegration:
         assert "x cannot be bad" in result
 
     async def test_registry_call_validate_pass(self) -> None:
-        def validate(params: dict) -> str | None:
+        def validate(params: dict[str, Any]) -> str | None:
             return None
 
         async def handler(x: str) -> str:

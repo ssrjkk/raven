@@ -86,10 +86,14 @@ class WebChatChannel(BaseChannel):
                     if payload:
                         websocket.state.user_id = payload.get("sub", "unknown")
                         websocket.state.role = payload.get("role", "user")
+                    else:
+                        logger.debug("WebSocket token invalid, rejecting")
+                        await websocket.close(code=1008, reason="Authentication required")
+                        return
                 except Exception as e:
                     logger.debug("WebSocket token decode failed: {}", e)
-                    websocket.state.user_id = "anonymous"
-                    websocket.state.role = "user"
+                    await websocket.close(code=1008, reason="Authentication required")
+                    return
             else:
                 websocket.state.user_id = "anonymous"
                 websocket.state.role = "user"
@@ -129,7 +133,8 @@ class WebChatChannel(BaseChannel):
                     if not payload:
                         await websocket.close(code=1008, reason="Authentication required")
                         return
-                except Exception:
+                except Exception as e:
+                    logger.debug("[webchat] JWT decode failed: {}", e)
                     await websocket.close(code=1008, reason="Authentication required")
                     return
             await websocket.accept()
@@ -161,7 +166,8 @@ class WebChatChannel(BaseChannel):
                     if not payload:
                         await websocket.close(code=1008, reason="Authentication required")
                         return
-                except Exception:
+                except Exception as e:
+                    logger.debug("[webchat] canvas JWT decode failed: {}", e)
                     await websocket.close(code=1008, reason="Authentication required")
                     return
             await websocket.accept()
