@@ -58,6 +58,7 @@ class UnifiedAgent:
         self._permissions = permissions
         self._on_step = on_step
         self._on_message = on_message
+        self._on_message_lock = asyncio.Lock()
         self._memory_path = memory_path
         self._llm_provider = llm_provider
         self._llm_fallbacks: list[Any] = []
@@ -237,8 +238,9 @@ class UnifiedAgent:
                 stream_used[0] = True
                 await queue.put(content)
 
-        saved_on_message = self._on_message
-        self._on_message = stream_wrapper
+        async with self._on_message_lock:
+            saved_on_message = self._on_message
+            self._on_message = stream_wrapper
         task = asyncio.create_task(self._run_and_signal(queue, message, stream_used))
 
         try:
@@ -252,7 +254,8 @@ class UnifiedAgent:
             logger.error("Stream error: {}", exc)
             yield f"[error: {exc}]"
         finally:
-            self._on_message = saved_on_message
+            async with self._on_message_lock:
+                self._on_message = saved_on_message
             if not task.done():
                 task.cancel()
 

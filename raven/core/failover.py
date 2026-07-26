@@ -57,7 +57,7 @@ class ModelFailover:
         for model_cfg in self._models:
             cb = self._get_circuit(model_cfg.provider)
             try:
-                if cb.is_open:
+                if not await cb.try_acquire():
                     logger.info("Circuit open, skipping {}/{}", model_cfg.provider, model_cfg.model)
                     last_error = CircuitBreakerOpenError(cb.name)
                     continue
@@ -85,13 +85,8 @@ class ModelFailover:
         for model_cfg in self._models:
             cb = self._get_circuit(model_cfg.provider)
             try:
-                if cb.is_open:
-                    logger.info("Circuit open, skipping {}/{} stream", model_cfg.provider, model_cfg.model)
-                    last_error = CircuitBreakerOpenError(cb.name)
-                    continue
-
                 if not await cb.try_acquire():
-                    logger.info("Circuit rejected, skipping {}/{} stream", model_cfg.provider, model_cfg.model)
+                    logger.info("Circuit open, skipping {}/{} stream", model_cfg.provider, model_cfg.model)
                     last_error = CircuitBreakerOpenError(cb.name)
                     continue
 

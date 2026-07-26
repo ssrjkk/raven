@@ -32,6 +32,10 @@ class TokenBucket:
                 return True
             return False
 
+    async def refund(self) -> None:
+        async with self._lock:
+            self._tokens = min(float(self._burst), self._tokens + 1.0)
+
     @property
     def rate(self) -> float:
         return self._rate
@@ -119,6 +123,7 @@ class RateLimiter:
         if user_id:
             ub = self._get_or_create_user_bucket(user_id)
             if not await ub.acquire():
+                await cb.refund()
                 logger.warning("Rate limit exceeded for user {} on channel {}", user_id, channel_id)
                 metrics.inc("rate_limiter_blocked", {"scope": "user", "channel": channel_id})
                 return False

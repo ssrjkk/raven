@@ -79,11 +79,15 @@ def is_private_url(url: str) -> bool:
         return True
     try:
         ips = _resolve_host(host)
+        if not ips:
+            logger.debug("SSRF DNS resolution returned no results for {}, blocking", host)
+            return True
         for ip in ips:
             if any(ip in net for net in PRIVATE_NETS):
                 return True
     except Exception as exc:
         logger.debug("SSRF IP resolution error for {}: {}", host, exc)
+        return True
     try:
         ip = ipaddress.ip_address(host)
         if any(ip in net for net in PRIVATE_NETS):

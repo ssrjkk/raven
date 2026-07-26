@@ -238,6 +238,7 @@ class Gateway:
                 self._llm_cache = LLMCache(self._redis_client, ttl=300)
                 self.llm = LLMRouter(llm_cache=self._llm_cache)
                 self.failover = ModelFailover(self.llm)
+                self._propagate_llm()
                 self._redis_rate_limiter = RedisRateLimiter(self._redis_client, InMemoryRateLimiter())
             else:
                 logger.warning("redis_connection_failed_falling_back_to_in_memory")
@@ -404,6 +405,15 @@ class Gateway:
     async def _llm_restart(self) -> None:
         self.llm = LLMRouter()
         self.failover = ModelFailover(self.llm)
+        self._propagate_llm()
+
+    def _propagate_llm(self) -> None:
+        self.registry.llm = self.llm
+        self.tasks._llm = self.llm
+        self._extractor._llm = self.llm
+        self._agent_orchestrator._llm = self.llm
+        if self._ctxmgr is not None:
+            self._ctxmgr._llm = self.llm
 
     async def handle_message(self, event: IncomingMessage):
         if not self._running:
@@ -493,17 +503,7 @@ class Gateway:
         finally:
             clear_context()
 
-        _t = asyncio.create_task(self._extract_and_store(event.text, event.channel, event.user_id))
-        self._bg_tasks.add(_t)
-
-        def _extract_done(t: asyncio.Task[None]) -> None:
-            self._bg_tasks.discard(t)
-            if not t.cancelled():
-                exc = t.exception()
-                if exc is not None:
-                    logger.debug("Extract-and-store failed: {}", exc)
-
-        _t.add_done_callback(_extract_done)
+        _t = await self._bg_task(self._extract_and_store(event.text, event.channel, event.user_id))
 
     async def _handle_with_orchestrator(self, event: IncomingMessage, session_id: str, profile: str) -> None:
         from raven.core.agents.orchestrator import StatusEmitter

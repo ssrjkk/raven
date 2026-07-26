@@ -119,6 +119,20 @@ class DiscordChannel(BaseChannel):
 
         @self._bot.command(name="reset")
         async def reset_cmd(ctx: commands.Context[commands.Bot]):
+            if self._handler:
+                user_id = str(ctx.author.id)
+                channel_id = str(ctx.channel.id)
+                from uuid import uuid4
+
+                new_session = f"discord:{channel_id}:{uuid4().hex[:8]}"
+                event = IncomingMessage(
+                    channel="discord",
+                    user_id=user_id,
+                    session_id=new_session,
+                    text="/new",
+                    metadata={"channel_id": channel_id, "username": str(ctx.author)},
+                )
+                await self._handler(event)
             await ctx.reply("Session reset.")
 
         @self._bot.command(name="status")
