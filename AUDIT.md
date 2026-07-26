@@ -286,3 +286,23 @@ Full end-to-end task planning and execution system:
 | File encoding | Non-ASCII chars in CLI/logging output only (emojis, Unicode arrows — Python 3 UTF-8 safe) |
 | Stale artifacts | 0 `__pycache__` / `.pyc` remnants |
 | daemon/ scripts/ deploy/ | All Python files parse cleanly |
+
+---
+
+## 15. Production Bug Fixes (2026-07-26)
+
+**Status: DONE**
+
+7 real production bugs identified via deep codebase audit and fixed:
+
+| # | Severity | File | Bug | Fix |
+|---|----------|------|-----|-----|
+| 1 | **P0** | `unified_agent.py:240` | `_on_message` saved/restored without synchronization — concurrent `stream_process` corrupts callback | Added `asyncio.Lock()` protecting save/restore in `__init__` and `stream_process` |
+| 2 | **P0** | `gateway.py:239` | LLM replacement after Redis connect not propagated to `registry`, `tasks`, `_extractor`, `_agent_orchestrator`, `_ctxmgr` | Added `_propagate_llm()` helper, called in `start()` and `_llm_restart()` |
+| 3 | **P0** | `ssrf.py:68` | DNS resolution failure returns `[]`, `is_private_url` returns `False` — SSRF bypass | DNS failure now returns `True` (block); exception handler also returns `True` |
+| 4 | **P1** | `gateway.py:506` | `_extract_and_store` uses bare `asyncio.create_task`, bypasses `_bg_semaphore` | Routed through `_bg_task()` which acquires semaphore |
+| 5 | **P1** | `rate_limiter.py:121` | Channel token consumed then user limit rejects — token leaked (not refunded) | Added `TokenBucket.refund()`; channel token refunded on user rejection |
+| 6 | **P1** | `discord/channel.py:120` | `/reset` replies "Session reset." but never clears session | Now sends `/new` with fresh session UUID to handler (matching Telegram pattern) |
+| 7 | **P1** | `failover.py:60` | `cb.is_open` TOCTOU — property reads state without lock, multiple coroutines can transition to HALF_OPEN | Replaced with atomic `await cb.try_acquire()` in both `complete()` and `complete_stream()` |
+
+**Verification**: `check_all.py --quick` 4/4 pass. 882 tests pass, 0 regressions.
