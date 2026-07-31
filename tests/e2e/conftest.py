@@ -100,5 +100,6 @@ async def gateway(mock_db, mock_plugin_loader, mock_settings) -> AsyncGenerator[
     channel = MockChannel()
     await g.register_channel(channel)
     channel._handler = g.handle_message
+    g._running = True
     yield g
     await g.stop()

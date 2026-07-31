@@ -217,7 +217,7 @@ class WebChatChannel(BaseChannel):
         logger.info("WebChat channel ready")
 
     async def stop(self):
-        for ws in self._connections.values():
+        for ws in list(self._connections.values()):
             with contextlib.suppress(ConnectionError, RuntimeError):
                 await ws.close()
         self._connections.clear()

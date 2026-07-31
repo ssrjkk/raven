@@ -112,11 +112,11 @@ class TestTokenBucket:
         assert not await tb.acquire()
 
     async def test_refills_over_time(self):
-        tb = TokenBucket(rate=100.0, burst=100)
+        tb = TokenBucket(rate=1.0, burst=100)
         for _ in range(100):
             assert await tb.acquire()
         assert not await tb.acquire()
-        await asyncio.sleep(0.02)
+        await asyncio.sleep(1.5)
         assert await tb.acquire()
 
     async def test_default_burst_is_twice_rate(self):
@@ -245,8 +245,32 @@ class TestChannelGuardianErrorTracking:
         async def on_dead(cid):
             dead.append(cid)
 
+        class _FailingChannel(BaseChannel):
+            channel_id = "ch"
+
+            async def start(self):
+                raise RuntimeError("always fails")
+
+            async def stop(self):
+                pass
+
+            async def connect(self):
+                pass
+
+            async def disconnect(self):
+                pass
+
+            async def health_check(self):
+                return False
+
+            async def send(self, session_id: str, message):
+                pass
+
+            async def on_message(self, handler):
+                pass
+
         g = ChannelGuardian(on_channel_dead=on_dead, backoff_base=0.01)
-        ch = _FakeChannel("ch")
+        ch = _FailingChannel()
         g.register(ch)
 
         fails_needed = MAX_CONSECUTIVE_FAILURES * (MAX_RESTART_ATTEMPTS + 1)

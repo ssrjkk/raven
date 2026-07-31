@@ -69,7 +69,7 @@ class HealthRegistry:
             for name, hc in self._checks.items():
                 if not hc.critical:
                     continue
-                if time.monotonic() - hc.last_check > hc.cache_ttl * 2:
+                if time.monotonic() - hc.last_check > hc.cache_ttl:
                     try:
                         result = await asyncio.wait_for(hc.check(), timeout=hc.timeout)
                         hc.last_status = result if isinstance(result, bool) else True

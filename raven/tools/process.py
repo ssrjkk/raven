@@ -8,41 +8,37 @@ import sys
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 
-async def process_list() -> str:
-    if os.name == "nt":
-        proc = await asyncio.create_subprocess_exec(
-            "tasklist",
-            "/FO",
-            "CSV",
-            "/NH",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15.0)
-        lines = stdout.decode("utf-8", errors="replace").splitlines()[:50]
-        return "\n".join(line.strip('"') for line in lines)
+async def _run_subprocess(args: list[str], timeout: float = 15.0) -> tuple[int, str, str]:
     proc = await asyncio.create_subprocess_exec(
-        "ps",
-        "aux",
-        "--sort=-%mem",
+        *args,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15.0)
-    lines = stdout.decode("utf-8", errors="replace").splitlines()[:50]
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise
+    return proc.returncode or 0, stdout.decode("utf-8", errors="replace"), (stderr or b"").decode("utf-8", errors="replace")
+
+
+async def process_list() -> str:
+    if os.name == "nt":
+        _rc, stdout, _stderr = await _run_subprocess(["tasklist", "/FO", "CSV", "/NH"])
+        lines = stdout.splitlines()[:50]
+        return "\n".join(line.strip('"') for line in lines)
+    _rc, stdout, _stderr = await _run_subprocess(["ps", "aux", "--sort=-%mem"])
+    lines = stdout.splitlines()[:50]
     return "\n".join(lines)
 
 
 async def process_kill(pid: int) -> str:
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *(["taskkill", "/PID", str(pid), "/F"] if sys.platform == "win32" else ["kill", "-TERM", str(pid)]),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
-        if proc.returncode != 0:
-            stderr_text = stdout.decode("utf-8", errors="replace").strip()
+        args = ["taskkill", "/PID", str(pid), "/F"] if sys.platform == "win32" else ["kill", "-TERM", str(pid)]
+        rc, _stdout, stderr = await _run_subprocess(args, timeout=10.0)
+        if rc != 0:
+            stderr_text = stderr.strip()
             return f"Failed to kill process {pid}: {stderr_text or 'unknown error'}"
         return f"Process {pid} terminated"
     except TimeoutError:

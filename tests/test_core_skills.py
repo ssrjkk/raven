@@ -10,32 +10,21 @@ class TestSkillsBuiltins:
         from raven.core.skills import list_skills
 
         skills = list_skills()
-        assert "code-review" in skills
-        assert "security-audit" in skills
-        assert "refactor" in skills
-        assert "test-writer" in skills
-        assert "debug" in skills
-        assert "dependency-update" in skills
-
-    def test_load_known_skill_returns_markdown(self) -> None:
-        from raven.core.skills import load_skill
-
-        content = load_skill("code-review")
-        assert content.startswith("# Skill: Code Review")
-        assert "## Instructions" in content
-
-    def test_load_unknown_skill_returns_error(self) -> None:
-        from raven.core.skills import load_skill
-
-        result = load_skill("nonexistent-skill")
-        assert "not found" in result
+        names = [s["name"] for s in skills]
+        assert "code-review" in names
+        assert "security-audit" in names
+        assert "refactor" in names
+        assert "test-writer" in names
+        assert "debug" in names
+        assert "dependency-update" in names
 
     def test_get_skill_info_known(self) -> None:
         from raven.core.skills import get_skill_info
 
         skill = get_skill_info("debug")
         assert skill is not None
-        assert skill.name == "Debugging"
+        assert skill.name == "debug"
+        assert skill.description != ""
 
     def test_get_skill_info_unknown(self) -> None:
         from raven.core.skills import get_skill_info
@@ -72,19 +61,37 @@ class TestSkillsRegistry:
 
         set_skill_registry("")
         result = await download_skill("test-skill")
-        assert "no registry URL" in result
+        assert result is None
+
+    def test_create_skill(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.core.skills import SKILLS_DIR, create_skill, get_skill_info
+
+        monkeypatch.setattr("raven.core.skills.SKILLS_DIR", tmp_path / "skills")
+        create_skill("test-skill", "A test skill", "do something")
+        skill = get_skill_info("test-skill")
+        assert skill is not None
+        assert skill.description == "A test skill"
+
+    def test_install_skill_from_md(self, tmp_path: Path) -> None:
+        from raven.core.skills import install_skill
+
+        md_file = tmp_path / "custom.md"
+        md_file.write_text("# Custom skill\nDo the thing")
+        skill = install_skill(str(md_file))
+        assert skill is not None
+        assert skill.name == "custom"
 
 
 class TestSkillsFileDiscovery:
-    def test_discover_from_skill_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        from raven.core.skills import _SKILL_SEARCH_DIRS, discover_skills
+    def test_discover_from_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.core.skills import _SKILL_SEARCH_DIRS, SkillsRegistry
 
-        skill_dir = tmp_path / ".opencode" / "skills"
+        skill_dir = tmp_path / "skills" / "my-custom"
         skill_dir.mkdir(parents=True)
-        (skill_dir / "my-custom-skill.md").write_text("Do this thing")
-
-        monkeypatch.setattr("raven.core.skills._SKILL_SEARCH_DIRS", [skill_dir.parent.parent])
-
-        skills = discover_skills()
-        builtin_count = 6
-        assert len(skills) >= builtin_count
+        (skill_dir / "skill.md").write_text("# My Custom\nDo this thing")
+        reg = SkillsRegistry()
+        count = reg.register_from_dir(tmp_path / "skills")
+        assert count >= 1
+        skill = reg.get("my-custom")
+        assert skill is not None
+        assert "My Custom" in skill.description

@@ -23,6 +23,7 @@ const nav = [
   { to: "/github", label: "GitHub" },
   { to: "/cicd", label: "CI/CD" },
   { to: "/tests", label: "Tests" },
+  { to: "/dream", label: "Dream" },
   { to: "/media", label: "Media" },
   { to: "/browser", label: "Browser" },
   { to: "/web-search", label: "Search" },

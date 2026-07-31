@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 
@@ -37,81 +35,6 @@ class TestAgentTypes:
         assert r.data is None
         assert r.error is None
         assert r.steps == 0
-
-
-class TestSubTask:
-    def test_sub_task_defaults(self) -> None:
-        from raven.core.agents.multi import SubTask
-        from ravencode.agents.orchestrator import AgentType
-
-        t = SubTask(description="do something")
-        assert t.description == "do something"
-        assert t.agent_type == AgentType.AUTONOMOUS
-        assert t.depends_on is None
-        assert t.config is None
-
-    def test_sub_task_with_deps(self) -> None:
-        from raven.core.agents.multi import SubTask
-        from ravencode.agents.orchestrator import AgentType
-
-        t = SubTask(description="step 2", agent_type=AgentType.CODER, depends_on=[0, 1])
-        assert t.depends_on == [0, 1]
-        assert t.agent_type == AgentType.CODER
-
-
-class TestTaskResult:
-    def test_task_result_dataclass(self) -> None:
-        from raven.core.agents.multi import TaskResult
-        from ravencode.agents.orchestrator import AgentResult
-
-        ar = AgentResult(agent="planner", success=True)
-        tr = TaskResult(index=0, description="plan", result=ar, duration=1.5)
-        assert tr.index == 0
-        assert tr.description == "plan"
-        assert tr.result.success is True
-        assert tr.duration == 1.5
-
-
-class TestMultiAgentOrchestrator:
-    def test_get_orchestrator_instance(self) -> None:
-        from raven.core.agents.multi import get_multi_orchestrator
-
-        orch = get_multi_orchestrator()
-        assert orch is not None
-
-    def test_orchestrator_singleton(self) -> None:
-        from raven.core.agents.multi import get_multi_orchestrator
-
-        o1 = get_multi_orchestrator()
-        o2 = get_multi_orchestrator()
-        assert o1 is o2
-
-    def test_run_sequential_empty(self) -> None:
-        import asyncio
-
-        from raven.core.agents.multi import MultiAgentOrchestrator
-
-        orch = MultiAgentOrchestrator()
-        results = asyncio.run(orch.run_sequential([]))
-        assert results == []
-
-    def test_run_parallel_empty(self) -> None:
-        import asyncio
-
-        from raven.core.agents.multi import MultiAgentOrchestrator
-
-        orch = MultiAgentOrchestrator()
-        results = asyncio.run(orch.run_parallel([]))
-        assert results == []
-
-    def test_run_dag_empty(self) -> None:
-        import asyncio
-
-        from raven.core.agents.multi import MultiAgentOrchestrator
-
-        orch = MultiAgentOrchestrator()
-        results = asyncio.run(orch.run_dag([]))
-        assert results == []
 
 
 class TestOrchestratorDispatch:

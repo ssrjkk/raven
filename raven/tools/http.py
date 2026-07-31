@@ -22,7 +22,12 @@ async def _fetch(url: str, method: str = "GET", **kwargs: Any) -> str:
                 blocked = validate_url(location)
                 if blocked:
                     return f"[blocked] redirect blocked: {blocked}"
-                resp = await c.request(method, location, **kwargs)
+                redirect_method = method
+                redirect_kwargs = dict(kwargs)
+                if resp.status_code in (301, 302) and method == "POST":
+                    redirect_method = "GET"
+                    redirect_kwargs.pop("content", None)
+                resp = await c.request(redirect_method, location, **redirect_kwargs)
             else:
                 break
         if resp.is_redirect:

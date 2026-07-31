@@ -20,6 +20,8 @@ from raven.core.cache.session_store import SessionStore
 from raven.core.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from raven.core.config import settings
 from raven.core.context_window import ContextWindowConfig, ContextWindowManager
+from raven.core.events import EventBus
+from raven.core.features import FeatureFlags
 from raven.core.gateway.channel_manager import ChannelManager
 from raven.core.gateway.commands.base import CommandContext
 from raven.core.gateway.commands.registry import CommandRegistry
@@ -75,6 +77,8 @@ class Gateway:
         self._guardian = ChannelGuardian(on_channel_dead=self._on_channel_dead)
         self.mcp = MCPBridge(send_fn=self._send)
         self._metrics_server = MetricsServer(port=settings.metrics_port)
+        self.event_bus = EventBus()
+        self.features = FeatureFlags.get()
         self._tracing = TracingManager(service_name="raven-gateway", otlp_endpoint=settings.otlp_endpoint or None)
         self._tracer = get_tracer("raven.gateway")
 
@@ -130,6 +134,7 @@ class Gateway:
     async def register_channel(self, channel: BaseChannel):
         await self.channels.register(channel)
         self._guardian.register(channel)
+        await self.event_bus.publish("channel.registered", channel_id=channel.channel_id)
 
     def load_skills(self, skills_path: str | None = None):
         from pathlib import Path
@@ -260,6 +265,7 @@ class Gateway:
             await self.mcp.start(plugin_loader=self.plugin_loader)
             started.append("mcp")
             await self._guardian.start()
+            await self.event_bus.publish("gateway.started", channels=channel_count)
         except Exception:
             logger.error("Gateway start failed, rolling back {} components", len(started))
             await self._partial_stop(started)
@@ -309,6 +315,7 @@ class Gateway:
             return
         logger.info("Stopping gateway...")
         self._running = False
+        await self.event_bus.publish("gateway.stopping")
         for task in list(self._bg_tasks):
             task.cancel()
         if self._bg_tasks:
@@ -362,7 +369,7 @@ class Gateway:
                     ]
                     monitors_info = "Monitors: " + ", ".join(statuses)
 
-                tstore = TaskStore(self.db.db_path)
+                tstore = self.tasks._store if self.tasks._store else TaskStore(self.db.db_path)
                 tasks = await tstore.list_tasks(user_id=user_id, limit=5)
                 tasks_info = ""
                 if tasks:

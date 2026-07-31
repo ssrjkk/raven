@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from raven.core.jobs import Job, JobManager, JobStatus
 
 
@@ -45,7 +47,8 @@ class TestJob:
             raise asyncio.CancelledError()
 
         job = Job("test", fn)
-        await job.run()
+        with pytest.raises(asyncio.CancelledError):
+            await job.run()
         assert job.status == JobStatus.CANCELLED
 
 
@@ -79,11 +82,18 @@ class TestJobManager:
         assert self.mgr.get("nonexistent") is None
 
     async def test_cancel_job(self):
+        started = asyncio.Event()
+
         async def fn():
+            started.set()
             await asyncio.sleep(999)
 
         job = await self.mgr.submit("test", fn)
+        await asyncio.wait_for(started.wait(), timeout=2)
         assert await self.mgr.cancel(job.id) is True
+        with pytest.raises(asyncio.CancelledError):
+            assert job._task is not None
+            await job._task
         assert job.status == JobStatus.CANCELLED
 
     async def test_cancel_nonexistent(self):

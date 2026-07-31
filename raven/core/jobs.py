@@ -48,6 +48,7 @@ class Job:
         except asyncio.CancelledError:
             self.status = JobStatus.CANCELLED
             self.error = "Cancelled"
+            raise
         except Exception as e:
             self.status = JobStatus.FAILED
             self.error = str(e)
@@ -76,7 +77,6 @@ class JobManager:
             job = self._jobs.get(job_id)
             if job and job._task and not job._task.done():
                 job._task.cancel()
-                job.status = JobStatus.CANCELLED
                 return True
         return False
 

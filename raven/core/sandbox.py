@@ -73,9 +73,28 @@ class Sandbox:
         return "Unknown sandbox mode"
 
     async def _exec_direct(self, code: str) -> str:
+        import ast
         import builtins
         import io
         from contextlib import redirect_stderr, redirect_stdout
+
+        try:
+            tree = ast.parse(code)
+        except SyntaxError as e:
+            return f"Syntax Error: {e}"
+
+        _blocked_names = frozenset({"__builtins__", "__import__", "exec", "eval", "compile", "open", "getattr", "setattr", "delattr", "globals", "locals", "breakpoint", "exit", "quit"})
+        _blocked_attrs = frozenset({"__subclasses__", "__class__", "__bases__", "__mro__", "__globals__", "__code__", "__builtins__"})
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and node.id in _blocked_names:
+                return f"[denied] access to '{node.id}' is not allowed"
+            if isinstance(node, ast.Attribute) and node.attr in _blocked_attrs:
+                return f"[denied] attribute '{node.attr}' is not allowed"
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                for alias in node.names:
+                    mod = alias.name.split(".")[0]
+                    if mod in ("os", "sys", "subprocess", "shutil", "socket", "ctypes"):
+                        return f"[denied] import of '{alias.name}' is not allowed"
 
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
@@ -145,6 +164,7 @@ class Sandbox:
         except TimeoutError:
             try:
                 proc.kill()
+                await proc.wait()
             except (ProcessLookupError, OSError):
                 logger.debug("Process already exited during kill")
             return "Execution timed out"
@@ -246,7 +266,7 @@ class Sandbox:
         finally:
             if container:
                 try:
-                    container.remove(force=True)
+                    await loop.run_in_executor(None, lambda: container.remove(force=True))
                 except (docker.errors.DockerException, docker.errors.NotFound):
                     logger.debug("Container already removed or Docker error during cleanup")
 

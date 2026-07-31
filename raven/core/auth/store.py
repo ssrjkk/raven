@@ -53,12 +53,16 @@ class AuthStore(BaseStore):
         now = time.time()
         uid = f"user:{username}"
         pwd_hash = hash_password(password) if password else ""
-        await self._execute(
-            "INSERT OR IGNORE INTO auth_users "
+        result = await self._execute(
+            "INSERT INTO auth_users "
             "(id, username, display_name, role, password_hash, api_tokens, "
             "is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (uid, username, display_name, role, pwd_hash, "[]", 1, now, now),
         )
+        if hasattr(result, "rowcount") and result.rowcount == 0:
+            existing = await self.get_user(username)
+            if existing:
+                return existing
         await self._commit()
         return User(id=uid, username=username, display_name=display_name, role=Role(role))
 

@@ -98,6 +98,8 @@ Available profiles:
 - **reviewer**: For code review and validation
 - **debugger**: For debugging and fixing issues
 - **qa**: For testing and quality assurance
+- **researcher**: For information gathering, codebase exploration, web research
+- **security**: For security auditing, vulnerability scanning, threat modeling
 - **done**: If the task is complete and no more agents are needed
 
 Respond with ONLY the profile name or "done".
@@ -106,6 +108,8 @@ Examples:
 "need to review the implementation" → reviewer
 "tests fail, need to debug" → debugger
 "task is complete" → done
+"need to research API usage" → researcher
+"audit for security issues" → security
 """
 
 
@@ -336,7 +340,7 @@ class AgentOrchestrator:
                 model="",
             )
             decision = (resp.content or "").strip().lower()
-            valid_profiles = {"architect", "planner", "coder", "reviewer", "debugger", "qa", "done"}
+            valid_profiles = {"architect", "planner", "coder", "reviewer", "debugger", "qa", "researcher", "security", "done"}
             if decision in valid_profiles and decision != "done":
                 return None if decision == current_profile else decision
             return None

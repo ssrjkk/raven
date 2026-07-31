@@ -200,6 +200,64 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
         "challenges, and suggested focus areas for next week.",
     ),
     WorkflowTemplate(
+        id="dream-cycle",
+        name="Dream Cycle (Memory Consolidation)",
+        description="Trigger memory consolidation, pattern detection, and skill generation",
+        category=TemplateCategory.DAILY,
+        trigger=TemplateTrigger.SCHEDULED,
+        default_schedule="0 3 * * *",
+        icon="💭",
+        config_schema={
+            "type": "object",
+            "properties": {
+                "force": {"type": "boolean", "description": "Run even if not idle", "default": False},
+            },
+        },
+        steps_goal="Run the dream cycle: consolidate short-term memories to long-term storage, "
+        "detect recurring patterns in stored memories, and generate new skill proposals. "
+        "Report the number of memories consolidated, patterns detected, and skills proposed. "
+        "Use the dream_cycle and dream_status tools.",
+    ),
+    WorkflowTemplate(
+        id="delegate-task",
+        name="Delegate to Agent",
+        description="Route a complex task to a specialized AI agent profile",
+        category=TemplateCategory.PRODUCTIVITY,
+        icon="🤖",
+        config_schema={
+            "type": "object",
+            "properties": {
+                "profile": {
+                    "type": "string",
+                    "enum": ["architect", "coder", "reviewer", "debugger", "qa", "researcher", "security", "planner"],
+                    "description": "Agent profile to delegate to",
+                },
+                "task": {"type": "string", "description": "Task description"},
+            },
+            "required": ["profile", "task"],
+        },
+        steps_goal="Review the task and delegate it to the specified agent profile. "
+        "Use the list_profiles tool to verify the profile exists, then use delegate_task "
+        "to route the work. Return the result from the delegated agent.",
+    ),
+    WorkflowTemplate(
+        id="parallel-review",
+        name="Parallel Security + Code Review",
+        description="Run security audit and code review in parallel delegation",
+        category=TemplateCategory.DEV,
+        icon="🛡️",
+        config_schema={
+            "type": "object",
+            "properties": {
+                "code_path": {"type": "string", "description": "Path to code to review"},
+            },
+            "required": ["code_path"],
+        },
+        steps_goal="Read the code at the specified path, then delegate both a security audit "
+        "(profile=security) and a code review (profile=reviewer) in parallel. "
+        "Collect both results and produce a combined report with security findings and code quality feedback.",
+    ),
+    WorkflowTemplate(
         id="incident-response",
         name="Incident Response",
         description="Run diagnostics and collect data when a service incident is detected",

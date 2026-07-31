@@ -37,8 +37,7 @@ def _read_json_file(path: str) -> dict[str, Any]:
     with Path(path).open() as f:
         import json as _json
 
-        data = _json.load(f)
-        return cast("dict[str, Any]", data)
+        return cast("dict[str, Any]", _json.load(f))
 
 
 async def _stream_sse(

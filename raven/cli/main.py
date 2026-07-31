@@ -12,10 +12,12 @@ from rich.panel import Panel
 from rich.table import Table
 
 from raven.cli.aios_cmd import aios_group as _aios
+from raven.cli.backup_cmd import backup_group as _backup
 from raven.cli.code_cmd import code_group as _code
 from raven.cli.db_cmd import db_group as _db
 from raven.cli.devices_cmd import devices_group as _devices
 from raven.cli.doctor_cmd import doctor as _doctor
+from raven.cli.dream_cmd import dream_group as _dream
 from raven.cli.flow_cmd import flow_group as _flow
 from raven.cli.gateway_runner import _run_gateway, create_gateway
 from raven.cli.logs_cmd import logs as _logs
@@ -29,6 +31,7 @@ from raven.cli.ravencode_cmd import ravencode_group as _ravencode
 from raven.cli.routine_cmd import routine_group as _routine
 from raven.cli.security_cmd import security_group as _security
 from raven.cli.service_cmd import service_group as _service
+from raven.cli.setup_cmd import setup as _setup
 from raven.cli.task_cmd import task_group as _task
 from raven.cli.upgrade_cmd import upgrade as _upgrade
 from raven.cli.voice_cmd import voice as _voice
@@ -69,6 +72,7 @@ cli.add_command(_aios)
 cli.add_command(_code)
 cli.add_command(_db)
 cli.add_command(_devices)
+cli.add_command(_dream)
 cli.add_command(_flow)
 cli.add_command(_message)
 cli.add_command(_models)
@@ -80,6 +84,8 @@ cli.add_command(_ravencode)
 cli.add_command(_routine)
 cli.add_command(_security)
 cli.add_command(_service)
+cli.add_command(_backup)
+cli.add_command(_setup)
 cli.add_command(_task)
 cli.add_command(_doctor)
 cli.add_command(_voice)

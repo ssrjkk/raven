@@ -247,7 +247,7 @@ class TestHandleCallback:
         assert result is not None
         assert result["provider"] == "github"
         assert result["email"] == "testuser@oauth"
-        assert "access_token" in result
+        assert "access_token" not in result
         assert state not in _SESSIONS
 
     @patch("raven.core.auth.oauth._exchange_code")

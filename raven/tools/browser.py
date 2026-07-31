@@ -5,6 +5,7 @@ import base64
 import ipaddress
 import json
 import socket
+from contextlib import asynccontextmanager
 from typing import Any
 from urllib.parse import urlparse
 
@@ -20,35 +21,41 @@ _browser_context = None
 _lock = asyncio.Lock()
 
 
+class _SSRFError(ValueError):
+    pass
+
+
+_PRIVATE_NETWORKS = [ipaddress.ip_network(r, strict=False) for r in _PRIVATE_RANGES]
+
+
 def _validate_url(url: str) -> None:
     parsed = urlparse(url)
     host = parsed.hostname
     if not host:
-        raise ValueError("URL missing hostname")
+        raise _SSRFError("URL missing hostname")
     try:
         ip = ipaddress.ip_address(host)
-        for r in _PRIVATE_RANGES:
-            if ip in ipaddress.ip_network(r, strict=False):
-                msg = f"SSRF blocked: private IP {host}"
-                raise ValueError(msg)
+        for net in _PRIVATE_NETWORKS:
+            if ip in net:
+                raise _SSRFError(f"SSRF blocked: private IP {host}")
     except ValueError:
-        if host in ("localhost", "0.0.0.0"):
-            msg = f"SSRF blocked: hostname {host}"
-            raise ValueError(msg) from None
-        try:
-            addrs = socket.getaddrinfo(host, None)
-            for _family, _type, _proto, _cname, sockaddr in addrs:
-                addr = str(sockaddr[0])
-                try:
-                    ip = ipaddress.ip_address(addr)
-                    for r in _PRIVATE_RANGES:
-                        if ip in ipaddress.ip_network(r, strict=False):
-                            msg = f"SSRF blocked: hostname {host} resolves to private IP {addr}"
-                            raise ValueError(msg)
-                except ValueError:
-                    continue
-        except (socket.gaierror, OSError):
-            logger.warning("SSRF guard: DNS resolution failed for {}", host)
+        pass
+    else:
+        return
+    if host in ("localhost", "0.0.0.0"):
+        raise _SSRFError(f"SSRF blocked: hostname {host}")
+    try:
+        addrs = socket.getaddrinfo(host, None)
+        for _family, _type, _proto, _cname, sockaddr in addrs:
+            addr = str(sockaddr[0])
+            ip = ipaddress.ip_address(addr)
+            for net in _PRIVATE_NETWORKS:
+                if ip in net:
+                    raise _SSRFError(f"SSRF blocked: hostname {host} resolves to private IP {addr}")
+    except _SSRFError:
+        raise
+    except (socket.gaierror, OSError):
+        logger.warning("SSRF guard: DNS resolution failed for {}", host)
 
 
 async def _get_playwright() -> Any | None:
@@ -105,7 +112,28 @@ async def _close_agent() -> None:
             _agent = None
 
 
+@asynccontextmanager
+async def _page_context(timeout: int = 30, url: str = "", skip_goto: bool = False):
+    browser = await _get_playwright()
+    if not browser:
+        yield None
+        return
+    page = await browser.new_page()
+    try:
+        if url:
+            _validate_url(url)
+            if not skip_goto:
+                await page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
+        yield page
+    finally:
+        await page.close()
+
+
 async def browser_open(url: str) -> str:
+    try:
+        _validate_url(url)
+    except ValueError as e:
+        return f"Blocked: {e}"
     import webbrowser
 
     await asyncio.to_thread(webbrowser.open, url)
@@ -113,176 +141,125 @@ async def browser_open(url: str) -> str:
 
 
 async def browser_navigate(url: str, wait_until: str = "domcontentloaded", timeout: int = 30) -> str:
-    browser = await _get_playwright()
-    if not browser:
-        return "Playwright not available. Install: pip install playwright && playwright install chromium"
     try:
         _validate_url(url)
     except ValueError as e:
         return f"Blocked: {e}"
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
-    page = await browser.new_page(viewport={"width": 1280, "height": 720})
-    try:
-        await page.goto(url, wait_until=wait_until, timeout=timeout * 1000)
+    async with _page_context(timeout=timeout, url=url) as page:
+        if page is None:
+            return "Playwright not available. Install: pip install playwright && playwright install chromium"
         title = await page.title()
         text = await page.evaluate("document.body.innerText")
         return f"Navigated to {title}\n\n{text[:6000]}"
-    finally:
-        await page.close()
 
 
 async def browser_click(selector: str, url: str = "", timeout: int = 10) -> str:
-    browser = await _get_playwright()
-    if not browser:
-        return "Playwright not available"
-    page = await browser.new_page()
-    try:
-        if url:
-            _validate_url(url)
-            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
-        await page.wait_for_selector(selector, timeout=timeout * 1000)
-        await page.click(selector)
-        await asyncio.sleep(1)
-        return f"Clicked {selector}"
-    except Exception as e:
-        return f"Click failed: {e}"
-    finally:
-        await page.close()
+    async with _page_context(url=url, timeout=timeout) as page:
+        if page is None:
+            return "Playwright not available"
+        try:
+            await page.wait_for_selector(selector, timeout=timeout * 1000)
+            await page.click(selector)
+            await asyncio.sleep(1)
+            return f"Clicked {selector}"
+        except Exception as e:
+            return f"Click failed: {e}"
 
 
 async def browser_fill(selector: str, value: str, url: str = "", timeout: int = 10) -> str:
-    browser = await _get_playwright()
-    if not browser:
-        return "Playwright not available"
-    page = await browser.new_page()
-    try:
-        if url:
-            _validate_url(url)
-            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
-        await page.wait_for_selector(selector, timeout=timeout * 1000)
-        await page.fill(selector, value)
-        return f"Filled {selector} with '{value[:50]}'"
-    except Exception as e:
-        return f"Fill failed: {e}"
-    finally:
-        await page.close()
+    async with _page_context(url=url, timeout=timeout) as page:
+        if page is None:
+            return "Playwright not available"
+        try:
+            await page.wait_for_selector(selector, timeout=timeout * 1000)
+            await page.fill(selector, value)
+            return f"Filled {selector} with '{value[:50]}'"
+        except Exception as e:
+            return f"Fill failed: {e}"
 
 
 async def browser_type(selector: str, text: str, delay_ms: int = 50, url: str = "", timeout: int = 10) -> str:
-    browser = await _get_playwright()
-    if not browser:
-        return "Playwright not available"
-    page = await browser.new_page()
-    try:
-        if url:
-            _validate_url(url)
-            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
-        await page.wait_for_selector(selector, timeout=timeout * 1000)
-        await page.type(selector, text, delay=delay_ms)
-        return f"Typed '{text[:50]}' into {selector}"
-    except Exception as e:
-        return f"Type failed: {e}"
-    finally:
-        await page.close()
+    async with _page_context(url=url, timeout=timeout) as page:
+        if page is None:
+            return "Playwright not available"
+        try:
+            await page.wait_for_selector(selector, timeout=timeout * 1000)
+            await page.type(selector, text, delay=delay_ms)
+            return f"Typed '{text[:50]}' into {selector}"
+        except Exception as e:
+            return f"Type failed: {e}"
 
 
 async def browser_select(selector: str, value: str, url: str = "", timeout: int = 10) -> str:
-    browser = await _get_playwright()
-    if not browser:
-        return "Playwright not available"
-    page = await browser.new_page()
-    try:
-        if url:
-            _validate_url(url)
-            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
-        await page.wait_for_selector(selector, timeout=timeout * 1000)
-        await page.select_option(selector, value)
-        return f"Selected '{value}' in {selector}"
-    except Exception as e:
-        return f"Select failed: {e}"
-    finally:
-        await page.close()
+    async with _page_context(url=url, timeout=timeout) as page:
+        if page is None:
+            return "Playwright not available"
+        try:
+            await page.wait_for_selector(selector, timeout=timeout * 1000)
+            await page.select_option(selector, value)
+            return f"Selected '{value}' in {selector}"
+        except Exception as e:
+            return f"Select failed: {e}"
 
 
 async def browser_screenshot(url: str, selector: str = "", timeout: int = 15) -> str:
-    browser = await _get_playwright()
-    if not browser:
-        return "Playwright not available. Install: pip install playwright && playwright install chromium"
     try:
         _validate_url(url)
     except ValueError as e:
         return f"Blocked: {e}"
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
-    page = await browser.new_page(viewport={"width": 1280, "height": 720})
-    try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
-        await asyncio.sleep(2)
-        if selector:
-            el = await page.wait_for_selector(selector, timeout=5000)
-            screenshot_bytes = await el.screenshot()
-        else:
-            screenshot_bytes = await page.screenshot(full_page=False)
-        b64 = base64.b64encode(screenshot_bytes).decode()
-        return f"![Screenshot](data:image/png;base64,{b64})"
-    except Exception as e:
-        return f"Screenshot failed: {e}"
-    finally:
-        await page.close()
+    async with _page_context(url=url, timeout=timeout) as page:
+        if page is None:
+            return "Playwright not available. Install: pip install playwright && playwright install chromium"
+        try:
+            await asyncio.sleep(2)
+            if selector:
+                el = await page.wait_for_selector(selector, timeout=5000)
+                screenshot_bytes = await el.screenshot()
+            else:
+                screenshot_bytes = await page.screenshot(full_page=False)
+            b64 = base64.b64encode(screenshot_bytes).decode()
+            return f"![Screenshot](data:image/png;base64,{b64})"
+        except Exception as e:
+            return f"Screenshot failed: {e}"
 
 
 async def browser_evaluate(script: str, url: str = "", timeout: int = 10) -> str:
-    browser = await _get_playwright()
-    if not browser:
-        return "Playwright not available"
-    page = await browser.new_page()
-    try:
-        if url:
-            _validate_url(url)
-            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
-        result = await page.evaluate(script)
-        return str(result)[:4000]
-    except Exception as e:
-        return f"Script execution failed: {e}"
-    finally:
-        await page.close()
+    async with _page_context(url=url, timeout=timeout) as page:
+        if page is None:
+            return "Playwright not available"
+        try:
+            result = await page.evaluate(script)
+            return str(result)[:4000]
+        except Exception as e:
+            return f"Script execution failed: {e}"
 
 
 async def browser_get_text(selector: str = "body", url: str = "", timeout: int = 10) -> str:
-    browser = await _get_playwright()
-    if not browser:
-        return "Playwright not available"
-    page = await browser.new_page()
-    try:
-        if url:
-            _validate_url(url)
-            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
-        await page.wait_for_selector(selector, timeout=timeout * 1000)
-        text = str(await page.inner_text(selector))
-        return text[:6000]
-    except Exception as e:
-        return f"Get text failed: {e}"
-    finally:
-        await page.close()
+    async with _page_context(url=url, timeout=timeout) as page:
+        if page is None:
+            return "Playwright not available"
+        try:
+            await page.wait_for_selector(selector, timeout=timeout * 1000)
+            text = str(await page.inner_text(selector))
+            return text[:6000]
+        except Exception as e:
+            return f"Get text failed: {e}"
 
 
 async def browser_get_html(selector: str = "body", url: str = "", timeout: int = 10) -> str:
-    browser = await _get_playwright()
-    if not browser:
-        return "Playwright not available"
-    page = await browser.new_page()
-    try:
-        if url:
-            _validate_url(url)
-            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
-        await page.wait_for_selector(selector, timeout=timeout * 1000)
-        html = str(await page.inner_html(selector))
-        return html[:6000]
-    except Exception as e:
-        return f"Get HTML failed: {e}"
-    finally:
-        await page.close()
+    async with _page_context(url=url, timeout=timeout) as page:
+        if page is None:
+            return "Playwright not available"
+        try:
+            await page.wait_for_selector(selector, timeout=timeout * 1000)
+            html = str(await page.inner_html(selector))
+            return html[:6000]
+        except Exception as e:
+            return f"Get HTML failed: {e}"
 
 
 async def browser_get_attributes(selector: str, url: str = "", timeout: int = 10) -> str:
@@ -296,7 +273,14 @@ async def browser_get_attributes(selector: str, url: str = "", timeout: int = 10
             await page.goto(url, wait_until="domcontentloaded", timeout=15000)
         await page.wait_for_selector(selector, timeout=timeout * 1000)
         attrs = await page.evaluate(
-            f"(function() {{ const el = document.querySelector('{selector}'); if (!el) return null; const a = {{}}; for (const attr of el.attributes) {{ a[attr.name] = attr.value; }} return JSON.stringify(a); }})()"
+            """(sel) => {
+                const el = document.querySelector(sel);
+                if (!el) return null;
+                const a = {};
+                for (const attr of el.attributes) { a[attr.name] = attr.value; }
+                return JSON.stringify(a);
+            }""",
+            selector,
         )
         return f"Attributes of {selector}: {attrs}"
     except Exception as e:
@@ -314,7 +298,7 @@ async def browser_wait(selector: str, timeout: int = 10, state: str = "visible",
         if url:
             _validate_url(url)
             await page.goto(url, wait_until="domcontentloaded", timeout=15000)
-        await page.wait_for_selector(selector, timeout=timeout * 1000)
+        await page.wait_for_selector(selector, timeout=timeout * 1000, state=state)
         return f"Selector {selector} is {state}"
     except Exception as e:
         return f"Wait failed: {e}"
@@ -323,42 +307,30 @@ async def browser_wait(selector: str, timeout: int = 10, state: str = "visible",
 
 
 async def browser_scroll(direction: str = "down", amount: int = 500, url: str = "", timeout: int = 10) -> str:
-    browser = await _get_playwright()
-    if not browser:
-        return "Playwright not available"
-    page = await browser.new_page()
-    try:
-        if url:
-            _validate_url(url)
-            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
-        sign = -1 if direction == "up" else 1
-        await page.evaluate(f"window.scrollBy(0, {sign * amount})")
-        await asyncio.sleep(0.5)
-        return f"Scrolled {direction} {amount}px"
-    except Exception as e:
-        return f"Scroll failed: {e}"
-    finally:
-        await page.close()
+    async with _page_context(url=url, timeout=timeout) as page:
+        if page is None:
+            return "Playwright not available"
+        try:
+            sign = -1 if direction == "up" else 1
+            await page.evaluate(f"window.scrollBy(0, {sign * amount})")
+            await asyncio.sleep(0.5)
+            return f"Scrolled {direction} {amount}px"
+        except Exception as e:
+            return f"Scroll failed: {e}"
 
 
 async def browser_get_cookies(url: str = "", timeout: int = 10) -> str:
-    browser = await _get_playwright()
-    if not browser:
-        return "Playwright not available"
-    page = await browser.new_page()
-    try:
-        if url:
-            _validate_url(url)
-            await page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
-        cookies = await page.context.cookies()
-        if not cookies:
-            return "No cookies"
-        summary = "\n".join(f"  {c['name']}={c['value'][:40]}" for c in cookies[:20])
-        return f"Cookies ({len(cookies)}):\n{summary}"
-    except Exception as e:
-        return f"Get cookies failed: {e}"
-    finally:
-        await page.close()
+    async with _page_context(url=url, timeout=timeout) as page:
+        if page is None:
+            return "Playwright not available"
+        try:
+            cookies = await page.context.cookies()
+            if not cookies:
+                return "No cookies"
+            summary = "\n".join(f"  {c['name']}={c['value'][:40]}" for c in cookies[:20])
+            return f"Cookies ({len(cookies)}):\n{summary}"
+        except Exception as e:
+            return f"Get cookies failed: {e}"
 
 
 async def browser_fill_form(fields: str, timeout: int = 30) -> str:

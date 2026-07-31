@@ -87,6 +87,9 @@ MAX_OUTPUT_CHARS = 30_000
 MAX_STDERR_CHARS = 10_000
 
 
+_FORBIDDEN_EXEC_FLAGS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
+
+
 def _validate_command(command: str) -> list[str]:
     import shlex
 
@@ -97,6 +100,10 @@ def _validate_command(command: str) -> list[str]:
     if base not in ALLOWED_COMMANDS:
         msg = f"command '{base}' not in allowlist"
         raise ValueError(msg)
+    if base == "find":
+        for token in parts[1:]:
+            if token in _FORBIDDEN_EXEC_FLAGS:
+                raise ValueError(f"find flag '{token}' is not allowed")
     return parts
 
 
@@ -127,6 +134,7 @@ async def shell_command(command: str, timeout: int = 30) -> str:
         return output or "(no output)"
     except TimeoutError:
         proc.kill()
+        await proc.wait()
         return f"[timeout after {timeout}s]"
 
 

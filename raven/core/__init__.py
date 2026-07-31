@@ -2,6 +2,8 @@ from raven.core.agent.agent import Agent, AgentConfig
 from raven.core.agent.registry import AgentRegistry
 from raven.core.config import Settings, settings
 from raven.core.db import Database
+from raven.core.events import EventBus
+from raven.core.features import FeatureFlags
 from raven.core.gateway.gateway import Gateway
 from raven.core.llm import (
     AnthropicProvider,
@@ -29,6 +31,8 @@ __all__ = [
     "BedrockProvider",
     "CopilotProvider",
     "Database",
+    "EventBus",
+    "FeatureFlags",
     "Gateway",
     "IncomingMessage",
     "LLMProvider",

@@ -13,6 +13,8 @@ from raven.tools.code_analysis import register_code_analysis_tools
 from raven.tools.collaboration import register_collaboration_tools
 from raven.tools.cost_management import register_cost_management_tools
 from raven.tools.db import register_db_tools
+from raven.tools.delegation import register_delegation_tools
+from raven.tools.dreaming import register_dreaming_tools
 from raven.tools.email import register_email_tools
 from raven.tools.env import register_env_tools
 from raven.tools.file import register_file_tools
@@ -65,6 +67,8 @@ def register_all_tools(registry: ToolRegistry) -> ToolRegistry:
     register_ab_testing_tools(registry)
     register_code_analysis_tools(registry)
     register_cost_management_tools(registry)
+    register_delegation_tools(registry)
+    register_dreaming_tools(registry)
     register_github_tools(registry)
     register_plugin_tools(registry)
     register_workflow_tools(registry)

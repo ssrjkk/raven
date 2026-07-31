@@ -140,6 +140,51 @@ Guidelines:
 - Test public APIs, not implementation details
 - If tests fail, report clearly what failed and why"""
 
+RESEARCHER_PROMPT = """You are the **Researcher** — an expert at gathering information, analyzing codebases, and discovering knowledge.
+
+Your process:
+1. Understand the research question or information need
+2. Search systematically using available tools:
+   - Codebase search (grep, glob, file_read)
+   - Web search for external knowledge
+   - Documentation review
+   - Dependency analysis
+3. Synthesize findings into a clear, structured report
+4. Cite sources and note confidence levels
+
+Guidelines:
+- Be thorough: check multiple sources before concluding
+- Distinguish facts from assumptions
+- When exploring unfamiliar code, start broad then narrow
+- Report negative findings (what you looked for but didn't find)
+- Estimate complexity and identify risks when relevant"""
+
+SECURITY_PROMPT = """You are the **Security Engineer** — you audit code for vulnerabilities and enforce security best practices.
+
+Your process:
+1. Review the code or system for:
+   - Injection flaws (SQL, NoSQL, command, template)
+   - Cross-site scripting (XSS) and CSRF
+   - SSRF and path traversal
+   - Authentication and authorization weaknesses
+   - Insecure deserialization
+   - Secrets exposure (hardcoded keys, tokens)
+   - Dependency vulnerabilities
+2. Run security scans and linters if available
+3. For each finding, report:
+   - Severity (CRITICAL / HIGH / MEDIUM / LOW)
+   - File and line location
+   - Explanation of the vulnerability
+   - Remediation recommendation
+4. Prioritize fixes by severity
+
+Guidelines:
+- Be thorough: check OWASP Top 10 categories
+- Verify findings before reporting (avoid false positives)
+- Provide concrete fix examples
+- If no issues found, state that explicitly
+- Never introduce new vulnerabilities in suggested fixes"""
+
 PROFILES: dict[str, AgentProfile] = {
     "architect": AgentProfile(
         name="architect",
@@ -216,6 +261,35 @@ PROFILES: dict[str, AgentProfile] = {
         max_iterations=15,
         temperature=0.1,
         handoff_profiles=["coder"],
+    ),
+    "researcher": AgentProfile(
+        name="researcher",
+        display_name="Researcher",
+        role="researcher",
+        system_prompt=RESEARCHER_PROMPT,
+        allowed_tool_categories=["file", "search", "git", "http"],
+        allowed_tools=["file_read", "file_list", "file_grep", "file_search",
+                       "git_log", "git_diff", "git_show",
+                       "search_web", "web_fetch", "knowledge_search"],
+        denied_tools=["file_write", "file_edit", "file_delete", "shell_exec", "db_query"],
+        max_iterations=15,
+        temperature=0.3,
+        handoff_profiles=["architect", "coder"],
+    ),
+    "security": AgentProfile(
+        name="security",
+        display_name="Security Engineer",
+        role="security",
+        system_prompt=SECURITY_PROMPT,
+        allowed_tool_categories=["file", "git", "search", "shell", "code_analysis"],
+        allowed_tools=["file_read", "file_list", "file_grep", "file_diff",
+                       "git_diff", "git_log",
+                       "test_run", "shell_exec",
+                       "code_analysis_complexity", "code_analysis_deps"],
+        denied_tools=["file_write", "file_edit", "file_delete"],
+        max_iterations=20,
+        temperature=0.1,
+        handoff_profiles=["coder", "reviewer"],
     ),
 }
 

@@ -38,15 +38,15 @@ class _PostgresMigrator:
             logger.info("Postgres DB is up-to-date (version {})", current)
             return
 
-        async with self.db._p.acquire() as conn:
-            for mig in pending:
-                logger.info("Applying Postgres migration {}: {}", mig.version, mig.description)
-                if mig.sql:
-                    await conn.execute(mig.sql)
-                if mig.migrate_fn:
-                    await mig.migrate_fn(conn)
-                await conn.execute("INSERT INTO _migrations (version) VALUES ($1)", mig.version)
-                logger.info("Postgres Migration {} applied", mig.version)
+        async with self.db._p.acquire() as conn, conn.transaction():
+                for mig in pending:
+                    logger.info("Applying Postgres migration {}: {}", mig.version, mig.description)
+                    if mig.sql:
+                        await conn.execute(mig.sql)
+                    if mig.migrate_fn:
+                        await mig.migrate_fn(conn)
+                    await conn.execute("INSERT INTO _migrations (version) VALUES ($1)", mig.version)
+                    logger.info("Postgres Migration {} applied", mig.version)
 
 
 class PostgresDatabase:
@@ -187,7 +187,20 @@ class PostgresDatabase:
     async def get_or_create_session(
         self, session_id: str, channel: str, user_id: str, agent_id: str = "default"
     ) -> Session:
+        now = datetime.now(UTC)
         async with self._p.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO sessions "
+                "(id, channel, user_id, agent_id, agent_skills, created_at, updated_at) "
+                "VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING",
+                session_id,
+                channel,
+                user_id,
+                agent_id,
+                "[]",
+                now,
+                now,
+            )
             row = await conn.fetchrow("SELECT * FROM sessions WHERE id = $1", session_id)
         if row:
             try:
@@ -207,9 +220,9 @@ class PostgresDatabase:
                 created_at=created if isinstance(created, datetime) else datetime.now(UTC),
                 updated_at=updated if isinstance(updated, datetime) else datetime.now(UTC),
             )
-        now = datetime.now(UTC)
+        now2 = datetime.now(UTC)
         session = Session(
-            id=session_id, channel=channel, user_id=user_id, agent_id=agent_id, created_at=now, updated_at=now
+            id=session_id, channel=channel, user_id=user_id, agent_id=agent_id, created_at=now2, updated_at=now2
         )
         async with self._p.acquire() as conn:
             await conn.execute(
@@ -272,18 +285,18 @@ class PostgresDatabase:
     ) -> dict[str, Any]:
         user_id = f"{channel}:{external_id}"
         async with self._p.acquire() as conn:
-            row = await conn.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
-        if row:
-            return dict(row)
-        async with self._p.acquire() as conn:
             await conn.execute(
-                "INSERT INTO users (id, channel, external_id, display_name, role) VALUES ($1, $2, $3, $4, $5)",
+                "INSERT INTO users (id, channel, external_id, display_name, role) "
+                "VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING",
                 user_id,
                 channel,
                 external_id,
                 display_name,
                 "user",
             )
+            row = await conn.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
+        if row:
+            return dict(row)
         return {
             "id": user_id,
             "channel": channel,

@@ -121,9 +121,12 @@ def check_tool_allowed(policy: SandboxPolicy, tool_name: str, channel: str = "")
 
 
 def check_path_allowed(policy: SandboxPolicy, path: str, mode: str = "read") -> tuple[bool, str]:
+    from pathlib import Path as _Path
+
     allow_list = policy.allow_read if mode == "read" else policy.allow_write
     if allow_list is not None:
-        allowed = any(path.startswith(a) for a in allow_list)
+        resolved = _Path(path).resolve()
+        allowed = any(resolved.is_relative_to(_Path(a).resolve()) for a in allow_list)
         if not allowed:
             return False, f"Path '{path}' not allowed for {mode} in {policy.name} sandbox"
     return True, ""

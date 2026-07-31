@@ -1,8 +1,35 @@
 from __future__ import annotations
 
 import json
+from typing import ClassVar
+
+import pytest
 
 from raven.core.llm import LLMProvider, LLMResponse, LLMRouter, ToolCall
+
+
+class _AllKeysDiscovery:
+    providers_available: ClassVar[list[str]] = [
+        "ollama",
+        "openai",
+        "anthropic",
+        "openrouter",
+        "groq",
+        "vertex",
+        "bedrock",
+        "copilot",
+    ]
+
+    def is_available(self, key_name: str) -> bool:
+        return True
+
+
+@pytest.fixture
+def all_keys(monkeypatch):
+    import raven.core.config_discovery as discovery
+
+    monkeypatch.setattr(discovery, "get_discovered_keys", lambda *a, **k: _AllKeysDiscovery())
+    return discovery
 
 
 class TestToolCall:
@@ -64,17 +91,17 @@ class TestLLMRouter:
             return type(prov._wrapped)
         return type(prov)
 
-    def test_get_provider_openrouter(self):
+    def test_get_provider_openrouter(self, all_keys):
         router = LLMRouter()
         prov = router._get_provider("openrouter/anthropic/claude-3")
         assert self._unwrapped(prov).__name__ == "OpenRouterProvider"
 
-    def test_get_provider_anthropic(self):
+    def test_get_provider_anthropic(self, all_keys):
         router = LLMRouter()
         prov = router._get_provider("claude-3-haiku-20240307")
         assert self._unwrapped(prov).__name__ == "AnthropicProvider"
 
-    def test_get_provider_openai(self):
+    def test_get_provider_openai(self, all_keys):
         router = LLMRouter()
         prov = router._get_provider("gpt-4o")
         assert self._unwrapped(prov).__name__ == "OpenAIProvider"

@@ -90,7 +90,13 @@ class ConditionNode:
         if self.op == Op.CONTAINS:
             return self.value in str(actual) if actual is not None else False
         if self.op == Op.REGEX:
-            return bool(re.match(self.value, str(actual))) if actual is not None else False
+            if actual is None:
+                return False
+            try:
+                compiled = re.compile(self.value)
+                return bool(compiled.match(str(actual)))
+            except re.error:
+                return False
         if self.op == Op.STARTSWITH:
             return str(actual).startswith(self.value) if actual is not None else False
         if self.op == Op.ENDSWITH:

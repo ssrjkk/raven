@@ -674,3 +674,30 @@ export interface GitBlameResult {
   file: string;
   error?: string;
 }
+
+export interface DreamSkillEntry {
+  name: string;
+  description: string;
+  source: string;
+}
+
+export interface DreamMemoryStats {
+  working: number;
+  session: number;
+  long_term: number;
+  knowledge: number;
+}
+
+export interface DreamStatusData {
+  running: boolean;
+  total_cycles: number;
+  last_cycle_time: number;
+  last_cycle_stats: Record<string, number> | null;
+  idle_timeout: number;
+  cycle_interval: number;
+}
+
+export interface DreamStatsData extends DreamStatusData {
+  memory: DreamMemoryStats;
+  skills: DreamSkillEntry[];
+}

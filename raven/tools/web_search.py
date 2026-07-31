@@ -95,7 +95,8 @@ class WebSearchTool:
     async def _duckduckgo(self, query: str, max_results: int) -> list[SearchResult]:
         client = await self._client_get()
         resp = await client.get(
-            f"https://html.duckduckgo.com/html/?q={query.replace(' ', '+')}",
+            "https://html.duckduckgo.com/html/",
+            params={"q": query},
             headers={"User-Agent": "Mozilla/5.0"},
         )
         resp.raise_for_status()

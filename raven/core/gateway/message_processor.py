@@ -107,7 +107,7 @@ class MessageProcessor:
         if not msgs:
             return
 
-        msg_dicts = [{"role": m.role, "content": m.content} for m in msgs]
+        msg_dicts = [{"role": m.role, "content": m.content, "created_at": m.created_at, "metadata": m.metadata} for m in msgs]
         total = await self._ctxmgr.estimate_tokens(msg_dicts)
         ratio = total / self._ctxmgr._config.max_tokens if self._ctxmgr._config.max_tokens > 0 else 0
 

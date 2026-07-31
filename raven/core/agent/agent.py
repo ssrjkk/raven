@@ -140,12 +140,12 @@ class Agent:
             resp = await self.llm.complete(prompt)
             summary = (resp.content or "")[:500]
             if summary.strip():
-                compressed = [{"role": "system", "content": f"[Context summary: {summary}]"}]
+                compressed = [messages[0], {"role": "system", "content": f"[Context summary: {summary}]"}]
                 compressed.extend(messages[-4:])
                 return compressed
         except Exception as e:
             logger.warning("Compression failed: {}", e)
-        return messages[-8:]
+        return [messages[0], *messages[-8:]] if len(messages) > 8 else messages
 
     async def _auto_memory(self, user_text: str, response_text: str):
         if not self.config.use_memory:

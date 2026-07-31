@@ -60,6 +60,25 @@ def _confine_fd(path: str, flags: int) -> int:
     return fd
 
 
+async def _read_file(path: str) -> str:
+    fd = _confine_fd(path, os.O_RDONLY)
+    try:
+        size = await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_END)
+        await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_SET)
+        raw = await asyncio.to_thread(os.read, fd, size)
+        return raw.decode("utf-8", errors="replace")
+    finally:
+        await asyncio.to_thread(os.close, fd)
+
+
+async def _write_file(path: str, content: str, flags: int = os.O_WRONLY | os.O_CREAT | os.O_TRUNC) -> None:
+    fd = _confine_fd(path, flags | _O_NOFOLLOW)
+    try:
+        await asyncio.to_thread(os.write, fd, content.encode("utf-8"))
+    finally:
+        await asyncio.to_thread(os.close, fd)
+
+
 async def file_read(path: str, max_size: int = 50000) -> str:
     fd = _confine_fd(path, os.O_RDONLY)
     try:
@@ -76,42 +95,23 @@ async def file_read(path: str, max_size: int = 50000) -> str:
 
 
 async def file_write(path: str, content: str) -> str:
-    fd = _confine_fd(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _O_NOFOLLOW)
-    try:
-        await asyncio.to_thread(os.write, fd, content.encode("utf-8"))
-    finally:
-        await asyncio.to_thread(os.close, fd)
+    await _write_file(path, content)
     return f"Written {len(content)} bytes to {path}"
 
 
 async def file_append(path: str, content: str) -> str:
-    fd = _confine_fd(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | _O_NOFOLLOW)
-    try:
-        await asyncio.to_thread(os.write, fd, content.encode("utf-8"))
-    finally:
-        await asyncio.to_thread(os.close, fd)
+    await _write_file(path, content, flags=os.O_WRONLY | os.O_CREAT | os.O_APPEND)
     return f"Appended {len(content)} bytes to {path}"
 
 
 async def file_edit(path: str, old_string: str, new_string: str) -> str:
-    fd = _confine_fd(path, os.O_RDONLY)
-    try:
-        size = await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_END)
-        await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_SET)
-        raw = await asyncio.to_thread(os.read, fd, size)
-        content = raw.decode("utf-8", errors="replace")
-    finally:
-        await asyncio.to_thread(os.close, fd)
+    content = await _read_file(path)
 
     if old_string not in content:
         return f"[error] old_string not found in {path}"
 
     new_content = content.replace(old_string, new_string, 1)
-    fd = _confine_fd(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _O_NOFOLLOW)
-    try:
-        await asyncio.to_thread(os.write, fd, new_content.encode("utf-8"))
-    finally:
-        await asyncio.to_thread(os.close, fd)
+    await _write_file(path, new_content)
     return f"Applied edit to {path} ({len(new_content)} bytes, {len(content) - len(new_content)} delta)"
 
 

@@ -45,7 +45,9 @@ def test_skills_registry_remove_nonexistent():
 
 
 def test_skills_registry_from_dir(tmp_path: Path):
-    (tmp_path / "my-skill.md").write_text("My custom skill\n\nDo something useful")
+    skill_dir = tmp_path / "my-skill"
+    skill_dir.mkdir()
+    (skill_dir / "skill.md").write_text("My custom skill\n\nDo something useful")
     reg = SkillsRegistry()
     reg.register_from_dir(tmp_path)
     skill = reg.get("my-skill")

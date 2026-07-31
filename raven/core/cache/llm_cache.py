@@ -34,10 +34,16 @@ class LLMCache:
 
     @staticmethod
     def _serialize_response(response: LLMResponse) -> str:
+        tool_calls_data = []
+        for tc in response.tool_calls:
+            if hasattr(tc, "to_dict"):
+                tool_calls_data.append(tc.to_dict())
+            else:
+                tool_calls_data.append({"id": getattr(tc, "id", ""), "name": getattr(tc, "name", ""), "arguments": getattr(tc, "arguments", {})})
         return json.dumps(
             {
                 "content": response.content,
-                "tool_calls": response.tool_calls,
+                "tool_calls": tool_calls_data,
                 "finish_reason": response.finish_reason,
             }
         )
@@ -56,9 +62,17 @@ class LLMCache:
             if raw is None:
                 return None
             data = json.loads(raw)
+            from raven.core.llm.protocol import ToolCall
+
+            raw_tool_calls = data.get("tool_calls", [])
+            tool_calls = [
+                ToolCall(id=tc.get("id", ""), name=tc.get("name", ""), arguments=tc.get("arguments", {}))
+                if isinstance(tc, dict) else tc
+                for tc in raw_tool_calls
+            ]
             return LLMResponse(
                 content=data.get("content", ""),
-                tool_calls=data.get("tool_calls", []),
+                tool_calls=tool_calls,
                 finish_reason=data.get("finish_reason", "stop"),
             )
         except (json.JSONDecodeError, TypeError, ValueError) as e:

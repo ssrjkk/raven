@@ -5,13 +5,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
+from raven.core.features import FeatureFlags
+
 
 @dataclass
 class Skill:
     name: str
     description: str
     instructions: str = ""
+    examples: list[str] = field(default_factory=list)
     paths: list[Path] = field(default_factory=list)
+    source: str = "local"
     _handler: Callable[..., Any] | None = None
 
     async def execute(self, *args: object, **kwargs: object) -> Any:
@@ -27,19 +33,42 @@ class SkillsRegistry:
     def register(self, skill: Skill) -> None:
         self._skills[skill.name] = skill
 
-    def register_from_dir(self, path: Path) -> None:
+    def register_from_dir(self, path: Path) -> int:
         if not path.is_dir():
-            return
-        for md_file in path.glob("*.md"):
-            skill_id = md_file.stem.lower()
-            content = md_file.read_text(encoding="utf-8", errors="replace")
+            return 0
+        count = 0
+        skill_file = path / "skill.md"
+        if skill_file.exists():
+            skill_id = path.name.lower()
+            content = skill_file.read_text(encoding="utf-8", errors="replace")
+            examples = []
+            examples_file = path / "examples.md"
+            if examples_file.exists():
+                examples = [examples_file.read_text(encoding="utf-8", errors="replace")]
+            scripts_dir = path / "scripts"
+            paths: list[Path] = [skill_file]
+            if scripts_dir.is_dir():
+                for sp in sorted(scripts_dir.iterdir()):
+                    if sp.suffix in (".py", ".sh", ".ps1"):
+                        paths.append(sp)
+            description = self._extract_description(content) or f"Skill loaded from {path}"
             skill = Skill(
                 name=skill_id,
-                description=f"Loaded from {md_file}",
+                description=description,
                 instructions=content,
-                paths=[md_file],
+                examples=examples,
+                paths=paths,
+                source="directory",
             )
             self._skills[skill_id] = skill
+            count += 1
+        for sub in sorted(path.iterdir()):
+            if sub.is_dir() and sub.name != "__pycache__":
+                count += self.register_from_dir(sub)
+        return count
+
+    def register_builtin(self, skill: Skill) -> None:
+        self._skills[skill.name] = skill
 
     def get(self, name: str) -> Skill | None:
         return self._skills.get(name)
@@ -50,105 +79,28 @@ class SkillsRegistry:
     def remove(self, name: str) -> bool:
         return self._skills.pop(name, None) is not None
 
+    def find_by_keyword(self, keyword: str) -> list[Skill]:
+        kw = keyword.lower()
+        results: list[Skill] = []
+        for s in self._skills.values():
+            if kw in s.name.lower() or kw in s.description.lower() or kw in s.instructions.lower():
+                results.append(s)
+        return results
+
+    def _extract_description(self, content: str) -> str:
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("# ") and len(stripped) > 2:
+                return stripped[2:].strip()
+        lines = [ln.strip() for ln in content.splitlines() if ln.strip()]
+        return lines[0][:120] if lines else ""
+
 
 skills_registry = SkillsRegistry()
 
 _BUILTIN_SKILLS: dict[str, Skill] = {}
-
-
-def _register_builtin(id: str, name: str, description: str, instructions: str) -> None:
-    _BUILTIN_SKILLS[id] = Skill(name=name, description=description, instructions=instructions)
-
-
-_register_builtin(
-    "security-audit",
-    "Security Audit",
-    "Review code for common security vulnerabilities (injection, XSS, SSRF, secrets exposure).",
-    (
-        "You are running a security audit. Follow these rules:\n"
-        "1. Read all modified/new files first\n"
-        "2. Check for: path injection, command injection, XSS, SSRF, hardcoded secrets, SQL injection\n"
-        "3. For each finding, report: file, line, severity (low/med/high/critical), and a fix suggestion\n"
-        "4. Never modify files during audit only report findings\n"
-        "5. Output a final summary table with severity counts"
-    ),
-)
-
-_register_builtin(
-    "code-review",
-    "Code Review",
-    "Review a pull request or set of changes for correctness, style, and maintainability.",
-    (
-        "You are reviewing code changes. Follow these rules:\n"
-        "1. Read the diff or the relevant files\n"
-        "2. Check for: logic errors, missing edge cases, type mismatches, dead code, style issues\n"
-        "3. For each issue, reference the exact file and line number\n"
-        "4. Separate your feedback into Required fixes Suggestions and Praise\n"
-        "5. Provide a summary rating LGTM / Minor Issues / Needs Changes"
-    ),
-)
-
-_register_builtin(
-    "refactor",
-    "Refactoring",
-    "Refactor code to improve structure, reduce duplication, or modernize patterns.",
-    (
-        "You are refactoring code. Follow these rules:\n"
-        "1. First understand the full codebase structure read relevant files\n"
-        "2. Plan the refactoring steps before executing\n"
-        "3. Make one change at a time and verify with tests/lint after each step\n"
-        "4. Keep the public API unchanged unless explicitly requested\n"
-        "5. Update imports and references across the codebase\n"
-        "6. After refactoring run lint and tests to confirm nothing is broken"
-    ),
-)
-
-_register_builtin(
-    "test-writer",
-    "Test Writer",
-    "Write comprehensive tests for code. Prefer real tests over mocks.",
-    (
-        "You are writing tests. Follow these rules:\n"
-        "1. Read the source files to understand the API and edge cases\n"
-        "2. Check existing test files for style conventions and patterns\n"
-        "3. Cover happy path error cases edge cases empty input None boundaries\n"
-        "4. Use real assertions assert x == y never print-based testing\n"
-        "5. Run tests after writing to confirm they pass\n"
-        "6. If tests use async verify the test runner supports it"
-    ),
-)
-
-_register_builtin(
-    "debug",
-    "Debugging",
-    "Diagnose and fix test failures, runtime errors, or unexpected behavior.",
-    (
-        "You are debugging an issue. Follow these rules:\n"
-        "1. Reproduce the error first run the failing command/test\n"
-        "2. Read the full error traceback and identify the root cause\n"
-        "3. Check recent changes git diff git log for the likely culprit\n"
-        "4. Formulate a hypothesis before making changes\n"
-        "5. Apply the fix and re-run to confirm resolution\n"
-        "6. If stuck after 3 attempts delegate to a sub-task with full context"
-    ),
-)
-
-_register_builtin(
-    "dependency-update",
-    "Dependency Update",
-    "Update project dependencies safely check for updates apply and verify compatibility.",
-    (
-        "You are updating dependencies. Follow these rules:\n"
-        "1. Check current dependency files requirements.txt pyproject.toml Cargo.toml package.json\n"
-        "2. Research latest compatible versions use web_search if needed\n"
-        "3. Update one dependency at a time\n"
-        "4. After each update run install lint typecheck tests\n"
-        "5. If a breaking change is found research migration steps\n"
-        "6. Commit changes with a descriptive message per dependency"
-    ),
-)
-
-_SKILL_SEARCH_DIRS = (
+_SKILL_SEARCH_DIRS: tuple[Path, ...] = (
+    Path("workspace") / "skills",
     Path(".opencode/skills"),
     Path(".claude/skills"),
     Path(".agents/skills"),
@@ -156,44 +108,146 @@ _SKILL_SEARCH_DIRS = (
 )
 
 
+def _register_builtin(id: str, name: str, description: str, instructions: str) -> None:
+    _BUILTIN_SKILLS[id] = Skill(name=id, description=description, instructions=instructions)
+
+
+_register_builtin(
+    "security-audit",
+    "Security Audit",
+    "Review code for common security vulnerabilities (injection, XSS, SSRF, secrets exposure).",
+    "Analyze the provided code for:\n- SQL/NoSQL injection\n- Cross-site scripting (XSS)\n- Server-side request forgery (SSRF)\n- Hardcoded secrets/API keys\n- Path traversal\n- Command injection\n\nOutput a report with severity levels.",
+)
+
+_register_builtin(
+    "code-review",
+    "Code Review",
+    "Review a pull request or set of changes for correctness, style, and maintainability.",
+    "Review the provided diff or code for:\n- Correctness: logic errors, edge cases\n- Style: adherence to project conventions\n- Maintainability: readability, duplication, test coverage\n\nProvide actionable feedback.",
+)
+
+_register_builtin(
+    "refactor",
+    "Refactoring",
+    "Refactor code to improve structure, reduce duplication, or modernize patterns.",
+    "Analyze the provided code and:\n- Identify duplication\n- Suggest structural improvements\n- Modernize patterns where appropriate\n- Preserve existing behavior\n\nOutput the refactored version.",
+)
+
+_register_builtin(
+    "test-writer",
+    "Test Writer",
+    "Write comprehensive tests for code. Prefer real tests over mocks.",
+    "Write tests for the provided code:\n- Cover happy path, edge cases, and error paths\n- Prefer real integrations over mocks\n- Use the project's existing test framework\n- Name tests descriptively",
+)
+
+_register_builtin(
+    "debug",
+    "Debugging",
+    "Diagnose and fix test failures, runtime errors, or unexpected behavior.",
+    "Debug the provided issue:\n- Reproduce the problem\n- Identify root cause\n- Propose a fix\n- Verify the fix doesn't break existing tests",
+)
+
+_register_builtin(
+    "dependency-update",
+    "Dependency Update",
+    "Update project dependencies safely check for updates apply and verify compatibility.",
+    "Update dependencies:\n- Check current versions\n- Determine compatible updates\n- Apply updates\n- Run tests to verify compatibility",
+)
+
+
 def discover_skills() -> dict[str, Skill]:
+    if not FeatureFlags.get().is_enabled("skills"):
+        return dict(_BUILTIN_SKILLS)
     result = dict(_BUILTIN_SKILLS)
     for base in _SKILL_SEARCH_DIRS:
         if not base.is_dir():
             continue
-        for md_file in base.glob("*.md"):
-            skill_id = md_file.stem.lower()
-            content = md_file.read_text(encoding="utf-8", errors="replace")
-            name = skill_id.replace("-", " ").title()
-            result[skill_id] = Skill(
-                name=name,
-                description=f"Loaded from {md_file}",
-                instructions=content,
-                paths=[md_file],
-            )
+        skills_registry.register_from_dir(base)
+    for s in skills_registry.list_names():
+        skill = skills_registry.get(s)
+        if skill:
+            result[s] = skill
     return result
 
 
-def load_skill(skill_id: str) -> str:
-    skills = discover_skills()
-    skill = skills.get(skill_id)
-    if skill:
-        return f"# Skill: {skill.name}\n\n{skill.description}\n\n## Instructions\n\n{skill.instructions}"
-    available = ", ".join(sorted(skills))
-    return f"Skill '{skill_id}' not found. Available: {available or '(none)'}"
+SKILLS_DIR = Path("workspace") / "skills"
 
 
-def list_skills() -> list[str]:
-    return sorted(discover_skills().keys())
+def ensure_skills_dir() -> Path:
+    SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+    return SKILLS_DIR
 
 
-def get_skill_info(skill_id: str) -> Skill | None:
-    return discover_skills().get(skill_id)
+def create_skill(name: str, description: str, instructions: str, examples: str = "") -> Path:
+    safe_name = name.lower().replace(" ", "-").replace("_", "-")
+    skill_dir = SKILLS_DIR / safe_name
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "skill.md").write_text(f"# {description}\n\n{instructions}", encoding="utf-8")
+    if examples:
+        (skill_dir / "examples.md").write_text(examples, encoding="utf-8")
+    skill = Skill(name=safe_name, description=description, instructions=instructions, source="directory")
+    skills_registry.register(skill)
+    logger.info("[skills] created '{}' at {}", safe_name, skill_dir)
+    return skill_dir
 
 
-# ---------------------------------------------------------------------------
-# remote registry (ClawHub-like)
-# ---------------------------------------------------------------------------
+def update_skill(name: str, instructions: str | None = None, description: str | None = None) -> bool:
+    skill = skills_registry.get(name)
+    if not skill:
+        return False
+    if instructions is not None:
+        skill.instructions = instructions
+    if description is not None:
+        skill.description = description
+    for p in skill.paths:
+        if p.name == "skill.md" and p.exists():
+            content = p.read_text(encoding="utf-8")
+            if instructions is not None:
+                content = f"# {skill.description}\n\n{instructions}"
+            elif description is not None:
+                lines = content.splitlines()
+                if lines and lines[0].startswith("# "):
+                    lines[0] = f"# {description}"
+                content = "\n".join(lines)
+            p.write_text(content, encoding="utf-8")
+    return True
+
+
+def list_skills() -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for name in list(_BUILTIN_SKILLS) + skills_registry.list_names():
+        if name in seen:
+            continue
+        seen.add(name)
+        skill = _BUILTIN_SKILLS.get(name) or skills_registry.get(name)
+        if skill:
+            result.append({"name": skill.name, "description": skill.description, "source": skill.source})
+    return result
+
+
+def get_skill_info(name: str) -> Skill | None:
+    return _BUILTIN_SKILLS.get(name) or skills_registry.get(name)
+
+
+def install_skill(source: str) -> Skill | None:
+    src_path = Path(source)
+    if src_path.is_dir():
+        count = skills_registry.register_from_dir(src_path)
+        if count > 0:
+            logger.info("[skills] installed {} skills from {}", count, source)
+            return skills_registry.get(src_path.name.lower())
+    elif src_path.is_file() and src_path.suffix == ".md":
+        content = src_path.read_text(encoding="utf-8", errors="replace")
+        skill_id = src_path.stem.lower()
+        first_line = content.splitlines()[0] if content.splitlines() else ""
+        description = first_line.lstrip("# ").strip() if first_line.startswith("# ") else skill_id
+        skill = Skill(name=skill_id, description=description, instructions=content, source="installed")
+        skills_registry.register(skill)
+        logger.info("[skills] installed skill '{}' from {}", skill_id, source)
+        return skill
+    return None
+
 
 _REMOTE_REGISTRY_URL: str = ""
 
@@ -201,34 +255,30 @@ _REMOTE_REGISTRY_URL: str = ""
 def set_skill_registry(url: str) -> str:
     global _REMOTE_REGISTRY_URL
     _REMOTE_REGISTRY_URL = url
-    return f"Registry URL set to: {url}"
+    logger.info("[skills] remote registry set to {}", url)
+    return url
 
 
 def get_registry_url() -> str:
     return _REMOTE_REGISTRY_URL
 
 
-async def download_skill(skill_id: str) -> str:
+async def download_skill(skill_id: str) -> Skill | None:
     if not _REMOTE_REGISTRY_URL:
-        return "[error] no registry URL configured. Use set_skill_registry() first."
-    try:
-        import httpx
+        logger.warning("[skills] no remote registry configured")
+        return None
+    import httpx
 
-        url = f"{_REMOTE_REGISTRY_URL.rstrip('/')}/skills/{skill_id}"
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            data = resp.json()
-        name = data.get("name", skill_id)
-        description = data.get("description", "")
-        instructions = data.get("instructions", data.get("prompt", ""))
-        if not instructions:
-            return f"[error] skill '{skill_id}' has no instructions in registry"
-        _register_builtin(skill_id, name, description, instructions)
-        return f"Downloaded and registered skill: {name}"
-    except httpx.HTTPStatusError as exc:
-        if exc.response.status_code == 404:
-            return f"[error] skill '{skill_id}' not found in registry"
-        return f"[error] registry request failed: {exc}"
-    except Exception as exc:
-        return f"[error] cannot download skill: {exc}"
+    url = f"{_REMOTE_REGISTRY_URL.rstrip('/')}/skills/{skill_id}"
+    try:
+        resp = await httpx.AsyncClient().get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        content = data.get("instructions", "")
+        description = data.get("description", skill_id)
+        skill = Skill(name=skill_id, description=description, instructions=content, source="remote")
+        skills_registry.register(skill)
+        return skill
+    except Exception:
+        logger.opt(exception=True).warning("[skills] failed to download '{}'", skill_id)
+        return None

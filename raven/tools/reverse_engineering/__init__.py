@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 from raven.tools.reverse_engineering.binary_analyzer import (
     analyze_binary,
     extract_strings,
@@ -17,9 +20,7 @@ __all__ = [
 ]
 
 
-def register_re_tools(registry):
-    from raven.core.task_engine.tool_registry import ToolSpec
-
+def register_re_tools(registry: ToolRegistry) -> None:
     registry.register(
         ToolSpec(
             name="analyze_binary",

@@ -17,6 +17,16 @@ from raven.core.llm.protocol import LLMProvider, LLMResponse
 from raven.core.metrics import InstrumentedLLMProvider, metrics
 from raven.core.tracing import trace_llm_call
 
+_HAS_TIER_CONFIG: bool | None = None
+
+
+def _tiers_configured() -> bool:
+    global _HAS_TIER_CONFIG
+    if _HAS_TIER_CONFIG is not None:
+        return _HAS_TIER_CONFIG
+    _HAS_TIER_CONFIG = bool(settings.model_fast or settings.model_balanced or settings.model_quality)
+    return _HAS_TIER_CONFIG
+
 
 class LLMRouter:
     _CACHE_TTL = 2.0
@@ -116,10 +126,19 @@ class LLMRouter:
             self._providers[key] = InstrumentedLLMProvider(raw, provider_name=key)
         return self._providers[key]
 
+    def _resolve_model(self, messages: list[dict[str, Any]], model: str | None) -> str:
+        if model:
+            return model
+        if _tiers_configured():
+            from raven.core.model_tiers import select_model
+
+            return select_model(messages)
+        return settings.default_model
+
     async def complete_stream(
         self, messages: list[dict[str, Any]], model: str | None = None, tools: list[dict[str, Any]] | None = None
     ) -> AsyncIterator[str]:
-        model = model or settings.default_model
+        model = self._resolve_model(messages, model)
         last_exc: Exception | None = None
         for attempt in range(max(1, settings.llm_retry_max)):
             try:
@@ -168,7 +187,7 @@ class LLMRouter:
     async def complete(
         self, messages: list[dict[str, Any]], model: str | None = None, tools: list[dict[str, Any]] | None = None
     ) -> LLMResponse:
-        model = model or settings.default_model
+        model = self._resolve_model(messages, model)
         key = self._cache_key(messages, model, tools)
         cached = await self._get_cached(key)
         if cached is not None:

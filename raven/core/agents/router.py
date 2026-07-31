@@ -16,6 +16,8 @@ Available profiles:
 - **reviewer**: Code review, running linters/tests, finding bugs, quality check.
 - **debugger**: Diagnosing bugs, reading stack traces, fixing runtime errors.
 - **qa**: Running tests, writing test cases, validating coverage, integration testing.
+- **researcher**: Information gathering, codebase exploration, web research, knowledge discovery.
+- **security**: Security auditing, vulnerability scanning, threat modeling, OWASP review.
 
 Respond with ONLY the profile name and a confidence score 0-1, no explanation.
 Format: profile_name|confidence
@@ -30,6 +32,8 @@ Examples:
 "create a plan for migrating to postgres" → planner|0.9
 "help me understand this error" → debugger|0.85
 "add input validation" → coder|0.7
+"research the codebase for deprecated APIs" → researcher|0.9
+"audit this code for security issues" → security|0.95
 """
 
 
@@ -48,6 +52,8 @@ _KEYWORD_RULES: list[tuple[re.Pattern[str], str, float]] = [
     (re.compile(r"(?:test|coverage|unit\s*test|integration\s*test|e2e\s*test|pytest|assert)"), "qa", 0.75),
     (re.compile(r"(?:implement|write\s*code|create\s*(?:a|an)\s+(?:function|class|module|file)|refactor|add\s+feature)"), "coder", 0.65),
     (re.compile(r"(?:write|create|generate|build|make|develop)"), "coder", 0.5),
+    (re.compile(r"(?:research|investigate|explore|find|search|look\s*up|learn|study|analyze\s*codebase|discover|documentation)"), "researcher", 0.7),
+    (re.compile(r"(?:security|vulnerability|cve|audit|owasp|threat|exploit|injection|xss|ssrf|hardcoded|secret|token|permission)"), "security", 0.8),
 ]
 
 
@@ -87,7 +93,7 @@ class IntentRouter:
                     confidence = float(parts[1].strip())
                 except (ValueError, IndexError):
                     confidence = 0.5
-                if profile in ("architect", "planner", "coder", "reviewer", "debugger", "qa"):
+                if profile in ("architect", "planner", "coder", "reviewer", "debugger", "qa", "researcher", "security"):
                     llm_result = ClassificationResult(profile=profile, confidence=confidence, raw_query=text)
                     if keyword_result and keyword_result.profile == profile:
                         return llm_result

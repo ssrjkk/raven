@@ -43,7 +43,9 @@ from raven.core.config_watcher import ConfigWatcher
 from raven.core.cost_management_api import create_cost_management_router
 from raven.core.db import DatabaseFactory
 from raven.core.debugger_api import create_debugger_router
+from raven.core.dreaming.engine import DreamEngine as _DreamEngine
 from raven.core.email_api import create_email_router
+from raven.core.features import FeatureFlags
 from raven.core.finetune_api import create_finetune_router
 from raven.core.gateway.aios_adapter import get_aios_adapter
 from raven.core.gateway.gateway import Gateway
@@ -54,6 +56,7 @@ from raven.core.http_client import client_manager
 from raven.core.insights_api import create_insights_router
 from raven.core.kg_api import create_knowledge_router
 from raven.core.media_api import create_media_router
+from raven.core.memory.manager import MemoryManager as _MemoryManager
 from raven.core.metrics import metrics
 from raven.core.middleware import (
     auth_middleware,
@@ -95,6 +98,9 @@ def create_gateway() -> Gateway:
 
 
 async def _run_gateway(gateway: Gateway, web_port: int):
+    features = FeatureFlags.get()
+    logger.info("Active features: {}", ", ".join(features.enabled_list()))
+
     audit_logger.start()
     config_watcher = ConfigWatcher()
     await config_watcher.start()
@@ -104,8 +110,17 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     await _secrets.bind_db(gateway.db)
     plugins_dir = Path(__file__).parent.parent / "plugins"
     plugin_loader = gateway.plugin_loader
+    plugin_filter: dict[str, str] = {
+        "browser": "browser",
+        "voice": "voice",
+    }
     for pdir in sorted(plugins_dir.iterdir(), key=lambda d: d.name):
-        if pdir.is_dir() and pdir.name != "__pycache__":
+        name = pdir.name
+        if pdir.is_dir() and name != "__pycache__":
+            required_feature = plugin_filter.get(name)
+            if required_feature and not features.is_enabled(required_feature):
+                logger.debug("Plugin '{}' skipped (feature '{}' disabled)", name, required_feature)
+                continue
             plugin_loader.load_from_dir(pdir)
     logger.info("Loaded {} tools from plugins", len(plugin_loader.tools))
 
@@ -133,35 +148,25 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     github_ch = GithubChannel()
     gitlab = GitlabChannel()
 
-    await telegram.on_message(gateway.handle_message)
-    await discord.on_message(gateway.handle_message)
-    await webchat.on_message(gateway.handle_message)
-    await slack.on_message(gateway.handle_message)
-    await whatsapp.on_message(gateway.handle_message)
-    await matrix.on_message(gateway.handle_message)
-    await googlechat.on_message(gateway.handle_message)
-    await sig_ch.on_message(gateway.handle_message)
-    await irc.on_message(gateway.handle_message)
-    await teams.on_message(gateway.handle_message)
-    await feishu.on_message(gateway.handle_message)
-    await line.on_message(gateway.handle_message)
-    await github_ch.on_message(gateway.handle_message)
-    await gitlab.on_message(gateway.handle_message)
-
-    await gateway.register_channel(telegram)
-    await gateway.register_channel(discord)
-    await gateway.register_channel(webchat)
-    await gateway.register_channel(slack)
-    await gateway.register_channel(whatsapp)
-    await gateway.register_channel(matrix)
-    await gateway.register_channel(googlechat)
-    await gateway.register_channel(sig_ch)
-    await gateway.register_channel(irc)
-    await gateway.register_channel(teams)
-    await gateway.register_channel(feishu)
-    await gateway.register_channel(line)
-    await gateway.register_channel(github_ch)
-    await gateway.register_channel(gitlab)
+    _all_channels = [
+        ("telegram", telegram),
+        ("discord", discord),
+        ("webchat", webchat),
+        ("slack", slack),
+        ("whatsapp", whatsapp),
+        ("matrix", matrix),
+        ("googlechat", googlechat),
+        ("signal", sig_ch),
+        ("irc", irc),
+        ("teams", teams),
+        ("feishu", feishu),
+        ("line", line),
+        ("github", github_ch),
+        ("gitlab", gitlab),
+    ]
+    for _, ch in _all_channels:
+        await ch.on_message(gateway.handle_message)
+        await gateway.register_channel(ch)
 
     api_app = webchat.app
 
@@ -242,8 +247,11 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     knowledge_router = create_knowledge_router()
     api_app.include_router(knowledge_router)
 
-    voice_router = create_voice_router()
-    api_app.include_router(voice_router)
+    if features.is_enabled("voice"):
+        voice_router = create_voice_router()
+        api_app.include_router(voice_router)
+    else:
+        logger.debug("Router 'voice' skipped (feature disabled)")
 
     collab_router = create_collab_router()
     api_app.include_router(collab_router)
@@ -260,11 +268,13 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     email_router = create_email_router()
     api_app.include_router(email_router)
 
-    analytics_router = create_analytics_router()
-    api_app.include_router(analytics_router)
-
-    ab_testing_router = create_ab_testing_router()
-    api_app.include_router(ab_testing_router)
+    if features.is_enabled("telemetry"):
+        analytics_router = create_analytics_router()
+        api_app.include_router(analytics_router)
+        ab_testing_router = create_ab_testing_router()
+        api_app.include_router(ab_testing_router)
+    else:
+        logger.debug("Routers 'analytics/ab_testing' skipped (telemetry disabled)")
 
     cost_router = create_cost_management_router()
     api_app.include_router(cost_router)
@@ -272,8 +282,11 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     wf_store = WorkflowStore()
     wf_store.register_many(BUILTIN_TEMPLATES)
 
-    browser_router = create_browser_router()
-    api_app.include_router(browser_router)
+    if features.is_enabled("browser"):
+        browser_router = create_browser_router()
+        api_app.include_router(browser_router)
+    else:
+        logger.debug("Router 'browser' skipped (feature disabled)")
 
     web_search_router = create_web_search_router()
     api_app.include_router(web_search_router)
@@ -431,63 +444,68 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             await eng.resume_routine(routine_id)
         return {"ok": True}
 
-    @api_app.get("/api/task/list")
-    async def api_task_list(limit: int = 50, offset: int = 0):
-        from raven.core.task_engine.store import TaskStore
+    if features.is_enabled("planner"):
 
-        store = TaskStore(settings.resolved_db_path)
-        limit = min(limit, 1000)
-        items = [
-            {
-                "id": t.id,
-                "goal": t.goal,
-                "status": t.status.value,
-                "steps": [
-                    {"order": s.order, "description": s.description, "tool": s.tool, "status": s.status.value}
-                    for s in t.steps
-                ],
-                "created_at": t.created_at,
-            }
-            for t in await store.list_tasks(limit=limit, offset=offset)
-        ]
-        return {"items": items, "total": await store.count_tasks(), "limit": limit, "offset": offset, "version": 1}
+        @api_app.get("/api/task/list")
+        async def api_task_list(limit: int = 50, offset: int = 0):
+            from raven.core.task_engine.store import TaskStore
 
-    @api_app.post("/api/task/run")
-    async def api_task_run(body: dict[str, Any]):
-        from raven.core.task_engine.planner import TaskPlanner
-        from raven.core.task_engine.runner import TaskRunner
-        from raven.core.task_engine.store import TaskStore
-        from raven.tools.register_all import create_tool_registry
+            store = TaskStore(settings.resolved_db_path)
+            limit = min(limit, 1000)
+            items = [
+                {
+                    "id": t.id,
+                    "goal": t.goal,
+                    "status": t.status.value,
+                    "steps": [
+                        {"order": s.order, "description": s.description, "tool": s.tool, "status": s.status.value}
+                        for s in t.steps
+                    ],
+                    "created_at": t.created_at,
+                }
+                for t in await store.list_tasks(limit=limit, offset=offset)
+            ]
+            return {"items": items, "total": await store.count_tasks(), "limit": limit, "offset": offset, "version": 1}
 
-        goal = body.get("goal", "")
-        if not goal:
-            from fastapi import HTTPException
+        @api_app.post("/api/task/run")
+        async def api_task_run(body: dict[str, Any]):
+            from raven.core.task_engine.planner import TaskPlanner
+            from raven.core.task_engine.runner import TaskRunner
+            from raven.core.task_engine.store import TaskStore
+            from raven.tools.register_all import create_tool_registry
 
-            raise HTTPException(400, "goal required")
-        tools = create_tool_registry()
-        store = TaskStore(settings.resolved_db_path)
-        planner = TaskPlanner(tools)
-        runner = TaskRunner(store, tools)
-        task = await planner.plan(goal, gateway.llm)
-        await runner.submit(task)
-        bg_task = asyncio.create_task(runner.wait(task.id, timeout=600))
-        if not hasattr(api_app.state, "_bg_tasks"):
-            api_app.state._bg_tasks = set()
-        api_app.state._bg_tasks.add(bg_task)
-        bg_task.add_done_callback(api_app.state._bg_tasks.discard)
-        return {"id": task.id}
+            goal = body.get("goal", "")
+            if not goal:
+                from fastapi import HTTPException
 
-    @api_app.post("/api/task/{task_id}/cancel")
-    async def api_task_cancel(task_id: str):
-        from raven.core.task_engine.runner import TaskRunner
-        from raven.core.task_engine.store import TaskStore
-        from raven.tools.register_all import create_tool_registry
+                raise HTTPException(400, "goal required")
+            tools = create_tool_registry()
+            store = TaskStore(settings.resolved_db_path)
+            planner = TaskPlanner(tools)
+            runner = TaskRunner(store, tools)
+            task = await planner.plan(goal, gateway.llm)
+            await runner.submit(task)
+            bg_task = asyncio.create_task(runner.wait(task.id, timeout=600))
+            if not hasattr(api_app.state, "_bg_tasks"):
+                api_app.state._bg_tasks = set()
+            api_app.state._bg_tasks.add(bg_task)
+            bg_task.add_done_callback(api_app.state._bg_tasks.discard)
+            return {"id": task.id}
 
-        tools = create_tool_registry()
-        store = TaskStore(settings.resolved_db_path)
-        runner = TaskRunner(store, tools)
-        ok = await runner.cancel(task_id)
-        return {"ok": ok}
+        @api_app.post("/api/task/{task_id}/cancel")
+        async def api_task_cancel(task_id: str):
+            from raven.core.task_engine.runner import TaskRunner
+            from raven.core.task_engine.store import TaskStore
+            from raven.tools.register_all import create_tool_registry
+
+            tools = create_tool_registry()
+            store = TaskStore(settings.resolved_db_path)
+            runner = TaskRunner(store, tools)
+            ok = await runner.cancel(task_id)
+            return {"ok": ok}
+
+    else:
+        logger.debug("Task endpoints skipped (planner disabled)")
 
     @api_app.get("/api/code/list")
     async def api_code_sessions(limit: int = 20, offset: int = 0):
@@ -592,6 +610,70 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     set_tool_analytics(analytics_engine)
 
+    memory_manager = _MemoryManager(db=gateway.db, workspace=settings.resolved_workspace)
+    dream_engine = _DreamEngine(memory=memory_manager, event_bus=gateway.event_bus)
+    api_app.state.dream_engine = dream_engine
+
+    @api_app.get("/api/dream/status")
+    async def api_dream_status():
+        eng: _DreamEngine = api_app.state.dream_engine
+        return eng.status()
+
+    @api_app.get("/api/dream/stats")
+    async def api_dream_stats():
+        eng: _DreamEngine = api_app.state.dream_engine
+        memory_stats = await _get_memory_stats(memory_manager)
+        dream_skills = _get_dream_skills()
+        return {
+            **eng.status(),
+            "memory": memory_stats,
+            "skills": dream_skills,
+        }
+
+    @api_app.post("/api/dream/cycle")
+    async def api_dream_cycle():
+        eng: _DreamEngine = api_app.state.dream_engine
+        stats = await eng.cycle_once()
+        return {"ok": True, "stats": stats}
+
+    @api_app.post("/api/memory/backup")
+    async def api_memory_backup():
+        from raven.core.backup import export_memory
+        path = await export_memory(memory_manager)
+        return {"ok": True, "path": str(path)}
+
+    @api_app.post("/api/memory/restore")
+    async def api_memory_restore(body: dict[str, str]):
+        from raven.core.backup import import_memory
+        source = Path(body.get("path", ""))
+        if not source.is_file():
+            return {"ok": False, "error": f"File not found: {source}"}
+        counts = await import_memory(memory_manager, source)
+        return {"ok": True, "restored": counts}
+
+    @api_app.get("/api/memory/backups")
+    async def api_memory_backups():
+        from raven.core.backup import list_backups
+        backups = await list_backups()
+        return {"backups": backups}
+
+    async def _get_memory_stats(mgr: _MemoryManager) -> dict[str, Any]:
+        tiers = {}
+        for tier_name in ("working", "session", "long_term", "knowledge"):
+            store = getattr(mgr, tier_name, None)
+            if store is None:
+                continue
+            try:
+                keys = await store.list_keys() if hasattr(store, "list_keys") else []
+                tiers[tier_name] = len(keys)
+            except Exception:
+                tiers[tier_name] = 0
+        return tiers
+
+    def _get_dream_skills() -> list[dict[str, Any]]:
+        from raven.core.skills import list_skills
+        return [s for s in list_skills() if s.get("source") == "dream"]
+
     ws = settings.resolved_workspace
     if ws:
         set_metrics_workspace(str(ws))
@@ -601,6 +683,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         await monitor_engine.start()
         await routine_engine.start()
         await analytics_engine.start()
+        await dream_engine.start()
         if web_port < 1024 or web_port not in (18888, 18789):
             logger.warning("Binding to 0.0.0.0:{}. Ensure firewall/reverse proxy is configured.", web_port)
         config = uvicorn.Config(api_app, host="0.0.0.0", port=web_port, log_level="info", ws="auto")
@@ -618,6 +701,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     async def _shutdown(gw: Gateway, sv_task: asyncio.Task[None]):
         for name, coro in [
+            ("dream engine", dream_engine.stop()),
             ("monitor engine", monitor_engine.stop()),
             ("routine engine", routine_engine.stop()),
             ("analytics engine", analytics_engine.stop()),

@@ -72,6 +72,7 @@ class UnifiedAgent:
         self._mode: AgentMode = AgentMode.QUERY
         self._sessions: dict[str, HybridSession] = {}
         self._total_tokens: int = 0
+        self._max_sessions: int = 1000
 
     @property
     def mode(self) -> AgentMode:
@@ -372,6 +373,9 @@ class UnifiedAgent:
     # -- session management -----------------------------------------------------
 
     def create_hybrid_session(self, session_id: str, mode: AgentMode = AgentMode.HYBRID) -> HybridSession:
+        if len(self._sessions) >= self._max_sessions:
+            oldest_key = next(iter(self._sessions))
+            del self._sessions[oldest_key]
         session = HybridSession(session_id=session_id, mode=mode)
         self._sessions[session_id] = session
         logger.info("Created hybrid session: {}", session_id)

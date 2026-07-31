@@ -79,16 +79,15 @@ async def email_inbox(limit: int = 10) -> str:
     imap_port = int(config.get("imap_port", "993"))
     if not imap_host or not imap_user:
         return "[error] IMAP not configured. Set EMAIL_IMAP_HOST and EMAIL_IMAP_USER env vars."
-    try:
-        import email
+    import email
 
-        client = aioimaplib.IMAP4_SSL(imap_host, imap_port)
+    client = aioimaplib.IMAP4_SSL(imap_host, imap_port)
+    try:
         await client.wait_hello_from_server()
         await client.login(imap_user, imap_pass)
         await client.select("INBOX")
         status, data = await client.search("ALL")
         if status != "OK":
-            await client.logout()
             return "[error] Failed to search inbox."
         msg_ids = data[0].split() if data else []
         recent = msg_ids[-limit:]
@@ -106,11 +105,15 @@ async def email_inbox(limit: int = 10) -> str:
             lines.append(f"  From: {from_addr}")
             lines.append(f"  Subject: {subject}")
             lines.append("")
-        await client.logout()
         return "\n".join(lines)
     except Exception as e:
         logger.error("Email inbox failed: {}", e)
         return f"[error] Failed to read inbox: {e}"
+    finally:
+        from contextlib import suppress
+
+        with suppress(Exception):
+            await client.logout()
 
 
 def email_config_status() -> str:

@@ -98,7 +98,7 @@ class AnalyticsEngine:
     ) -> list[dict[str, Any]]:
         if self._db is None:
             raise RuntimeError("AnalyticsEngine not started")
-        since = since or int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
+        since = since if since is not None else int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
         bucket_sec = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400}.get(bucket, 300)
         rows = await self._db.execute_fetchall(
             """
@@ -137,7 +137,7 @@ class AnalyticsEngine:
     async def query_summary(self, since: int | None = None) -> dict[str, Any]:
         if self._db is None:
             raise RuntimeError("AnalyticsEngine not started")
-        since = since or int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
+        since = since if since is not None else int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
         totals = await self._db.execute_fetchall(
             """
             SELECT metric_name, AVG(metric_value) AS avg_val,
@@ -175,11 +175,11 @@ class AnalyticsEngine:
     async def query_aggregated(self, since: int | None = None) -> dict[str, Any]:
         if self._db is None:
             raise RuntimeError("AnalyticsEngine not started")
-        since = since or int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
+        since = since if since is not None else int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
         series = await self.query_series("raven_messages_received_total", since=since)
         error_series = await self.query_series("raven_message_errors_total", since=since)
-        total_received = sum(s["avg"] * s["count"] for s in series) if series else 0
-        total_errors = sum(s["avg"] * s["count"] for s in error_series) if error_series else 0
+        total_received = sum(s["max"] - s["min"] for s in series) if series else 0
+        total_errors = sum(s["max"] - s["min"] for s in error_series) if error_series else 0
         rows = await self._db.execute_fetchall(
             "SELECT DISTINCT metric_name FROM analytics_snapshots "
             "WHERE metric_name LIKE '%latency%' OR metric_name LIKE '%response%' "
@@ -201,7 +201,7 @@ class AnalyticsEngine:
     async def query_tool_usage(self, since: int | None = None) -> list[dict[str, Any]]:
         if self._db is None:
             raise RuntimeError("AnalyticsEngine not started")
-        since = since or int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
+        since = since if since is not None else int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
         rows = await self._db.execute_fetchall(
             "SELECT DISTINCT metric_name FROM analytics_snapshots WHERE metric_name LIKE '%tool_calls%' AND ts >= ?",
             (since,),
@@ -223,11 +223,11 @@ class AnalyticsEngine:
         return results
 
     async def query_tool_breakdown(self, since: int | None = None) -> dict[str, Any]:
-        since = since or int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
+        since = since if since is not None else int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
         success = await self.query_series("raven_tool_calls_success_total", since=since)
         error_s = await self.query_series("raven_tool_calls_error_total", since=since)
-        total_success = sum(s["avg"] * s["count"] for s in success) if success else 0
-        total_errors = sum(s["avg"] * s["count"] for s in error_s) if error_s else 0
+        total_success = sum(s["max"] - s["min"] for s in success) if success else 0
+        total_errors = sum(s["max"] - s["min"] for s in error_s) if error_s else 0
         return {
             "success": round(total_success),
             "errors": round(total_errors),

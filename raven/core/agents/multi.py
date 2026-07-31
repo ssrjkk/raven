@@ -1,106 +1,196 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+import re
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from ravencode.agents.orchestrator import AgentResult, AgentType, Orchestrator
-from ravencode.runtime.agent_core import AgentConfig
+from raven.core.agents.orchestrator import AgentOrchestrator, AgentResult
+from raven.core.features import FeatureFlags
+
+if TYPE_CHECKING:
+    from raven.core.llm import LLMRouter
+    from raven.core.task_engine.tool_registry import ToolRegistry
 
 
 @dataclass
-class SubTask:
+class DelegatedTask:
     description: str
-    agent_type: AgentType = AgentType.AUTONOMOUS
+    profile: str
+    context: dict[str, Any] = field(default_factory=dict)
     depends_on: list[int] | None = None
-    config: AgentConfig | None = None
 
 
 @dataclass
-class TaskResult:
+class DelegationResult:
     index: int
     description: str
-    result: AgentResult
+    profile: str
+    content: str
+    success: bool
     duration: float
+    iterations: int
+    tokens_used: int
+    handoffs: int
 
 
-class MultiAgentOrchestrator:
-    def __init__(self) -> None:
-        self._orchestrator = Orchestrator()
+async def delegate(
+    query: str,
+    llm: LLMRouter,
+    tool_registry: ToolRegistry,
+    profile_override: str | None = None,
+    context: dict[str, Any] | None = None,
+    send_fn: Callable[..., Any] | None = None,
+) -> AgentResult:
+    if not FeatureFlags.get().is_enabled("delegation"):
+        logger.info("[delegate] delegation disabled, routing to coder")
+        profile_override = "coder"
+    orchestrator = AgentOrchestrator(llm=llm, tool_registry=tool_registry, send_fn=send_fn)
+    return await orchestrator.execute(
+        query=query,
+        context=context,
+        profile_override=profile_override,
+    )
 
-    async def run_sequential(self, tasks: list[SubTask]) -> list[TaskResult]:
-        results: list[TaskResult] = []
+
+def route_to_profile(query: str) -> str:
+    keyword_rules: list[tuple[str, str]] = [
+        (r"security|vulnerability|cve|owasp|threat|exploit|injection|xss|ssrf|hardcoded|audit", "security"),
+        (r"design|architect|architecture|structure|overview|diagram|system design", "architect"),
+        (r"plan|break down|decompose|roadmap|milestone|task list", "planner"),
+        (r"debug|bug|error|crash|exception|stack trace|not working|broken|failing", "debugger"),
+        (r"review|check code|quality|lint|code review|static analysis", "reviewer"),
+        (r"test|coverage|unit test|integration test|pytest", "qa"),
+        (r"implement|write code|create|refactor|add feature", "coder"),
+        (r"research|investigate|explore|find|search|look up|learn|discover", "researcher"),
+    ]
+    q = query.lower()
+    best: tuple[str, float] | None = None
+    for pattern, profile in keyword_rules:
+        if re.search(pattern, q):
+            score = 0.75
+            if best is None or score > best[1]:
+                best = (profile, score)
+    return best[0] if best else "coder"
+
+
+class DelegationOrchestrator:
+    def __init__(
+        self,
+        llm: LLMRouter,
+        tool_registry: ToolRegistry,
+        send_fn: Callable[..., Any] | None = None,
+        max_concurrent: int = 3,
+        max_total_iterations: int = 100,
+    ):
+        self._llm = llm
+        self._tool_registry = tool_registry
+        self._send_fn = send_fn
+        self._max_concurrent = max_concurrent
+        self._max_total_iterations = max_total_iterations
+
+    async def run_sequential(self, tasks: list[DelegatedTask]) -> list[DelegationResult]:
+        results: list[DelegationResult] = []
         for i, task in enumerate(tasks):
-            logger.info("Multi-agent: running task {}/{}: {}", i + 1, len(tasks), task.description[:80])
-            start = asyncio.get_event_loop().time()
-            result = await self._orchestrator.dispatch(
-                task.description, task.agent_type, agent_config_override=task.config
-            )
-            duration = asyncio.get_event_loop().time() - start
-            results.append(TaskResult(index=i, description=task.description, result=result, duration=duration))
+            logger.info("[delegation] sequential task {}/{}: {} → {}", i + 1, len(tasks), task.description[:80], task.profile)
+            result = await self._run_single(task)
+            results.append(result)
         return results
 
-    async def run_parallel(self, tasks: list[SubTask], max_concurrent: int = 3) -> list[TaskResult]:
-        sem = asyncio.Semaphore(max_concurrent)
-        results: list[TaskResult | None] = [None] * len(tasks)
+    async def run_parallel(self, tasks: list[DelegatedTask]) -> list[DelegationResult]:
+        sem = asyncio.Semaphore(self._max_concurrent)
+        results: list[DelegationResult | None] = [None] * len(tasks)
 
-        async def run_one(i: int, task: SubTask) -> None:
+        async def run_one(i: int, task: DelegatedTask) -> None:
             async with sem:
-                logger.info("Multi-agent: parallel task {}/{}: {}", i + 1, len(tasks), task.description[:80])
-                start = asyncio.get_event_loop().time()
-                result = await self._orchestrator.dispatch(
-                    task.description, task.agent_type, agent_config_override=task.config
-                )
-                duration = asyncio.get_event_loop().time() - start
-                results[i] = TaskResult(index=i, description=task.description, result=result, duration=duration)
+                logger.info("[delegation] parallel task {}/{}: {} → {}", i + 1, len(tasks), task.description[:80], task.profile)
+                results[i] = await self._run_single(task)
 
-        coros = [run_one(i, t) for i, t in enumerate(tasks)]
-        await asyncio.gather(*coros)
+        await asyncio.gather(*[run_one(i, t) for i, t in enumerate(tasks)])
         return [r for r in results if r is not None]
 
-    async def run_dag(self, tasks: list[SubTask], max_concurrent: int = 5) -> list[TaskResult]:
-        sem = asyncio.Semaphore(max_concurrent)
-        results: dict[int, TaskResult] = {}
-        completed = set()
+    async def run_dag(self, tasks: list[DelegatedTask]) -> list[DelegationResult]:
+        sem = asyncio.Semaphore(self._max_concurrent)
+        results: dict[int, DelegationResult] = {}
+        completed: set[int] = set()
         remaining = list(range(len(tasks)))
 
         while remaining:
-            batch = []
+            batch: list[int] = []
             for i in remaining[:]:
-                task = tasks[i]
-                deps = task.depends_on or []
+                deps = tasks[i].depends_on or []
                 if all(d in completed for d in deps):
                     batch.append(i)
                     remaining.remove(i)
             if not batch:
-                msg = f"Circular dependency detected among tasks: {remaining}"
-                raise RuntimeError(msg)
-            coros = []
-            for i in batch:
-                task = tasks[i]
-                logger.info("Multi-agent: DAG task {}/{}: {}", i + 1, len(tasks), task.description[:80])
+                raise RuntimeError(f"Circular dependency detected among tasks: {remaining}")
 
-                async def run_task(idx: int, t: SubTask, started: float) -> TaskResult:
-                    async with sem:
-                        r = await self._orchestrator.dispatch(
-                            t.description, t.agent_type, agent_config_override=t.config
-                        )
-                        dur = asyncio.get_event_loop().time() - started
-                        return TaskResult(index=idx, description=t.description, result=r, duration=dur)
+            async def run_task(idx: int, task: DelegatedTask) -> DelegationResult:
+                async with sem:
+                    return await self._run_single(task)
 
-                coros.append(run_task(i, task, asyncio.get_event_loop().time()))
-            for r in await asyncio.gather(*coros):
+            for r in await asyncio.gather(*[run_task(i, tasks[i]) for i in batch]):
                 results[r.index] = r
                 completed.add(r.index)
         return [results[i] for i in range(len(tasks))]
 
+    async def _run_single(self, task: DelegatedTask) -> DelegationResult:
+        import time
+        started = time.monotonic()
+        try:
+            agent = AgentOrchestrator(
+                llm=self._llm,
+                tool_registry=self._tool_registry,
+                send_fn=self._send_fn,
+                max_total_iterations=self._max_total_iterations,
+            )
+            result = await agent.execute(
+                query=task.description,
+                context=task.context,
+                profile_override=task.profile,
+            )
+            duration = time.monotonic() - started
+            return DelegationResult(
+                index=0,
+                description=task.description,
+                profile=result.profile,
+                content=result.content,
+                success=result.success,
+                duration=duration,
+                iterations=result.iterations,
+                tokens_used=result.tokens_used,
+                handoffs=result.handoffs,
+            )
+        except Exception as e:
+            duration = time.monotonic() - started
+            logger.error("[delegation] task failed: {}: {}", task.description[:80], e)
+            return DelegationResult(
+                index=0,
+                description=task.description,
+                profile=task.profile,
+                content=f"Error: {e}",
+                success=False,
+                duration=duration,
+                iterations=0,
+                tokens_used=0,
+                handoffs=0,
+            )
 
-_orchestrator_instance: MultiAgentOrchestrator | None = None
+
+_orchestrator_instance: DelegationOrchestrator | None = None
 
 
-def get_multi_orchestrator() -> MultiAgentOrchestrator:
+def get_delegation_orchestrator(
+    llm: LLMRouter | None = None,
+    tool_registry: ToolRegistry | None = None,
+    send_fn: Callable[..., Any] | None = None,
+) -> DelegationOrchestrator:
     global _orchestrator_instance
-    if _orchestrator_instance is None:
-        _orchestrator_instance = MultiAgentOrchestrator()
+    if _orchestrator_instance is None and llm is not None and tool_registry is not None:
+        _orchestrator_instance = DelegationOrchestrator(llm=llm, tool_registry=tool_registry, send_fn=send_fn)
+    elif _orchestrator_instance is None:
+        raise RuntimeError("DelegationOrchestrator not initialized: provide llm and tool_registry on first call")
     return _orchestrator_instance

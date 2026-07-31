@@ -193,10 +193,6 @@ async def handle_callback(provider_name: str, code: str, state: str) -> dict[str
         "user_id": f"oauth:{provider_name}:{user_info.get('id', '') or user_info.get('sub', '')}",
         "avatar_url": user_info.get("picture", "") or user_info.get("avatar_url", ""),
     }
-    if provider_name == "github":
-        result["access_token"] = access_token
-        gh_scopes = token_data.get("scope", "")
-        result["scope"] = gh_scopes
     return result
 
 

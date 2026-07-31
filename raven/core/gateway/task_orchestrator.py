@@ -85,6 +85,8 @@ class TaskOrchestrator:
             raise RuntimeError("TaskOrchestrator not started")
         try:
             task = await self._runner.wait(task.id, timeout=600)
+            async with self._lock:
+                self._tasks[task.id] = task
             msg = self._format_result(task)
         except Exception as e:
             logger.error("Task {} execution error: {}", task.id, e)

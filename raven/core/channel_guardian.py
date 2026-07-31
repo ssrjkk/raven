@@ -9,6 +9,7 @@ from typing import Any
 from loguru import logger
 
 from raven.channels.base import BaseChannel
+from raven.core.security.rate_limiter import TokenBucket
 
 HEARTBEAT_INTERVAL = 30.0
 MAX_CONSECUTIVE_FAILURES = 3
@@ -16,25 +17,15 @@ BACKOFF_BASE = 5.0
 MAX_RESTART_ATTEMPTS = 3
 MAX_USER_BUCKETS = 1000
 
-
-class TokenBucket:
-    def __init__(self, rate: float = 10.0, burst: int | None = None):
-        self._rate = rate
-        self._burst = burst or int(rate * 2)
-        self._tokens = float(self._burst)
-        self._last_refill = time.monotonic()
-        self._lock = asyncio.Lock()
-
-    async def acquire(self) -> bool:
-        async with self._lock:
-            now = time.monotonic()
-            elapsed = now - self._last_refill
-            self._tokens = min(float(self._burst), self._tokens + elapsed * self._rate)
-            self._last_refill = now
-            if self._tokens >= 1.0:
-                self._tokens -= 1.0
-                return True
-            return False
+__all__ = [
+    "BACKOFF_BASE",
+    "HEARTBEAT_INTERVAL",
+    "MAX_CONSECUTIVE_FAILURES",
+    "MAX_RESTART_ATTEMPTS",
+    "MAX_USER_BUCKETS",
+    "ChannelGuardian",
+    "TokenBucket",
+]
 
 
 class ChannelGuardian:
@@ -136,6 +127,7 @@ class ChannelGuardian:
             await asyncio.sleep(backoff)
             await channel.start()
             self._error_counts[channel_id] = 0
+            self._restart_attempts[channel_id] = 0
             logger.info("Channel {} restart succeeded", channel_id)
         except Exception as e:
             logger.error("Channel {} restart failed: {}", channel_id, e)

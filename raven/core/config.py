@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"  # default Ollama URL
     vllm_base_url: str = ""
     default_model: str = ""  # auto-discovered if empty
+    model_fast: str = ""
+    model_balanced: str = ""
+    model_quality: str = ""
 
     # --- Tier / rate limits ---
     tier_default: str = "free"
