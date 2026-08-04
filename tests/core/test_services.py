@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 
@@ -24,7 +25,7 @@ class TestEntityExtractor:
         result = await extractor.extract("Visit https://example.com/path")
         urls = [e for e in result.entities if e.label == "URL"]
         assert len(urls) == 1
-        assert "example.com" in urls[0].text
+        assert urlparse(urls[0].text).netloc == "example.com"
 
     async def test_extract_phone(self):
         extractor = EntityExtractor()

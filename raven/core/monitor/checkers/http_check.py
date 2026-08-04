@@ -29,7 +29,7 @@ async def check_http(monitor: Monitor) -> str | None:
             resp = await client_manager.request("POST", url, json=body, headers=headers, timeout=timeout)
     except Exception as exc:
         logger.error("HTTP check failed for {}: {}", url, exc)
-        return f"HTTP check failed for {url}: {exc}"
+        return f"HTTP check failed for {url}"
 
     status = resp.status_code
     if status >= 400:

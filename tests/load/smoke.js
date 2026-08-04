@@ -1,6 +1,7 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
 import { Rate, Trend } from "k6/metrics";
+import crypto from "k6/crypto";
 
 const BASE_URL = __ENV.BASE_URL || "http://localhost:8000";
 const AUTH_TOKEN = __ENV.AUTH_TOKEN || "test-token";
@@ -23,7 +24,7 @@ export const options = {
 };
 
 function randomId(): string {
-  return Math.random().toString(36).substring(2, 15);
+  return crypto.randomBytes(9).hex();
 }
 
 export default function () {

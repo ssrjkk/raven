@@ -6,6 +6,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from raven.core.security.path_guard import confine_path
+
 TEMPLATES: dict[str, dict[str, Any]] = {
     "fastapi-react": {
         "name": "FastAPI + React",
@@ -112,7 +114,7 @@ def create_scaffold_router(workspace: str = "") -> APIRouter:
             raise HTTPException(404, f"Template '{req.template_id}' not found")
 
         proj_name = req.answers.get("project_name", "my-app")
-        target = (ws_root / req.output_dir / proj_name) if req.output_dir else (ws_root / proj_name)
+        target = confine_path(str(ws_root / (req.output_dir or "") / proj_name), ws_root)
         target.mkdir(parents=True, exist_ok=True)
 
         files: list[dict[str, str]] = []

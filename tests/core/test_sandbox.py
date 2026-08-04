@@ -155,7 +155,7 @@ class TestNetworkRules:
         ep = s._build_net_allow_entrypoint()
         assert ep is not None
         assert "iptables" in ep
-        assert "pypi.org" in ep
+        assert "iptables -A OUTPUT -d pypi.org -j ACCEPT" in ep
 
     def test_build_net_entrypoint_wildcard_allow(self):
         cfg = SandboxConfig(mode="docker", allow_network=True, network_rules={"allow": ["*"]})

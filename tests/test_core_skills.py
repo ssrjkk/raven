@@ -46,7 +46,7 @@ class TestSkillsRegistry:
         from raven.core.skills import get_registry_url, set_skill_registry
 
         result = set_skill_registry("https://hub.example.com")
-        assert "https://hub.example.com" in result
+        assert result == "https://hub.example.com"
         assert get_registry_url() == "https://hub.example.com"
 
     def test_set_registry_url_empty(self) -> None:

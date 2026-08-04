@@ -9,7 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from loguru import logger
 
 from raven.channels.base import BaseChannel
@@ -222,6 +222,34 @@ class WebChatChannel(BaseChannel):
                 logger.debug("[webchat] canvas client disconnected")
             finally:
                 canvas_manager.delete_session(session.session_id)
+
+        @app.get("/api/canvas/image")
+        async def canvas_image_proxy(url: str) -> Response:
+            from raven.core.security.ssrf import safe_fetch_async
+
+            if not url.startswith(("http://", "https://")):
+                return JSONResponse(status_code=400, content={"error": "Invalid URL scheme"})
+            try:
+                response = await safe_fetch_async(url, max_bytes=10 * 1024 * 1024)
+            except Exception as exc:
+                logger.warning("[webchat] canvas image proxy failed: {}", exc)
+                return JSONResponse(status_code=502, content={"error": "Proxy failed"})
+            return Response(
+                content=response.content,
+                media_type=response.headers.get("content-type", "application/octet-stream"),
+            )
+
+        @app.get("/api/canvas/link")
+        async def canvas_link_redirect(url: str) -> Response:
+            from raven.core.security.ssrf import validate_url_async
+
+            if not url.startswith(("http://", "https://")):
+                return JSONResponse(status_code=400, content={"error": "Invalid URL scheme"})
+            error = await validate_url_async(url)
+            if error:
+                logger.debug("[webchat] canvas link blocked: {}", error)
+                return JSONResponse(status_code=400, content={"error": error})
+            return RedirectResponse(url)
 
     async def start(self):
         self._ready = True

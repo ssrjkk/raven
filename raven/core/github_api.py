@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from raven.core.config import settings
 from raven.core.secrets import secrets
+from raven.core.security.path_guard import confine_path
 
 
 class CreatePRRequest(BaseModel):
@@ -258,7 +259,8 @@ def create_github_router() -> APIRouter:
             raise HTTPException(401, "GitHub token not configured")
         repo_url = f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
         base_dir = Path(body.target_dir) if body.target_dir else Path("workspace") / "cloned"
-        target = base_dir / owner / repo
+        base = settings.resolved_workspace or Path.cwd()
+        target = confine_path(str(base_dir / owner / repo), base)
         if target.exists():
             return {"ok": True, "path": str(target), "existing": True}
         target.mkdir(parents=True, exist_ok=True)

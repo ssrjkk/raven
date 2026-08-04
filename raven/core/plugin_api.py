@@ -85,17 +85,18 @@ def create_plugin_router() -> APIRouter:
                 "version": result.metadata.version,
                 "status": result.status.value,
             }
-        except Exception as e:
+        except Exception:
             logger.exception("plugin install failed")
-            return {"error": str(e)}
+            return {"error": "plugin install failed"}
 
     @router.post("/uninstall/{name}")
     async def api_plugins_uninstall(name: str):
         try:
             ok = _manager.uninstall_plugin(name)
             return {"ok": ok}
-        except Exception as e:
-            return {"error": str(e)}
+        except Exception:
+            logger.exception("plugin uninstall failed")
+            return {"error": "plugin uninstall failed"}
 
     @router.post("/update/{name}")
     async def api_plugins_update(name: str):
@@ -107,8 +108,9 @@ def create_plugin_router() -> APIRouter:
                 "version": result.metadata.version,
                 "status": result.status.value,
             }
-        except Exception as e:
-            return {"error": str(e)}
+        except Exception:
+            logger.exception("plugin update failed")
+            return {"error": "plugin update failed"}
 
     @router.get("/top")
     async def api_plugins_top(limit: int = 10):

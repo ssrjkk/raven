@@ -334,7 +334,8 @@ async def video_info(filepath: str) -> str:
     except ImportError:
         return "[error] ffmpeg-python not installed (pip install raven-agent[media])"
     except Exception as e:
-        return f"[error] ffprobe failed: {e}"
+        logger.error("ffprobe failed for {}: {}", path, e)
+        return "[error] ffprobe failed"
 
     streams = probe.get("streams", [])
     info = probe.get("format", {})
@@ -386,7 +387,8 @@ async def video_thumbnail(filepath: str, time_sec: float = 1.0, size: str = "320
             )
         )
     except Exception as e:
-        return f"[error] Thumbnail extraction failed: {e}"
+        logger.error("Thumbnail extraction failed for {}: {}", path, e)
+        return "[error] Thumbnail extraction failed"
 
     try:
         from PIL import Image
@@ -479,7 +481,7 @@ async def video_transcribe(filepath: str, model: str = "whisper-1", language: st
             return "\n".join(filter(None, lines))
     except Exception as e:
         logger.error("Video transcription failed: {}", e)
-        return f"[error] Transcription failed: {e}"
+        return "[error] Transcription failed"
     finally:
         if tmp_wav and Path(tmp_wav).exists():
             Path(tmp_wav).unlink()
@@ -542,7 +544,7 @@ async def video_extract_frames(
         return "\n".join(lines)
     except Exception as e:
         logger.error("Frame extraction failed: {}", e)
-        return f"[error] Frame extraction failed: {e}"
+        return "[error] Frame extraction failed"
 
 
 async def image_analyze(filepath: str, prompt: str = "Describe this image in detail") -> str:
@@ -599,7 +601,7 @@ async def image_analyze(filepath: str, prompt: str = "Describe this image in det
             return f"[error] API response: {data}"
     except Exception as e:
         logger.error("Image analysis failed: {}", e)
-        return f"[error] Image analysis failed: {e}"
+        return "[error] Image analysis failed"
 
 
 def register_media_tools(registry: ToolRegistry) -> None:

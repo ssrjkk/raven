@@ -17,6 +17,26 @@ interface CanvasState {
   events: { component_id: string; action: string; data: unknown; timestamp: number }[];
 }
 
+const BLOCKED_SCHEME_PREFIXES = ["javascript:", "vbscript:", "file:"];
+const ALLOWED_HTTP_PREFIXES = ["http://", "https://"];
+
+function safeResourceUrl(raw: string, kind: "image" | "link"): string | null {
+  const lower = raw.toLowerCase();
+  if (BLOCKED_SCHEME_PREFIXES.some((scheme) => lower.startsWith(scheme))) {
+    return null;
+  }
+  if (lower.startsWith("data:")) {
+    if (kind === "image" && raw.startsWith("data:image/")) {
+      return raw;
+    }
+    return null;
+  }
+  if (!ALLOWED_HTTP_PREFIXES.some((prefix) => raw.startsWith(prefix))) {
+    return null;
+  }
+  return `/api/canvas/${kind}?url=${encodeURIComponent(raw)}`;
+}
+
 function renderComponent(node: ComponentDef, onAction: (id: string, action: string, data?: Record<string, unknown>) => void): ReactNode {
   const { id, type, props, children } = node;
   const childNodes = children?.map((c) => renderComponent(c, onAction)) ?? [];
@@ -141,12 +161,12 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
 
     case "image": {
       const imgUrl = props.url as string;
-      const allowedUrl = imgUrl.startsWith("http://") || imgUrl.startsWith("https://") || imgUrl.startsWith("data:image/");
-      if (!allowedUrl) {
+      const src = safeResourceUrl(imgUrl, "image");
+      if (!src) {
         return <span key={id} className="text-gray-500 text-sm">Blocked image URL</span>;
       }
       return (
-        <img key={id} src={imgUrl} alt={props.alt as string || ""}
+        <img key={id} src={src} alt={props.alt as string || ""}
           className={`rounded-lg max-w-full ${props.className as string || ""}`}
           style={{ maxHeight: props.maxHeight as string || "300px", ...(props.style as Record<string, string> || {}) }}
         />
@@ -171,13 +191,12 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
 
     case "link": {
       const href = props.href as string;
-      const allowed = href.startsWith("http://") || href.startsWith("https://") || href.startsWith("mailto:") || href.startsWith("/");
-      const noXss = !href.includes("javascript:") && !href.includes("data:") && !href.includes("vbscript:");
-      if (!allowed || !noXss) {
+      const safeHref = safeResourceUrl(href, "link");
+      if (!safeHref) {
         return <span key={id} className="text-gray-500 text-sm">{props.text as string} (blocked)</span>;
       }
       return (
-        <a key={id} href={href} target="_blank" rel="noopener noreferrer"
+        <a key={id} href={safeHref} target="_blank" rel="noopener noreferrer"
           className="text-violet-400 hover:text-violet-300 underline text-sm">
           {props.text as string}
         </a>

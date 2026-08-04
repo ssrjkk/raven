@@ -12,6 +12,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from raven.core.security.path_guard import confine_path
+
 _SANITIZE_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"(api[_-]?key|secret|token|password|credential)\s*[=:]\s*\S+", re.IGNORECASE),
     re.compile(r"(eyJ[A-Za-z0-9_-]{10,}\.)"),  # JWT tokens
@@ -28,14 +30,8 @@ def _get_workspace() -> Path:
     return _WORKSPACE
 
 
-def _confine_path(file_path: Path) -> Path:
-    ws = _get_workspace()
-    resolved = file_path.resolve()
-    try:
-        resolved.relative_to(ws)
-    except ValueError as exc:
-        raise HTTPException(403, f"Access denied: {resolved} is outside workspace {ws}") from exc
-    return resolved
+def _confine_path(file_path: str) -> Path:
+    return confine_path(file_path, _get_workspace())
 
 
 def _sanitize_traceback(tb_str: str) -> str:
@@ -80,8 +76,7 @@ def create_debugger_router() -> APIRouter:
     @router.post("/start")
     async def debug_start(req: DebugStartRequest, _admin: dict[str, Any] = Depends(_require_admin)) -> DebuggerState:
         global _active_debugger
-        file_path = Path(req.file)
-        file_path = _confine_path(file_path)
+        file_path = _confine_path(req.file)
         if not file_path.is_file():
             raise HTTPException(404, f"File not found: {req.file}")
         if file_path.suffix.lower() not in _ALLOWED_EXTENSIONS:
@@ -170,11 +165,11 @@ class _DebugSession:
         self._resume_event.set()
 
     def _resolve_bp_path(self, user_path: str) -> str:
-        p = Path(user_path)
-        if p.is_absolute():
-            return str(p.resolve()).replace("\\", "/")
-        candidate = (self._file_path.parent / p).resolve()
-        return str(candidate).replace("\\", "/")
+        if Path(user_path).is_absolute():
+            target = confine_path(user_path, _get_workspace())
+        else:
+            target = confine_path(str(self._file_path.parent / user_path), _get_workspace())
+        return str(target).replace("\\", "/")
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)

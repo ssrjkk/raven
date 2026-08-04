@@ -49,6 +49,6 @@ def create_chat_router() -> APIRouter:
             return {"results": results, "total": len(results), "query": q}
         except Exception as e:
             logger.warning("[chat] search failed: {}", e)
-            return {"results": [], "total": 0, "error": str(e)}
+            return {"results": [], "total": 0, "error": "search failed"}
 
     return router

@@ -1658,9 +1658,9 @@ async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
         return str(result)
     except QuestionError:
         raise
-    except Exception as exc:
+    except Exception:
         logger.exception("Tool {} failed", name)
-        return f"[error] {name}: {exc}"
+        return f"[error] {name} failed: see server logs"
 
 
 _PERMISSION_CHECKER: contextvars.ContextVar[Any] = contextvars.ContextVar("_PERMISSION_CHECKER", default=None)

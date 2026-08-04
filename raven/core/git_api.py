@@ -8,6 +8,8 @@ from typing import Any
 from fastapi import APIRouter
 
 from raven.coding.git_integration import GitIntegration
+from raven.core.config import settings
+from raven.core.security.path_guard import confine_path
 
 
 def create_git_router() -> APIRouter:
@@ -16,7 +18,8 @@ def create_git_router() -> APIRouter:
     def _git(repo: str = "") -> GitIntegration:
         git = GitIntegration()
         if repo:
-            git._repo = Path(repo).resolve()
+            base = settings.resolved_workspace or Path.cwd()
+            git._repo = confine_path(repo, base)
         return git
 
     @router.get("/status")

@@ -45,7 +45,7 @@ async def check_rss(monitor: Monitor) -> str | None:
         feed = feedparser.parse(raw_text)
     except Exception as exc:
         logger.error("RSS check failed for {}: {}", url, exc)
-        return f"RSS check failed for {url}: {exc}"
+        return f"RSS check failed for {url}"
 
     new_entries: list[str] = []
     for entry in feed.entries[:10]:

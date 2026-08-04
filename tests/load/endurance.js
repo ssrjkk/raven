@@ -1,6 +1,7 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
 import { Rate } from "k6/metrics";
+import crypto from "k6/crypto";
 
 const GATEWAY = __ENV.GATEWAY_URL || "http://localhost:8000";
 
@@ -19,7 +20,7 @@ export const options = {
 };
 
 function randomId() {
-  return Math.random().toString(36).substring(2, 15);
+  return crypto.randomBytes(9).hex();
 }
 
 export default function () {

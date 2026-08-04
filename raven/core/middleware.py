@@ -122,7 +122,7 @@ async def error_handler_middleware(request: Request, call_next):
     except Exception as e:
         classify_error(e)
         logger.error("Unhandled error: {} {}", type(e).__name__, e)
-        return JSONResponse(status_code=500, content={"code": "internal.error", "message": str(e)[:200]})
+        return JSONResponse(status_code=500, content={"code": "internal.error", "message": "Internal server error"})
 
 
 async def auth_middleware(request: Request, call_next):
@@ -185,6 +185,6 @@ async def input_sanitize_middleware(request: Request, call_next):
 
                 try:
                     _check_depth(body)
-                except ValueError as e:
-                    return JSONResponse(status_code=400, content={"error": str(e)})
+                except ValueError:
+                    return JSONResponse(status_code=400, content={"error": "Request body is too deeply nested"})
     return await call_next(request)

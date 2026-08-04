@@ -9,6 +9,8 @@ from typing import Any
 from fastapi import APIRouter, Query
 from loguru import logger
 
+from raven.core.security.path_guard import confine_path
+
 _PATTERN_LIST = [
     (
         "print-vs-loguru",
@@ -124,7 +126,7 @@ def create_pattern_checker_router(workspace: str = "") -> APIRouter:
         checks = [p for p in patterns if p["id"] in enabled_ids]
 
         if file:
-            target = ws_root / file
+            target = confine_path(str(ws_root / file), ws_root)
             if not target.is_file():
                 return {"error": f"File not found: {file}", "violations": []}
             files_to_check = [target]

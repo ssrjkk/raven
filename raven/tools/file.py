@@ -5,6 +5,7 @@ import os
 import sys
 from pathlib import Path
 
+from raven.core.security.path_guard import confine_path
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 _MAX_LIST_ITEMS = 1000
@@ -29,26 +30,14 @@ def _check_no_symlinks_in_path(p: Path, ws: Path) -> None:
 
 
 def _confine(path: str) -> Path:
-    p = Path(os.path.normpath(Path(path).expanduser()))
-    ws = _workspace()
-    try:
-        p.relative_to(ws)
-    except ValueError:
-        msg = f"Access denied: path outside workspace: {p}"
-        raise PermissionError(msg) from None
-    _check_no_symlinks_in_path(p, ws)
+    p = confine_path(path, _workspace())
+    _check_no_symlinks_in_path(p, _workspace())
     return p
 
 
 def _confine_fd(path: str, flags: int) -> int:
-    p = Path(os.path.normpath(Path(path).expanduser()))
-    ws = _workspace()
-    try:
-        p.relative_to(ws)
-    except ValueError:
-        msg = f"Access denied: path outside workspace: {p}"
-        raise PermissionError(msg) from None
-    _check_no_symlinks_in_path(p, ws)
+    p = confine_path(path, _workspace())
+    _check_no_symlinks_in_path(p, _workspace())
     p.parent.mkdir(parents=True, exist_ok=True)
     try:
         fd = os.open(str(p), flags | _O_NOFOLLOW, 0o644)

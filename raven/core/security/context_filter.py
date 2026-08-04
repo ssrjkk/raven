@@ -16,7 +16,7 @@ class ContextVisibility(StrEnum):
 
 _ROLE_MARKERS = re.compile(r"<\|(?:im_start|im_end|system|user|assistant|tool)(?:\|[^|]{0,200})?\|>")
 _SYS_PROMPT_PATTERNS = re.compile(
-    r"(you\s+are\s+(?:a|an)?\s*(?:helpful|expert|ai|assistant)|"
+    r"(you\s+are\s+(?:(?:a|an)\s+)?(?:helpful|expert|ai|assistant)|"
     r"system\s*(?:prompt|instruction|message)|"
     r"ignore\s+(?:all\s+)?(?:previous|above)\s+instructions)",
     re.IGNORECASE,

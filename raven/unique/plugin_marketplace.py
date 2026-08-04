@@ -11,6 +11,8 @@ from typing import Any
 
 from loguru import logger
 
+from raven.core.security.path_guard import confine_path
+
 
 class Category(Enum):
     CODING = "coding"
@@ -223,7 +225,7 @@ class PluginManager:
             if source == "remote":
                 metadata = await self._fetch_remote_metadata(url_or_path) or metadata
             elif source == "local":
-                metadata = self._read_local_metadata(Path(url_or_path)) or metadata
+                metadata = self._read_local_metadata(confine_path(url_or_path, self._plugins_dir)) or metadata
 
             if self._allow_real_install:
                 await self._real_install(url_or_path, install_path, metadata)

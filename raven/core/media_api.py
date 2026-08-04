@@ -7,6 +7,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, UploadFile
 from loguru import logger
 
+from raven.core.security.path_guard import confine_path
+
 
 def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
     router = APIRouter(prefix="/api/media", tags=["media"])
@@ -38,14 +40,8 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
             logger.error("Image generation API error: {}", e)
             raise HTTPException(500, str(e)) from e
 
-    def _confine(p: Path, base: Path) -> Path:
-        r = p.expanduser().resolve()
-        b = base.resolve()
-        try:
-            r.relative_to(b)
-        except ValueError:
-            raise HTTPException(403, f"Path outside workspace: {p}") from None
-        return r
+    def _confine(p: str, base: Path) -> Path:
+        return confine_path(p, base)
 
     @router.post("/process")
     def process_image(
@@ -57,7 +53,7 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
         output_format: str = "",
         quality: int = 85,
     ):
-        target = _confine(Path(filepath), ws)
+        target = _confine(filepath, ws)
         if not target.exists():
             raise HTTPException(404, f"File not found: {target}")
         try:
@@ -100,7 +96,7 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
 
     @router.post("/parse")
     def parse_document(filepath: str, pages: str = ""):
-        target = _confine(Path(filepath), ws)
+        target = _confine(filepath, ws)
         if not target.exists():
             raise HTTPException(404, f"File not found: {target}")
         ext = target.suffix.lower()

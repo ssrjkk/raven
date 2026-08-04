@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any
 from unittest.mock import AsyncMock, patch
+from urllib.parse import urlparse
 
 import pytest
 
@@ -191,7 +192,7 @@ class TestGetAuthorizeUrl:
         register_providers()
         result = get_authorize_url("github", "http://localhost:5173/oauth/callback")
         assert result is not None
-        assert "github.com" in result
+        assert urlparse(result).netloc == "github.com"
         assert "code_challenge" in result
         assert "code_challenge_method=S256" in result
 
