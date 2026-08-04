@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Protocol
 
 from loguru import logger
 
-from raven.core.config import settings
 from raven.core.models import IncomingMessage
 from raven.core.monitor.checkers.price import check_price
 from raven.core.monitor.models import Monitor, MonitorType
@@ -52,9 +51,7 @@ class MonitorIntent:
     )
 
     async def handle(self, gw: Gateway, event: IncomingMessage, match: re.Match[str]) -> bool:
-        from raven.core.monitor.store import MonitorStore
-
-        store = MonitorStore(settings.resolved_db_path)
+        store = gw._monitor_store
         monitors = await store.list_monitors(user_id=event.user_id)
         if not monitors:
             await gw._send(event.channel, event.session_id, "You have no monitors configured.")

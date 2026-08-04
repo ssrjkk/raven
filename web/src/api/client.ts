@@ -12,7 +12,7 @@ DreamStatsData, DreamStatusData,
 HealthData, KnowledgeSearchEntry, MessageData, MetricsSnapshot, ModelInfoData,
 MonitorData,
 OAuthProviderInfo, PatternCheckInfo, PatternRunResponse,
-PluginInfo, RAGResultEntry, RAGStatsData,   RoutineData, Session,   StatusData, TaskData, TrainingResultData,   VoiceSpeakerInfo, VoiceStatsData, WebSearchProvider,   WebSearchResult, } from "./types";
+PluginInfo, RAGResultEntry, RAGStatsData,   RoutineData, Session,   StatusData, TaskData, TrainingResultData,   VoiceSpeakerInfo, VoiceStatsData, WebSearchProvider,   WebSearchResult, ThemeScheme, TruthfulResult, } from "./types";
 
 export type {
 ABCreateResponse,
@@ -38,7 +38,7 @@ OAuthProviderInfo,
   PatternCheckInfo, PatternRunResponse, PatternViolation,   PluginInfo,   PricingInfo, ProjectMetrics,
 RAGResultEntry, RAGStatsData,
   RoutineData,   Session,   StatusData, TaskData, TrainingResultData,
-  VoiceSpeakerInfo, VoiceStatsData, WebSearchProvider,   WebSearchResult, WsMessage, } from "./types";
+  VoiceSpeakerInfo, VoiceStatsData, WebSearchProvider,   WebSearchResult, WsMessage, TruthfulResult, } from "./types";
 
 const BASE = "";
 
@@ -348,6 +348,10 @@ export const api = {
     request<{ accentColor: string }>("/api/v1/commands/theme", {
       method: "POST", body: JSON.stringify({ accentColor }),
     }),
+  generateTheme: (prompt: string) =>
+    request<ThemeScheme>("/api/v1/commands/theme/generate", {
+      method: "POST", body: JSON.stringify({ prompt }),
+    }),
 
   scaffoldPlans: () =>
     request<{ id: string; name: string; description: string; questions: { key: string; label: string; default: string | boolean | number; type: string; options?: string[] }[] }[]>("/api/v1/scaffold/plans"),
@@ -363,6 +367,11 @@ export const api = {
 
   ideAgentRun: (task: string, mode: string, workspace: string) =>
     request<{ response?: string }>("/api/v1/agent/run", { method: "POST", body: JSON.stringify({ task, mode, workspace }) }),
+  truthfulAgent: (prompt: string, context = "", model?: string) =>
+    request<TruthfulResult>("/aios/agent/truthful", {
+      method: "POST",
+      body: JSON.stringify({ prompt, context, model: model ?? null }),
+    }),
   ideContextIndex: (workspace: string) =>
     request<{ indexed: number }>("/api/v1/context/index", { method: "POST", body: JSON.stringify({ workspace }) }),
   ideContextSearch: (query: string, topK = 5) =>

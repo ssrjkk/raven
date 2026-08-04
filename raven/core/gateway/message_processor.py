@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from raven.core.db import Database
     from raven.core.gateway.channel_manager import ChannelManager
     from raven.core.metrics import MetricsCollector
-    from raven.core.models import IncomingMessage
+    from raven.core.models import IncomingMessage, Message
 
 
 class MessageProcessor:
@@ -39,24 +39,26 @@ class MessageProcessor:
         session = await self.db.get_or_create_session(session_id, event.channel, event.user_id)
         session.sandbox_policy = get_policy_for_channel(event.channel)
 
-        await self._manage_context(session_id)
+        msgs = await self.db.get_session_messages(session_id, limit=200)
+
+        await self._manage_context(session_id, msgs)
 
         agent = self.registry.create_agent(session)
+        history = [{"role": m.role, "content": m.content} for m in msgs]
 
         channel_obj = await self.channels.get(event.channel)
         supports_stream = hasattr(channel_obj, "send_stream") if channel_obj else False
 
         async def confirm_fn(tool_name: str, args: dict[str, Any]) -> bool:
-            ch = await self.channels.get(event.channel)
-            if not ch:
+            if not channel_obj:
                 return True
             action_desc = f"Execute tool '{tool_name}' with args: {str(args)[:200]}"
-            result = await ch.ask_confirmation(event.user_id, action_desc, event.session_id or "")
+            result = await channel_obj.ask_confirmation(event.user_id, action_desc, event.session_id or "")
             return bool(result)
 
         full_response = ""
         buffer = ""
-        gen = agent.run(event.text, confirm_fn=confirm_fn)
+        gen = agent.run(event.text, confirm_fn=confirm_fn, history=history)
         timed_out = False
         error_hint = ""
         try:
@@ -99,11 +101,10 @@ class MessageProcessor:
             self.metrics.inc("messages_sent", {"channel": event.channel})
             self.metrics.observe("response_length", len(full_response), {"channel": event.channel})
 
-    async def _manage_context(self, session_id: str) -> None:
+    async def _manage_context(self, session_id: str, msgs: list[Message]) -> None:
         if self._ctxmgr is None:
             return
 
-        msgs = await self.db.get_session_messages(session_id, limit=200)
         if not msgs:
             return
 

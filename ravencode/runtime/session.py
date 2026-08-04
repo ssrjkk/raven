@@ -58,10 +58,10 @@ class SessionStore:
 
     async def load(self, session_id: str) -> ReActAgent | None:
         p = self._path(session_id)
-        if not p.is_file():
+        if not await asyncio.to_thread(p.is_file):
             return None
         try:
-            data = json.loads(p.read_text(encoding="utf-8"))
+            data = json.loads(await asyncio.to_thread(p.read_text, encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
             logger.error("Failed to load session {}: {}", session_id, exc)
             return None
@@ -74,8 +74,8 @@ class SessionStore:
 
     async def delete(self, session_id: str) -> bool:
         p = self._path(session_id)
-        if p.is_file():
-            p.unlink()
+        if await asyncio.to_thread(p.is_file):
+            await asyncio.to_thread(p.unlink)
             return True
         return False
 

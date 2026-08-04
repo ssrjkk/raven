@@ -5,13 +5,27 @@ import { api } from "../api/client";
 import { Skeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 import { ACCENT_PRESETS } from "../design/accent";
+import { applyThemeScheme } from "../design/scheme";
 import { useTheme } from "../design/ThemeContext";
 import { useApiQuery } from "../hooks/useApiQuery";
 
 export default function Settings() {
   const [customHex, setCustomHex] = useState("");
+  const [schemePrompt, setSchemePrompt] = useState("");
   const { toast } = useToast();
-  const { accentColor, setAccentColor, theme, toggleTheme } = useTheme();
+  const { accentColor, setAccentColor, theme, toggleTheme, resetScheme } = useTheme();
+
+  const generateScheme = useMutation({
+    mutationFn: (prompt: string) => api.generateTheme(prompt),
+    onSuccess: (scheme) => {
+      applyThemeScheme(scheme.palette);
+      setAccentColor(scheme.accent);
+      toast(scheme.name, "success");
+    },
+    onError: (err) => {
+      if (err instanceof Error) toast(`Theme generation failed: ${err.message}`, "error");
+    },
+  });
 
   const { data: configData, isLoading } = useApiQuery<Record<string, string>>(["config"], () => api.config());
   const config = configData ?? {};
@@ -141,6 +155,59 @@ export default function Settings() {
             disabled={!/^#[0-9a-f]{6}$/i.test(customHex)}
           >
             Apply
+          </button>
+        </div>
+      </div>
+
+      {/* AI Color Scheme */}
+      <div className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card)", border: "1px solid var(--dt-colors-border-default)" }}>
+        <h2 className="text-sm font-semibold mb-1 text-primary">AI Color Scheme</h2>
+        <p className="text-xs text-secondary mb-3">
+          Describe a mood or palette — the LLM designs a full dark-mode color scheme and applies it live.
+        </p>
+        <div className="flex items-center gap-3">
+          <input
+            type="text"
+            value={schemePrompt}
+            onChange={(e) => setSchemePrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && schemePrompt.trim()) {
+                generateScheme.mutate(schemePrompt.trim());
+              }
+            }}
+            placeholder="e.g. neon cyberpunk with mint accents"
+            className="flex-1 bg-transparent border rounded-lg px-3 py-1.5 text-sm outline-none"
+            style={{
+              color: "var(--dt-colors-text-primary)",
+              borderColor: "var(--dt-colors-border-default)",
+            }}
+          />
+          <button
+            onClick={() => {
+              if (schemePrompt.trim()) generateScheme.mutate(schemePrompt.trim());
+            }}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-40"
+            style={{
+              backgroundColor: "var(--dt-colors-accent-muted)",
+              color: "var(--dt-colors-accent-default)",
+            }}
+            disabled={generateScheme.isPending || !schemePrompt.trim()}
+          >
+            {generateScheme.isPending ? "Generating..." : "Generate"}
+          </button>
+          <button
+            onClick={() => {
+              resetScheme();
+              setAccentColor("#7c3aed");
+              toast("Theme reset to defaults", "info");
+            }}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium transition"
+            style={{
+              backgroundColor: "var(--dt-colors-surface-elevated)",
+              color: "var(--dt-colors-text-secondary)",
+            }}
+          >
+            Reset
           </button>
         </div>
       </div>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 from pathlib import Path
 from typing import Any
@@ -20,33 +21,41 @@ def create_git_router() -> APIRouter:
 
     @router.get("/status")
     async def git_status(repo: str = ""):
-        return _git(repo).status()
+        git = _git(repo)
+        return await asyncio.to_thread(git.status)
 
     @router.get("/branch")
     async def git_branch(repo: str = ""):
         git = _git(repo)
-        return {"branch": git.get_branch(), "is_branch": git.is_branch(), "is_repo": git.is_repo()}
+        return {
+            "branch": await asyncio.to_thread(git.get_branch),
+            "is_branch": await asyncio.to_thread(git.is_branch),
+            "is_repo": await asyncio.to_thread(git.is_repo),
+        }
 
     @router.get("/branches")
     async def git_branches(repo: str = ""):
         git = _git(repo)
-        stdout, _ = git._run("branch", "-a")
+        stdout, _ = await asyncio.to_thread(git._run, "branch", "-a")
         branches = [b.replace("*", "").strip() for b in stdout.split("\n") if b.strip()]
-        current = git.get_branch()
+        current = await asyncio.to_thread(git.get_branch)
         return {"branches": branches, "current": current}
 
     @router.get("/log")
     async def git_log(count: int = 10, repo: str = ""):
-        return _git(repo).get_log(count)
+        git = _git(repo)
+        return await asyncio.to_thread(git.get_log, count)
 
     @router.get("/log/detail/{commit_hash:str}")
     async def git_log_detail(commit_hash: str, repo: str = ""):
         git = _git(repo)
-        stdout, _ = git._run("log", "-1", "--format=%H|%h|%s|%an|%ae|%ad|%ai|%D", "--date=short", commit_hash)
+        stdout, _ = await asyncio.to_thread(
+            git._run, "log", "-1", "--format=%H|%h|%s|%an|%ae|%ad|%ai|%D", "--date=short", commit_hash
+        )
         parts = stdout.split("|")
         if len(parts) < 8:
             return {"error": "commit not found"}
-        stat_out, _ = git._run("diff-tree", "--no-commit-id", "-r", "--numstat", commit_hash)
+        stat_out, _ = await asyncio.to_thread(git._run, "diff-tree", "--no-commit-id", "-r", "--numstat", commit_hash)
         files: list[dict[str, Any]] = []
         total_added = 0
         total_deleted = 0
@@ -59,7 +68,7 @@ def create_git_router() -> APIRouter:
                     total_added += added
                     total_deleted += deleted
                     files.append({"path": sp[2], "added": added, "deleted": deleted})
-        diff_out, _ = git._run("diff", commit_hash + "^.." + commit_hash)
+        diff_out, _ = await asyncio.to_thread(git._run, "diff", commit_hash + "^.." + commit_hash)
         return {
             "hash_full": parts[0],
             "hash": parts[1],
@@ -78,19 +87,20 @@ def create_git_router() -> APIRouter:
 
     @router.get("/diff")
     async def git_diff(staged: bool = False, repo: str = ""):
-        return {"diff": _git(repo).get_diff(staged=staged)}
+        git = _git(repo)
+        return {"diff": await asyncio.to_thread(git.get_diff, staged=staged)}
 
     @router.get("/diff/commit/{commit_hash}")
     async def git_diff_commit(commit_hash: str, repo: str = ""):
         git = _git(repo)
-        stdout, _ = git._run("diff", commit_hash + "^.." + commit_hash)
+        stdout, _ = await asyncio.to_thread(git._run, "diff", commit_hash + "^.." + commit_hash)
         parsed = _parse_diff(stdout)
         return {"diff": stdout, "files": parsed}
 
     @router.get("/blame")
     async def git_blame(file: str, repo: str = ""):
         git = _git(repo)
-        stdout, stderr = git._run("blame", "--line-porcelain", file)
+        stdout, stderr = await asyncio.to_thread(git._run, "blame", "--line-porcelain", file)
         if stderr and "fatal" in stderr:
             return {"error": stderr, "lines": []}
         lines: list[dict[str, Any]] = []
@@ -128,7 +138,7 @@ def create_git_router() -> APIRouter:
         if auto:
             result = await git.auto_commit_async()
         else:
-            result = git.commit(message or "auto: commit")
+            result = await asyncio.to_thread(git.commit, message or "auto: commit")
         return {
             "success": result.success,
             "message": result.message,
@@ -139,13 +149,13 @@ def create_git_router() -> APIRouter:
     @router.post("/push")
     async def git_push(repo: str = ""):
         git = _git(repo)
-        stdout, stderr = git._run("push")
+        stdout, stderr = await asyncio.to_thread(git._run, "push")
         return {"ok": not stderr or "error" not in stderr.lower(), "output": stderr or stdout}
 
     @router.post("/pull")
     async def git_pull(repo: str = ""):
         git = _git(repo)
-        stdout, stderr = git._run("pull")
+        stdout, stderr = await asyncio.to_thread(git._run, "pull")
         return {"ok": not stderr or "error" not in stderr.lower(), "output": stderr or stdout}
 
     @router.post("/checkout")
@@ -155,7 +165,7 @@ def create_git_router() -> APIRouter:
         if create:
             args += ["-b"]
         args.append(branch)
-        stdout, stderr = git._run(*args)
+        stdout, stderr = await asyncio.to_thread(git._run, *args)
         return {"ok": not stderr or "error" not in stderr.lower(), "output": stderr or stdout, "branch": branch}
 
     @router.post("/pr")

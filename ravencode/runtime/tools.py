@@ -4,13 +4,15 @@ import asyncio
 import contextvars
 import difflib
 import fnmatch
+import functools
+import os
 import shlex
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
-from raven.core.security.ssrf import validate_url
+from raven.core.security.ssrf import safe_fetch_async, validate_url
 from ravencode.core.metrics import observe_tool
 from ravencode.runtime.question import QuestionError
 from ravencode.runtime.undo import get_undo_manager
@@ -19,16 +21,17 @@ from ravencode.runtime.undo import get_undo_manager
 # helpers
 # ---------------------------------------------------------------------------
 
-_WORKSPACE_ROOT: Path | None = None
+_workspace_var: contextvars.ContextVar[str | None] = contextvars.ContextVar("_workspace_var", default=None)
 
 
 def _get_workspace() -> Path:
-    global _WORKSPACE_ROOT
-    if _WORKSPACE_ROOT is None:
-        import os
+    override = _workspace_var.get()
+    root = override if override is not None else os.environ.get("RAVEN_WORKSPACE", "workspace")
+    return Path(root).expanduser().resolve()
 
-        _WORKSPACE_ROOT = Path(os.environ.get("RAVEN_WORKSPACE", "workspace")).expanduser().resolve()
-    return _WORKSPACE_ROOT
+
+def set_workspace_root(root: str | Path) -> None:
+    _workspace_var.set(str(root))
 
 
 def _confine(path: str) -> Path:
@@ -291,12 +294,12 @@ async def web_fetch(url: str) -> str:
     if not validate_url(url):
         return f"[denied] URL blocked by SSRF guard: {url}"
     try:
-        import httpx
-
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            resp = await client.get(url, headers={"User-Agent": "Raven/1.0"})
-            resp.raise_for_status()
+        resp = await safe_fetch_async(url, timeout=30.0, headers={"User-Agent": "Raven/1.0"})
+        resp.raise_for_status()
         return resp.text[:50_000]
+    except ValueError as exc:
+        logger.warning("web_fetch blocked: {}", exc)
+        return f"[denied] URL blocked by SSRF guard: {exc}"
     except Exception as exc:
         logger.exception("web_fetch failed")
         return f"[error] web_fetch: {exc}"
@@ -354,6 +357,11 @@ async def _git_cmd(*args: str, cwd: str | None = None) -> str:
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
     except TimeoutError:
+        try:
+            proc.kill()
+            await proc.wait()
+        except (ProcessLookupError, OSError):
+            logger.debug("git process already exited during timeout kill")
         return "[timeout]"
     output = (stdout or b"").decode("utf-8", errors="replace")[:20_000]
     if stderr:
@@ -767,7 +775,7 @@ async def _talk_handler(text: str, voice: str = "", provider: str = "") -> str:
         prov = TTSProvider.SYSTEM
     config = TTSConfig(provider=prov, voice=voice)
     tts = TextToSpeech(config)
-    path = tts.synthesize(text)
+    path = await asyncio.to_thread(tts.synthesize, text)
     return f"Audio saved to {path}"
 
 
@@ -1610,7 +1618,12 @@ def _ensure_plugin_tools() -> None:
 
 def get_tool_definitions(plan_mode: bool = False) -> list[dict[str, Any]]:
     _ensure_plugin_tools()
-    return [
+    return list(_build_tool_definitions(plan_mode))
+
+
+@functools.lru_cache(maxsize=2)
+def _build_tool_definitions(plan_mode: bool) -> tuple[dict[str, Any], ...]:
+    return tuple(
         {
             "type": "function",
             "function": {
@@ -1621,7 +1634,7 @@ def get_tool_definitions(plan_mode: bool = False) -> list[dict[str, Any]]:
         }
         for t in MODULE_TOOLS.values()
         if not plan_mode or t["name"] not in _PLAN_MODE_DENIED
-    ]
+    )
 
 
 def is_dangerous(name: str) -> bool:

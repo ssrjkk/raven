@@ -225,8 +225,13 @@ const CanvasViewer = memo(function CanvasViewer({ sessionId, className }: { sess
 
   useEffect(() => {
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${proto}//${window.location.host}/api/canvas/ws/${sessionId}`;
-    const sock = new WebSocket(url);
+    const sock = new WebSocket(`${proto}//${window.location.host}/api/canvas/ws/${sessionId}`);
+    sock.onopen = () => {
+      const token = getToken();
+      if (token) {
+        sock.send(JSON.stringify({ type: "auth", token }));
+      }
+    };
     sock.onmessage = (evt) => {
       try {
         const data = JSON.parse(evt.data) as CanvasState;

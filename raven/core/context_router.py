@@ -45,11 +45,15 @@ class ContextRouter:
             re.compile(r"(write|create).+(monitor|watch|alert|notif)", re.IGNORECASE),
         ]
 
-    def classify(self, message: str) -> TaskType:
-        coding_score = sum(1 for p in self.CODING_PATTERNS if p.search(message))
-        automation_score = sum(1 for p in self.AUTOMATION_PATTERNS if p.search(message))
-        hybrid_score = sum(1 for p in self.HYBRID_PATTERNS if p.search(message))
+    def _scores(self, message: str) -> tuple[int, int, int]:
+        return (
+            sum(1 for p in self.CODING_PATTERNS if p.search(message)),
+            sum(1 for p in self.AUTOMATION_PATTERNS if p.search(message)),
+            sum(1 for p in self.HYBRID_PATTERNS if p.search(message)),
+        )
 
+    @staticmethod
+    def _classify_scores(coding_score: int, automation_score: int, hybrid_score: int) -> TaskType:
         if hybrid_score > 0:
             return TaskType.HYBRID
         if coding_score > 0 and automation_score == 0:
@@ -64,12 +68,13 @@ class ContextRouter:
             return TaskType.CODING
         return TaskType.QUERY
 
+    def classify(self, message: str) -> TaskType:
+        return self._classify_scores(*self._scores(message))
+
     def classify_with_confidence(self, message: str) -> tuple[TaskType, float]:
-        coding_score = sum(1 for p in self.CODING_PATTERNS if p.search(message))
-        automation_score = sum(1 for p in self.AUTOMATION_PATTERNS if p.search(message))
-        hybrid_score = sum(1 for p in self.HYBRID_PATTERNS if p.search(message))
+        coding_score, automation_score, hybrid_score = self._scores(message)
         total = coding_score + automation_score + hybrid_score or 1
-        task_type = self.classify(message)
+        task_type = self._classify_scores(coding_score, automation_score, hybrid_score)
 
         confidence: float
         if task_type == TaskType.HYBRID:

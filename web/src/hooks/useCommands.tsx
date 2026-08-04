@@ -2,6 +2,8 @@ import { Code, Database,FileText, Settings, Sparkles } from "lucide-react";
 import { useEffect,useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { getToken } from "../api/client";
+
 export interface CommandItem {
   id: string;
   label: string;
@@ -29,8 +31,14 @@ export function useCommands(onToggleTheme?: () => void) {
     const fetchCommands = async () => {
       setIsLoading(true);
       try {
+        const headers: Record<string, string> = {};
+        const token = getToken();
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
         const response = await fetch("/api/v1/commands/contextual", {
           signal: ac.signal,
+          headers,
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const dynamicCommands: unknown = await response.json();

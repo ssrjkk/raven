@@ -31,7 +31,7 @@ def mock_registry():
     reg = MagicMock()
     agent = MagicMock()
 
-    async def _run(text, confirm_fn=None):
+    async def _run(text, confirm_fn=None, history=None):
         yield "Hello "
         yield "world"
 
@@ -95,7 +95,7 @@ async def test_process_empty_response(mock_db, mock_registry, mock_channels, moc
     send_fn = _make_send()
     processor = MessageProcessor(mock_db, mock_registry, cm, None, mock_metrics, send_fn)
 
-    async def empty_run(text, confirm_fn=None):
+    async def empty_run(text, confirm_fn=None, history=None):
         return
         yield  # pragma: no cover
 
@@ -112,7 +112,7 @@ async def test_process_timeout(mock_db, mock_registry, mock_channels, mock_metri
     send_fn = _make_send()
     processor = MessageProcessor(mock_db, mock_registry, cm, None, mock_metrics, send_fn)
 
-    async def slow_run(text, confirm_fn=None):
+    async def slow_run(text, confirm_fn=None, history=None):
         await asyncio.sleep(999)
         yield "late"
 
@@ -134,7 +134,7 @@ async def test_process_mid_stream_error(mock_db, mock_registry, mock_channels, m
     send_fn = _make_send()
     processor = MessageProcessor(mock_db, mock_registry, cm, None, mock_metrics, send_fn)
 
-    async def error_run(text, confirm_fn=None):
+    async def error_run(text, confirm_fn=None, history=None):
         yield "partial"
         raise ValueError("oops")  # pragma: no cover
         yield  # pragma: no cover
@@ -153,7 +153,7 @@ async def test_manage_context_skips_when_no_ctxmgr(mock_db, mock_registry, mock_
     send_fn = _make_send()
     processor = MessageProcessor(mock_db, mock_registry, cm, None, mock_metrics, send_fn)
 
-    await processor._manage_context("sess1")
+    await processor._manage_context("sess1", [])
     mock_db.get_session_messages.assert_not_called()
 
 
@@ -168,7 +168,10 @@ async def test_manage_context_below_threshold(mock_db, mock_registry, mock_chann
     send_fn = _make_send()
     processor = MessageProcessor(mock_db, mock_registry, cm, ctxmgr, mock_metrics, send_fn)
 
-    await processor._manage_context("sess1")
+    mock_msg = MagicMock()
+    mock_msg.role = "user"
+    mock_msg.content = "some content"
+    await processor._manage_context("sess1", [mock_msg])
     ctxmgr.manage.assert_not_called()
 
 
@@ -187,8 +190,7 @@ async def test_manage_context_above_threshold(mock_db, mock_registry, mock_chann
     mock_msg = MagicMock()
     mock_msg.role = "user"
     mock_msg.content = "some content"
-    mock_db.get_session_messages = AsyncMock(return_value=[mock_msg])
-    await processor._manage_context("sess1")
+    await processor._manage_context("sess1", [mock_msg])
     ctxmgr.manage.assert_called_once()
     mock_db.replace_session_messages.assert_called_once_with("sess1", [{"role": "user", "content": "summary"}])
 
@@ -202,7 +204,7 @@ async def test_manage_context_no_messages(mock_db, mock_registry, mock_channels,
     processor = MessageProcessor(mock_db, mock_registry, cm, ctxmgr, mock_metrics, send_fn)
 
     mock_db.get_session_messages = AsyncMock(return_value=[])
-    await processor._manage_context("sess1")
+    await processor._manage_context("sess1", [])
     ctxmgr.estimate_tokens.assert_not_called()
 
 
@@ -215,7 +217,7 @@ async def test_confirm_fn(mock_db, mock_registry, mock_channels, mock_metrics):
 
     captured_confirm = None
 
-    async def capture_run(text, confirm_fn=None):
+    async def capture_run(text, confirm_fn=None, history=None):
         nonlocal captured_confirm
         captured_confirm = confirm_fn
         return

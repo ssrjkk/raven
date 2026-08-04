@@ -11,6 +11,15 @@ vi.mock("../api/client", () => ({
     shutdown: vi.fn().mockResolvedValue({ ok: true }),
     getTheme: vi.fn().mockResolvedValue({ accentColor: "#7c3aed" }),
     saveTheme: vi.fn().mockResolvedValue({ ok: true }),
+    generateTheme: vi.fn().mockResolvedValue({
+      name: "AI · neon cyberpunk",
+      description: "neon cyberpunk",
+      accent: "#22d3ee",
+      palette: {
+        accent: { default: "#22d3ee", hover: "#67e8f9" },
+        bg: { primary: "#08111f" },
+      },
+    }),
   },
   isAuthenticated: vi.fn().mockReturnValue(true),
 }));
@@ -70,6 +79,40 @@ describe("Settings Page", () => {
     await user.click(btn);
     await waitFor(() => {
       expect(screen.getByText("Shutting down...")).toBeInTheDocument();
+    });
+  });
+
+  it("renders AI color scheme section", async () => {
+    renderSettings();
+    await waitFor(() => {
+      expect(screen.getByText("AI Color Scheme")).toBeInTheDocument();
+    });
+    expect(screen.getByPlaceholderText("e.g. neon cyberpunk with mint accents")).toBeInTheDocument();
+  });
+
+  it("generates and applies a color scheme", async () => {
+    const client = await import("../api/client");
+    client.api.generateTheme = vi.fn().mockResolvedValue({
+      name: "AI · neon cyberpunk",
+      description: "neon cyberpunk",
+      accent: "#22d3ee",
+      palette: {
+        accent: { default: "#22d3ee", hover: "#67e8f9" },
+        bg: { primary: "#08111f" },
+      },
+    });
+    const user = userEvent.setup();
+    renderSettings();
+    await waitFor(() => {
+      expect(screen.getByText("AI Color Scheme")).toBeInTheDocument();
+    });
+    await user.type(screen.getByPlaceholderText("e.g. neon cyberpunk with mint accents"), "neon cyberpunk");
+    await user.click(screen.getByText("Generate"));
+    await waitFor(() => {
+      expect(client.api.generateTheme).toHaveBeenCalledWith("neon cyberpunk");
+    });
+    await waitFor(() => {
+      expect(document.documentElement.style.getPropertyValue("--dt-colors-accent-default")).toBe("#22d3ee");
     });
   });
 });

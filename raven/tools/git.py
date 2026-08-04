@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -47,7 +48,7 @@ async def git_commit(message: str = "", auto: bool = False, workspace: str = "")
     if auto:
         result = await git.auto_commit_async()
     else:
-        result = git.commit(message or "auto: commit")
+        result = await asyncio.to_thread(git.commit, message or "auto: commit")
     return {
         "success": result.success,
         "message": result.message,

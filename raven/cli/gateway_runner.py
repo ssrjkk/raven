@@ -70,10 +70,11 @@ from raven.core.monitor.store import MonitorStore
 from raven.core.pattern_checker import create_pattern_checker_router
 from raven.core.plugin_api import create_plugin_router
 from raven.core.plugin_loader import PluginLoader
+from raven.core.project_insights_api import create_project_insights_router
 from raven.core.project_metrics_api import create_project_metrics_router
 from raven.core.project_metrics_api import set_workspace as set_metrics_workspace
 from raven.core.rag_api import create_rag_router
-from raven.core.routine.engine import RoutineEngine
+from raven.core.routine.engine import RoutineEngine, register_routine_engine
 from raven.core.routine.store import RoutineStore
 from raven.core.scaffold_api import create_scaffold_router
 from raven.core.voice_api import create_voice_router
@@ -300,6 +301,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     metrics_router = create_project_metrics_router()
     api_app.include_router(metrics_router)
+
+    project_insights_router = create_project_insights_router(workspace=str(settings.resolved_workspace))
+    api_app.include_router(project_insights_router)
 
     insights_router = create_insights_router(workspace=str(settings.resolved_workspace))
     api_app.include_router(insights_router)
@@ -601,6 +605,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     routine_store = RoutineStore(settings.resolved_db_path)
     routine_engine = RoutineEngine(routine_store)
+    register_routine_engine(routine_engine)
     await register_all_routines(routine_engine)
     api_app.state.routine_engine = routine_engine
 
@@ -703,7 +708,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         for name, coro in [
             ("dream engine", dream_engine.stop()),
             ("monitor engine", monitor_engine.stop()),
+            ("monitor store", monitor_store.close()),
             ("routine engine", routine_engine.stop()),
+            ("routine store", routine_store.close()),
             ("analytics engine", analytics_engine.stop()),
             ("LLM cleanup", gw.llm.cleanup()),
             ("gateway stop", gw.stop()),
@@ -722,6 +729,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             await audit_logger.stop()
         except Exception as e:
             logger.warning("Shutdown audit_logger: {}", e)
+        register_routine_engine(None)
         sv_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await sv_task

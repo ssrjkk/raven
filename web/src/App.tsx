@@ -70,6 +70,7 @@ export default function App() {
             <Route path="knowledge" element={<Knowledge />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="insights" element={<Insights />} />
+            <Route path="project-insights" element={<ProjectInsights />} />
             <Route path="components" element={<ComponentLibrary />} />
             <Route path="scaffold" element={<Scaffold />} />
             <Route path="code-quality" element={<CodeQuality />} />
@@ -113,6 +114,7 @@ const Media = lazy(() => import("./pages/Media"));
 const Knowledge = lazy(() => import("./pages/Knowledge"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const Insights = lazy(() => import("./pages/Insights"));
+const ProjectInsights = lazy(() => import("./pages/ProjectInsights"));
 const ComponentLibrary = lazy(() => import("./pages/ComponentLibrary"));
 const Scaffold = lazy(() => import("./pages/Scaffold"));
 const CodeQuality = lazy(() => import("./pages/CodeQuality"));

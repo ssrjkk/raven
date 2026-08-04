@@ -7,6 +7,7 @@ from loguru import logger
 
 from raven.channels.enterprise_base import EnterpriseChannel
 from raven.core.channel_config import get_channel_config
+from raven.core.http_client import client_manager
 from raven.core.models import IncomingMessage, Message
 
 
@@ -30,20 +31,19 @@ class MatrixChannel(EnterpriseChannel):
             self._sync_task = None
 
     async def _matrix_get(self, path: str):
-        import httpx
-
-        async with httpx.AsyncClient(base_url=self._homeserver, timeout=15) as client:
-            resp = await client.get(path, headers={"Authorization": f"Bearer {self._token}"})
-            resp.raise_for_status()
-            return resp.json()
+        return await client_manager.get(
+            f"{self._homeserver}{path}",
+            headers={"Authorization": f"Bearer {self._token}"},
+            timeout=15,
+        )
 
     async def _matrix_post(self, path: str, json_body: dict[str, Any]):
-        import httpx
-
-        async with httpx.AsyncClient(base_url=self._homeserver, timeout=15) as client:
-            resp = await client.post(path, json=json_body, headers={"Authorization": f"Bearer {self._token}"})
-            resp.raise_for_status()
-            return resp.json()
+        return await client_manager.post(
+            f"{self._homeserver}{path}",
+            json=json_body,
+            headers={"Authorization": f"Bearer {self._token}"},
+            timeout=15,
+        )
 
     async def _start_sync(self):
         if not self._homeserver or not self._token:

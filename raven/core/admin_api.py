@@ -34,9 +34,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     @router.get("/monitors")
     async def admin_monitors_list(user_id: str | None = None):
         gateway = get_gateway_fn()
-        from raven.core.monitor.store import MonitorStore
-
-        store = MonitorStore(gateway.db.db_path)
+        store = gateway._monitor_store
         monitors = await store.list_monitors(user_id=user_id)
         return [
             {
@@ -62,9 +60,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     @router.get("/monitors/{monitor_id}")
     async def admin_monitor_get(monitor_id: str):
         gateway = get_gateway_fn()
-        from raven.core.monitor.store import MonitorStore
-
-        store = MonitorStore(gateway.db.db_path)
+        store = gateway._monitor_store
         m = await store.load_monitor(monitor_id)
         if not m:
             raise HTTPException(404, "Monitor not found")
@@ -88,9 +84,8 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     async def admin_monitor_create(body: MonitorCreateRequest):
         gateway = get_gateway_fn()
         from raven.core.monitor.models import Condition, ConditionOperator, Monitor, MonitorStatus, MonitorType
-        from raven.core.monitor.store import MonitorStore
 
-        store = MonitorStore(gateway.db.db_path)
+        store = gateway._monitor_store
         conditions = [
             Condition(metric=c.metric, operator=ConditionOperator(c.operator), value=c.value) for c in body.conditions
         ]
@@ -114,9 +109,8 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     async def admin_monitor_update(monitor_id: str, body: MonitorUpdateRequest):
         gateway = get_gateway_fn()
         from raven.core.monitor.models import Condition, ConditionOperator, MonitorStatus, MonitorType
-        from raven.core.monitor.store import MonitorStore
 
-        store = MonitorStore(gateway.db.db_path)
+        store = gateway._monitor_store
         existing = await store.load_monitor(monitor_id)
         if not existing:
             raise HTTPException(404, "Monitor not found")
@@ -150,9 +144,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     @router.delete("/monitors/{monitor_id}")
     async def admin_monitor_delete(monitor_id: str):
         gateway = get_gateway_fn()
-        from raven.core.monitor.store import MonitorStore
-
-        store = MonitorStore(gateway.db.db_path)
+        store = gateway._monitor_store
         m = await store.load_monitor(monitor_id)
         if not m:
             raise HTTPException(404, "Monitor not found")
@@ -163,10 +155,9 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     @router.post("/monitors/{monitor_id}/check")
     async def admin_monitor_check_now(monitor_id: str):
         from raven.core.monitor.engine import MonitorEngine
-        from raven.core.monitor.store import MonitorStore
 
         gateway = get_gateway_fn()
-        store = MonitorStore(gateway.db.db_path)
+        store = gateway._monitor_store
         engine = MonitorEngine(store, send_fn=lambda cid, txt: logger.info("Alert[{}]: {}", cid, txt))
         alert_text = await engine.check_now(monitor_id)
         return {"ok": True, "alert": alert_text}

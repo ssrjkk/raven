@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from typing import Any
 
 from loguru import logger
@@ -10,6 +11,8 @@ from pydantic import SecretStr
 from raven.core._json import json
 from raven.core.llm.protocol import LLMProvider, LLMResponse
 from raven.core.llm.providers.base import _convert_to_gemini, _read_json_file
+
+_TOKEN_TTL = 3300.0
 
 
 class VertexAIProvider(LLMProvider):
@@ -25,9 +28,11 @@ class VertexAIProvider(LLMProvider):
         raw = overrides.get("api_key") or ""
         self._api_key = SecretStr(raw) if isinstance(raw, str) else raw
         self._token: str | None = None
+        self._token_expires_at: float = 0.0
+        self._token_from_creds = False
 
     async def _get_token(self) -> str:
-        if self._token:
+        if self._token and (self._token_from_creds or time.monotonic() < self._token_expires_at):
             return self._token
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -45,6 +50,8 @@ class VertexAIProvider(LLMProvider):
                 raise
             if proc.returncode == 0:
                 self._token = stdout.decode().strip()
+                self._token_from_creds = False
+                self._token_expires_at = time.monotonic() + _TOKEN_TTL
                 return self._token
             err_text = stderr.decode().strip()
             logger.warning("gcloud auth failed (rc={}): {}", proc.returncode, err_text)
@@ -59,6 +66,7 @@ class VertexAIProvider(LLMProvider):
                 logger.warning("Vertex AI: failed to read credentials file: {}", e)
                 return ""
             self._token = creds.get("access_token", "")
+            self._token_from_creds = bool(self._token)
             if not self._token and "private_key" in creds:
                 logger.warning("Vertex AI: service account needs `gcloud auth application-default print-access-token`")
         return self._token or ""

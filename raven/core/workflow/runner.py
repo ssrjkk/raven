@@ -141,8 +141,14 @@ class TemplateRunner:
             config={"template_id": template.id, "template_config": config or {}},
             created_at=time.time(),
         )
-        from raven.core.routine.engine import RoutineEngine
+        from raven.core.routine.engine import RoutineEngine, get_routine_engine
         from raven.core.routine.store import RoutineStore
+
+        engine = get_routine_engine()
+        if engine is not None:
+            await engine.add_routine(routine)
+            logger.info("Scheduled workflow '{}' as routine {}", template.name, routine_id)
+            return routine_id
 
         store = RoutineStore(db_path)
         try:

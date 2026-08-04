@@ -80,6 +80,33 @@ export interface ProjectMetrics {
   activity: { today: number; this_week: number; this_month: number };
 }
 
+export interface ProjectInsightsData {
+  project_id: string;
+  time_saved_minutes: number;
+  ai_contribution_percent: number;
+  success_rate: number;
+  token_cost_estimate: number;
+  files: number;
+  code_lines: number;
+  commits: number;
+  active_days: number;
+  trend: { date: string; commits: number }[];
+  generated_at: string;
+}
+
+export interface ThemeScheme {
+  name: string;
+  description: string;
+  accent: string;
+  palette: Record<string, Record<string, string>>;
+}
+
+export interface TruthfulResult {
+  status: "success" | "corrected" | "refused";
+  content: string;
+  thinking_process: string;
+}
+
 export interface StatusData {
   status: string;
   channels: string[];

@@ -18,6 +18,11 @@ class NodeManager:
         self._lock = asyncio.Lock()
 
     async def register(self, name: str, endpoint: str, capabilities: list[str] | None = None) -> str:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(endpoint)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return f"[blocked] node endpoint must be an http(s) URL: {endpoint[:100]}"
         nid = uuid.uuid4().hex[:8]
         async with self._lock:
             self._nodes[nid] = NodeInfo(
@@ -52,7 +57,13 @@ class NodeManager:
         if not node:
             return f"[error] node not found: {nid}"
         try:
+            from urllib.parse import urlparse
+
             import httpx
+
+            parsed = urlparse(node.endpoint)
+            if parsed.scheme not in ("http", "https") or not parsed.hostname:
+                return f"[blocked] node endpoint must be an http(s) URL: {node.endpoint[:100]}"
 
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(

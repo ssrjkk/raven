@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import ipaddress
-import socket
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote_plus
 
 import httpx
 from bs4 import BeautifulSoup
 from loguru import logger
+
+from raven.core.security.ssrf import safe_fetch_async, validate_url
 
 PLUGIN_NAME = "browser"
 PLUGIN_DESCRIPTION = "Browse the web, take screenshots, and search the internet"
@@ -15,46 +15,6 @@ PLUGIN_DESCRIPTION = "Browse the web, take screenshots, and search the internet"
 _browser = None
 _context = None
 _lock = asyncio.Lock()
-
-_PRIVATE_RANGES = [
-    "127.0.0.0/8",
-    "10.0.0.0/8",
-    "172.16.0.0/12",
-    "192.168.0.0/16",
-    "::1/128",
-    "fc00::/7",
-]
-
-
-def _validate_url(url: str) -> None:
-    parsed = urlparse(url)
-    host = parsed.hostname
-    if not host:
-        raise ValueError("URL missing hostname")
-    try:
-        ip = ipaddress.ip_address(host)
-        for r in _PRIVATE_RANGES:
-            if ip in ipaddress.ip_network(r, strict=False):
-                msg = f"SSRF blocked: private IP {host}"
-                raise ValueError(msg)
-    except ValueError:
-        if host in ("localhost", "0.0.0.0"):
-            msg = f"SSRF blocked: hostname {host}"
-            raise ValueError(msg) from None
-        try:
-            addrs = socket.getaddrinfo(host, None)
-            for _family, _, _, _, sockaddr in addrs:
-                addr = sockaddr[0]
-                try:
-                    ip = ipaddress.ip_address(addr)
-                    for r in _PRIVATE_RANGES:
-                        if ip in ipaddress.ip_network(r, strict=False):
-                            msg = f"SSRF blocked: hostname {host} resolves to private IP {addr}"
-                            raise ValueError(msg)
-                except ValueError:
-                    continue
-        except (socket.gaierror, OSError) as e:
-            logger.debug("[browser] DNS resolution failed for {}: {}", host, e)
 
 
 async def _ensure_browser():
@@ -88,10 +48,9 @@ async def _cleanup():
 
 async def browse(url: str) -> str:
     """Fetch and extract text content from a URL. Args: url (str): Full URL to visit"""
-    try:
-        _validate_url(url)
-    except ValueError as e:
-        return f"Blocked: {e}"
+    error = validate_url(url)
+    if error:
+        return f"Blocked: {error}"
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
     try:
@@ -100,18 +59,22 @@ async def browse(url: str) -> str:
             page = await browser.new_page()
             try:
                 await page.goto(url, timeout=15000, wait_until="domcontentloaded")
+                final_url = page.url
+                error = validate_url(final_url)
+                if error:
+                    return f"Blocked: redirect to restricted address ({error})"
                 content: str = await page.evaluate("document.body.innerText")
                 return content[:4000]
             finally:
                 await page.close()
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
-            resp.raise_for_status()
-            soup = BeautifulSoup(resp.text, "lxml")
-            for tag in soup(["script", "style", "nav", "footer"]):
-                tag.decompose()
-            text = soup.get_text(separator="\n", strip=True)
-            return text[:4000]
+        resp = await safe_fetch_async(url, timeout=15.0)
+        soup = BeautifulSoup(resp.text, "lxml")
+        for tag in soup(["script", "style", "nav", "footer"]):
+            tag.decompose()
+        text = soup.get_text(separator="\n", strip=True)
+        return text[:4000]
+    except ValueError as e:
+        return f"Blocked: {e}"
     except Exception as e:
         logger.error("Browse failed: {}", e)
         return f"Error browsing {url}: {e}"
@@ -119,10 +82,9 @@ async def browse(url: str) -> str:
 
 async def screenshot(url: str) -> str:
     """Take a screenshot of a URL and return as base64. Args: url (str): Full URL to screenshot"""
-    try:
-        _validate_url(url)
-    except ValueError as e:
-        return f"Blocked: {e}"
+    error = validate_url(url)
+    if error:
+        return f"Blocked: {error}"
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
     try:
@@ -132,6 +94,10 @@ async def screenshot(url: str) -> str:
         page = await browser.new_page(viewport={"width": 1280, "height": 720})
         try:
             await page.goto(url, timeout=15000, wait_until="domcontentloaded")
+            final_url = page.url
+            error = validate_url(final_url)
+            if error:
+                return f"Blocked: redirect to restricted address ({error})"
             import base64
 
             screenshot_bytes = await page.screenshot(full_page=False)

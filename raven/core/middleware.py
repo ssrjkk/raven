@@ -80,7 +80,12 @@ PATH_PERMISSIONS: dict[str, Permission] = {
     "/api/stream/push": Permission.ADMIN_WRITE,
     "/api/browser": Permission.ADMIN_WRITE,
     "/api/media/generate": Permission.ADMIN_WRITE,
+    "/aios/exec": Permission.ADMIN_WRITE,
+    "/aios/agent/truthful": Permission.TASK_RUN,
+    "/aios/agent": Permission.ADMIN_WRITE,
 }
+
+AUTH_REQUIRED_PREFIXES: tuple[str, ...] = ("/aios", "/api/tests")
 
 
 async def request_id_middleware(request: Request, call_next):
@@ -142,6 +147,12 @@ async def auth_middleware(request: Request, call_next):
             request.state.user_id = "admin"
 
     path = request.url.path
+    for prefix in AUTH_REQUIRED_PREFIXES:
+        if path.startswith(prefix) and request.state.user_id == "anonymous":
+            return JSONResponse(
+                status_code=401,
+                content={"error": "Authentication required", "required": "Bearer token or X-Raven-Key"},
+            )
     for prefix, required_perm in PATH_PERMISSIONS.items():
         if path.startswith(prefix) and not rbac.has_permission(request.state.user_role, required_perm):
             return JSONResponse(status_code=403, content={"error": "Forbidden", "required": required_perm.value})

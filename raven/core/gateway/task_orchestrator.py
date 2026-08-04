@@ -49,6 +49,18 @@ class TaskOrchestrator:
     async def stop(self) -> None:
         async with self._lock:
             self._tasks.clear()
+        for t in list(self._bg_tasks):
+            t.cancel()
+        if self._bg_tasks:
+            await asyncio.gather(*self._bg_tasks, return_exceptions=True)
+            self._bg_tasks.clear()
+        if self._runner is not None:
+            await self._runner.shutdown()
+        if self._store is not None:
+            await self._store.close()
+            self._store = None
+        self._planner = None
+        self._runner = None
         logger.info("TaskOrchestrator stopped")
 
     async def create_and_run(

@@ -4,8 +4,9 @@ import asyncio
 import os
 import platform
 import subprocess
+import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from loguru import logger
 
@@ -174,7 +175,6 @@ _RESTRICTED_BUILTINS: dict[str, Any] = {
     "enumerate": enumerate,
     "filter": filter,
     "float": float,
-    "format": format,
     "frozenset": frozenset,
     "hash": hash,
     "hex": hex,
@@ -223,6 +223,8 @@ _DENIED_BUILTINS = frozenset(
         "delattr",
         "vars",
         "dir",
+        "format",
+        "format_map",
         "__import__",
         "globals",
         "locals",
@@ -262,20 +264,31 @@ async def python_code(code: str, timeout: int = 15) -> str:
                     if module_name in _DENIED_MODULES:
                         return f"[denied] import of '{alias.name}' is not allowed"
 
-        def _run() -> str:
-            last_expr: ast.Expr | None = None
-            if tree.body and isinstance(tree.body[-1], ast.Expr):
-                last_expr = cast(ast.Expr, tree.body.pop())
-            compiled = compile(tree, "<sandbox>", "exec")
-            ns: dict[str, Any] = {"__builtins__": _RESTRICTED_BUILTINS.copy()}
-            exec(compiled, ns)
-            if last_expr:
-                compiled_expr = compile(ast.Expression(last_expr.value), "<sandbox>", "eval")
-                result = eval(compiled_expr, ns)
-                return str(result) if result is not None else "(no return value)"
-            return "(code executed, no return value)"
-
-        return await asyncio.to_thread(_run)
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
+            "raven.tools._pyrunner",
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(code.encode("utf-8")), timeout=timeout)
+        except TimeoutError:
+            try:
+                proc.kill()
+                await proc.wait()
+            except ProcessLookupError:
+                pass
+            return f"[timeout after {timeout}s]"
+        out = stdout.decode("utf-8", errors="replace").strip()
+        err = stderr.decode("utf-8", errors="replace").strip()
+        if out:
+            return out
+        if err:
+            logger.warning("Python sandbox subprocess error: {}", err)
+            return f"Error: {err}"
+        return "(no output)"
     except SyntaxError as e:
         return f"Syntax Error: {e}"
     except Exception as e:

@@ -85,6 +85,48 @@ async def test_sandbox_default_config():
     assert s.config.denied_tools == []
 
 
+@pytest.mark.asyncio
+async def test_sandbox_direct_blocks_dunder_attr():
+    s = Sandbox(SandboxConfig(mode="none"))
+    result = await s.exec("print(''.__class__)")
+    assert "[denied]" in result
+
+
+@pytest.mark.asyncio
+async def test_sandbox_direct_blocks_subclasses_chain():
+    s = Sandbox(SandboxConfig(mode="none"))
+    result = await s.exec("print(().__class__.__bases__[0].__subclasses__())")
+    assert "[denied]" in result
+
+
+@pytest.mark.asyncio
+async def test_sandbox_direct_blocks_dict_descriptor():
+    s = Sandbox(SandboxConfig(mode="none"))
+    result = await s.exec("print(object.__dict__['__subclasses__'])")
+    assert "[denied]" in result
+
+
+@pytest.mark.asyncio
+async def test_sandbox_direct_blocks_format_bypass():
+    s = Sandbox(SandboxConfig(mode="none"))
+    result = await s.exec("print('{0.__class__}'.format(()))")
+    assert "[denied]" in result
+
+
+@pytest.mark.asyncio
+async def test_sandbox_direct_blocks_vars():
+    s = Sandbox(SandboxConfig(mode="none"))
+    result = await s.exec("print(vars(object))")
+    assert "[denied]" in result
+
+
+@pytest.mark.asyncio
+async def test_sandbox_direct_allows_legit_introspection():
+    s = Sandbox(SandboxConfig(mode="none"))
+    result = await s.exec("x = [1, 2, 3]; print(len(x))")
+    assert "3" in result
+
+
 class TestNetworkRules:
     def test_effective_network_rules_default_deny(self):
         cfg = SandboxConfig(mode="subprocess", allow_network=False)

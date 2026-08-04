@@ -96,6 +96,12 @@ class PluginCatalog:
         try:
             import httpx
 
+            from raven.core.security.ssrf import validate_url
+
+            if validate_url(self.catalog_url):
+                logger.warning("[catalog] catalog URL blocked by SSRF guard: {}", self.catalog_url)
+                return self._load_local_cache()
+
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.get(self.catalog_url)
                 resp.raise_for_status()
@@ -376,6 +382,12 @@ class PluginManager:
     async def _fetch_remote_metadata(self, url: str) -> PluginMetadata | None:
         try:
             import httpx
+
+            from raven.core.security.ssrf import validate_url
+
+            if validate_url(url):
+                logger.debug("[plugin] remote metadata URL blocked by SSRF guard: {}", url)
+                return None
 
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.get(f"{url.rstrip('/')}/plugin.json")

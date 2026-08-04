@@ -23,10 +23,17 @@ PRIVATE_NETS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
 ]
 
 
+def _is_private_address(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if any(addr in net for net in PRIVATE_NETS):
+        return True
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+        return _is_private_address(addr.ipv4_mapped)
+    return False
+
+
 def _is_private_ip(ip: str) -> bool:
     try:
-        addr = ipaddress.ip_address(ip)
-        return any(addr in net for net in PRIVATE_NETS)
+        return _is_private_address(ipaddress.ip_address(ip))
     except ValueError:
         return False
 
@@ -83,14 +90,14 @@ def is_private_url(url: str) -> bool:
             logger.debug("SSRF DNS resolution returned no results for {}, blocking", host)
             return True
         for ip in ips:
-            if any(ip in net for net in PRIVATE_NETS):
+            if _is_private_address(ip):
                 return True
     except Exception as exc:
         logger.debug("SSRF IP resolution error for {}: {}", host, exc)
         return True
     try:
         ip = ipaddress.ip_address(host)
-        if any(ip in net for net in PRIVATE_NETS):
+        if _is_private_address(ip):
             return True
     except ValueError:
         logger.debug("SSRF host '{}' is not an IP and DNS resolution failed", host)
@@ -131,7 +138,7 @@ async def validate_url_async(url: str) -> str | None:
         return f"Failed to resolve hostname: {host}"
 
     for ip in ips:
-        if any(ip in net for net in PRIVATE_NETS):
+        if _is_private_address(ip):
             return f"Hostname resolves to private IP: {ip}"
 
     return None
@@ -178,3 +185,63 @@ async def safe_http_request(url: str, **kwargs: Any) -> httpx.Response:
                     msg = f"Redirect blocked by SSRF: {error}"
                     raise httpx.ConnectError(msg)
         return response
+
+
+async def _materialize(resp: httpx.Response, max_bytes: int) -> httpx.Response:
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in resp.aiter_bytes():
+        total += len(chunk)
+        if total > max_bytes:
+            msg = f"Response exceeds {max_bytes} bytes"
+            raise ValueError(msg)
+        chunks.append(chunk)
+    return httpx.Response(
+        status_code=resp.status_code,
+        headers=resp.headers,
+        request=resp.request,
+        content=b"".join(chunks),
+        extensions=resp.extensions,
+    )
+
+
+async def safe_fetch_async(
+    url: str,
+    method: str = "GET",
+    max_redirects: int = 5,
+    timeout: float = 30.0,
+    max_bytes: int = 10 * 1024 * 1024,
+    **kwargs: Any,
+) -> httpx.Response:
+    """Fetch a URL with SSRF protection on every redirect hop.
+
+    The transport validates and IP-pins the target on each request, so
+    DNS-rebinding and private-IP redirects are blocked even when the
+    server follows Location headers. The response body is streamed and
+    capped at ``max_bytes`` to prevent memory-exhaustion attacks.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        msg = f"Invalid scheme: {parsed.scheme}"
+        raise ValueError(msg)
+    transport = SSRFSafeTransport()
+    async with httpx.AsyncClient(transport=transport, follow_redirects=False, timeout=timeout) as client:
+        current = url
+        current_method = method
+        for _ in range(max_redirects + 1):
+            async with client.stream(current_method, current, **kwargs) as resp:
+                if not (resp.is_redirect or resp.is_informational):
+                    return await _materialize(resp, max_bytes)
+                location = resp.headers.get("Location")
+                if not location:
+                    return await _materialize(resp, max_bytes)
+                current = str(resp.url.join(location))
+                error = await validate_url_async(current)
+                if error:
+                    msg = f"Redirect blocked by SSRF: {error}"
+                    raise httpx.ConnectError(msg)
+                if resp.status_code in (301, 302) and current_method == "POST":
+                    current_method = "GET"
+                    kwargs.pop("content", None)
+        msg = f"Too many redirects ({max_redirects}) for {url}"
+        raise ValueError(msg)

@@ -22,8 +22,10 @@ def db_path(tmp_path: Path) -> str:
 
 
 @pytest.fixture
-def store(db_path: str) -> TaskStore:
-    return TaskStore(db_path)
+async def store(db_path: str):
+    s = TaskStore(db_path)
+    yield s
+    await s.close()
 
 
 @pytest.fixture

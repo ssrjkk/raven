@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -10,6 +11,7 @@ from raven.core.workflow.runner import TemplateRunner
 from raven.core.workflow.store import WorkflowStore
 
 _store: WorkflowStore | None = None
+_cleanup_tasks: set[asyncio.Task[None]] = set()
 
 
 def set_workflow_store(store: WorkflowStore) -> None:
@@ -107,8 +109,14 @@ def create_workflow_router() -> APIRouter:
             task_id = await tpl_runner.instantiate(
                 template=template, user_id=req.user_id, channel=req.channel, config=req.config
             )
+
+            def _close_store() -> None:
+                _cleanup_tasks.add(asyncio.create_task(task_store.close()))
+
+            runner.on_complete(task_id, _close_store)
             return {"ok": True, "task_id": task_id}
         except Exception as e:
+            await task_store.close()
             logger.warning("[workflow] instantiate failed: {}", e)
             raise HTTPException(500, str(e)) from e
 

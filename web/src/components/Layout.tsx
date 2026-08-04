@@ -30,6 +30,7 @@ const nav = [
   { to: "/knowledge", label: "Knowledge" },
   { to: "/analytics", label: "Analytics" },
   { to: "/insights", label: "Insights" },
+  { to: "/project-insights", label: "Project Insights" },
   { to: "/components", label: "UI Kit" },
   { to: "/scaffold", label: "Scaffold" },
   { to: "/code-quality", label: "Code Quality" },

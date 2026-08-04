@@ -20,9 +20,17 @@ class WorkingMemory:
     async def store(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
         expires = time.monotonic() + self._default_ttl
         async with self._lock:
+            now = time.monotonic()
+            if len(self._entries) >= self._max_entries:
+                self._prune_expired(now)
             self._entries[key] = (value, metadata or {}, expires)
             self._entries.move_to_end(key)
             self._evict()
+
+    def _prune_expired(self, now: float) -> None:
+        stale = [k for k, (_, _, exp) in self._entries.items() if now > exp]
+        for k in stale:
+            del self._entries[k]
 
     async def recall(self, key: str) -> str | None:
         async with self._lock:

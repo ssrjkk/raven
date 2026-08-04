@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import time
+from collections.abc import Callable
 
 from loguru import logger
 
@@ -13,35 +14,44 @@ from raven.core.task_engine.tool_registry import ToolRegistry
 
 class TaskRunner:
     MAX_CONCURRENT = 10
+    SUBMIT_TIMEOUT = 60.0
 
-    def __init__(self, store: TaskStore, tools: ToolRegistry):
+    def __init__(self, store: TaskStore, tools: ToolRegistry, max_concurrent: int | None = None):
         self._store = store
         self._tools = tools
+        self.MAX_CONCURRENT = max_concurrent or self.MAX_CONCURRENT
+        self._sem = asyncio.Semaphore(self.MAX_CONCURRENT)
         self._running: dict[str, asyncio.Task[None]] = {}
         self._cancel_events: dict[str, asyncio.Event] = {}
         self._pause_events: dict[str, asyncio.Event] = {}
 
     async def submit(self, task: Task) -> Task:
-        if len(self._running) >= self.MAX_CONCURRENT:
-            msg = (
-                f"Too many concurrent tasks ({len(self._running)}/{self.MAX_CONCURRENT}). "
+        try:
+            await asyncio.wait_for(self._sem.acquire(), timeout=self.SUBMIT_TIMEOUT)
+        except TimeoutError:
+            raise RuntimeError(
+                f"No capacity for task '{task.id}' after {self.SUBMIT_TIMEOUT}s "
+                f"({len(self._running)}/{self.MAX_CONCURRENT} running). "
                 "Wait for a running task to complete."
-            )
-            raise RuntimeError(msg)
-        task.status = TaskStatus.PENDING
-        task.updated_at = time.time()
-        for step in task.steps:
-            step.task_id = task.id
-        await self._store.save_task(task)
+            ) from None
+        try:
+            task.status = TaskStatus.PENDING
+            task.updated_at = time.time()
+            for step in task.steps:
+                step.task_id = task.id
+            await self._store.save_task(task)
 
-        cancel_ev = asyncio.Event()
-        self._cancel_events[task.id] = cancel_ev
-        self._pause_events[task.id] = asyncio.Event()
+            cancel_ev = asyncio.Event()
+            self._cancel_events[task.id] = cancel_ev
+            self._pause_events[task.id] = asyncio.Event()
 
-        runner_task = asyncio.create_task(self._execute(task.id, cancel_ev))
-        self._running[task.id] = runner_task
-        runner_task.add_done_callback(lambda _: self._cleanup(task.id))
-        return task
+            runner_task = asyncio.create_task(self._execute(task.id, cancel_ev))
+            self._running[task.id] = runner_task
+            runner_task.add_done_callback(lambda _: self._cleanup(task.id))
+            return task
+        except Exception:
+            self._sem.release()
+            raise
 
     async def cancel(self, task_id: str) -> bool:
         cancel_ev = self._cancel_events.get(task_id)
@@ -183,7 +193,23 @@ class TaskRunner:
             await self._store.save_task(task)
             raise
 
+    def on_complete(self, task_id: str, callback: Callable[[], None]) -> None:
+        task = self._running.get(task_id)
+        if task is not None:
+            task.add_done_callback(lambda _: callback())
+
     def _cleanup(self, task_id: str) -> None:
         self._running.pop(task_id, None)
         self._cancel_events.pop(task_id, None)
         self._pause_events.pop(task_id, None)
+        self._sem.release()
+
+    async def shutdown(self) -> None:
+        pending = list(self._running.values())
+        self._running.clear()
+        self._cancel_events.clear()
+        self._pause_events.clear()
+        for t in pending:
+            t.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)

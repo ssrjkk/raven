@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 from dataclasses import dataclass, field
@@ -350,56 +351,67 @@ class GitIntegration:
         return result or self._generate_pr_description(diff)
 
     async def auto_commit_async(self, additional_context: str = "") -> CommitResult:
-        if not self.is_repo():
-            return CommitResult(success=False, message="Not a git repository")
+        try:
+            if not await asyncio.to_thread(self.is_repo):
+                return CommitResult(success=False, message="Not a git repository")
 
-        diff = self.get_diff()
-        if not diff:
-            self.stage_all()
-            diff = self.get_diff(staged=True)
+            diff = await asyncio.to_thread(self.get_diff)
             if not diff:
-                return CommitResult(success=False, message="No changes to commit")
-        else:
-            self.stage_all()
-            diff = self.get_diff(staged=True)
+                await asyncio.to_thread(self.stage_all)
+                diff = await asyncio.to_thread(self.get_diff, staged=True)
+                if not diff:
+                    return CommitResult(success=False, message="No changes to commit")
+            else:
+                await asyncio.to_thread(self.stage_all)
+                diff = await asyncio.to_thread(self.get_diff, staged=True)
 
-        commit_msg = await self._generate_llm_commit_message(diff, additional_context)
-        return self.commit(commit_msg)
+            commit_msg = await self._generate_llm_commit_message(diff, additional_context)
+            return await asyncio.to_thread(self.commit, commit_msg)
+        except subprocess.CalledProcessError as e:
+            logger.warning("git auto-commit failed: {}", e.stderr.strip())
+            return CommitResult(success=False, message=(e.stderr or str(e)).strip())
 
     async def create_pr_async(self, title: str = "", body: str = "") -> PRResult:
-        if not self.is_repo():
-            return PRResult(success=False, error="Not a git repository")
-        if not self.is_branch():
-            return PRResult(success=False, error="Not on a feature branch")
-
-        branch = self.get_branch()
-        if not title:
-            title = f"PR: {branch}"
-
-        diff = self.get_diff(staged=True)
-        if not diff:
-            self.stage_all()
-            diff = self.get_diff(staged=True)
-
-        if not body:
-            body = await self._generate_llm_pr_description(diff)
-
-        _, stderr = self._run("push", "--set-upstream", "origin", branch)
-        if stderr and "error" in stderr.lower():
-            return PRResult(success=False, error=stderr)
-
         try:
-            pr_stdout, _ = self._run("-c", "core.pager=", "push", "origin", branch)
-            for line in pr_stdout.split("\n"):
-                if "pull/new" in line or "/pull/" in line:
-                    return PRResult(success=True, url=line.strip())
-        except Exception as exc:
-            logger.debug("git push PR detection failed: {}", exc)
+            if not await asyncio.to_thread(self.is_repo):
+                return PRResult(success=False, error="Not a git repository")
+            if not await asyncio.to_thread(self.is_branch):
+                return PRResult(success=False, error="Not on a feature branch")
 
-        return PRResult(success=True, url=f"(pushed branch {branch})")
+            branch = await asyncio.to_thread(self.get_branch)
+            if not title:
+                title = f"PR: {branch}"
+
+            diff = await asyncio.to_thread(self.get_diff, staged=True)
+            if not diff:
+                await asyncio.to_thread(self.stage_all)
+                diff = await asyncio.to_thread(self.get_diff, staged=True)
+
+            if not body:
+                body = await self._generate_llm_pr_description(diff)
+
+            _, stderr = await asyncio.to_thread(self._run, "push", "--set-upstream", "origin", branch)
+            if stderr and "error" in stderr.lower():
+                return PRResult(success=False, error=stderr)
+
+            try:
+                pr_stdout, _ = await asyncio.to_thread(self._run, "-c", "core.pager=", "push", "origin", branch)
+                for line in pr_stdout.split("\n"):
+                    if "pull/new" in line or "/pull/" in line:
+                        return PRResult(success=True, url=line.strip())
+            except Exception as exc:
+                logger.debug("git push PR detection failed: {}", exc)
+
+            return PRResult(success=True, url=f"(pushed branch {branch})")
+        except subprocess.CalledProcessError as e:
+            logger.warning("git push failed: {}", e.stderr.strip())
+            return PRResult(success=False, error=(e.stderr or str(e)).strip())
 
     async def llm_review(self, file_path: str | None = None) -> ReviewResult:
-        diff = self.get_diff() if file_path is None else self._get_file_diff(file_path)
+        if file_path is None:
+            diff = await asyncio.to_thread(self.get_diff)
+        else:
+            diff = await asyncio.to_thread(self._get_file_diff, file_path)
         if not diff:
             return ReviewResult(comments=[], summary="No diff to review")
 
@@ -423,7 +435,7 @@ class GitIntegration:
             user_prompt=prompt,
         )
         if not response:
-            return self.review(file_path)
+            return await asyncio.to_thread(self.review, file_path)
 
         try:
             data = json.loads(response)
@@ -434,7 +446,7 @@ class GitIntegration:
                 data = json.loads(response[start:end])
             except (ValueError, json.JSONDecodeError):
                 logger.warning("Failed to parse LLM review JSON, falling back to rule-based review")
-                return self.review(file_path)
+                return await asyncio.to_thread(self.review, file_path)
 
         comments_data = data.get("comments", []) if isinstance(data, dict) else []
         comments = [

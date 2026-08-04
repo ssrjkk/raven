@@ -11,6 +11,8 @@ from typing import Any, Self
 
 from loguru import logger
 
+from raven.core.agents.truthful_orchestrator import TruthfulResult
+from raven.core.llm.protocol import LLMClientProtocol
 from ravencode.api.client import AIOSClient
 from ravencode.core.prompts import get_prompt
 from ravencode.runtime.context import Conversation, MemoryStore
@@ -43,11 +45,25 @@ class EventEmitter:
         self._handlers.setdefault(event_type, []).append(handler)
 
     async def emit(self, event: AgentEvent) -> None:
-        for handler in self._handlers.get(event.type, []):
-            try:
-                await handler(event)
-            except Exception as exc:
-                logger.exception("Event handler failed for {}: {}", event.type, exc)
+        handlers = self._handlers.get(event.type, [])
+        if len(handlers) <= 1:
+            for handler in handlers:
+                try:
+                    await handler(event)
+                except Exception as exc:
+                    logger.exception("Event handler failed for {}: {}", event.type, exc)
+            return
+        results = await asyncio.gather(
+            *(self._safe_handle(h, event) for h in handlers),
+            return_exceptions=True,
+        )
+        for _h, res in zip(handlers, results, strict=True):
+            if isinstance(res, Exception):
+                logger.exception("Event handler failed for {}: {}", event.type, res)
+
+    @staticmethod
+    async def _safe_handle(handler: Callable[[AgentEvent], Awaitable[None]], event: AgentEvent) -> None:
+        await handler(event)
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +211,38 @@ class ReActAgent:
         if self._task is not None:
             self._task.cancel()
 
+    async def run_truthful(
+        self,
+        user_input: str,
+        completer: LLMClientProtocol,
+        model: str = "",
+        context: str = "",
+    ) -> TruthfulResult:
+        """Run a single query through the Truthful Orchestrator (Chain-of-Verification)."""
+        from raven.core.agents.truthful_orchestrator import TruthfulOrchestrator
+
+        result = await TruthfulOrchestrator(completer, model=model).process(user_input, context)
+
+        self.conversation.add_user_message(user_input)
+        self.conversation.add_assistant_message(result.content)
+
+        ee = self.config.event_emitter
+        if ee:
+            await ee.emit(
+                AgentEvent(
+                    "truthful",
+                    {
+                        "status": result.status,
+                        "query": user_input,
+                        "content": result.content,
+                        "thinking_process": result.thinking_process,
+                    },
+                )
+            )
+            await ee.emit(AgentEvent("message", {"role": "assistant", "content": result.content}))
+            await ee.emit(AgentEvent("done", {"reason": "truthful", "steps": 1}))
+        return result
+
     async def run(self, user_input: str) -> str:
         self._task = asyncio.current_task()
         from ravencode.runtime.tools import set_agent_memory
@@ -330,10 +378,19 @@ class ReActAgent:
     # -----------------------------------------------------------------------
 
     async def _confirm_action(self, name: str, args: dict[str, Any]) -> bool:
-        if not self.config.confirm_dangerous or not is_dangerous(name):
+        if not is_dangerous(name):
+            return True
+        if self.config.plan_mode:
+            logger.info("Blocked dangerous tool '{}' in plan mode (read-only)", name)
+            return False
+        if not self.config.confirm_dangerous:
             return True
         if self.config.confirm_callback is not None:
             return await self.config.confirm_callback(name, args)
+        logger.warning(
+            "Dangerous tool '{}' auto-approved: confirm_dangerous is set but no confirm_callback is wired",
+            name,
+        )
         return True
 
     # -----------------------------------------------------------------------

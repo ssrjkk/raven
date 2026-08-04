@@ -8,6 +8,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": "http://localhost:18888",
+      "/aios": "http://localhost:18888",
       "/ws": {
         target: "ws://localhost:18888",
         ws: true,

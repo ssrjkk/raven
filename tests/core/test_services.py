@@ -66,7 +66,9 @@ class TestEntityExtractor:
             async def complete(self, messages, **kw):
                 return {"choices": [{"message": {"content": "PERSON|Alice\nORG|Acme"}}]}
         extractor = EntityExtractor(llm_provider=MockLLM())
-        result = await extractor.extract("Alice works at Acme")
+        result = await extractor.extract(
+            "Alice works at Acme corporation, a large company in the city of Boston, and manages the engineering team."
+        )
         assert len(result.entities) >= 2
         labels = {e.label for e in result.entities}
         assert "PERSON" in labels or "ORG" in labels
@@ -76,23 +78,29 @@ class TestEntityExtractor:
             async def complete(self, messages, **kw):
                 return {"choices": [{"message": {"content": ""}}]}
         extractor = EntityExtractor(llm_provider=MockLLM())
-        result = await extractor.extract("Some text")
+        result = await extractor.extract(
+            "This is some text that is long enough to trigger the LLM entity extraction path without real entities."
+        )
         assert result.entities is not None
 
     async def test_extract_llm_no_entities(self):
         class MockLLM:
             async def complete(self, messages, **kw):
-                return {"choices": [{"message": {"content": "nothing|here"}}]}
+                return {"choices": [{"message": {"content": "ZZZZ|qqqq"}}]}
         extractor = EntityExtractor(llm_provider=MockLLM())
-        result = await extractor.extract("hello world")
-        assert len(result.entities) == 0  # "nothing|here" has no match in "hello world"
+        result = await extractor.extract(
+            "hello world this is a long message with no organizations or people mentioned anywhere inside it"
+        )
+        assert len(result.entities) == 0  # "qqqq" has no match in the text
 
     async def test_extract_llm_failure_logged(self):
         class FailingLLM:
             async def complete(self, messages, **kw):
                 raise RuntimeError("LLM failed")
         extractor = EntityExtractor(llm_provider=FailingLLM())
-        result = await extractor.extract("test@example.com")
+        result = await extractor.extract(
+            "Contact us at test@example.com for more information about our products and services today."
+        )
         assert len(result.entities) == 1  # regex still finds email
 
     async def test_extract_llm_deduplicates(self):
@@ -100,9 +108,26 @@ class TestEntityExtractor:
             async def complete(self, messages, **kw):
                 return {"choices": [{"message": {"content": "EMAIL|test@example.com"}}]}
         extractor = EntityExtractor(llm_provider=MockLLM())
-        result = await extractor.extract("Email: test@example.com")
+        result = await extractor.extract(
+            "Please send all invoices to test@example.com, that is the email address our accounting team uses."
+        )
         emails = [e for e in result.entities if e.label == "EMAIL"]
         assert len(emails) == 1  # deduplicated
+
+    async def test_extract_llm_skips_short_text(self):
+        class MockLLM:
+            def __init__(self):
+                self.calls = 0
+
+            async def complete(self, messages, **kw):
+                self.calls += 1
+                return {"choices": [{"message": {"content": "PERSON|Bob"}}]}
+
+        llm = MockLLM()
+        extractor = EntityExtractor(llm_provider=llm)
+        result = await extractor.extract("Hi Bob")
+        assert len(result.entities) == 0  # short text: pattern finds nothing, LLM path gated off
+        assert llm.calls == 0
 
     async def test_extract_llm_no_provider(self):
         extractor = EntityExtractor(llm_provider=None)

@@ -6,6 +6,7 @@ from loguru import logger
 
 from raven.channels.enterprise_base import EnterpriseChannel
 from raven.core.config import settings
+from raven.core.http_client import client_manager
 from raven.core.models import IncomingMessage, Message
 
 
@@ -156,11 +157,9 @@ class GithubChannel(EnterpriseChannel):
         target_type = parts[2]
         target_id = parts[3] if len(parts) >= 4 else ""
         if target_type == "issue" and target_id and self._token:
-            import httpx
-
             repo = parts[1]
-            async with httpx.AsyncClient(timeout=15) as client:
-                resp = await client.post(
+            try:
+                await client_manager.post(
                     f"https://api.github.com/repos/{repo}/issues/{target_id}/comments",
                     json={"body": message.content[:4000]},
                     headers={
@@ -168,5 +167,7 @@ class GithubChannel(EnterpriseChannel):
                         "Accept": "application/vnd.github.v3+json",
                         "User-Agent": "raven-ai/1.0",
                     },
+                    timeout=15,
                 )
-                resp.raise_for_status()
+            except Exception as e:
+                logger.error("[github] send failed: {}", e)

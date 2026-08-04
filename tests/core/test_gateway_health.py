@@ -80,6 +80,34 @@ class TestLlmHealthCheck:
             result = await gateway._llm_health_check()
             assert result is False
 
+    async def test_llm_health_check_cached_within_ttl(self, gateway: Gateway):
+        with patch.object(
+            gateway.llm, "complete", new_callable=AsyncMock, return_value=MagicMock(content="ok")
+        ) as mock_complete:
+            first = await gateway._llm_health_check()
+            second = await gateway._llm_health_check()
+            assert first is True
+            assert second is True
+            mock_complete.assert_awaited_once()
+
+    async def test_llm_health_check_failure_cached(self, gateway: Gateway):
+        with patch.object(
+            gateway.llm, "complete", new_callable=AsyncMock, side_effect=Exception("LLM down")
+        ) as mock_complete:
+            assert await gateway._llm_health_check() is False
+            assert await gateway._llm_health_check() is False
+            mock_complete.assert_awaited_once()
+
+    async def test_llm_restart_resets_health_cache(self, gateway: Gateway):
+        with patch.object(gateway.llm, "complete", new_callable=AsyncMock, side_effect=Exception("LLM down")):
+            assert await gateway._llm_health_check() is False
+        await gateway._llm_restart()
+        with patch.object(
+            gateway.llm, "complete", new_callable=AsyncMock, return_value=MagicMock(content="ok")
+        ) as mock_complete:
+            assert await gateway._llm_health_check() is True
+            mock_complete.assert_awaited_once()
+
 
 class TestDbRestart:
     async def test_db_restart(self, gateway: Gateway):

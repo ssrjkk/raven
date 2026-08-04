@@ -75,62 +75,74 @@ class Sandbox:
     async def _exec_direct(self, code: str) -> str:
         import ast
         import builtins
-        import io
-        from contextlib import redirect_stderr, redirect_stdout
 
         try:
             tree = ast.parse(code)
         except SyntaxError as e:
             return f"Syntax Error: {e}"
 
-        _blocked_names = frozenset({"__builtins__", "__import__", "exec", "eval", "compile", "open", "getattr", "setattr", "delattr", "globals", "locals", "breakpoint", "exit", "quit"})
-        _blocked_attrs = frozenset({"__subclasses__", "__class__", "__bases__", "__mro__", "__globals__", "__code__", "__builtins__"})
+        _blocked_names = frozenset({"__builtins__", "__import__", "exec", "eval", "compile", "open", "getattr", "setattr", "delattr", "globals", "locals", "breakpoint", "exit", "quit", "vars", "format", "format_map"})
         for node in ast.walk(tree):
             if isinstance(node, ast.Name) and node.id in _blocked_names:
                 return f"[denied] access to '{node.id}' is not allowed"
-            if isinstance(node, ast.Attribute) and node.attr in _blocked_attrs:
+            if isinstance(node, ast.Attribute) and (
+                (node.attr.startswith("__") and node.attr.endswith("__"))
+                or node.attr in ("format", "format_map")
+            ):
                 return f"[denied] attribute '{node.attr}' is not allowed"
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 for alias in node.names:
                     mod = alias.name.split(".")[0]
-                    if mod in ("os", "sys", "subprocess", "shutil", "socket", "ctypes"):
+                    if mod in ("os", "sys", "subprocess", "shutil", "socket", "ctypes", "importlib", "builtins", "operator", "inspect", "pickle", "marshal", "code", "codeop"):
                         return f"[denied] import of '{alias.name}' is not allowed"
 
-        stdout_capture = io.StringIO()
-        stderr_capture = io.StringIO()
-        safe_builtins = {
-            k: v
-            for k, v in builtins.__dict__.items()
-            if k
-            not in frozenset(
-                {
-                    "__import__",
-                    "exec",
-                    "eval",
-                    "compile",
-                    "open",
-                    "getattr",
-                    "setattr",
-                    "delattr",
-                    "globals",
-                    "locals",
-                    "breakpoint",
-                    "exit",
-                    "quit",
-                }
-            )
-        }
-        restricted_globals: dict[str, object] = {"__builtins__": safe_builtins}
+        def _run() -> str:
+            import io
+            from contextlib import redirect_stderr, redirect_stdout
+
+            stdout_capture = io.StringIO()
+            stderr_capture = io.StringIO()
+            safe_builtins = {
+                k: v
+                for k, v in builtins.__dict__.items()
+                if k
+                not in frozenset(
+                    {
+                        "__import__",
+                        "exec",
+                        "eval",
+                        "compile",
+                        "open",
+                        "getattr",
+                        "setattr",
+                        "delattr",
+                        "globals",
+                        "locals",
+                        "breakpoint",
+                        "exit",
+                        "quit",
+                        "vars",
+                        "format",
+                        "format_map",
+                    }
+                )
+            }
+            restricted_globals: dict[str, object] = {"__builtins__": safe_builtins}
+            try:
+                with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+                    exec(code, restricted_globals)
+                result = stdout_capture.getvalue()
+                stderr_val = stderr_capture.getvalue()
+                if stderr_val.strip():
+                    result += f"\n[stderr]\n{stderr_val}"
+                return result[:5000] or "(no output)"
+            except Exception as e:
+                return f"Execution error: {e}"
+
         try:
-            with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-                exec(code, restricted_globals)
-            result = stdout_capture.getvalue()
-            stderr_val = stderr_capture.getvalue()
-            if stderr_val.strip():
-                result += f"\n[stderr]\n{stderr_val}"
-            return result[:5000] or "(no output)"
-        except Exception as e:
-            return f"Execution error: {e}"
+            return await asyncio.wait_for(asyncio.to_thread(_run), timeout=self.config.timeout)
+        except TimeoutError:
+            return "Execution timed out"
 
     async def _exec_subprocess(self, code: str) -> str:
         if len(code.splitlines()) > 5000:

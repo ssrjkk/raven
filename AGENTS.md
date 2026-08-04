@@ -382,3 +382,30 @@ npm run dev
 - **`raven/core/commands_api.py`**: Added `GET /api/v1/commands/theme` + `POST /api/v1/commands/theme` — reads/writes `data/theme_prefs.json`. Pydantic model uses `Field(alias="accentColor")` for camelCase API compatibility.
 - **`web/src/api/client.ts`**: Added `api.getTheme()` and `api.saveTheme(accentColor)`.
 - **Verification**: TypeScript 0 errors, ruff 0, mypy 0, vite build success.
+## Fixes applied (Aug 2026, security hardening round 2)
+### SSRF redirect-bypass hardening
+- **`raven/core/security/ssrf.py`**: Added `safe_fetch_async(url, method, max_redirects=5, timeout=30, **kwargs)` — validates scheme + IP-pins EVERY hop via `SSRFSafeTransport` (no redirect following), raises `ValueError` on invalid scheme/private redirect.
+- **`raven/plugins/api/plugin.py`**: Removed local `_validate_url` imitator and `_client` pool; `_request` now `validate_url()` → `safe_fetch_async()`; returns `[blocked]`/`[error]`.
+- **`raven/plugins/browser/plugin.py`**: `browse`/`screenshot` now `validate_url` on start AND final URL (blocks redirect to private via Playwright), fallback `safe_fetch_async`.
+- **`ravencode/runtime/tools.py`**: `web_fetch` rewritten on `safe_fetch_async` (redirect-safe).
+- **`ravencode/runtime/skills.py`**: `download_skill` validates `skill_id` (`/`, `..`, `.`-prefix denied) + `validate_url` on registry + no-redirect-follow with Location validation.
+### Sandbox DoS fixes
+- **`raven/core/sandbox.py`**: `_exec_direct` moved into `asyncio.wait_for(asyncio.to_thread(...), timeout)` — infinite loops no longer freeze the event loop; returns "Execution timed out".
+- **`raven/tools/shell.py`**: `python_code` rewritten to run in a killable subprocess (`sys.executable -m raven.tools._pyrunner`) with the same AST restrictions + restricted builtins; TimeoutError kills the process. Added `import sys`.
+- **`raven/tools/_pyrunner.py`** (new): subprocess runner reusing `_RESTRICTED_BUILTINS` from `shell.py`; returns last-expression value or error text.
+- Verified: channels (`signal`, `matrix`, `github`, `gitlab`, `feishu`, `enterprise_base`) send to operator-configured URLs only (no user-URL SSRF); `client_manager` uses httpx default `follow_redirects=False`; `_restrict_key_file` runs in sync startup path only.
+### Event-loop blocking fixes (sync subprocess in async context)
+- **`raven/coding/git_integration.py`**: `auto_commit_async`, `create_pr_async`, `llm_review` called sync `_run` (subprocess.run, timeout=60) directly on the event loop. Rewritten with `asyncio.to_thread` around every git op; `subprocess.CalledProcessError` now returns error results instead of 500s. Kept the stage_all-before-commit logic.
+- **`raven/core/git_api.py`**: All `/api/git/*` async handlers (status, branch, branches, log, log/detail, diff, diff/commit, blame, commit, push, pull, checkout) wrapped in `asyncio.to_thread` — no more event-loop freeze on slow git ops.
+- **`raven/tools/git.py`**: `git_commit` non-auto path now `await asyncio.to_thread(git.commit, ...)` (was sync call in async handler).
+- **`raven/unique/chaos_engineering.py`**: `inject()` fault dispatch (`_inject_service_kill/_inject_network_latency/_inject_disk_fill/_inject_cpu_storm/_inject_memory_leak/_inject_process_kill`) and `recover()`'s `_recover_fault` now run via `asyncio.to_thread`.
+- Verified: `raven/voice/conversation.py:163` already uses `asyncio.to_thread(self.tts.synthesize, ...)`; `tool_registry._run_handler` wraps sync tool handlers in `asyncio.to_thread`; all remaining sync `subprocess.run` sites are CLI-only (sync context). No `time.sleep` in async functions anywhere.
+### SSRF on user-controlled outbound URLs (round 2)
+- **`raven/core/skills.py`**: `set_skill_registry` now validates http(s) scheme + hostname (invalid/empty clears registry, matching test semantics); `download_skill` validates `skill_id` (`/`, `..`, `.`-prefix) and `validate_url` on the constructed registry URL before `client_manager.get`.
+- **`raven/unique/plugin_marketplace.py`**: `_fetch_remote_metadata` (remote `install_plugin` GET of `{url}/plugin.json`) and `PluginCatalog.sync` now pass URLs through `validate_url` — blocks SSRF to private/internal hosts.
+- **`raven/tools/nodes.py`**: `NodeManager.register` rejects non-http(s) endpoints (scheme + hostname required); `execute` re-validates `node.endpoint` scheme before POST (guards endpoint tampering). Localhost/LAN endpoints are allowed — pairing local/LAN worker nodes is the intended use case, and agents already have the SSRF-guarded `http_request` tool for generic fetches.
+- **`ravencode/runtime/skills.py`**: `set_skill_registry` now requires http(s) scheme + hostname.
+- **`raven/core/monitor/checkers/http_check.py`**: switched to `client_manager.request` so `resp.text` is available — fixes broken `content_match` (was parsing JSON dict from `client_manager.get/post`).
+- Audited all remaining outbound HTTP call sites: `web_search.py`, `ravencode/runtime/tools.py` `_httpx_search` (fixed search hosts, safe), `media.py`, `media_api.py`, `github.py`/`github_api.py`/`ci.py` (fixed GitHub + operator-env GitLab/Jenkins hosts), `tools/http.py` (already per-hop validate_url) — no new user-URL SSRF vectors.
+### Verification
+- ruff 0, mypy 0, full suite **2196 passed / 14 skipped / 22 deselected (e2e+load)**.

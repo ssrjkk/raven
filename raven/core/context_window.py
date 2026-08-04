@@ -24,7 +24,12 @@ class ContextWindowManager:
         self._config = config or ContextWindowConfig()
 
     def _count_tokens_estimate(self, text: str) -> int:
-        return max(1, len(text) // 4)
+        if not text:
+            return 0
+        words = len(text.split())
+        cjk = sum(1 for ch in text if "\u2e80" <= ch <= "\u9fff" or "\uf900" <= ch <= "\ufaff")
+        est = words + (len(text) - cjk) / 4 + cjk * 1.5
+        return max(1, int(est))
 
     async def estimate_tokens(self, messages: list[dict[str, Any]]) -> int:
         total = 0

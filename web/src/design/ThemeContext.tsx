@@ -12,6 +12,7 @@ type ThemeContextValue = {
   toggleTheme: () => void;
   setTheme: (t: Theme) => void;
   setAccentColor: (hex: string) => void;
+  resetScheme: () => void;
 };
 
 const DEFAULT_ACCENT = "#7c3aed";
@@ -22,6 +23,7 @@ const ThemeContext = createContext<ThemeContextValue>({
   toggleTheme: () => {},
   setTheme: () => {},
   setAccentColor: () => {},
+  resetScheme: () => {},
 });
 
 function safeGetItem(key: string): string | null {
@@ -109,8 +111,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setAccentColorState(hex);
   }, []);
 
+  const resetScheme = useCallback(() => {
+    applyTokens(theme);
+  }, [theme]);
+
   return (
-    <ThemeContext.Provider value={{ theme, accentColor, toggleTheme, setTheme, setAccentColor }}>
+    <ThemeContext.Provider value={{ theme, accentColor, toggleTheme, setTheme, setAccentColor, resetScheme }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -23,6 +23,10 @@ class BaseStore:
         if self._connection is None:
             self._connection = await aiosqlite.connect(self._path)
             self._connection.row_factory = aiosqlite.Row
+            await self._connection.execute("PRAGMA journal_mode=WAL")
+            await self._connection.execute("PRAGMA synchronous=NORMAL")
+            await self._connection.execute("PRAGMA busy_timeout=5000")
+            await self._connection.execute("PRAGMA foreign_keys=ON")
         if not self._schema_ensured:
             async with self._lock:
                 if not self._schema_ensured:

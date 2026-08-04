@@ -1,3 +1,5 @@
+# ruff: noqa: RUF001 (intentional Cyrillic in Russian prompts)
+
 from __future__ import annotations
 
 import pytest
@@ -157,3 +159,61 @@ class TestQuestionErrorPropagation:
         agent = ReActAgent(config=AgentConfig(max_steps=5, max_tool_retries=3))
         assert agent.config.max_tool_retries == 3
         assert agent.config.max_steps == 5
+
+
+class TestReActAgentTruthful:
+    @pytest.mark.asyncio
+    async def test_run_truthful_success(self):
+        from ravencode.runtime.agent_core import ReActAgent
+        from tests.core.test_truthful_orchestrator import ScriptedCompleter
+
+        agent = ReActAgent(config=AgentConfig())
+        completer = ScriptedCompleter(
+            [
+                "<thinking>факт проверен</thinking>\nответ готов",
+                "VERIFIED: TRUE",
+            ]
+        )
+        result = await agent.run_truthful("q", completer, model="test-model")
+        assert result.status == "success"
+        assert result.content == "ответ готов"
+        assert result.thinking_process == "факт проверен"
+
+    @pytest.mark.asyncio
+    async def test_run_truthful_records_conversation(self):
+        from ravencode.runtime.agent_core import ReActAgent
+        from tests.core.test_truthful_orchestrator import ScriptedCompleter
+
+        agent = ReActAgent(config=AgentConfig())
+        completer = ScriptedCompleter(
+            [
+                "<thinking>размышление</thinking>\nчерновик",
+                "VERIFIED: FALSE: уточни",
+                "<thinking>перепроверено</thinking>\nисправленный ответ",
+                "VERIFIED: TRUE",
+            ]
+        )
+        result = await agent.run_truthful("q", completer, model="test-model")
+        assert result.status == "corrected"
+        assert len(agent.conversation.messages) == 3
+        assert agent.conversation.messages[-2] == {"content": "q", "role": "user"}
+        assert agent.conversation.messages[-1]["content"] == "исправленный ответ"
+        assert agent.conversation.messages[-1]["role"] == "assistant"
+
+    @pytest.mark.asyncio
+    async def test_run_truthful_emits_events(self):
+        from ravencode.runtime.agent_core import ReActAgent
+        from tests.core.test_truthful_orchestrator import ScriptedCompleter
+
+        ee = EventEmitter()
+        received: list[AgentEvent] = []
+
+        async def handler(event: AgentEvent) -> None:
+            received.append(event)
+
+        ee.on("truthful", handler)
+        ee.on("done", handler)
+        agent = ReActAgent(config=AgentConfig(event_emitter=ee))
+        completer = ScriptedCompleter(["<thinking>п</thinking>\nо", "VERIFIED: TRUE"])
+        await agent.run_truthful("q", completer, model="test-model")
+        assert [e.type for e in received] == ["truthful", "done"]

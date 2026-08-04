@@ -6,6 +6,7 @@ from loguru import logger
 
 from raven.channels.enterprise_base import EnterpriseChannel
 from raven.core.config import settings
+from raven.core.http_client import client_manager
 from raven.core.models import IncomingMessage, Message
 
 
@@ -184,12 +185,12 @@ class GitlabChannel(EnterpriseChannel):
         project_id = parts[1] if len(parts) >= 2 else None
         if not project_id or not self._token:
             return
-        import httpx
-
-        async with httpx.AsyncClient(base_url=f"{self._gitlab_url}/api/v4", timeout=15) as client:
-            resp = await client.post(
-                f"/projects/{project_id}/issues",
+        try:
+            await client_manager.post(
+                f"{self._gitlab_url}/api/v4/projects/{project_id}/issues",
                 json={"title": message.content[:4000]},
                 headers={"PRIVATE-TOKEN": self._token},
+                timeout=15,
             )
-            resp.raise_for_status()
+        except Exception as e:
+            logger.error("[gitlab] send failed: {}", e)

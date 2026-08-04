@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+
+_cleanup_tasks: set[asyncio.Task[None]] = set()
 
 
 def workflow_list_templates(category: str = "") -> str:
@@ -68,8 +72,14 @@ async def workflow_instantiate(template_id: str, config_json: str = "{}") -> str
     tpl_runner = TemplateRunner(runner, store, tools, None)
     try:
         task_id = await tpl_runner.instantiate(template=template, user_id="system", channel="internal", config=config)
+
+        def _close_store() -> None:
+            _cleanup_tasks.add(asyncio.create_task(store.close()))
+
+        runner.on_complete(task_id, _close_store)
         return f"Instantiated '{template.name}' as task `{task_id}`."
     except Exception as e:
+        await store.close()
         return f"Failed to instantiate: {e}"
 
 

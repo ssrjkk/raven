@@ -38,6 +38,10 @@ class TTSConfig:
         self.speed = speed
         self.api_key = api_key or _ELEVENLABS_API_KEY
         self.cache_dir = Path(cache_dir or tempfile.gettempdir()) / "raven_tts_cache"
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            logger.warning("Unable to create TTS cache dir {}: {}", self.cache_dir, exc)
 
 
 class TextToSpeech:
@@ -114,17 +118,23 @@ class TextToSpeech:
             stream.Close()
         except ImportError:
             logger.warning("win32com not available, writing silence WAV")
-            import struct
-            import wave
+            self._write_silence_wav(text, output_path)
+        except Exception as exc:
+            logger.warning("SAPI synthesis failed ({}), writing silence WAV", exc)
+            self._write_silence_wav(text, output_path)
 
-            sample_rate = 22050
-            duration = max(len(text) * 0.06, 1.0)
-            num_samples = int(sample_rate * duration)
-            with wave.open(output_path, "w") as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(sample_rate)
-                wf.writeframes(struct.pack(f"<{num_samples}h", *([0] * num_samples)))
+    def _write_silence_wav(self, text: str, output_path: str) -> None:
+        import struct
+        import wave
+
+        sample_rate = 22050
+        duration = min(max(len(text) * 0.06, 1.0), 60.0)
+        num_samples = int(sample_rate * duration)
+        with wave.open(output_path, "w") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(struct.pack(f"<{num_samples}h", *([0] * num_samples)))
 
     def _synthesize_macos_say(self, text: str, output_path: str):
         import tempfile
@@ -151,11 +161,11 @@ class TextToSpeech:
 
         out = output_path or str(self.config.cache_dir / f"{uuid4().hex}.mp3")
         voice = self.config.voice or "en-US-AriaNeural"
-        _loop = asyncio.new_event_loop()
-        try:
-            _loop.run_until_complete(edge_tts.Communicate(text, voice).save(out))
-        finally:
-            _loop.close()
+
+        async def _save() -> None:
+            await edge_tts.Communicate(text, voice).save(out)
+
+        asyncio.run(_save())
         logger.info("Edge TTS saved to {}", out)
         return out
 

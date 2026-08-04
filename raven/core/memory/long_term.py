@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,32 @@ class LongTermMemory:
         for f in self._files.values():
             if not f.exists():
                 f.write_text("", encoding="utf-8")
+        self._cache: dict[str, dict[str, str]] = {cat: self._parse_file(path) for cat, path in self._files.items()}
+
+    @staticmethod
+    def _parse_file(path: Path) -> dict[str, str]:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            return {}
+        parsed: dict[str, str] = {}
+        for line in text.splitlines():
+            if line.startswith("## "):
+                key, sep, val = line[3:].partition(": ")
+                if sep:
+                    parsed[key] = val
+        return parsed
+
+    def _dump_category(self, category: str) -> str:
+        return "\n".join(f"## {k}: {v}" for k, v in self._cache[category].items())
+
+    @staticmethod
+    async def _read_text(path: Path) -> str:
+        return await asyncio.to_thread(path.read_text, encoding="utf-8")
+
+    @staticmethod
+    async def _write_text(path: Path, content: str) -> None:
+        await asyncio.to_thread(path.write_text, content, encoding="utf-8")
 
     def _category_for(self, key: str) -> str:
         for cat in ("user", "project", "lessons"):
@@ -33,36 +60,23 @@ class LongTermMemory:
 
     async def store(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
         category = self._category_for(key)
-        path = self._files[category]
+        self._cache[category][key] = value[:500]
         try:
-            existing = path.read_text(encoding="utf-8")
-            lines = existing.splitlines()
-            kept = [line for line in lines if not line.startswith(f"## {key}:")]
-            kept.append(f"## {key}: {value[:500]}")
-            path.write_text("\n".join(kept), encoding="utf-8")
+            await self._write_text(self._files[category], self._dump_category(category))
         except Exception:
             logger.opt(exception=True).warning("[long_term] store failed for {}", key)
 
     async def recall(self, key: str) -> str | None:
         category = self._category_for(key)
-        path = self._files[category]
-        try:
-            text = path.read_text(encoding="utf-8")
-            for line in text.splitlines():
-                if line.startswith(f"## {key}:"):
-                    return line[len(f"## {key}: "):]
-            return None
-        except Exception:
-            logger.opt(exception=True).warning("[long_term] recall failed for {}", key)
-            return None
+        return self._cache[category].get(key)
 
     async def delete(self, key: str) -> bool:
         category = self._category_for(key)
-        path = self._files[category]
+        if key not in self._cache[category]:
+            return False
+        del self._cache[category][key]
         try:
-            existing = path.read_text(encoding="utf-8")
-            lines = [ln for ln in existing.splitlines() if not ln.startswith(f"## {key}:")]
-            path.write_text("\n".join(lines), encoding="utf-8")
+            await self._write_text(self._files[category], self._dump_category(category))
             return True
         except Exception:
             logger.opt(exception=True).warning("[long_term] delete failed for {}", key)
@@ -72,15 +86,16 @@ class LongTermMemory:
         results: list[MemoryEntry] = []
         q = query.lower()
         try:
-            for cat, path in self._files.items():
-                text = path.read_text(encoding="utf-8")
-                for line in text.splitlines():
-                    if q in line.lower():
-                        parts = line.split(": ", 1)
-                        key = parts[0].lstrip("# ") if len(parts) > 1 else "unknown"
-                        val = parts[1] if len(parts) > 1 else line
+            for cat, entries in self._cache.items():
+                for key, value in entries.items():
+                    if q in f"## {key}: {value}".lower():
                         results.append(
-                            MemoryEntry(key=key, value=val, tier=MemoryTier.LONG_TERM, metadata={"category": cat})
+                            MemoryEntry(
+                                key=key,
+                                value=value,
+                                tier=MemoryTier.LONG_TERM,
+                                metadata={"category": cat},
+                            )
                         )
                         if len(results) >= limit:
                             return results
@@ -90,20 +105,14 @@ class LongTermMemory:
 
     async def list_keys(self) -> list[str]:
         keys: list[str] = []
-        try:
-            for path in self._files.values():
-                text = path.read_text(encoding="utf-8")
-                for line in text.splitlines():
-                    if line.startswith("## "):
-                        key = line.split(":")[0].lstrip("# ")
-                        keys.append(key)
-        except Exception:
-            logger.opt(exception=True).warning("[long_term] list_keys failed")
+        for entries in self._cache.values():
+            keys.extend(entries)
         return keys
 
     async def clear(self) -> None:
-        for path in self._files.values():
-            path.write_text("", encoding="utf-8")
+        for category, path in self._files.items():
+            self._cache[category].clear()
+            await self._write_text(path, "")
 
     @property
     def root(self) -> Path:

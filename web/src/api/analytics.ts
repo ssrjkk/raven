@@ -2,11 +2,13 @@ import { request } from "./client";
 import type {
 AnalyticsAggregatedData,
   AnalyticsFullData, AnalyticsSeriesData, AnalyticsSummaryData, AnalyticsToolBreakdownData,   AnalyticsToolUsageData, BudgetInfo, CostBudgetCreateResult, CostCheckResult,   CostSummary, CostUsageRecord,
-PricingInfo, ProjectMetrics,
+PricingInfo, ProjectInsightsData, ProjectMetrics,
 } from "./types";
 
 export const analyticsApi = {
   analyticsOverview: () => request<AnalyticsFullData["last_hour"] & AnalyticsFullData["last_24h"]>("/api/analytics/overview"),
+  projectInsights: (projectId: string, days = 30) =>
+    request<ProjectInsightsData>(`/api/v1/projects/${encodeURIComponent(projectId)}/insights?days=${days}`),
   analyticsMetrics: () => request<{ metrics: string[] }>("/api/analytics/metrics"),
   analyticsSeries: (metricName: string, since?: number, bucket = "5m") =>
     request<AnalyticsSeriesData>(`/api/analytics/series/${encodeURIComponent(metricName)}?bucket=${bucket}${since ? `&since=${since}` : ""}`),

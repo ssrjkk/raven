@@ -88,19 +88,15 @@ class RavenFlowDaemon:
 
             if request.url.path != "/health":
                 auth_header = request.headers.get("Authorization", "")
-                if auth_header.startswith("Bearer "):
-                    token = auth_header[7:]
-                    payload = await _validate_token(token)
-                    if payload is None:
-                        return JSONResponse(
-                            status_code=401,
-                            content={"error": "Invalid or expired token"},
-                        )
-                    request.state.user_id = payload.get("sub", "anonymous")
-                    request.state.role = payload.get("role", "user")
-                else:
-                    request.state.user_id = "anonymous"
-                    request.state.role = "user"
+                token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
+                payload = await _validate_token(token)
+                if payload is None:
+                    return JSONResponse(
+                        status_code=401,
+                        content={"error": "Authentication required or invalid token"},
+                    )
+                request.state.user_id = payload.get("sub", "anonymous")
+                request.state.role = payload.get("role", "user")
 
             response = await call_next(request)
             response.headers["X-Request-ID"] = request_id

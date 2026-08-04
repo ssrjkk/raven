@@ -2,10 +2,17 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from ravencode.api.client import AIOSClient, AIResponse
+import pytest
+
+from ravencode.api.client import AIOSClient, AIResponse, reset_shared_llm
 
 
 class TestRavencodeApiClient:
+    @pytest.fixture(autouse=True)
+    def _isolate_shared_llm(self):
+        reset_shared_llm()
+        yield
+        reset_shared_llm()
     @patch("raven.core.llm.LLMRouter")
     @patch("ravencode.api.client.settings")
     def test_ask_success(self, mock_settings, mock_llm_cls):

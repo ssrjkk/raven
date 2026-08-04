@@ -2,6 +2,8 @@ import { useCallback,useEffect, useRef, useState } from "react";
 
 import { api, MessageData,Session } from "../api/client";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { AgentStream } from "./AgentStream";
+import type { AgentEvent } from "./AgentStream";
 import MessageBubble from "./MessageBubble";
 import { useToast } from "./Toast";
 
@@ -9,6 +11,8 @@ export default function Chat() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSession, setCurrentSession] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageData[]>([]);
+  const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
+  const [streamVisible, setStreamVisible] = useState(true);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -18,7 +22,7 @@ export default function Chat() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const onWsMessage = useCallback((data: { type: string; role?: string; content?: string; session_id?: string; event?: string; profile?: string; detail?: string }) => {
+  const onWsMessage = useCallback((data: { type: string; role?: string; content?: string; session_id?: string; event?: string; profile?: string; detail?: string; data?: Record<string, unknown> }) => {
     if (data.type === "message") {
       setMessages((prev) => [
         ...prev,
@@ -28,18 +32,14 @@ export default function Chat() {
       setTimeout(scrollToBottom, 50);
     }
     if (data.type === "agent_status" && data.event && data.profile) {
-      const icons: Record<string, string> = {
-        agent_started: "🤖", agent_completed: "✅", tool_call: "🛠", tool_result: "📎",
-        thinking: "💭", error: "❌", handoff: "🔄", plan_created: "📋",
-      };
-      const icon = icons[data.event] ?? "⚡";
-      setMessages((prev) => [
+      setAgentEvents((prev) => [
         ...prev,
         {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: `${icon} **[${data.profile}]** ${data.detail ?? data.event}`,
-          created_at: new Date().toISOString(),
+          type: "agent_status",
+          event: data.event ?? "",
+          profile: data.profile ?? "",
+          detail: data.detail,
+          data: data.data,
         },
       ]);
       if (data.event === "agent_completed" || data.event === "error") {
@@ -84,6 +84,8 @@ export default function Chat() {
       ...prev,
       { id: crypto.randomUUID(), role: "user", content: input, created_at: new Date().toISOString() },
     ]);
+    setAgentEvents([]);
+    setStreamVisible(true);
     send(input, sessionId);
     setInput("");
     setLoading(true);
@@ -130,6 +132,19 @@ export default function Chat() {
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+        {agentEvents.length > 0 && streamVisible && (
+          <div className="mb-3">
+            <div className="mb-1 flex justify-end">
+              <button
+                onClick={() => setStreamVisible(false)}
+                className="text-xs text-gray-500 hover:text-gray-300 transition"
+              >
+                Свернуть поток
+              </button>
+            </div>
+            <AgentStream events={agentEvents} />
+          </div>
+        )}
         {messages.map((msg) => (
           <MessageBubble key={msg.id} message={msg} />
         ))}

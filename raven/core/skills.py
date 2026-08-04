@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from loguru import logger
 
@@ -254,6 +255,10 @@ _REMOTE_REGISTRY_URL: str = ""
 
 def set_skill_registry(url: str) -> str:
     global _REMOTE_REGISTRY_URL
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        _REMOTE_REGISTRY_URL = ""
+        return f"[blocked] invalid registry URL (http/https required): {url[:100]}"
     _REMOTE_REGISTRY_URL = url
     logger.info("[skills] remote registry set to {}", url)
     return url
@@ -267,13 +272,19 @@ async def download_skill(skill_id: str) -> Skill | None:
     if not _REMOTE_REGISTRY_URL:
         logger.warning("[skills] no remote registry configured")
         return None
-    import httpx
+    if not skill_id or "/" in skill_id or ".." in skill_id or skill_id.startswith("."):
+        logger.warning("[skills] invalid skill id: {!r}", skill_id)
+        return None
+    from raven.core.http_client import client_manager
+    from raven.core.security.ssrf import validate_url
 
     url = f"{_REMOTE_REGISTRY_URL.rstrip('/')}/skills/{skill_id}"
+    error = validate_url(url)
+    if error:
+        logger.warning("[skills] registry URL blocked by SSRF guard: {}", error)
+        return None
     try:
-        resp = await httpx.AsyncClient().get(url, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
+        data = await client_manager.get(url, timeout=10)
         content = data.get("instructions", "")
         description = data.get("description", skill_id)
         skill = Skill(name=skill_id, description=description, instructions=content, source="remote")

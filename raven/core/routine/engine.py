@@ -12,6 +12,17 @@ from raven.core.periodic_engine import PeriodicEngine
 from raven.core.routine.models import Routine, RoutineAction, RoutineLog, RoutineStatus, RoutineTrigger
 from raven.core.routine.store import RoutineStore
 
+_running_engine: RoutineEngine | None = None
+
+
+def register_routine_engine(engine: RoutineEngine | None) -> None:
+    global _running_engine
+    _running_engine = engine
+
+
+def get_routine_engine() -> RoutineEngine | None:
+    return _running_engine
+
 
 class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
     def __init__(self, store: RoutineStore):

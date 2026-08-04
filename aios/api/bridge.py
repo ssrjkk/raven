@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import asyncio
+import hmac
 import json
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import PlainTextResponse
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from aios.runtime.adapter import RuntimeAdapter
+from raven.core.agents.truthful_orchestrator import TruthfulResult
+from raven.core.config import settings
+from raven.core.llm.protocol import LLMClientProtocol
 from ravencode.agents.multi import MultiAgentOrchestrator, SubTask
 from ravencode.agents.orchestrator import AgentType, Orchestrator
 from ravencode.api.client import AIOSClient
@@ -61,7 +66,19 @@ class AgentDispatchResponse(BaseModel):
 class MultiAgentRequest(BaseModel):
     tasks: list[dict[str, Any]]
     mode: str = "sequential"
-    max_concurrent: int = 3
+    max_concurrent: int = Field(default=3, ge=1, le=20)
+
+
+class TruthfulRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=20_000, description="User query")
+    context: str = Field(default="", max_length=20_000, description="Optional project context")
+    model: str | None = Field(default=None, max_length=200, description="Model override")
+
+
+class TruthfulResponse(BaseModel):
+    status: str
+    content: str
+    thinking_process: str
 
 
 @router.post("/ai", response_model=AIResponse)
@@ -98,6 +115,42 @@ async def aios_agent_dispatch(req: AgentDispatchRequest):
     )
 
 
+def _critical_providers_config() -> dict[str, Any]:
+    if not settings.critical_provider or not settings.critical_api_key:
+        return {}
+    return {settings.critical_provider: {"api_key": settings.critical_api_key.get_secret_value()}}
+
+
+_critical_router: LLMClientProtocol | None = None
+
+
+def _get_critical_router() -> LLMClientProtocol:
+    global _critical_router
+    if _critical_router is None:
+        from raven.core.llm import LLMRouter
+
+        _critical_router = cast(LLMClientProtocol, LLMRouter(providers_config=_critical_providers_config()))
+    return _critical_router
+
+
+def _reset_critical_router() -> None:
+    global _critical_router
+    _critical_router = None
+
+
+async def run_truthful(prompt: str, context: str, model: str | None = None) -> TruthfulResult:
+    from raven.core.agents.truthful_orchestrator import TruthfulOrchestrator
+
+    resolved_model = model or settings.critical_model or settings.default_model
+    return await TruthfulOrchestrator(_get_critical_router(), model=resolved_model).process(prompt, context)
+
+
+@router.post("/agent/truthful", response_model=TruthfulResponse)
+async def aios_agent_truthful(req: TruthfulRequest):
+    result = await run_truthful(req.prompt, req.context, req.model)
+    return TruthfulResponse(status=result.status, content=result.content, thinking_process=result.thinking_process)
+
+
 @router.post("/agent/multi", response_model=list[dict[str, Any]])
 async def aios_multi_agent(req: MultiAgentRequest):
     subtasks = [
@@ -129,7 +182,8 @@ async def aios_multi_agent(req: MultiAgentRequest):
 
 @router.get("/sessions")
 async def aios_list_sessions():
-    return {"sessions": _session_store.list()}
+    sessions = await asyncio.to_thread(_session_store.list)
+    return {"sessions": sessions}
 
 
 @router.delete("/sessions/{session_id}")
@@ -138,8 +192,30 @@ async def aios_delete_session(session_id: str):
     return {"deleted": deleted}
 
 
+async def _ws_auth_payload(ws: WebSocket) -> dict[str, Any] | None:
+    token = ws.query_params.get("token", "")
+    if not token:
+        return None
+    from raven.core.auth.auth_handler import auth_handler
+
+    secret = settings.web_secret_key.get_secret_value()
+    if secret and hmac.compare_digest(token, secret):
+        return {"sub": "admin", "role": "admin"}
+    return await auth_handler.decode_token(token)
+
+
+async def _require_ws_auth(ws: WebSocket) -> dict[str, Any] | None:
+    payload = await _ws_auth_payload(ws)
+    if payload is None:
+        logger.warning("[aios] rejecting unauthenticated WebSocket")
+        await ws.close(code=1008, reason="Authentication required")
+    return payload
+
+
 @router.websocket("/ws")
 async def aios_websocket(ws: WebSocket):
+    if await _require_ws_auth(ws) is None:
+        return
     await ws.accept()
     try:
         while True:
@@ -201,6 +277,8 @@ async def aios_websocket(ws: WebSocket):
 
 @router.websocket("/ws/agent")
 async def aios_agent_ws(ws: WebSocket):
+    if await _require_ws_auth(ws) is None:
+        return
     await ws.accept()
     ee = EventEmitter()
 
@@ -220,6 +298,7 @@ async def aios_agent_ws(ws: WebSocket):
     ee.on("tool_call", send_event)
     ee.on("tool_result", send_event)
     ee.on("message", send_event)
+    ee.on("truthful", send_event)
     ee.on("done", send_event)
 
     try:
@@ -244,6 +323,24 @@ async def aios_agent_ws(ws: WebSocket):
                 max_tool_retries=msg.get("max_tool_retries", 3),
             )
             agent = ReActAgent(config=config)
+            if msg.get("truthful"):
+                model = msg.get("model")
+                try:
+                    truthful_result = await run_truthful(prompt, "", model)
+                except ValueError as exc:
+                    await ws.send_json({"type": "error", "data": {"message": str(exc)}})
+                    continue
+                await ws.send_json(
+                    {
+                        "type": "final",
+                        "data": {
+                            "status": truthful_result.status,
+                            "content": truthful_result.content,
+                            "thinking_process": truthful_result.thinking_process,
+                        },
+                    }
+                )
+                continue
             result = await agent.run(prompt)
             if not result.startswith("[aborted"):
                 await ws.send_json({"type": "final", "data": {"content": result}})

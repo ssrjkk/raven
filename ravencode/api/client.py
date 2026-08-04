@@ -32,6 +32,14 @@ _PROVIDER_ROUTING = {
     "search": "openai",
 }
 
+_shared_llm: LLMRouter | None = None
+
+
+def reset_shared_llm() -> None:
+    """Drop the cached shared router so the next call rebuilds it (used by tests / reconfiguration)."""
+    global _shared_llm
+    _shared_llm = None
+
 
 class AIUnavailableError(RuntimeError):
     """Raised when the AI backend cannot be reached."""
@@ -40,10 +48,10 @@ class AIUnavailableError(RuntimeError):
 class AIOSClient:
     def __init__(self, base_url: str | None = None) -> None:
         self.base_url = base_url or f"http://localhost:{settings.web_port}"
-        self._llm: LLMRouter | None = None
 
     def _get_llm(self) -> LLMRouter | None:
-        if self._llm is None:
+        global _shared_llm
+        if _shared_llm is None:
             try:
                 from raven.core.llm import LLMRouter
                 from ravencode.config.loader import get_config
@@ -60,11 +68,11 @@ class AIOSClient:
                         overrides.update(p.options)
                     if overrides:
                         providers_config[p.id] = overrides
-                self._llm = LLMRouter(providers_config=providers_config)
+                _shared_llm = LLMRouter(providers_config=providers_config)
             except Exception as exc:
                 logger.warning("LLMRouter unavailable: {}", exc)
-                self._llm = None
-        return self._llm
+                _shared_llm = None
+        return _shared_llm
 
     def _pick_provider(self, task: str) -> str:
         return _PROVIDER_ROUTING.get(task, "openrouter")

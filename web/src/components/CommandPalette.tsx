@@ -3,7 +3,8 @@ import { Search, Sparkles } from "lucide-react";
 import { useEffect, useMemo,useRef, useState } from "react";
 
 import { useTheme } from "../design/ThemeContext";
-import { useCommands } from "../hooks/useCommands";
+import { CommandItem, useCommands } from "../hooks/useCommands";
+import { FuzzyResult, fuzzyMatch } from "../lib/fuzzy";
 
 interface Props {
   isOpen: boolean;
@@ -19,13 +20,28 @@ export const CommandPalette = ({ isOpen, onClose }: Props) => {
 
   const filteredCommands = useMemo(() => {
     const q = query.toLowerCase().trim();
-    if (!q) return commands;
-    return commands.filter(
-      (cmd) =>
-        cmd.label.toLowerCase().includes(q) ||
-        cmd.description.toLowerCase().includes(q)
-    );
+    if (!q) return commands.map((cmd) => ({ cmd, indices: [] as number[] }));
+    return commands
+      .map((cmd) => ({ cmd, match: fuzzyMatch(q, cmd.label) }))
+      .filter((entry): entry is { cmd: CommandItem; match: FuzzyResult } => entry.match !== null)
+      .sort((a, b) => b.match.score - a.match.score)
+      .map(({ cmd, match }) => ({ cmd, indices: match.indices }));
   }, [commands, query]);
+
+  const highlight = (text: string, indices: number[]) => {
+    const marks = new Set(indices);
+    return (
+      <>
+        {Array.from(text).map((ch, i) =>
+          marks.has(i) ? (
+            <mark key={i} className="bg-indigo-500/40 text-indigo-100 rounded-sm px-0.5">{ch}</mark>
+          ) : (
+            <span key={i}>{ch}</span>
+          )
+        )}
+      </>
+    );
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -51,8 +67,8 @@ export const CommandPalette = ({ isOpen, onClose }: Props) => {
         setSelectedIndex((prev) => (prev - 1 + filteredCommands.length) % filteredCommands.length);
       } else if (e.key === "Enter") {
         e.preventDefault();
-        const cmd = filteredCommands[selectedIndex];
-        if (cmd) { cmd.action(); onClose(); }
+        const entry = filteredCommands[selectedIndex];
+        if (entry) { entry.cmd.action(); onClose(); }
       } else if (e.key === "Escape") {
         onClose();
       }
@@ -100,7 +116,7 @@ export const CommandPalette = ({ isOpen, onClose }: Props) => {
                     Ничего не найдено. Попробуйте описать задачу иначе.
                   </div>
                 ) : (
-                  filteredCommands.map((cmd, index) => (
+                  filteredCommands.map(({ cmd, indices }, index) => (
                     <motion.button
                       key={cmd.id}
                       initial={{ opacity: 0, x: -10 }}
@@ -117,7 +133,7 @@ export const CommandPalette = ({ isOpen, onClose }: Props) => {
                         {cmd.icon}
                       </div>
                       <div className="flex-1">
-                        <div className="font-medium">{cmd.label}</div>
+                        <div className="font-medium">{highlight(cmd.label, indices)}</div>
                         <div className="text-sm text-zinc-500">{cmd.description}</div>
                       </div>
                       {cmd.shortcut && (

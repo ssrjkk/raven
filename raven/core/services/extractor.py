@@ -11,6 +11,8 @@ _URL_RE = re.compile(r"https?://[^\s<>\"']+|www\.[^\s<>\"']+")
 _PHONE_RE = re.compile(r"\+?[\d\s\-().]{7,}")
 _DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{4}")
 
+_LLM_EXTRACT_MIN_CHARS = 60
+
 
 @dataclass(frozen=True)
 class Entity:
@@ -41,7 +43,7 @@ class EntityExtractor:
 
     async def extract(self, text: str, labels: list[str] | None = None) -> ExtractorResult:
         entities = self._extract_pattern(text, labels)
-        if self._llm:
+        if self._llm and len(text.strip()) >= _LLM_EXTRACT_MIN_CHARS:
             try:
                 llm_entities = await self._extract_llm(text, labels)
                 seen = {(e.text, e.label) for e in entities}

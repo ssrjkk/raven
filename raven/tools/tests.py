@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -8,16 +9,67 @@ from loguru import logger
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
+_SAFE_ARGS_PREFIXES = (
+    "-q",
+    "-x",
+    "--maxfail",
+    "--tb",
+    "--no-header",
+    "--no-cov",
+    "--disable-warnings",
+    "--timeout",
+    "--cov",
+    "--cov-fail-under",
+    "-k",
+    "-m",
+    "-rf",
+    "--ff",
+    "--lf",
+    "-p",
+)
+
+
+def _workspace() -> Path:
+    return Path(os.environ.get("RAVEN_WORKSPACE", "data")).resolve()
+
+
+def _confine(path: str) -> Path:
+    p = Path(path).expanduser().resolve()
+    ws = _workspace()
+    try:
+        p.relative_to(ws)
+    except ValueError:
+        msg = f"Access denied: path outside workspace: {p}"
+        raise PermissionError(msg) from None
+    return p
+
+
+def _sanitize_extra_args(extra_args: str) -> tuple[str, list[str]]:
+    kept: list[str] = []
+    dropped: list[str] = []
+    for token in extra_args.split():
+        if any(token.startswith(prefix) for prefix in _SAFE_ARGS_PREFIXES):
+            kept.append(token)
+        else:
+            dropped.append(token)
+    if dropped:
+        logger.warning("[tests] dropping unsafe pytest args: {}", " ".join(dropped))
+    return " ".join(kept), dropped
+
 
 async def run_tests(path: str = "", marker: str = "", timeout: int = 120, extra_args: str = "") -> str:
-    root = Path(path or Path.cwd()).resolve()
+    try:
+        root = _confine(path) if path else Path.cwd()
+    except PermissionError as e:
+        return f"{e}"
     if not root.is_dir():
         return f"Path not found: {root}"
+    safe_args, _dropped = _sanitize_extra_args(extra_args)
     cmd = [sys.executable, "-m", "pytest", str(root), "-q", "--tb=short", "--no-header", "-p", "no:schemathesis"]
     if marker:
         cmd += ["-m", marker]
-    if extra_args:
-        cmd += extra_args.split()
+    if safe_args:
+        cmd += safe_args.split()
     logger.info("Running tests: {}", " ".join(cmd))
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -43,7 +95,10 @@ async def run_tests(path: str = "", marker: str = "", timeout: int = 120, extra_
 
 
 async def test_coverage(path: str = "", timeout: int = 180) -> str:
-    root = Path(path or Path.cwd()).resolve()
+    try:
+        root = _confine(path) if path else Path.cwd()
+    except PermissionError as e:
+        return f"{e}"
     if not root.is_dir():
         return f"Path not found: {root}"
     cmd = [
@@ -101,7 +156,10 @@ async def test_coverage(path: str = "", timeout: int = 180) -> str:
 async def generate_tests(file_path: str = "") -> str:
     if not file_path:
         return "file_path required"
-    fp = Path(file_path).resolve()
+    try:
+        fp = _confine(file_path)
+    except PermissionError as e:
+        return f"{e}"
     if not fp.is_file():
         return f"File not found: {fp}"
     try:

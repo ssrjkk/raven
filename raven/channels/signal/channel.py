@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from loguru import logger
+
 from raven.channels.enterprise_base import EnterpriseChannel
 from raven.core.channel_config import get_channel_config
+from raven.core.http_client import client_manager
 from raven.core.models import IncomingMessage, Message
 
 
@@ -44,8 +47,11 @@ class SignalChannel(EnterpriseChannel):
         recipient = parts[1] if len(parts) >= 2 else None
         if not recipient:
             return
-        import httpx
-
-        async with httpx.AsyncClient(base_url=self._api_url, timeout=15) as client:
-            resp = await client.post("/v2/send", json={"message": message.content[:3000], "recipient": recipient})
-            resp.raise_for_status()
+        try:
+            await client_manager.post(
+                f"{self._api_url}/v2/send",
+                json={"message": message.content[:3000], "recipient": recipient},
+                timeout=15,
+            )
+        except Exception as e:
+            logger.error("[signal] send failed: {}", e)

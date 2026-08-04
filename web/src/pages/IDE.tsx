@@ -19,6 +19,12 @@ const AGENT_MODES: { value: AgentMode; label: string; desc: string }[] = [
   { value: "general",label: "General",desc: "Answer questions about code" },
 ]
 
+const TRUTHFUL_STATUS: Record<string, { label: string; color: string }> = {
+  success: { label: "Verified", color: "bg-emerald-500/20 text-emerald-400" },
+  corrected: { label: "Self-corrected", color: "bg-amber-500/20 text-amber-400" },
+  refused: { label: "Refused (no data)", color: "bg-red-500/20 text-red-400" },
+}
+
 export default function IDEPage() {
   const [code, setCode] = useState(`export default function App() {\n  return <h1>Hello Raven</h1>\n}`)
   const [output, setOutput] = useState("")
@@ -29,6 +35,9 @@ export default function IDEPage() {
   const [workspaceFiles] = useState<WorkspaceFile[]>([])
   const [indexStatus, setIndexStatus] = useState<string>("")
   const [sidebarTab, setSidebarTab] = useState<"ai" | "debug">("ai")
+  const [truthfulMode, setTruthfulMode] = useState(false)
+  const [truthfulStatus, setTruthfulStatus] = useState<string>("")
+  const [thinkingProcess, setThinkingProcess] = useState("")
   const terminalEndRef = useRef<HTMLDivElement>(null)
 
   const scrollTerminal = useCallback(() => {
@@ -36,6 +45,21 @@ export default function IDEPage() {
   }, [])
 
   async function runAI() {
+    if (truthfulMode) {
+      setOutput("Thinking...")
+      setTruthfulStatus("")
+      setThinkingProcess("")
+      try {
+        const data = await api.truthfulAgent(aiPrompt, code, "general")
+        setOutput(data.content)
+        setTruthfulStatus(data.status)
+        setThinkingProcess(data.thinking_process)
+      } catch (e) {
+        console.error("Truthful agent failed:", e);
+        setOutput("Truthful agent unavailable. Start with: raven services code-service")
+      }
+      return
+    }
     setOutput("Thinking...")
     try {
       const data = await api.ideAgentRun(aiPrompt, agentMode, ".")
@@ -68,6 +92,12 @@ export default function IDEPage() {
       console.error("Search failed:", e);
       setOutput("Search failed")
     }
+  }
+
+  function submitPrompt() {
+    if (truthfulMode) return runAI()
+    if (agentMode === "general") return searchCodebase()
+    return runAI()
   }
 
   async function runTerminal() {
@@ -173,13 +203,37 @@ export default function IDEPage() {
                 ))}
               </div>
               <div className="text-[10px] text-gray-500">{AGENT_MODES.find(m => m.value === agentMode)?.desc}</div>
+              <button onClick={() => setTruthfulMode(v => !v)}
+                className={`flex items-center justify-center gap-1.5 text-xs px-2.5 py-1.5 rounded border-none cursor-pointer transition ${
+                  truthfulMode
+                    ? "bg-violet-500/20 text-violet-300 font-semibold"
+                    : "bg-[#222] text-gray-400 hover:bg-[#333]"
+                }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${truthfulMode ? "bg-violet-400" : "bg-gray-600"}`} />
+                Truthful mode (Chain-of-Verification)
+              </button>
             </div>
 
             <div className="flex-1 p-3 overflow-auto flex flex-col gap-3">
+              {truthfulStatus && (
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${TRUTHFUL_STATUS[truthfulStatus]?.color ?? "bg-gray-500/20 text-gray-400"}`}>
+                    {TRUTHFUL_STATUS[truthfulStatus]?.label ?? truthfulStatus}
+                  </span>
+                </div>
+              )}
               {output && (
                 <div className="bg-[#1a1a2e] rounded-lg p-3 text-sm leading-relaxed text-gray-300 whitespace-pre-wrap">
                   {output}
                 </div>
+              )}
+              {thinkingProcess && (
+                <details className="bg-[#151522] rounded-lg p-3">
+                  <summary className="text-[10px] text-violet-300 cursor-pointer uppercase tracking-wider">
+                    Verification thinking
+                  </summary>
+                  <pre className="text-xs text-gray-400 whitespace-pre-wrap mt-2 font-mono">{thinkingProcess}</pre>
+                </details>
               )}
               {workspaceFiles.length > 0 && (
                 <div>
@@ -205,11 +259,11 @@ export default function IDEPage() {
                   onChange={(e) => setAiPrompt(e.target.value)}
                   placeholder="Ask AI to build anything..."
                   className="flex-1 bg-[#1e1e1e] border border-[#333] rounded-lg px-3 py-2 text-gray-100 text-sm outline-none"
-                  onKeyDown={(e) => e.key === "Enter" && (agentMode === "general" ? searchCodebase() : runAI())}
+                  onKeyDown={(e) => e.key === "Enter" && submitPrompt()}
                 />
-                <button onClick={() => agentMode === "general" ? searchCodebase() : runAI()}
+                <button onClick={submitPrompt}
                   className="bg-white hover:bg-gray-200 text-black border-none rounded-lg px-4 py-2 font-semibold cursor-pointer text-sm transition">
-                  {agentMode === "general" ? "Search" : "Run"}
+                  {truthfulMode ? "Verify" : agentMode === "general" ? "Search" : "Run"}
                 </button>
               </div>
               <div className="flex gap-1">

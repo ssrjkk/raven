@@ -124,6 +124,26 @@ class TestShellTools:
         result = await python_code("1/0")
         assert "Error" in result or "ZeroDivision" in result
 
+    async def test_python_denied_format_bypass(self) -> None:
+        result = await python_code("'{0.__class__.__mro__}'.format(())")
+        assert "denied" in result
+
+    async def test_python_denied_format_map_bypass(self) -> None:
+        result = await python_code("'{}'.format_map({})")
+        assert "denied" in result
+
+    async def test_python_denied_builtin_format(self) -> None:
+        result = await python_code("format(())")
+        assert "denied" in result
+
+    async def test_python_fstring_dunder_blocked(self) -> None:
+        result = await python_code("f'{().__class__}'")
+        assert "denied" in result
+
+    async def test_python_legit_format_style_ok(self) -> None:
+        result = await python_code("name = 'world'; out = f'hello {name}'")
+        assert "executed" in result
+
 
 # ---------------------------------------------------------------------------
 # DB tools
@@ -285,3 +305,56 @@ class TestToolRegistryIntegration:
         count1 = registry.count
         register_all_tools(registry)
         assert registry.count == count1  # no dupes
+
+
+# ---------------------------------------------------------------------------
+# Test runner tools
+# ---------------------------------------------------------------------------
+
+class TestTestsTool:
+    async def test_run_tests_denies_outside_workspace(self, tmp_path: Path) -> None:
+        old = os.environ.get("RAVEN_WORKSPACE")
+        os.environ["RAVEN_WORKSPACE"] = str(tmp_path)
+        try:
+            outside = tempfile.gettempdir()
+            from raven.tools.tests import run_tests
+
+            result = await run_tests(path=outside)
+            assert "outside workspace" in result
+        finally:
+            if old is None:
+                os.environ.pop("RAVEN_WORKSPACE", None)
+            else:
+                os.environ["RAVEN_WORKSPACE"] = old
+
+    async def test_run_tests_missing_path(self, tmp_path: Path) -> None:
+        old = os.environ.get("RAVEN_WORKSPACE")
+        os.environ["RAVEN_WORKSPACE"] = str(tmp_path)
+        try:
+            from raven.tools.tests import run_tests
+
+            result = await run_tests(path=str(tmp_path / "missing"))
+            assert "not found" in result
+        finally:
+            if old is None:
+                os.environ.pop("RAVEN_WORKSPACE", None)
+            else:
+                os.environ["RAVEN_WORKSPACE"] = old
+
+    async def test_sanitize_extra_args_drops_unsafe(self) -> None:
+        from raven.tools.tests import _sanitize_extra_args
+
+        kept, dropped = _sanitize_extra_args("--cov --tb=short --pdb --some-evil --rootdir=/etc")
+        assert "--cov" in kept
+        assert "--tb=short" in kept
+        assert any("--pdb" in d for d in dropped)
+        assert any("--some-evil" in d for d in dropped)
+        assert any("--rootdir" in d for d in dropped)
+
+    async def test_sanitize_extra_args_allows_safe(self) -> None:
+        from raven.tools.tests import _sanitize_extra_args
+
+        kept, dropped = _sanitize_extra_args("--maxfail=1 -x -k test_foo")
+        assert "-x" in kept.split()
+        assert "-k" in kept.split()
+        assert any("test_foo" in d for d in dropped)

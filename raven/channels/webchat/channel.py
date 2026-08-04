@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import hmac
 import json
 from collections.abc import Awaitable, Callable
+from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -14,6 +17,52 @@ from raven.core.canvas import canvas_manager
 from raven.core.db import Database
 from raven.core.models import IncomingMessage, Message
 from raven.core.watermark import canary_html_comment, install_fastapi_watermark
+
+
+async def _validate_ws_token(token: str) -> dict[str, Any] | None:
+    from raven.core.auth.auth_handler import auth_handler
+    from raven.core.config import settings
+
+    secret = settings.web_secret_key.get_secret_value()
+    if secret and hmac.compare_digest(token, secret):
+        return {"sub": "admin", "role": "admin"}
+    try:
+        return await auth_handler.decode_token(token)
+    except Exception as e:
+        logger.debug("[webchat] WS token decode failed: {}", e)
+        return None
+
+
+async def _authenticate_ws(websocket: WebSocket) -> dict[str, Any] | None:
+    query_token = websocket.query_params.get("token", "")
+    if query_token:
+        payload = await _validate_ws_token(query_token)
+        if payload is None:
+            await websocket.close(code=1008, reason="Authentication required")
+            return None
+        await websocket.accept()
+        return payload
+
+    await websocket.accept()
+    try:
+        raw = await asyncio.wait_for(websocket.receive_text(), timeout=10)
+    except Exception:
+        await websocket.close(code=1008, reason="Authentication required")
+        return None
+    try:
+        msg = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        await websocket.close(code=1008, reason="Authentication required")
+        return None
+    token = str(msg.get("token", "")) if isinstance(msg, dict) else ""
+    if not token:
+        await websocket.close(code=1008, reason="Authentication required")
+        return None
+    payload = await _validate_ws_token(token)
+    if payload is None:
+        await websocket.close(code=1008, reason="Authentication required")
+        return None
+    return payload
 
 
 class WebChatChannel(BaseChannel):
@@ -77,27 +126,11 @@ class WebChatChannel(BaseChannel):
 
         @app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):
-            token = websocket.query_params.get("token", "")
-            if token:
-                try:
-                    from raven.core.auth.auth_handler import auth_handler
-
-                    payload = await auth_handler.decode_token(token)
-                    if payload:
-                        websocket.state.user_id = payload.get("sub", "unknown")
-                        websocket.state.role = payload.get("role", "user")
-                    else:
-                        logger.debug("WebSocket token invalid, rejecting")
-                        await websocket.close(code=1008, reason="Authentication required")
-                        return
-                except Exception as e:
-                    logger.debug("WebSocket token decode failed: {}", e)
-                    await websocket.close(code=1008, reason="Authentication required")
-                    return
-            else:
-                websocket.state.user_id = "anonymous"
-                websocket.state.role = "user"
-            await websocket.accept()
+            payload = await _authenticate_ws(websocket)
+            if payload is None:
+                return
+            websocket.state.user_id = payload.get("sub", "unknown")
+            websocket.state.role = payload.get("role", "user")
             client_id = str(uuid4().hex[:8])
             self._connections[client_id] = websocket
             session_id = f"webchat:{client_id}:default"
@@ -124,20 +157,9 @@ class WebChatChannel(BaseChannel):
 
         @app.websocket("/ws/stream")
         async def agent_stream(websocket: WebSocket):
-            token = websocket.query_params.get("token", "")
-            if token:
-                try:
-                    from raven.core.auth.auth_handler import auth_handler
-
-                    payload = await auth_handler.decode_token(token)
-                    if not payload:
-                        await websocket.close(code=1008, reason="Authentication required")
-                        return
-                except Exception as e:
-                    logger.debug("[webchat] JWT decode failed: {}", e)
-                    await websocket.close(code=1008, reason="Authentication required")
-                    return
-            await websocket.accept()
+            payload = await _authenticate_ws(websocket)
+            if payload is None:
+                return
             client_id = str(uuid4().hex[:8])
             session_id = f"webchat:{client_id}:stream"
             from raven.channels.webchat.streaming import AgentStreamHandler
@@ -157,20 +179,9 @@ class WebChatChannel(BaseChannel):
 
         @app.websocket("/ws/canvas")
         async def canvas_websocket(websocket: WebSocket):
-            token = websocket.query_params.get("token", "")
-            if token:
-                try:
-                    from raven.core.auth.auth_handler import auth_handler
-
-                    payload = await auth_handler.decode_token(token)
-                    if not payload:
-                        await websocket.close(code=1008, reason="Authentication required")
-                        return
-                except Exception as e:
-                    logger.debug("[webchat] canvas JWT decode failed: {}", e)
-                    await websocket.close(code=1008, reason="Authentication required")
-                    return
-            await websocket.accept()
+            payload = await _authenticate_ws(websocket)
+            if payload is None:
+                return
             session = canvas_manager.create_session(str(uuid4().hex[:12]))
             try:
                 while True:

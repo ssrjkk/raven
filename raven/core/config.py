@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     model_fast: str = ""
     model_balanced: str = ""
     model_quality: str = ""
+    critical_model: str = ""  # model used by the Truthful Orchestrator (falls back to default_model)
+    critical_provider: str = ""  # dedicated provider key for critical calls (e.g. "openrouter")
+    critical_api_key: SafeSecretStr = SafeSecretStr("")  # API key for the dedicated critical provider
 
     # --- Tier / rate limits ---
     tier_default: str = "free"

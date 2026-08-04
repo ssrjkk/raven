@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
 
 from loguru import logger
 
@@ -21,7 +22,19 @@ async def _ensure_page() -> Any:
     return _PAGE
 
 
+def _validate_navigation_url(url: str) -> str | None:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return f"[denied] browser_navigate: only http/https URLs are allowed, got '{parsed.scheme}://'"
+    if not parsed.netloc:
+        return "[denied] browser_navigate: missing hostname"
+    return None
+
+
 async def browser_navigate(url: str) -> str:
+    denied = _validate_navigation_url(url)
+    if denied:
+        return denied
     try:
         page = await _ensure_page()
         await page.goto(url, timeout=30000)

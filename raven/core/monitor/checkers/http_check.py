@@ -24,19 +24,19 @@ async def check_http(monitor: Monitor) -> str | None:
 
     try:
         if method == "GET":
-            resp = await client_manager.get(url, headers=headers, timeout=timeout)
+            resp = await client_manager.request("GET", url, headers=headers, timeout=timeout)
         else:
-            resp = await client_manager.post(url, json=body, headers=headers, timeout=timeout)
+            resp = await client_manager.request("POST", url, json=body, headers=headers, timeout=timeout)
     except Exception as exc:
         logger.error("HTTP check failed for {}: {}", url, exc)
         return f"HTTP check failed for {url}: {exc}"
 
-    status = resp.status_code if hasattr(resp, "status_code") else 200
+    status = resp.status_code
     if status >= 400:
         return f"🔴 HTTP {status} for {url}"
 
     if content_match:
-        text = resp if isinstance(resp, str) else (resp.text if hasattr(resp, "text") else str(resp))
+        text = resp.text or ""
         if content_match not in text:
             return f"🔴 Content check failed for {url}: expected '{content_match}' not found"
 

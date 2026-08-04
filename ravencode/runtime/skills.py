@@ -170,6 +170,11 @@ _REMOTE_REGISTRY_URL: str = ""
 
 def set_skill_registry(url: str) -> str:
     global _REMOTE_REGISTRY_URL
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return f"[error] invalid registry URL (http/https required): {url[:100]}"
     _REMOTE_REGISTRY_URL = url
     return f"Registry URL set to: {url}"
 
@@ -181,12 +186,25 @@ def get_registry_url() -> str:
 async def download_skill(skill_id: str) -> str:
     if not _REMOTE_REGISTRY_URL:
         return "[error] no registry URL configured. Use set_skill_registry() first."
+    if not skill_id or "/" in skill_id or ".." in skill_id or skill_id.startswith("."):
+        return f"[error] invalid skill id: {skill_id!r}"
     try:
         import httpx
 
+        from raven.core.security.ssrf import validate_url
+
         url = f"{_REMOTE_REGISTRY_URL.rstrip('/')}/skills/{skill_id}"
-        async with httpx.AsyncClient(timeout=15) as client:
+        error = validate_url(url)
+        if error:
+            return f"[error] registry URL blocked by SSRF guard: {error}"
+        async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
             resp = await client.get(url)
+            if resp.is_redirect:
+                location = resp.headers.get("Location")
+                if location:
+                    redirect_error = validate_url(str(resp.url.join(location)))
+                    if redirect_error:
+                        return f"[error] registry redirect blocked by SSRF guard: {redirect_error}"
             resp.raise_for_status()
             data = resp.json()
         name = data.get("name", skill_id)

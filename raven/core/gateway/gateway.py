@@ -5,6 +5,7 @@ import json
 import re
 import secrets
 import string
+import time
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -105,6 +106,9 @@ class Gateway:
             db_restart=self._db_restart,
             llm_restart=self._llm_restart,
         )
+        self._llm_health_last_check = 0.0
+        self._llm_health_result = True
+        self._llm_health_ttl = 60.0
         self._rate_limiter = RateLimiter()
         self._redis_rate_limiter: RedisRateLimiter | None = None
         self._init_stores()
@@ -354,6 +358,14 @@ class Gateway:
             await self._persister.close()
         except Exception as e:
             logger.warning("persister close error: {}", e)
+        try:
+            await self._monitor_store.close()
+        except Exception as e:
+            logger.warning("monitor store close error: {}", e)
+        try:
+            await self._routine_store.close()
+        except Exception as e:
+            logger.warning("routine store close error: {}", e)
 
     def _get_skill(self, name: str) -> Any:
         return skills_registry.get(name)
@@ -370,7 +382,11 @@ class Gateway:
                     monitors_info = "Monitors: " + ", ".join(statuses)
 
                 tstore = self.tasks._store if self.tasks._store else TaskStore(self.db.db_path)
-                tasks = await tstore.list_tasks(user_id=user_id, limit=5)
+                try:
+                    tasks = await tstore.list_tasks(user_id=user_id, limit=5)
+                finally:
+                    if tstore is not self.tasks._store:
+                        await tstore.close()
                 tasks_info = ""
                 if tasks:
                     pending = [t for t in tasks if t.status.value in ("pending", "running")]
@@ -398,12 +414,18 @@ class Gateway:
             logger.info("Registered morning_briefing skill handler")
 
     async def _llm_health_check(self) -> bool:
+        now = time.monotonic()
+        if now - self._llm_health_last_check < self._llm_health_ttl:
+            return self._llm_health_result
         try:
             result = await self.llm.complete([{"role": "user", "content": "ping"}], model=settings.default_model)
-            return bool(result.content)
+            healthy = bool(result.content)
         except Exception as e:
             logger.warning("LLM health check failed: {}", e)
-            return False
+            healthy = False
+        self._llm_health_last_check = now
+        self._llm_health_result = healthy
+        return healthy
 
     async def _db_restart(self) -> None:
         await self.db.disconnect()
@@ -413,6 +435,7 @@ class Gateway:
         self.llm = LLMRouter()
         self.failover = ModelFailover(self.llm)
         self._propagate_llm()
+        self._llm_health_last_check = 0.0
 
     def _propagate_llm(self) -> None:
         self.registry.llm = self.llm

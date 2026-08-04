@@ -15,10 +15,12 @@ export function useWebSocket(onMessage: Handler) {
 
   const connect = useCallback(() => {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const token = getToken();
-    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : "";
-    const ws = new WebSocket(`${protocol}//${location.host}/ws${tokenParam}`);
+    const ws = new WebSocket(`${protocol}//${location.host}/ws`);
     ws.onopen = () => {
+      const token = getToken();
+      if (token) {
+        ws.send(JSON.stringify({ type: "auth", token }));
+      }
       setConnected(true);
       reconnectAttempt.current = 0;
     };

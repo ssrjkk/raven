@@ -191,6 +191,7 @@ class Agent:
         user_message: str,
         recall_context: str | None = None,
         confirm_fn: Callable[[str, dict[str, Any]], Awaitable[bool]] | None = None,
+        history: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[str]:
         state = AgentState.INIT
         messages: list[dict[str, Any]] = [{"role": "system", "content": await self._build_system_prompt()}]
@@ -206,8 +207,8 @@ class Agent:
             messages.append({"role": "system", "content": f"Relevant memories:\n{recall_context}"})
 
         if not self.config.stateless:
-            history = await self._load_history()
-            messages.extend(history)
+            history = history if history is not None else await self._load_history()
+            messages.extend(history[: self.config.max_history])
         messages.append({"role": "user", "content": user_message})
 
         if not self.config.stateless and len(messages) > self.config.max_history + 3:

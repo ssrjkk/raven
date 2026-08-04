@@ -44,6 +44,8 @@ services/*/bin/
 *.exe
 
 # Test artifacts
+[0-9].txt
+a.txt
 .coverage
 .coverage.*
 tmp_test_secrets/

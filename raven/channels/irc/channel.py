@@ -40,8 +40,19 @@ class IRCChannel(EnterpriseChannel):
         self._reconnect_delay = 1.0
 
     async def _stop(self):
+        pending = list(self._bg_tasks)
+        self._bg_tasks.clear()
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        writer = self._writer
         self._writer = None
         self._reader = None
+        if writer is not None:
+            with contextlib.suppress(Exception):
+                writer.close()
+                await writer.wait_closed()
 
     async def _connect_irc(self):
         loop = asyncio.get_running_loop()
@@ -74,6 +85,11 @@ class IRCChannel(EnterpriseChannel):
                     await asyncio.sleep(self._reconnect_delay)
                     self._reconnect_delay = min(self._reconnect_delay * 2, 60)
                     with contextlib.suppress(ConnectionError, OSError):
+                        old = self._writer
+                        if old is not None:
+                            with contextlib.suppress(Exception):
+                                old.close()
+                                await old.wait_closed()
                         self._reader, self._writer = await asyncio.open_connection(self._server, self._port)
 
     _PRIVMSG_RE = re.compile(r":(\S+)!\S+ PRIVMSG (\S+) :(.+)")

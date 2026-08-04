@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,9 @@ class KnowledgeBase:
         except Exception:
             logger.opt(exception=True).warning("[knowledge] failed to save graph")
 
+    async def _save_async(self) -> None:
+        await asyncio.to_thread(self._save)
+
     async def store(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
         meta = metadata or {}
         entity_type = meta.get("type", "concept")
@@ -48,7 +52,7 @@ class KnowledgeBase:
             existing[0].update(entity)
         else:
             self._graph["entities"].append(entity)
-        self._save()
+        await self._save_async()
 
     async def recall(self, key: str) -> str | None:
         for e in self._graph.get("entities", []):
@@ -67,7 +71,7 @@ class KnowledgeBase:
             r for r in self._graph.get("relations", []) if r.get("source_id") != key and r.get("target_id") != key
         ]
         if len(self._graph["entities"]) < before:
-            self._save()
+            await self._save_async()
             return True
         return False
 
@@ -96,7 +100,7 @@ class KnowledgeBase:
     async def add_relation(self, source: str, target: str, rel_type: str = "related") -> None:
         rel = {"source_id": source, "target_id": target, "rel_type": rel_type}
         self._graph.setdefault("relations", []).append(rel)
-        self._save()
+        await self._save_async()
 
     async def get_related(self, entity_id: str) -> list[dict[str, Any]]:
         related: list[dict[str, Any]] = []
@@ -110,4 +114,4 @@ class KnowledgeBase:
 
     async def clear(self) -> None:
         self._graph = {"entities": [], "relations": []}
-        self._save()
+        await self._save_async()

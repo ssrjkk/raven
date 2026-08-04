@@ -25,6 +25,12 @@ def test_validate_url_blocks_localhost():
     assert result is not None
 
 
+def test_validate_url_blocks_ipv4_mapped_private():
+    result = validate_url("http://[::ffff:192.168.1.1]/admin")
+    assert result is not None
+    assert "private" in result.lower()
+
+
 def test_validate_url_allows_public_ip():
     with patch("raven.core.security.ssrf.get_settings") as mock_settings:
         s = type("s", (), {"ghost_mode": False})()
@@ -68,6 +74,17 @@ class TestIsPrivateIp:
     def test_public_ip(self):
         assert _is_private_ip("8.8.8.8") is False
         assert _is_private_ip("1.1.1.1") is False
+
+    def test_ipv4_mapped_private(self):
+        assert _is_private_ip("::ffff:10.0.0.1") is True
+        assert _is_private_ip("::ffff:172.16.0.1") is True
+        assert _is_private_ip("::ffff:192.168.1.1") is True
+        assert _is_private_ip("::ffff:127.0.0.1") is True
+        assert _is_private_ip("::ffff:169.254.169.254") is True
+
+    def test_ipv4_mapped_public(self):
+        assert _is_private_ip("::ffff:8.8.8.8") is False
+        assert _is_private_ip("::ffff:1.1.1.1") is False
 
 
 @pytest.mark.asyncio

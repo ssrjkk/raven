@@ -8,6 +8,7 @@ from loguru import logger
 
 from raven.channels.enterprise_base import EnterpriseChannel
 from raven.core.channel_config import get_channel_config
+from raven.core.http_client import client_manager
 from raven.core.models import IncomingMessage, Message
 
 
@@ -33,18 +34,15 @@ class FeishuChannel(EnterpriseChannel):
         logger.info("[feishu] channel stopped")
 
     async def _refresh_token(self):
-        import httpx
-
         try:
-            async with httpx.AsyncClient(base_url="https://open.feishu.cn", timeout=10) as client:
-                resp = await client.post(
-                    "/open-apis/auth/v3/tenant_access_token/internal",
-                    json={"app_id": self._app_id, "app_secret": self._app_secret},
-                )
-                data = resp.json()
-                self._tenant_token = data.get("tenant_access_token", "")
-                expires_in = data.get("expire", 3600)
-                self._token_expires = time.time() + expires_in - 60
+            data = await client_manager.post(
+                "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+                json={"app_id": self._app_id, "app_secret": self._app_secret},
+                timeout=10,
+            )
+            self._tenant_token = data.get("tenant_access_token", "")
+            expires_in = data.get("expire", 3600)
+            self._token_expires = time.time() + expires_in - 60
         except Exception as e:
             logger.error("[feishu] token refresh failed: {}", e)
 
@@ -91,16 +89,16 @@ class FeishuChannel(EnterpriseChannel):
         user_id = parts[1] if len(parts) >= 2 else None
         if not user_id:
             return
-        import httpx
-
-        async with httpx.AsyncClient(base_url="https://open.feishu.cn", timeout=15) as client:
-            resp = await client.post(
-                "/open-apis/im/v1/messages",
+        try:
+            await client_manager.post(
+                "https://open.feishu.cn/open-apis/im/v1/messages",
                 headers={"Authorization": f"Bearer {self._tenant_token}"},
                 json={
                     "receive_id": user_id,
                     "msg_type": "text",
                     "content": json.dumps({"text": message.content[:4000]}),
                 },
+                timeout=15,
             )
-            resp.raise_for_status()
+        except Exception as e:
+            logger.error("[feishu] send failed: {}", e)

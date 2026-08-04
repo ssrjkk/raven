@@ -24,7 +24,11 @@ def mgr(mock_llm):
 async def test_estimate_tokens(mgr):
     msgs = [{"role": "user", "content": "hello world"}, {"role": "assistant", "content": "hi there"}]
     total = await mgr.estimate_tokens(msgs)
-    expected = (len("hello world") // 4 + 10) + (len("hi there") // 4 + 10)
+
+    def est(s: str) -> int:
+        return int(2 + len(s) / 4)  # 2 words + ascii chars/4
+
+    expected = est("hello world") + 10 + est("hi there") + 10
     assert total == expected
 
 

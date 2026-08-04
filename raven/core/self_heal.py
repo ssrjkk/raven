@@ -37,11 +37,17 @@ class ServiceStatus:
 
 class SelfHealer:
     def __init__(self):
-        self._services: dict[str, tuple[ServiceStatus, Callable[[], Any], Callable[[], Any]]] = {}
+        self._services: dict[str, tuple[ServiceStatus, Callable[[], Any], Callable[[], Any], float]] = {}
         self._task: asyncio.Task[None] | None = None
 
-    def register(self, name: str, health_check: Callable[[], Any], restart: Callable[[], Any]):
-        self._services[name] = (ServiceStatus(name), health_check, restart)
+    def register(
+        self,
+        name: str,
+        health_check: Callable[[], Any],
+        restart: Callable[[], Any],
+        timeout: float = 10.0,
+    ):
+        self._services[name] = (ServiceStatus(name), health_check, restart, timeout)
 
     def unregister(self, name: str):
         self._services.pop(name, None)
@@ -58,11 +64,22 @@ class SelfHealer:
                 await asyncio.wait_for(self._task, timeout=5.0)
             self._task = None
 
+    async def _run_check(self, health_check: Callable[[], Any], timeout: float) -> bool:
+        if asyncio.iscoroutinefunction(health_check):
+            return bool(await asyncio.wait_for(health_check(), timeout=timeout))
+        return bool(health_check())
+
+    async def _run_restart(self, restart_fn: Callable[[], Any], timeout: float) -> None:
+        if asyncio.iscoroutinefunction(restart_fn):
+            await asyncio.wait_for(restart_fn(), timeout=timeout)
+        else:
+            restart_fn()
+
     async def _loop(self):
         while True:
-            for name, (status, health_check, restart_fn) in list(self._services.items()):
+            for name, (status, health_check, restart_fn, timeout) in list(self._services.items()):
                 try:
-                    healthy = await health_check() if asyncio.iscoroutinefunction(health_check) else health_check()
+                    healthy = await self._run_check(health_check, timeout)
                     if healthy:
                         status.record_success()
                     else:
@@ -82,7 +99,7 @@ class SelfHealer:
                         backoff,
                     )
                     try:
-                        await restart_fn() if asyncio.iscoroutinefunction(restart_fn) else restart_fn()
+                        await self._run_restart(restart_fn, timeout)
                         status.alive = True
                         logger.info("Restart of {} succeeded", name)
                     except Exception as e:
@@ -98,7 +115,7 @@ class SelfHealer:
                 "restart_attempts": s.restart_attempts,
                 "last_ok": s.last_ok,
             }
-            for name, (s, _, _) in self._services.items()
+            for name, (s, _, _, _) in self._services.items()
         }
 
 

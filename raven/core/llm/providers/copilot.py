@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 from loguru import logger
@@ -8,6 +9,8 @@ from pydantic import SecretStr
 
 from raven.core.llm.protocol import LLMProvider, LLMResponse
 from raven.core.llm.providers.base import _parse_openai_response, _stream_sse
+
+_TOKEN_TTL = 1500.0
 
 
 class CopilotProvider(LLMProvider):
@@ -20,10 +23,12 @@ class CopilotProvider(LLMProvider):
         )
         raw = overrides.get("api_key") or os.environ.get("COPILOT_TOKEN") or ""
         self._token: SecretStr | None = SecretStr(raw) if raw else None
+        self._static = bool(raw)
+        self._token_expires_at: float = 0.0
         self._github_token = os.environ.get("GITHUB_TOKEN", "")
 
     async def _get_token(self) -> str:
-        if self._token:
+        if self._token and (self._static or time.monotonic() < self._token_expires_at):
             return self._token.get_secret_value()
         if not self._github_token:
             logger.warning("No GITHUB_TOKEN or COPILOT_TOKEN set for CopilotProvider")
@@ -37,10 +42,12 @@ class CopilotProvider(LLMProvider):
             data = resp.json()
             raw = data.get("token", self._github_token)
             self._token = SecretStr(raw) if raw else None
+            self._token_expires_at = time.monotonic() + _TOKEN_TTL
         except Exception as e:
             logger.warning("Failed to get Copilot token: {}", e)
             raw = self._github_token
             self._token = SecretStr(raw) if raw else None
+            self._token_expires_at = 0.0
         return self._token.get_secret_value() if self._token else ""
 
     async def cleanup(self):

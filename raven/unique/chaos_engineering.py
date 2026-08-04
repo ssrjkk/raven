@@ -249,17 +249,17 @@ class FaultInjector:
 
         try:
             if config.fault_type == FaultType.SERVICE_KILL:
-                self._inject_service_kill(fault_record)
+                await asyncio.to_thread(self._inject_service_kill, fault_record)
             elif config.fault_type == FaultType.NETWORK_LATENCY:
-                self._inject_network_latency(fault_record)
+                await asyncio.to_thread(self._inject_network_latency, fault_record)
             elif config.fault_type == FaultType.DISK_FILL:
-                self._inject_disk_fill(fault_record)
+                await asyncio.to_thread(self._inject_disk_fill, fault_record)
             elif config.fault_type == FaultType.CPU_STORM:
-                self._inject_cpu_storm(fault_record)
+                await asyncio.to_thread(self._inject_cpu_storm, fault_record)
             elif config.fault_type == FaultType.MEMORY_LEAK:
-                self._inject_memory_leak(fault_record)
+                await asyncio.to_thread(self._inject_memory_leak, fault_record)
             elif config.fault_type == FaultType.PROCESS_KILL:
-                self._inject_process_kill(fault_record)
+                await asyncio.to_thread(self._inject_process_kill, fault_record)
         except Exception as exc:
             fault_record["error"] = str(exc)
             logger.error("Fault injection failed [{}]: {}", fault_id, exc)
@@ -277,7 +277,7 @@ class FaultInjector:
 
         logger.info("Recovering fault [{}]: type={}", fault_id, fault["config"]["fault_type"])
         try:
-            self._recover_fault(fault)
+            await asyncio.to_thread(self._recover_fault, fault)
             fault["recovered"] = True
             fault["recovery_time"] = time.time()
             logger.info("Fault [{}] recovered successfully", fault_id)
