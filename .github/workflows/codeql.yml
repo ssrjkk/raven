@@ -19,17 +19,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ["python", "go", "javascript-typescript"]
+        language: ["python", "javascript-typescript"]
 
     steps:
       - uses: actions/checkout@v7
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: stable
-          cache: true
-        if: matrix.language == 'go'
 
       - name: Setup Node
         uses: actions/setup-node@v4
