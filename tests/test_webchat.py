@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -147,3 +148,43 @@ class TestWebChatChannel:
         await channel.disconnect()
         mock_ws.close.assert_awaited_once()
         assert len(channel._connections) == 0
+
+
+class TestCanvasLinkProxy:
+    def _proxied_content(self, channel, url, headers, content=b"<html>ok</html>"):
+        with patch(
+            "raven.core.security.ssrf.safe_fetch_async",
+            AsyncMock(return_value=httpx.Response(200, headers=headers, content=content)),
+        ):
+            return TestClient(channel.app).get("/api/canvas/link", params={"url": url})
+
+    def test_html_content_is_sandboxed(self, channel):
+        response = self._proxied_content(
+            channel, "https://example.com/page", {"content-type": "text/html; charset=utf-8"}
+        )
+        assert response.status_code == 200
+        assert response.content == b"<html>ok</html>"
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers["content-security-policy"] == "sandbox"
+
+    def test_non_html_content_has_no_csp(self, channel):
+        response = self._proxied_content(
+            channel, "https://example.com/doc.pdf", {"content-type": "application/pdf"}, content=b"%PDF"
+        )
+        assert response.status_code == 200
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert "content-security-policy" not in response.headers
+
+    def test_bad_scheme_rejected(self, channel):
+        response = TestClient(channel.app).get("/api/canvas/link", params={"url": "javascript:alert(1)"})
+        assert response.status_code == 400
+        assert response.json()["error"] == "Invalid URL scheme"
+
+    def test_proxy_failure_returns_502(self, channel):
+        with patch(
+            "raven.core.security.ssrf.safe_fetch_async",
+            AsyncMock(side_effect=RuntimeError("boom")),
+        ):
+            response = TestClient(channel.app).get("/api/canvas/link", params={"url": "https://example.com/x"})
+        assert response.status_code == 502
+        assert response.json()["error"] == "Proxy failed"

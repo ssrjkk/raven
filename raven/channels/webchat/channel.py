@@ -18,6 +18,18 @@ from raven.core.db import Database
 from raven.core.models import IncomingMessage, Message
 from raven.core.watermark import canary_html_comment, install_fastapi_watermark
 
+_MAX_LINK_PROXY_BYTES = 10 * 1024 * 1024
+
+_HTML_LIKE_MEDIA_TYPES = frozenset(
+    {
+        "text/html",
+        "application/xhtml+xml",
+        "image/svg+xml",
+        "application/xml",
+        "text/xml",
+    }
+)
+
 
 async def _validate_ws_token(token: str) -> dict[str, Any] | None:
     from raven.core.auth.auth_handler import auth_handler
@@ -240,9 +252,23 @@ class WebChatChannel(BaseChannel):
             )
 
         @app.get("/api/canvas/link")
-        async def canvas_link_redirect(url: str) -> Response:
-            logger.debug("[webchat] canvas link proxy disabled for: {}", url)
-            return JSONResponse(status_code=400, content={"error": "Link proxying disabled"})
+        async def canvas_link_proxy(url: str) -> Response:
+            from raven.core.security.ssrf import safe_fetch_async
+
+            if not url.startswith(("http://", "https://")):
+                return JSONResponse(status_code=400, content={"error": "Invalid URL scheme"})
+            try:
+                response = await safe_fetch_async(url, max_bytes=_MAX_LINK_PROXY_BYTES)
+            except Exception as exc:
+                logger.warning("[webchat] canvas link proxy failed: {}", exc)
+                return JSONResponse(status_code=502, content={"error": "Proxy failed"})
+            content_type = response.headers.get("content-type", "application/octet-stream")
+            media_type = content_type.split(";")[0].strip().lower()
+            headers = {"X-Content-Type-Options": "nosniff"}
+            if media_type in _HTML_LIKE_MEDIA_TYPES:
+                headers["Content-Security-Policy"] = "sandbox"
+                headers["Referrer-Policy"] = "no-referrer"
+            return Response(content=response.content, media_type=content_type, headers=headers)
 
     async def start(self):
         self._ready = True
