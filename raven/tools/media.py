@@ -11,7 +11,7 @@ from typing import Any
 from loguru import logger
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
-from raven.tools.file import _confine
+from raven.tools.file import _check_no_symlinks_in_path, _confine, _workspace
 
 _OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 _REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN", "")
@@ -324,7 +324,11 @@ def _parse_xlsx(path: Path) -> str:
 
 
 async def video_info(filepath: str) -> str:
-    path = _confine(filepath)
+    resolved = os.path.abspath(os.path.normpath(os.path.expanduser(filepath)))  # noqa: PTH100, PTH111
+    if not resolved.startswith(os.path.abspath(str(_workspace()))):  # noqa: PTH100
+        return f"[error] Access denied: {filepath}"
+    path = Path(resolved)
+    _check_no_symlinks_in_path(path, _workspace())
     if not path.exists():
         return f"[error] File not found: {filepath}"
     try:
@@ -416,7 +420,11 @@ async def video_thumbnail(filepath: str, time_sec: float = 1.0, size: str = "320
 
 async def video_transcribe(filepath: str, model: str = "whisper-1", language: str = "") -> str:
     """Extract audio from video and transcribe using OpenAI Whisper API."""
-    path = _confine(filepath)
+    resolved = os.path.abspath(os.path.normpath(os.path.expanduser(filepath)))  # noqa: PTH100, PTH111
+    if not resolved.startswith(os.path.abspath(str(_workspace()))):  # noqa: PTH100
+        return f"[error] Access denied: {filepath}"
+    path = Path(resolved)
+    _check_no_symlinks_in_path(path, _workspace())
     if not path.exists():
         return f"[error] File not found: {filepath}"
     api_key = _OPENAI_API_KEY
@@ -490,7 +498,11 @@ async def video_transcribe(filepath: str, model: str = "whisper-1", language: st
 async def video_extract_frames(
     filepath: str, interval_sec: float = 5.0, max_frames: int = 10, size: str = "640x480", output_dir: str = ""
 ) -> str:
-    path = _confine(filepath)
+    resolved = os.path.abspath(os.path.normpath(os.path.expanduser(filepath)))  # noqa: PTH100, PTH111
+    if not resolved.startswith(os.path.abspath(str(_workspace()))):  # noqa: PTH100
+        return f"[error] Access denied: {filepath}"
+    path = Path(resolved)
+    _check_no_symlinks_in_path(path, _workspace())
     exists = await asyncio.to_thread(path.exists)
     if not exists:
         return f"[error] File not found: {filepath}"
@@ -500,7 +512,14 @@ async def video_extract_frames(
     except ImportError:
         return "[error] ffmpeg-python not installed (pip install raven-agent[media])"
 
-    out_dir = Path(output_dir) if output_dir else (path.parent / f"{path.stem}_frames")
+    if output_dir:
+        out_resolved = os.path.abspath(os.path.normpath(os.path.expanduser(output_dir)))  # noqa: PTH100, PTH111
+        if not out_resolved.startswith(os.path.abspath(str(_workspace()))):  # noqa: PTH100
+            return f"[error] Access denied: {output_dir}"
+        out_dir = Path(out_resolved)
+        _check_no_symlinks_in_path(out_dir, _workspace())
+    else:
+        out_dir = path.parent / f"{path.stem}_frames"
     await asyncio.to_thread(out_dir.mkdir, parents=True, exist_ok=True)
     try:
         probe = await asyncio.to_thread(lambda: ffmpeg.probe(str(path)))

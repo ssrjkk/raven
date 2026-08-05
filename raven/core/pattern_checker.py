@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import os
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -8,8 +9,6 @@ from typing import Any
 
 from fastapi import APIRouter, Query
 from loguru import logger
-
-from raven.core.security.path_guard import confine_path
 
 _PATTERN_LIST = [
     (
@@ -126,7 +125,11 @@ def create_pattern_checker_router(workspace: str = "") -> APIRouter:
         checks = [p for p in patterns if p["id"] in enabled_ids]
 
         if file:
-            target = confine_path(str(ws_root / file), ws_root)
+            combined = str(ws_root / file)
+            resolved = os.path.abspath(os.path.normpath(os.path.expanduser(combined)))  # noqa: PTH100, PTH111
+            if not resolved.startswith(str(ws_root)):
+                return {"error": f"Access denied: {file}", "violations": []}
+            target = Path(resolved)
             if not target.is_file():
                 return {"error": f"File not found: {file}", "violations": []}
             files_to_check = [target]

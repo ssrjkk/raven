@@ -9,7 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from loguru import logger
 
 from raven.channels.base import BaseChannel
@@ -241,15 +241,8 @@ class WebChatChannel(BaseChannel):
 
         @app.get("/api/canvas/link")
         async def canvas_link_redirect(url: str) -> Response:
-            from raven.core.security.ssrf import validate_url_async
-
-            if not url.startswith(("http://", "https://")):
-                return JSONResponse(status_code=400, content={"error": "Invalid URL scheme"})
-            error = await validate_url_async(url)
-            if error:
-                logger.debug("[webchat] canvas link blocked: {}", error)
-                return JSONResponse(status_code=400, content={"error": error})
-            return RedirectResponse(url)
+            logger.debug("[webchat] canvas link proxy disabled for: {}", url)
+            return JSONResponse(status_code=400, content={"error": "Link proxying disabled"})
 
     async def start(self):
         self._ready = True

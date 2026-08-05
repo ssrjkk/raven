@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,6 @@ from pydantic import BaseModel
 
 from raven.core.config import settings
 from raven.core.secrets import secrets
-from raven.core.security.path_guard import confine_path
 
 
 class CreatePRRequest(BaseModel):
@@ -260,7 +260,11 @@ def create_github_router() -> APIRouter:
         repo_url = f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
         base_dir = Path(body.target_dir) if body.target_dir else Path("workspace") / "cloned"
         base = settings.resolved_workspace or Path.cwd()
-        target = confine_path(str(base_dir / owner / repo), base)
+        combined = str(base_dir / owner / repo)
+        resolved = os.path.abspath(os.path.normpath(os.path.expanduser(combined)))  # noqa: PTH100, PTH111
+        if not resolved.startswith(os.path.abspath(str(base))):  # noqa: PTH100
+            raise HTTPException(403, f"Access denied: {body.target_dir}")
+        target = Path(resolved)
         if target.exists():
             return {"ok": True, "path": str(target), "existing": True}
         target.mkdir(parents=True, exist_ok=True)

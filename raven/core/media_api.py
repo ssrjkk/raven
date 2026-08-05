@@ -7,8 +7,6 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, UploadFile
 from loguru import logger
 
-from raven.core.security.path_guard import confine_path
-
 
 def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
     router = APIRouter(prefix="/api/media", tags=["media"])
@@ -40,9 +38,6 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
             logger.error("Image generation API error: {}", e)
             raise HTTPException(500, str(e)) from e
 
-    def _confine(p: str, base: Path) -> Path:
-        return confine_path(p, base)
-
     @router.post("/process")
     def process_image(
         filepath: str,
@@ -53,7 +48,10 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
         output_format: str = "",
         quality: int = 85,
     ):
-        target = _confine(filepath, ws)
+        resolved = os.path.abspath(os.path.normpath(os.path.expanduser(filepath)))  # noqa: PTH100, PTH111
+        if not resolved.startswith(os.path.abspath(str(ws))):  # noqa: PTH100
+            raise HTTPException(403, f"Access denied: {filepath}")
+        target = Path(resolved)
         if not target.exists():
             raise HTTPException(404, f"File not found: {target}")
         try:
@@ -96,7 +94,10 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
 
     @router.post("/parse")
     def parse_document(filepath: str, pages: str = ""):
-        target = _confine(filepath, ws)
+        resolved = os.path.abspath(os.path.normpath(os.path.expanduser(filepath)))  # noqa: PTH100, PTH111
+        if not resolved.startswith(os.path.abspath(str(ws))):  # noqa: PTH100
+            raise HTTPException(403, f"Access denied: {filepath}")
+        target = Path(resolved)
         if not target.exists():
             raise HTTPException(404, f"File not found: {target}")
         ext = target.suffix.lower()

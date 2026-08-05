@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import re
 import socket
 from typing import Any
 from urllib.parse import urlparse
@@ -21,6 +22,8 @@ PRIVATE_NETS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
     ipaddress.ip_network("fc00::/7"),
     ipaddress.ip_network("fe80::/10"),
 ]
+
+_HTTP_URL_PATTERN = re.compile(r"^https?://[^\s\\]+$")
 
 
 def _is_private_address(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
@@ -223,6 +226,13 @@ async def safe_fetch_async(
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         msg = f"Invalid scheme: {parsed.scheme}"
+        raise ValueError(msg)
+    error = await validate_url_async(url)
+    if error:
+        msg = f"URL blocked by SSRF: {error}"
+        raise ValueError(msg)
+    if not re.fullmatch(_HTTP_URL_PATTERN, url):
+        msg = f"Invalid URL: {url}"
         raise ValueError(msg)
     transport = SSRFSafeTransport()
     async with httpx.AsyncClient(transport=transport, follow_redirects=False, timeout=timeout) as client:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -10,8 +11,6 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
-
-from raven.core.security.path_guard import confine_path
 
 
 class Category(Enum):
@@ -225,7 +224,7 @@ class PluginManager:
             if source == "remote":
                 metadata = await self._fetch_remote_metadata(url_or_path) or metadata
             elif source == "local":
-                metadata = self._read_local_metadata(confine_path(url_or_path, self._plugins_dir)) or metadata
+                metadata = self._read_local_metadata(url_or_path) or metadata
 
             if self._allow_real_install:
                 await self._real_install(url_or_path, install_path, metadata)
@@ -410,7 +409,11 @@ class PluginManager:
             logger.debug("[plugin] could not fetch remote metadata from {}: {}", url, exc)
         return None
 
-    def _read_local_metadata(self, path: Path) -> PluginMetadata | None:
+    def _read_local_metadata(self, path: str | Path) -> PluginMetadata | None:
+        resolved = os.path.abspath(os.path.normpath(os.path.expanduser(str(path))))  # noqa: PTH100, PTH111
+        if not resolved.startswith(os.path.abspath(str(self._plugins_dir))):  # noqa: PTH100
+            return None
+        path = Path(resolved)
         plugin_json = path / "plugin.json" if path.is_dir() else path.parent / "plugin.json"
         if plugin_json.exists():
             try:

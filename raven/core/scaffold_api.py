@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-
-from raven.core.security.path_guard import confine_path
 
 TEMPLATES: dict[str, dict[str, Any]] = {
     "fastapi-react": {
@@ -114,7 +113,11 @@ def create_scaffold_router(workspace: str = "") -> APIRouter:
             raise HTTPException(404, f"Template '{req.template_id}' not found")
 
         proj_name = req.answers.get("project_name", "my-app")
-        target = confine_path(str(ws_root / (req.output_dir or "") / proj_name), ws_root)
+        combined = str(ws_root / (req.output_dir or "") / proj_name)
+        resolved = os.path.abspath(os.path.normpath(os.path.expanduser(combined)))  # noqa: PTH100, PTH111
+        if not resolved.startswith(str(ws_root)):
+            raise HTTPException(403, f"Access denied: {req.output_dir}")
+        target = Path(resolved)
         target.mkdir(parents=True, exist_ok=True)
 
         files: list[dict[str, str]] = []

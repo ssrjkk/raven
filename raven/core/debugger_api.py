@@ -76,7 +76,10 @@ def create_debugger_router() -> APIRouter:
     @router.post("/start")
     async def debug_start(req: DebugStartRequest, _admin: dict[str, Any] = Depends(_require_admin)) -> DebuggerState:
         global _active_debugger
-        file_path = _confine_path(req.file)
+        resolved = os.path.abspath(os.path.normpath(os.path.expanduser(req.file)))  # noqa: PTH100, PTH111
+        if not resolved.startswith(os.path.abspath(str(_get_workspace()))):  # noqa: PTH100
+            raise HTTPException(403, f"Access denied: {req.file}")
+        file_path = Path(resolved)
         if not file_path.is_file():
             raise HTTPException(404, f"File not found: {req.file}")
         if file_path.suffix.lower() not in _ALLOWED_EXTENSIONS:
