@@ -113,9 +113,12 @@ def create_scaffold_router(workspace: str = "") -> APIRouter:
             raise HTTPException(404, f"Template '{req.template_id}' not found")
 
         proj_name = req.answers.get("project_name", "my-app")
+        base = os.path.abspath(str(ws_root))  # noqa: PTH100
         combined = str(ws_root / (req.output_dir or "") / proj_name)
         resolved = os.path.abspath(os.path.normpath(os.path.expanduser(combined)))  # noqa: PTH100, PTH111
-        if not resolved.startswith(str(ws_root)):
+        if not resolved.startswith(base):
+            raise HTTPException(403, f"Access denied: {req.output_dir}")
+        if resolved != base and not resolved.startswith(base + os.sep):
             raise HTTPException(403, f"Access denied: {req.output_dir}")
         target = Path(resolved)
         target.mkdir(parents=True, exist_ok=True)

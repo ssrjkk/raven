@@ -244,3 +244,19 @@ class TestPluginManager:
         await self.manager.install_plugin("https://example.com/persist-me", source="local")
         manager2 = PluginManager(plugins_dir=self.tmp_dir)
         assert "persist-me" in manager2._installed
+
+    @pytest.mark.asyncio
+    async def test_install_traversal_paths_stay_inside_plugins_dir(self) -> None:
+        root = self.tmp_dir.resolve()
+        for bad in ("https://evil.com/..", "C:\\Windows", "https://x.com/..\\..\\etc", ".."):
+            installed = await self.manager.install_plugin(bad, source="local")
+            path = installed.install_path.resolve()
+            assert path == root or path.is_relative_to(root)
+            assert path.name not in (".", "..")
+            assert (path / "plugin.json").exists()
+
+    def test_name_from_url_sanitizes(self) -> None:
+        assert self.manager._name_from_url("https://github.com/acme/my-plugin.git") == "my-plugin"
+        assert self.manager._name_from_url("https://evil.com/..").startswith("plugin_")
+        assert self.manager._name_from_url("https://x.com/..\\..\\etc") == "etc"
+        assert self.manager._name_from_url("https://x.com/...") != ""

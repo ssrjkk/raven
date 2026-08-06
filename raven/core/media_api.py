@@ -7,6 +7,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, UploadFile
 from loguru import logger
 
+from raven.tools.file import _check_no_symlinks_in_path
+
 
 def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
     router = APIRouter(prefix="/api/media", tags=["media"])
@@ -48,10 +50,14 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
         output_format: str = "",
         quality: int = 85,
     ):
+        base = os.path.abspath(str(ws))  # noqa: PTH100
         resolved = os.path.abspath(os.path.normpath(os.path.expanduser(filepath)))  # noqa: PTH100, PTH111
-        if not resolved.startswith(os.path.abspath(str(ws))):  # noqa: PTH100
+        if not resolved.startswith(base):
+            raise HTTPException(403, f"Access denied: {filepath}")
+        if resolved != base and not resolved.startswith(base + os.sep):
             raise HTTPException(403, f"Access denied: {filepath}")
         target = Path(resolved)
+        _check_no_symlinks_in_path(target, Path(base))
         if not target.exists():
             raise HTTPException(404, f"File not found: {target}")
         try:
@@ -94,10 +100,14 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
 
     @router.post("/parse")
     def parse_document(filepath: str, pages: str = ""):
+        base = os.path.abspath(str(ws))  # noqa: PTH100
         resolved = os.path.abspath(os.path.normpath(os.path.expanduser(filepath)))  # noqa: PTH100, PTH111
-        if not resolved.startswith(os.path.abspath(str(ws))):  # noqa: PTH100
+        if not resolved.startswith(base):
+            raise HTTPException(403, f"Access denied: {filepath}")
+        if resolved != base and not resolved.startswith(base + os.sep):
             raise HTTPException(403, f"Access denied: {filepath}")
         target = Path(resolved)
+        _check_no_symlinks_in_path(target, Path(base))
         if not target.exists():
             raise HTTPException(404, f"File not found: {target}")
         ext = target.suffix.lower()

@@ -10,6 +10,8 @@ from typing import Any
 from fastapi import APIRouter, Query
 from loguru import logger
 
+from raven.tools.file import _check_no_symlinks_in_path
+
 _PATTERN_LIST = [
     (
         "print-vs-loguru",
@@ -125,11 +127,15 @@ def create_pattern_checker_router(workspace: str = "") -> APIRouter:
         checks = [p for p in patterns if p["id"] in enabled_ids]
 
         if file:
+            base = os.path.abspath(str(ws_root))  # noqa: PTH100
             combined = str(ws_root / file)
             resolved = os.path.abspath(os.path.normpath(os.path.expanduser(combined)))  # noqa: PTH100, PTH111
-            if not resolved.startswith(str(ws_root)):
+            if not resolved.startswith(base):
+                return {"error": f"Access denied: {file}", "violations": []}
+            if resolved != base and not resolved.startswith(base + os.sep):
                 return {"error": f"Access denied: {file}", "violations": []}
             target = Path(resolved)
+            _check_no_symlinks_in_path(target, Path(base))
             if not target.is_file():
                 return {"error": f"File not found: {file}", "violations": []}
             files_to_check = [target]

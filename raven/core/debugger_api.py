@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from raven.core.security.path_guard import confine_path
+from raven.tools.file import _check_no_symlinks_in_path
 
 _SANITIZE_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"(api[_-]?key|secret|token|password|credential)\s*[=:]\s*\S+", re.IGNORECASE),
@@ -76,10 +77,14 @@ def create_debugger_router() -> APIRouter:
     @router.post("/start")
     async def debug_start(req: DebugStartRequest, _admin: dict[str, Any] = Depends(_require_admin)) -> DebuggerState:
         global _active_debugger
+        base = os.path.abspath(str(_get_workspace()))  # noqa: PTH100
         resolved = os.path.abspath(os.path.normpath(os.path.expanduser(req.file)))  # noqa: PTH100, PTH111
-        if not resolved.startswith(os.path.abspath(str(_get_workspace()))):  # noqa: PTH100
+        if not resolved.startswith(base):
+            raise HTTPException(403, f"Access denied: {req.file}")
+        if resolved != base and not resolved.startswith(base + os.sep):
             raise HTTPException(403, f"Access denied: {req.file}")
         file_path = Path(resolved)
+        _check_no_symlinks_in_path(file_path, Path(base))
         if not file_path.is_file():
             raise HTTPException(404, f"File not found: {req.file}")
         if file_path.suffix.lower() not in _ALLOWED_EXTENSIONS:

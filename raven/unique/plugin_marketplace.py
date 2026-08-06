@@ -219,6 +219,11 @@ class PluginManager:
         )
 
         install_path = self._plugins_dir / plugin_id
+        install_root = self._plugins_dir.resolve()
+        install_path = install_path.resolve()
+        if not (install_path == install_root or install_path.is_relative_to(install_root)):
+            msg = f"Invalid plugin name: {plugin_id}"
+            raise ValueError(msg)
 
         try:
             if source == "remote":
@@ -376,9 +381,13 @@ class PluginManager:
             logger.warning("[plugin] failed to save registry: {}", exc)
 
     def _name_from_url(self, url_or_path: str) -> str:
-        name = url_or_path.rstrip("/").split("/")[-1]
+        raw = url_or_path.rstrip("/\\")
+        name = raw.split("/")[-1].split("\\")[-1]
         name = name.removesuffix(".git").removesuffix(".zip").removesuffix(".tar.gz")
-        return name or f"plugin_{uuid.uuid4().hex[:8]}"
+        name = name.rstrip(". ")
+        if not name:
+            name = f"plugin_{uuid.uuid4().hex[:8]}"
+        return name
 
     async def _fetch_remote_metadata(self, url: str) -> PluginMetadata | None:
         try:
@@ -410,8 +419,11 @@ class PluginManager:
         return None
 
     def _read_local_metadata(self, path: str | Path) -> PluginMetadata | None:
+        base = os.path.abspath(str(self._plugins_dir))  # noqa: PTH100
         resolved = os.path.abspath(os.path.normpath(os.path.expanduser(str(path))))  # noqa: PTH100, PTH111
-        if not resolved.startswith(os.path.abspath(str(self._plugins_dir))):  # noqa: PTH100
+        if not resolved.startswith(base):
+            return None
+        if resolved != base and not resolved.startswith(base + os.sep):
             return None
         path = Path(resolved)
         plugin_json = path / "plugin.json" if path.is_dir() else path.parent / "plugin.json"

@@ -260,9 +260,12 @@ def create_github_router() -> APIRouter:
         repo_url = f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
         base_dir = Path(body.target_dir) if body.target_dir else Path("workspace") / "cloned"
         base = settings.resolved_workspace or Path.cwd()
+        base_str = os.path.abspath(str(base))  # noqa: PTH100
         combined = str(base_dir / owner / repo)
         resolved = os.path.abspath(os.path.normpath(os.path.expanduser(combined)))  # noqa: PTH100, PTH111
-        if not resolved.startswith(os.path.abspath(str(base))):  # noqa: PTH100
+        if not resolved.startswith(base_str):
+            raise HTTPException(403, f"Access denied: {body.target_dir}")
+        if resolved != base_str and not resolved.startswith(base_str + os.sep):
             raise HTTPException(403, f"Access denied: {body.target_dir}")
         target = Path(resolved)
         if target.exists():

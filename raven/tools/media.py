@@ -324,8 +324,11 @@ def _parse_xlsx(path: Path) -> str:
 
 
 async def video_info(filepath: str) -> str:
+    base = os.path.abspath(str(_workspace()))  # noqa: PTH100
     resolved = os.path.abspath(os.path.normpath(os.path.expanduser(filepath)))  # noqa: PTH100, PTH111
-    if not resolved.startswith(os.path.abspath(str(_workspace()))):  # noqa: PTH100
+    if not resolved.startswith(base):
+        return f"[error] Access denied: {filepath}"
+    if resolved != base and not resolved.startswith(base + os.sep):
         return f"[error] Access denied: {filepath}"
     path = Path(resolved)
     _check_no_symlinks_in_path(path, _workspace())
@@ -420,8 +423,11 @@ async def video_thumbnail(filepath: str, time_sec: float = 1.0, size: str = "320
 
 async def video_transcribe(filepath: str, model: str = "whisper-1", language: str = "") -> str:
     """Extract audio from video and transcribe using OpenAI Whisper API."""
+    base = os.path.abspath(str(_workspace()))  # noqa: PTH100
     resolved = os.path.abspath(os.path.normpath(os.path.expanduser(filepath)))  # noqa: PTH100, PTH111
-    if not resolved.startswith(os.path.abspath(str(_workspace()))):  # noqa: PTH100
+    if not resolved.startswith(base):
+        return f"[error] Access denied: {filepath}"
+    if resolved != base and not resolved.startswith(base + os.sep):
         return f"[error] Access denied: {filepath}"
     path = Path(resolved)
     _check_no_symlinks_in_path(path, _workspace())
@@ -498,8 +504,11 @@ async def video_transcribe(filepath: str, model: str = "whisper-1", language: st
 async def video_extract_frames(
     filepath: str, interval_sec: float = 5.0, max_frames: int = 10, size: str = "640x480", output_dir: str = ""
 ) -> str:
+    base = os.path.abspath(str(_workspace()))  # noqa: PTH100
     resolved = os.path.abspath(os.path.normpath(os.path.expanduser(filepath)))  # noqa: PTH100, PTH111
-    if not resolved.startswith(os.path.abspath(str(_workspace()))):  # noqa: PTH100
+    if not resolved.startswith(base):
+        return f"[error] Access denied: {filepath}"
+    if resolved != base and not resolved.startswith(base + os.sep):
         return f"[error] Access denied: {filepath}"
     path = Path(resolved)
     _check_no_symlinks_in_path(path, _workspace())
@@ -513,8 +522,14 @@ async def video_extract_frames(
         return "[error] ffmpeg-python not installed (pip install raven-agent[media])"
 
     if output_dir:
-        out_resolved = os.path.abspath(os.path.normpath(os.path.expanduser(output_dir)))  # noqa: PTH100, PTH111
-        if not out_resolved.startswith(os.path.abspath(str(_workspace()))):  # noqa: PTH100
+        out_candidate = os.path.expanduser(output_dir)  # noqa: PTH111
+        if not os.path.isabs(out_candidate):  # noqa: PTH117
+            out_candidate = str(_workspace() / out_candidate)
+        out_resolved = os.path.abspath(os.path.normpath(out_candidate))  # noqa: PTH100
+        out_base = os.path.abspath(str(_workspace()))  # noqa: PTH100
+        if not out_resolved.startswith(out_base):
+            return f"[error] Access denied: {output_dir}"
+        if out_resolved != out_base and not out_resolved.startswith(out_base + os.sep):
             return f"[error] Access denied: {output_dir}"
         out_dir = Path(out_resolved)
         _check_no_symlinks_in_path(out_dir, _workspace())
