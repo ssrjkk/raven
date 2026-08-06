@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api/client";
+import PageHeader from "../components/PageHeader";
 import { useApiQuery } from "../hooks/useApiQuery";
 
 interface ABVariant {
@@ -109,37 +110,46 @@ export default function ABTesting() {
     }
   };
 
+  const statusBadge = (s: string) => {
+    switch (s) {
+      case "running": return "badge badge-success";
+      case "paused": return "badge badge-warning";
+      case "completed": return "badge badge-accent";
+      default: return "badge badge-info";
+    }
+  };
+
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">A/B Testing</h1>
+      <PageHeader title="A/B Testing" subtitle="Create and run split experiments" />
 
       {error && <div className="p-3 mb-4 rounded-lg text-sm bg-danger-muted text-danger">{error}</div>}
       {msg && <div className="p-3 mb-4 rounded-lg text-sm bg-success-muted text-success">{msg}</div>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-4">
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card">
             <h2 className="text-lg font-semibold mb-3">Create Experiment</h2>
             <div className="space-y-2 mb-3">
               <input placeholder="Experiment name" value={name} onChange={e => setName(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                className="input-base" />
               <input placeholder="Description" value={desc} onChange={e => setDesc(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                className="input-base" />
               <textarea placeholder='[{"name":"A","weight":0.5,"config":{}},...]' value={variantsJson} onChange={e => setVariantsJson(e.target.value)}
-                rows={3} className="w-full px-3 py-2 rounded-lg text-sm font-mono bg-tertiary text-primary border-default" />
+                rows={3} className="input-base font-mono" />
               <input placeholder="Metric name (default: conversion)" value={metricName} onChange={e => setMetricName(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                className="input-base" />
             </div>
             <button onClick={() => createExperiment.mutate()} disabled={createExperiment.isPending || !name || !desc}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white">
+              className="btn-primary">
               Create
             </button>
           </div>
 
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card">
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-lg font-semibold">Experiments ({experiments.length})</h2>
-              <button onClick={() => refetchExperiments()} className="px-3 py-1 rounded-lg text-xs btn-secondary-text">
+              <button onClick={() => refetchExperiments()} className="btn-ghost">
                 Refresh
               </button>
             </div>
@@ -169,13 +179,13 @@ export default function ABTesting() {
         <div className="lg:col-span-2 space-y-4">
           {selected && (
             <>
-              <div className="p-4 rounded-lg bg-secondary">
+              <div className="card">
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <h2 className="text-lg font-semibold">{selected.name}</h2>
                     <p className="text-sm text-secondary">{selected.description}</p>
                   </div>
-                  <span className="px-2 py-1 rounded text-xs font-medium" style={{ backgroundColor: statusColor(selected.status), color: "#fff" }}>
+                  <span className={statusBadge(selected.status)}>
                     {selected.status}
                   </span>
                 </div>
@@ -206,18 +216,18 @@ export default function ABTesting() {
               </div>
 
               {results && (
-                <div className="p-4 rounded-lg bg-secondary">
+                <div className="card">
                   <h2 className="text-lg font-semibold mb-3">Results</h2>
                   <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div className="p-3 rounded-lg text-center bg-tertiary">
-                      <div className="text-2xl font-bold">{results.total_events}</div>
-                      <div className="text-xs text-tertiary">Total Events</div>
+                    <div className="stat-card text-center">
+                      <div className="stat-card-value">{results.total_events}</div>
+                      <div className="stat-card-label">Total Events</div>
                     </div>
-                    <div className="p-3 rounded-lg text-center bg-tertiary">
-                      <div className="text-lg font-bold" style={{ color: results.significant ? "var(--dt-colors-success-default)" : "var(--dt-colors-text-tertiary)" }}>
+                    <div className="stat-card text-center">
+                      <div className="stat-card-value" style={{ color: results.significant ? "var(--dt-colors-success-default)" : "var(--dt-colors-text-tertiary)" }}>
                         {(results.significance * 100).toFixed(1)}%
                       </div>
-                      <div className="text-xs text-tertiary">
+                      <div className="stat-card-label">
                         {results.significant ? "Significant!" : "Confidence"}
                       </div>
                     </div>
@@ -228,7 +238,7 @@ export default function ABTesting() {
                       <div key={v.name} className="p-3 rounded-lg bg-tertiary">
                         <div className="flex justify-between items-center">
                           <span className="font-medium">{v.name}</span>
-                          <span className={`text-sm ${v.lift > 0 ? "text-green-400" : v.lift < 0 ? "text-red-400" : ""}`}>
+                          <span className={`text-sm ${v.lift > 0 ? "text-success" : v.lift < 0 ? "text-danger" : ""}`}>
                             {v.lift > 0 ? "+" : ""}{v.lift}%
                           </span>
                         </div>

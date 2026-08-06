@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api/client";
+import PageHeader from "../components/PageHeader";
 import { useApiQuery } from "../hooks/useApiQuery";
 
 interface RAGResult {
@@ -66,13 +67,12 @@ export default function RAG() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Multi-Modal RAG</h1>
+      <PageHeader title="Multi-Modal RAG" subtitle="Cross-modal search and retrieval over indexed documents" />
 
       <div className="flex gap-1 mb-6 border-b border-default">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className="px-4 py-2 text-sm font-medium rounded-t-lg transition"
-            style={{ color: tab === t.key ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)", borderBottom: tab === t.key ? "2px solid var(--dt-colors-accent-default)" : "2px solid transparent" }}>
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition ${tab === t.key ? "tab-active" : "tab-inactive"}`}>
             {t.label}
           </button>
         ))}
@@ -82,13 +82,13 @@ export default function RAG() {
       {msg && <div className="p-3 mb-4 rounded-lg text-sm bg-success-muted text-success">{msg}</div>}
 
       {tab === "search" && (
-        <div className="p-4 rounded-lg bg-secondary">
+        <div className="card p-4">
           <h2 className="text-lg font-semibold mb-3">Cross-Modal Search</h2>
           <div className="flex gap-3 mb-3">
             <input placeholder="Search query..." value={query} onChange={e => setQuery(e.target.value)}
-              className="flex-1 px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+              className="input-base flex-1" />
             <button onClick={() => search.mutate()} disabled={search.isPending || !query}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white">
+              className="btn-primary">
               {search.isPending ? "..." : "Search"}
             </button>
           </div>
@@ -103,7 +103,7 @@ export default function RAG() {
                     <span className="text-tertiary">{r.document_id}</span>
                   </div>
                   <p className="text-sm">{r.text?.slice(0, 300)}</p>
-                  {r.image_path && <p className="text-xs mt-1 text-tertiary">СЂСџвЂњВ· {r.image_path}</p>}
+                  {r.image_path && <p className="text-xs mt-1 text-tertiary">📷 {r.image_path}</p>}
                 </div>
               ))}
             </div>
@@ -112,25 +112,25 @@ export default function RAG() {
       )}
 
       {tab === "index" && (
-        <div className="p-4 rounded-lg bg-secondary">
+        <div className="card p-4">
           <h2 className="text-lg font-semibold mb-3">Index Document</h2>
           <div className="space-y-3 mb-3">
             <input placeholder="Document ID" value={docId} onChange={e => setDocId(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+              className="input-base" />
             <input placeholder="Source (optional)" value={docSource} onChange={e => setDocSource(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+              className="input-base" />
             <textarea placeholder="Document text content..." value={docText} onChange={e => setDocText(e.target.value)}
-              rows={8} className="w-full px-3 py-2 rounded-lg text-sm font-mono bg-tertiary text-primary border-default" />
+              rows={8} className="input-base font-mono" />
           </div>
           <button onClick={() => indexDoc.mutate()} disabled={indexDoc.isPending || !docId || !docText}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white">
+            className="btn-primary">
             {indexDoc.isPending ? "..." : "Index Document"}
           </button>
         </div>
       )}
 
       {tab === "stats" && (
-        <div className="p-4 rounded-lg bg-secondary">
+        <div className="card p-4">
           <h2 className="text-lg font-semibold mb-3">RAG Statistics</h2>
           {stats === undefined ? (
             <p className="text-sm text-tertiary">Loading...</p>
@@ -142,13 +142,13 @@ export default function RAG() {
                 { label: "Total Chars", value: stats.total_chars },
                 { label: "Total Images", value: stats.total_images },
                 { label: "Dimension", value: stats.dimension },
-                { label: "SentenceTransformer", value: stats.sentence_transformer ? "РІСљвЂњ" : "РІР‚вЂќ" },
-                { label: "CLIP", value: stats.clip_available ? "РІСљвЂњ" : "РІР‚вЂќ" },
-                { label: "ChromaDB", value: stats.chroma_available ? "РІСљвЂњ" : "РІР‚вЂќ" },
+                { label: "SentenceTransformer", value: stats.sentence_transformer ? "✓" : "—" },
+                { label: "CLIP", value: stats.clip_available ? "✓" : "—" },
+                { label: "ChromaDB", value: stats.chroma_available ? "✓" : "—" },
               ].map(s => (
-                <div key={s.label} className="p-3 rounded-lg text-center bg-tertiary">
-                  <div className="text-2xl font-bold">{s.value ?? "РІР‚вЂќ"}</div>
-                  <div className="text-xs mt-1 text-tertiary">{s.label}</div>
+                <div key={s.label} className="stat-card text-center">
+                  <div className="stat-card-value">{s.value ?? "—"}</div>
+                  <div className="stat-card-label">{s.label}</div>
                 </div>
               ))}
             </div>

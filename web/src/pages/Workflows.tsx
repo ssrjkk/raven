@@ -1,6 +1,7 @@
 import { useEffect, useRef,useState } from "react";
 
 import { api } from "../api/client";
+import PageHeader from "../components/PageHeader";
 
 interface TemplateStep {
   description: string;
@@ -79,7 +80,7 @@ export default function Workflows() {
     }
   }
 
-  // РІвЂќР‚РІвЂќР‚ Drag & Drop step reorder РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+  // ── Drag & Drop step reorder ──────────────────────────
   function openBuilder(t: WorkflowTemplate) {
     setShowBuilder(t.id);
     setEditSteps(t.predefined_steps ? t.predefined_steps.map((s) => ({ ...s, params: { ...s.params } })) : []);
@@ -139,7 +140,7 @@ export default function Workflows() {
     }
   }
 
-  // РІвЂќР‚РІвЂќР‚ Generate steps from goal РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+  // ── Generate steps from goal ──────────────────────────
   async function generateSteps(t: WorkflowTemplate) {
     if (!t.steps_goal) return;
     setMsg(`Generating steps for ${t.name}...`);
@@ -152,7 +153,7 @@ export default function Workflows() {
     }
   }
 
-  // РІвЂќР‚РІвЂќР‚ Edit step params as JSON РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚РІвЂќР‚
+  // ── Edit step params as JSON ──────────────────────────
   function updateStepParam(idx: number, key: string, value: string) {
     setEditSteps((prev) => {
       const next = [...prev];
@@ -179,21 +180,21 @@ export default function Workflows() {
     });
   }
 
-  const statusColor: Record<string, string> = {
-    running: "#3b82f6", completed: "#22c55e", failed: "#ef4444", pending: "#a1a1aa",
+  const statusBadge: Record<string, string> = {
+    running: "badge badge-info", completed: "badge badge-success", failed: "badge badge-error", pending: "badge badge-warning",
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Workflows</h1>
-        <button
-          onClick={() => setShowRuns(!showRuns)}
-          className="px-3 py-1.5 rounded-lg text-sm font-medium transition btn-secondary-text"
-        >
-          {showRuns ? "Templates" : `Runs (${runs.length})`}
-        </button>
-      </div>
+      <PageHeader
+        title="Workflows"
+        subtitle="Automate recurring tasks with reusable workflow templates"
+        actions={
+          <button onClick={() => setShowRuns(!showRuns)} className="btn-outline">
+            {showRuns ? "Templates" : `Runs (${runs.length})`}
+          </button>
+        }
+      />
 
       {msg && (
         <div className="px-4 py-2 rounded text-sm flex items-center justify-between btn-tertiary">
@@ -206,12 +207,13 @@ export default function Workflows() {
         <div className="space-y-2">
           {runs.length === 0 && <p className="text-sm text-tertiary">No runs yet</p>}
           {runs.map((run) => (
-            <div key={run.id} className="flex items-center justify-between p-3 rounded-lg border bg-secondary border-default">
+            <div key={run.id} className="card flex items-center justify-between p-3">
               <div>
                 <span className="font-medium text-sm">{run.template_name}</span>
                 <span className="ml-3 text-xs text-tertiary">{run.started_at}</span>
               </div>
-              <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: statusColor[run.status] || "#a1a1aa", color: "#fff" }}>
+              <span className={`${statusBadge[run.status] || "badge badge-accent"}`}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "currentColor" }} />
                 {run.status}
               </span>
             </div>
@@ -238,13 +240,13 @@ export default function Workflows() {
           {/* Template cards */}
           <div className="grid gap-4">
             {filtered.map((t) => (
-              <div key={t.id} className="rounded-lg border bg-secondary border-default">
+              <div key={t.id} className="card">
                 <button
                   onClick={() => setExpanded(expanded === t.id ? null : t.id)}
                   className="w-full flex items-center justify-between p-4 text-left"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-xl">{t.icon || "РІС™в„ў"}</span>
+                    <span className="text-xl">{t.icon || "⚙"}</span>
                     <div>
                       <div className="font-semibold">{t.name}</div>
                       <div className="text-sm text-tertiary">{t.description}</div>
@@ -256,10 +258,10 @@ export default function Workflows() {
                         {t.predefined_steps.length} steps
                       </span>
                     )}
-                    <span className="text-xs px-2 py-0.5 rounded-full btn-secondary-text">
+                    <span className="chip">
                       {t.trigger}
                     </span>
-                    <span className={`text-lg transition text-tertiary ${expanded === t.id ? "rotate-180" : ""}`}>РІвЂ“С</span>
+                    <span className={`text-lg transition text-tertiary ${expanded === t.id ? "rotate-180" : ""}`}>▾</span>
                   </div>
                 </button>
 
@@ -321,8 +323,7 @@ export default function Workflows() {
                             </label>
                             {prop.type === "boolean" ? (
                               <select
-                                className="w-full px-3 py-1.5 rounded border text-sm"
-                                style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+                                className="input-base"
                                 value={configs[t.id]?.[key] ?? prop.default ?? ""}
                                 onChange={(e) => updateConfig(t.id, key, e.target.value)}
                               >
@@ -331,8 +332,7 @@ export default function Workflows() {
                               </select>
                             ) : (
                               <input
-                                className="w-full px-3 py-1.5 rounded border text-sm"
-                                style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+                                className="input-base"
                                 placeholder={prop.default ?? key}
                                 value={configs[t.id]?.[key] ?? prop.default ?? ""}
                                 onChange={(e) => updateConfig(t.id, key, e.target.value)}
@@ -345,27 +345,24 @@ export default function Workflows() {
 
                     {/* Actions */}
                     <div className="flex gap-3 pt-2 flex-wrap">
-                      <button onClick={() => runNow(t)}
-                        className="px-5 py-2 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
-                        РІвЂ“В¶ Run Now
+                      <button onClick={() => runNow(t)} className="btn-primary">
+                        ▶ Run Now
                       </button>
                       {(t.trigger === "scheduled" || t.trigger === "interval") && (
-                        <button onClick={() => schedule(t)}
-                          className="px-5 py-2 rounded-lg text-sm font-medium transition btn-secondary-text">
-                          СЂСџвЂњвЂ¦ Schedule
+                        <button onClick={() => schedule(t)} className="btn-outline">
+                          📅 Schedule
                         </button>
                       )}
-                      <button onClick={() => openBuilder(t)}
-                        className="px-5 py-2 rounded-lg text-sm font-medium transition btn-secondary-text">
-                        СЂСџР‹РЃ Edit Steps
+                      <button onClick={() => openBuilder(t)} className="btn-outline">
+                        🎨 Edit Steps
                       </button>
                     </div>
 
                     {/* Step builder panel */}
                     {showBuilder === t.id && (
-                      <div className="mt-4 p-4 rounded-lg border" style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)" }}>
+                      <div className="card mt-4 p-4">
                         <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-sm font-semibold">Step Builder РІР‚вЂќ {t.name}</h4>
+                          <h4 className="text-sm font-semibold">Step Builder — {t.name}</h4>
                           <div className="flex gap-2">
                             {t.steps_goal && (
                               <button onClick={() => generateSteps(t)}
@@ -374,16 +371,16 @@ export default function Workflows() {
                               </button>
                             )}
                             <button onClick={addStep}
-                              className="px-3 py-1 text-xs rounded transition btn-secondary-text">
+                              className="px-3 py-1 text-xs rounded transition bg-tertiary text-secondary">
                               + Add Step
                             </button>
                             <button onClick={() => saveSteps(t)}
                               className="px-3 py-1 text-xs rounded transition bg-accent-muted text-accent">
-                              СЂСџвЂ™С• Save
+                              💾 Save
                             </button>
                             <button onClick={closeBuilder}
                               className="px-3 py-1 text-xs rounded transition bg-tertiary text-tertiary">
-                              РІСљвЂў
+                              ✕
                             </button>
                           </div>
                         </div>
@@ -409,29 +406,28 @@ export default function Workflows() {
                                 opacity: dragIdx === idx ? 0.5 : 1,
                               }}
                             >
-                              <span className="text-xs font-medium mt-2 w-5 text-center text-tertiary">РІВ С—</span>
+                              <span className="text-xs font-medium mt-2 w-5 text-center text-tertiary">⠿</span>
                               <div className="flex-1 space-y-2">
                                 <div className="flex items-center gap-2">
                                   <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 bg-accent-muted text-accent">
                                     {idx + 1}
                                   </span>
                                   <input
-                                    className="flex-1 px-2 py-1 rounded border text-xs"
-                                    style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+                                    className="input-base flex-1"
                                     placeholder="Step description"
                                     value={step.description}
                                     onChange={(e) => updateStep(idx, "description", e.target.value)}
                                   />
                                   <input
-                                    className="w-28 px-2 py-1 rounded border text-xs"
-                                    style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+                                    className="input-base"
+                                    style={{ width: "7rem" }}
                                     placeholder="Tool (optional)"
                                     value={step.tool ?? ""}
                                     onChange={(e) => updateStep(idx, "tool", e.target.value || null)}
                                   />
                                   <button onClick={() => removeStep(idx)}
                                     className="text-xs px-2 py-1 rounded text-tertiary">
-                                    РІСљвЂў
+                                    ✕
                                   </button>
                                 </div>
 
@@ -461,7 +457,7 @@ export default function Workflows() {
                                       />
                                       <button onClick={() => removeStepParam(idx, k)}
                                         className="text-[10px] text-tertiary">
-                                        РІСљвЂў
+                                        ✕
                                       </button>
                                     </div>
                                   ))}

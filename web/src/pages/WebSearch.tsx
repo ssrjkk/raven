@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api/client";
+import PageHeader from "../components/PageHeader";
 
 const PROVIDERS = [
   { value: "duckduckgo", label: "DuckDuckGo", free: true },
@@ -38,22 +39,22 @@ export default function WebSearch() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Web Search</h1>
+      <PageHeader title="Web Search" subtitle="Search the web across multiple providers" />
 
-      <div className="p-4 rounded-lg mb-4 bg-secondary">
+      <div className="card p-4 mb-4">
         <div className="flex gap-2 mb-3">
           <input value={query} onChange={e => setQuery(e.target.value)}
             placeholder="Search query..." onKeyDown={e => e.key === "Enter" && search.mutate()}
-            className="flex-1 px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+            className="input-base flex-1" />
           <button onClick={() => search.mutate()} disabled={search.isPending || !query.trim()}
-            className="px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 bg-accent text-white">
+            className="btn-primary">
             {search.isPending ? "Searching..." : "Search"}
           </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <select value={provider} onChange={e => setProvider(e.target.value)} disabled={useFailover}
-            className="px-3 py-1.5 rounded-lg text-sm bg-tertiary text-primary border-default">
+            className="input-base">
             {PROVIDERS.map(p => (
               <option key={p.value} value={p.value} disabled={!p.free && useFailover}>{p.label}{!p.free ? " (API key)" : ""}</option>
             ))}
@@ -67,7 +68,7 @@ export default function WebSearch() {
           <div className="flex items-center gap-1 text-sm text-secondary">
             <span>Max:</span>
             <input value={maxResults} onChange={e => setMaxResults(e.target.value)} type="number" min="1" max="50"
-              className="w-16 px-2 py-1 rounded text-sm bg-tertiary text-primary border-default" />
+              className="input-base" style={{ width: "4rem" }} />
           </div>
         </div>
       </div>
@@ -75,7 +76,7 @@ export default function WebSearch() {
       {error && <div className="p-3 mb-4 rounded-lg text-sm bg-danger-muted text-danger">{error}</div>}
 
       {rawOutput && !results.length && (
-        <div className="p-4 rounded-lg mb-4 bg-secondary">
+        <div className="card p-4 mb-4">
           <p className="text-sm text-tertiary">{rawOutput}</p>
         </div>
       )}
@@ -86,7 +87,7 @@ export default function WebSearch() {
             {results.length} result{results.length !== 1 ? "s" : ""}
           </p>
           {results.map((r, i) => (
-            <div key={i} className="p-4 rounded-lg bg-secondary">
+            <div key={i} className="card p-4">
               <a href={r.url} target="_blank" rel="noopener noreferrer"
                 className="text-sm font-semibold hover:underline" style={{ color: "var(--dt-colors-accent-default)" }}>
                 {r.title || r.url}

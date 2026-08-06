@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
 import { api } from "../api/client";
+import PageHeader from "../components/PageHeader";
 
 type Tab = "generate" | "edit" | "analyze" | "documents" | "video" | "upload";
 
@@ -47,13 +48,6 @@ export default function Media() {
   // upload
   const [uploadResult, setUploadResult] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
-
-  const btnStyle = { backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" };
-  const inputStyle: React.CSSProperties = {
-    backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)",
-    color: "var(--dt-colors-text-primary)", width: "100%", padding: "8px 12px", borderRadius: "6px",
-    border: "1px solid", fontSize: "14px", boxSizing: "border-box" as const,
-  };
 
   const generateMutation = useMutation({
     mutationFn: () => api.mediaGenerate(prompt),
@@ -129,7 +123,7 @@ export default function Media() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-primary">Media</h1>
+      <PageHeader title="Media" subtitle="Generate, edit, analyze, and process images, documents, and video" />
 
       {error && (
         <div className="px-4 py-2 rounded text-sm bg-danger-subtle text-danger">
@@ -141,11 +135,7 @@ export default function Media() {
       <div className="flex gap-1 border-b flex-wrap border-default">
         {TABS.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className="px-4 py-2 text-sm font-medium transition rounded-t"
-            style={{
-              color: tab === t.key ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)",
-              borderBottom: tab === t.key ? "2px solid var(--dt-colors-accent-default)" : "2px solid transparent",
-            }}>
+            className={`px-4 py-2 text-sm font-medium transition rounded-t ${tab === t.key ? "tab-active" : "tab-inactive"}`}>
             {t.label}
           </button>
         ))}
@@ -153,10 +143,10 @@ export default function Media() {
 
       {tab === "generate" && (
         <div className="space-y-4 max-w-2xl">
-          <textarea style={inputStyle} rows={3} placeholder="Describe the image to generate..." value={prompt} onChange={(e) => setPrompt(e.target.value)} />
+          <textarea className="input-base" rows={3} placeholder="Describe the image to generate..." value={prompt} onChange={(e) => setPrompt(e.target.value)} />
           <div className="flex gap-2 items-center">
             <button onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending || !prompt}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40" style={btnStyle}>
+              className="btn-primary">
               {generateMutation.isPending ? "Generating..." : "Generate Image"}
             </button>
           </div>
@@ -171,27 +161,27 @@ export default function Media() {
       {tab === "edit" && (
         <div className="space-y-4 max-w-2xl">
           <p className="text-sm text-tertiary">Apply transformations to an image file.</p>
-          <input style={inputStyle} placeholder="File path (e.g. /path/to/image.jpg)" value={editPath} onChange={(e) => setEditPath(e.target.value)} />
+          <input className="input-base" placeholder="File path (e.g. /path/to/image.jpg)" value={editPath} onChange={(e) => setEditPath(e.target.value)} />
           <div className="grid grid-cols-2 gap-3">
-            <input style={inputStyle} placeholder="Resize (e.g. 800x600)" value={editResize} onChange={(e) => setEditResize(e.target.value)} />
-            <input style={inputStyle} placeholder="Crop (left,upper,right,lower)" value={editCrop} onChange={(e) => setEditCrop(e.target.value)} />
-            <input style={inputStyle} placeholder="Rotate (degrees)" type="number" value={editRotate} onChange={(e) => setEditRotate(e.target.value)} />
-            <select style={inputStyle} value={editFlip} onChange={(e) => setEditFlip(e.target.value)}>
+            <input className="input-base" placeholder="Resize (e.g. 800x600)" value={editResize} onChange={(e) => setEditResize(e.target.value)} />
+            <input className="input-base" placeholder="Crop (left,upper,right,lower)" value={editCrop} onChange={(e) => setEditCrop(e.target.value)} />
+            <input className="input-base" placeholder="Rotate (degrees)" type="number" value={editRotate} onChange={(e) => setEditRotate(e.target.value)} />
+            <select className="input-base" value={editFlip} onChange={(e) => setEditFlip(e.target.value)}>
               <option value="">No flip</option>
               <option value="horizontal">Flip horizontal</option>
               <option value="vertical">Flip vertical</option>
             </select>
-            <select style={inputStyle} value={editFormat} onChange={(e) => setEditFormat(e.target.value)}>
+            <select className="input-base" value={editFormat} onChange={(e) => setEditFormat(e.target.value)}>
               <option value="">Keep original</option>
               <option value="png">PNG</option>
               <option value="jpeg">JPEG</option>
               <option value="webp">WebP</option>
               <option value="gif">GIF</option>
             </select>
-            <input style={inputStyle} placeholder="Quality (1-100)" type="number" min="1" max="100" value={editQuality} onChange={(e) => setEditQuality(e.target.value)} />
+            <input className="input-base" placeholder="Quality (1-100)" type="number" min="1" max="100" value={editQuality} onChange={(e) => setEditQuality(e.target.value)} />
           </div>
           <button onClick={() => editMutation.mutate()} disabled={editMutation.isPending || !editPath}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40" style={btnStyle}>
+            className="btn-primary">
             {editMutation.isPending ? "Processing..." : "Apply Edits"}
           </button>
           {editResult && (
@@ -205,10 +195,10 @@ export default function Media() {
       {tab === "analyze" && (
         <div className="space-y-4 max-w-2xl">
           <p className="text-sm text-tertiary">Analyze an image using GPT-4o Vision.</p>
-          <input style={inputStyle} placeholder="File path to image" value={analyzePath} onChange={(e) => setAnalyzePath(e.target.value)} />
-          <textarea style={inputStyle} rows={2} placeholder="Prompt (e.g., Describe this image in detail)" value={analyzePrompt} onChange={(e) => setAnalyzePrompt(e.target.value)} />
+          <input className="input-base" placeholder="File path to image" value={analyzePath} onChange={(e) => setAnalyzePath(e.target.value)} />
+          <textarea className="input-base" rows={2} placeholder="Prompt (e.g., Describe this image in detail)" value={analyzePrompt} onChange={(e) => setAnalyzePrompt(e.target.value)} />
           <button onClick={() => analyzeMutation.mutate()} disabled={analyzeMutation.isPending || !analyzePath}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40" style={btnStyle}>
+            className="btn-primary">
             {analyzeMutation.isPending ? "Analyzing..." : "Analyze Image"}
           </button>
           {analyzeResult && (
@@ -221,10 +211,10 @@ export default function Media() {
 
       {tab === "documents" && (
         <div className="space-y-4 max-w-2xl">
-          <input style={inputStyle} placeholder="File path (e.g. /path/to/document.pdf)" value={docPath} onChange={(e) => setDocPath(e.target.value)} />
-          <input style={inputStyle} placeholder="Pages (PDF only, e.g. 1-3,5 РІР‚вЂќ leave empty for all)" value={docPages} onChange={(e) => setDocPages(e.target.value)} />
+          <input className="input-base" placeholder="File path (e.g. /path/to/document.pdf)" value={docPath} onChange={(e) => setDocPath(e.target.value)} />
+          <input className="input-base" placeholder="Pages (PDF only, e.g. 1-3,5 — leave empty for all)" value={docPages} onChange={(e) => setDocPages(e.target.value)} />
           <button onClick={() => parseMutation.mutate()} disabled={parseMutation.isPending || !docPath}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40" style={btnStyle}>
+            className="btn-primary">
             {parseMutation.isPending ? "Parsing..." : "Parse Document"}
           </button>
           {docMeta && (
@@ -243,32 +233,32 @@ export default function Media() {
       {tab === "video" && (
         <div className="space-y-4 max-w-2xl">
           <div className="flex gap-2 items-center flex-wrap">
-            <select style={{ ...inputStyle, width: "auto" }} value={videoAction} onChange={(e) => setVideoAction(e.target.value)}>
+            <select className="input-base" style={{ width: "auto" }} value={videoAction} onChange={(e) => setVideoAction(e.target.value)}>
               <option value="info">Get Info</option>
               <option value="thumbnail">Thumbnail</option>
               <option value="transcribe">Transcribe</option>
               <option value="frames">Extract Frames</option>
             </select>
           </div>
-          <input style={inputStyle} placeholder="File path to video" value={videoPath} onChange={(e) => setVideoPath(e.target.value)} />
+          <input className="input-base" placeholder="File path to video" value={videoPath} onChange={(e) => setVideoPath(e.target.value)} />
           {videoAction === "thumbnail" && (
             <div className="grid grid-cols-2 gap-3">
-              <input style={inputStyle} placeholder="Timestamp (seconds)" type="number" value={videoTime} onChange={(e) => setVideoTime(e.target.value)} />
-              <input style={inputStyle} placeholder="Size (e.g. 320x240)" value={videoSize} onChange={(e) => setVideoSize(e.target.value)} />
+              <input className="input-base" placeholder="Timestamp (seconds)" type="number" value={videoTime} onChange={(e) => setVideoTime(e.target.value)} />
+              <input className="input-base" placeholder="Size (e.g. 320x240)" value={videoSize} onChange={(e) => setVideoSize(e.target.value)} />
             </div>
           )}
           {videoAction === "transcribe" && (
-            <input style={inputStyle} placeholder="Language code (optional, e.g. en)" value={videoLang} onChange={(e) => setVideoLang(e.target.value)} />
+            <input className="input-base" placeholder="Language code (optional, e.g. en)" value={videoLang} onChange={(e) => setVideoLang(e.target.value)} />
           )}
           {videoAction === "frames" && (
             <div className="grid grid-cols-3 gap-3">
-              <input style={inputStyle} placeholder="Interval (sec)" type="number" value={videoInterval} onChange={(e) => setVideoInterval(e.target.value)} />
-              <input style={inputStyle} placeholder="Max frames" type="number" value={videoMaxFrames} onChange={(e) => setVideoMaxFrames(e.target.value)} />
-              <input style={inputStyle} placeholder="Size (e.g. 640x480)" value={videoSize} onChange={(e) => setVideoSize(e.target.value)} />
+              <input className="input-base" placeholder="Interval (sec)" type="number" value={videoInterval} onChange={(e) => setVideoInterval(e.target.value)} />
+              <input className="input-base" placeholder="Max frames" type="number" value={videoMaxFrames} onChange={(e) => setVideoMaxFrames(e.target.value)} />
+              <input className="input-base" placeholder="Size (e.g. 640x480)" value={videoSize} onChange={(e) => setVideoSize(e.target.value)} />
             </div>
           )}
           <button onClick={() => videoMutation.mutate()} disabled={videoMutation.isPending || !videoPath}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40" style={btnStyle}>
+            className="btn-primary">
             {videoMutation.isPending ? "Processing..." : `Run ${videoAction}`}
           </button>
           {videoResult && (
@@ -281,7 +271,7 @@ export default function Media() {
 
       {tab === "upload" && (
         <div className="space-y-4 max-w-lg">
-          <input ref={fileRef} type="file" style={inputStyle} className="file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm" onChange={handleUpload} />
+          <input ref={fileRef} type="file" className="input-base file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm" onChange={handleUpload} />
           {uploadResult && (
             <pre className="p-3 rounded border text-xs overflow-auto card-bordered text-primary">
               {uploadResult}

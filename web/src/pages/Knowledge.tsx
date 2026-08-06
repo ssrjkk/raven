@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { api, type GraphLink, type GraphNode, type KnowledgeSearchEntry } from "../api/client";
+import PageHeader from "../components/PageHeader";
 import { useApiQuery } from "../hooks/useApiQuery";
 
 type Tab = "graph" | "extract" | "search" | "stats";
@@ -131,16 +132,9 @@ export default function Knowledge() {
     onError: (e: any) => setError(e.message || "Search failed"),
   });
 
-  const inputStyle: React.CSSProperties = {
-    backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)",
-    color: "var(--dt-colors-text-primary)", padding: "8px 12px", borderRadius: "6px",
-    border: "1px solid", fontSize: "14px", width: "100%", boxSizing: "border-box",
-  };
-  const btnStyle = { backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" };
-
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-primary">Knowledge Graph</h1>
+      <PageHeader title="Knowledge Graph" subtitle="Extract entities, explore relationships, and search your knowledge base" />
 
       {error && (
         <div className="px-4 py-2 rounded text-sm bg-danger-subtle text-danger">
@@ -149,7 +143,7 @@ export default function Knowledge() {
       )}
 
       {extractResult && (
-        <div className="px-4 py-2 rounded text-sm" style={{ backgroundColor: "rgba(16,185,129,0.15)", color: "#10b981" }}>
+        <div className="px-4 py-2 rounded text-sm bg-success-muted text-success">
           {extractResult}
         </div>
       )}
@@ -157,11 +151,7 @@ export default function Knowledge() {
       <div className="flex gap-1 border-b border-default">
         {(["graph", "extract", "search", "stats"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium transition rounded-t ${tab === t ? "border-b-2" : ""}`}
-            style={{
-              color: tab === t ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)",
-              borderColor: tab === t ? "var(--dt-colors-accent-default)" : "transparent",
-            }}>
+            className={`px-4 py-2 text-sm font-medium transition rounded-t ${tab === t ? "tab-active" : "tab-inactive"}`}>
             {t === "graph" ? "Graph" : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
@@ -170,8 +160,7 @@ export default function Knowledge() {
       {tab === "graph" && (
         <div>
           <div className="flex gap-2 mb-3">
-            <button onClick={() => graphRefetch()} className="px-3 py-1.5 rounded text-sm font-medium transition disabled:opacity-40"
-              style={btnStyle}>
+            <button onClick={() => graphRefetch()} className="btn-ghost">
               Refresh
             </button>
             <span className="text-xs self-center text-tertiary">
@@ -179,19 +168,18 @@ export default function Knowledge() {
             </span>
           </div>
           <canvas ref={canvasRef} width={W} height={H}
-            className="w-full rounded border"
-            style={{ backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)", maxHeight: `${H}px` }} />
+            className="w-full rounded border border-default bg-secondary"
+            style={{ maxHeight: `${H}px` }} />
         </div>
       )}
 
       {tab === "extract" && (
         <div className="space-y-3 max-w-2xl">
-          <textarea style={inputStyle} rows={6}
+          <textarea className="input-base" rows={6}
             placeholder="Paste text to extract entities and relations..."
             value={extractText} onChange={(e) => setExtractText(e.target.value)} />
           <button onClick={() => extract.mutate()} disabled={extract.isPending || !extractText}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40"
-            style={btnStyle}>
+            className="btn-primary">
             {extract.isPending ? "Extracting..." : "Extract Knowledge"}
           </button>
         </div>
@@ -200,12 +188,11 @@ export default function Knowledge() {
       {tab === "search" && (
         <div className="space-y-3 max-w-2xl">
           <div className="flex gap-2">
-            <input style={inputStyle} placeholder="Search entities..."
+            <input className="input-base" placeholder="Search entities..."
               value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && search.mutate()} />
             <button onClick={() => search.mutate()} disabled={search.isPending || !searchQuery}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40"
-              style={btnStyle}>Search</button>
+              className="btn-primary">Search</button>
           </div>
           {searchResults !== null && (
             <div className="space-y-2">
@@ -213,8 +200,8 @@ export default function Knowledge() {
                 <p className="text-sm text-tertiary">No results</p>
               ) : (
                 searchResults.map((r) => (
-                  <div key={r.id} className="p-3 rounded border text-sm bg-secondary border-default">
-                    <span className="font-semibold" style={{ color: COLORS[r.type] || "#6b7280" }}>[{r.type}]</span>
+                  <div key={r.id} className="card-bordered text-sm p-3">
+                    <span className="font-semibold" style={{ color: COLORS[r.type] || "var(--dt-colors-text-tertiary)" }}>[{r.type}]</span>
                     {" "}{r.name}
                     {r.neighbors && r.neighbors.length > 0 && (
                       <div className="mt-1 text-xs text-tertiary">
@@ -237,7 +224,7 @@ export default function Knowledge() {
             <p className="text-sm text-tertiary">Graph is empty</p>
           ) : (
             Object.entries(stats).map(([key, val]) => (
-              <div key={key} className="p-3 rounded border text-sm bg-secondary border-default">
+              <div key={key} className="card-bordered text-sm p-3">
                 <div className="font-semibold capitalize text-primary">
                   {key.replace(/_/g, " ")}
                 </div>

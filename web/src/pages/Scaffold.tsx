@@ -79,7 +79,7 @@ export default function Scaffold() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold flex items-center gap-2 mb-6">
+      <h1 className="page-title flex items-center gap-2 mb-6">
         <Sparkles className="w-6 h-6" style={{ color: "var(--dt-colors-accent-default)" }} />
         Project Scaffold
       </h1>
@@ -88,7 +88,7 @@ export default function Scaffold() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {plans.map((plan) => (
             <button key={plan.id} onClick={() => startPlan(plan)}
-              className="rounded-xl p-5 text-left transition-all hover:scale-[1.02] card-bordered">
+              className="card card-hover p-5 text-left transition-all hover:scale-[1.02]">
               <div className="flex items-start justify-between mb-2">
                 <FileCode className="w-5 h-5" style={{ color: "var(--dt-colors-accent-default)" }} />
                 <ChevronRight className="w-4 h-4 text-tertiary" />
@@ -96,7 +96,7 @@ export default function Scaffold() {
               <h3 className="font-semibold mb-1">{plan.name}</h3>
               <p className="text-xs text-tertiary">{plan.description}</p>
               <div className="mt-2 flex gap-1">
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-tertiary text-tertiary">
+                <span className="chip">
                   {plan.questions.length} steps
                 </span>
               </div>
@@ -111,7 +111,7 @@ export default function Scaffold() {
       )}
 
       {step === "configure" && selectedPlan && (
-        <div className="rounded-xl p-6 card-bordered">
+        <div className="card p-6">
           <div className="flex items-center gap-2 mb-1">
             <button onClick={() => setStep("select")} className="text-xs text-tertiary">
               <ChevronLeft className="w-4 h-4 inline" /> Back
@@ -126,7 +126,7 @@ export default function Scaffold() {
                 <label className="block text-sm font-medium mb-1.5">{q.label}</label>
                 {q.type === "text" && (
                   <input type="text" value={String(answers[q.key] ?? "")} onChange={e => setAnswers({ ...answers, [q.key]: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                    className="input-base" />
                 )}
                 {q.type === "boolean" && (
                   <div className="flex gap-2">
@@ -162,14 +162,14 @@ export default function Scaffold() {
             <div>
               <label className="block text-sm font-medium mb-1.5">Output directory (optional)</label>
               <input type="text" value={outputDir} onChange={e => setOutputDir(e.target.value)} placeholder="e.g., projects"
-                className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                className="input-base" />
             </div>
           </div>
 
           {error && <div className="p-3 mb-4 rounded-lg text-sm bg-danger-muted text-danger">{error}</div>}
 
           <button onClick={handleGenerate}
-            className="w-full px-4 py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 bg-accent text-white">
+            className="btn-primary w-full">
             <Sparkles className="w-4 h-4" />
             Generate Project
           </button>
@@ -185,7 +185,7 @@ export default function Scaffold() {
 
       {step === "done" && result && (
         <div className="space-y-6">
-          <div className="rounded-xl p-6 card-bordered">
+          <div className="card p-6">
             <div className="flex items-center gap-2 mb-4">
               <Check className="w-5 h-5 text-success" />
               <h2 className="text-lg font-semibold">Project Generated!</h2>
@@ -211,7 +211,7 @@ export default function Scaffold() {
             </div>
           </div>
           <button onClick={reset}
-            className="px-4 py-2 rounded-lg text-sm font-medium btn-tertiary">
+            className="btn-outline">
             Create Another Project
           </button>
         </div>

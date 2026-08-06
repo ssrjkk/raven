@@ -4,6 +4,7 @@ Bar, BarChart, CartesianGrid, Cell,
 Line,   LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, } from "recharts";
 
 import { api } from "../api/client";
+import PageHeader from "../components/PageHeader";
 import { Skeleton } from "../components/Skeleton";
 import { useApiQuery } from "../hooks/useApiQuery";
 
@@ -139,25 +140,27 @@ export default function Analytics() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Advanced Analytics</h1>
-        <div className="flex gap-1 bg-gray-800/60 rounded-lg p-1">
-          {rangeOpts.map((r) => (
-            <button
-              key={r.key}
-              onClick={() => setRange(r.key)}
-              className="px-3 py-1.5 rounded-md text-sm font-medium transition"
-              style={{
-                backgroundColor: range === r.key ? "var(--dt-colors-accent-default)" : "transparent",
-                color: range === r.key ? "#fff" : "var(--dt-colors-text-secondary)",
-              }}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <PageHeader
+        title="Advanced Analytics"
+        subtitle="Usage, performance, and cost insights"
+        actions={
+          <div className="flex gap-1 bg-tertiary rounded-lg p-1">
+            {rangeOpts.map((r) => (
+              <button
+                key={r.key}
+                onClick={() => setRange(r.key)}
+                className="px-3 py-1.5 rounded-md text-sm font-medium transition"
+                style={{
+                  backgroundColor: range === r.key ? "var(--dt-colors-accent-default)" : "transparent",
+                  color: range === r.key ? "#fff" : "var(--dt-colors-text-secondary)",
+                }}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
       {/* Project Metrics */}
       {projectMetrics?.summary && (
@@ -165,10 +168,10 @@ export default function Analytics() {
           <div>
             <h2 className="text-lg font-semibold mb-3">Project Metrics</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <MetricCard label="Total Files" value={projectMetrics.summary.total_files?.toLocaleString() ?? "РІР‚вЂќ"} />
-              <MetricCard label="Total Lines" value={projectMetrics.summary.total_lines?.toLocaleString() ?? "РІР‚вЂќ"} />
-              <MetricCard label="Code Lines" value={projectMetrics.summary.total_code?.toLocaleString() ?? "РІР‚вЂќ"} />
-              <MetricCard label="Languages" value={String(projectMetrics.summary.languages ?? "РІР‚вЂќ")} />
+              <MetricCard label="Total Files" value={projectMetrics.summary.total_files?.toLocaleString() ?? "—"} />
+              <MetricCard label="Total Lines" value={projectMetrics.summary.total_lines?.toLocaleString() ?? "—"} />
+              <MetricCard label="Code Lines" value={projectMetrics.summary.total_code?.toLocaleString() ?? "—"} />
+              <MetricCard label="Languages" value={String(projectMetrics.summary.languages ?? "—")} />
             </div>
           </div>
 
@@ -234,18 +237,18 @@ export default function Analytics() {
 
       {/* Summary Metric Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard label="Messages Received" value={data?.received?.toLocaleString() ?? "РІР‚вЂќ"} />
+        <MetricCard label="Messages Received" value={data?.received?.toLocaleString() ?? "—"} />
         <MetricCard
           label="Errors"
-          value={data?.errors?.toLocaleString() ?? "РІР‚вЂќ"}
+          value={data?.errors?.toLocaleString() ?? "—"}
           danger={errorRate > 5}
         />
         <MetricCard
           label="Error Rate"
-          value={errorRate != null ? `${errorRate.toFixed(1)}%` : "РІР‚вЂќ"}
+          value={errorRate != null ? `${errorRate.toFixed(1)}%` : "—"}
           danger={errorRate > 5}
         />
-        <MetricCard label="Tool Calls" value={toolBd?.total?.toLocaleString() ?? "РІР‚вЂќ"} />
+        <MetricCard label="Tool Calls" value={toolBd?.total?.toLocaleString() ?? "—"} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -424,26 +427,26 @@ export default function Analytics() {
         <div>
           <h2 className="text-lg font-semibold mb-3">Cost Summary (24h)</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <MetricCard label="Total Cost" value={costData.total_cost != null ? `$${costData.total_cost.toFixed(4)}` : "РІР‚вЂќ"} />
-            <MetricCard label="Daily Cost" value={costData.daily_cost != null ? `$${costData.daily_cost.toFixed(4)}` : "РІР‚вЂќ"} />
-            <MetricCard label="Monthly Cost" value={costData.monthly_cost != null ? `$${costData.monthly_cost.toFixed(4)}` : "РІР‚вЂќ"} />
-            <MetricCard label="Budget Exceeded" value={costData.budget_exceeded ? "РІС™В  Yes" : "No"} danger={costData.budget_exceeded} />
+            <MetricCard label="Total Cost" value={costData.total_cost != null ? `$${costData.total_cost.toFixed(4)}` : "—"} />
+            <MetricCard label="Daily Cost" value={costData.daily_cost != null ? `$${costData.daily_cost.toFixed(4)}` : "—"} />
+            <MetricCard label="Monthly Cost" value={costData.monthly_cost != null ? `$${costData.monthly_cost.toFixed(4)}` : "—"} />
+            <MetricCard label="Budget Exceeded" value={costData.budget_exceeded ? "⚠  Yes" : "No"} danger={costData.budget_exceeded} />
           </div>
         </div>
       )}
 
       {/* Detailed Metrics Table */}
       {summaryMetrics.length > 0 && (
-        <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
+        <div className="card">
           <h2 className="text-lg font-semibold mb-3">All Metrics ({summaryMetrics.length})</h2>
           <div className="overflow-x-auto max-h-96 overflow-y-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-tertiary">
-                  <th className="text-left pb-2 font-medium sticky top-0 bg-gray-900">Metric Name</th>
-                  <th className="text-right pb-2 font-medium sticky top-0 bg-gray-900">Avg</th>
-                  <th className="text-right pb-2 font-medium sticky top-0 bg-gray-900">Max</th>
-                  <th className="text-right pb-2 font-medium sticky top-0 bg-gray-900">Samples</th>
+                  <th className="text-left pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))" }}>Metric Name</th>
+                  <th className="text-right pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))" }}>Avg</th>
+                  <th className="text-right pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))" }}>Max</th>
+                  <th className="text-right pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))" }}>Samples</th>
                 </tr>
               </thead>
               <tbody>
@@ -463,7 +466,7 @@ export default function Analytics() {
 
       {/* Latency Series Detail */}
       {data?.latency_series && Object.keys(data.latency_series).length > 0 && (
-        <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
+        <div className="card">
           <h2 className="text-lg font-semibold mb-3">Latency Detail Series</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {Object.entries(data.latency_series).slice(0, 4).map(([name, series]) =>
@@ -494,10 +497,10 @@ export default function Analytics() {
 
 function MetricCard({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
   return (
-    <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-      <div className="text-xs text-gray-500 uppercase tracking-wider">{label}</div>
+    <div className="stat-card">
+      <div className="stat-card-label">{label}</div>
       <div
-        className="text-2xl font-bold mt-1"
+        className="stat-card-value"
         style={{ color: danger ? "var(--dt-colors-danger-default)" : "inherit" }}
       >
         {value}
@@ -508,7 +511,7 @@ function MetricCard({ label, value, danger }: { label: string; value: string; da
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
+    <div className="card">
       <h2 className="text-sm font-semibold mb-3 text-secondary">{title}</h2>
       {children}
     </div>

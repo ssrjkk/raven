@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { api } from "../api/client";
+import PageHeader from "../components/PageHeader";
 
 interface Repo {
   id: number;
@@ -252,23 +253,21 @@ export default function GitHub() {
   if (!tokenStatus?.configured) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">GitHub</h1>
-        <div className="p-6 rounded-lg border bg-secondary border-default">
+        <PageHeader title="GitHub" subtitle="Connect your GitHub account" />
+        <div className="card p-6">
           <h2 className="text-lg font-semibold mb-4">Configure GitHub Token</h2>
           <p className="text-sm mb-4 text-tertiary">
             Enter a GitHub personal access token with <code>repo</code> scope to browse repositories, create PRs, and more.
           </p>
           <div className="flex gap-2">
             <input
-              className="flex-1 px-3 py-1.5 rounded border text-sm font-mono"
-              style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+              className="input-base flex-1 font-mono"
               placeholder="ghp_..."
               value={newToken}
               onChange={(e) => setNewToken(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && setToken()}
             />
-            <button onClick={setToken}
-              className="px-4 py-1.5 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
+            <button onClick={setToken} className="btn-primary shrink-0">
               Save Token
             </button>
           </div>
@@ -280,7 +279,7 @@ export default function GitHub() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">GitHub</h1>
+      <PageHeader title="GitHub" subtitle="Browse repositories, pull requests, and issues" />
 
       {msg && (
         <div className="px-4 py-2 rounded text-sm flex items-center justify-between btn-tertiary">
@@ -299,16 +298,14 @@ export default function GitHub() {
 
       <div className="flex gap-2">
         <input
-          className="flex-1 px-3 py-1.5 rounded border text-sm"
-          style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+          className="input-base flex-1"
           placeholder={user ? "Search your repos..." : "Loading..."}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && searchRepos()}
           disabled={!user}
         />
-        <button onClick={searchRepos}
-          className="px-4 py-1.5 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
+        <button onClick={searchRepos} className="btn-primary shrink-0">
           Search
         </button>
       </div>
@@ -329,7 +326,7 @@ export default function GitHub() {
               <div className="font-medium text-sm truncate">{r.full_name}</div>
               {r.description && <div className="truncate mt-0.5 text-tertiary">{r.description}</div>}
               <div className="flex gap-2 mt-1">
-                {r.language && <span className="text-[10px] px-1 py-0.5 rounded bg-tertiary">{r.language}</span>}
+                {r.language && <span className="chip">{r.language}</span>}
                 <span className="text-[10px] text-tertiary">S {r.stargazers_count}</span>
               </div>
             </button>
@@ -346,13 +343,11 @@ export default function GitHub() {
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-lg font-semibold truncate">{selectedRepo}</h2>
                 <div className="flex items-center gap-2">
-                  <button onClick={cloneRepo} disabled={cloning}
-                    className="text-xs px-3 py-1 rounded-lg transition bg-accent-muted text-accent">
+                  <button onClick={cloneRepo} disabled={cloning} className="btn-primary">
                     {cloning ? "Cloning..." : "Clone"}
                   </button>
                   <select
-                    className="text-xs px-2 py-1 rounded border"
-                    style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+                    className="input-base text-xs! w-auto!"
                     value={currentBranch}
                     onChange={(e) => switchBranch(e.target.value)}
                   >
@@ -380,12 +375,10 @@ export default function GitHub() {
                 <div className="space-y-0.5">
                   {fileViewer ? (
                     <div>
-                      <button onClick={closeFileViewer}
-                        className="text-xs px-2 py-1 rounded mb-2 transition"
-                        style={{ backgroundColor: "var(--dt-colors-bg-secondary)", color: "var(--dt-colors-text-secondary)" }}>
+                      <button onClick={closeFileViewer} className="btn-ghost mb-2 text-xs!">
                         &larr; Back to files
                       </button>
-                      <div className="p-3 rounded-lg border bg-secondary border-default">
+                      <div className="card p-3">
                         <div className="text-xs font-mono mb-2 text-tertiary">{fileViewer.path}</div>
                         <pre className="text-xs font-mono whitespace-pre-wrap overflow-x-auto max-h-[60vh] overflow-y-auto text-primary">{fileViewer.content}</pre>
                       </div>
@@ -424,7 +417,7 @@ export default function GitHub() {
                 <div className="space-y-2">
                   {pulls.length === 0 && <p className="text-xs py-4 text-center text-tertiary">No pull requests</p>}
                   {pulls.map((pr) => (
-                    <div key={pr.number} className="p-3 rounded-lg border bg-secondary border-default">
+                    <div key={pr.number} className="card p-3">
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="font-medium text-sm" style={{ color: "var(--dt-colors-accent-default)" }}>
@@ -435,16 +428,15 @@ export default function GitHub() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs px-2 py-0.5 rounded-full" style={{
-                            backgroundColor: pr.state === "open" ? "rgba(34,197,94,0.15)" : "rgba(161,161,170,0.15)",
-                            color: pr.state === "open" ? "#22c55e" : "#a1a1aa",
-                          }}>
+                          <span className="badge" style={
+                            pr.state === "open"
+                              ? { color: "var(--dt-colors-status-success)", backgroundColor: "var(--dt-colors-status-success-bg)" }
+                              : { color: "var(--dt-colors-text-secondary)", backgroundColor: "var(--dt-colors-bg-tertiary)" }
+                          }>
                             {pr.state}
                           </span>
                           {pr.state === "open" && (
-                            <button onClick={() => mergePR(pr.number)}
-                              className="text-xs px-2 py-0.5 rounded transition"
-                              style={{ backgroundColor: "rgba(99,102,241,0.15)", color: "#818cf8" }}>
+                            <button onClick={() => mergePR(pr.number)} className="btn-primary text-xs! px-3! py-1!">
                               Merge
                             </button>
                           )}
@@ -459,9 +451,9 @@ export default function GitHub() {
                 <div className="space-y-2">
                   {issues.length === 0 && <p className="text-xs py-4 text-center text-tertiary">No issues</p>}
                   {issues.map((iss) => (
-                    <div key={iss.number} className="p-3 rounded-lg border bg-secondary border-default">
+                    <div key={iss.number} className="card p-3">
                       <div className="flex items-center gap-2">
-                        <span>{iss.state === "open" ? "O" : "C"}</span>
+                        <span className={iss.state === "open" ? "badge badge-success" : "badge"}>{iss.state === "open" ? "O" : "C"}</span>
                         <div className="flex-1">
                           <span className="font-medium text-sm">#{iss.number} {iss.title}</span>
                           <div className="text-xs text-tertiary">{iss.user.login}</div>
@@ -480,18 +472,16 @@ export default function GitHub() {
               )}
 
               {tab === "new-pr" && (
-                <div className="space-y-3 p-4 rounded-lg border bg-secondary border-default">
+                <div className="card p-4 space-y-3">
                   <h3 className="text-sm font-semibold">New Pull Request</h3>
                   <input
-                    className="w-full px-3 py-1.5 rounded border text-sm"
-                    style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+                    className="input-base"
                     placeholder="Title"
                     value={prTitle}
                     onChange={(e) => setPrTitle(e.target.value)}
                   />
                   <textarea
-                    className="w-full px-3 py-1.5 rounded border text-sm"
-                    style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+                    className="input-base"
                     placeholder="Description (supports Markdown)"
                     rows={4}
                     value={prBody}
@@ -499,55 +489,48 @@ export default function GitHub() {
                   />
                   <div className="flex gap-2">
                     <input
-                      className="flex-1 px-3 py-1.5 rounded border text-sm"
-                      style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+                      className="input-base flex-1"
                       placeholder={`Head branch (default: ${currentBranch})`}
                       value={prHead}
                       onChange={(e) => setPrHead(e.target.value)}
                     />
                     <span className="self-center text-xs text-tertiary">&rarr;</span>
                     <input
-                      className="flex-1 px-3 py-1.5 rounded border text-sm"
-                      style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+                      className="input-base flex-1"
                       placeholder="Base branch (default: main)"
                       value={prBase}
                       onChange={(e) => setPrBase(e.target.value)}
                     />
                   </div>
-                  <button onClick={createPR}
-                    className="px-5 py-2 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
+                  <button onClick={createPR} className="btn-primary">
                     Create Pull Request
                   </button>
                 </div>
               )}
 
               {tab === "new-issue" && (
-                <div className="space-y-3 p-4 rounded-lg border bg-secondary border-default">
+                <div className="card p-4 space-y-3">
                   <h3 className="text-sm font-semibold">New Issue</h3>
                   <input
-                    className="w-full px-3 py-1.5 rounded border text-sm"
-                    style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+                    className="input-base"
                     placeholder="Title"
                     value={issueTitle}
                     onChange={(e) => setIssueTitle(e.target.value)}
                   />
                   <textarea
-                    className="w-full px-3 py-1.5 rounded border text-sm"
-                    style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+                    className="input-base"
                     placeholder="Description (supports Markdown)"
                     rows={4}
                     value={issueBody}
                     onChange={(e) => setIssueBody(e.target.value)}
                   />
                   <input
-                    className="w-full px-3 py-1.5 rounded border text-sm"
-                    style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+                    className="input-base"
                     placeholder="Labels (comma separated: bug, enhancement, documentation)"
                     value={issueLabels}
                     onChange={(e) => setIssueLabels(e.target.value)}
                   />
-                  <button onClick={createIssue}
-                    className="px-5 py-1.5 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
+                  <button onClick={createIssue} className="btn-primary">
                     Create Issue
                   </button>
                 </div>
@@ -557,15 +540,13 @@ export default function GitHub() {
                 <div className="space-y-3">
                   <div className="flex gap-2">
                     <input
-                      className="flex-1 px-3 py-1.5 rounded border text-sm font-mono"
-                      style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+                      className="input-base flex-1 font-mono"
                       placeholder="Search code in repository..."
                       value={codeQuery}
                       onChange={(e) => setCodeQuery(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && searchCode()}
                     />
-                    <button onClick={searchCode}
-                      className="px-4 py-1.5 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
+                    <button onClick={searchCode} className="btn-primary shrink-0">
                       Search
                     </button>
                   </div>

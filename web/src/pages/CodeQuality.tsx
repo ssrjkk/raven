@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { api, type PatternCheckInfo, type PatternRunResponse,type PatternViolation } from "../api/client";
 import { useApiQuery } from "../hooks/useApiQuery";
+import PageHeader from "../components/PageHeader";
 
 export default function CodeQuality() {
   const [results, setResults] = useState<PatternRunResponse | null>(null);
@@ -34,22 +35,19 @@ export default function CodeQuality() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Bug className="w-6 h-6" style={{ color: "var(--dt-colors-accent-default)" }} />
-            Code Quality
-          </h1>
-          <p className="text-sm mt-1 text-tertiary">
-            Pattern checking and convention enforcement
-          </p>
-        </div>
-        <button onClick={() => runChecks.mutate()} disabled={runChecks.isPending}
-          className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 bg-accent text-white">
-          <RefreshCw className={`w-4 h-4 ${runChecks.isPending ? "animate-spin" : ""}`} />
-          Run Checks
-        </button>
-      </div>
+      <PageHeader
+        title="Code Quality"
+        subtitle="Pattern checking and convention enforcement"
+        actions={
+          <div className="flex items-center gap-2">
+            <Bug className="w-5 h-5" style={{ color: "var(--dt-colors-accent-default)" }} />
+            <button onClick={() => runChecks.mutate()} disabled={runChecks.isPending} className="btn-primary">
+              <RefreshCw className={`w-4 h-4 ${runChecks.isPending ? "animate-spin" : ""}`} />
+              Run Checks
+            </button>
+          </div>
+        }
+      />
 
       <div className="flex gap-2 flex-wrap mb-4">
         <button onClick={() => setActiveCheck("")}
@@ -88,9 +86,9 @@ export default function CodeQuality() {
               { label: "Warnings", value: results.by_severity?.warning || 0, color: "var(--dt-colors-warning-default)" },
               { label: "Info", value: results.by_severity?.info || 0, color: "var(--dt-colors-accent-default)" },
             ].map((s) => (
-              <div key={s.label} className="flex-1 rounded-xl p-3 text-center card-bordered">
-                <div className="text-lg font-bold" style={{ color: s.color }}>{s.value}</div>
-                <div className="text-xs text-tertiary">{s.label}</div>
+              <div key={s.label} className="stat-card flex-1 text-center">
+                <div className="stat-card-value" style={{ color: s.color }}>{s.value}</div>
+                <div className="stat-card-label">{s.label}</div>
               </div>
             ))}
           </div>
@@ -106,21 +104,21 @@ export default function CodeQuality() {
               {Object.entries(grouped).map(([file, violations]) => {
                 const isOpen = expanded[file];
                 return (
-                  <div key={file} className="rounded-xl overflow-hidden card-bordered">
+                  <div key={file} className="card overflow-hidden">
                     <button onClick={() => setExpanded({ ...expanded, [file]: !isOpen })}
                       className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium"
                       style={{ borderBottom: isOpen ? "1px solid var(--dt-colors-border-default)" : "none" }}>
                       {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                       <FileCode className="w-4 h-4" style={{ color: "var(--dt-colors-accent-default)" }} />
                       <span className="flex-1 truncate font-mono text-xs">{file}</span>
-                      <div className="flex gap-2 text-xs">
-                        <span className="text-danger">
+                      <div className="flex gap-1.5 text-xs">
+                        <span className="badge badge-error">
                           {violations.filter((v) => v.severity === "error").length}E
                         </span>
-                        <span style={{ color: "var(--dt-colors-warning-default)" }}>
+                        <span className="badge badge-warning">
                           {violations.filter((v) => v.severity === "warning").length}W
                         </span>
-                        <span style={{ color: "var(--dt-colors-accent-default)" }}>
+                        <span className="badge badge-accent">
                           {violations.filter((v) => v.severity === "info").length}I
                         </span>
                       </div>
@@ -136,10 +134,7 @@ export default function CodeQuality() {
                                   <span className="text-xs font-medium capitalize text-tertiary">
                                     L{v.line}
                                   </span>
-                                  <span className="text-xs px-1.5 py-0.5 rounded" style={{
-                                    backgroundColor: v.severity === "error" ? "rgba(239,68,68,0.15)" : v.severity === "warning" ? "rgba(234,179,8,0.15)" : "rgba(99,102,241,0.15)",
-                                    color: v.severity === "error" ? "var(--dt-colors-danger-default)" : v.severity === "warning" ? "var(--dt-colors-warning-default)" : "var(--dt-colors-accent-default)",
-                                  }}>
+                                  <span className={`badge ${v.severity === "error" ? "badge-error" : v.severity === "warning" ? "badge-warning" : "badge-accent"}`}>
                                     {v.severity}
                                   </span>
                                 </div>
@@ -148,7 +143,7 @@ export default function CodeQuality() {
                                   {v.line_content}
                                 </pre>
                                 <p className="mt-1 text-xs text-tertiary">
-                                  СЂСџвЂ™РЋ {v.fix_hint}
+                                  💡 {v.fix_hint}
                                 </p>
                               </div>
                             </div>

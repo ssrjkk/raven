@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { api } from "../api/client";
+import PageHeader from "../components/PageHeader";
 import { Skeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 import { ACCENT_PRESETS } from "../design/accent";
@@ -62,13 +63,7 @@ export default function Settings() {
     return (
       <div className="space-y-6">
         <Skeleton width={120} height={28} />
-        <div
-          className="rounded-xl p-4 space-y-3"
-          style={{
-            backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))",
-            border: "1px solid var(--dt-colors-border-default)",
-          }}
-        >
+        <div className="card p-4 space-y-3">
           <Skeleton width={96} height={16} />
           {[1, 2, 3].map((i) => <Skeleton key={i} height={32} rounded="md" />)}
         </div>
@@ -78,20 +73,16 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Settings</h1>
+      <PageHeader title="Settings" subtitle="Configure Raven, themes, and server behavior" />
 
       {/* Theme */}
-      <div className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card)", border: "1px solid var(--dt-colors-border-default)" }}>
+      <div className="card p-4">
         <h2 className="text-sm font-semibold mb-3 text-primary">Theme</h2>
         <div className="flex items-center justify-between">
           <span className="text-sm text-secondary">Appearance</span>
           <button
             onClick={toggleTheme}
-            className="px-4 py-1.5 rounded-lg text-sm font-medium transition"
-            style={{
-              backgroundColor: "var(--dt-colors-accent-muted)",
-              color: "var(--dt-colors-accent-default)",
-            }}
+            className="btn-outline"
           >
             {theme === "dark" ? "Switch to Light" : "Switch to Dark"}
           </button>
@@ -99,7 +90,7 @@ export default function Settings() {
       </div>
 
       {/* Accent Color */}
-      <div className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card)", border: "1px solid var(--dt-colors-border-default)" }}>
+      <div className="card p-4">
         <h2 className="text-sm font-semibold mb-3 text-primary">Accent Color</h2>
         <div className="flex flex-wrap gap-3 mb-4">
           {ACCENT_PRESETS.map((p) => (
@@ -137,21 +128,13 @@ export default function Settings() {
               }
             }}
             placeholder="#7c3aed"
-            className="flex-1 bg-transparent border rounded-lg px-3 py-1.5 text-sm font-mono outline-none"
-            style={{
-              color: "var(--dt-colors-text-primary)",
-              borderColor: "var(--dt-colors-border-default)",
-            }}
+            className="input-base flex-1 font-mono"
           />
           <button
             onClick={() => {
               if (/^#[0-9a-f]{6}$/i.test(customHex)) handleAccentChange(customHex);
             }}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-40"
-            style={{
-              backgroundColor: "var(--dt-colors-accent-muted)",
-              color: "var(--dt-colors-accent-default)",
-            }}
+            className="btn-primary"
             disabled={!/^#[0-9a-f]{6}$/i.test(customHex)}
           >
             Apply
@@ -160,7 +143,7 @@ export default function Settings() {
       </div>
 
       {/* AI Color Scheme */}
-      <div className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card)", border: "1px solid var(--dt-colors-border-default)" }}>
+      <div className="card p-4">
         <h2 className="text-sm font-semibold mb-1 text-primary">AI Color Scheme</h2>
         <p className="text-xs text-secondary mb-3">
           Describe a mood or palette — the LLM designs a full dark-mode color scheme and applies it live.
@@ -176,21 +159,13 @@ export default function Settings() {
               }
             }}
             placeholder="e.g. neon cyberpunk with mint accents"
-            className="flex-1 bg-transparent border rounded-lg px-3 py-1.5 text-sm outline-none"
-            style={{
-              color: "var(--dt-colors-text-primary)",
-              borderColor: "var(--dt-colors-border-default)",
-            }}
+            className="input-base flex-1"
           />
           <button
             onClick={() => {
               if (schemePrompt.trim()) generateScheme.mutate(schemePrompt.trim());
             }}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-40"
-            style={{
-              backgroundColor: "var(--dt-colors-accent-muted)",
-              color: "var(--dt-colors-accent-default)",
-            }}
+            className="btn-primary"
             disabled={generateScheme.isPending || !schemePrompt.trim()}
           >
             {generateScheme.isPending ? "Generating..." : "Generate"}
@@ -201,11 +176,7 @@ export default function Settings() {
               setAccentColor("#7c3aed");
               toast("Theme reset to defaults", "info");
             }}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium transition"
-            style={{
-              backgroundColor: "var(--dt-colors-surface-elevated)",
-              color: "var(--dt-colors-text-secondary)",
-            }}
+            className="btn-ghost"
           >
             Reset
           </button>
@@ -213,7 +184,7 @@ export default function Settings() {
       </div>
 
       {/* Config */}
-      <div className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card)", border: "1px solid var(--dt-colors-border-default)" }}>
+      <div className="card p-4">
         <h2 className="text-sm font-semibold mb-3 text-primary">Configuration</h2>
         <div className="space-y-2 text-sm">
           {Object.entries(config).map(([k, v]) => (
@@ -226,7 +197,7 @@ export default function Settings() {
       </div>
 
       <button onClick={() => shutdown.mutate()} disabled={shutdown.isPending}
-        className="bg-red-700 hover:bg-red-600 disabled:bg-red-900/50 text-white px-5 py-2 rounded-xl text-sm font-medium transition">
+        className="px-5 py-2 rounded-xl text-sm font-medium transition bg-danger-subtle text-danger disabled:opacity-50">
         {shutdown.isPending ? "Shutting down..." : "Shutdown Raven"}
       </button>
     </div>

@@ -3,6 +3,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 
 import { api } from "../api/client";
 import type { ProjectInsightsData } from "../api/types";
+import PageHeader from "../components/PageHeader";
 import { Skeleton } from "../components/Skeleton";
 import { useApiQuery } from "../hooks/useApiQuery";
 
@@ -15,9 +16,9 @@ function formatMinutes(total: number): string {
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl p-4 card-bordered">
-      <div className="text-xs uppercase tracking-wider text-tertiary">{label}</div>
-      <div className="text-2xl font-bold mt-1">{value}</div>
+    <div className="stat-card">
+      <div className="stat-card-label">{label}</div>
+      <div className="stat-card-value">{value}</div>
       {sub && <div className="text-xs text-tertiary mt-0.5">{sub}</div>}
     </div>
   );
@@ -47,26 +48,31 @@ export default function ProjectInsights() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <h1 className="text-2xl font-bold">Project Insights</h1>
-        <div className="flex items-center gap-2">
-          <input
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-            placeholder="project id"
-            className="px-3 py-1.5 rounded-lg text-sm bg-secondary text-primary border border-default focus:outline-none focus:border-accent"
-          />
-          <select
-            value={days}
-            onChange={(e) => setDays(Number(e.target.value))}
-            className="px-2 py-1.5 rounded text-sm bg-secondary text-primary border border-default"
-          >
-            {[7, 14, 30, 60, 90].map((d) => (
-              <option key={d} value={d}>{d}д</option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <PageHeader
+        title="Project Insights"
+        subtitle="Метрики работы с кодом"
+        actions={
+          <div className="flex items-center gap-2">
+            <input
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              placeholder="project id"
+              className="input-base"
+              style={{ width: "10rem" }}
+            />
+            <select
+              value={days}
+              onChange={(e) => setDays(Number(e.target.value))}
+              className="input-base"
+              style={{ width: "auto" }}
+            >
+              {[7, 14, 30, 60, 90].map((d) => (
+                <option key={d} value={d}>{d}д</option>
+              ))}
+            </select>
+          </div>
+        }
+      />
 
       {isLoading || !data ? (
         <SkeletonCards />
@@ -86,7 +92,7 @@ export default function ProjectInsights() {
             <StatCard label="Активных дней" value={String(data.active_days)} />
           </div>
 
-          <div className="rounded-xl p-4 card-bordered">
+          <div className="card">
             <h3 className="text-sm font-semibold mb-3">Коммиты по дням</h3>
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">

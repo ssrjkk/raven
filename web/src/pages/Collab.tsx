@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { api } from "../api/client";
 import { useApiQuery } from "../hooks/useApiQuery";
+import PageHeader from "../components/PageHeader";
 
 interface CollabUser {
   id: string;
@@ -78,15 +79,15 @@ export default function Collab() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Collaboration</h1>
+      <PageHeader title="Collaboration" subtitle="Live code sessions and collaborative review" />
 
       <div className="flex gap-1 mb-6 border-b border-default">
-        <button onClick={() => setTab("sessions")} className="px-4 py-2 text-sm font-medium rounded-t-lg transition"
-          style={{ color: tab === "sessions" ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)", borderBottom: tab === "sessions" ? "2px solid var(--dt-colors-accent-default)" : "2px solid transparent" }}>
+        <button onClick={() => setTab("sessions")}
+          className={`px-4 py-2 text-sm font-medium rounded-t-lg transition ${tab === "sessions" ? "tab-active" : "tab-inactive"}`}>
           Sessions
         </button>
-        <button onClick={() => setTab("session")} disabled={!selectedSession} className="px-4 py-2 text-sm font-medium rounded-t-lg transition disabled:opacity-50"
-          style={{ color: tab === "session" ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)", borderBottom: tab === "session" ? "2px solid var(--dt-colors-accent-default)" : "2px solid transparent" }}>
+        <button onClick={() => setTab("session")} disabled={!selectedSession}
+          className={`px-4 py-2 text-sm font-medium rounded-t-lg transition disabled:opacity-50 ${tab === "session" ? "tab-active" : "tab-inactive"}`}>
           Session Details
         </button>
       </div>
@@ -97,38 +98,38 @@ export default function Collab() {
       {tab === "sessions" && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="p-4 rounded-lg bg-secondary">
+            <div className="card p-4">
               <h2 className="text-lg font-semibold mb-3">Create Session</h2>
               <div className="space-y-3 mb-3">
                 <input placeholder="Session ID" value={sessionId} onChange={e => setSessionId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                  className="input-base" />
                 <input placeholder="File path" value={filePath} onChange={e => setFilePath(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                  className="input-base" />
               </div>
               <button onClick={() => createSession.mutate()} disabled={createSession.isPending || !sessionId || !filePath}
-                className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white">
+                className="btn-primary">
                 {createSession.isPending ? "..." : "Create Session"}
               </button>
             </div>
 
-            <div className="p-4 rounded-lg bg-secondary">
+            <div className="card p-4">
               <h2 className="text-lg font-semibold mb-3">Join Session</h2>
               <div className="space-y-3 mb-3">
                 <input placeholder="Session ID" value={joinSid} onChange={e => setJoinSid(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                  className="input-base" />
                 <input placeholder="User ID" value={joinUid} onChange={e => setJoinUid(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                  className="input-base" />
                 <input placeholder="User Name" value={joinName} onChange={e => setJoinName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                  className="input-base" />
               </div>
               <button onClick={() => joinSession.mutate()} disabled={joinSession.isPending || !joinSid || !joinUid}
-                className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white">
+                className="btn-primary">
                 Join Session
               </button>
             </div>
           </div>
 
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card p-4">
             <h2 className="text-lg font-semibold mb-3">Active Sessions ({sessions.length})</h2>
             {sessions.length === 0 ? (
               <p className="text-sm text-tertiary">No active sessions.</p>
@@ -153,14 +154,14 @@ export default function Collab() {
 
       {tab === "session" && selectedSession && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card p-4">
             <h2 className="text-lg font-semibold mb-3">Document Content</h2>
             <pre className="p-3 rounded-lg text-xs overflow-auto max-h-96 bg-tertiary">
               {sessionDetail?.content || "(empty)"}
             </pre>
           </div>
           <div className="space-y-4">
-            <div className="p-4 rounded-lg bg-secondary">
+            <div className="card p-4">
               <h2 className="text-lg font-semibold mb-3">Users</h2>
               {Array.isArray(sessionDetail?.users) && (sessionDetail!.users as CollabUser[]).map((u: CollabUser) => (
                 <div key={u.id} className="p-2 rounded-lg text-sm mb-1 bg-tertiary">
@@ -168,13 +169,13 @@ export default function Collab() {
                 </div>
               ))}
             </div>
-            <div className="p-4 rounded-lg bg-secondary">
+            <div className="card p-4">
               <h2 className="text-lg font-semibold mb-3">Comments</h2>
               {sessionDetail?.comments?.length === 0 && <p className="text-sm text-tertiary">No comments.</p>}
               {sessionDetail?.comments?.map((c) => (
                 <div key={c.id} className="p-2 rounded-lg text-sm mb-1 bg-tertiary">
                   <span className="font-medium">{c.user_id}</span> L{c.line}: {c.text}
-                  <span className="ml-2 text-xs">{c.resolved ? "РІСљвЂњ resolved" : "РІвЂ”вЂ№ open"}</span>
+                  <span className="ml-2 text-xs">{c.resolved ? "✓ resolved" : "✗ open"}</span>
                 </div>
               ))}
             </div>

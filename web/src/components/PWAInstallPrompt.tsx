@@ -44,7 +44,7 @@ export default function PWAInstallPrompt() {
       }}
     >
       <div className="flex items-center gap-3 mb-3">
-        <span className="text-2xl">СЂСџвЂњР†</span>
+        <span className="text-2xl">📲</span>
         <div>
           <div className="font-medium">Install Raven AI</div>
           <div className="text-tertiary">

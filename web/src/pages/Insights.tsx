@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { api } from "../api/client";
+import PageHeader from "../components/PageHeader";
 import { Skeleton } from "../components/Skeleton";
 import { useApiQuery } from "../hooks/useApiQuery";
 
@@ -43,16 +44,19 @@ export default function Insights() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Developer Insights</h1>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-tertiary">Period (days):</label>
-          <select value={days} onChange={e => setDays(Number(e.target.value))}
-            className="px-2 py-1 rounded text-sm bg-tertiary text-primary border-default">
-            {[7, 14, 30, 60, 90, 180, 365].map(d => <option key={d} value={d}>{d}d</option>)}
-          </select>
-        </div>
-      </div>
+      <PageHeader
+        title="Developer Insights"
+        subtitle="Coding, LLM usage, and workspace analytics"
+        actions={
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-tertiary">Period (days):</label>
+            <select value={days} onChange={e => setDays(Number(e.target.value))}
+              className="input-base" style={{ width: "auto" }}>
+              {[7, 14, 30, 60, 90, 180, 365].map(d => <option key={d} value={d}>{d}d</option>)}
+            </select>
+          </div>
+        }
+      />
 
       {error && <div className="p-3 mb-4 rounded-lg text-sm bg-danger-muted text-danger">{error}</div>}
 
@@ -99,7 +103,7 @@ function CodingInsights({ data }: { data: CodingInsights | null }) {
         <StatCard label="Avg / Day" value={data.avg_commits_per_day} />
       </div>
 
-      <div className="p-4 rounded-lg bg-secondary">
+      <div className="card p-4">
         <h3 className="text-sm font-semibold mb-3">Commits per Day</h3>
         <div className="flex items-end gap-1 h-32">
           {(data.commits_per_day || []).slice(-30).map((d) => (
@@ -119,7 +123,7 @@ function CodingInsights({ data }: { data: CodingInsights | null }) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="p-4 rounded-lg bg-secondary">
+        <div className="card p-4">
           <h3 className="text-sm font-semibold mb-3">Peak Coding Hours</h3>
           <div className="flex items-end gap-1 h-24">
             {Array.from({ length: 24 }, (_, i) => {
@@ -132,7 +136,7 @@ function CodingInsights({ data }: { data: CodingInsights | null }) {
                     minHeight: count > 0 ? 2 : 0,
                     backgroundColor: "var(--dt-colors-accent-default)",
                     opacity: 0.4 + (count / maxHour) * 0.6,
-                  }} title={`${i}:00 РІР‚вЂќ ${count} commits`} />
+                  }} title={`${i}:00 — ${count} commits`} />
                   <span className="text-[8px] mt-0.5 text-tertiary">{i}</span>
                 </div>
               );
@@ -140,7 +144,7 @@ function CodingInsights({ data }: { data: CodingInsights | null }) {
           </div>
         </div>
 
-        <div className="p-4 rounded-lg bg-secondary">
+        <div className="card p-4">
           <h3 className="text-sm font-semibold mb-3">Most Changed Files</h3>
           {(!data.top_files || data.top_files.length === 0) ? (
             <p className="text-sm text-tertiary">No data.</p>
@@ -177,7 +181,7 @@ function LLMInsights({ data }: { data: LlmInsights | null }) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="p-4 rounded-lg bg-secondary">
+        <div className="card p-4">
           <h3 className="text-sm font-semibold mb-3">LLM Calls per Day</h3>
           <div className="flex items-end gap-1 h-28">
             {(data.calls_per_day || []).slice(-30).map((d) => (
@@ -194,7 +198,7 @@ function LLMInsights({ data }: { data: LlmInsights | null }) {
           </div>
         </div>
 
-        <div className="p-4 rounded-lg bg-secondary">
+        <div className="card p-4">
           <h3 className="text-sm font-semibold mb-3">Models Used</h3>
           <div className="space-y-2">
             {(data.models || []).map((m) => (
@@ -216,7 +220,7 @@ function LLMInsights({ data }: { data: LlmInsights | null }) {
         </div>
       </div>
 
-      <div className="p-4 rounded-lg bg-secondary">
+      <div className="card p-4">
         <h3 className="text-sm font-semibold mb-3">Peak LLM Usage Hours</h3>
         <div className="flex items-end gap-1 h-24">
           {Array.from({ length: 24 }, (_, i) => {
@@ -256,7 +260,7 @@ function WorkspaceInsights({ data }: { data: { total_files: number; total_dirs: 
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="p-4 rounded-lg bg-secondary">
+        <div className="card p-4">
           <h3 className="text-sm font-semibold mb-3">File Types</h3>
           <div className="space-y-1.5 max-h-72 overflow-y-auto">
             {exts.slice(0, 20).map(([ext, count]) => (
@@ -274,7 +278,7 @@ function WorkspaceInsights({ data }: { data: { total_files: number; total_dirs: 
           </div>
         </div>
 
-        <div className="p-4 rounded-lg bg-secondary">
+        <div className="card p-4">
           <h3 className="text-sm font-semibold mb-3">Recently Modified</h3>
           {(!data.recently_modified || data.recently_modified.length === 0) ? (
             <p className="text-sm text-tertiary">No data.</p>
@@ -294,7 +298,7 @@ function WorkspaceInsights({ data }: { data: { total_files: number; total_dirs: 
       </div>
 
       {exts.length > 0 && (
-        <div className="p-4 rounded-lg bg-secondary">
+        <div className="card p-4">
           <h3 className="text-sm font-semibold mb-3">Largest Files</h3>
           {(!data.largest_files || data.largest_files.length === 0) ? (
             <p className="text-sm text-tertiary">No data.</p>
@@ -316,9 +320,9 @@ function WorkspaceInsights({ data }: { data: { total_files: number; total_dirs: 
 
 function StatCard({ label, value }: { label: string; value: string | number | null | undefined }) {
   return (
-    <div className="rounded-xl p-4 card-bordered">
-      <div className="text-xs uppercase tracking-wider text-tertiary">{label}</div>
-      <div className="text-xl font-bold mt-1">{value ?? "РІР‚вЂќ"}</div>
+    <div className="stat-card">
+      <div className="stat-card-label">{label}</div>
+      <div className="stat-card-value">{value ?? "—"}</div>
     </div>
   );
 }
@@ -335,7 +339,7 @@ function SkeletonCard({ count = 3 }: { count?: number }) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="rounded-xl p-4 bg-secondary">
+        <div key={i} className="card p-4">
           <Skeleton width="40%" height={12} rounded="md" />
           <Skeleton width="60%" height={24} rounded="md" className="mt-2" />
           <Skeleton width="100%" height={80} rounded="md" className="mt-3" />

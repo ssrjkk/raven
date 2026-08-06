@@ -23,7 +23,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!this.state.error) return this.props.children;
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-4">
-        <div className="text-4xl">РІС™В </div>
+        <div className="text-4xl">⚠ </div>
         <h2 className="text-lg font-semibold text-primary">
           Something went wrong
         </h2>

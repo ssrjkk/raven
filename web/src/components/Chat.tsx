@@ -5,6 +5,7 @@ import { useWebSocket } from "../hooks/useWebSocket";
 import { AgentStream } from "./AgentStream";
 import type { AgentEvent } from "./AgentStream";
 import MessageBubble from "./MessageBubble";
+import PageHeader from "./PageHeader";
 import { useToast } from "./Toast";
 
 export default function Chat() {
@@ -108,28 +109,29 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3rem)]">
-      <div className="flex items-center gap-4 mb-4">
-        <h1 className="text-2xl font-bold">Chat</h1>
-        <span className="text-xs text-gray-500">
-          {connected ? "● Connected" : "○ Disconnected"}
-        </span>
-        <div className="flex gap-2 ml-auto">
-          <select
-            value={currentSession || ""}
-            onChange={(e) => setCurrentSession(e.target.value || null)}
-            className="bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-violet-500/50"
-          >
-            {sessions.map((s) => (
-              <option key={s.id} value={s.id}>{s.id.split(":").slice(0, 2).join(":").slice(-20)}</option>
-            ))}
-          </select>
-          <button onClick={newSession}
-            className="bg-violet-600 hover:bg-violet-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition">
-            + New
-          </button>
-        </div>
-      </div>
+    <div className="flex flex-col h-[calc(100vh-6rem)]">
+      <PageHeader
+        title="Chat"
+        actions={
+          <>
+            <span className={connected ? "badge badge-success" : "badge badge-error"}>
+              {connected ? "● Connected" : "○ Disconnected"}
+            </span>
+            <select
+              value={currentSession || ""}
+              onChange={(e) => setCurrentSession(e.target.value || null)}
+              className="input-base px-3 py-1.5 text-xs"
+            >
+              {sessions.map((s) => (
+                <option key={s.id} value={s.id}>{s.id.split(":").slice(0, 2).join(":").slice(-20)}</option>
+              ))}
+            </select>
+            <button onClick={newSession} className="btn-outline px-3 py-1.5 text-xs">
+              + New
+            </button>
+          </>
+        }
+      />
 
       <div className="flex-1 overflow-y-auto space-y-2 mb-4">
         {agentEvents.length > 0 && streamVisible && (
@@ -150,11 +152,17 @@ export default function Chat() {
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-gray-800/50 border border-gray-700/50 rounded-2xl rounded-bl-sm px-4 py-3 max-w-[80%]">
+            <div
+              className="rounded-2xl rounded-bl-sm px-4 py-3 max-w-[80%]"
+              style={{
+                backgroundColor: "var(--dt-colors-bg-tertiary)",
+                border: "1px solid var(--dt-colors-border-default)",
+              }}
+            >
               <span className="inline-flex gap-1">
-                <span className="typing-dot w-2 h-2 bg-gray-400 rounded-full" />
-                <span className="typing-dot w-2 h-2 bg-gray-400 rounded-full" />
-                <span className="typing-dot w-2 h-2 bg-gray-400 rounded-full" />
+                <span className="typing-dot w-2 h-2 rounded-full" style={{ backgroundColor: "var(--dt-colors-text-tertiary)" }} />
+                <span className="typing-dot w-2 h-2 rounded-full" style={{ backgroundColor: "var(--dt-colors-text-tertiary)" }} />
+                <span className="typing-dot w-2 h-2 rounded-full" style={{ backgroundColor: "var(--dt-colors-text-tertiary)" }} />
               </span>
             </div>
           </div>
@@ -167,10 +175,9 @@ export default function Chat() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Type a message..."
-          className="flex-1 bg-gray-800/60 border border-gray-700/50 rounded-xl px-4 py-3 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-violet-500/50 transition"
+          className="input-base flex-1 px-4 py-3"
         />
-        <button type="submit" disabled={loading}
-          className="bg-violet-600 hover:bg-violet-500 disabled:bg-violet-800/50 text-white px-5 py-2 rounded-xl text-sm font-medium transition">
+        <button type="submit" disabled={loading} className="btn-primary px-5">
           Send
         </button>
       </form>

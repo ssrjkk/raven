@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api/client";
+import PageHeader from "../components/PageHeader";
 
 export default function Tests() {
   const [path, setPath] = useState("");
@@ -32,16 +33,12 @@ export default function Tests() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Tests</h1>
+      <PageHeader title="Tests" subtitle="Run pytest suites, measure coverage, and generate tests" />
 
       <div className="flex gap-1 border-b border-default">
         {(["run", "coverage", "generate"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium transition rounded-t ${tab === t ? "border-b-2" : ""}`}
-            style={{
-              color: tab === t ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)",
-              borderColor: tab === t ? "var(--dt-colors-accent-default)" : "transparent",
-            }}>
+            className={`px-4 py-2 text-sm font-medium transition rounded-t ${tab === t ? "tab-active" : "tab-inactive"}`}>
             {t === "run" ? "Run Tests" : t === "coverage" ? "Coverage" : "Generate"}
           </button>
         ))}
@@ -50,27 +47,28 @@ export default function Tests() {
       {tab === "run" && (
         <div className="space-y-3 max-w-lg">
           <input
-            className="w-full px-3 py-2 rounded border text-sm card-bordered text-primary"
+            className="input-base"
             placeholder="Path (optional, defaults to current dir)"
             value={path}
             onChange={(e) => setPath(e.target.value)}
           />
           <input
-            className="w-full px-3 py-2 rounded border text-sm card-bordered text-primary"
+            className="input-base"
             placeholder="Marker filter (e.g. 'not slow')"
             value={marker}
             onChange={(e) => setMarker(e.target.value)}
           />
           <div className="flex items-center gap-2">
             <input
-              className="px-3 py-2 rounded border text-sm w-24 card-bordered text-primary"
+              className="input-base"
+              style={{ width: "6rem" }}
               placeholder="Timeout"
               type="number"
               value={timeout}
               onChange={(e) => setTimeout_(e.target.value)}
             />
             <input
-              className="flex-1 px-3 py-2 rounded border text-sm card-bordered text-primary"
+              className="input-base flex-1"
               placeholder="Extra pytest args"
               value={extraArgs}
               onChange={(e) => setExtraArgs(e.target.value)}
@@ -86,13 +84,14 @@ export default function Tests() {
       {tab === "coverage" && (
         <div className="space-y-3 max-w-lg">
           <input
-            className="w-full px-3 py-2 rounded border text-sm card-bordered text-primary"
+            className="input-base"
             placeholder="Path (optional)"
             value={path}
             onChange={(e) => setPath(e.target.value)}
           />
           <input
-            className="px-3 py-2 rounded border text-sm w-24 card-bordered text-primary"
+            className="input-base"
+            style={{ width: "6rem" }}
             placeholder="Timeout"
             type="number"
             value={timeout}
@@ -108,7 +107,7 @@ export default function Tests() {
       {tab === "generate" && (
         <div className="space-y-3 max-w-lg">
           <input
-            className="w-full px-3 py-2 rounded border text-sm card-bordered text-primary"
+            className="input-base"
             placeholder="Path to Python source file"
             value={filePath}
             onChange={(e) => setFilePath(e.target.value)}

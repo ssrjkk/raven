@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api, type BudgetInfo, type CostSummary, type CostUsageRecord, type PricingInfo } from "../api/client";
+import PageHeader from "../components/PageHeader";
 import { Skeleton } from "../components/Skeleton";
 import TokenUsageBar from "../components/TokenUsageBar";
 import { useApiQuery } from "../hooks/useApiQuery";
@@ -51,7 +52,7 @@ export default function CostManagement() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Cost Management</h1>
+      <PageHeader title="Cost Management" subtitle="Track spend, budgets, and model pricing" />
 
       {error && <div className="p-3 mb-4 rounded-lg text-sm bg-danger-muted text-danger">{error}</div>}
       {msg && <div className="p-3 mb-4 rounded-lg text-sm bg-success-muted text-success">{msg}</div>}
@@ -59,7 +60,7 @@ export default function CostManagement() {
       {isLoading && !summary ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))", border: "1px solid var(--dt-colors-border-default)" }}>
+            <div key={i} className="card">
               <Skeleton width={64} height={12} rounded="md" />
               <Skeleton width={48} height={32} rounded="md" className="mt-2" />
             </div>
@@ -76,9 +77,9 @@ export default function CostManagement() {
                   { label: "Monthly Cost", value: `$${summary.monthly_cost?.toFixed(4)}`, danger: summary.monthly_cost > 10 },
                   { label: "LLM Calls", value: summary.total_calls },
                 ].map((c) => (
-                  <div key={c.label} className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-                    <div className="text-xs text-gray-500 uppercase tracking-wider">{c.label}</div>
-                    <div className="text-2xl font-bold mt-1" style={{ color: c.danger ? "var(--dt-colors-danger-default)" : "inherit" }}>
+                  <div key={c.label} className="stat-card">
+                    <div className="stat-card-label">{c.label}</div>
+                    <div className="stat-card-value" style={{ color: c.danger ? "var(--dt-colors-danger-default)" : "inherit" }}>
                       {String(c.value)}
                     </div>
                   </div>
@@ -86,7 +87,7 @@ export default function CostManagement() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="p-4 rounded-lg bg-secondary">
+                <div className="card">
                   <h2 className="text-lg font-semibold mb-3">Cost by Model ({Object.keys(summary.by_model || {}).length})</h2>
                   {!summary.by_model || Object.keys(summary.by_model).length === 0 ? (
                     <p className="text-sm text-tertiary">No usage recorded yet.</p>
@@ -107,19 +108,19 @@ export default function CostManagement() {
                   )}
                 </div>
 
-                <div className="p-4 rounded-lg bg-secondary">
+                <div className="card">
                   <h2 className="text-lg font-semibold mb-3">Budgets</h2>
                   <div className="space-y-2 mb-3">
                     <input placeholder="Budget name" value={budgetName} onChange={e => setBudgetName(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                      className="input-base" />
                     <div className="grid grid-cols-2 gap-2">
                       <input type="number" placeholder="Daily limit ($)" value={dailyLimit} onChange={e => setDailyLimit(parseFloat(e.target.value) || 0)}
-                        className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                        className="input-base" />
                       <input type="number" placeholder="Monthly limit ($)" value={monthlyLimit} onChange={e => setMonthlyLimit(parseFloat(e.target.value) || 0)}
-                        className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                        className="input-base" />
                     </div>
                     <button onClick={() => createBudget.mutate()} disabled={createBudget.isPending || !budgetName}
-                      className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white">
+                      className="btn-primary">
                       Add Budget
                     </button>
                   </div>
@@ -152,7 +153,7 @@ export default function CostManagement() {
             </>
           )}
 
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card">
             <h2 className="text-lg font-semibold mb-3">Model Pricing</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -176,7 +177,7 @@ export default function CostManagement() {
             </div>
           </div>
 
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card">
             <h2 className="text-lg font-semibold mb-3">
               Recent Usage
               {recentUsage.length > 0 && (
@@ -203,7 +204,7 @@ export default function CostManagement() {
                     {recentUsage.map((r) => (
                       <tr key={r.id} className="border-t border-default">
                         <td className="py-1.5 pr-3">
-                          <span className="text-[11px] px-1.5 py-0.5 rounded btn-secondary-text">
+                          <span className="chip">
                             {r.model}
                           </span>
                         </td>
@@ -214,7 +215,7 @@ export default function CostManagement() {
                           ${r.cost?.toFixed(6)}
                         </td>
                         <td className="py-1.5 text-right font-mono text-xs text-tertiary">
-                          {r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}s` : "РІР‚вЂќ"}
+                          {r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}s` : "—"}
                         </td>
                         <td className="py-1.5 text-right text-xs text-tertiary">
                           {formatTime(r.timestamp)}

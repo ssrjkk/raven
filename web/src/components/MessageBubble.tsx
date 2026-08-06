@@ -17,7 +17,14 @@ const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProp
   if (isSystem) {
     return (
       <div className="flex justify-center">
-        <div className="bg-gray-800/30 border border-gray-700/30 rounded-lg px-3 py-1.5 text-xs text-gray-500 max-w-[80%] text-center">
+        <div
+          className="rounded-full px-3 py-1.5 text-xs max-w-[80%] text-center"
+          style={{
+            backgroundColor: "var(--dt-colors-bg-tertiary)",
+            color: "var(--dt-colors-text-tertiary)",
+            border: "1px solid var(--dt-colors-border-default)",
+          }}
+        >
           {message.content}
         </div>
       </div>
@@ -27,8 +34,20 @@ const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProp
   if (isTool) {
     return (
       <div className="flex justify-start">
-        <div className="bg-gray-900/40 border border-gray-700/20 rounded-lg px-3 py-2 text-xs text-gray-500 max-w-[80%] font-mono">
-          <span className="text-[10px] text-gray-600 uppercase tracking-wider block mb-1">Tool Output</span>
+        <div
+          className="rounded-xl px-3 py-2 text-xs max-w-[80%] font-mono"
+          style={{
+            backgroundColor: "var(--dt-colors-bg-tertiary)",
+            color: "var(--dt-colors-text-secondary)",
+            border: "1px dashed var(--dt-colors-border-default)",
+          }}
+        >
+          <span
+            className="block mb-1 text-[10px] uppercase tracking-wider"
+            style={{ color: "var(--dt-colors-text-tertiary)" }}
+          >
+            Tool Output
+          </span>
           <pre className="whitespace-pre-wrap">{message.content.slice(0, 500)}</pre>
         </div>
       </div>
@@ -38,13 +57,21 @@ const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProp
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`
-          max-w-[80%] rounded-2xl px-4 py-2.5
-          ${isUser
-            ? "bg-violet-600/80 text-white rounded-br-sm"
-            : "bg-gray-800/50 border border-gray-700/50 text-gray-100 rounded-bl-sm"
-          }
-        `}
+        className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+          isUser ? "text-white rounded-br-sm" : "rounded-bl-sm"
+        }`}
+        style={
+          isUser
+            ? {
+                backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-accent-hover, #6d28d9))",
+                boxShadow: "0 4px 16px var(--dt-colors-accent-muted, rgba(124,58,237,0.3))",
+              }
+            : {
+                backgroundColor: "var(--dt-colors-bg-tertiary)",
+                color: "var(--dt-colors-text-primary)",
+                border: "1px solid var(--dt-colors-border-default)",
+              }
+        }
       >
         <div className="text-[11px] font-medium mb-1 opacity-60 flex items-center gap-2">
           <span>{isUser ? "You" : "Raven"}</span>

@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api/client";
+import PageHeader from "../components/PageHeader";
 
 type Tab = "inject" | "experiment" | "history";
 
@@ -106,13 +107,12 @@ export default function Chaos() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Chaos Engineering</h1>
+      <PageHeader title="Chaos Engineering" subtitle="Inject faults, run experiments, and review history" />
 
       <div className="flex gap-1 mb-6 border-b border-default">
         {tabs.map(t => (
           <button key={t.key} onClick={() => { setTab(t.key); if (t.key === "inject") loadActive(); if (t.key === "history") loadHistory(); }}
-            className="px-4 py-2 text-sm font-medium rounded-t-lg transition"
-            style={{ color: tab === t.key ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)", borderBottom: tab === t.key ? "2px solid var(--dt-colors-accent-default)" : "2px solid transparent" }}>
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition ${tab === t.key ? "tab-active" : "tab-inactive"}`}>
             {t.label}
           </button>
         ))}
@@ -123,31 +123,31 @@ export default function Chaos() {
 
       {tab === "inject" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card">
             <h2 className="text-lg font-semibold mb-3">Inject Fault</h2>
             <div className="space-y-3 mb-3">
               <select value={faultType} onChange={e => setFaultType(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default">
+                className="input-base">
                 {FAULT_TYPES.map(ft => <option key={ft} value={ft}>{ft}</option>)}
               </select>
               <input placeholder="Target (service/process name)" value={target} onChange={e => setTarget(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                className="input-base" />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-tertiary">Duration (s)</label>
                   <input type="number" min={1} value={duration} onChange={e => setDuration(parseFloat(e.target.value) || 30)}
-                    className="w-full px-3 py-2 rounded-lg text-sm mt-1 bg-tertiary text-primary border-default" />
+                    className="input-base mt-1" />
                 </div>
                 <div>
                   <label className="text-xs text-tertiary">Intensity (0-1)</label>
                   <input type="number" min={0} max={1} step={0.1} value={intensity} onChange={e => setIntensity(parseFloat(e.target.value) || 0.5)}
-                    className="w-full px-3 py-2 rounded-lg text-sm mt-1 bg-tertiary text-primary border-default" />
+                    className="input-base mt-1" />
                 </div>
               </div>
             </div>
             <div className="flex gap-2">
               <button onClick={() => injectMutation.mutate()} disabled={injectMutation.isPending}
-                className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white">
+                className="btn-primary">
                 {injectMutation.isPending ? "Injecting..." : "Inject"}
               </button>
               <button onClick={() => recoverAllMutation.mutate()} disabled={recoverAllMutation.isPending}
@@ -157,10 +157,10 @@ export default function Chaos() {
             </div>
           </div>
 
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card">
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-lg font-semibold">Active Faults ({activeFaults.length})</h2>
-              <button onClick={loadActive} className="px-3 py-1 rounded-lg text-xs btn-secondary-text">
+              <button onClick={loadActive} className="btn-ghost">
                 Refresh
               </button>
             </div>
@@ -174,7 +174,7 @@ export default function Chaos() {
                       <span className="font-medium">{f.config?.fault_type}</span>
                       <span className="ml-2 text-xs text-tertiary">{f.config?.target || "system"}</span>
                     </div>
-                    <button onClick={() => recoverMutation.mutate(f.id)} className="px-2 py-1 rounded text-xs" style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "var(--dt-colors-success-default)" }}>
+                    <button onClick={() => recoverMutation.mutate(f.id)} className="px-2 py-1 rounded text-xs" style={{ backgroundColor: "var(--dt-colors-status-success-bg)", color: "var(--dt-colors-status-success)" }}>
                       Recover
                     </button>
                   </div>
@@ -187,29 +187,29 @@ export default function Chaos() {
 
       {tab === "experiment" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card">
             <h2 className="text-lg font-semibold mb-3">Run Experiment</h2>
             <div className="space-y-3 mb-3">
               <input placeholder="Experiment name" value={expName} onChange={e => setExpName(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                className="input-base" />
               <textarea placeholder='[{"fault_type":"cpu_storm","duration_sec":10}]' value={faultsJson} onChange={e => setFaultsJson(e.target.value)}
-                rows={4} className="w-full px-3 py-2 rounded-lg text-sm font-mono bg-tertiary text-primary border-default" />
+                rows={4} className="input-base font-mono" />
               <input placeholder="Hypothesis (optional)" value={hypothesis} onChange={e => setHypothesis(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                className="input-base" />
             </div>
             <button onClick={() => runExperimentMutation.mutate()} disabled={runExperimentMutation.isPending || !expName || !faultsJson}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white">
+              className="btn-primary">
               {runExperimentMutation.isPending ? "Running..." : "Run Experiment"}
             </button>
           </div>
 
           {expResult && (
-            <div className="p-4 rounded-lg bg-secondary">
+            <div className="card">
               <h2 className="text-lg font-semibold mb-3">Experiment Result</h2>
               <div className="space-y-2 text-sm">
                 <p>Status: <span className="font-medium">{expResult.status}</span></p>
                 <p>Resilience: <span className="font-medium">{expResult.resilience_score?.toFixed(4)}</span></p>
-                <p>Hypothesis validated: <span className="font-medium">{expResult.hypothesis_validated ? "РІСљвЂњ" : "РІСљвЂ”"}</span></p>
+                <p>Hypothesis validated: <span className="font-medium">{expResult.hypothesis_validated ? "✓" : "✗"}</span></p>
                 <p>Faults injected: {expResult.faults_injected}</p>
                 <p>Faults recovered: {expResult.faults_recovered}</p>
                 <p>Experiment ID: <code className="text-xs">{expResult.experiment_id}</code></p>
@@ -229,15 +229,15 @@ export default function Chaos() {
                 { label: "Avg Steadiness", value: summary.avg_steadiness?.toFixed(4) },
                 { label: "Hypotheses Validated", value: summary.hypotheses_validated },
               ].map(s => (
-                <div key={s.label} className="p-3 rounded-lg text-center bg-tertiary">
-                  <div className="text-xl font-bold">{s.value ?? "РІР‚вЂќ"}</div>
-                  <div className="text-xs text-tertiary">{s.label}</div>
+                <div key={s.label} className="stat-card text-center">
+                  <div className="stat-card-label">{s.label}</div>
+                  <div className="stat-card-value">{s.value ?? "—"}</div>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card">
             <h2 className="text-lg font-semibold mb-3">Fault History ({history.length})</h2>
             {history.length === 0 ? (
               <p className="text-sm text-tertiary">No faults injected yet.</p>
@@ -247,7 +247,7 @@ export default function Chaos() {
                   <div key={h.id} className="p-2 rounded-lg text-sm bg-tertiary">
                     <span className="font-medium">{h.config?.fault_type}</span>
                     <span className="ml-2">{h.config?.target || "system"}</span>
-                    <span className="ml-2 text-xs">{h.recovered ? "РІСљвЂњ recovered" : "РІС™В  active"}</span>
+                    <span className="ml-2 text-xs">{h.recovered ? "✓ recovered" : "⚠  active"}</span>
                   </div>
                 ))}
               </div>

@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api/client";
+import PageHeader from "../components/PageHeader";
 
 interface DatasetStats {
   conversations?: number;
@@ -111,12 +112,11 @@ export default function FineTune() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Fine-Tuning</h1>
+      <PageHeader title="Fine-Tuning" subtitle="Prepare datasets, load models, and run training" />
       <div className="flex gap-1 mb-6 border-b border-default">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className="px-4 py-2 text-sm font-medium rounded-t-lg transition"
-            style={{ color: tab === t.key ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)", borderBottom: tab === t.key ? "2px solid var(--dt-colors-accent-default)" : "2px solid transparent" }}>
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition ${tab === t.key ? "tab-active" : "tab-inactive"}`}>
             {t.label}
           </button>
         ))}
@@ -127,35 +127,35 @@ export default function FineTune() {
 
       {tab === "dataset" && (
         <div className="space-y-6">
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card p-4">
             <h2 className="text-lg font-semibold mb-3">Add Conversation</h2>
             <div className="space-y-3 mb-3">
               <input placeholder="System prompt" value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                className="input-base" />
               <textarea placeholder='[{"role":"user","content":"..."},{"role":"assistant","content":"..."}]' value={messagesJson} onChange={e => setMessagesJson(e.target.value)}
-                rows={4} className="w-full px-3 py-2 rounded-lg text-sm font-mono bg-tertiary text-primary border-default" />
+                rows={4} className="input-base font-mono" />
             </div>
             <button onClick={() => addConversationMutation.mutate()} disabled={addConversationMutation.isPending}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white">
+              className="btn-primary">
               {addConversationMutation.isPending ? "Adding..." : "Add Conversation"}
             </button>
           </div>
 
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card p-4">
             <h2 className="text-lg font-semibold mb-3">Add Code Sample</h2>
             <div className="space-y-3 mb-3">
               <input placeholder="Language (python, javascript, ...)" value={codeLang} onChange={e => setCodeLang(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+                className="input-base" />
               <textarea placeholder="Source code..." value={code} onChange={e => setCode(e.target.value)}
-                rows={6} className="w-full px-3 py-2 rounded-lg text-sm font-mono bg-tertiary text-primary border-default" />
+                rows={6} className="input-base font-mono" />
             </div>
             <button onClick={() => addCodeMutation.mutate()} disabled={addCodeMutation.isPending || !code}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white">
+              className="btn-primary">
               {addCodeMutation.isPending ? "Adding..." : "Add Code"}
             </button>
           </div>
 
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card p-4">
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-lg font-semibold">Dataset Statistics</h2>
               <button onClick={() => loadDatasetStatsMutation.mutate()} className="px-3 py-1 rounded-lg text-xs btn-secondary-text">
@@ -164,17 +164,17 @@ export default function FineTune() {
             </div>
             {datasetStats ? (
               <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 rounded-lg text-center bg-tertiary">
-                  <div className="text-2xl font-bold">{datasetStats.conversations}</div>
-                  <div className="text-xs text-tertiary">Conversations</div>
+                <div className="stat-card text-center">
+                  <div className="stat-card-label">Conversations</div>
+                  <div className="stat-card-value">{datasetStats.conversations}</div>
                 </div>
-                <div className="p-3 rounded-lg text-center bg-tertiary">
-                  <div className="text-2xl font-bold">{datasetStats.code_samples}</div>
-                  <div className="text-xs text-tertiary">Code Samples</div>
+                <div className="stat-card text-center">
+                  <div className="stat-card-label">Code Samples</div>
+                  <div className="stat-card-value">{datasetStats.code_samples}</div>
                 </div>
-                <div className="p-3 rounded-lg text-center bg-tertiary">
-                  <div className="text-2xl font-bold">{datasetStats.config?.max_length}</div>
-                  <div className="text-xs text-tertiary">Max Length</div>
+                <div className="stat-card text-center">
+                  <div className="stat-card-label">Max Length</div>
+                  <div className="stat-card-value">{datasetStats.config?.max_length}</div>
                 </div>
               </div>
             ) : (
@@ -186,11 +186,11 @@ export default function FineTune() {
 
       {tab === "model" && (
         <div className="space-y-6">
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card p-4">
             <h2 className="text-lg font-semibold mb-3">Load Model</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
               <select value={modelType} onChange={e => setModelType(e.target.value)}
-                className="px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default">
+                className="input-base">
                 <option value="llama">Llama</option>
                 <option value="mistral">Mistral</option>
                 <option value="falcon">Falcon</option>
@@ -207,7 +207,7 @@ export default function FineTune() {
               </label>
             </div>
             <button onClick={() => loadModelMutation.mutate()} disabled={loadModelMutation.isPending}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white">
+              className="btn-primary">
               {loadModelMutation.isPending ? "Loading..." : "Load Model"}
             </button>
             {modelInfo && (
@@ -220,7 +220,7 @@ export default function FineTune() {
             )}
           </div>
 
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card p-4">
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-lg font-semibold">Checkpoints</h2>
               <button onClick={() => loadCheckpointsMutation.mutate()} className="px-3 py-1 rounded-lg text-xs btn-secondary-text">
@@ -243,27 +243,27 @@ export default function FineTune() {
       )}
 
       {tab === "training" && (
-        <div className="p-4 rounded-lg bg-secondary">
+        <div className="card p-4">
           <h2 className="text-lg font-semibold mb-3">Start Training</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
             <div>
               <label className="text-xs text-tertiary">Epochs</label>
               <input type="number" min={1} max={100} value={epochs} onChange={e => setEpochs(parseInt(e.target.value) || 3)}
-                className="w-full px-3 py-2 rounded-lg text-sm mt-1 bg-tertiary text-primary border-default" />
+                className="input-base mt-1" />
             </div>
             <div>
               <label className="text-xs text-tertiary">Learning Rate</label>
               <input value={lr} onChange={e => setLr(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg text-sm mt-1 bg-tertiary text-primary border-default" />
+                className="input-base mt-1" />
             </div>
             <div>
               <label className="text-xs text-tertiary">Batch Size</label>
               <input type="number" min={1} max={128} value={batchSize} onChange={e => setBatchSize(parseInt(e.target.value) || 4)}
-                className="w-full px-3 py-2 rounded-lg text-sm mt-1 bg-tertiary text-primary border-default" />
+                className="input-base mt-1" />
             </div>
           </div>
           <button onClick={() => startTrainingMutation.mutate()} disabled={startTrainingMutation.isPending}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white">
+            className="btn-primary">
             {startTrainingMutation.isPending ? "Training..." : "Start Training"}
           </button>
           {trainingResult && (

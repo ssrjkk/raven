@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api/client";
+import PageHeader from "../components/PageHeader";
 
 export default function CICD() {
   const [owner, setOwner] = useState("");
@@ -47,26 +48,22 @@ export default function CICD() {
     onError: (e: any) => setError(e.message || "Failed to trigger run"),
   });
 
-  const btn = { backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" };
-  const inp: React.CSSProperties = {
-    backgroundColor: "var(--dt-colors-bg-secondary)", borderColor: "var(--dt-colors-border-default)",
-    color: "var(--dt-colors-text-primary)", padding: "8px 12px", borderRadius: "6px",
-    border: "1px solid", fontSize: "14px", boxSizing: "border-box",
-  };
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-primary">CI/CD</h1>
-        <div className="flex items-center gap-2">
-          <select style={inp} value={provider} onChange={(e) => setProvider(e.target.value)}>
-            <option value="github">GitHub Actions</option>
-            <option value="gitlab">GitLab CI</option>
-          </select>
-          <input style={inp} placeholder="Owner" value={owner} onChange={(e) => setOwner(e.target.value)} />
-          <input style={inp} placeholder="Repo / Project ID" value={repo} onChange={(e) => setRepo(e.target.value)} />
-        </div>
-      </div>
+      <PageHeader
+        title="CI/CD"
+        subtitle="Inspect and trigger pipelines across providers"
+        actions={
+          <>
+            <select className="input-base px-3 py-2 text-sm" value={provider} onChange={(e) => setProvider(e.target.value)}>
+              <option value="github">GitHub Actions</option>
+              <option value="gitlab">GitLab CI</option>
+            </select>
+            <input className="input-base px-3 py-2 text-sm" placeholder="Owner" value={owner} onChange={(e) => setOwner(e.target.value)} />
+            <input className="input-base px-3 py-2 text-sm" placeholder="Repo / Project ID" value={repo} onChange={(e) => setRepo(e.target.value)} />
+          </>
+        }
+      />
 
       {error && (
         <div className="px-4 py-2 rounded text-sm bg-danger-subtle text-danger">
@@ -77,12 +74,11 @@ export default function CICD() {
 
       <div className="flex gap-1 border-b border-default">
         {(["workflows", "runs", "status", "trigger"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            className="px-4 py-2 text-sm font-medium transition rounded-t"
-            style={{
-              color: tab === t ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)",
-              borderBottom: tab === t ? "2px solid var(--dt-colors-accent-default)" : "2px solid transparent",
-            }}>
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-4 py-2 text-sm font-medium transition rounded-t ${tab === t ? "tab-active" : "tab-inactive"}`}
+          >
             {t === "trigger" ? "Trigger Run" : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
@@ -90,8 +86,7 @@ export default function CICD() {
 
       {tab === "workflows" && (
         <div className="space-y-3">
-          <button onClick={() => loadWorkflows.mutate()} disabled={loadWorkflows.isPending}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40" style={btn}>
+          <button onClick={() => loadWorkflows.mutate()} disabled={loadWorkflows.isPending} className="btn-primary">
             {loadWorkflows.isPending ? "Loading..." : "List Workflows"}
           </button>
         </div>
@@ -99,16 +94,15 @@ export default function CICD() {
 
       {tab === "runs" && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <input style={inp} placeholder="Branch filter" value={branch} onChange={(e) => setBranch(e.target.value)} />
-            <select style={inp} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <div className="flex flex-wrap items-center gap-2">
+            <input className="input-base px-3 py-2 text-sm" placeholder="Branch filter" value={branch} onChange={(e) => setBranch(e.target.value)} />
+            <select className="input-base px-3 py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               <option value="">All statuses</option>
               <option value="completed">Completed</option>
               <option value="in_progress">In Progress</option>
               <option value="queued">Queued</option>
             </select>
-            <button onClick={() => loadRuns.mutate()} disabled={loadRuns.isPending}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40" style={btn}>
+            <button onClick={() => loadRuns.mutate()} disabled={loadRuns.isPending} className="btn-primary">
               {loadRuns.isPending ? "Loading..." : "List Runs"}
             </button>
           </div>
@@ -118,12 +112,14 @@ export default function CICD() {
       {tab === "status" && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <input style={{ ...inp, flex: 1 }}
-              placeholder="Pipeline / Run ID" value={pipelineId}
+            <input
+              className="input-base flex-1 px-3 py-2 text-sm"
+              placeholder="Pipeline / Run ID"
+              value={pipelineId}
               onChange={(e) => setPipelineId(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && loadStatus.mutate()} />
-            <button onClick={() => loadStatus.mutate()} disabled={loadStatus.isPending || !pipelineId}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40" style={btn}>
+              onKeyDown={(e) => e.key === "Enter" && loadStatus.mutate()}
+            />
+            <button onClick={() => loadStatus.mutate()} disabled={loadStatus.isPending || !pipelineId} className="btn-primary">
               {loadStatus.isPending ? "Loading..." : "Check Status"}
             </button>
           </div>
@@ -131,31 +127,37 @@ export default function CICD() {
       )}
 
       {tab === "trigger" && (
-        <div className="space-y-3 max-w-lg">
+        <div className="card space-y-3 max-w-lg">
           <p className="text-sm text-tertiary">
             Owner: <strong>{owner || "(not set)"}</strong> &middot; Repo: <strong>{repo || "(not set)"}</strong>
           </p>
-          <input style={{ ...inp, width: "100%" }}
-            placeholder="Workflow ID or filename" value={workflowId}
+          <input
+            className="input-base w-full"
+            placeholder="Workflow ID or filename"
+            value={workflowId}
             onChange={(e) => setWorkflowId(e.target.value)}
           />
-          <input style={{ ...inp, width: "100%" }}
-            placeholder="Ref (branch/tag, default: main)" value={ref}
+          <input
+            className="input-base w-full"
+            placeholder="Ref (branch/tag, default: main)"
+            value={ref}
             onChange={(e) => setRef(e.target.value)}
           />
-          <textarea style={{ ...inp, width: "100%" }}
-            placeholder="Workflow inputs (JSON, optional)" rows={4}
-            value={inputs} onChange={(e) => setInputs(e.target.value)}
+          <textarea
+            className="input-base w-full"
+            placeholder="Workflow inputs (JSON, optional)"
+            rows={4}
+            value={inputs}
+            onChange={(e) => setInputs(e.target.value)}
           />
-          <button onClick={() => triggerRun.mutate()} disabled={triggerRun.isPending || !workflowId}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40" style={btn}>
+          <button onClick={() => triggerRun.mutate()} disabled={triggerRun.isPending || !workflowId} className="btn-primary">
             {triggerRun.isPending ? "Triggering..." : "Trigger Workflow"}
           </button>
         </div>
       )}
 
       {result && (
-        <pre className="p-4 rounded text-sm whitespace-pre-wrap bg-secondary text-primary">
+        <pre className="p-4 rounded text-sm whitespace-pre-wrap bg-secondary text-primary border border-default">
           {result}
         </pre>
       )}

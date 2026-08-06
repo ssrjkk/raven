@@ -2,6 +2,7 @@ import { useCallback,useEffect, useState } from "react";
 
 import { api } from "../api/client";
 import DiffViewer from "../components/DiffViewer";
+import PageHeader from "../components/PageHeader";
 
 interface CommitEntry {
   hash: string;
@@ -159,24 +160,32 @@ export default function Git() {
     }
   }
 
-  const sevColor = (s: string) => s === "error" ? "text-red-400" : s === "warning" ? "text-yellow-400" : "text-blue-400";
+  const sevColor = (s: string) =>
+    s === "error"
+      ? "var(--dt-colors-status-error)"
+      : s === "warning"
+        ? "var(--dt-colors-status-warning)"
+        : "var(--dt-colors-status-info)";
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Git</h1>
-        <div className="flex items-center gap-2">
-          <input
-            className="px-3 py-1.5 rounded border text-sm card-bordered text-primary"
-            placeholder="Workspace path (optional)"
-            value={repo}
-            onChange={(e) => setRepo(e.target.value)}
-          />
-          <button onClick={refresh} className="px-3 py-1.5 rounded text-sm font-medium transition bg-accent-muted text-accent">
-            Refresh
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Git"
+        subtitle="Repository status, history and review tools"
+        actions={
+          <div className="flex items-center gap-2">
+            <input
+              className="input-base"
+              placeholder="Workspace path (optional)"
+              value={repo}
+              onChange={(e) => setRepo(e.target.value)}
+            />
+            <button onClick={refresh} className="btn-outline px-3 py-1.5">
+              Refresh
+            </button>
+          </div>
+        }
+      />
 
       {msg && (
         <div className="px-4 py-2 rounded text-sm flex items-center gap-2 btn-tertiary">
@@ -203,7 +212,7 @@ export default function Git() {
         </button>
         <div className="flex items-center gap-2">
           <input
-            className="px-3 py-1.5 rounded border text-sm card-bordered text-primary"
+            className="input-base"
             placeholder="Commit message"
             value={commitMsg}
             onChange={(e) => setCommitMsg(e.target.value)}
@@ -228,7 +237,7 @@ export default function Git() {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm text-secondary">Branch:</span>
           <select
-            className="px-3 py-1.5 rounded border text-sm card-bordered text-primary"
+            className="input-base"
             value={branches.current}
             onChange={async (e) => {
               await api.gitCheckout(e.target.value, false, repo);
@@ -240,7 +249,7 @@ export default function Git() {
             ))}
           </select>
           <input
-            className="px-3 py-1.5 rounded border text-sm card-bordered text-primary"
+            className="input-base"
             placeholder="New branch name"
             value={newBranch}
             onChange={(e) => setNewBranch(e.target.value)}
@@ -255,11 +264,7 @@ export default function Git() {
       <div className="flex gap-1 border-b border-default">
         {(["status", "log", "diff", "blame", "review", "pr"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium transition rounded-t ${tab === t ? "border-b-2" : ""}`}
-            style={{
-              color: tab === t ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)",
-              borderColor: tab === t ? "var(--dt-colors-accent-default)" : "transparent",
-            }}>
+            className={`px-4 py-2 text-sm font-medium transition rounded-t ${tab === t ? "tab-active" : "tab-inactive"}`}>
             {t === "pr" ? "Pull Request" : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
@@ -330,8 +335,8 @@ export default function Git() {
                 <span>{selectedCommit.author} &lt;{selectedCommit.author_email}&gt;</span>
                 <span>{selectedCommit.date}</span>
                 <span>{selectedCommit.total_files} files</span>
-                {selectedCommit.total_added > 0 && <span className="text-green-500">+{selectedCommit.total_added}</span>}
-                {selectedCommit.total_deleted > 0 && <span className="text-red-500">-{selectedCommit.total_deleted}</span>}
+                {selectedCommit.total_added > 0 && <span className="text-success">+{selectedCommit.total_added}</span>}
+                {selectedCommit.total_deleted > 0 && <span className="text-danger">-{selectedCommit.total_deleted}</span>}
               </div>
             </div>
           )}
@@ -343,7 +348,7 @@ export default function Git() {
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <input
-              className="flex-1 px-3 py-1.5 rounded border text-sm font-mono card-bordered text-primary"
+              className="input-base flex-1 font-mono"
               placeholder="File path (e.g. src/main.ts)"
               value={blameFile}
               onChange={(e) => setBlameFile(e.target.value)}
@@ -396,7 +401,7 @@ export default function Git() {
                 reviewResult.comments.map((c, i) => (
                   <div key={i} className="p-3 rounded border text-sm bg-secondary border-default">
                     <div className="flex gap-3 mb-1">
-                      <span className={`font-medium ${sevColor(c.severity)}`}>{c.severity}</span>
+                      <span className="font-medium" style={{ color: sevColor(c.severity) }}>{c.severity}</span>
                       <span className="text-tertiary">{c.file}:{c.line}</span>
                     </div>
                     <div>{c.message}</div>
@@ -416,13 +421,13 @@ export default function Git() {
       {tab === "pr" && (
         <div className="space-y-4 max-w-lg">
           <input
-            className="w-full px-3 py-2 rounded border text-sm card-bordered text-primary"
+            className="input-base"
             placeholder="PR title"
             value={prTitle}
             onChange={(e) => setPrTitle(e.target.value)}
           />
           <textarea
-            className="w-full px-3 py-2 rounded border text-sm card-bordered text-primary"
+            className="input-base"
             placeholder="PR body (optional)"
             rows={6}
             value={prBody}
@@ -439,9 +444,9 @@ export default function Git() {
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="p-3 rounded-xl border bg-secondary border-default">
-      <div className="text-xs text-tertiary">{label}</div>
-      <div className="text-lg font-semibold text-primary">{value}</div>
+    <div className="stat-card">
+      <div className="stat-card-label">{label}</div>
+      <div className="stat-card-value">{value}</div>
     </div>
   );
 }

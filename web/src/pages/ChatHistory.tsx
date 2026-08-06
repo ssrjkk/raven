@@ -52,7 +52,7 @@ export default function ChatHistory() {
         <form onSubmit={handleSearch} className="relative shrink-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-tertiary" />
           <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
-            placeholder="Search messages..." className="w-full pl-9 pr-8 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+            placeholder="Search messages..." className="input-base" style={{ paddingLeft: "2.25rem", paddingRight: "2rem" }} />
           {query && (
             <button type="button" onClick={() => { setQuery(""); setResults([]); setSearched(false); }}
               className="absolute right-2 top-1/2 -translate-y-1/2">
@@ -111,7 +111,7 @@ export default function ChatHistory() {
       </div>
 
       {/* Detail pane */}
-      <div className="flex-1 rounded-xl overflow-hidden flex flex-col" style={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", minHeight: 0 }}>
+      <div className="card flex-1 overflow-hidden flex flex-col" style={{ minHeight: 0 }}>
         {selected ? (
           <>
             <div className="p-4 border-b shrink-0 border-default">

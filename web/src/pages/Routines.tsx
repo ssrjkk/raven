@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { api, type RoutineData } from "../api/client";
+import PageHeader from "../components/PageHeader";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 import { useApiQuery } from "../hooks/useApiQuery";
@@ -32,12 +33,12 @@ export default function Routines() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Routines</h1>
+      <PageHeader title="Routines" subtitle="Recurring routines executed on a schedule" />
       <div className="space-y-2">
         {routines?.map((r: RoutineData) => {
           const icons: Record<string, string> = { active: "🟢", paused: "⏸", error: "🔴" };
           return (
-            <div key={r.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary">
+            <div key={r.id} className="card flex items-center justify-between p-3">
               <div>
                 <div className="font-medium">{r.name}</div>
                 <div className="text-xs text-tertiary">
@@ -48,12 +49,12 @@ export default function Routines() {
                 <span title={r.status}>{icons[r.status] || "⚪"}</span>
                 {r.status === "active" ? (
                   <button onClick={() => toggle.mutate({ action: "pause", id: r.id })}
-                    className="px-2 py-1 rounded text-xs font-medium" style={{ backgroundColor: "rgba(234,179,8,0.2)", color: "#eab308" }}>
+                    className="px-2 py-1 rounded text-xs font-medium" style={{ backgroundColor: "var(--dt-colors-status-warning-bg)", color: "var(--dt-colors-status-warning)" }}>
                     Pause
                   </button>
                 ) : (
                   <button onClick={() => toggle.mutate({ action: "resume", id: r.id })}
-                    className="px-2 py-1 rounded text-xs font-medium" style={{ backgroundColor: "rgba(34,197,94,0.2)", color: "#22c55e" }}>
+                    className="px-2 py-1 rounded text-xs font-medium" style={{ backgroundColor: "var(--dt-colors-status-success-bg)", color: "var(--dt-colors-status-success)" }}>
                     Resume
                   </button>
                 )}

@@ -20,9 +20,9 @@ const AGENT_MODES: { value: AgentMode; label: string; desc: string }[] = [
 ]
 
 const TRUTHFUL_STATUS: Record<string, { label: string; color: string }> = {
-  success: { label: "Verified", color: "bg-emerald-500/20 text-emerald-400" },
-  corrected: { label: "Self-corrected", color: "bg-amber-500/20 text-amber-400" },
-  refused: { label: "Refused (no data)", color: "bg-red-500/20 text-red-400" },
+  success: { label: "Verified", color: "badge badge-success" },
+  corrected: { label: "Self-corrected", color: "badge badge-warning" },
+  refused: { label: "Refused (no data)", color: "badge badge-error" },
 }
 
 export default function IDEPage() {
@@ -125,10 +125,10 @@ export default function IDEPage() {
   }
 
   return (
-    <div className="grid grid-cols-[1fr_320px] h-[calc(100vh-2rem)] bg-[#1e1e1e]">
+    <div className="grid grid-cols-[1fr_320px] h-[calc(100vh-2rem)] bg-primary">
       <div className="flex flex-col">
         <div className="flex-1 flex flex-col">
-          <div className="border-b border-[#333] px-4 py-2 text-xs text-gray-500 bg-[#252526]">
+          <div className="border-b border-default px-4 py-2 text-xs text-tertiary bg-tertiary">
             ssrjkk/workspace/src/app.tsx
           </div>
           <Editor
@@ -140,46 +140,46 @@ export default function IDEPage() {
             options={{ minimap: { enabled: false }, fontSize: 14, padding: { top: 16 } }}
           />
         </div>
-        <div className="h-60 border-t border-[#333] bg-[#0d0d0d] flex flex-col">
-          <div className="px-3 py-1 text-xs text-gray-500 border-b border-[#222] bg-[#252526]">
+        <div className="h-60 border-t border-default bg-secondary flex flex-col">
+          <div className="px-3 py-1 text-xs text-tertiary border-b border-default bg-tertiary">
             Terminal
           </div>
           <div className="flex-1 overflow-auto p-1">
             {terminalHistory.map((line, i) => (
-              <div key={i} className="font-mono text-xs text-green-500 px-2 py-0.5 whitespace-pre-wrap">
-                <span className="text-gray-500">raven@ssrjkk:~$ </span>{line.input}<br />
-                <span className="text-gray-400">{line.output}</span>
+              <div key={i} className="font-mono text-xs text-success px-2 py-0.5 whitespace-pre-wrap">
+                <span className="text-tertiary">raven@ssrjkk:~$ </span>{line.input}<br />
+                <span className="text-tertiary">{line.output}</span>
               </div>
             ))}
             <div ref={terminalEndRef} />
           </div>
-          <div className="flex gap-1 px-2 py-1 border-t border-[#222]">
+          <div className="flex gap-1 px-2 py-1 border-t border-default">
             <input
               value={terminalInput}
               onChange={(e) => setTerminalInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && runTerminal()}
               placeholder="command..."
-              className="flex-1 bg-[#1a1a1a] border border-[#333] rounded px-2.5 py-1.5 text-green-500 text-xs outline-none font-mono"
+              className="flex-1 input-base font-mono text-xs"
             />
             <button onClick={runTerminal}
-              className="bg-gray-700 hover:bg-gray-600 text-white border-none rounded px-3 py-1.5 cursor-pointer text-xs font-medium transition">
+              className="btn-outline" style={{ padding: "0.25rem 0.75rem", fontSize: "0.75rem" }}>
               Run
             </button>
           </div>
         </div>
       </div>
 
-      <div className="border-l border-[#333] flex flex-col bg-[#0d0d0d]">
-        <div className="flex border-b border-[#333]">
+      <div className="border-l border-default flex flex-col bg-secondary">
+        <div className="flex border-b border-default">
           <button onClick={() => setSidebarTab("ai")}
             className={`flex items-center gap-1.5 flex-1 px-3 py-2 border-none cursor-pointer text-xs font-medium transition ${
-              sidebarTab === "ai" ? "bg-[#1e1e1e] text-gray-100" : "bg-transparent text-gray-500 hover:text-gray-300"
+              sidebarTab === "ai" ? "bg-primary text-primary" : "bg-transparent text-tertiary hover:text-secondary"
             }`}>
             <Bot className="w-3.5 h-3.5" /> AI
           </button>
           <button onClick={() => setSidebarTab("debug")}
             className={`flex items-center gap-1.5 flex-1 px-3 py-2 border-none cursor-pointer text-xs font-medium transition ${
-              sidebarTab === "debug" ? "bg-[#1e1e1e] text-gray-100" : "bg-transparent text-gray-500 hover:text-gray-300"
+              sidebarTab === "debug" ? "bg-primary text-primary" : "bg-transparent text-tertiary hover:text-secondary"
             }`}>
             <Bug className="w-3.5 h-3.5" /> Debug
           </button>
@@ -187,29 +187,29 @@ export default function IDEPage() {
 
         {sidebarTab === "ai" ? (
           <>
-            <div className="p-3 border-b border-[#333] flex flex-col gap-2">
+            <div className="p-3 border-b border-default flex flex-col gap-2">
               <div className="text-sm font-semibold">AI Agent</div>
               <div className="flex gap-1">
                 {AGENT_MODES.map(m => (
                   <button key={m.value} onClick={() => setAgentMode(m.value)}
                     className={`text-xs px-2.5 py-1 rounded border-none cursor-pointer transition ${
                       agentMode === m.value
-                        ? "bg-white text-black font-semibold"
-                        : "bg-[#333] text-gray-300 hover:bg-[#444]"
+                        ? "bg-accent text-white font-semibold"
+                        : "bg-tertiary text-secondary hover:bg-accent-muted"
                     }`}
                     title={m.desc}>
                     {m.label}
                   </button>
                 ))}
               </div>
-              <div className="text-[10px] text-gray-500">{AGENT_MODES.find(m => m.value === agentMode)?.desc}</div>
+              <div className="text-[10px] text-tertiary">{AGENT_MODES.find(m => m.value === agentMode)?.desc}</div>
               <button onClick={() => setTruthfulMode(v => !v)}
                 className={`flex items-center justify-center gap-1.5 text-xs px-2.5 py-1.5 rounded border-none cursor-pointer transition ${
                   truthfulMode
-                    ? "bg-violet-500/20 text-violet-300 font-semibold"
-                    : "bg-[#222] text-gray-400 hover:bg-[#333]"
+                    ? "bg-accent-muted text-accent font-semibold"
+                    : "bg-tertiary text-tertiary hover:bg-accent-muted"
                 }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${truthfulMode ? "bg-violet-400" : "bg-gray-600"}`} />
+                <span className={`w-1.5 h-1.5 rounded-full ${truthfulMode ? "bg-accent" : "bg-tertiary"}`} />
                 Truthful mode (Chain-of-Verification)
               </button>
             </div>
@@ -217,30 +217,30 @@ export default function IDEPage() {
             <div className="flex-1 p-3 overflow-auto flex flex-col gap-3">
               {truthfulStatus && (
                 <div className="flex items-center gap-2">
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${TRUTHFUL_STATUS[truthfulStatus]?.color ?? "bg-gray-500/20 text-gray-400"}`}>
+                  <span className={TRUTHFUL_STATUS[truthfulStatus]?.color ?? "badge badge-accent"}>
                     {TRUTHFUL_STATUS[truthfulStatus]?.label ?? truthfulStatus}
                   </span>
                 </div>
               )}
               {output && (
-                <div className="bg-[#1a1a2e] rounded-lg p-3 text-sm leading-relaxed text-gray-300 whitespace-pre-wrap">
+                <div className="card p-3 text-sm leading-relaxed text-secondary whitespace-pre-wrap">
                   {output}
                 </div>
               )}
               {thinkingProcess && (
-                <details className="bg-[#151522] rounded-lg p-3">
-                  <summary className="text-[10px] text-violet-300 cursor-pointer uppercase tracking-wider">
+                <details className="card p-3">
+                  <summary className="text-[10px] text-accent cursor-pointer uppercase tracking-wider">
                     Verification thinking
                   </summary>
-                  <pre className="text-xs text-gray-400 whitespace-pre-wrap mt-2 font-mono">{thinkingProcess}</pre>
+                  <pre className="text-xs text-tertiary whitespace-pre-wrap mt-2 font-mono">{thinkingProcess}</pre>
                 </details>
               )}
               {workspaceFiles.length > 0 && (
                 <div>
-                  <div className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Workspace</div>
+                  <div className="text-xs text-tertiary mb-1 uppercase tracking-wider">Workspace</div>
                   <div className="flex flex-wrap gap-1">
                     {workspaceFiles.map(f => (
-                      <span key={f.path} className="text-[10px] bg-[#1e1e1e] px-2 py-0.5 rounded text-gray-400">
+                      <span key={f.path} className="chip">
                         {f.name}
                       </span>
                     ))}
@@ -248,27 +248,27 @@ export default function IDEPage() {
                 </div>
               )}
               {indexStatus && (
-                <div className="text-xs text-gray-500">{indexStatus}</div>
+                <div className="text-xs text-tertiary">{indexStatus}</div>
               )}
             </div>
 
-            <div className="p-3 border-t border-[#333] flex flex-col gap-2">
+            <div className="p-3 border-t border-default flex flex-col gap-2">
               <div className="flex gap-2">
                 <input
                   value={aiPrompt}
                   onChange={(e) => setAiPrompt(e.target.value)}
                   placeholder="Ask AI to build anything..."
-                  className="flex-1 bg-[#1e1e1e] border border-[#333] rounded-lg px-3 py-2 text-gray-100 text-sm outline-none"
+                  className="flex-1 input-base"
                   onKeyDown={(e) => e.key === "Enter" && submitPrompt()}
                 />
                 <button onClick={submitPrompt}
-                  className="bg-white hover:bg-gray-200 text-black border-none rounded-lg px-4 py-2 font-semibold cursor-pointer text-sm transition">
+                  className="btn-primary">
                   {truthfulMode ? "Verify" : agentMode === "general" ? "Search" : "Run"}
                 </button>
               </div>
               <div className="flex gap-1">
                 <button onClick={indexCodebase}
-                  className="bg-[#2a2a2a] hover:bg-[#3a3a3a] text-gray-300 border border-[#444] rounded px-2 py-1 text-[10px] cursor-pointer transition">
+                  className="btn-outline" style={{ padding: "0.25rem 0.75rem", fontSize: "0.75rem" }}>
                   Index
                 </button>
               </div>

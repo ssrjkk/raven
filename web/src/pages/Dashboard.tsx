@@ -1,4 +1,5 @@
 import { api, type HealthData, type MetricsSnapshot, type StatusData } from "../api/client";
+import PageHeader from "../components/PageHeader";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useApiQuery } from "../hooks/useApiQuery";
 
@@ -35,35 +36,38 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <span className={`flex items-center gap-2 text-sm ${sys?.running ? "text-green-400" : "text-red-400"}`}>
-          <span className={`w-2 h-2 rounded-full ${sys?.running ? "bg-green-400" : "bg-red-400"}`} />
-          {sys?.running ? "Running" : "Stopped"}
-        </span>
-      </div>
+      <PageHeader
+        title="Dashboard"
+        subtitle="System overview at a glance"
+        actions={
+          <span className={sys?.running ? "badge badge-success" : "badge badge-error"}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "currentColor" }} />
+            {sys?.running ? "Running" : "Stopped"}
+          </span>
+        }
+      />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {metricCards.map((c) => (
-          <div key={c.label} className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-            <div className="text-xs text-gray-500 uppercase tracking-wider">{c.label}</div>
-            <div className="text-2xl font-bold mt-1">{String(c.value)}</div>
+          <div key={c.label} className="stat-card">
+            <div className="stat-card-label">{c.label}</div>
+            <div className="stat-card-value">{String(c.value)}</div>
           </div>
         ))}
       </div>
 
       {health && (
-        <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-gray-300 mb-3">Health Checks</h2>
+        <div className="card">
+          <h2 className="text-sm font-semibold mb-3">Health Checks</h2>
           <div className="space-y-2">
             {health.checks.map((c) => (
-              <div key={c.name} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
+              <div key={c.name} className="flex items-center justify-between text-sm rounded-lg px-3 py-2" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}>
+                <div className="flex items-center gap-2.5">
                   <span className={`w-1.5 h-1.5 rounded-full ${c.ok ? "bg-green-400" : "bg-red-400"}`} />
-                  <span className="text-gray-400">{c.name}</span>
-                  {c.critical && <span className="text-[10px] text-yellow-500">critical</span>}
+                  <span style={{ color: "var(--dt-colors-text-secondary)" }}>{c.name}</span>
+                  {c.critical && <span className="badge badge-warning">critical</span>}
                 </div>
-                <span className="text-gray-500">{c.latency_ms.toFixed(0)}ms</span>
+                <span className="text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>{c.latency_ms.toFixed(0)}ms</span>
               </div>
             ))}
           </div>
@@ -71,21 +75,21 @@ export default function Dashboard() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-gray-300 mb-3">Channels</h2>
+        <div className="card">
+          <h2 className="text-sm font-semibold mb-3">Channels</h2>
           <div className="flex flex-wrap gap-2">
             {(status?.channels ?? []).map((ch) => (
-              <span key={ch} className="px-2.5 py-1 bg-gray-800/60 rounded-lg text-xs text-gray-300">{ch}</span>
+              <span key={ch} className="chip">{ch}</span>
             ))}
           </div>
         </div>
-        <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-gray-300 mb-3">Key Metrics</h2>
+        <div className="card">
+          <h2 className="text-sm font-semibold mb-3">Key Metrics</h2>
           <div className="grid grid-cols-2 gap-2 text-sm">
             {Object.entries(metrics).slice(0, 8).map(([k, v]) => (
-              <div key={k} className="flex justify-between">
-                <span className="text-gray-500">{k}</span>
-                <span className="text-gray-200">{typeof v === "number" ? v.toLocaleString() : v}</span>
+              <div key={k} className="flex justify-between rounded-lg px-3 py-2" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}>
+                <span style={{ color: "var(--dt-colors-text-tertiary)" }}>{k}</span>
+                <span style={{ color: "var(--dt-colors-text-primary)" }} className="font-medium">{typeof v === "number" ? v.toLocaleString() : v}</span>
               </div>
             ))}
           </div>

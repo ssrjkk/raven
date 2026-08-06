@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { api, type ChannelInfo, getToken } from "../api/client";
+import PageHeader from "../components/PageHeader";
 import { Skeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 import { useApiQuery } from "../hooks/useApiQuery";
@@ -97,11 +98,11 @@ export default function Admin() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Admin</h1>
+      <PageHeader title="Admin" subtitle="Channels, model configuration, security audit, and live logs" />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-gray-300 mb-3">Channels</h2>
+        <div className="card p-4">
+          <h2 className="text-sm font-semibold text-primary mb-3">Channels</h2>
           {channelsLoading ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => <Skeleton key={i} height={40} rounded="lg" />)}
@@ -109,41 +110,41 @@ export default function Admin() {
           ) : (
             <div className="space-y-2">
               {channels.map((ch) => (
-                <div key={ch.id} className="flex items-center justify-between py-2 px-3 bg-gray-800/30 rounded-lg">
+                <div key={ch.id} className="flex items-center justify-between py-2 px-3 bg-tertiary rounded-lg">
                   <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${ch.ready ? "bg-green-400" : "bg-red-400"}`} />
-                    <span className="text-sm text-gray-200">{ch.id}</span>
-                    <span className="text-[10px] text-gray-500">{ch.type}</span>
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: ch.ready ? "var(--dt-colors-status-success)" : "var(--dt-colors-status-error)" }} />
+                    <span className="text-sm text-primary">{ch.id}</span>
+                    <span className="text-[10px] text-tertiary">{ch.type}</span>
                   </div>
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-tertiary">
                     sent:{ch.stats?.sent ?? 0} failed:{ch.stats?.failed ?? 0}
                   </span>
                 </div>
               ))}
-              {channels.length === 0 && <p className="text-sm text-gray-500">No channels registered</p>}
+              {channels.length === 0 && <p className="text-sm text-tertiary">No channels registered</p>}
             </div>
           )}
         </div>
 
-        <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-gray-300 mb-3">Model Configuration</h2>
+        <div className="card p-4">
+          <h2 className="text-sm font-semibold text-primary mb-3">Model Configuration</h2>
           <div className="space-y-3">
             <div>
-              <label className="text-xs text-gray-500 block mb-1">OpenRouter API Key</label>
+              <label className="text-xs text-tertiary block mb-1">OpenRouter API Key</label>
               <input
                 type="password"
                 value={modelKey}
                 onChange={(e) => setModelKey(e.target.value)}
                 placeholder="sk-or-v1-..."
-                className="w-full bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-violet-500/50"
+                className="input-base"
               />
             </div>
             <button onClick={updateModelKey}
-              className="bg-violet-700 hover:bg-violet-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition">
+              className="btn-primary">
               Update Key
             </button>
             {keyFeedback && (
-              <p className={`text-xs mt-1 ${keyFeedback.ok ? "text-green-400" : "text-red-400"}`}>
+              <p className={`text-xs mt-1 ${keyFeedback.ok ? "text-success" : "text-danger"}`}>
                 {keyFeedback.msg}
               </p>
             )}
@@ -151,11 +152,12 @@ export default function Admin() {
         </div>
       </div>
 
-      <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
+      <div className="card p-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-300">Security Audit</h2>
+          <h2 className="text-sm font-semibold text-primary">Security Audit</h2>
           <button onClick={runAudit} disabled={runningAudit}
-            className="bg-amber-700 hover:bg-amber-600 disabled:bg-amber-900/50 text-white px-4 py-1.5 rounded-lg text-xs font-medium transition">
+            className="btn-outline disabled:opacity-40"
+            style={{ color: "var(--dt-colors-status-warning)", borderColor: "var(--dt-colors-status-warning)" }}>
             {runningAudit ? "Running..." : "Run Audit"}
           </button>
         </div>
@@ -163,16 +165,16 @@ export default function Admin() {
           <div className="space-y-1 max-h-64 overflow-y-auto">
             {audit.map((c, i) => (
               <div key={i} className={`flex items-start gap-2 px-3 py-2 rounded-lg text-xs ${
-                c.passed ? "bg-green-900/10 text-green-300" : "bg-red-900/10 text-red-300"
+                c.passed ? "bg-success-muted text-success" : "bg-danger-muted text-danger"
               }`}>
                 <span className="mt-0.5">{c.passed ? "✓" : "✗"}</span>
                 <div className="flex-1">
                   <span className="font-medium">{c.check}</span>
                   {!c.passed && (
-                    <p className="text-gray-500 mt-0.5">{c.fix_hint}</p>
+                    <p className="text-tertiary mt-0.5">{c.fix_hint}</p>
                   )}
                 </div>
-                <span className={`text-[10px] uppercase ${c.severity === "high" ? "text-red-400" : "text-yellow-400"}`}>
+                <span className={`badge ${c.severity === "high" ? "badge-error" : "badge-warning"}`}>
                   {c.severity}
                 </span>
               </div>
@@ -180,21 +182,21 @@ export default function Admin() {
           </div>
         )}
         {audit.length === 0 && !runningAudit && (
-          <p className="text-sm text-gray-500">Run a security audit to check your configuration.</p>
+          <p className="text-sm text-tertiary">Run a security audit to check your configuration.</p>
         )}
       </div>
 
-      <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-        <h2 className="text-sm font-semibold text-gray-300 mb-3">Live Logs</h2>
-        <div className="bg-black/40 rounded-lg p-3 h-48 overflow-y-auto font-mono text-xs space-y-1">
-          {logs.length === 0 && <p className="text-gray-600">Waiting for logs...</p>}
+      <div className="card p-4">
+        <h2 className="text-sm font-semibold text-primary mb-3">Live Logs</h2>
+        <div className="bg-primary border border-default rounded-lg p-3 h-48 overflow-y-auto font-mono text-xs space-y-1">
+          {logs.length === 0 && <p className="text-tertiary">Waiting for logs...</p>}
           {logs.map((l, i) => (
             <div key={i} className={`${
-              l.level === "ERROR" ? "text-red-400" :
-              l.level === "WARNING" ? "text-yellow-400" :
-              "text-gray-400"
+              l.level === "ERROR" ? "text-danger" :
+              l.level === "WARNING" ? "text-warning" :
+              "text-tertiary"
             }`}>
-              <span className="text-gray-600">{l.timestamp}</span> {l.level} {l.message}
+              <span className="text-tertiary">{l.timestamp}</span> {l.level} {l.message}
             </div>
           ))}
           <div ref={logEnd} />

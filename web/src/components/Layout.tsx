@@ -1,6 +1,44 @@
-import { AnimatePresence,motion } from "framer-motion";
-import { Suspense,useState } from "react";
-import { NavLink, Outlet, useLocation,useNavigate } from "react-router-dom";
+import {
+  Activity,
+  BarChart3,
+  Blocks,
+  Bomb,
+  BookOpen,
+  Braces,
+  Clapperboard,
+  Code2,
+  Database,
+  FlaskConical,
+  FolderGit2,
+  Gauge,
+  GitBranch,
+  GitFork,
+  GitMerge,
+  Globe,
+  History,
+  LayoutDashboard,
+  Lightbulb,
+  ListTodo,
+  type LucideIcon,
+  Mail,
+  MessageSquare,
+  Mic,
+  Palette,
+  Puzzle,
+  RefreshCw,
+  Search,
+  Settings,
+  Shield,
+  SlidersHorizontal,
+  Sparkles,
+  Split,
+  Users,
+  Wallet,
+  Workflow,
+} from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Suspense, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { clearToken } from "../api/client";
 import { useTheme } from "../design/ThemeContext";
@@ -8,43 +46,89 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import PWAInstallPrompt from "./PWAInstallPrompt";
 import { SkeletonPage } from "./Skeleton";
 
-const nav = [
-  { to: "/", label: "Dashboard" },
-  { to: "/chat", label: "Chat" },
-  { to: "/chat/history", label: "History" },
-  { to: "/admin", label: "Admin" },
-  { to: "/tasks", label: "Tasks" },
-  { to: "/workflows", label: "Workflows" },
-  { to: "/monitors", label: "Monitors" },
-  { to: "/routines", label: "Routines" },
-  { to: "/code", label: "Code" },
-  { to: "/ide", label: "IDE" },
-  { to: "/git", label: "Git" },
-  { to: "/github", label: "GitHub" },
-  { to: "/cicd", label: "CI/CD" },
-  { to: "/tests", label: "Tests" },
-  { to: "/dream", label: "Dream" },
-  { to: "/media", label: "Media" },
-  { to: "/browser", label: "Browser" },
-  { to: "/web-search", label: "Search" },
-  { to: "/knowledge", label: "Knowledge" },
-  { to: "/analytics", label: "Analytics" },
-  { to: "/insights", label: "Insights" },
-  { to: "/project-insights", label: "Project Insights" },
-  { to: "/components", label: "UI Kit" },
-  { to: "/scaffold", label: "Scaffold" },
-  { to: "/code-quality", label: "Code Quality" },
-  { to: "/abtesting", label: "A/B Test" },
-  { to: "/cost", label: "Cost" },
-  { to: "/voice", label: "Voice" },
-  { to: "/collab", label: "Collab" },
-  { to: "/rag", label: "RAG" },
-  { to: "/finetune", label: "FineTune" },
-  { to: "/chaos", label: "Chaos" },
-  { to: "/email", label: "Email" },
-  { to: "/plugins", label: "Plugins" },
-  { to: "/settings", label: "System" },
+interface NavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  end?: boolean;
+}
+
+interface NavSection {
+  title: string;
+  items: NavItem[];
+}
+
+const navSections: NavSection[] = [
+  {
+    title: "Overview",
+    items: [
+      { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
+      { to: "/chat", label: "Chat", icon: MessageSquare },
+      { to: "/chat/history", label: "History", icon: History },
+      { to: "/admin", label: "Admin", icon: Shield },
+    ],
+  },
+  {
+    title: "Automate",
+    items: [
+      { to: "/tasks", label: "Tasks", icon: ListTodo },
+      { to: "/workflows", label: "Workflows", icon: Workflow },
+      { to: "/monitors", label: "Monitors", icon: Activity },
+      { to: "/routines", label: "Routines", icon: RefreshCw },
+    ],
+  },
+  {
+    title: "Develop",
+    items: [
+      { to: "/code", label: "Code", icon: Code2 },
+      { to: "/ide", label: "IDE", icon: Braces },
+      { to: "/git", label: "Git", icon: GitBranch },
+      { to: "/github", label: "GitHub", icon: GitFork },
+      { to: "/cicd", label: "CI/CD", icon: GitMerge },
+      { to: "/tests", label: "Tests", icon: FlaskConical },
+    ],
+  },
+  {
+    title: "Explore",
+    items: [
+      { to: "/dream", label: "Dream", icon: Sparkles },
+      { to: "/media", label: "Media", icon: Clapperboard },
+      { to: "/browser", label: "Browser", icon: Globe },
+      { to: "/web-search", label: "Search", icon: Search },
+      { to: "/knowledge", label: "Knowledge", icon: BookOpen },
+      { to: "/analytics", label: "Analytics", icon: BarChart3 },
+      { to: "/insights", label: "Insights", icon: Lightbulb },
+      { to: "/project-insights", label: "Project Insights", icon: FolderGit2 },
+    ],
+  },
+  {
+    title: "Build",
+    items: [
+      { to: "/scaffold", label: "Scaffold", icon: Blocks },
+      { to: "/code-quality", label: "Code Quality", icon: Gauge },
+      { to: "/abtesting", label: "A/B Test", icon: Split },
+      { to: "/cost", label: "Cost", icon: Wallet },
+      { to: "/voice", label: "Voice", icon: Mic },
+      { to: "/collab", label: "Collab", icon: Users },
+      { to: "/rag", label: "RAG", icon: Database },
+      { to: "/finetune", label: "FineTune", icon: SlidersHorizontal },
+      { to: "/chaos", label: "Chaos", icon: Bomb },
+      { to: "/email", label: "Email", icon: Mail },
+      { to: "/plugins", label: "Plugins", icon: Puzzle },
+    ],
+  },
+  {
+    title: "Preferences",
+    items: [
+      { to: "/components", label: "UI Kit", icon: Palette },
+      { to: "/settings", label: "System", icon: Settings },
+    ],
+  },
 ];
+
+function openCommandPalette() {
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }));
+}
 
 export default function Layout() {
   const navigate = useNavigate();
@@ -58,18 +142,21 @@ export default function Layout() {
   }
 
   return (
-    <div className="flex h-screen" style={{ backgroundColor: "var(--dt-colors-bg-primary)", color: "var(--dt-colors-text-primary)" }}>
+    <div
+      className="flex h-screen"
+      style={{ backgroundColor: "var(--dt-colors-bg-primary)", color: "var(--dt-colors-text-primary)" }}
+    >
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-10 md:hidden"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          style={{ backgroundColor: "rgba(0,0,0,0.5)", backdropFilter: "blur(2px)" }}
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       <aside
-        className={`fixed md:static z-20 w-56 flex flex-col flex-shrink-0 border-r transition-transform duration-200 ${
+        className={`fixed md:static z-20 w-60 flex flex-col flex-shrink-0 border-r transition-transform duration-200 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
         style={{
@@ -77,50 +164,86 @@ export default function Layout() {
           borderColor: "var(--dt-colors-border-default)",
         }}
       >
-        <div
-          className="p-4 border-b border-default"
-        >
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg font-bold">Raven AI</h1>
-            <button
-              className="md:hidden text-sm text-tertiary"
-              onClick={() => setSidebarOpen(false)}
-            >
-              РІСљвЂў
-            </button>
+        {/* Brand */}
+        <div className="flex items-center gap-2.5 px-4 py-4 border-b border-default">
+          <div
+            className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-white font-black text-lg shadow-lg"
+            style={{
+              backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default, #7c3aed), #d946ef)",
+              boxShadow: "0 4px 14px var(--dt-colors-accent-muted, rgba(124, 58, 237, 0.35))",
+            }}
+          >
+            R
           </div>
+          <div className="min-w-0">
+            <h1 className="text-base font-bold leading-tight tracking-tight">Raven AI</h1>
+            <span className="text-[10px] text-tertiary">command & control</span>
+          </div>
+          <button
+            className="md:hidden ml-auto text-tertiary text-sm"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close sidebar"
+          >
+            ✕
+          </button>
         </div>
-        <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
-          {nav.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/"}
-              onClick={() => setSidebarOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${
-                  isActive ? "border" : ""
-                }`
-              }
-              style={({ isActive }) =>
-                isActive
-                  ? {
-                      backgroundColor: "var(--dt-colors-accent-muted)",
-                      color: "var(--dt-colors-accent-default)",
-                      borderColor: "var(--dt-colors-accent-subtle)",
+
+        {/* Command palette trigger */}
+        <button
+          onClick={openCommandPalette}
+          className="mx-3 mt-3 flex items-center gap-2 px-3 py-2 rounded-lg border border-default text-sm transition hover:border-accent-muted"
+          style={{ backgroundColor: "var(--dt-colors-bg-primary)" }}
+        >
+          <Search size={14} className="shrink-0" />
+          <span className="text-xs text-tertiary flex-1 text-left">Search…</span>
+          <kbd className="kbd">⌘K</kbd>
+        </button>
+
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto p-2 space-y-3">
+          {navSections.map((section) => (
+            <div key={section.title}>
+              <div className="nav-section-label">{section.title}</div>
+              <div className="space-y-0.5">
+                {section.items.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    onClick={() => setSidebarOpen(false)}
+                    className="relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition group"
+                    style={({ isActive }) =>
+                      isActive
+                        ? {
+                            backgroundColor: "var(--dt-colors-accent-muted)",
+                            color: "var(--dt-colors-accent-default)",
+                          }
+                        : {
+                            color: "var(--dt-colors-text-secondary)",
+                          }
                     }
-                  : {
-                      color: "var(--dt-colors-text-secondary)",
-                    }
-              }
-            >
-              <span>{item.label}</span>
-            </NavLink>
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {isActive && (
+                          <span
+                            className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full"
+                            style={{ backgroundColor: "var(--dt-colors-accent-default)" }}
+                          />
+                        )}
+                        <item.icon size={16} className="shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                      </>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
-        <div
-          className="p-3 border-t space-y-2 border-default"
-        >
+
+        {/* Footer */}
+        <div className="p-3 border-t space-y-2 border-default">
           <button
             onClick={toggleTheme}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition"
@@ -129,7 +252,7 @@ export default function Layout() {
               backgroundColor: "var(--dt-colors-bg-tertiary)",
             }}
           >
-            {theme === "dark" ? "РІВР‚РїС‘РЏ Light" : "СЂСџРЉв„ў Dark"}
+            {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
           </button>
           <button
             onClick={handleLogout}
@@ -137,24 +260,20 @@ export default function Layout() {
           >
             Sign Out
           </button>
-          <div
-            className="text-[10px] text-center"
-            style={{ color: "var(--dt-colors-border-hover)" }}
-          >
+          <div className="text-[10px] text-center" style={{ color: "var(--dt-colors-border-hover)" }}>
             Raven AI v{import.meta.env.VITE_APP_VERSION || "0.2.0"}
           </div>
         </div>
       </aside>
 
-      <main
-        className="flex-1 overflow-y-auto min-w-0 bg-primary"
-      >
+      <main className="flex-1 overflow-y-auto min-w-0 bg-primary">
         <div className="flex items-center gap-2 p-2 md:hidden border-b border-default">
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-1 rounded text-lg text-secondary"
+            aria-label="Open sidebar"
           >
-            РІВВ°
+            ☰
           </button>
           <span className="text-sm font-semibold">Raven AI</span>
         </div>

@@ -141,19 +141,19 @@ export default function EmailPage() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between p-2 rounded-lg bg-tertiary">
                 <span>SMTP</span>
-                <span>{config.smtp_configured ? `РІСљвЂњ ${config.smtp_host}` : "РІСљвЂ” Not configured"}</span>
+                <span>{config.smtp_configured ? `✓ ${config.smtp_host}` : "✗ Not configured"}</span>
               </div>
               <div className="flex justify-between p-2 rounded-lg bg-tertiary">
                 <span>IMAP</span>
-                <span>{config.imap_configured ? `РІСљвЂњ ${config.imap_host}` : "РІСљвЂ” Not configured"}</span>
+                <span>{config.imap_configured ? `✓ ${config.imap_host}` : "✗ Not configured"}</span>
               </div>
               <div className="flex justify-between p-2 rounded-lg bg-tertiary">
                 <span>SMTP Library</span>
-                <span>{config.smtp_lib_available ? "РІСљвЂњ Installed" : "РІСљвЂ” Not installed"}</span>
+                <span>{config.smtp_lib_available ? "✓ Installed" : "✗ Not installed"}</span>
               </div>
               <div className="flex justify-between p-2 rounded-lg bg-tertiary">
                 <span>IMAP Library</span>
-                <span>{config.imap_lib_available ? "РІСљвЂњ Installed" : "РІСљвЂ” Not installed"}</span>
+                <span>{config.imap_lib_available ? "✓ Installed" : "✗ Not installed"}</span>
               </div>
             </div>
           )}

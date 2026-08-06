@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api/client";
 import type { DreamStatsData } from "../api/client";
+import PageHeader from "../components/PageHeader";
 import { SkeletonCard } from "../components/Skeleton";
 import { useApiQuery } from "../hooks/useApiQuery";
 
@@ -26,7 +27,7 @@ export default function Dream() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Dream Engine</h1>
+        <PageHeader title="Dream Engine" subtitle="Autonomous skill discovery from usage patterns" />
         <SkeletonCard height={120} />
         <SkeletonCard height={200} />
       </div>
@@ -38,101 +39,103 @@ export default function Dream() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Dream Engine</h1>
-        <span className={`flex items-center gap-2 text-sm ${d?.running ? "text-green-400" : "text-red-400"}`}>
-          <span className={`w-2 h-2 rounded-full ${d?.running ? "bg-green-400" : "bg-red-400"}`} />
-          {d?.running ? "Running" : "Stopped"}
-        </span>
-      </div>
+      <PageHeader
+        title="Dream Engine"
+        subtitle="Autonomous skill discovery from usage patterns"
+        actions={
+          <span className={`flex items-center gap-2 text-sm ${d?.running ? "text-success" : "text-danger"}`}>
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: d?.running ? "var(--dt-colors-status-success)" : "var(--dt-colors-status-error)" }} />
+            {d?.running ? "Running" : "Stopped"}
+          </span>
+        }
+      />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-          <div className="text-xs text-gray-500 uppercase tracking-wider">Total Cycles</div>
-          <div className="text-2xl font-bold mt-1">{d?.total_cycles ?? 0}</div>
+        <div className="stat-card">
+          <div className="stat-card-label">Total Cycles</div>
+          <div className="stat-card-value">{d?.total_cycles ?? 0}</div>
         </div>
-        <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-          <div className="text-xs text-gray-500 uppercase tracking-wider">Last Cycle</div>
-          <div className="text-sm font-bold mt-1">{lastCycle}</div>
+        <div className="stat-card">
+          <div className="stat-card-label">Last Cycle</div>
+          <div className="text-sm font-bold mt-1.5 text-primary">{lastCycle}</div>
         </div>
-        <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-          <div className="text-xs text-gray-500 uppercase tracking-wider">Idle Timeout</div>
-          <div className="text-2xl font-bold mt-1">{d?.idle_timeout ?? 60}s</div>
+        <div className="stat-card">
+          <div className="stat-card-label">Idle Timeout</div>
+          <div className="stat-card-value">{d?.idle_timeout ?? 60}s</div>
         </div>
-        <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-          <div className="text-xs text-gray-500 uppercase tracking-wider">Cycle Interval</div>
-          <div className="text-2xl font-bold mt-1">{d?.cycle_interval ?? 300}s</div>
+        <div className="stat-card">
+          <div className="stat-card-label">Cycle Interval</div>
+          <div className="stat-card-value">{d?.cycle_interval ?? 300}s</div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-gray-300 mb-3">Memory Tiers</h2>
+        <div className="card p-4">
+          <h2 className="text-sm font-semibold text-secondary mb-3">Memory Tiers</h2>
           {d?.memory ? (
             <div className="space-y-2">
               {Object.entries(d.memory).map(([tier, count]) => (
                 <div key={tier} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-400 capitalize">{tier.replace("_", " ")}</span>
-                  <span className="text-gray-200 font-mono">{count}</span>
+                  <span className="text-tertiary capitalize">{tier.replace("_", " ")}</span>
+                  <span className="text-primary font-mono">{count}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-500">Memory stats unavailable</p>
+            <p className="text-sm text-tertiary">Memory stats unavailable</p>
           )}
         </div>
 
-        <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-gray-300 mb-3">Last Cycle Stats</h2>
+        <div className="card p-4">
+          <h2 className="text-sm font-semibold text-secondary mb-3">Last Cycle Stats</h2>
           {d?.last_cycle_stats ? (
             <div className="space-y-2">
               {Object.entries(d.last_cycle_stats).map(([k, v]) => (
                 <div key={k} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-400 capitalize">{k.replace(/_/g, " ")}</span>
-                  <span className="text-gray-200 font-mono">{String(v)}</span>
+                  <span className="text-tertiary capitalize">{k.replace(/_/g, " ")}</span>
+                  <span className="text-primary font-mono">{String(v)}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-500">No cycles yet</p>
+            <p className="text-sm text-tertiary">No cycles yet</p>
           )}
         </div>
       </div>
 
-      <div className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4">
+      <div className="card p-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-300">Dream-Generated Skills</h2>
+          <h2 className="text-sm font-semibold text-secondary">Dream-Generated Skills</h2>
           <button
             onClick={handleCycle}
             disabled={cycling}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-50"
-            style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent-muted text-accent"
           >
             {cycling ? "Running..." : "Trigger Cycle"}
           </button>
         </div>
         {cycleResult && (
-          <div className="mb-3 p-3 rounded-lg text-sm" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}>
-            <span className="text-green-400 font-medium">Cycle complete:</span>{" "}
+          <div className="mb-3 p-3 rounded-lg text-sm bg-tertiary">
+            <span className="text-success font-medium">Cycle complete:</span>{" "}
             {Object.entries(cycleResult).map(([k, v]) => `${k}: ${v}`).join(", ")}
           </div>
         )}
         {d?.skills && d.skills.length > 0 ? (
           <div className="space-y-2">
             {d.skills.map((skill) => (
-              <div key={skill.name} className="flex items-center justify-between p-2 rounded-lg text-sm" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}>
+              <div key={skill.name} className="flex items-center justify-between p-2 rounded-lg text-sm bg-tertiary">
                 <div>
-                  <span className="text-gray-200 font-medium">{skill.name}</span>
-                  <p className="text-gray-500 text-xs mt-0.5">{skill.description}</p>
+                  <span className="text-primary font-medium">{skill.name}</span>
+                  <p className="text-tertiary text-xs mt-0.5">{skill.description}</p>
                 </div>
-                <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent-muted text-accent">
                   {skill.source}
                 </span>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-500">No dream-generated skills yet. Trigger a cycle to generate skills from patterns.</p>
+          <p className="text-sm text-tertiary">No dream-generated skills yet. Trigger a cycle to generate skills from patterns.</p>
         )}
       </div>
     </div>

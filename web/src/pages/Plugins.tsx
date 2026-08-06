@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { api } from "../api/client";
+import PageHeader from "../components/PageHeader";
 
 interface PluginManifest {
   id?: string;
@@ -98,7 +99,7 @@ export default function Plugins() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Plugins</h1>
+      <PageHeader title="Plugins" subtitle="Install, manage, and discover plugins" />
 
       {msg && (
         <div className="px-4 py-2 rounded text-sm btn-tertiary">
@@ -110,11 +111,7 @@ export default function Plugins() {
       <div className="flex gap-1 border-b border-default">
         {(["installed", "catalog", "search", "install"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium transition rounded-t ${tab === t ? "border-b-2" : ""}`}
-            style={{
-              color: tab === t ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)",
-              borderColor: tab === t ? "var(--dt-colors-accent-default)" : "transparent",
-            }}>
+            className={`px-4 py-2 text-sm font-medium transition rounded-t ${tab === t ? "tab-active" : "tab-inactive"}`}>
             {t === "installed" ? `Installed (${installed.length})` : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
@@ -126,7 +123,7 @@ export default function Plugins() {
             <p className="text-sm text-tertiary">No plugins installed</p>
           ) : (
             installed.map((p) => (
-              <div key={p.id || p.name} className="p-4 rounded border text-sm bg-secondary border-default">
+              <div key={p.id || p.name} className="card text-sm">
                 <div className="flex items-center justify-between mb-2">
                   <div>
                     <span className="font-semibold">{p.name}</span>
@@ -163,11 +160,11 @@ export default function Plugins() {
               <h3 className="text-sm font-semibold mb-2 text-secondary">Top Rated</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {topRated.map((p) => (
-                  <div key={p.id} className="p-3 rounded border text-sm bg-secondary border-default">
+                  <div key={p.id} className="card-bordered text-sm p-3">
                     <div className="font-semibold">{p.name}</div>
                     <div className="text-xs text-tertiary">{(p.description ?? "").slice(0, 100)}</div>
                     <div className="mt-1 flex items-center gap-2 text-xs text-tertiary">
-                      <span style={{ color: "#f59e0b" }}>РІВвЂ¦ {(p.rating ?? 0).toFixed(1)}</span>
+                      <span style={{ color: "#f59e0b" }}>★ {(p.rating ?? 0).toFixed(1)}</span>
                       <span className="px-1 py-0.5 rounded text-[10px]" style={{ backgroundColor: categoryColor(p.category ?? ""), color: "#fff" }}>{p.category}</span>
                     </div>
                   </div>
@@ -182,7 +179,7 @@ export default function Plugins() {
               <p className="text-sm text-tertiary">Catalog empty (no remote configured)</p>
             ) : (
               catalog.map((p) => (
-                <div key={p.id} className="p-3 rounded border text-sm mb-2 bg-secondary border-default">
+                <div key={p.id} className="card-bordered text-sm mb-2 p-3">
                   <div className="flex items-center justify-between">
                     <div>
                       <span className="font-semibold">{p.name}</span>
@@ -213,14 +210,13 @@ export default function Plugins() {
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <input
-              className="flex-1 px-3 py-2 rounded border text-sm card-bordered text-primary"
+              className="input-base flex-1"
               placeholder="Search plugins..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             />
-            <button onClick={handleSearch}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
+            <button onClick={handleSearch} className="btn-primary">
               Search
             </button>
           </div>
@@ -230,7 +226,7 @@ export default function Plugins() {
                 <p className="text-sm text-tertiary">No results</p>
               ) : (
                 searchResults.map((p) => (
-                  <div key={p.id} className="p-3 rounded border text-sm bg-secondary border-default">
+                  <div key={p.id} className="card-bordered text-sm p-3">
                     <span className="font-semibold">{p.name}</span>
                     <span className="ml-2 text-xs text-tertiary">v{p.version}</span>
                     <p className="text-xs mt-1 text-secondary">{p.description}</p>
@@ -245,14 +241,13 @@ export default function Plugins() {
       {tab === "install" && (
         <div className="space-y-3 max-w-lg">
           <input
-            className="w-full px-3 py-2 rounded border text-sm card-bordered text-primary"
+            className="input-base"
             placeholder="Plugin URL or path"
             value={installUrl}
             onChange={(e) => setInstallUrl(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleInstall()}
           />
-          <button onClick={handleInstall}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
+          <button onClick={handleInstall} className="btn-primary">
             Install Plugin
           </button>
         </div>

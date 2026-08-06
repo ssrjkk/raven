@@ -62,7 +62,7 @@ export default function ComponentLibrary() {
             <h1 className="text-2xl font-bold">Heading 1 (text-2xl font-bold)</h1>
             <h2 className="text-xl font-semibold">Heading 2 (text-xl font-semibold)</h2>
             <h3 className="text-lg font-semibold">Heading 3 (text-lg font-semibold)</h3>
-            <p className="text-sm">Body text (text-sm) РІР‚вЂќ the standard paragraph style.</p>
+            <p className="text-sm">Body text (text-sm) — the standard paragraph style.</p>
             <p className="text-xs text-tertiary">Caption (text-xs, tertiary colour)</p>
             <p className="text-[11px] font-mono px-1.5 py-0.5 rounded inline-block bg-tertiary">Tag / badge text (11px monospace)</p>
           </div>

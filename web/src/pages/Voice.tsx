@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { api } from "../api/client";
 import { useApiQuery } from "../hooks/useApiQuery";
+import PageHeader from "../components/PageHeader";
 
 interface VoiceSpeaker {
   speaker_id: string;
@@ -122,18 +123,14 @@ export default function Voice() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Voice Biometrics</h1>
+      <PageHeader title="Voice Biometrics" subtitle="Enroll, verify, and identify speakers by voice." />
 
       <div className="flex gap-1 mb-6 border-b border-default">
         {tabs.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className="px-4 py-2 text-sm font-medium rounded-t-lg transition"
-            style={{
-              color: tab === t.key ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)",
-              borderBottom: tab === t.key ? "2px solid var(--dt-colors-accent-default)" : "2px solid transparent",
-            }}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition ${tab === t.key ? "tab-active" : "tab-inactive"}`}
           >
             {t.label}
           </button>
@@ -153,33 +150,33 @@ export default function Voice() {
 
       {tab === "speakers" && (
         <div className="space-y-6">
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card">
             <h2 className="text-lg font-semibold mb-3">Enroll Speaker</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
               <input
                 placeholder="Speaker ID"
                 value={enrollId}
                 onChange={e => setEnrollId(e.target.value)}
-                className="px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default"
+                className="input-base"
               />
               <textarea
                 placeholder='[[0.1,0.2,...],[0.3,0.4,...]] (JSON array of audio samples)'
                 value={enrollSamples}
                 onChange={e => setEnrollSamples(e.target.value)}
                 rows={3}
-                className="px-3 py-2 rounded-lg text-sm font-mono md:col-span-2 bg-tertiary text-primary border-default"
+                className="input-base font-mono md:col-span-2"
               />
             </div>
             <button
               onClick={() => enroll.mutate()}
               disabled={enroll.isPending || !enrollId || !enrollSamples}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white"
+              className="btn-primary"
             >
               {enroll.isPending ? "Processing..." : "Enroll"}
             </button>
           </div>
 
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card">
             <h2 className="text-lg font-semibold mb-3">Enrolled Speakers ({speakers.length})</h2>
             {speakers.length === 0 ? (
               <p className="text-sm text-tertiary">No speakers enrolled.</p>
@@ -209,34 +206,34 @@ export default function Voice() {
 
       {tab === "verify" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card">
             <h2 className="text-lg font-semibold mb-3">Verify Speaker</h2>
             <div className="space-y-3 mb-3">
               <input
                 placeholder="Speaker ID"
                 value={verifyId}
                 onChange={e => setVerifyId(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default"
+                className="input-base"
               />
               <textarea
                 placeholder='[0.1,0.2,...] (audio as array of floats)'
                 value={verifyAudio}
                 onChange={e => setVerifyAudio(e.target.value)}
                 rows={4}
-                className="w-full px-3 py-2 rounded-lg text-sm font-mono bg-tertiary text-primary border-default"
+                className="input-base font-mono"
               />
             </div>
             <button
               onClick={() => verify.mutate()}
               disabled={verify.isPending || !verifyId || !verifyAudio}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white"
+              className="btn-primary"
             >
               {verify.isPending ? "Processing..." : "Verify"}
             </button>
             {verifyResult && (
               <div className="mt-3 p-3 rounded-lg text-sm bg-tertiary">
-                <p className={verifyResult.verified ? "text-green-500" : "text-red-500"}>
-                  {verifyResult.verified ? "РІСљвЂњ VERIFIED" : "РІСљвЂ” REJECTED"}
+                <p className={verifyResult.verified ? "text-success" : "text-danger"}>
+                  {verifyResult.verified ? "✓ VERIFIED" : "✗ REJECTED"}
                 </p>
                 <p>Score: {verifyResult.score} (threshold: {verifyResult.threshold})</p>
                 <p>Latency: {verifyResult.latency_ms.toFixed(1)}ms</p>
@@ -247,7 +244,7 @@ export default function Voice() {
             )}
           </div>
 
-          <div className="p-4 rounded-lg bg-secondary">
+          <div className="card">
             <h2 className="text-lg font-semibold mb-3">Identify Speaker</h2>
             <div className="space-y-3 mb-3">
               <textarea
@@ -255,13 +252,13 @@ export default function Voice() {
                 value={identifyAudio}
                 onChange={e => setIdentifyAudio(e.target.value)}
                 rows={4}
-                className="w-full px-3 py-2 rounded-lg text-sm font-mono bg-tertiary text-primary border-default"
+                className="input-base font-mono"
               />
             </div>
             <button
               onClick={() => identify.mutate()}
               disabled={identify.isPending || !identifyAudio}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white"
+              className="btn-primary"
             >
               {identify.isPending ? "Processing..." : "Identify"}
             </button>
@@ -271,7 +268,7 @@ export default function Voice() {
                   <div key={i} className="p-2 rounded-lg text-sm bg-tertiary">
                     <span className="font-medium">{r.speaker_id}</span>
                     <span className="ml-2">score={r.score}</span>
-                    <span className="ml-2">{r.verified ? "РІСљвЂњ" : "РІСљвЂ”"}</span>
+                    <span className="ml-2">{r.verified ? "✓" : "✗"}</span>
                   </div>
                 ))}
               </div>
@@ -281,14 +278,14 @@ export default function Voice() {
       )}
 
       {tab === "continuous" && (
-        <div className="p-4 rounded-lg bg-secondary">
+        <div className="card">
           <h2 className="text-lg font-semibold mb-3">Continuous Authentication</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
             <input
               placeholder="Speaker ID"
               value={contId}
               onChange={e => setContId(e.target.value)}
-              className="px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default"
+              className="input-base"
             />
             <input
               placeholder="Interval (seconds)"
@@ -297,12 +294,12 @@ export default function Voice() {
               type="number"
               min="1"
               step="0.5"
-              className="px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default"
+              className="input-base"
             />
             <button
               onClick={() => continuousStart.mutate()}
               disabled={continuousStart.isPending || !contId}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white"
+              className="btn-primary"
             >
               {continuousStart.isPending ? "Processing..." : "Start Continuous Auth"}
             </button>
@@ -314,7 +311,7 @@ export default function Voice() {
       )}
 
       {tab === "stats" && (
-        <div className="p-4 rounded-lg bg-secondary">
+        <div className="card">
           <h2 className="text-lg font-semibold mb-3">Voice Biometrics Statistics</h2>
           {stats === undefined ? (
             <p className="text-sm text-tertiary">Loading...</p>
@@ -326,9 +323,9 @@ export default function Voice() {
                 { label: "Threshold", value: stats.threshold },
                 { label: "Encoder Model", value: stats.encoder_model?.split("/").pop() },
               ].map(s => (
-                <div key={s.label} className="p-3 rounded-lg text-center bg-tertiary">
-                  <div className="text-2xl font-bold">{s.value ?? "РІР‚вЂќ"}</div>
-                  <div className="text-xs mt-1 text-tertiary">{s.label}</div>
+                <div key={s.label} className="stat-card text-center">
+                  <div className="stat-card-value">{s.value ?? "—"}</div>
+                  <div className="stat-card-label">{s.label}</div>
                 </div>
               ))}
             </div>
