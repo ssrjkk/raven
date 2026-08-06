@@ -161,6 +161,40 @@ class TestQuestionErrorPropagation:
         assert agent.config.max_steps == 5
 
 
+class TestReActAgentMalformedToolJson:
+    @pytest.mark.asyncio
+    async def test_malformed_tool_json_returns_clear_feedback(self):
+        from ravencode.runtime.agent_core import ReActAgent
+
+        calls: list[object] = []
+
+        async def fake_llm(messages):
+            calls.append(messages)
+            if len(calls) == 1:
+                return {
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "nodes_list", "arguments": "{oops"},
+                        }
+                    ],
+                }
+            return {"content": "final answer"}
+
+        agent = ReActAgent(
+            config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, max_steps=5),
+            llm_provider=fake_llm,
+        )
+        result = await agent.run("do the thing")
+        assert result == "final answer"
+        tool_results = [m for m in agent.conversation.messages if m.get("role") == "tool"]
+        assert tool_results, "expected a tool result message for the malformed call"
+        assert "malformed JSON" in tool_results[0]["content"]
+        assert "nodes_list" in tool_results[0]["content"]
+
+
 class TestReActAgentTruthful:
     @pytest.mark.asyncio
     async def test_run_truthful_success(self):

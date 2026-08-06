@@ -12,6 +12,7 @@ from typing import Any
 
 from loguru import logger
 
+from raven.core.agents.validation import validate_tool_arguments
 from raven.core.security.ssrf import safe_fetch_async, validate_url
 from ravencode.core.metrics import observe_tool
 from ravencode.runtime.question import QuestionError
@@ -1648,6 +1649,10 @@ async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
     tool = MODULE_TOOLS.get(name)
     if not tool:
         return f"[error] unknown tool: {name}"
+    validation_error = validate_tool_arguments(name, tool.get("parameters", {}), arguments)
+    if validation_error is not None:
+        logger.warning("Tool call to '{}' rejected: {}", name, validation_error)
+        return f"[error] {validation_error}"
     perm = _get_permission_for_tool(name, arguments)
     if not perm[0]:
         return f"[denied] {perm[1]}"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ravencode.runtime.tools import MODULE_TOOLS, _ensure_plugin_tools
+from ravencode.runtime.tools import MODULE_TOOLS, _ensure_plugin_tools, execute_tool
 
 
 class TestModuleTools:
@@ -60,3 +60,50 @@ class TestModuleTools:
     def test_no_tools_with_same_name(self):
         names = [t["name"] for t in MODULE_TOOLS.values()]
         assert len(names) == len(set(names))
+
+
+class TestExecuteToolValidation:
+    @pytest.mark.asyncio
+    async def test_rejects_missing_required_argument(self, monkeypatch):
+        async def boom(**kwargs):
+            raise AssertionError("handler must not be invoked on invalid arguments")
+
+        monkeypatch.setitem(MODULE_TOOLS["write"], "handler", boom)
+        result = await execute_tool("write", {"content": "x"})
+        assert result.startswith("[error]")
+        assert "path" in result
+
+    @pytest.mark.asyncio
+    async def test_rejects_unknown_property(self, monkeypatch):
+        async def boom(**kwargs):
+            raise AssertionError("handler must not be invoked on invalid arguments")
+
+        monkeypatch.setitem(MODULE_TOOLS["write"], "handler", boom)
+        result = await execute_tool("write", {"path": "a.txt", "content": "x", "surprise": 1})
+        assert result.startswith("[error]")
+        assert "surprise" in result
+
+    @pytest.mark.asyncio
+    async def test_rejects_wrong_type(self, monkeypatch):
+        async def boom(**kwargs):
+            raise AssertionError("handler must not be invoked on invalid arguments")
+
+        monkeypatch.setitem(MODULE_TOOLS["write"], "handler", boom)
+        result = await execute_tool("write", {"path": "a.txt", "content": 42})
+        assert result.startswith("[error]")
+        assert "content" in result
+
+    @pytest.mark.asyncio
+    async def test_valid_arguments_pass_through(self, monkeypatch):
+        async def fake(path: str, content: str) -> str:
+            return f"wrote {path}"
+
+        monkeypatch.setitem(MODULE_TOOLS["write"], "handler", fake)
+        result = await execute_tool("write", {"path": "a.txt", "content": "hello"})
+        assert result == "wrote a.txt"
+
+    @pytest.mark.asyncio
+    async def test_unknown_tool_still_rejected(self):
+        result = await execute_tool("definitely_not_a_tool", {})
+        assert result.startswith("[error]")
+        assert "unknown tool" in result

@@ -315,10 +315,18 @@ class ReActAgent:
                 name = tc["function"]["name"]
                 raw = tc["function"]["arguments"]
 
-                try:
-                    args = json.loads(raw) if isinstance(raw, str) else raw
-                except json.JSONDecodeError:
-                    args = {"raw": raw}
+                malformed = ""
+                if isinstance(raw, str):
+                    try:
+                        args = json.loads(raw)
+                    except json.JSONDecodeError:
+                        args = {}
+                        malformed = (
+                            f"[error] malformed JSON in tool arguments for '{name}': {raw[:500]!r}. "
+                            "Respond with a corrected arguments object."
+                        )
+                else:
+                    args = raw
 
                 if not isinstance(args, dict):
                     args = {"value": str(args)}
@@ -326,7 +334,9 @@ class ReActAgent:
                 if ee:
                     await ee.emit(AgentEvent("tool_call", {"name": name, "args": args, "step": step}))
 
-                if await self._confirm_action(name, args):
+                if malformed:
+                    result = malformed
+                elif await self._confirm_action(name, args):
                     result = await self._execute_with_retry(name, args)
                 else:
                     result = f"[user denied] {name} was not approved"

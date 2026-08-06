@@ -6,7 +6,17 @@ from jsonschema import Draft7Validator
 
 
 def build_arguments_schema(parameters: Mapping[str, object]) -> dict[str, object]:
-    """Build a JSON Schema object description from tool parameter metadata."""
+    """Build a JSON Schema object description from tool parameter metadata.
+
+    Accepts both formats:
+    - flat mapping of ``{name: spec}`` (raven ``ToolSpec.parameters``)
+    - a complete JSON Schema object (ravencode ``MODULE_TOOLS[..]["parameters"]``)
+    """
+    if isinstance(parameters.get("type"), str) and isinstance(parameters.get("properties"), Mapping):
+        schema = dict(parameters)
+        schema["type"] = "object"
+        schema["additionalProperties"] = False
+        return schema
     required: list[str] = []
     for name, spec in parameters.items():
         if isinstance(spec, Mapping) and spec.get("required"):
