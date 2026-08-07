@@ -32,7 +32,15 @@ RAVEN_JSON_TEMPLATE = """\
   }},
   "workspace": "workspace",
   "plugins_dir": "plugins",
-  "skills_dir": "workspace/skills"
+  "skills_dir": "workspace/skills",
+  "paths": {{
+    "skills": ["workspace/skills"],
+    "commands": [".raven/commands"],
+    "rules": [".raven/rules"],
+    "agents": [".raven/agents"],
+    "plugins": ["plugins"],
+    "hooks": [".raven/hooks"]
+  }}
 }
 """
 
@@ -60,6 +68,10 @@ RAVEN_DEFAULT_MODEL={default_model}
 # RAVEN_WORKSPACE=workspace
 # RAVEN_PLUGINS_DIR=plugins
 # RAVEN_SKILLS_DIR=workspace/skills
+# RAVEN_COMMANDS_DIR=.raven/commands
+# RAVEN_RULES_DIR=.raven/rules
+# RAVEN_AGENTS_DIR=.raven/agents
+# RAVEN_HOOKS_DIR=.raven/hooks
 
 # Web UI
 # RAVEN_WEB_PORT={web_port}
@@ -177,6 +189,14 @@ def _write_raven_json(llm: dict[str, str], channels: dict[str, Any], security: d
         "workspace": "workspace",
         "plugins_dir": "plugins",
         "skills_dir": "workspace/skills",
+        "paths": {
+            "skills": ["workspace/skills"],
+            "commands": [".raven/commands"],
+            "rules": [".raven/rules"],
+            "agents": [".raven/agents"],
+            "plugins": ["plugins"],
+            "hooks": [".raven/hooks"],
+        },
     }
     path.write_text(json.dumps(data, indent=2))
     console.print(f"[green]Written {path}[/green]")
@@ -249,6 +269,14 @@ def init() -> None:
     (root / "plugins").mkdir(exist_ok=True)
     (root / "data").mkdir(exist_ok=True)
 
+    artifact_dirs = ("skills", "commands", "rules", "agents", "plugins", "hooks")
+    team = root / ".raven"
+    for sub in artifact_dirs:
+        (team / sub).mkdir(parents=True, exist_ok=True)
+    personal = root / ".raven.local"
+    for sub in artifact_dirs:
+        (personal / sub).mkdir(parents=True, exist_ok=True)
+
     console.print()
     console.print(
         Panel.fit(
@@ -262,7 +290,9 @@ def init() -> None:
             f"  {root / '.env.example'}\n"
             f"  {root / 'workspace/'}\n"
             f"  {root / 'plugins/'}\n"
-            f"  {root / 'data/'}",
+            f"  {root / 'data/'}\n"
+            f"  {root / '.raven/'}  (team artifacts)\n"
+            f"  {root / '.raven.local/'}  (personal artifacts, gitignore it)",
             border_style="green",
         )
     )

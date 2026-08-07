@@ -23,10 +23,14 @@ class BaseStore:
         if self._connection is None:
             self._connection = await aiosqlite.connect(self._path)
             self._connection.row_factory = aiosqlite.Row
-            await self._connection.execute("PRAGMA journal_mode=WAL")
-            await self._connection.execute("PRAGMA synchronous=NORMAL")
-            await self._connection.execute("PRAGMA busy_timeout=5000")
-            await self._connection.execute("PRAGMA foreign_keys=ON")
+            for pragma in (
+                "PRAGMA journal_mode=WAL",
+                "PRAGMA synchronous=NORMAL",
+                "PRAGMA busy_timeout=5000",
+                "PRAGMA foreign_keys=ON",
+            ):
+                async with self._connection.execute(pragma):
+                    pass
         if not self._schema_ensured:
             async with self._lock:
                 if not self._schema_ensured:
@@ -50,12 +54,18 @@ class BaseStore:
 
     async def _fetchone(self, sql: str, params: list[Any] | tuple[Any, ...] = ()) -> aiosqlite.Row | None:
         cursor = await self._execute(sql, params)
-        return await cursor.fetchone()
+        try:
+            return await cursor.fetchone()
+        finally:
+            await cursor.close()
 
     async def _fetchall(self, sql: str, params: list[Any] | tuple[Any, ...] = ()) -> list[aiosqlite.Row]:
         cursor = await self._execute(sql, params)
-        rows = await cursor.fetchall()
-        return list(rows)
+        try:
+            rows = await cursor.fetchall()
+            return list(rows)
+        finally:
+            await cursor.close()
 
     async def _commit(self) -> None:
         conn = await self._conn()

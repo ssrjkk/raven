@@ -26,6 +26,10 @@ data/*.log.*
 data/secrets.enc
 data/.secrets
 data/audit_signing_key.bin
+data/token.txt
+data/session.txt
+data/*.err
+data/_*.py
 
 # Build artifacts
 desktop/dist/

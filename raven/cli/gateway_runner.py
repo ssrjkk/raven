@@ -27,7 +27,7 @@ from raven.channels.telegram.channel import TelegramChannel
 from raven.channels.webchat.channel import WebChatChannel
 from raven.channels.whatsapp.channel import WhatsAppChannel
 from raven.core.ab_testing_api import create_ab_testing_router
-from raven.core.admin_api import create_admin_router
+from raven.core.admin_api import create_admin_router, init_auth_routes
 from raven.core.analytics import AnalyticsEngine
 from raven.core.analytics_api import create_analytics_router, set_analytics_engine
 from raven.core.audit import AuditEventType, audit_logger
@@ -170,6 +170,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         await gateway.register_channel(ch)
 
     api_app = webchat.app
+
+    init_auth_routes(api_app, str(settings.resolved_db_path))
 
     cors_origins = [o.strip() for o in settings.web_cors_origins.split(",") if o.strip()]
     if not cors_origins:

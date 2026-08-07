@@ -229,10 +229,27 @@ async def _migration_8(conn):
             logger.debug("Migration 8: index already exists")
 
 
+@register(9, "Add user_id + channel columns to monitors")
+async def _migration_9(conn):
+    for col, ddl in (
+        ("user_id", "ALTER TABLE monitors ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"),
+        ("channel", "ALTER TABLE monitors ADD COLUMN channel TEXT NOT NULL DEFAULT ''"),
+    ):
+        try:
+            await conn.execute(ddl)
+        except aiosqlite.OperationalError:
+            logger.debug("Migration 9: column {} already exists", col)
+    try:
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_monitor_user_id ON monitors(user_id)")
+    except aiosqlite.OperationalError:
+        logger.debug("Migration 9: index already exists")
+
+
 async def apply_pending_migrations(conn: aiosqlite.Connection) -> None:
-    await conn.execute(MIGRATIONS_TABLE)
-    cursor = await conn.execute("SELECT COALESCE(MAX(version), 0) FROM _migrations")
-    row = await cursor.fetchone()
+    async with conn.execute(MIGRATIONS_TABLE):
+        pass
+    async with conn.execute("SELECT COALESCE(MAX(version), 0) FROM _migrations") as cursor:
+        row = await cursor.fetchone()
     current = row[0] if row else 0
 
     pending = sorted([m for m in _MIGRATIONS if m.version > current], key=lambda m: m.version)
@@ -240,7 +257,8 @@ async def apply_pending_migrations(conn: aiosqlite.Connection) -> None:
         return
 
     try:
-        await conn.execute("PRAGMA foreign_keys=OFF")
+        async with conn.execute("PRAGMA foreign_keys=OFF"):
+            pass
         for mig in pending:
             logger.info("Applying migration {}: {}", mig.version, mig.description)
             try:
@@ -257,7 +275,8 @@ async def apply_pending_migrations(conn: aiosqlite.Connection) -> None:
                 logger.error("Migration {} failed: {}", mig.version, e)
                 raise
     finally:
-        await conn.execute("PRAGMA foreign_keys=ON")
+        async with conn.execute("PRAGMA foreign_keys=ON"):
+            pass
 
 
 class Migrator:
@@ -287,7 +306,8 @@ class Migrator:
 
         conn = await aiosqlite.connect(str(self.db_path), timeout=_AIOSQLITE_TIMEOUT)
         try:
-            await conn.execute("PRAGMA foreign_keys=OFF")
+            async with conn.execute("PRAGMA foreign_keys=OFF"):
+                pass
             for mig in pending:
                 logger.info("Applying migration {}: {}", mig.version, mig.description)
                 try:
@@ -303,7 +323,8 @@ class Migrator:
                     logger.error("Migration {} failed: {}", mig.version, e)
                     raise
         finally:
-            await conn.execute("PRAGMA foreign_keys=ON")
+            async with conn.execute("PRAGMA foreign_keys=ON"):
+                pass
             await conn.close()
 
         logger.info("DB migrated to version {}", current + len(pending))

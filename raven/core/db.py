@@ -29,10 +29,14 @@ class Database:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = await aiosqlite.connect(str(self.db_path))
         self.conn.row_factory = aiosqlite.Row
-        await self.conn.execute("PRAGMA journal_mode=WAL")
-        await self.conn.execute("PRAGMA foreign_keys=ON")
-        await self.conn.execute("PRAGMA busy_timeout=5000")
-        await self.conn.execute("PRAGMA synchronous=NORMAL")
+        for pragma in (
+            "PRAGMA journal_mode=WAL",
+            "PRAGMA foreign_keys=ON",
+            "PRAGMA busy_timeout=5000",
+            "PRAGMA synchronous=NORMAL",
+        ):
+            async with self.conn.execute(pragma):
+                pass
         await self._migrate()
 
     async def _migrate(self):

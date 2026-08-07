@@ -216,7 +216,8 @@ class TestComplete:
                 return LLMResponse(content="ok")
 
             async def complete_stream(self, messages, model, tools=None):
-                pass
+                if False:
+                    yield ""
 
             async def cleanup(self):
                 pass
@@ -245,7 +246,8 @@ class TestComplete:
                 return LLMResponse(content="ok")
 
             async def complete_stream(self, messages, model, tools=None):
-                pass
+                if False:
+                    yield ""
 
             async def cleanup(self):
                 pass

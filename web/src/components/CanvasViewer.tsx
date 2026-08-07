@@ -52,38 +52,52 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
     case "text": {
       const as = (props.as as string) || "p";
       const Tag = as === "h1" ? "h1" : as === "h2" ? "h2" : as === "h3" ? "h3" : as === "h4" ? "h4" : as === "span" ? "span" : "p";
-      return <Tag key={id} className={`text-gray-200 ${Tag !== "p" ? "font-bold" : ""}`} style={{ color: props.color as string }}>{props.content as string}</Tag>;
+      return <Tag key={id} className={`text-primary ${Tag !== "p" ? "font-bold" : ""}`} style={{ color: props.color as string }}>{props.content as string}</Tag>;
     }
 
-    case "button":
+    case "button": {
+      const variant = (props.variant as string) || "default";
+      let variantStyle: Record<string, string> = {
+        backgroundColor: "var(--dt-colors-accent-default)",
+        color: "#fff",
+      };
+      if (variant === "danger") {
+        variantStyle = { backgroundColor: "var(--dt-colors-status-error)", color: "#fff" };
+      } else if (variant === "success") {
+        variantStyle = { backgroundColor: "var(--dt-colors-status-success)", color: "#fff" };
+      } else if (variant === "outline") {
+        variantStyle = {
+          backgroundColor: "transparent",
+          color: "var(--dt-colors-text-primary)",
+          border: "1px solid var(--dt-colors-border-default)",
+        };
+      }
       return (
         <button
           key={id}
           onClick={() => onAction(id, props.action as string, props.data as Record<string, unknown> || {})}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            (props.variant as string) === "danger" ? "bg-red-700 hover:bg-red-600 text-white" :
-            (props.variant as string) === "success" ? "bg-green-700 hover:bg-green-600 text-white" :
-            (props.variant as string) === "outline" ? "border border-gray-600 hover:bg-gray-800 text-gray-200" :
-            "bg-violet-700 hover:bg-violet-600 text-white"
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition hover:brightness-110 active:brightness-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+            variant === "outline" ? "hover:bg-[var(--dt-colors-bg-hover)]" : ""
           } ${props.className as string || ""}`}
           disabled={props.disabled as boolean}
-          style={props.style as Record<string, string> || {}}
+          style={{ ...variantStyle, ...(props.style as Record<string, string> || {}) }}
         >
           {props.label as string}
         </button>
       );
+    }
 
     case "input":
       const label = props.label as string | undefined;
       return (
         <div key={id} className="flex flex-col gap-1">
-          {label && <label className="text-xs text-gray-500">{label}</label>}
+          {label && <label className="text-xs text-tertiary">{label}</label>}
           <input
             name={props.name as string}
             placeholder={(props.placeholder as string) || ""}
             defaultValue={props.defaultValue as string}
             type={(props.inputType as string) || "text"}
-            className="bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-violet-500/50"
+            className="input-base"
           />
         </div>
       );
@@ -92,11 +106,11 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
       const selectLabel = props.label as string | undefined;
       return (
         <div key={id} className="flex flex-col gap-1">
-          {selectLabel && <label className="text-xs text-gray-500">{selectLabel}</label>}
+          {selectLabel && <label className="text-xs text-tertiary">{selectLabel}</label>}
           <select
             name={props.name as string}
             defaultValue={props.defaultValue as string}
-            className="bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-violet-500/50"
+            className="input-base"
           >
             {(props.options as Array<{ value: string; label: string }>)?.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -108,8 +122,8 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
     case "card":
       const title = props.title as string | undefined;
       return (
-        <div key={id} className="bg-gray-900/60 border border-gray-800/50 rounded-xl p-4 space-y-3" style={props.style as Record<string, string> || {}}>
-          {title && <h3 className="text-sm font-semibold text-gray-200">{title}</h3>}
+        <div key={id} className="card-bordered p-4 space-y-3" style={props.style as Record<string, string> || {}}>
+          {title && <h3 className="text-sm font-semibold text-primary">{title}</h3>}
           {childNodes}
         </div>
       );
@@ -119,17 +133,17 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
         <div key={id} className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800/50">
+              <tr className="border-b border-default">
                 {(props.headers as string[])?.map((h: string, i: number) => (
-                  <th key={i} className="px-3 py-2 text-left text-gray-500 font-medium">{h}</th>
+                  <th key={i} className="px-3 py-2 text-left text-tertiary font-medium">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {(props.rows as string[][])?.map((row: string[], ri: number) => (
-                <tr key={ri} className="border-b border-gray-800/30 hover:bg-gray-800/20">
+                <tr key={ri} className="border-b border-default hover:bg-[var(--dt-colors-bg-hover)]">
                   {row.map((cell: string, ci: number) => (
-                    <td key={ci} className="px-3 py-2 text-gray-300">{cell}</td>
+                    <td key={ci} className="px-3 py-2 text-secondary">{cell}</td>
                   ))}
                 </tr>
               ))}
@@ -139,22 +153,22 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
       );
 
     case "badge":
-      const variantMap: Record<string, string> = {
-        default: "bg-gray-700 text-gray-200",
-        success: "bg-green-900/50 text-green-300",
-        warning: "bg-amber-900/50 text-amber-300",
-        danger: "bg-red-900/50 text-red-300",
-        info: "bg-blue-900/50 text-blue-300",
+      const badgeVariants: Record<string, Record<string, string>> = {
+        default: { backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-secondary)" },
+        success: { backgroundColor: "var(--dt-colors-status-success-bg)", color: "var(--dt-colors-status-success)" },
+        warning: { backgroundColor: "var(--dt-colors-status-warning-bg)", color: "var(--dt-colors-status-warning)" },
+        danger: { backgroundColor: "var(--dt-colors-status-error-bg)", color: "var(--dt-colors-status-error)" },
+        info: { backgroundColor: "var(--dt-colors-status-info-bg)", color: "var(--dt-colors-status-info)" },
       };
       return (
-        <span key={id} className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${variantMap[props.variant as string] || variantMap.default}`}>
+        <span key={id} className="inline-block px-2 py-0.5 rounded-full text-xs font-medium" style={badgeVariants[(props.variant as string) || "default"]}>
           {props.text as string}
         </span>
       );
 
     case "code":
       return (
-        <pre key={id} className="bg-black/40 rounded-lg p-3 overflow-x-auto text-sm">
+        <pre key={id} className="bg-tertiary rounded-lg p-3 overflow-x-auto text-sm">
           <code className={props.language ? `language-${props.language as string}` : ""}>{props.content as string}</code>
         </pre>
       );
@@ -163,7 +177,7 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
       const imgUrl = props.url as string;
       const src = safeResourceUrl(imgUrl, "image");
       if (!src) {
-        return <span key={id} className="text-gray-500 text-sm">Blocked image URL</span>;
+        return <span key={id} className="text-tertiary text-sm">Blocked image URL</span>;
       }
       return (
         <img key={id} src={src} alt={props.alt as string || ""}
@@ -176,8 +190,8 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
     case "progress":
       const pct = ((props.value as number || 0) / (props.max as number || 1)) * 100;
       return (
-        <div key={id} className="w-full bg-gray-800 rounded-full h-2">
-          <div className="bg-violet-600 h-2 rounded-full transition-all duration-300" style={{ width: `${Math.min(pct, 100)}%` }} />
+        <div key={id} className="w-full bg-tertiary rounded-full h-2">
+          <div className="h-2 rounded-full transition-all duration-300" style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: "var(--dt-colors-accent-default)" }} />
         </div>
       );
 
@@ -193,11 +207,11 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
       const href = props.href as string;
       const safeHref = safeResourceUrl(href, "link");
       if (!safeHref) {
-        return <span key={id} className="text-gray-500 text-sm">{props.text as string} (blocked)</span>;
+        return <span key={id} className="text-tertiary text-sm">{props.text as string} (blocked)</span>;
       }
       return (
         <a key={id} href={safeHref} target="_blank" rel="noopener noreferrer"
-          className="text-violet-400 hover:text-violet-300 underline text-sm">
+          className="text-accent hover:text-[var(--dt-colors-accent-hover)] underline text-sm">
           {props.text as string}
         </a>
       );
@@ -207,9 +221,9 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
       return (
         <ul key={id} className="space-y-1 list-disc list-inside">
           {(props.items as Array<{ text: string; sub?: string }>)?.map((item, i) => (
-            <li key={i} className="text-sm text-gray-300">
+            <li key={i} className="text-sm text-secondary">
               {item.text}
-              {item.sub && <span className="text-gray-500 text-xs ml-2">{item.sub}</span>}
+              {item.sub && <span className="text-tertiary text-xs ml-2">{item.sub}</span>}
             </li>
           ))}
         </ul>
@@ -223,8 +237,8 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
         <div key={id} className="space-y-2">
           {(props.tabs as Array<{ label: string; content: ComponentDef }>)?.map((tab, i) => (
             <div key={i}>
-              <h4 className="text-sm font-medium text-gray-300 mb-1">{tab.label}</h4>
-              <div className="pl-3 border-l-2 border-gray-700">
+              <h4 className="text-sm font-medium text-secondary mb-1">{tab.label}</h4>
+              <div className="pl-3 border-l-2 border-default">
                 {renderComponent(tab.content, onAction)}
               </div>
             </div>
@@ -233,7 +247,7 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
       );
 
     default:
-      return <div key={id} className="text-gray-500 text-sm">Unknown: {type}</div>;
+      return <div key={id} className="text-tertiary text-sm">Unknown: {type}</div>;
   }
 }
 
@@ -284,22 +298,22 @@ const CanvasViewer = memo(function CanvasViewer({ sessionId, className }: { sess
   }, [sessionId]);
 
   if (error) {
-    return <div className="text-red-400 text-sm p-4 bg-red-900/10 rounded-lg">{error}</div>;
+    return <div className="text-danger text-sm p-4 bg-danger-muted rounded-lg">{error}</div>;
   }
 
   if (!canvas?.root) {
     return (
-      <div className="flex items-center justify-center h-48 text-gray-600 text-sm">
+      <div className="flex items-center justify-center h-48 text-tertiary text-sm">
         Canvas is empty — tell the agent to render something
       </div>
     );
   }
 
   return (
-    <div className={`space-y-3 p-3 bg-gray-950/50 rounded-xl border border-gray-800/30 ${className || ""}`}>
+    <div className={`card p-3 space-y-3 ${className || ""}`}>
       <div className="flex items-center justify-between">
-        <span className="text-[10px] text-gray-700 font-mono uppercase tracking-wider">Live Canvas</span>
-        <span className="text-[10px] text-gray-600">{canvas.session_id.slice(0, 16)}</span>
+        <span className="text-[10px] text-tertiary font-mono uppercase tracking-wider">Live Canvas</span>
+        <span className="text-[10px] text-tertiary">{canvas.session_id.slice(0, 16)}</span>
       </div>
       <div className="space-y-3 canvas-root">
         {renderComponent(canvas.root, onAction)}

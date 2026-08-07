@@ -42,7 +42,8 @@ class AuthStore(BaseStore):
 
     async def _conn(self) -> aiosqlite.Connection:
         conn = await super()._conn()
-        await conn.execute("PRAGMA journal_mode=WAL")
+        async with conn.execute("PRAGMA journal_mode=WAL"):
+            pass
         return conn
 
     @property

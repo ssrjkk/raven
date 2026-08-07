@@ -67,7 +67,7 @@ async def _resolve_host_async(host: str) -> list[ipaddress.IPv4Address | ipaddre
         seen: set[str] = set()
         result: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
         for _, _, _, _, sa in addrs:
-            ip_str = sa[0]
+            ip_str = str(sa[0])
             if ip_str not in seen:
                 seen.add(ip_str)
                 try:

@@ -5,6 +5,7 @@ import inspect
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from raven.core.plugin_loader import PluginLoader, func_to_tool
@@ -229,25 +230,31 @@ class TestApiPlugin:
     async def test_http_get_success(self):
         from raven.plugins.api import plugin as p
 
-        with patch("httpx.AsyncClient.request", new=AsyncMock()) as mock_request:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.reason_phrase = "OK"
-            mock_response.text = '{"ok": true}'
-            mock_response.headers = {"content-type": "application/json"}
-            mock_response.has_redirect_location = False
-            mock_response.is_redirect = False
-            mock_request.return_value = mock_response
+        response = httpx.Response(200, json={"ok": True})
+        with (
+            patch("raven.plugins.api.plugin.validate_url", return_value=None),
+            patch(
+                "raven.plugins.api.plugin.safe_fetch_async",
+                new=AsyncMock(return_value=response),
+            ) as mock_fetch,
+        ):
             result = await p.http_get("https://example.com")
-            assert "200" in result
+        assert "200" in result
+        mock_fetch.assert_awaited_once_with("https://example.com", method="GET")
 
     @pytest.mark.asyncio
     async def test_http_get_timeout(self):
         from raven.plugins.api import plugin as p
 
-        with patch("httpx.AsyncClient.request", side_effect=TimeoutError("timeout")):
+        with (
+            patch("raven.plugins.api.plugin.validate_url", return_value=None),
+            patch(
+                "raven.plugins.api.plugin.safe_fetch_async",
+                new=AsyncMock(side_effect=TimeoutError("timeout")),
+            ),
+        ):
             result = await p.http_get("https://example.com", timeout=1)
-            assert "Error" in result or "error" in result
+        assert "Error" in result or "error" in result
 
     @pytest.mark.asyncio
     async def test_validate_url_blocks_localhost(self):
@@ -267,17 +274,23 @@ class TestApiPlugin:
     async def test_http_post(self):
         from raven.plugins.api import plugin as p
 
-        with patch("httpx.AsyncClient.request", new=AsyncMock()) as mock_request:
-            mock_response = MagicMock()
-            mock_response.status_code = 201
-            mock_response.reason_phrase = "Created"
-            mock_response.text = '{"id": 1}'
-            mock_response.headers = {}
-            mock_response.has_redirect_location = False
-            mock_response.is_redirect = False
-            mock_request.return_value = mock_response
-            result = await p.http_post("https://example.com/api", data='{"name": "test"}')
-            assert "201" in result
+        response = httpx.Response(201, json={"id": 1})
+        with (
+            patch("raven.plugins.api.plugin.validate_url", return_value=None),
+            patch(
+                "raven.plugins.api.plugin.safe_fetch_async",
+                new=AsyncMock(return_value=response),
+            ) as mock_fetch,
+        ):
+            result = await p.http_post(
+                "https://example.com/api", data='{"name": "test"}'
+            )
+        assert "201" in result
+        mock_fetch.assert_awaited_once_with(
+            "https://example.com/api",
+            method="POST",
+            json={"name": "test"},
+        )
 
     def test_tool_discovery(self):
         from raven.plugins.api import plugin as p

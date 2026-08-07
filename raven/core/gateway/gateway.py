@@ -6,6 +6,7 @@ import re
 import secrets
 import string
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -227,6 +228,20 @@ class Gateway:
         self.commands.register(CodeCommand(self))
         self.commands.register(RoutineCommand(self))
         self.commands.register(VoiceCommand(self))
+        self._register_artifact_commands()
+
+    def _register_artifact_commands(self) -> None:
+        from raven.core.artifacts import get_artifact_manager
+        from raven.core.artifacts.commands import BundleCommandHandler
+
+        root = settings.resolved_workspace or Path.cwd()
+        try:
+            self._artifact_root = root
+            manager = get_artifact_manager(cwd=root)
+            for index in manager.commands_index():
+                self.commands.register(BundleCommandHandler(self, manager.load_command(index), manager))
+        except Exception as e:
+            logger.warning("Artifact commands not loaded: {}", e)
 
     async def start(self):
         if self._running:

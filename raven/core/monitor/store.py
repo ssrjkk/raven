@@ -49,7 +49,6 @@ CREATE TABLE IF NOT EXISTS monitor_checks (
     error TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_monitor_status ON monitors(status);
-CREATE INDEX IF NOT EXISTS idx_monitor_user_id ON monitors(user_id);
 CREATE INDEX IF NOT EXISTS idx_monitor_checks_monitor_id ON monitor_checks(monitor_id);
 CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 """

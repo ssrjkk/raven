@@ -139,7 +139,7 @@ export default function Chat() {
             <div className="mb-1 flex justify-end">
               <button
                 onClick={() => setStreamVisible(false)}
-                className="text-xs text-gray-500 hover:text-gray-300 transition"
+                className="text-xs text-tertiary hover:text-secondary transition"
               >
                 Свернуть поток
               </button>

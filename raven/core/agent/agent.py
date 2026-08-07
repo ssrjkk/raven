@@ -4,6 +4,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from enum import Enum, auto
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -97,9 +98,8 @@ class Agent:
         if self.session.system_prompt:
             base = self.session.system_prompt + "\n\n" + base
         workspace = self.config.workspace
+        ws: Path | None = None
         if workspace:
-            from pathlib import Path
-
             ws = Path(workspace)
             for fname in ("SOUL.md", "AGENTS.md", "TOOLS.md"):
                 fp = ws / fname
@@ -109,7 +109,46 @@ class Agent:
                     content = content.strip()
                     if content:
                         base += f"\n\n---\n[{fname}]\n{content}"
+        artifact_blocks = await self._artifact_blocks(ws)
+        if artifact_blocks:
+            base += artifact_blocks
         return base
+
+    async def _artifact_blocks(self, workspace: Path | None) -> str:
+        try:
+            from raven.core.artifacts import get_artifact_manager
+
+            root = workspace if workspace is not None else settings.resolved_workspace
+            if root is None:
+                return ""
+            manager = get_artifact_manager(cwd=root)
+            ctx = manager.context(
+                agent_id=self.config.agent_id,
+                channel=self.session.channel,
+                cwd=root,
+                root=root,
+            )
+            parts: list[str] = []
+            rules = manager.rules_for(ctx)
+            if rules:
+                body = "\n\n".join(f"[rules: {r.name}]\n{r.content}" for r in rules)
+                parts.append(f"[project rules]\n{body}")
+            skills = manager.skills_for(ctx)
+            for skill in skills:
+                text = skill.instructions
+                if skill.examples:
+                    text = f"{text}\n\nExamples:\n" + "\n\n".join(skill.examples)
+                parts.append(f"[skill: {skill.name}]\n{text}")
+            commands = manager.commands_for(ctx)
+            if commands:
+                listing = "\n".join(f"/{c.name} — {c.description}" for c in commands)
+                parts.append(f"[available commands]\n{listing}")
+            if not parts:
+                return ""
+            return "\n\n" + "\n\n".join(parts)
+        except Exception as e:
+            logger.debug("Artifact context skipped: {}", e)
+            return ""
 
     def _tool_schemas(self) -> list[dict[str, Any]]:
         return [

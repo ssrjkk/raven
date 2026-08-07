@@ -67,15 +67,15 @@ function phaseOf(event: AgentEvent): Phase {
 }
 
 const TONE_CLASSES: Record<EventMeta["tone"], string> = {
-  default: "text-zinc-400 bg-zinc-800/80 border-zinc-700/60",
-  accent: "text-indigo-300 bg-indigo-500/10 border-indigo-500/40",
-  success: "text-emerald-300 bg-emerald-500/10 border-emerald-500/40",
-  error: "text-red-300 bg-red-500/10 border-red-500/40",
+  default: "text-secondary bg-tertiary border-default",
+  accent: "text-accent bg-accent-muted border-[var(--dt-colors-accent-muted)]",
+  success: "text-success bg-success-muted border-[var(--dt-colors-status-success)]",
+  error: "text-danger bg-danger-muted border-[var(--dt-colors-status-error)]",
 };
 
 function ProfileBadge({ profile }: { profile: string }) {
   return (
-    <span className="px-1.5 py-0.5 rounded-md bg-zinc-800 border border-zinc-700/60 text-[10px] font-mono uppercase tracking-wide text-zinc-400">
+    <span className="px-1.5 py-0.5 rounded-md bg-tertiary border border-default text-[10px] font-mono uppercase tracking-wide text-secondary">
       {PROFILE_LABELS[profile] ?? profile}
     </span>
   );
@@ -92,9 +92,9 @@ function PlanSteps({ steps }: { steps: unknown }) {
           initial={{ opacity: 0, x: -8 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: i * 0.05 }}
-          className="flex items-start gap-2 text-sm text-zinc-300"
+          className="flex items-start gap-2 text-sm text-secondary"
         >
-          <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 text-[10px] font-bold text-indigo-300">
+          <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-accent-muted text-[10px] font-bold text-accent">
             {i + 1}
           </span>
           {step}
@@ -123,20 +123,20 @@ function EventRow({ event }: { event: AgentEvent }) {
       </div>
       <div className="min-w-0 flex-1 pb-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium text-zinc-200">{meta.label}</span>
+          <span className="text-sm font-medium text-primary">{meta.label}</span>
           <ProfileBadge profile={event.profile} />
         </div>
         {detail && detail !== meta.label && (
-          <p className="mt-0.5 break-words text-sm text-zinc-400">{detail}</p>
+          <p className="mt-0.5 break-words text-sm text-secondary">{detail}</p>
         )}
         {event.event === "plan_created" && <PlanSteps steps={data?.steps} />}
         {event.event === "tool_call" && Boolean(data?.args) && (
-          <pre className="mt-1.5 overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-400">
+          <pre className="mt-1.5 overflow-x-auto rounded-lg border border-default bg-primary px-3 py-2 text-xs text-secondary">
             {JSON.stringify(data?.args, null, 2)}
           </pre>
         )}
         {event.event === "tool_result" && detail.startsWith("error") && (
-          <span className="mt-1 inline-flex items-center gap-1 text-xs text-red-400">
+          <span className="mt-1 inline-flex items-center gap-1 text-xs text-danger">
             <XCircle className="w-3 h-3" /> {detail}
           </span>
         )}
@@ -184,12 +184,12 @@ function PhaseTracker({ events }: { events: AgentEvent[] }) {
     <div className="flex items-center gap-1.5">
       {phases.map((phase, i) => (
         <div key={phase} className="flex items-center gap-1.5">
-          {i > 0 && <div className="h-px w-4 bg-zinc-700" />}
+          {i > 0 && <div className="h-px w-4 bg-[var(--dt-colors-border-default)]" />}
           <div
             className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
               orderIndex(phase) <= currentIndex
-                ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40"
-                : "bg-zinc-800/60 text-zinc-500 border border-zinc-700/40"
+                ? "bg-accent-muted text-accent border border-[var(--dt-colors-accent-muted)]"
+                : "bg-tertiary text-tertiary border border-default"
             }`}
           >
             {labels[phase]}
@@ -203,8 +203,8 @@ function PhaseTracker({ events }: { events: AgentEvent[] }) {
 export function AgentStream({ events }: { events: AgentEvent[] }) {
   if (events.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 py-10 text-center text-zinc-500">
-        <Bot className="w-8 h-8 text-zinc-700" />
+      <div className="flex flex-col items-center gap-3 py-10 text-center text-tertiary">
+        <Bot className="w-8 h-8 text-tertiary" />
         <p className="text-sm">Агент пока бездействует. Отправьте запрос — здесь появится живой поток работы.</p>
       </div>
     );
@@ -213,18 +213,18 @@ export function AgentStream({ events }: { events: AgentEvent[] }) {
   const isRunning = !events.some((e) => e.event === "agent_completed" || e.event === "error");
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+    <div className="card p-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="flex h-2 w-2">
             {isRunning && (
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-400">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--dt-colors-accent-default)]">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--dt-colors-accent-default)] opacity-60" />
               </span>
             )}
-            {!isRunning && <span className="h-2 w-2 rounded-full bg-emerald-400" />}
+            {!isRunning && <span className="h-2 w-2 rounded-full bg-[var(--dt-colors-status-success)]" />}
           </span>
-          <span className="text-sm font-semibold text-zinc-200">Flow State</span>
+          <span className="text-sm font-semibold text-primary">Flow State</span>
         </div>
         <PhaseTracker events={events} />
       </div>
@@ -236,7 +236,7 @@ export function AgentStream({ events }: { events: AgentEvent[] }) {
         </AnimatePresence>
       </div>
       {isRunning && (
-        <div className="mt-2 flex items-center gap-2 text-xs text-indigo-400">
+        <div className="mt-2 flex items-center gap-2 text-xs text-accent">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Агенты работают...
         </div>
