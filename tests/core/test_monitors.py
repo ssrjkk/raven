@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -16,6 +17,7 @@ from raven.core.monitor.models import (
     MonitorCheck,
     MonitorStatus,
     MonitorType,
+    SLOStats,
 )
 from raven.core.monitor.store import MonitorStore
 
@@ -375,3 +377,170 @@ class TestEngineFromDb:
 
         engine = MonitorEngine(Path(db_path))
         assert engine._store is not None
+
+    async def test_legacy_db_migrated(self, db_path: str):
+        import aiosqlite
+
+        conn = await aiosqlite.connect(db_path)
+        await conn.execute(
+            """CREATE TABLE monitors (
+                id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL,
+                config TEXT NOT NULL DEFAULT '{}', condition TEXT NOT NULL DEFAULT '',
+                cooldown_minutes INTEGER NOT NULL DEFAULT 30, interval_seconds INTEGER NOT NULL DEFAULT 300,
+                notify_channels TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL DEFAULT 'active',
+                user_id TEXT NOT NULL DEFAULT '', channel TEXT NOT NULL DEFAULT '',
+                last_checked TEXT, last_triggered TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )"""
+        )
+        await conn.execute(
+            """CREATE TABLE monitor_checks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, monitor_id TEXT NOT NULL,
+                status TEXT NOT NULL, checked_at REAL NOT NULL, response_time_ms REAL,
+                triggered INTEGER DEFAULT 0, result TEXT, error TEXT
+            )"""
+        )
+        await conn.commit()
+        await conn.close()
+
+        s = MonitorStore(db_path)
+        m = Monitor(name="mig", type=MonitorType.HTTP, target="https://x", group="prod", slo_target=0.95)
+        await s.save_monitor(m)
+        loaded = await s.load_monitor(m.id)
+        assert loaded is not None
+        assert loaded.group == "prod"
+        assert loaded.slo_target == 0.95
+        assert loaded.slo_window_seconds == 86400
+        await s.close()
+
+
+class TestSLOStats:
+    def test_slo_stats_empty(self):
+        s = SLOStats(target=0.99, window_seconds=86400, total_checks=0, ok_checks=0, fail_checks=0)
+        assert s.success_rate == 1.0
+        assert s.error_budget_remaining == 1.0
+
+    def test_slo_stats_compute(self):
+        s = SLOStats(target=0.99, window_seconds=86400, total_checks=100, ok_checks=95, fail_checks=5)
+        assert s.success_rate == 0.95
+        assert s.ok_checks == 95
+        assert s.fail_checks == 5
+
+    def test_slo_stats_dict(self):
+        s = SLOStats(target=0.9, window_seconds=86400, total_checks=10, ok_checks=9, fail_checks=1)
+        d = s.to_dict()
+        assert d["target"] == 0.9
+        assert d["success_rate"] == 0.9
+        assert d["error_budget_remaining"] == 0.0
+
+    async def test_get_slo_stats_filters_window(self, store: MonitorStore):
+        m = Monitor(name="slo", type=MonitorType.HTTP, target="https://example.com")
+        await store.save_monitor(m)
+        now = time.time()
+        await store.save_check(
+            MonitorCheck(monitor_id=m.id, status="up", checked_at=now - 10, triggered=False)
+        )
+        await store.save_check(
+            MonitorCheck(monitor_id=m.id, status="down", checked_at=now - 50, triggered=True)
+        )
+        await store.save_check(
+            MonitorCheck(monitor_id=m.id, status="down", checked_at=now - 2000, triggered=True)
+        )
+        stats = await store.get_slo_stats(m.id, 1000)
+        assert stats == {"total": 2, "ok": 1, "fail": 1}
+
+
+class TestAdaptiveInterval:
+    async def test_interval_doubles_after_threshold_failures(self, store: MonitorStore):
+        handler = AsyncMock(return_value="alert")
+        engine = MonitorEngine(store)
+        engine.register_handler("http", handler)
+        m = Monitor(name="t", type=MonitorType.HTTP, target="https://example.com", interval_seconds=60)
+        await store.save_monitor(m)
+        assert engine.effective_interval(m.id, 60) == 60
+        for _ in range(3):
+            await engine.check_now(m.id)
+        assert engine.effective_interval(m.id, 60) == 120
+        assert engine._get_interval(m) == 120
+
+    async def test_interval_restored_after_successes(self, store: MonitorStore):
+        handler = AsyncMock(side_effect=["alert"] * 3 + [None] * 3)
+        engine = MonitorEngine(store)
+        engine.register_handler("http", handler)
+        m = Monitor(name="t", type=MonitorType.HTTP, target="https://example.com", interval_seconds=60)
+        await store.save_monitor(m)
+        for _ in range(3):
+            await engine.check_now(m.id)
+        assert engine.effective_interval(m.id, 60) == 120
+        for _ in range(3):
+            await engine.check_now(m.id)
+        assert engine.effective_interval(m.id, 60) == 60
+
+    async def test_interval_capped(self, store: MonitorStore):
+        handler = AsyncMock(return_value="alert")
+        engine = MonitorEngine(store)
+        engine.register_handler("http", handler)
+        m = Monitor(name="t", type=MonitorType.HTTP, target="https://example.com", interval_seconds=1000)
+        await store.save_monitor(m)
+        for _ in range(3):
+            await engine.check_now(m.id)
+        assert engine.effective_interval(m.id, 1000) == 2000
+        for _ in range(3):
+            await engine.check_now(m.id)
+        assert engine.effective_interval(m.id, 1000) == 3600
+
+    async def test_get_slo_report(self, store: MonitorStore):
+        handler = AsyncMock(return_value="alert")
+        engine = MonitorEngine(store)
+        engine.register_handler("http", handler)
+        m = Monitor(
+            name="t",
+            type=MonitorType.HTTP,
+            target="https://example.com",
+            interval_seconds=60,
+            group="prod",
+        )
+        await store.save_monitor(m)
+        await engine.check_now(m.id)
+        report = await engine.slo_report()
+        assert len(report) == 1
+        assert report[0]["monitor_id"] == m.id
+        assert report[0]["group"] == "prod"
+        assert report[0]["total_checks"] == 1
+        assert report[0]["success_rate"] == 0.0
+        assert report[0]["slo_breached"] is True
+
+
+class TestAlertDispatcherStreak:
+    async def test_suppresses_below_threshold(self):
+        d = AlertDispatcher(min_consecutive=3)
+        m = Monitor(name="t", type=MonitorType.HTTP, target="x", group="prod")
+        check = MonitorCheck(monitor_id="x", status="down", triggered=True)
+        await d.dispatch(m, check, "down")
+        assert d.streak(m, check) == 1
+
+    async def test_fires_after_threshold(self):
+        d = AlertDispatcher(min_consecutive=3)
+        m = Monitor(name="t", type=MonitorType.HTTP, target="x", group="prod")
+        c1 = MonitorCheck(monitor_id="x", status="down", triggered=True)
+        await d.dispatch(m, c1, "down")
+        await d.dispatch(m, c1, "down")
+        await d.dispatch(m, c1, "down")
+        assert d.streak(m, c1) == 0
+
+    async def test_up_resets_streak(self):
+        d = AlertDispatcher(min_consecutive=3)
+        m = Monitor(name="t", type=MonitorType.HTTP, target="x", group="prod")
+        down = MonitorCheck(monitor_id="x", status="down", triggered=True)
+        up = MonitorCheck(monitor_id="x", status="up", triggered=False)
+        await d.dispatch(m, down, "down")
+        await d.dispatch(m, up, "up")
+        assert d.streak(m, down) == 0
+
+    async def test_group_isolated_streaks(self):
+        d = AlertDispatcher(min_consecutive=3)
+        m1 = Monitor(name="a", type=MonitorType.HTTP, target="x", group="prod")
+        m2 = Monitor(name="b", type=MonitorType.HTTP, target="x", group="dev")
+        check = MonitorCheck(monitor_id="x", status="down", triggered=True)
+        await d.dispatch(m1, check, "down")
+        assert d.streak(m1, check) == 1
+        assert d.streak(m2, check) == 0

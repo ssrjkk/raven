@@ -1,52 +1,23 @@
-#!/usr/bin/env pwsh
-<#
-.SYNOPSIS
-    Build Raven AI Windows executable via PyInstaller
-.DESCRIPTION
-    Packages the entire Raven AI CLI + AI-OS-MVP bridge into a single raven.exe
-#>
+# Builds the Raven Desktop EXE (gateway + bundled web UI).
+# Prereqs: npm installed, python venv with project deps + pyinstaller installed.
 $ErrorActionPreference = "Stop"
-$ProjectRoot = Split-Path -Parent $PSScriptRoot
+$Root = Split-Path -Parent $PSScriptRoot
+Set-Location $Root
 
-Write-Host "Raven AI -- Build Windows Executable" -ForegroundColor Cyan
-Write-Host "=====================================" -ForegroundColor Cyan
-
-$py = (Get-Command python -ErrorAction SilentlyContinue)
-if (-not $py) {
-    Write-Host "Python not found. Install Python 3.11+ first." -ForegroundColor Red
-    exit 1
-}
-
-Write-Host "[1/3] Installing build dependencies..." -ForegroundColor Yellow
-pip install pyinstaller
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Failed to install pyinstaller" -ForegroundColor Red
-    exit 1
-}
-
-Write-Host "[2/3] Building raven.exe..." -ForegroundColor Yellow
-$spec = Join-Path $ProjectRoot "raven.spec"
-Push-Location $ProjectRoot
-pyinstaller --clean $spec
+Write-Host "== Step 1/3: building web frontend =="
+Push-Location web
+npm run build
+if ($LASTEXITCODE -ne 0) { throw "web build failed" }
 Pop-Location
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Build failed" -ForegroundColor Red
-    exit 1
-}
+Write-Host "== Step 2/3: generating app icon =="
+python scripts/make_icon.py
 
-$exe = Join-Path $ProjectRoot "dist" "raven" "raven.exe"
-if (Test-Path $exe) {
-    Write-Host "[3/3] Build complete!" -ForegroundColor Green
-    Write-Host "  Executable: $exe" -ForegroundColor Cyan
-    Write-Host "  Size: $((Get-Item $exe).Length / 1MB -as [int]) MB" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "Run: .\dist\raven\raven.exe start" -ForegroundColor Cyan
-    Write-Host "Contacts:" -ForegroundColor Cyan
-    Write-Host "  Telegram: @ssrjkk" -ForegroundColor Cyan
-    Write-Host "  GitHub: github.com/ssrjkk" -ForegroundColor Cyan
-    Write-Host "  Email: ray013lefe@gmail.com" -ForegroundColor Cyan
-} else {
-    Write-Host "Build failed: raven.exe not found at $exe" -ForegroundColor Red
-    exit 1
-}
+Write-Host "== Step 3/3: building EXE with PyInstaller =="
+python -m PyInstaller --noconfirm --clean --distpath packaging\dist --workpath packaging\build scripts/raven.spec
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed" }
+
+$Exe = Join-Path $Root "packaging\dist\Raven.exe"
+Write-Host ""
+Write-Host "Build complete: $Exe"
+Write-Host "Run it to start Raven and open the web UI."

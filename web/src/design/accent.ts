@@ -31,6 +31,8 @@ export function toRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+export type AccentTheme = "dark" | "light" | "midnight";
+
 export interface AccentPalette {
   default: string;
   hover: string;
@@ -43,29 +45,38 @@ export interface AccentPalette {
   glow: string;
 }
 
-export function generateAccentPalette(hex: string): AccentPalette {
+export function generateAccentPalette(hex: string, theme: AccentTheme = "dark"): AccentPalette {
+  const lightMode = theme === "light";
   return {
     default: hex,
-    hover: lighten(hex, 0.12),
-    active: darken(hex, 0.12),
+    hover: lightMode ? darken(hex, 0.08) : lighten(hex, 0.12),
+    active: lightMode ? darken(hex, 0.18) : darken(hex, 0.12),
     muted: toRgba(hex, 0.15),
     subtle: toRgba(hex, 0.08),
     borderFocus: hex,
-    textLink: lighten(hex, 0.18),
-    textLinkHover: lighten(hex, 0.3),
+    textLink: lightMode ? darken(hex, 0.08) : lighten(hex, 0.18),
+    textLinkHover: lightMode ? darken(hex, 0.18) : lighten(hex, 0.32),
     glow: toRgba(hex, 0.4),
   };
 }
 
 export const ACCENT_PRESETS = [
   { name: "Purple", hex: "#7c3aed" },
+  { name: "Violet", hex: "#8b5cf6" },
+  { name: "Indigo", hex: "#6366f1" },
   { name: "Blue", hex: "#3b82f6" },
-  { name: "Green", hex: "#22c55e" },
+  { name: "Sky", hex: "#0ea5e9" },
+  { name: "Cyan", hex: "#06b6d4" },
   { name: "Teal", hex: "#14b8a6" },
+  { name: "Green", hex: "#22c55e" },
+  { name: "Lime", hex: "#84cc16" },
+  { name: "Amber", hex: "#f59e0b" },
   { name: "Orange", hex: "#f97316" },
   { name: "Red", hex: "#ef4444" },
+  { name: "Rose", hex: "#f43f5e" },
   { name: "Pink", hex: "#ec4899" },
-  { name: "Amber", hex: "#f59e0b" },
+  { name: "Fuchsia", hex: "#d946ef" },
+  { name: "Slate", hex: "#64748b" },
 ] as const;
 
 export function applyAccentPalette(palette: AccentPalette) {

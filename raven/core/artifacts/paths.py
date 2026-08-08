@@ -32,6 +32,15 @@ _LEGACY: dict[str, list[str]] = {
     "hooks": [],
 }
 
+_LEGACY_HOME: dict[str, list[str]] = {
+    "skills": [".config/opencode/skills"],
+    "commands": [".config/opencode/commands"],
+    "rules": [],
+    "agents": [],
+    "plugins": [],
+    "hooks": [],
+}
+
 
 @dataclass
 class ArtifactPaths:
@@ -66,6 +75,7 @@ class ArtifactPaths:
             dirs.append(cwd / ".raven" / kind)
             dirs.append(home / ".config" / "raven" / kind)
             dirs.extend(_legacy_dirs(kind, cwd))
+            dirs.extend(_legacy_home_dirs(kind, home))
             out[kind] = _dedupe_existing(dirs)
         return cls(
             skills=out["skills"],
@@ -95,6 +105,10 @@ def _config_dirs(kind: str, cfg_paths: dict[str, Any], cwd: Path) -> list[Path]:
 
 def _legacy_dirs(kind: str, cwd: Path) -> list[Path]:
     return [Path(d) if Path(d).is_absolute() else cwd / d for d in _LEGACY.get(kind, [])]
+
+
+def _legacy_home_dirs(kind: str, home: Path) -> list[Path]:
+    return [home / d for d in _LEGACY_HOME.get(kind, [])]
 
 
 def _split_paths(raw: str, cwd: Path | None = None) -> list[Path]:

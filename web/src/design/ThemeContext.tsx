@@ -1,10 +1,11 @@
-import { createContext, type ReactNode,useCallback, useContext, useEffect, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 
-import { applyAccentPalette,generateAccentPalette } from "./accent";
+import { applyAccentPalette, generateAccentPalette } from "./accent";
 import darkTokens from "./tokens.json";
 import lightTokens from "./tokens.light.json";
+import midnightTokens from "./tokens.midnight.json";
 
-type Theme = "dark" | "light";
+export type Theme = "dark" | "light" | "midnight";
 
 type ThemeContextValue = {
   theme: Theme;
@@ -16,6 +17,14 @@ type ThemeContextValue = {
 };
 
 const DEFAULT_ACCENT = "#7c3aed";
+
+const THEME_ORDER: Theme[] = ["dark", "light", "midnight"];
+
+const THEME_META: Record<Theme, string> = {
+  dark: "#0f1117",
+  light: "#f6f7fb",
+  midnight: "#050507",
+};
 
 const ThemeContext = createContext<ThemeContextValue>({
   theme: "dark",
@@ -44,7 +53,7 @@ function safeSetItem(key: string, value: string) {
 
 function getInitialTheme(): Theme {
   const stored = safeGetItem("raven-theme");
-  if (stored === "light" || stored === "dark") return stored;
+  if (stored === "light" || stored === "dark" || stored === "midnight") return stored;
   try {
     if (window.matchMedia("(prefers-color-scheme: light)").matches) return "light";
   } catch (e) { console.error("ThemeContext:", e);
@@ -60,7 +69,7 @@ function getInitialAccent(): string {
 }
 
 function applyTokens(theme: Theme) {
-  const tokens = theme === "dark" ? darkTokens : lightTokens;
+  const tokens = theme === "dark" ? darkTokens : theme === "light" ? lightTokens : midnightTokens;
   const root = document.documentElement;
   root.setAttribute("data-theme", theme);
   const flatten = (obj: Record<string, unknown>, prefix = "--dt") => {
@@ -76,26 +85,38 @@ function applyTokens(theme: Theme) {
   flatten(tokens as unknown as Record<string, unknown>);
 }
 
+function animateThemeSwitch() {
+  const root = document.documentElement;
+  root.classList.add("theme-anim");
+  window.setTimeout(() => root.classList.remove("theme-anim"), 320);
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(getInitialTheme);
   const [accentColor, setAccentColorState] = useState<string>(getInitialAccent);
+  const firstRender = useRef(true);
 
   useEffect(() => {
     applyTokens(theme);
     const meta = document.querySelector("meta[name=theme-color]");
     if (meta) {
-      meta.setAttribute("content", theme === "dark" ? "#0f1117" : "#f8f9fc");
+      meta.setAttribute("content", THEME_META[theme]);
+    }
+    if (firstRender.current) {
+      firstRender.current = false;
+    } else {
+      animateThemeSwitch();
     }
   }, [theme]);
 
   useEffect(() => {
-    const palette = generateAccentPalette(accentColor);
+    const palette = generateAccentPalette(accentColor, theme);
     applyAccentPalette(palette);
-  }, [accentColor]);
+  }, [accentColor, theme]);
 
   const toggleTheme = useCallback(() => {
     setThemeState((prev) => {
-      const next = prev === "dark" ? "light" : "dark";
+      const next = THEME_ORDER[(THEME_ORDER.indexOf(prev) + 1) % THEME_ORDER.length];
       safeSetItem("raven-theme", next);
       return next;
     });

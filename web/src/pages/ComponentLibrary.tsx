@@ -2,7 +2,7 @@ import { Activity, AlertTriangle, BarChart3, Bot, CheckCircle, ChevronDown, Chev
 import { useState } from "react";
 
 import MessageBubble from "../components/MessageBubble";
-import { Skeleton, SkeletonText } from "../components/Skeleton";
+import { Skeleton, SkeletonCard, SkeletonCircle, SkeletonTableRow, SkeletonText } from "../components/Skeleton";
 import TokenUsageBar from "../components/TokenUsageBar";
 
 const iconList = [
@@ -104,22 +104,23 @@ export default function ComponentLibrary() {
             <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "rgba(234,179,8,0.15)", color: "var(--dt-colors-warning-default)" }}>Warning</span>
             <span className="text-[11px] px-1.5 py-0.5 rounded bg-danger-subtle text-danger">Danger</span>
           </div>
-        ), `<span className="text-[11px] px-1.5 py-0.5 rounded"\n className="bg-accent text-white">Label</span>`)}
+        ), `<span className="text-[11px] px-1.5 py-0.5 rounded bg-accent text-white">Label</span>\n<span className="badge badge-success">Success</span>\n<span className="badge badge-warning">Warning</span>`)}
 
         {/* Skeleton variants */}
         {section("Skeletons", "Loading placeholders for all content shapes", (
           <div className="space-y-3 max-w-md">
             <div className="flex items-center gap-2">
-              <Skeleton width={24} height={24} rounded="full" />
+              <SkeletonCircle size={24} />
               <div className="flex-1 space-y-1">
                 <Skeleton width="60%" height={12} />
                 <Skeleton width="40%" height={12} />
               </div>
             </div>
             <SkeletonText lines={3} />
-            <SkeletonCard demo />
+            <SkeletonCard />
+            <SkeletonTableRow cols={4} />
           </div>
-        ), `<Skeleton width={24} height={24} circle />\n<SkeletonText lines={3} />\n<SkeletonCard />\n<SkeletonTableRow cols={4} />`)}
+        ), `<Skeleton width={24} height={24} rounded="full" />\n<SkeletonCircle size={24} />\n<SkeletonText lines={3} />\n<SkeletonCard />\n<SkeletonTableRow cols={4} />\n<SkeletonCodeBlock lines={5} />`)}
 
         {/* Cards */}
         {section("Cards & Containers", "Panel, stat card, and surface variants", (
@@ -230,26 +231,6 @@ export default function ComponentLibrary() {
           </div>
         ), `<code className="px-1.5 py-0.5 rounded text-xs font-mono">...</code>\n<pre className="p-3 rounded-lg text-xs font-mono">...</pre>`)}
       </div>
-    </div>
-  );
-}
-
-function SkeletonCard({ demo }: { demo?: boolean }) {
-  return (
-    <div className="rounded-xl p-4 bg-tertiary">
-      <div className="flex items-center gap-2 mb-3">
-        <Skeleton width={24} height={24} rounded="full" />
-        <Skeleton width="50%" height={14} />
-      </div>
-      <Skeleton width="100%" height={10} className="mb-2" />
-      <Skeleton width="80%" height={10} className="mb-2" />
-      <Skeleton width="60%" height={10} />
-      {demo && (
-        <div className="flex gap-2 mt-3">
-          <Skeleton width={60} height={28} rounded="lg" />
-          <Skeleton width={60} height={28} rounded="lg" />
-        </div>
-      )}
     </div>
   );
 }

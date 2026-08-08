@@ -57,7 +57,7 @@ export function useCommands(onToggleTheme?: () => void) {
           {
             id: "toggle-theme",
             label: "Переключить тему",
-            description: "Светлая / Темная / Системная",
+            description: "Светлая / Тёмная / Midnight",
             icon: <Settings className="w-5 h-5 text-zinc-400" />,
             category: "action",
             action: onToggleTheme ?? (() => {}),

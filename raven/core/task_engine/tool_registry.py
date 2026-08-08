@@ -25,6 +25,10 @@ class ToolSpec(BaseModel):
     timeout: int = 60
     confirm: bool = False
     """Whether this tool requires user confirmation before execution."""
+    dangerous: bool = False
+    """Whether this tool is potentially harmful; restricts default allowed roles."""
+    allowed_roles: list[str] | None = None
+    """Roles allowed to invoke this tool. None = any role (subject to policy overrides)."""
     validator_fn: ValidatorFn | None = None
     """Optional validation function; returns error message or None."""
 
@@ -102,8 +106,13 @@ class CategoryToolRegistry:
 
 
 class ToolRegistry:
-    def __init__(self):
+    def __init__(self, policy_store: Any = None):
         self._tools: dict[str, ToolSpec] = {}
+        if policy_store is None:
+            from raven.core.tools_rbac import ToolPolicyStore
+
+            policy_store = ToolPolicyStore()
+        self._policy = policy_store
 
     def register(self, spec: ToolSpec) -> None:
         self._tools[spec.name] = spec
@@ -122,18 +131,36 @@ class ToolRegistry:
     def to_llm_tools(self) -> builtins.list[dict[str, Any]]:
         return [t.to_llm_tool() for t in self._tools.values()]
 
+    def effective_allowed_roles(self, name: str) -> builtins.list[str] | None:
+        """Effective role allowlist for a tool: policy override > spec.allowed_roles > dangerous default."""
+        override = self._policy.get(name)
+        if override is not None:
+            return builtins.list(override)
+        spec = self._tools.get(name)
+        if spec is None:
+            return None
+        if spec.allowed_roles is not None:
+            return builtins.list(spec.allowed_roles)
+        if spec.dangerous:
+            return ["admin"]
+        return None
+
     async def _run_handler(self, name: str, spec: ToolSpec, params: dict[str, Any]) -> Any:
         handler_fn = spec.handler
         if asyncio.iscoroutinefunction(handler_fn):
             return await handler_fn(**params)
         return await asyncio.to_thread(handler_fn, **params)
 
-    async def call(self, name: str, **params: Any) -> Any:
+    async def call(self, name: str, role: str | None = None, **params: Any) -> Any:
         spec = self.get(name)
         if not spec:
             return f"[error] Unknown tool: {name}"
         if spec.handler is None:
             return f"[error] Tool {name} has no handler registered"
+
+        denied = self._denied_by_role(name, role)
+        if denied:
+            return denied
 
         if spec.validator_fn:
             try:
@@ -168,6 +195,14 @@ class ToolRegistry:
                 metrics.inc("tool_calls_error_total", {"tool": name, "reason": "exception"})
                 metrics.observe("tool_call_duration", elapsed, {"tool": name})
                 return f"[error] {exc}"
+
+    def _denied_by_role(self, name: str, role: str | None) -> str | None:
+        if role is None:
+            return None
+        required = self.effective_allowed_roles(name)
+        if required and role not in required:
+            return f"[error] Tool '{name}' requires role {sorted(required)}; current role is '{role}'"
+        return None
 
     @property
     def count(self) -> int:

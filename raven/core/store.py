@@ -35,11 +35,15 @@ class BaseStore:
             async with self._lock:
                 if not self._schema_ensured:
                     await self._connection.executescript(self.SCHEMA)
-                    await self._connection.commit()
                     await apply_pending_migrations(self._connection)
+                    await self._post_schema(self._connection)
+                    await self._connection.commit()
                     self._schema_ensured = True
                     logger.info("Schema initialized for {}", type(self).__name__)
         return self._connection
+
+    async def _post_schema(self, connection: aiosqlite.Connection) -> None:
+        """Hook for stores that need column migrations after schema creation."""
 
     async def close(self) -> None:
         async with self._lock:

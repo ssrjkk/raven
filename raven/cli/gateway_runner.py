@@ -320,6 +320,10 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     pattern_checker_router = create_pattern_checker_router(workspace=str(settings.resolved_workspace))
     api_app.include_router(pattern_checker_router)
 
+    from raven.core.sse_api import create_sse_router
+
+    api_app.include_router(create_sse_router())
+
     @api_app.post("/api/tests/run")
     async def api_tests_run(body: dict[str, Any]):
         from raven.tools.tests import run_tests
@@ -375,7 +379,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
                 "type": m.type.value,
                 "target": m.target,
                 "interval_seconds": m.interval_seconds,
+                "effective_interval": eng.effective_interval(m.id, m.interval_seconds),
                 "status": m.status.value,
+                "group": m.group,
                 "last_check": {"status": m.last_check.status, "checked_at": m.last_check.checked_at}
                 if m.last_check
                 else None,
@@ -383,6 +389,49 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             for m in await eng.list_monitors(limit=limit, offset=offset)
         ]
         return {"items": items, "total": await eng.count_monitors(), "limit": limit, "offset": offset, "version": 1}
+
+    @api_app.get("/api/monitor/slo")
+    async def api_monitor_slo(limit: int = 100, offset: int = 0):
+        eng: MonitorEngine = api_app.state.monitor_engine
+        limit = min(limit, 1000)
+        items = await eng.slo_report(limit=limit, offset=offset)
+        return {"items": items, "total": len(items), "limit": limit, "offset": offset, "version": 1}
+
+    @api_app.get("/api/tools/policy")
+    async def api_tools_policy():
+        from raven.core.tools_rbac import ToolPolicyStore
+        from raven.tools.register_all import create_tool_registry
+
+        policy = ToolPolicyStore()
+        reg = create_tool_registry()
+        tools = [
+            {
+                "name": t.name,
+                "category": t.category,
+                "dangerous": t.dangerous,
+                "allowed_roles": reg.effective_allowed_roles(t.name),
+            }
+            for t in reg.list()
+        ]
+        return {"policy": policy.all(), "tools": tools, "version": 1}
+
+    @api_app.post("/api/tools/policy")
+    async def api_tools_policy_set(body: dict[str, Any]):
+        from fastapi import HTTPException
+
+        from raven.core.tools_rbac import ToolPolicyStore
+
+        tool = str(body.get("tool", ""))
+        if not tool:
+            raise HTTPException(400, "tool required")
+        policy = ToolPolicyStore()
+        roles = body.get("roles")
+        if roles is None:
+            policy.remove(tool)
+        else:
+            policy.set(tool, [str(r) for r in roles])
+        policy.save()
+        return {"ok": True, "tool": tool, "roles": policy.get(tool), "version": 1}
 
     @api_app.post("/api/monitor/{action}/{monitor_id}")
     async def api_monitor_toggle(action: str, monitor_id: str):
@@ -663,6 +712,25 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         from raven.core.backup import list_backups
         backups = await list_backups()
         return {"backups": backups}
+
+    if web_dist.is_dir():
+        from fastapi import HTTPException
+        from fastapi.responses import FileResponse
+        from fastapi.staticfiles import StaticFiles
+
+        # SPA serving: the built HTML references /assets/* with absolute paths,
+        # so a single /dashboard mount 404s the JS/CSS bundles. Serve assets
+        # directly and fall back to index.html for any other path so client-side
+        # routing works. Registered last so the /api/* routes above win.
+        assets_dir = web_dist / "assets"
+        if assets_dir.is_dir():
+            api_app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+        @api_app.get("/{full_path:path}", include_in_schema=False)
+        async def spa_fallback(full_path: str):
+            if full_path.startswith("api/"):
+                raise HTTPException(status_code=404, detail="Not Found")
+            return FileResponse(str(web_dist / "index.html"))
 
     async def _get_memory_stats(mgr: _MemoryManager) -> dict[str, Any]:
         tiers = {}

@@ -55,4 +55,30 @@ describe("MessageBubble", () => {
     render(<MessageBubble message={{ ...baseMessage, content: long, role: "user" }} />);
     expect(screen.getByText(long)).toBeInTheDocument();
   });
+
+  it("renders artifact JSON as an artifact card", () => {
+    const artifact = JSON.stringify({
+      artifact_id: "abc12345",
+      title: "Login Form",
+      type: "react",
+      content: "export const Login = () => <h1>Hi</h1>",
+      status: "created",
+    });
+    render(<MessageBubble message={{ ...baseMessage, content: artifact, role: "assistant" }} />);
+    expect(screen.getByText("Login Form")).toBeInTheDocument();
+    expect(screen.getByText("react")).toBeInTheDocument();
+    expect(screen.getByText(/export const Login/)).toBeInTheDocument();
+  });
+
+  it("does not render artifact card for user messages", () => {
+    const artifact = JSON.stringify({
+      artifact_id: "abc12345",
+      title: "Login Form",
+      type: "react",
+      content: "export const Login = () => 1",
+      status: "created",
+    });
+    render(<MessageBubble message={{ ...baseMessage, content: artifact, role: "user" }} />);
+    expect(screen.queryByText("Login Form")).not.toBeInTheDocument();
+  });
 });

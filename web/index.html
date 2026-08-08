@@ -13,16 +13,13 @@
     <script>
       (function() {
         var theme = 'dark';
-        try { var s = localStorage.getItem('raven-theme'); if (s === 'light' || s === 'dark') theme = s; }
+        try { var s = localStorage.getItem('raven-theme'); if (s === 'light' || s === 'dark' || s === 'midnight') theme = s; }
         catch(e) {}
         if (theme === 'light' && window.matchMedia('(prefers-color-scheme: light)').matches) theme = 'light';
         document.documentElement.setAttribute('data-theme', theme);
-        if (theme === 'light') {
-          document.documentElement.className = 'light';
-          document.querySelector('meta[name=theme-color]')?.setAttribute('content', '#f8f9fc');
-        } else {
-          document.documentElement.className = 'dark';
-        }
+        document.documentElement.className = theme;
+        var meta = document.querySelector('meta[name=theme-color]');
+        if (meta) { meta.setAttribute('content', theme === 'midnight' ? '#050507' : theme === 'light' ? '#f6f7fb' : '#0f1117'); }
       })();
     </script>
     <meta name="theme-color" content="#0f1117" />

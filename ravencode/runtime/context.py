@@ -153,7 +153,7 @@ class Conversation:
     # message management
     # -------------------------------------------------------------------
 
-    def add_user_message(self, content: str) -> None:
+    def add_user_message(self, content: str | list[dict[str, Any]]) -> None:
         self.messages.append({"role": "user", "content": content})
         self._token_total += self._estimate_tokens(content)
         self._trim()
@@ -175,21 +175,32 @@ class Conversation:
     # trimming (rough token estimate)
     # -------------------------------------------------------------------
 
-    def _estimate_tokens(self, text: str) -> int:
-        return len(text) // 4 + len(text.split())
+    def _estimate_tokens(self, text: str | list[dict[str, Any]]) -> int:
+        if isinstance(text, str):
+            return len(text) // 4 + len(text.split())
+        total = 0
+        for block in text:
+            if not isinstance(block, dict):
+                continue
+            payload = block.get("text") or block.get("image_url")
+            if isinstance(payload, dict):
+                payload = payload.get("url", "")
+            total += self._estimate_tokens(str(payload))
+        return total
 
     def _total_tokens(self) -> int:
         total = 0
         for msg in self.messages:
-            if isinstance(msg.get("content"), str):
-                total += self._estimate_tokens(msg["content"])
+            content = msg.get("content")
+            if isinstance(content, (str, list)):
+                total += self._estimate_tokens(content)
         return total
 
     def _trim(self) -> None:
         while len(self.messages) > 2 and self._token_total > self.max_tokens:
             popped = self.messages.pop(1)
             content = popped.get("content")
-            if isinstance(content, str):
+            if isinstance(content, (str, list)):
                 self._token_total -= self._estimate_tokens(content)
 
     async def summarize_oldest(self, llm: Any | None = None) -> None:

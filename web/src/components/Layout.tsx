@@ -23,6 +23,8 @@ import {
   Mail,
   MessageSquare,
   Mic,
+  Moon,
+  MoonStar,
   Palette,
   Puzzle,
   RefreshCw,
@@ -32,6 +34,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Split,
+  Sun,
   Users,
   Wallet,
   Workflow,
@@ -41,7 +44,7 @@ import { Suspense, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { clearToken } from "../api/client";
-import { useTheme } from "../design/ThemeContext";
+import { type Theme, useTheme } from "../design/ThemeContext";
 import { ErrorBoundary } from "./ErrorBoundary";
 import PWAInstallPrompt from "./PWAInstallPrompt";
 import { SkeletonPage } from "./Skeleton";
@@ -128,6 +131,31 @@ const navSections: NavSection[] = [
 
 function openCommandPalette() {
   window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }));
+}
+
+const THEME_TARGETS: Record<Theme, { label: string; icon: LucideIcon }> = {
+  dark: { label: "Light", icon: Sun },
+  light: { label: "Midnight", icon: MoonStar },
+  midnight: { label: "Dark", icon: Moon },
+};
+
+function ThemeToggleButton({ theme, onClick }: { theme: Theme; onClick: () => void }) {
+  const target = THEME_TARGETS[theme];
+  const Icon = target.icon;
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition"
+      style={{
+        color: "var(--dt-colors-text-secondary)",
+        backgroundColor: "var(--dt-colors-bg-tertiary)",
+      }}
+      title={`Switch to ${target.label} theme`}
+    >
+      <Icon size={15} className="shrink-0" />
+      {target.label}
+    </button>
+  );
 }
 
 export default function Layout() {
@@ -244,16 +272,7 @@ export default function Layout() {
 
         {/* Footer */}
         <div className="p-3 border-t space-y-2 border-default">
-          <button
-            onClick={toggleTheme}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition"
-            style={{
-              color: "var(--dt-colors-text-secondary)",
-              backgroundColor: "var(--dt-colors-bg-tertiary)",
-            }}
-          >
-            {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
-          </button>
+          <ThemeToggleButton theme={theme} onClick={toggleTheme} />
           <button
             onClick={handleLogout}
             className="w-full text-center text-xs transition font-medium text-tertiary"

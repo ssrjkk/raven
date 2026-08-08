@@ -72,6 +72,40 @@ class CheckResult:
 
 
 @dataclass
+class SLOStats:
+    target: float
+    window_seconds: int
+    total_checks: int
+    ok_checks: int
+    fail_checks: int
+
+    @property
+    def success_rate(self) -> float:
+        return (self.ok_checks / self.total_checks) if self.total_checks else 1.0
+
+    @property
+    def error_budget_remaining(self) -> float:
+        if self.total_checks == 0:
+            return 1.0
+        allowed_error_ratio = max(0.0, 1.0 - self.target)
+        if allowed_error_ratio == 0:
+            return 1.0 if self.fail_checks == 0 else 0.0
+        observed = self.fail_checks / self.total_checks
+        return max(0.0, min(1.0, (allowed_error_ratio - observed) / allowed_error_ratio))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "target": self.target,
+            "window_seconds": self.window_seconds,
+            "total_checks": self.total_checks,
+            "ok_checks": self.ok_checks,
+            "fail_checks": self.fail_checks,
+            "success_rate": round(self.success_rate, 6),
+            "error_budget_remaining": round(self.error_budget_remaining, 6),
+        }
+
+
+@dataclass
 class Monitor:
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
     name: str = ""
@@ -87,6 +121,9 @@ class Monitor:
     cooldown_minutes: int = 30
     config: dict[str, Any] = field(default_factory=dict)
     created_at: float | None = None
+    slo_target: float = 0.99
+    slo_window_seconds: int = 86400
+    group: str = ""
 
     def should_notify(self) -> bool:
         if not self.last_check:
@@ -110,6 +147,9 @@ class Monitor:
             "cooldown_minutes": self.cooldown_minutes,
             "config": self.config,
             "created_at": self.created_at,
+            "slo_target": self.slo_target,
+            "slo_window_seconds": self.slo_window_seconds,
+            "group": self.group,
             "last_check": {
                 "status": self.last_check.status,
                 "checked_at": self.last_check.checked_at,
@@ -136,6 +176,9 @@ class Monitor:
             cooldown_minutes=data.get("cooldown_minutes", 30),
             config=data.get("config", {}),
             created_at=data.get("created_at"),
+            slo_target=float(data.get("slo_target", 0.99)),
+            slo_window_seconds=int(data.get("slo_window_seconds", 86400)),
+            group=data.get("group", ""),
         )
         lc = data.get("last_check")
         if lc:

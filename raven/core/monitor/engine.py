@@ -10,9 +10,19 @@ from loguru import logger
 from raven.core.monitor.checkers.http_check import check_http
 from raven.core.monitor.checkers.price import check_price
 from raven.core.monitor.checkers.rss import check_rss
-from raven.core.monitor.models import CheckResult, Monitor, MonitorCheck, MonitorStatus, MonitorType
+from raven.core.monitor.models import (
+    CheckResult,
+    Monitor,
+    MonitorCheck,
+    MonitorStatus,
+    MonitorType,
+    SLOStats,
+)
 from raven.core.monitor.store import MonitorStore
 from raven.core.periodic_engine import PeriodicEngine
+
+_ADAPTIVE_THRESHOLD = 3
+_ADAPTIVE_CAP_SECONDS = 3600
 
 
 class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
@@ -26,6 +36,9 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
         else:
             store = MonitorStore(str(store_or_path))
         super().__init__(store, send_fn=send_fn)
+        self._consecutive_failures: dict[str, int] = {}
+        self._consecutive_successes: dict[str, int] = {}
+        self._effective_intervals: dict[str, int] = {}
 
     @classmethod
     def from_db(cls, db_path: str, send_fn: Any = None) -> MonitorEngine:
@@ -57,6 +70,55 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
         if alert_text:
             await self._alert(monitor, alert_text)
         return alert_text
+
+    def effective_interval(self, monitor_id: str, base: int) -> int:
+        return self._effective_intervals.get(monitor_id, base)
+
+    def adaptive_state(self) -> dict[str, Any]:
+        return {
+            "intervals": dict(self._effective_intervals),
+            "consecutive_failures": dict(self._consecutive_failures),
+            "consecutive_successes": dict(self._consecutive_successes),
+        }
+
+    async def get_slo(self, monitor_id: str) -> SLOStats | None:
+        monitor = await self._load_item(monitor_id)
+        if not monitor:
+            return None
+        stats = await self._store.get_slo_stats(monitor.id, monitor.slo_window_seconds)
+        return SLOStats(
+            target=monitor.slo_target,
+            window_seconds=monitor.slo_window_seconds,
+            total_checks=stats["total"],
+            ok_checks=stats["ok"],
+            fail_checks=stats["fail"],
+        )
+
+    async def slo_report(self, limit: int = 1000, offset: int = 0) -> list[dict[str, Any]]:
+        monitors = await self.list_monitors(limit=limit, offset=offset)
+        report: list[dict[str, Any]] = []
+        for m in monitors:
+            stats = await self._store.get_slo_stats(m.id, m.slo_window_seconds)
+            slo = SLOStats(
+                target=m.slo_target,
+                window_seconds=m.slo_window_seconds,
+                total_checks=stats["total"],
+                ok_checks=stats["ok"],
+                fail_checks=stats["fail"],
+            )
+            report.append(
+                {
+                    "monitor_id": m.id,
+                    "name": m.name,
+                    "group": m.group,
+                    "type": m.type.value,
+                    "status": m.status.value,
+                    "effective_interval": self.effective_interval(m.id, m.interval_seconds),
+                    "slo_breached": stats["total"] > 0 and slo.error_budget_remaining <= 0,
+                    **slo.to_dict(),
+                }
+            )
+        return report
 
     async def _run_loop(self, monitor: Monitor) -> None:
         while self._running:
@@ -111,6 +173,7 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
                 error=None,
             )
             await self._store.save_check(check)
+            self._update_adaptive(monitor, triggered)
 
             return alert_text  # type: ignore[no-any-return]
 
@@ -133,6 +196,7 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
                 error=str(e),
             )
             await self._store.save_check(check)
+            self._update_adaptive(monitor, True)
             return None
 
     async def _list_active(self) -> list[Monitor]:
@@ -157,7 +221,29 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
         return item.status == MonitorStatus.ACTIVE
 
     def _get_interval(self, item: Monitor) -> int | float:
-        return item.interval_seconds
+        return self._effective_intervals.get(item.id, item.interval_seconds)
+
+    def _update_adaptive(self, monitor: Monitor, triggered: bool) -> None:
+        monitor_id = monitor.id
+        base = monitor.interval_seconds
+        if triggered:
+            failures = self._consecutive_failures.get(monitor_id, 0) + 1
+            self._consecutive_failures[monitor_id] = failures
+            self._consecutive_successes[monitor_id] = 0
+            if failures >= _ADAPTIVE_THRESHOLD:
+                current = self._effective_intervals.get(monitor_id, base)
+                new = min(current * 2, _ADAPTIVE_CAP_SECONDS)
+                self._effective_intervals[monitor_id] = new
+                self._consecutive_failures[monitor_id] = 0
+                logger.info("Monitor {} adaptive: interval {}s -> {}s", monitor_id, current, new)
+        else:
+            successes = self._consecutive_successes.get(monitor_id, 0) + 1
+            self._consecutive_successes[monitor_id] = successes
+            self._consecutive_failures[monitor_id] = 0
+            if successes >= _ADAPTIVE_THRESHOLD:
+                self._effective_intervals[monitor_id] = base
+                self._consecutive_successes[monitor_id] = 0
+                logger.info("Monitor {} adaptive: interval restored to {}s", monitor_id, base)
 
     def _paused_status(self) -> MonitorStatus:
         return MonitorStatus.PAUSED

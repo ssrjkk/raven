@@ -33,6 +33,7 @@ vi.mock("../api/client", () => ({
     }),
   },
   isAuthenticated: vi.fn().mockReturnValue(true),
+  getToken: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock("../components/Toast", () => ({

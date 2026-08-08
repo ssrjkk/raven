@@ -10,6 +10,21 @@ if (!globalThis.crypto?.randomUUID) {
   });
 }
 
+// Mock matchMedia (not implemented in jsdom)
+Object.defineProperty(window, "matchMedia", {
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }),
+});
+
 // Mock localStorage
 const store: Record<string, string> = {};
 const localStorageMock: Storage = {

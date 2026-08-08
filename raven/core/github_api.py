@@ -149,6 +149,36 @@ def create_github_router() -> APIRouter:
     async def list_branches(owner: str, repo: str):
         return await _get(owner, repo, "branches")
 
+    @router.get("/repos/{owner}/{repo}/contents/tree")
+    async def get_file_tree(owner: str, repo: str, ref: str = "main"):
+        token = _resolve_token()
+        if not token:
+            raise HTTPException(401, "GitHub token not configured")
+        tree: list[dict[str, Any]] = []
+
+        async def fetch_tree(path: str = "") -> None:
+            async with _client() as c:
+                url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
+                resp = await c.get(url, params={"ref": ref})
+                if resp.status_code != 200:
+                    return
+                items = resp.json()
+                if not isinstance(items, list):
+                    return
+                for item in items:
+                    entry: dict[str, Any] = {
+                        "name": item["name"],
+                        "path": item["path"],
+                        "type": item["type"],
+                        "size": item.get("size", 0),
+                    }
+                    tree.append(entry)
+                    if item["type"] == "dir":
+                        await fetch_tree(item["path"])
+
+        await fetch_tree()
+        return tree
+
     @router.get("/repos/{owner}/{repo}/contents/{path:path}")
     async def get_contents(owner: str, repo: str, path: str = "", ref: str | None = None):
         params = {"ref": ref} if ref else {}
@@ -221,36 +251,6 @@ def create_github_router() -> APIRouter:
             resp = await c.get("https://api.github.com/rate_limit")
             resp.raise_for_status()
             return resp.json()
-
-    @router.get("/repos/{owner}/{repo}/contents/tree")
-    async def get_file_tree(owner: str, repo: str, ref: str = "main"):
-        token = _resolve_token()
-        if not token:
-            raise HTTPException(401, "GitHub token not configured")
-        tree: list[dict[str, Any]] = []
-
-        async def fetch_tree(path: str = "") -> None:
-            async with _client() as c:
-                url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
-                resp = await c.get(url, params={"ref": ref})
-                if resp.status_code != 200:
-                    return
-                items = resp.json()
-                if not isinstance(items, list):
-                    return
-                for item in items:
-                    entry: dict[str, Any] = {
-                        "name": item["name"],
-                        "path": item["path"],
-                        "type": item["type"],
-                        "size": item.get("size", 0),
-                    }
-                    tree.append(entry)
-                    if item["type"] == "dir":
-                        await fetch_tree(item["path"])
-
-        await fetch_tree()
-        return tree
 
     @router.post("/repos/{owner}/{repo}/clone")
     async def clone_repo(owner: str, repo: str, body: CloneRepoRequest):

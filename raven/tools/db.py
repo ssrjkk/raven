@@ -75,5 +75,7 @@ def register_db_tools(registry: ToolRegistry) -> None:
             },
             handler=db_query,
             category="data",
+            dangerous=True,
+            allowed_roles=["admin"],
         )
     )

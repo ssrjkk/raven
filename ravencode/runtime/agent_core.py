@@ -155,13 +155,13 @@ class ReActAgent:
         self.config = config or AgentConfig()
         if max_steps is not None:
             self.config.max_steps = max_steps
+        self.name = name
         if conversation is None:
             memory = MemoryStore(path=self.config.memory_path) if self.config.memory_path else None
             self.conversation = Conversation(system_prompt=self._build_system_prompt(), memory=memory)
         else:
             self.conversation = conversation
         self.llm_provider = llm_provider
-        self.name = name
         self._lock = asyncio.Lock()
         self._aborted = False
         self._task: asyncio.Task[Any] | None = None
@@ -196,7 +196,37 @@ class ReActAgent:
             extras.append(get_prompt("diff_preview_instruction"))
         if extras:
             base += "\n\n" + "\n".join(extras)
+        base += self._artifact_blocks()
         return base
+
+    def _artifact_blocks(self) -> str:
+        try:
+            from raven.core.artifacts import get_artifact_manager
+
+            root = Path.cwd()
+            manager = get_artifact_manager(cwd=root)
+            ctx = manager.context(agent_id=self.name, cwd=root, root=root)
+            parts: list[str] = []
+            rules = manager.rules_for(ctx)
+            if rules:
+                body = "\n\n".join(f"[rules: {r.name}]\n{r.content}" for r in rules)
+                parts.append(f"[project rules]\n{body}")
+            skills = manager.skills_for(ctx)
+            for skill in skills:
+                text = skill.instructions
+                if skill.examples:
+                    text = f"{text}\n\nExamples:\n" + "\n\n".join(skill.examples)
+                parts.append(f"[skill: {skill.name}]\n{text}")
+            commands = manager.commands_for(ctx)
+            if commands:
+                listing = "\n".join(f"/{c.name} — {c.description}" for c in commands)
+                parts.append(f"[available commands]\n{listing}")
+            if not parts:
+                return ""
+            return "\n\n" + "\n\n".join(parts)
+        except Exception as e:
+            logger.debug("Artifact context skipped: {}", e)
+            return ""
 
     @staticmethod
     def _default_system_prompt() -> str:
@@ -243,11 +273,12 @@ class ReActAgent:
             await ee.emit(AgentEvent("done", {"reason": "truthful", "steps": 1}))
         return result
 
-    async def run(self, user_input: str) -> str:
+    async def run(self, user_input: str, images: list[str] | None = None) -> str:
         self._task = asyncio.current_task()
         from ravencode.runtime.tools import set_agent_memory
 
         _last_agent_var.set(self)
+        content = self._build_message_content(user_input, images)
         set_agent_memory(
             {
                 "name": self.name,
@@ -257,7 +288,7 @@ class ReActAgent:
         )
         async with self._lock:
             try:
-                return await self._run_impl(user_input)
+                return await self._run_impl(user_input, content)
             except asyncio.CancelledError:
                 self._aborted = True
                 await self._auto_save("aborted")
@@ -267,8 +298,20 @@ class ReActAgent:
                 await self._auto_save(f"crashed: {exc}")
                 return f"[error: {exc}]"
 
-    async def _run_impl(self, user_input: str) -> str:
-        self.conversation.add_user_message(user_input)
+    @staticmethod
+    def _build_message_content(user_input: str, images: list[str] | None) -> str | list[dict[str, Any]]:
+        if not images:
+            return user_input
+        blocks: list[dict[str, Any]] = [{"type": "text", "text": user_input}]
+        for img in images:
+            url = img
+            if not (img.startswith("http") or img.startswith("data:")):
+                url = f"data:image/png;base64,{img}"
+            blocks.append({"type": "image_url", "image_url": {"url": url}})
+        return blocks
+
+    async def _run_impl(self, user_input: str, content: str | list[dict[str, Any]] | None = None) -> str:
+        self.conversation.add_user_message(content if content is not None else user_input)
         self._aborted = False
         step = 0
 

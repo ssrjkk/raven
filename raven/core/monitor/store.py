@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS monitors (
     status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','error')),
     user_id TEXT NOT NULL DEFAULT '',
     channel TEXT NOT NULL DEFAULT '',
+    slo_target REAL NOT NULL DEFAULT 0.99,
+    slo_window_seconds INTEGER NOT NULL DEFAULT 86400,
+    "group" TEXT NOT NULL DEFAULT '',
     last_checked TEXT,
     last_triggered TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -50,8 +53,15 @@ CREATE TABLE IF NOT EXISTS monitor_checks (
 );
 CREATE INDEX IF NOT EXISTS idx_monitor_status ON monitors(status);
 CREATE INDEX IF NOT EXISTS idx_monitor_checks_monitor_id ON monitor_checks(monitor_id);
+CREATE INDEX IF NOT EXISTS idx_monitor_checks_mid_at ON monitor_checks(monitor_id, checked_at);
 CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 """
+
+_MONITOR_ADDED_COLUMNS = (
+    ("slo_target", "ALTER TABLE monitors ADD COLUMN slo_target REAL NOT NULL DEFAULT 0.99"),
+    ("slo_window_seconds", "ALTER TABLE monitors ADD COLUMN slo_window_seconds INTEGER NOT NULL DEFAULT 86400"),
+    ("group", 'ALTER TABLE monitors ADD COLUMN "group" TEXT NOT NULL DEFAULT \'\''),
+)
 
 
 class MonitorStore(BaseStore):
@@ -59,6 +69,13 @@ class MonitorStore(BaseStore):
 
     def __init__(self, db_path: str | Path) -> None:
         super().__init__(db_path)
+
+    async def _post_schema(self, connection: aiosqlite.Connection) -> None:
+        existing = {r["name"] for r in await connection.execute_fetchall("PRAGMA table_info(monitors)")}
+        for col_name, ddl in _MONITOR_ADDED_COLUMNS:
+            if col_name not in existing:
+                await connection.execute(ddl)
+                logger.info("MonitorStore migration: added column {}", col_name)
 
     @measure_latency()
     async def save_monitor(self, monitor: Monitor) -> None:
@@ -72,8 +89,9 @@ class MonitorStore(BaseStore):
         await self._execute(
             """INSERT OR REPLACE INTO monitors
                (id, name, type, config, condition, cooldown_minutes,
-                interval_seconds, notify_channels, status, user_id, channel, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                interval_seconds, notify_channels, status, user_id, channel,
+                slo_target, slo_window_seconds, "group", created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 monitor.id,
                 monitor.name,
@@ -86,6 +104,9 @@ class MonitorStore(BaseStore):
                 monitor.status.value,
                 monitor.user_id,
                 monitor.channel,
+                monitor.slo_target,
+                monitor.slo_window_seconds,
+                monitor.group,
                 monitor.created_at or time.time(),
             ),
         )
@@ -141,6 +162,22 @@ class MonitorStore(BaseStore):
 
     async def list_active(self) -> list[Monitor]:
         return await self.list_monitors(status="active")
+
+    @measure_latency()
+    async def get_slo_stats(self, monitor_id: str, window_seconds: int) -> dict[str, int]:
+        cutoff = time.time() - window_seconds
+        row = await self._fetchone(
+            """SELECT COUNT(*) AS total,
+                      COALESCE(SUM(CASE WHEN status = 'up' THEN 1 ELSE 0 END), 0) AS ok_count
+               FROM monitor_checks
+               WHERE monitor_id = ? AND checked_at >= ?""",
+            (monitor_id, cutoff),
+        )
+        if not row:
+            return {"total": 0, "ok": 0, "fail": 0}
+        total = int(row["total"] or 0)
+        ok = int(row["ok_count"] or 0)
+        return {"total": total, "ok": ok, "fail": total - ok}
 
     @measure_latency()
     async def update_status(self, monitor_id: str, status: MonitorStatus) -> None:
@@ -235,6 +272,9 @@ class MonitorStore(BaseStore):
                 user_id=row["user_id"],
                 channel=row["channel"],
                 created_at=row["created_at"],
+                slo_target=float(row["slo_target"]),
+                slo_window_seconds=int(row["slo_window_seconds"]),
+                group=row["group"],
             )
 
             last_checked = row["last_checked"]

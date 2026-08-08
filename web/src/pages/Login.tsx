@@ -130,7 +130,16 @@ export default function Login() {
             />
           </div>
           {error && (
-            <p className="text-xs text-red-400 bg-red-900/20 rounded-lg px-3 py-2">{error}</p>
+            <p
+              className="text-xs rounded-lg px-3 py-2 flex items-center gap-2"
+              style={{
+                color: "var(--dt-colors-status-error)",
+                backgroundColor: "var(--dt-colors-status-error-bg)",
+                border: "1px solid var(--dt-colors-status-error)",
+              }}
+            >
+              {error}
+            </p>
           )}
           <button
             type="submit"

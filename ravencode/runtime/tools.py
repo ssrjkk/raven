@@ -5,6 +5,8 @@ import contextvars
 import difflib
 import fnmatch
 import functools
+import hashlib
+import json
 import os
 import shlex
 from pathlib import Path
@@ -412,6 +414,41 @@ async def read_image(path: str) -> str:
 
     data = base64.b64encode(p.read_bytes()[:500_000]).decode("ascii")
     return f"Image ({p.stat().st_size} bytes, {ext}): data:image/{ext[1:]};base64,{data}"
+
+
+# ---------------------------------------------------------------------------
+# artifact creation
+# ---------------------------------------------------------------------------
+
+
+async def create_artifact(title: str, artifact_type: str, content: str, path: str | None = None) -> str:
+    """Create an interactive artifact and persist it to the workspace when possible."""
+    try:
+        ws = _get_workspace()
+        file_path: str | None = None
+        if path and artifact_type in ("react", "html", "python", "markdown", "typescript", "javascript"):
+            try:
+                target = Path(path).expanduser() if Path(path).is_absolute() else ws / path
+                safe_path = _confine(str(target))
+            except PermissionError as exc:
+                return json.dumps({"error": f"Path confinement failed: {exc}"}, ensure_ascii=False)
+            safe_path.parent.mkdir(parents=True, exist_ok=True)
+            safe_path.write_text(content, encoding="utf-8")
+            file_path = str(safe_path.relative_to(ws))
+        artifact_id = hashlib.sha256(f"{title}:{content[:50]}".encode()).hexdigest()[:8]
+        return json.dumps(
+            {
+                "artifact_id": artifact_id,
+                "title": title,
+                "type": artifact_type,
+                "content": content,
+                "file_path": file_path,
+                "status": "created",
+            },
+            ensure_ascii=False,
+        )
+    except Exception as exc:
+        return json.dumps({"error": f"create_artifact failed: {exc}"}, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------
@@ -1011,6 +1048,32 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
             "required": ["path"],
         },
         "handler": read_image,
+    },
+    "create_artifact": {
+        "name": "create_artifact",
+        "dangerous": False,
+        "description": (
+            "Create an interactive artifact (React component, HTML page, Mermaid diagram or SVG). "
+            "Use this instead of dumping large code blocks into the chat."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Short artifact title, e.g. 'Login Form'"},
+                "artifact_type": {
+                    "type": "string",
+                    "enum": ["react", "html", "mermaid", "svg", "markdown", "python", "typescript"],
+                    "description": "Content type for frontend rendering",
+                },
+                "content": {"type": "string", "description": "Full source code or artifact content"},
+                "path": {
+                    "type": "string",
+                    "description": "Optional workspace-relative path to persist the artifact as a file",
+                },
+            },
+            "required": ["title", "artifact_type", "content"],
+        },
+        "handler": create_artifact,
     },
     "undo": {
         "name": "undo",

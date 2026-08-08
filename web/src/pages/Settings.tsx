@@ -1,4 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
+import { Moon, MoonStar, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { api } from "../api/client";
@@ -7,14 +8,20 @@ import { Skeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 import { ACCENT_PRESETS } from "../design/accent";
 import { applyThemeScheme } from "../design/scheme";
-import { useTheme } from "../design/ThemeContext";
+import { type Theme, useTheme } from "../design/ThemeContext";
 import { useApiQuery } from "../hooks/useApiQuery";
+
+const THEMES: { id: Theme; label: string; icon: typeof Sun }[] = [
+  { id: "light", label: "Light", icon: Sun },
+  { id: "dark", label: "Dark", icon: Moon },
+  { id: "midnight", label: "Midnight", icon: MoonStar },
+];
 
 export default function Settings() {
   const [customHex, setCustomHex] = useState("");
   const [schemePrompt, setSchemePrompt] = useState("");
   const { toast } = useToast();
-  const { accentColor, setAccentColor, theme, toggleTheme, resetScheme } = useTheme();
+  const { accentColor, setAccentColor, theme, setTheme, resetScheme } = useTheme();
 
   const generateScheme = useMutation({
     mutationFn: (prompt: string) => api.generateTheme(prompt),
@@ -78,33 +85,74 @@ export default function Settings() {
       {/* Theme */}
       <div className="card p-4">
         <h2 className="text-sm font-semibold mb-3 text-primary">Theme</h2>
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-secondary">Appearance</span>
-          <button
-            onClick={toggleTheme}
-            className="btn-outline"
-          >
-            {theme === "dark" ? "Switch to Light" : "Switch to Dark"}
-          </button>
+        <div className="grid grid-cols-3 gap-2">
+          {THEMES.map(({ id, label, icon: Icon }) => {
+            const active = theme === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTheme(id)}
+                aria-pressed={active}
+                className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl text-sm font-medium transition-transform hover:scale-[1.02] active:scale-95"
+                style={
+                  active
+                    ? {
+                        backgroundColor: "var(--dt-colors-accent-muted)",
+                        color: "var(--dt-colors-accent-default)",
+                        border: "1px solid var(--dt-colors-accent-muted)",
+                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+                      }
+                    : {
+                        backgroundColor: "var(--dt-colors-bg-tertiary)",
+                        color: "var(--dt-colors-text-secondary)",
+                        border: "1px solid var(--dt-colors-border-default)",
+                      }
+                }
+              >
+                <Icon size={18} className="shrink-0" />
+                {label}
+              </button>
+            );
+          })}
         </div>
+        <p className="text-xs text-tertiary mt-3">
+          Midnight is an AMOLED-optimized dark theme for deep blacks and richer glow.
+        </p>
       </div>
 
       {/* Accent Color */}
       <div className="card p-4">
         <h2 className="text-sm font-semibold mb-3 text-primary">Accent Color</h2>
-        <div className="flex flex-wrap gap-3 mb-4">
-          {ACCENT_PRESETS.map((p) => (
-            <button
-              key={p.hex}
-              onClick={() => handleAccentChange(p.hex)}
-              className="w-8 h-8 rounded-full transition-transform hover:scale-110 active:scale-95"
-              style={{
-                backgroundColor: p.hex,
-                boxShadow: accentColor === p.hex ? `0 0 0 2px var(--dt-colors-bg-primary), 0 0 0 4px ${p.hex}` : "none",
-              }}
-              title={p.name}
-            />
-          ))}
+        <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 mb-4">
+          {ACCENT_PRESETS.map((p) => {
+            const active = accentColor === p.hex;
+            return (
+              <button
+                key={p.hex}
+                type="button"
+                onClick={() => handleAccentChange(p.hex)}
+                className="flex flex-col items-center gap-1.5 rounded-lg px-1 py-2 transition-colors"
+                style={{
+                  backgroundColor: active ? "var(--dt-colors-accent-subtle)" : "transparent",
+                }}
+                title={p.name}
+              >
+                <span
+                  className="w-6 h-6 rounded-full transition-transform hover:scale-110 active:scale-95"
+                  style={{
+                    backgroundColor: p.hex,
+                    boxShadow: active
+                      ? `0 0 0 2px var(--dt-colors-bg-primary), 0 0 0 4px ${p.hex}, 0 0 10px ${p.hex}80`
+                      : "none",
+                  }}
+                />
+                <span className="text-[10px] leading-none" style={{ color: "var(--dt-colors-text-tertiary)" }}>
+                  {p.name}
+                </span>
+              </button>
+            );
+          })}
         </div>
         <div className="flex items-center gap-3">
           <div

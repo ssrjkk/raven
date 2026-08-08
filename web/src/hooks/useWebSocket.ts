@@ -4,6 +4,12 @@ import { getToken, WsMessage } from "../api/client";
 
 type Handler = (msg: WsMessage) => void;
 
+export function computeReconnectDelay(attempt: number, base = 1000, cap = 30000): number {
+  const exponential = Math.min(base * Math.pow(2, attempt), cap);
+  const jitter = 0.7 + Math.random() * 0.6;
+  return Math.min(exponential * jitter, cap);
+}
+
 export function useWebSocket(onMessage: Handler) {
   const wsRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
@@ -27,7 +33,7 @@ export function useWebSocket(onMessage: Handler) {
     ws.onclose = () => {
       setConnected(false);
       if (!mountedRef.current) return;
-      const delay = Math.min(1000 * Math.pow(2, reconnectAttempt.current), 30000);
+      const delay = computeReconnectDelay(reconnectAttempt.current);
       reconnectAttempt.current++;
       timerRef.current = setTimeout(connect, delay);
     };

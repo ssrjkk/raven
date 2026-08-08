@@ -167,6 +167,10 @@ class Settings(BaseSettings):
         return p
 
     @property
+    def resolved_data_dir(self) -> Path:
+        return self.resolved_db_path.parent
+
+    @property
     def resolved_log_file(self) -> Path:
         p = Path(self.log_file)
         if not p.is_absolute():

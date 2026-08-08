@@ -5,6 +5,7 @@ import contextlib
 import hmac
 import json
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -337,6 +338,11 @@ class WebChatChannel(BaseChannel):
         return self._app
 
     def _get_index_html(self) -> str:
+        built = (
+            Path(__file__).resolve().parent.parent.parent.parent / "web" / "dist" / "index.html"
+        )
+        if built.is_file():
+            return built.read_text()
         return INDEX_HTML
 
 

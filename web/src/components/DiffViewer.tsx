@@ -42,8 +42,8 @@ const DiffViewer = memo(function DiffViewer({ diff, files, singlePane, maxHeight
           {files.map((f) => (
             <span key={f.path} className="font-mono text-tertiary">
               {f.path}
-              {f.added > 0 && <span className="text-green-500 ml-1">+{f.added}</span>}
-              {f.deleted > 0 && <span className="text-red-500 ml-1">-{f.deleted}</span>}
+              {f.added > 0 && <span className="ml-1" style={{ color: "var(--dt-colors-status-success)" }}>+{f.added}</span>}
+              {f.deleted > 0 && <span className="ml-1" style={{ color: "var(--dt-colors-status-error)" }}>-{f.deleted}</span>}
             </span>
           ))}
         </div>

@@ -308,6 +308,8 @@ def register_shell_tools(registry: ToolRegistry) -> None:
             handler=shell_command,
             category="system",
             timeout=60,
+            dangerous=True,
+            allowed_roles=["admin", "developer"],
         )
     )
     registry.register(
@@ -321,5 +323,7 @@ def register_shell_tools(registry: ToolRegistry) -> None:
             handler=python_code,
             category="system",
             timeout=30,
+            dangerous=True,
+            allowed_roles=["admin", "developer"],
         )
     )

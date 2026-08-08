@@ -2,6 +2,8 @@ import { api, type HealthData, type MetricsSnapshot, type StatusData } from "../
 import PageHeader from "../components/PageHeader";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useApiQuery } from "../hooks/useApiQuery";
+import { useSessionEvents } from "../hooks/useSessionEvents";
+import { Bot, Cpu, Puzzle, Radio } from "lucide-react";
 
 export default function Dashboard() {
   const { data: status } = useApiQuery<StatusData | null>(["status"], () => api.status().catch((e: unknown) => { console.error("status load failed:", e); return null; }));
@@ -9,12 +11,13 @@ export default function Dashboard() {
   const { data: metricsData } = useApiQuery<MetricsSnapshot>(["metrics"], () => api.metrics().catch((e: unknown) => { console.error("metrics load failed:", e); return {} as MetricsSnapshot; }));
   const { data: sys, isLoading } = useApiQuery<{ channels: number; agents: number; running: boolean; version: string } | null>(["systemStatus"], () => api.systemStatus().catch((e: unknown) => { console.error("system status load failed:", e); return null; }));
   const metrics = metricsData ?? ({} as MetricsSnapshot);
+  const flowSessions = useSessionEvents();
 
   const metricCards = [
-    { label: "Channels", value: sys?.channels ?? status?.channels.length ?? "—" },
-    { label: "Agents", value: sys?.agents ?? status?.agents.length ?? "—" },
-    { label: "Plugins", value: status?.plugins ?? "—" },
-    { label: "Model", value: status?.model?.split("/").pop() ?? "—" },
+    { label: "Channels", value: sys?.channels ?? status?.channels.length ?? "—", icon: Radio },
+    { label: "Agents", value: sys?.agents ?? status?.agents.length ?? "—", icon: Bot },
+    { label: "Plugins", value: status?.plugins ?? "—", icon: Puzzle },
+    { label: "Model", value: status?.model?.split("/").pop() ?? "—", icon: Cpu },
   ];
 
   if (isLoading) {
@@ -50,7 +53,18 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {metricCards.map((c) => (
           <div key={c.label} className="stat-card">
-            <div className="stat-card-label">{c.label}</div>
+            <div className="flex items-center justify-between">
+              <div className="stat-card-label">{c.label}</div>
+              <span
+                className="w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{
+                  backgroundColor: "var(--dt-colors-accent-muted)",
+                  color: "var(--dt-colors-accent-default)",
+                }}
+              >
+                <c.icon size={15} />
+              </span>
+            </div>
             <div className="stat-card-value">{String(c.value)}</div>
           </div>
         ))}
@@ -63,7 +77,7 @@ export default function Dashboard() {
             {health.checks.map((c) => (
               <div key={c.name} className="flex items-center justify-between text-sm rounded-lg px-3 py-2" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}>
                 <div className="flex items-center gap-2.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${c.ok ? "bg-green-400" : "bg-red-400"}`} />
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: c.ok ? "var(--dt-colors-status-success)" : "var(--dt-colors-status-error)" }} />
                   <span style={{ color: "var(--dt-colors-text-secondary)" }}>{c.name}</span>
                   {c.critical && <span className="badge badge-warning">critical</span>}
                 </div>
@@ -94,6 +108,29 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="card">
+        <h2 className="text-sm font-semibold mb-3">Flow Sessions</h2>
+        {flowSessions.length === 0 ? (
+          <p className="text-sm" style={{ color: "var(--dt-colors-text-tertiary)" }}>No active flow sessions yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {flowSessions.map((s) => (
+              <div key={s.id} className="flex items-center justify-between text-sm rounded-lg px-3 py-2" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}>
+                <div className="flex items-center gap-2.5">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.status === "running" ? "var(--dt-colors-status-warning)" : "var(--dt-colors-status-success)" }} />
+                  <span className="font-medium">{s.id}</span>
+                  <span className="chip">{s.channel}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>{s.status}</span>
+                  <span className="text-xs" style={{ color: "var(--dt-colors-text-tertiary)" }}>{s.message_count} msgs</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

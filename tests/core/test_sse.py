@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from raven.core.sse import Backpressure, SSEEvent, SSEStream
@@ -210,3 +212,63 @@ async def test_sse_stop_clears_all():
     stream.subscribe("s2")
     await stream.stop()
     assert stream.active_sessions == 0
+
+
+class TestDaemonSseIntegration:
+    @pytest.fixture
+    def daemon(self, tmp_path):
+        from raven.gateway.daemon import RavenFlowDaemon
+
+        return RavenFlowDaemon(port=0, data_dir=tmp_path)
+
+    @pytest.mark.asyncio
+    async def test_session_created_event_payload(self, daemon):
+        q = daemon._sse.subscribe("flow:user1:test")
+        await daemon._get_or_create_session("s1", "test")
+        payload = await asyncio.wait_for(q.get(), timeout=1.0)
+        assert payload.event == "session"
+        assert payload.data["action"] == "created"
+        session_payload = payload.data["session"]
+        assert session_payload["id"] == "s1"
+        assert session_payload["channel"] == "test"
+        assert session_payload["status"] == "idle"
+        assert session_payload["message_count"] == 0
+        daemon._sse.unsubscribe("flow:user1:test")
+
+    @pytest.mark.asyncio
+    async def test_session_updated_event_on_run(self, daemon):
+        q = daemon._sse.subscribe("flow:user1:test")
+        session = await daemon._get_or_create_session("s1", "test")
+        await asyncio.wait_for(q.get(), timeout=1.0)
+        await daemon._publish_session(session, "updated")
+        payload = await asyncio.wait_for(q.get(), timeout=1.0)
+        assert payload.event == "session"
+        assert payload.data["action"] == "updated"
+        assert payload.data["session"]["id"] == "s1"
+        daemon._sse.unsubscribe("flow:user1:test")
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_stops_delivery(self, daemon):
+        key = "flow:user1:gone"
+        daemon._sse.subscribe(key)
+        daemon._sse.unsubscribe(key)
+        session = await daemon._get_or_create_session("s1", "test")
+        await daemon._publish_session(session, "updated")
+        assert daemon._sse.get_session_info(key) is None
+
+    @pytest.mark.asyncio
+    async def test_published_payload_matches_session_info(self, daemon):
+        q = daemon._sse.subscribe("flow:user1:test")
+        session = await daemon._get_or_create_session("s1", "test")
+        await asyncio.wait_for(q.get(), timeout=1.0)
+        session.message_count = 7
+        await daemon._publish_session(session, "updated")
+        payload = await asyncio.wait_for(q.get(), timeout=1.0)
+        data = payload.data["session"]
+        from raven.gateway.daemon import SessionInfo
+
+        info = SessionInfo(**data)
+        assert info.id == "s1"
+        assert info.message_count == 7
+        assert info.status == "idle"
+        daemon._sse.unsubscribe("flow:user1:test")

@@ -13,6 +13,7 @@ from rich.table import Table
 
 from raven.cli.aios_cmd import aios_group as _aios
 from raven.cli.backup_cmd import backup_group as _backup
+from raven.cli.benchmark_cmd import benchmark as _benchmark
 from raven.cli.code_cmd import code_group as _code
 from raven.cli.db_cmd import db_group as _db
 from raven.cli.devices_cmd import devices_group as _devices
@@ -69,6 +70,8 @@ def cli(ctx: click.Context):
 # ── Register extracted command groups ──────────────────────────────
 
 cli.add_command(_aios)
+cli.add_command(_backup)
+cli.add_command(_benchmark)
 cli.add_command(_code)
 cli.add_command(_db)
 cli.add_command(_devices)

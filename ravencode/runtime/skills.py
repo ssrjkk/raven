@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 
 @dataclass
@@ -118,47 +119,51 @@ _register_builtin(
 )
 
 
-_SKILL_SEARCH_DIRS = [
-    Path(".opencode/skills"),
-    Path(".claude/skills"),
-    Path(".agents/skills"),
-    Path.home() / ".config/opencode/skills",
-]
+def _manager(cwd: Path | None = None) -> Any:
+    from raven.core.artifacts.manager import ArtifactManager
+
+    return ArtifactManager(cwd=cwd, import_agents_md=False)
 
 
-def discover_skills() -> dict[str, Skill]:
+def _to_skill(index: Any) -> Skill:
+    from raven.core.artifacts import loader as artifact_loader
+
+    loaded = artifact_loader.load_skill(index)
+    text = loaded.instructions
+    if loaded.examples:
+        text = f"{text}\n\nExamples:\n" + "\n\n".join(loaded.examples)
+    return Skill(
+        name=loaded.name,
+        description=loaded.description,
+        instructions=text,
+        paths=list(loaded.paths),
+    )
+
+
+def discover_skills(cwd: Path | None = None) -> dict[str, Skill]:
     result = dict(_BUILTIN_SKILLS)
-    for base in _SKILL_SEARCH_DIRS:
-        if not base.is_dir():
-            continue
-        for md_file in base.glob("*.md"):
-            skill_id = md_file.stem.lower()
-            content = md_file.read_text(encoding="utf-8", errors="replace")
-            name = skill_id.replace("-", " ").title()
-            result[skill_id] = Skill(
-                name=name,
-                description=f"Loaded from {md_file}",
-                instructions=content,
-                paths=[md_file],
-            )
+    for skill in _manager(cwd).skills_index():
+        result.setdefault(skill.name.lower(), _to_skill(skill))
     return result
 
 
-def load_skill(skill_id: str) -> str:
-    skills = discover_skills()
-    skill = skills.get(skill_id)
-    if skill:
-        return f"# Skill: {skill.name}\n\n{skill.description}\n\n## Instructions\n\n{skill.instructions}"
-    available = ", ".join(sorted(skills))
-    return f"Skill '{skill_id}' not found. Available: {available or '(none)'}"
+def load_skill(skill_id: str, cwd: Path | None = None) -> str:
+    manager = _manager(cwd)
+    index = manager.skill_index(skill_id) or manager.skill_index(skill_id.lower())
+    if index is None:
+        available = ", ".join(sorted(discover_skills(cwd)))
+        return f"Skill '{skill_id}' not found. Available: {available or '(none)'}"
+    skill = _to_skill(index)
+    return f"# Skill: {skill.name}\n\n{skill.description}\n\n## Instructions\n\n{skill.instructions}"
 
 
-def list_skills() -> list[str]:
-    return sorted(discover_skills().keys())
+def list_skills(cwd: Path | None = None) -> list[str]:
+    return sorted(discover_skills(cwd).keys())
 
 
-def get_skill_info(skill_id: str) -> Skill | None:
-    return discover_skills().get(skill_id)
+def get_skill_info(skill_id: str, cwd: Path | None = None) -> Skill | None:
+    skills = discover_skills(cwd)
+    return skills.get(skill_id) or skills.get(skill_id.lower())
 
 
 # ---------------------------------------------------------------------------

@@ -1,8 +1,10 @@
-import { memo } from "react";
+import { memo, useState } from "react";
+import { Bot, Check, Copy, User } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 
 import { MessageData } from "../api/client";
+import ArtifactRenderer from "./ArtifactRenderer";
 
 interface MessageBubbleProps {
   message: MessageData;
@@ -55,16 +57,17 @@ const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProp
   }
 
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+    <div className={`flex items-end gap-2.5 ${isUser ? "justify-end" : "justify-start"}`}>
+      {!isUser && <Avatar role="assistant" />}
       <div
-        className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+        className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${
           isUser ? "text-white rounded-br-sm" : "rounded-bl-sm"
         }`}
         style={
           isUser
             ? {
                 backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-accent-hover, #6d28d9))",
-                boxShadow: "0 4px 16px var(--dt-colors-accent-muted, rgba(124,58,237,0.3))",
+                boxShadow: "0 4px 16px var(--dt-colors-accent-muted, rgba(124, 58, 237, 0.3))",
               }
             : {
                 backgroundColor: "var(--dt-colors-bg-tertiary)",
@@ -78,14 +81,70 @@ const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProp
           {ts && <span className="text-[10px] opacity-50">{ts}</span>}
         </div>
         <div className="text-sm leading-relaxed prose prose-invert max-w-none">
-          <MarkdownContent content={message.content} />
+          {isUser ? (
+            <MarkdownContent content={message.content} />
+          ) : (
+            <ArtifactRenderer content={message.content} />
+          )}
         </div>
+        {!isUser && <CopyButton content={message.content} />}
       </div>
+      {isUser && <Avatar role="user" />}
     </div>
   );
 });
 
 export default MessageBubble;
+
+function Avatar({ role }: { role: "user" | "assistant" }) {
+  return (
+    <div
+      className="w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-white shadow-md"
+      style={
+        role === "user"
+          ? {
+              backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), #d946ef)",
+              boxShadow: "0 2px 10px var(--dt-colors-accent-muted, rgba(124, 58, 237, 0.35))",
+            }
+          : {
+              backgroundColor: "var(--dt-colors-bg-tertiary)",
+              border: "1px solid var(--dt-colors-border-default)",
+            }
+      }
+    >
+      {role === "user" ? (
+        <User size={14} className="text-white" />
+      ) : (
+        <Bot size={14} style={{ color: "var(--dt-colors-accent-default)" }} />
+      )}
+    </div>
+  );
+}
+
+function CopyButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className="mt-1.5 inline-flex items-center gap-1 text-[10px] opacity-50 hover:opacity-100 transition-opacity"
+      style={{ color: "var(--dt-colors-text-tertiary)" }}
+      aria-label="Copy response"
+    >
+      {copied ? <Check size={11} /> : <Copy size={11} />}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
 
 function MarkdownContent({ content }: { content: string }) {
   return <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{content}</ReactMarkdown>;

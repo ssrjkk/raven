@@ -39,7 +39,18 @@ describe("Toast", () => {
     renderToast();
     fireEvent.click(screen.getByText("Info"));
     expect(screen.getByText("Hello info")).toBeInTheDocument();
-    act(() => { vi.advanceTimersByTime(4100); });
+    act(() => { vi.advanceTimersByTime(4100 + 300); });
+    expect(screen.queryByText("Hello info")).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("dismisses toast via close button", () => {
+    vi.useFakeTimers();
+    renderToast();
+    fireEvent.click(screen.getByText("Info"));
+    expect(screen.getByText("Hello info")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Dismiss notification"));
+    act(() => { vi.advanceTimersByTime(300); });
     expect(screen.queryByText("Hello info")).not.toBeInTheDocument();
     vi.useRealTimers();
   });
