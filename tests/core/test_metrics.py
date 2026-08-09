@@ -4,12 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
 
+from raven.core.instrumented import InstrumentedLLMProvider
 from raven.core.llm.protocol import LLMResponse
-from raven.core.metrics import (
-    InstrumentedLLMProvider,
-    MetricsCollector,
-    MetricsServer,
-)
+from raven.core.metrics import MetricsCollector, MetricsServer
 
 
 @pytest.fixture(autouse=True)

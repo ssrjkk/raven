@@ -86,7 +86,7 @@ class TestLLMResponse:
 
 class TestLLMRouter:
     def _unwrapped(self, prov: LLMProvider) -> type[LLMProvider]:
-        from raven.core.metrics import InstrumentedLLMProvider
+        from raven.core.instrumented import InstrumentedLLMProvider
         if isinstance(prov, InstrumentedLLMProvider):
             return type(prov._wrapped)
         return type(prov)

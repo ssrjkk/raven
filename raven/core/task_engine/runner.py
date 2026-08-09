@@ -7,6 +7,7 @@ from collections.abc import Callable
 
 from loguru import logger
 
+from raven.core.metrics import metrics
 from raven.core.task_engine.models import Task, TaskStatus
 from raven.core.task_engine.store import TaskStore
 from raven.core.task_engine.tool_registry import ToolRegistry
@@ -110,6 +111,7 @@ class TaskRunner:
         await self._store.save_task(task)
 
         pause_ev = self._pause_events.get(task_id) or asyncio.Event()
+        started_at = time.time()
 
         try:
             for i in range(task.current_step_index, len(task.steps)):
@@ -117,6 +119,7 @@ class TaskRunner:
                     task.status = TaskStatus.CANCELLED
                     task.updated_at = time.time()
                     await self._store.save_task(task)
+                    self._record_outcome(task, started_at)
                     logger.info("Task {} cancelled at step {}", task_id, i)
                     return
 
@@ -125,6 +128,7 @@ class TaskRunner:
                         task.status = TaskStatus.CANCELLED
                         task.updated_at = time.time()
                         await self._store.save_task(task)
+                        self._record_outcome(task, started_at)
                         logger.info("Task {} cancelled while paused at step {}", task_id, i)
                         return
                     await asyncio.sleep(0.5)
@@ -166,6 +170,7 @@ class TaskRunner:
                     task.updated_at = time.time()
                     await self._store.update_step(step)
                     await self._store.save_task(task)
+                    self._record_outcome(task, started_at)
                     logger.warning("Task {} step {} timed out", task_id, i + 1)
                     return
 
@@ -178,6 +183,7 @@ class TaskRunner:
                     task.updated_at = time.time()
                     await self._store.update_step(step)
                     await self._store.save_task(task)
+                    self._record_outcome(task, started_at)
                     logger.error("Task {} step {} failed: {}", task_id, i + 1, e)
                     return
 
@@ -185,12 +191,14 @@ class TaskRunner:
             task.current_step_index = len(task.steps)
             task.updated_at = time.time()
             await self._store.save_task(task)
+            self._record_outcome(task, started_at)
             logger.info("Task {} completed with {} steps", task_id, len(task.steps))
 
         except asyncio.CancelledError:
             task.status = TaskStatus.CANCELLED
             task.updated_at = time.time()
             await self._store.save_task(task)
+            self._record_outcome(task, started_at)
             raise
 
     def on_complete(self, task_id: str, callback: Callable[[], None]) -> None:
@@ -203,6 +211,18 @@ class TaskRunner:
         self._cancel_events.pop(task_id, None)
         self._pause_events.pop(task_id, None)
         self._sem.release()
+
+    def _record_outcome(self, task: Task, started_at: float) -> None:
+        status = task.status
+        if status == TaskStatus.COMPLETED:
+            metrics.inc("task_completed")
+        elif status == TaskStatus.FAILED:
+            metrics.inc("task_failed")
+        elif status == TaskStatus.CANCELLED:
+            metrics.inc("task_cancelled")
+        else:
+            return
+        metrics.observe("task_duration", time.time() - started_at)
 
     async def shutdown(self) -> None:
         pending = list(self._running.values())

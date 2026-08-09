@@ -100,3 +100,34 @@ class TestGatewayE2E:
         assert hasattr(gateway, "_guardian")
         report = gateway._guardian.status_report()
         assert "mock" in report
+
+    async def test_message_publishes_event(self, gateway):
+        received: list[dict[str, object]] = []
+
+        async def on_event(**data: object) -> None:
+            received.append(dict(data))
+
+        gateway.event_bus.subscribe("gateway.message_received", on_event)
+        event = IncomingMessage(
+            channel="mock",
+            user_id="user1",
+            session_id="mock:user1:default",
+            text="hello events",
+        )
+        await gateway.handle_message(event)
+        assert any(d["channel"] == "mock" and d["user_id"] == "user1" for d in received)
+
+    async def test_message_received_metric(self, gateway):
+        from raven.core.metrics import metrics
+
+        metrics.clear()
+        event = IncomingMessage(
+            channel="mock",
+            user_id="user1",
+            session_id="mock:user1:default",
+            text="hello metrics",
+        )
+        await gateway.handle_message(event)
+        snap = metrics.snapshot()
+        received = {k: v for k, v in snap.items() if k.startswith("raven_messages_received") and k.endswith("_total")}
+        assert sum(received.values()) == 1

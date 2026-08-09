@@ -8,7 +8,6 @@ import string
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
 from loguru import logger
 
@@ -40,9 +39,10 @@ from raven.core.audit import audit_logger
 from raven.core.channel_guardian import ChannelGuardian
 from raven.core.failover import ModelFailover
 from raven.core.llm import LLMRouter
-from raven.core.logging import bind_context, clear_context
+from raven.core.logging import bind_context, clear_context, get_correlation_id, set_correlation_id
 from raven.core.metrics import MetricsServer, metrics
 from raven.core.models import IncomingMessage, Message
+from raven.core.outbox import Outbox
 from raven.core.plugin_loader import PluginLoader
 from raven.core.sandbox import Sandbox
 from raven.core.security.context_filter import ContextVisibility, filter_context_by_visibility, redact_pii
@@ -83,6 +83,7 @@ class Gateway:
         self.features = FeatureFlags.get()
         self._tracing = TracingManager(service_name="raven-gateway", otlp_endpoint=settings.otlp_endpoint or None)
         self._tracer = get_tracer("raven.gateway")
+        self._outbox = Outbox(self._outbox_path(), self._send_now)
 
         self._ctxmgr: ContextWindowManager | None = None
         if settings.context_window_enabled and settings.context_window_max_tokens > 0:
@@ -100,6 +101,7 @@ class Gateway:
             llm=self.llm,
             mcp_pool=self.mcp.pool,
             send_notification=self._send,
+            event_bus=self.event_bus,
         )
         self._health = HealthMonitor(
             db_check=self.db.health_check,
@@ -135,6 +137,12 @@ class Gateway:
             metrics=metrics,
             send_fn=self._send,
         )
+
+    def _outbox_path(self) -> Path:
+        db_path = getattr(self.db, "db_path", None)
+        if db_path:
+            return Path(db_path).parent / "outbox.db"
+        return Path("data/outbox.db")
 
     async def register_channel(self, channel: BaseChannel):
         await self.channels.register(channel)
@@ -284,6 +292,8 @@ class Gateway:
             await self.mcp.start(plugin_loader=self.plugin_loader)
             started.append("mcp")
             await self._guardian.start()
+            await self._outbox.start()
+            started.append("outbox")
             await self.event_bus.publish("gateway.started", channels=channel_count)
         except Exception:
             logger.error("Gateway start failed, rolling back {} components", len(started))
@@ -302,6 +312,11 @@ class Gateway:
                 await self._guardian.stop()
             except Exception as e:
                 logger.debug("guardian stop during rollback: {}", e)
+        if "outbox" in components:
+            try:
+                await self._outbox.stop()
+            except Exception as e:
+                logger.debug("outbox stop during rollback: {}", e)
         if "mcp" in components:
             try:
                 await self.mcp.stop()
@@ -344,6 +359,10 @@ class Gateway:
             await self._guardian.stop()
         except Exception as e:
             logger.warning("guardian stop error: {}", e)
+        try:
+            await self._outbox.stop()
+        except Exception as e:
+            logger.warning("outbox stop error: {}", e)
         if self._redis_client:
             try:
                 await self._redis_client.disconnect()
@@ -464,9 +483,17 @@ class Gateway:
         if not self._running:
             logger.warning("Gateway not running, dropping message from {}[{}]", event.channel, event.user_id)
             return
-        cid = str(uuid4())[:8]
+        if not get_correlation_id():
+            set_correlation_id()
+        cid = get_correlation_id()[:8]
         logger.info("[{}] Incoming message from {}[{}]: {}", cid, event.channel, event.user_id, event.text[:80])
         metrics.inc("messages_received", {"channel": event.channel})
+        await self.event_bus.publish(
+            "gateway.message_received",
+            channel=event.channel,
+            user_id=event.user_id,
+            session_id=event.session_id or "",
+        )
         with self._tracer.start_as_current_span("handle_message") as span:
             span.set_attribute("channel", event.channel)
             span.set_attribute("user_id", event.user_id)
@@ -687,6 +714,19 @@ class Gateway:
         return self._rbac.has_permission(role, permission)
 
     async def _send(self, channel_id: str, session_id: str, text: str, streaming: bool = False):
+        try:
+            await self._send_now(channel_id, session_id, text, streaming)
+        except Exception as e:
+            metrics.inc("send_errors", {"channel": channel_id})
+            if streaming or self._outbox is None or not self._outbox.healthy:
+                logger.error("Send failed for channel {}: {}", channel_id, e)
+                await self._guardian.record_error(channel_id)
+                return
+            logger.warning("Send failed for channel {}, enqueueing to outbox: {}", channel_id, e)
+            await self._guardian.record_error(channel_id)
+            await self._outbox.enqueue(channel_id, session_id, text)
+
+    async def _send_now(self, channel_id: str, session_id: str, text: str, streaming: bool = False):
         with self._tracer.start_as_current_span("send") as span:
             span.set_attribute("channel_id", channel_id)
             span.set_attribute("session_id", session_id)
@@ -694,27 +734,16 @@ class Gateway:
             span.set_attribute("streaming", str(streaming))
             channel = await self.channels.get(channel_id)
             if channel is None:
-                logger.warning("Channel '{}' not found for _send, session={}", channel_id, session_id)
-                return
+                raise RuntimeError(f"Channel '{channel_id}' not found for send")
             if streaming:
                 send_stream = getattr(channel, "send_stream", None)
                 if send_stream:
-                    try:
-                        await send_stream(session_id, text)
-                        await self._guardian.record_success(channel_id)
-                    except Exception as e:
-                        logger.error("Send stream failed for channel {}: {}", channel_id, e)
-                        metrics.inc("send_errors", {"channel": channel_id})
-                        await self._guardian.record_error(channel_id)
+                    await send_stream(session_id, text)
+                    await self._guardian.record_success(channel_id)
                     return
             msg = Message(session_id=session_id, channel=channel_id, role="assistant", content=text)
-            try:
-                await channel.send(session_id, msg)
-                await self._guardian.record_success(channel_id)
-            except Exception as e:
-                logger.error("Send failed for channel {}: {}", channel_id, e)
-                metrics.inc("send_errors", {"channel": channel_id})
-                await self._guardian.record_error(channel_id)
+            await channel.send(session_id, msg)
+            await self._guardian.record_success(channel_id)
 
     def _clean_text(self, channel: str, text: str) -> str:
         if channel == "discord":

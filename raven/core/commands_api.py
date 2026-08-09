@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -59,8 +60,8 @@ def _load_theme_prefs() -> dict[str, str]:
         raw = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(raw, dict) and isinstance(raw.get("accentColor"), str):
             return {"accentColor": raw["accentColor"]}
-    except (OSError, json.JSONDecodeError):
-        pass
+    except (OSError, json.JSONDecodeError) as e:
+        logger.debug("theme prefs load failed, using default accent: {}", e)
     return {"accentColor": _DEFAULT_ACCENT}
 
 
@@ -218,7 +219,8 @@ async def _llm_palette(prompt: str) -> dict[str, dict[str, str]] | None:
             return None
         raw = json.loads(text[start : end + 1])
         return _coerce_palette(raw) or None
-    except Exception:
+    except Exception as e:
+        logger.debug("LLM palette extraction failed: {}", e)
         return None
 
 

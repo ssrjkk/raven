@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Callable
+from types import TracebackType
 from typing import Any
 
 import httpx
@@ -13,8 +15,9 @@ from raven.core._json import json
 from raven.core.cache.llm_cache import LLMCache
 from raven.core.config import settings
 from raven.core.failover import ModelFailover
+from raven.core.instrumented import InstrumentedLLMProvider
 from raven.core.llm.protocol import LLMProvider, LLMResponse
-from raven.core.metrics import InstrumentedLLMProvider, metrics
+from raven.core.metrics import metrics
 from raven.core.tracing import trace_llm_call
 
 _HAS_TIER_CONFIG: bool | None = None
@@ -28,16 +31,53 @@ def _tiers_configured() -> bool:
     return _HAS_TIER_CONFIG
 
 
+class _DynamicRateLimiter:
+    def __init__(self, limit: int) -> None:
+        self._limit = max(1, limit)
+        self._active = 0
+        self._waiters = 0
+        self._condition = asyncio.Condition()
+
+    async def __aenter__(self) -> None:
+        async with self._condition:
+            self._waiters += 1
+            if self._waiters > 50:
+                logger.warning(
+                    "LLM backpressure: {} concurrent requests waiting, limit is {}", self._waiters, self._limit
+                )
+            try:
+                while self._active >= self._limit:
+                    await self._condition.wait()
+                self._active += 1
+            finally:
+                self._waiters -= 1
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        async with self._condition:
+            self._active -= 1
+            self._condition.notify_all()
+
+    def set_limit(self, limit: int) -> None:
+        self._limit = max(1, limit)
+
+
 class LLMRouter:
-    _CACHE_TTL = 2.0
-    _CACHE_MAXSIZE = 1024
+    _CACHE_TTL = 5.0
+    _CACHE_TOOL_TTL = 3.0
+    _CACHE_LONG_TTL = 10.0
+    _CACHE_MAXSIZE = 10000
 
     def __init__(self, providers_config: dict[str, Any] | None = None, llm_cache: LLMCache | None = None):
         self._providers: dict[str, LLMProvider] = {}
         self._providers_config = providers_config or {}
-        self._cache: OrderedDict[str, tuple[float, LLMResponse]] = OrderedDict()
+        self._cache: OrderedDict[str, tuple[float, float, LLMResponse]] = OrderedDict()
         self._cache_lock = asyncio.Lock()
-        self._rate_semaphore = asyncio.Semaphore(10)
+        self._rate_limiter = _DynamicRateLimiter(settings.llm_max_concurrent)
         self._llm_cache = llm_cache
 
     async def cleanup(self):
@@ -52,23 +92,38 @@ class LLMRouter:
 
     @staticmethod
     def _cache_key(messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None) -> str:
-        return f"{model}|{tools}|{json.dumps(messages, sort_keys=True)}"
+        payload = json.dumps({"m": messages, "t": tools}, sort_keys=True)
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        return f"{model}|{digest}"
+
+    @staticmethod
+    def _ttl_for(messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None) -> float:
+        if tools:
+            return LLMRouter._CACHE_TOOL_TTL
+        for m in reversed(messages):
+            if m.get("role") == "user":
+                content = m.get("content")
+                if isinstance(content, str) and len(content) > 200:
+                    return LLMRouter._CACHE_LONG_TTL
+                break
+        return LLMRouter._CACHE_TTL
 
     async def _get_cached(self, key: str) -> LLMResponse | None:
         async with self._cache_lock:
             entry = self._cache.get(key)
-            if entry and (time.monotonic() - entry[0]) < LLMRouter._CACHE_TTL:
-                self._cache.move_to_end(key)
-                return entry[1]
-            if entry:
+            if entry is not None:
+                ts, ttl, resp = entry
+                if (time.monotonic() - ts) < ttl:
+                    self._cache.move_to_end(key)
+                    return resp
                 del self._cache[key]
             return None
 
-    async def _set_cached(self, key: str, resp: LLMResponse):
+    async def _set_cached(self, key: str, resp: LLMResponse, ttl: float) -> None:
         async with self._cache_lock:
             if len(self._cache) >= LLMRouter._CACHE_MAXSIZE:
                 self._cache.popitem(last=False)
-            self._cache[key] = (time.monotonic(), resp)
+            self._cache[key] = (time.monotonic(), ttl, resp)
 
     def _get_provider(self, model: str) -> LLMProvider:
         if not model:
@@ -142,7 +197,7 @@ class LLMRouter:
         last_exc: Exception | None = None
         for attempt in range(max(1, settings.llm_retry_max)):
             try:
-                async with self._rate_semaphore:
+                async with self._rate_limiter:
                     provider = self._get_provider(model)
                     metrics.inc("llm_stream_start", {"model": model, "provider": type(provider).__name__})
                     with trace_llm_call(model=model):
@@ -196,21 +251,21 @@ class LLMRouter:
         if self._llm_cache:
             redis_cached = await self._llm_cache.get(model, messages, tools)
             if redis_cached is not None:
-                await self._set_cached(key, redis_cached)
+                await self._set_cached(key, redis_cached, self._ttl_for(messages, tools))
                 metrics.inc("llm_cache_hit", {"model": model})
                 return redis_cached
 
         primary_exc: Exception | None = None
         for attempt in range(max(1, settings.llm_retry_max)):
             try:
-                async with self._rate_semaphore:
+                async with self._rate_limiter:
                     provider = self._get_provider(model)
                     with trace_llm_call(model=model):
                         resp = await provider.complete(messages, model, tools)
                 metrics.inc("llm_complete", {"model": model, "status": "ok"})
                 if self._llm_cache:
                     await self._llm_cache.set(model, messages, resp, tools)
-                await self._set_cached(key, resp)
+                await self._set_cached(key, resp, self._ttl_for(messages, tools))
                 return resp
             except (RuntimeError, httpx.HTTPStatusError, httpx.TimeoutException, httpx.NetworkError) as e:
                 primary_exc = e

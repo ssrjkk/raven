@@ -6,12 +6,15 @@ import uuid
 from collections.abc import Callable
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 from pydantic import SecretStr
 
 from raven.core._json import json
+
+if TYPE_CHECKING:
+    from loguru import Record
 
 correlation_id: ContextVar[str] = ContextVar("correlation_id", default="")
 
@@ -39,7 +42,7 @@ def get_context() -> dict[str, Any]:
     return dict(_CONTEXT_BINDINGS.get())
 
 
-def _mask_secret_str(record):
+def _mask_secret_str(record: Any) -> bool:
     args = record.get("args")
     if args is not None and isinstance(args, tuple):
         masked = []
@@ -50,6 +53,15 @@ def _mask_secret_str(record):
                 masked.append(arg)
         record["args"] = tuple(masked)
     return True
+
+
+def _attach_correlation_id(record: Record) -> None:
+    record["extra"].setdefault("correlation_id", correlation_id.get())
+
+
+def _enrich_record(record: Record) -> bool:
+    _attach_correlation_id(record)
+    return _mask_secret_str(record)
 
 
 def get_correlation_id() -> str:
@@ -123,7 +135,7 @@ def setup_logging(log_file: str | Path | None = None, level: str = "INFO", json_
                 format=_serialize,
                 rotation="100 MB",
                 retention="30 days",
-                filter=_mask_secret_str,
+                filter=_enrich_record,
             )
             logger.add(
                 str(log_target.with_suffix(".err.log")),
@@ -131,7 +143,7 @@ def setup_logging(log_file: str | Path | None = None, level: str = "INFO", json_
                 format=_serialize,
                 rotation="100 MB",
                 retention="90 days",
-                filter=_mask_secret_str,
+                filter=_enrich_record,
             )
         console_fmt = "{time:HH:mm:ss} | {level: <8} | {name} - {message}"
     else:
@@ -145,7 +157,7 @@ def setup_logging(log_file: str | Path | None = None, level: str = "INFO", json_
         level=log_level,
         format=console_fmt,
         colorize=not (json_format or os.environ.get("RAVEN_JSON_LOG")),
-        filter=_mask_secret_str,
+        filter=_enrich_record,
     )
 
     if HAS_STRUCTLOG:

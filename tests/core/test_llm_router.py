@@ -88,7 +88,7 @@ class TestCacheOps:
         router = LLMRouter()
         key = "k1"
         resp = LLMResponse(content="cached")
-        await router._set_cached(key, resp)
+        await router._set_cached(key, resp, LLMRouter._CACHE_TTL)
         got = await router._get_cached(key)
         assert got is not None
         assert got.content == "cached"
@@ -101,23 +101,23 @@ class TestCacheOps:
     async def test_lru_eviction(self):
         router = LLMRouter()
         for i in range(LLMRouter._CACHE_MAXSIZE + 5):
-            await router._set_cached(f"key_{i}", LLMResponse(content=str(i)))
+            await router._set_cached(f"key_{i}", LLMResponse(content=str(i)), LLMRouter._CACHE_TTL)
         async with router._cache_lock:
             assert len(router._cache) == LLMRouter._CACHE_MAXSIZE
 
     async def test_move_to_end_on_hit(self):
         router = LLMRouter()
-        await router._set_cached("a", LLMResponse(content="a"))
-        await router._set_cached("b", LLMResponse(content="b"))
+        await router._set_cached("a", LLMResponse(content="a"), LLMRouter._CACHE_TTL)
+        await router._set_cached("b", LLMResponse(content="b"), LLMRouter._CACHE_TTL)
         await router._get_cached("a")
         async with router._cache_lock:
             assert list(router._cache.keys())[-1] == "a"
 
     async def test_ttl_expiry(self):
         router = LLMRouter()
-        await router._set_cached("expired", LLMResponse(content="old"))
+        await router._set_cached("expired", LLMResponse(content="old"), LLMRouter._CACHE_TTL)
         async with router._cache_lock:
-            router._cache["expired"] = (0.0, LLMResponse(content="old"))
+            router._cache["expired"] = (0.0, 1.0, LLMResponse(content="old"))
         got = await router._get_cached("expired")
         assert got is None
 
@@ -152,6 +152,7 @@ class TestGetProvider:
              patch("raven.core.config_discovery.get_discovered_keys") as mock_disc:
             mock_settings.ghost_mode = False
             mock_settings.default_model = "ollama/test"
+            mock_settings.llm_max_concurrent = 10
             mock_disc.return_value.is_available.return_value = True
             mock_disc.return_value.providers_available = ["openai", "anthropic", "openrouter", "ollama"]
             router = LLMRouter()
@@ -198,7 +199,7 @@ class TestComplete:
     async def test_cache_hit(self):
         router = LLMRouter()
         key = LLMRouter._cache_key([{"role": "user", "content": "hi"}], "ollama/test", None)
-        await router._set_cached(key, LLMResponse(content="cached"))
+        await router._set_cached(key, LLMResponse(content="cached"), LLMRouter._CACHE_TTL)
         with patch("raven.core.llm.router.settings") as mock_settings:
             mock_settings.llm_retry_max = 1
             resp = await router.complete([{"role": "user", "content": "hi"}], model="ollama/test")

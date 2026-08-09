@@ -8,6 +8,8 @@ from typing import Any
 
 from loguru import logger
 
+from raven.core.logging import get_correlation_id
+
 try:
     from opentelemetry import trace as otel_trace
     from opentelemetry.sdk.resources import Resource
@@ -152,6 +154,9 @@ def trace_llm_call(model: str, **attributes: Any) -> Generator[Any, None, None]:
     span_name = f"llm.{model}"
     with tracer.start_as_current_span(span_name) as span:
         span.set_attribute("llm.model", model)
+        cid = get_correlation_id()
+        if cid:
+            span.set_attribute("correlation_id", cid)
         for k, v in attributes.items():
             span.set_attribute(k, str(v))
         start = time.monotonic()
@@ -175,6 +180,9 @@ def trace_tool_call(tool_name: str | None = None) -> Callable[..., Any]:
             span_name = f"tool.{name}"
             with tracer.start_as_current_span(span_name) as span:
                 span.set_attribute("tool.name", name)
+                cid = get_correlation_id()
+                if cid:
+                    span.set_attribute("correlation_id", cid)
                 start = time.monotonic()
                 try:
                     return await func(*args, **kwargs)

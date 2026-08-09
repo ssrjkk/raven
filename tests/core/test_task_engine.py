@@ -266,3 +266,57 @@ class TestTaskRunner:
         loaded = await runner.get_task(task.id)
         assert loaded is not None
         assert loaded.goal == "test task"
+
+    async def test_metrics_completed(self, store: TaskStore, registry: ToolRegistry, task: Task):
+        from raven.core.metrics import metrics
+        from raven.core.task_engine.runner import TaskRunner
+
+        metrics.clear()
+        runner = TaskRunner(store, registry)
+        await runner.submit(task)
+        completed = await runner.wait(task.id, timeout=10)
+        assert completed is not None
+        assert completed.status == TaskStatus.COMPLETED
+        snap = metrics.snapshot()
+        assert snap.get("raven_task_completed_total") == 1
+        assert snap.get("raven_task_duration_count", 0) >= 1
+
+    async def test_metrics_failed(self, store: TaskStore):
+        from raven.core.metrics import metrics
+        from raven.core.task_engine.runner import TaskRunner
+        from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+
+        async def slow_handler():
+            await asyncio.sleep(3600)
+
+        registry = ToolRegistry()
+        registry.register(
+            ToolSpec(name="slow", description="slow", parameters={}, handler=slow_handler, timeout=1)
+        )
+        metrics.clear()
+        t = Task(
+            goal="timeout task",
+            steps=[TaskStep(task_id="", order=0, description="slow", tool="slow", params={})],
+        )
+        for s in t.steps:
+            s.task_id = t.id
+        runner = TaskRunner(store, registry)
+        await runner.submit(t)
+        result = await runner.wait(t.id, timeout=10)
+        assert result.status == TaskStatus.FAILED
+        snap = metrics.snapshot()
+        assert snap.get("raven_task_failed_total") == 1
+
+    async def test_metrics_cancelled(self, store: TaskStore, registry: ToolRegistry, task: Task):
+        from raven.core.metrics import metrics
+        from raven.core.task_engine.runner import TaskRunner
+
+        metrics.clear()
+        runner = TaskRunner(store, registry)
+        await runner.submit(task)
+        cancelled = await runner.cancel(task.id)
+        assert cancelled is True
+        result = await runner.wait(task.id, timeout=10)
+        assert result.status == TaskStatus.CANCELLED
+        snap = metrics.snapshot()
+        assert snap.get("raven_task_cancelled_total") == 1

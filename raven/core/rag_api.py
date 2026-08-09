@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +8,8 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
+from raven.core.events import EventBus
+from raven.core.metrics import metrics
 from raven.unique.multi_modal_rag import Document, MultiModalRAG
 
 _RAG_PATH = Path(__file__).parent.parent / "data" / "rag_index.json"
@@ -45,11 +48,11 @@ class RemoveDocumentRequest(BaseModel):
     document_id: str
 
 
-def create_rag_router() -> APIRouter:
+def create_rag_router(event_bus: EventBus | None = None) -> APIRouter:
     router = APIRouter(prefix="/api/rag", tags=["rag"])
 
     @router.post("/index")
-    def index_text(req: IndexTextRequest):
+    async def index_text(req: IndexTextRequest):
         rag = _get_rag()
         meta: dict[str, Any] = {}
         if req.metadata:
@@ -60,16 +63,28 @@ def create_rag_router() -> APIRouter:
             except json.JSONDecodeError:
                 meta = {"note": req.metadata}
         doc = Document(id=req.document_id, text=req.text, source=req.source, metadata=meta)
+        start = time.monotonic()
         chunk_ids = rag.index_document(doc)
         _save_rag(rag)
+        metrics.observe("rag_index", time.monotonic() - start)
+        metrics.inc("rag_index_document")
+        if event_bus is not None:
+            await event_bus.publish(
+                "rag.indexed",
+                document_id=req.document_id,
+                chunks=len(chunk_ids),
+            )
         return {"document_id": req.document_id, "chunks": len(chunk_ids)}
 
     @router.post("/search")
     def search(req: SearchRequest):
         rag = _get_rag()
+        start = time.monotonic()
         try:
             results = rag.search(req.query, top_k=req.top_k, include_images=req.include_images)
+            metrics.observe("rag_search", time.monotonic() - start)
         except Exception as e:
+            metrics.error("rag_search", {})
             logger.error("RAG search error: {}", e)
             raise HTTPException(500, str(e)) from e
         return {

@@ -259,7 +259,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     collab_router = create_collab_router()
     api_app.include_router(collab_router)
 
-    rag_router = create_rag_router()
+    rag_router = create_rag_router(event_bus=gateway.event_bus)
     api_app.include_router(rag_router)
 
     finetune_router = create_finetune_router()
@@ -649,7 +649,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             logger.debug("Signal handlers not supported on this platform")
 
     monitor_store = MonitorStore(settings.resolved_db_path)
-    monitor_engine = MonitorEngine(monitor_store)
+    monitor_engine = MonitorEngine(monitor_store, event_bus=gateway.event_bus)
     await register_all_monitors(monitor_engine)
     gateway._monitor_engine = monitor_engine
     api_app.state.monitor_engine = monitor_engine

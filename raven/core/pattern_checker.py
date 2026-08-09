@@ -183,8 +183,8 @@ def _find_python_files(root: Path, max_files: int) -> list[Path]:
             result.append(f)
             if len(result) >= max_files:
                 break
-    except OSError:
-        pass
+    except OSError as e:
+        logger.debug("[pattern_checker] file scan failed: {}", e)
     return result
 
 

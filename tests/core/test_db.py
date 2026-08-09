@@ -172,6 +172,35 @@ class TestDatabase:
         assert len(rows) == 0
 
 
+class TestDatabaseMetrics:
+    async def test_query_metrics_recorded(self, db):
+        from raven.core.metrics import metrics
+
+        metrics.clear()
+        await db.get_or_create_session("m1", "telegram", "u1")
+        await db.save_message(Message(session_id="m1", channel="telegram", role="user", content="hi"))
+        await db.get_session_messages("m1")
+        await db.find_or_create_user("telegram", "u1")
+        snap = metrics.snapshot()
+        counts = {k: v for k, v in snap.items() if k.startswith("raven_db_query") and k.endswith("_count")}
+        assert sum(counts.values()) >= 4
+        sums = {k: v for k, v in snap.items() if k.startswith("raven_db_query") and k.endswith("_sum")}
+        assert len(sums) >= 4
+
+    async def test_error_metric_on_failure(self, tmp_path):
+        from raven.core.metrics import metrics
+
+        d = Database(tmp_path / "test.db")
+        await d.connect()
+        metrics.clear()
+        await d.disconnect()
+        with pytest.raises(Exception):
+            await d.get_session_messages("s1")
+        snap = metrics.snapshot()
+        errors = {k: v for k, v in snap.items() if k.startswith("raven_db_query") and k.endswith("_errors_total")}
+        assert sum(errors.values()) == 1
+
+
 class TestSecrets:
     async def test_save_and_get_secret(self, db):
         await db.save_secret("api_key", "encrypted_value")

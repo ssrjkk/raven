@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ import aiosqlite
 from loguru import logger
 
 from raven.core._json import json
+from raven.core.metrics import metrics
 from raven.core.migrations import Migrator
 from raven.core.models import Message, Session
 
@@ -146,6 +148,18 @@ class Database:
     async def get_or_create_session(
         self, session_id: str, channel: str, user_id: str, agent_id: str = "default"
     ) -> Session:
+        start = time.monotonic()
+        try:
+            return await self._get_or_create_session(session_id, channel, user_id, agent_id)
+        except Exception:
+            metrics.error("db_query", {"operation": "get_or_create_session"})
+            raise
+        finally:
+            metrics.observe("db_query", time.monotonic() - start, {"operation": "get_or_create_session"})
+
+    async def _get_or_create_session(
+        self, session_id: str, channel: str, user_id: str, agent_id: str = "default"
+    ) -> Session:
         async with self.conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)) as c:
             row = await c.fetchone()
         if row:
@@ -190,6 +204,16 @@ class Database:
         return session
 
     async def save_message(self, msg: Message):
+        start = time.monotonic()
+        try:
+            await self._save_message(msg)
+        except Exception:
+            metrics.error("db_query", {"operation": "save_message"})
+            raise
+        finally:
+            metrics.observe("db_query", time.monotonic() - start, {"operation": "save_message"})
+
+    async def _save_message(self, msg: Message):
         await self.conn.execute("BEGIN")
         try:
             await self.conn.execute(
@@ -212,6 +236,16 @@ class Database:
             raise
 
     async def get_session_messages(self, session_id: str, limit: int = 50) -> list[Message]:
+        start = time.monotonic()
+        try:
+            return await self._get_session_messages(session_id, limit)
+        except Exception:
+            metrics.error("db_query", {"operation": "get_session_messages"})
+            raise
+        finally:
+            metrics.observe("db_query", time.monotonic() - start, {"operation": "get_session_messages"})
+
+    async def _get_session_messages(self, session_id: str, limit: int = 50) -> list[Message]:
         async with self.conn.execute(
             "SELECT * FROM messages WHERE session_id = ? ORDER BY created_at DESC LIMIT ?",
             (session_id, limit),
@@ -232,6 +266,18 @@ class Database:
         return result
 
     async def find_or_create_user(
+        self, channel: str, external_id: str, display_name: str | None = None
+    ) -> dict[str, Any]:
+        start = time.monotonic()
+        try:
+            return await self._find_or_create_user(channel, external_id, display_name)
+        except Exception:
+            metrics.error("db_query", {"operation": "find_or_create_user"})
+            raise
+        finally:
+            metrics.observe("db_query", time.monotonic() - start, {"operation": "find_or_create_user"})
+
+    async def _find_or_create_user(
         self, channel: str, external_id: str, display_name: str | None = None
     ) -> dict[str, Any]:
         user_id = f"{channel}:{external_id}"
@@ -320,6 +366,16 @@ class Database:
         return row["value"] if row else None
 
     async def delete_session(self, session_id: str):
+        start = time.monotonic()
+        try:
+            await self._delete_session(session_id)
+        except Exception:
+            metrics.error("db_query", {"operation": "delete_session"})
+            raise
+        finally:
+            metrics.observe("db_query", time.monotonic() - start, {"operation": "delete_session"})
+
+    async def _delete_session(self, session_id: str):
         await self.conn.execute("BEGIN")
         try:
             await self.conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
@@ -334,6 +390,16 @@ class Database:
             raise
 
     async def replace_session_messages(self, session_id: str, new_messages: list[dict[str, Any]]):
+        start = time.monotonic()
+        try:
+            await self._replace_session_messages(session_id, new_messages)
+        except Exception:
+            metrics.error("db_query", {"operation": "replace_session_messages"})
+            raise
+        finally:
+            metrics.observe("db_query", time.monotonic() - start, {"operation": "replace_session_messages"})
+
+    async def _replace_session_messages(self, session_id: str, new_messages: list[dict[str, Any]]):
         await self.conn.execute("BEGIN")
         try:
             await self.conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))

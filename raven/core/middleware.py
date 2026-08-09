@@ -87,6 +87,8 @@ PATH_PERMISSIONS: dict[str, Permission] = {
 
 AUTH_REQUIRED_PREFIXES: tuple[str, ...] = ("/aios", "/api/tests")
 
+_SLOW_REQUEST_THRESHOLD_S = 2.0
+
 
 async def request_id_middleware(request: Request, call_next):
     cid = request.headers.get("X-Correlation-ID") or uuid.uuid4().hex
@@ -98,6 +100,15 @@ async def request_id_middleware(request: Request, call_next):
     status_group = str(response.status_code)[0] + "xx"
     metrics.inc("http_requests_total", {"method": request.method, "path": request.url.path, "status": status_group})
     metrics.observe("http_request_duration", duration, {"method": request.method, "path": request.url.path})
+    if duration > _SLOW_REQUEST_THRESHOLD_S:
+        logger.warning(
+            "[{}] Slow request: {} {} {} {}ms",
+            cid,
+            request.method,
+            request.url.path,
+            response.status_code,
+            int(duration * 1000),
+        )
     logger.info("{} {} {} {}ms", request.method, request.url.path, response.status_code, int(duration * 1000))
     return response
 

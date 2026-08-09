@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.metadata
 import importlib.util
 import inspect
 import json
@@ -13,6 +14,12 @@ from typing import Any
 from loguru import logger
 
 from raven.core.models import PluginTool
+from raven.plugins.manifest import PluginManifest
+
+try:
+    _RAVEN_VERSION = importlib.metadata.version("raven-agent")
+except importlib.metadata.PackageNotFoundError:
+    _RAVEN_VERSION = "0.0.0"
 
 # ---------------------------------------------------------------------------
 # Worker pool for untrusted plugins
@@ -227,6 +234,30 @@ class PluginLoader:
     def __init__(self):
         self._tools: dict[str, PluginTool] = {}
         self._skills: dict[str, str] = {}
+        self._manifests: dict[str, PluginManifest] = {}
+
+    def _load_manifest(self, path: Path) -> PluginManifest | None:
+        manifest_path = path / "manifest.json"
+        if manifest_path.exists():
+            manifest = PluginManifest.from_file(manifest_path)
+            if manifest is None:
+                logger.error("Plugin {} rejected: invalid manifest.json", path.name)
+                return None
+        else:
+            manifest = PluginManifest(name=path.name)
+        error = manifest.validate(_RAVEN_VERSION)
+        if error:
+            logger.error("Plugin {} rejected: {}", path.name, error)
+            return None
+        self._manifests[path.name] = manifest
+        logger.debug(
+            "Plugin {} v{} loaded (permissions: {}, requires: {})",
+            manifest.name or path.name,
+            manifest.version,
+            manifest.permissions,
+            manifest.requires,
+        )
+        return manifest
 
     def load_from_dir(self, path: Path) -> list[PluginTool]:
         if not path.exists():
@@ -235,6 +266,9 @@ class PluginLoader:
         plugin_file = path / "plugin.py"
         if not plugin_file.exists():
             logger.warning("No plugin.py in {}", path)
+            return []
+        manifest = self._load_manifest(path)
+        if manifest is None:
             return []
 
         spec = importlib.util.spec_from_file_location(path.name, plugin_file)
@@ -265,6 +299,9 @@ class PluginLoader:
         return tools
 
     async def load_untrusted_from_dir(self, path: Path) -> list[dict[str, Any]]:
+        manifest = self._load_manifest(path)
+        if manifest is None:
+            return []
         result = await register_untrusted_plugin(path)
         if result is None:
             return []
@@ -289,6 +326,13 @@ class PluginLoader:
     def skills(self) -> list[str]:
         return list(self._skills.values())
 
+    @property
+    def manifests(self) -> dict[str, PluginManifest]:
+        return dict(self._manifests)
+
+    def get_manifest(self, plugin_name: str) -> PluginManifest | None:
+        return self._manifests.get(plugin_name)
+
     def get_tool(self, name: str) -> PluginTool | None:
         return self._tools.get(name)
 
@@ -298,6 +342,7 @@ class PluginLoader:
     def clear(self):
         self._tools.clear()
         self._skills.clear()
+        self._manifests.clear()
 
 
 def _make_untrusted_handler(plugin_file: str, tool_name: str) -> Callable[..., Any]:

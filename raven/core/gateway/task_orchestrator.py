@@ -6,6 +6,7 @@ from typing import Any
 
 from loguru import logger
 
+from raven.core.events import EventBus
 from raven.core.llm import LLMRouter
 from raven.core.mcp.mcp_client import MCPClientPool
 from raven.core.task_engine.models import Task
@@ -22,11 +23,13 @@ class TaskOrchestrator:
         llm: LLMRouter,
         mcp_pool: MCPClientPool,
         send_notification: Callable[[str, str, str], Awaitable[None]] | None = None,
+        event_bus: EventBus | None = None,
     ):
         self._db = db
         self._llm = llm
         self._mcp_pool = mcp_pool
         self._send_notification = send_notification
+        self._event_bus = event_bus
         self._tasks: dict[str, Task] = {}
         self._lock = asyncio.Lock()
         self._store: TaskStore | None = None
@@ -103,6 +106,14 @@ class TaskOrchestrator:
         except Exception as e:
             logger.error("Task {} execution error: {}", task.id, e)
             msg = f"❌ Task error: {e}"
+        if self._event_bus is not None:
+            await self._event_bus.publish(
+                "task.completed",
+                task_id=task.id,
+                status=task.status.value,
+                channel=channel,
+                session_id=session_id,
+            )
         await self._notify(channel, session_id, msg)
 
     def _format_result(self, task: Task) -> str:

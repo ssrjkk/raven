@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
@@ -21,6 +22,8 @@ class EmbeddingEngine:
         self.model = model
         self._cache: dict[str, list[float]] = {}
         self._dirty = False
+        self._local_model: Any = None
+        self._model_lock = asyncio.Lock()
         self._cache_path = Path(cache_path) if cache_path else None
         if self._cache_path is None:
             try:
@@ -122,19 +125,29 @@ class EmbeddingEngine:
             return await self._embed_local(texts)
 
     async def _embed_local(self, texts: list[str]) -> list[list[float]]:
+        model = await self._get_local_model()
         try:
-            from sentence_transformers import SentenceTransformer
-
-            model_name = self.model or "all-MiniLM-L6-v2"
-            model = SentenceTransformer(model_name)
-            embeddings = model.encode(texts, show_progress_bar=False)
+            embeddings = await asyncio.to_thread(model.encode, texts, show_progress_bar=False)
             result: list[list[float]] = embeddings.tolist()
             return result
-        except ImportError:
-            raise RuntimeError("sentence-transformers not installed — cannot embed locally") from None
         except Exception as e:
             logger.error("Local embedding failed: {}", e)
             raise
+
+    async def _get_local_model(self) -> Any:
+        if self._local_model is not None:
+            return self._local_model
+        async with self._model_lock:
+            if self._local_model is not None:
+                return self._local_model
+            try:
+                from sentence_transformers import SentenceTransformer
+
+                model_name = self.model or "all-MiniLM-L6-v2"
+                self._local_model = await asyncio.to_thread(SentenceTransformer, model_name)
+            except ImportError:
+                raise RuntimeError("sentence-transformers not installed — cannot embed locally") from None
+        return self._local_model
 
     @staticmethod
     def _get_openai_key() -> str:

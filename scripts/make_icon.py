@@ -28,7 +28,7 @@ def main() -> int:
     for y in range(SIZE):
         t = y / (SIZE - 1)
         color = tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3))
-        draw.line([(0, y), (SIZE, y)], fill=color + (255,))
+        draw.line([(0, y), (SIZE, y)], fill=(*color, 255))
 
     # Rounded-square mask so the gradient follows the rounded corners.
     mask = Image.new("L", (SIZE, SIZE), 0)

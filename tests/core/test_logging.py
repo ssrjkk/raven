@@ -1,6 +1,14 @@
 import json
+from typing import Any, cast
 
-from raven.core.logging import _serialize, get_correlation_id, set_correlation_id, setup_logging
+from raven.core.logging import (
+    _enrich_record,
+    _serialize,
+    correlation_id,
+    get_correlation_id,
+    set_correlation_id,
+    setup_logging,
+)
 
 
 class TestCorrelationId:
@@ -32,6 +40,9 @@ class FakeRecord:
 
     def __getitem__(self, key):
         return getattr(self, key, "")
+
+    def __setitem__(self, key, value):
+        setattr(self, key, value)
 
     def get(self, key, default=None):
         return getattr(self, key, default) if hasattr(self, key) else default
@@ -79,6 +90,23 @@ class TestSerialize:
         )
         result = json.loads(_serialize(record))
         assert result["extra"]["request_id"] == "req-123"
+
+
+class TestEnrichRecord:
+    def test_correlation_id_attached(self):
+        set_correlation_id("cid-123")
+        record = FakeRecord(args=(), extra={})
+        assert _enrich_record(cast(Any, record)) is True
+        assert record["extra"]["correlation_id"] == "cid-123"
+
+    def test_correlation_id_default_empty(self):
+        token = correlation_id.set("")
+        try:
+            record = FakeRecord(args=(), extra={})
+            _enrich_record(cast(Any, record))
+            assert record["extra"]["correlation_id"] == ""
+        finally:
+            correlation_id.reset(token)
 
 
 class TestSetupLogging:

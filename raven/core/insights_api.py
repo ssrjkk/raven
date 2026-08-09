@@ -135,7 +135,8 @@ def _get_git(ws: Path) -> Any:
         if not g.is_repo():
             return None
         return g
-    except Exception:
+    except Exception as e:
+        logger.debug("[insights] git integration unavailable: {}", e)
         return None
 
 

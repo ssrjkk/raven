@@ -7,6 +7,7 @@ from typing import Any
 
 from loguru import logger
 
+from raven.core.events import EventBus
 from raven.core.monitor.checkers.http_check import check_http
 from raven.core.monitor.checkers.price import check_price
 from raven.core.monitor.checkers.rss import check_rss
@@ -30,12 +31,14 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
         self,
         store_or_path: MonitorStore | str | Path,
         send_fn: Any = None,
+        event_bus: EventBus | None = None,
     ):
         if isinstance(store_or_path, MonitorStore):
             store = store_or_path
         else:
             store = MonitorStore(str(store_or_path))
         super().__init__(store, send_fn=send_fn)
+        self._event_bus = event_bus
         self._consecutive_failures: dict[str, int] = {}
         self._consecutive_successes: dict[str, int] = {}
         self._effective_intervals: dict[str, int] = {}
@@ -298,3 +301,11 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
         if self._send_fn and channel_id:
             await self._send_fn(channel_id, alert_text)
         logger.info("Monitor {} alert: {}", monitor.id, alert_text[:100])
+        if self._event_bus is not None:
+            await self._event_bus.publish(
+                "monitor.alert",
+                monitor_id=monitor.id,
+                status=monitor.status.value if monitor.status else "",
+                channel=channel_id or "",
+                text=alert_text[:200],
+            )

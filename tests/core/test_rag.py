@@ -130,3 +130,30 @@ async def test_retriever_index_chunks(tmp_db: Path):
     assert r.count() == 2
     results = await r.retrieve("test", k=5)
     assert len(results) == 2
+
+
+def test_rag_api_metrics(tmp_path: Path):
+    from unittest.mock import patch
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from raven.core.metrics import metrics
+    from raven.core.rag_api import create_rag_router
+
+    metrics.clear()
+    with patch("raven.core.rag_api._RAG_PATH", tmp_path / "rag_index.json"):
+        app = FastAPI()
+        app.include_router(create_rag_router())
+        with TestClient(app) as client:
+            resp = client.post("/api/rag/index", json={"document_id": "d1", "text": "hello world"})
+            assert resp.status_code == 200
+            assert resp.json()["chunks"] >= 1
+            resp = client.post(
+                "/api/rag/search", json={"query": "hello", "top_k": 2, "include_images": False}
+            )
+            assert resp.status_code == 200
+    snap = metrics.snapshot()
+    assert snap.get("raven_rag_index_document_total") == 1
+    assert snap.get("raven_rag_index_count", 0) >= 1
+    assert snap.get("raven_rag_search_count", 0) >= 1
