@@ -136,6 +136,20 @@ class Settings(BaseSettings):
     """Max tokens (input + output) allowed per hour per user_id."""
     ghost_mode: bool = False
 
+    # --- Channel send resilience (bulkhead + circuit breaker) ---
+    channel_send_concurrency: int = 4
+    """Max concurrent in-flight sends per channel (bulkhead isolation)."""
+    channel_send_timeout: float = 30.0
+    """Per-send timeout in seconds — a hung channel send must not stall the loop."""
+    channel_send_failure_threshold: int = 5
+    """Consecutive send failures before the per-channel circuit opens."""
+    channel_send_recovery_timeout: float = 30.0
+    """Seconds the per-channel circuit stays open before probing (half-open)."""
+
+    # --- Plugin registry / marketplace ---
+    plugin_registry_url: str = ""
+    """Base URL or directory of the plugin catalog used by `raven plugins update`."""
+
     def model_post_init(self, __context: Any) -> None:
         if not self.default_model:
             self.default_model = auto_select_model()

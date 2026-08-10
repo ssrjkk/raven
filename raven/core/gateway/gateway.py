@@ -84,6 +84,8 @@ class Gateway:
         self._tracing = TracingManager(service_name="raven-gateway", otlp_endpoint=settings.otlp_endpoint or None)
         self._tracer = get_tracer("raven.gateway")
         self._outbox = Outbox(self._outbox_path(), self._send_now)
+        self._send_semaphores: dict[str, asyncio.Semaphore] = {}
+        self._send_cbs: dict[str, CircuitBreaker] = {}
 
         self._ctxmgr: ContextWindowManager | None = None
         if settings.context_window_enabled and settings.context_window_max_tokens > 0:
@@ -692,6 +694,8 @@ class Gateway:
 
     async def _on_channel_dead(self, channel_id: str) -> None:
         channel = await self.channels.remove(channel_id)
+        self._send_semaphores.pop(channel_id, None)
+        self._send_cbs.pop(channel_id, None)
         if channel:
             logger.error("Channel {} removed from gateway (dead)", channel_id)
             metrics.inc("channels_dead", {"channel": channel_id})
@@ -714,10 +718,33 @@ class Gateway:
         return self._rbac.has_permission(role, permission)
 
     async def _send(self, channel_id: str, session_id: str, text: str, streaming: bool = False):
+        cb = self._send_cbs.get(channel_id)
+        if cb is None:
+            cb = CircuitBreaker(
+                f"send:{channel_id}",
+                failure_threshold=settings.channel_send_failure_threshold,
+                recovery_timeout=settings.channel_send_recovery_timeout,
+            )
+            self._send_cbs[channel_id] = cb
+        if not await cb.try_acquire():
+            metrics.inc("send_circuit_open", {"channel": channel_id})
+            if streaming or self._outbox is None or not self._outbox.healthy:
+                logger.warning(
+                    "Send circuit open for channel {} — dropping message (streaming or outbox unavailable)",
+                    channel_id,
+                )
+                await self._guardian.record_error(channel_id)
+                return
+            logger.warning("Send circuit open for channel {}, enqueueing to outbox", channel_id)
+            await self._guardian.record_error(channel_id)
+            await self._outbox.enqueue(channel_id, session_id, text)
+            return
         try:
             await self._send_now(channel_id, session_id, text, streaming)
+            await cb.on_success()
         except Exception as e:
             metrics.inc("send_errors", {"channel": channel_id})
+            await cb.on_failure()
             if streaming or self._outbox is None or not self._outbox.healthy:
                 logger.error("Send failed for channel {}: {}", channel_id, e)
                 await self._guardian.record_error(channel_id)
@@ -732,18 +759,24 @@ class Gateway:
             span.set_attribute("session_id", session_id)
             span.set_attribute("text_length", len(text))
             span.set_attribute("streaming", str(streaming))
-            channel = await self.channels.get(channel_id)
-            if channel is None:
-                raise RuntimeError(f"Channel '{channel_id}' not found for send")
-            if streaming:
-                send_stream = getattr(channel, "send_stream", None)
-                if send_stream:
-                    await send_stream(session_id, text)
-                    await self._guardian.record_success(channel_id)
-                    return
-            msg = Message(session_id=session_id, channel=channel_id, role="assistant", content=text)
-            await channel.send(session_id, msg)
-            await self._guardian.record_success(channel_id)
+            sem = self._send_semaphores.get(channel_id)
+            if sem is None:
+                sem = asyncio.Semaphore(settings.channel_send_concurrency)
+                self._send_semaphores[channel_id] = sem
+            timeout = settings.channel_send_timeout
+            async with sem:
+                channel = await self.channels.get(channel_id)
+                if channel is None:
+                    raise RuntimeError(f"Channel '{channel_id}' not found for send")
+                if streaming:
+                    send_stream = getattr(channel, "send_stream", None)
+                    if send_stream:
+                        await asyncio.wait_for(send_stream(session_id, text), timeout=timeout)
+                        await self._guardian.record_success(channel_id)
+                        return
+                msg = Message(session_id=session_id, channel=channel_id, role="assistant", content=text)
+                await asyncio.wait_for(channel.send(session_id, msg), timeout=timeout)
+                await self._guardian.record_success(channel_id)
 
     def _clean_text(self, channel: str, text: str) -> str:
         if channel == "discord":

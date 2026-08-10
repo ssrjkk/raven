@@ -11,6 +11,7 @@ import pytest
 from raven.channels.base import BaseChannel
 from raven.core.gateway.gateway import Gateway
 from raven.core.llm import LLMRouter
+from raven.core.llm.protocol import LLMResponse
 from raven.core.models import IncomingMessage, Message
 
 
@@ -19,12 +20,24 @@ class MockLLMProvider:
         self.responses = responses or ["Hello! How can I help you?"]
         self.call_count = 0
 
-    async def complete(self, messages: list[dict[str, Any]], **kwargs) -> dict[str, str]:
+    async def complete(
+        self,
+        messages: list[dict[str, Any]],
+        model: str | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        **kwargs: Any,
+    ) -> LLMResponse:
         self.call_count += 1
         idx = min(self.call_count - 1, len(self.responses) - 1)
-        return {"content": self.responses[idx], "role": "assistant"}
+        return LLMResponse(content=self.responses[idx], finish_reason="stop")
 
-    async def complete_stream(self, messages: list[dict[str, Any]], **kwargs) -> AsyncGenerator[str, None]:
+    async def complete_stream(
+        self,
+        messages: list[dict[str, Any]],
+        model: str | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        **kwargs: Any,
+    ) -> AsyncGenerator[str, None]:
         self.call_count += 1
         idx = min(self.call_count - 1, len(self.responses) - 1)
         for token in self.responses[idx].split():
