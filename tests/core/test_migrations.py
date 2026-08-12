@@ -3,16 +3,8 @@ from __future__ import annotations
 import aiosqlite
 import pytest
 
+from raven.core.asyncdb import SQLiteDB
 from raven.core.migrations import _MIGRATIONS, Migrator
-
-
-@pytest.fixture
-async def tmp_db(tmp_path):
-    db = tmp_path / "migrate.db"
-    conn = await aiosqlite.connect(str(db))
-    await conn.execute("PRAGMA journal_mode=WAL")
-    yield db, conn
-    await conn.close()
 
 
 @pytest.fixture
@@ -21,31 +13,34 @@ def db_path(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_migration_3_creates_checkpoints_table(tmp_db):
-    _db_path, conn = tmp_db
+async def test_migration_3_creates_checkpoints_table(db_path):
     mig3 = next(m for m in _MIGRATIONS if m.version == 3)
-    await mig3.migrate_fn(conn)
-    await conn.commit()
-    async with conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='checkpoints'") as c:
-        row = await c.fetchone()
+    assert mig3.migrate_fn is not None
+    db = SQLiteDB(db_path)
+    await db.connect()
+    await mig3.migrate_fn(db)
+    await db.commit()
+    row = await db.fetchone("SELECT name FROM sqlite_master WHERE type='table' AND name='checkpoints'")
     assert row is not None
     assert row[0] == "checkpoints"
+    await db.close()
 
 
 @pytest.mark.asyncio
-async def test_migration_4_creates_routines_and_logs(tmp_db):
-    _db_path, conn = tmp_db
+async def test_migration_4_creates_routines_and_logs(db_path):
     mig4 = next(m for m in _MIGRATIONS if m.version == 4)
-    await mig4.migrate_fn(conn)
-    await conn.commit()
-    async with conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='routines'") as c:
-        row = await c.fetchone()
+    assert mig4.migrate_fn is not None
+    db = SQLiteDB(db_path)
+    await db.connect()
+    await mig4.migrate_fn(db)
+    await db.commit()
+    row = await db.fetchone("SELECT name FROM sqlite_master WHERE type='table' AND name='routines'")
     assert row is not None
     assert row[0] == "routines"
-    async with conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='routine_logs'") as c:
-        row = await c.fetchone()
+    row = await db.fetchone("SELECT name FROM sqlite_master WHERE type='table' AND name='routine_logs'")
     assert row is not None
     assert row[0] == "routine_logs"
+    await db.close()
 
 
 @pytest.mark.asyncio

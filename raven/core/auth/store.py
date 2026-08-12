@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-
-import aiosqlite
+from typing import Any
 
 from raven.core._json import json
+from raven.core.asyncdb import is_postgres_dsn
 from raven.core.auth.models import Role, User
 from raven.core.auth.password import hash_password, verify_and_rehash
 from raven.core.store import BaseStore
@@ -37,37 +37,33 @@ class AuthStore(BaseStore):
     SCHEMA = SCHEMA
 
     def __init__(self, db_path: Path | str):
-        super().__init__(str(db_path))
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-
-    async def _conn(self) -> aiosqlite.Connection:
-        conn = await super()._conn()
-        async with conn.execute("PRAGMA journal_mode=WAL"):
-            pass
-        return conn
+        super().__init__(db_path)
+        if not is_postgres_dsn(db_path):
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
     @property
     def db_path(self) -> str:
-        return self._path
+        return self._path or ""
 
     async def create_user(self, username: str, password: str = "", display_name: str = "", role: str = "user") -> User:
         now = time.time()
         uid = f"user:{username}"
         pwd_hash = hash_password(password) if password else ""
-        result = await self._execute(
-            "INSERT INTO auth_users "
-            "(id, username, display_name, role, password_hash, api_tokens, "
-            "is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (uid, username, display_name, role, pwd_hash, "[]", 1, now, now),
-        )
-        if hasattr(result, "rowcount") and result.rowcount == 0:
-            existing = await self.get_user(username)
-            if existing:
-                return existing
-        await self._commit()
+        db = await self._conn()
+        async with db.transaction():
+            rowcount = await db.execute(
+                "INSERT INTO auth_users "
+                "(id, username, display_name, role, password_hash, api_tokens, "
+                "is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (uid, username, display_name, role, pwd_hash, "[]", 1, now, now),
+            )
+            if rowcount is not None and rowcount == 0:
+                existing = await self.get_user(username)
+                if existing:
+                    return existing
         return User(id=uid, username=username, display_name=display_name, role=Role(role))
 
-    async def _row_to_user(self, row: aiosqlite.Row) -> User:
+    async def _row_to_user(self, row: Any) -> User:
         return User(
             id=row["id"],
             username=row["username"],

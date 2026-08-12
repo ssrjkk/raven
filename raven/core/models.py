@@ -59,6 +59,7 @@ class IncomingMessage(BaseModel):
     session_id: str = ""
     text: str
     metadata: dict[str, Any] = {}
+    priority: float = 0.0
 
 
 class LLMResponse(BaseModel):

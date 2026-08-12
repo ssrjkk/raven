@@ -51,7 +51,7 @@ def disassemble_bytes(code: bytes, arch: str = "x64", offset: int = 0) -> str:
             op_str = insn.op_str if insn.op_str else ""
             lines.append(f"  {insn.address:#010x}  {bytes_hex:20s} {insn.mnemonic:8s} {op_str}")
 
-        if len(lines) == 1:
+        if len(lines) == 2:
             return "[warning] No instructions disassembled — wrong architecture?"
         return "\n".join(lines)
     except Exception as e:
@@ -81,7 +81,6 @@ def disassemble_file(path: str, symbol: str = "", bytes: int = 0, arch: str = "a
 
 def _guess_arch_from_binary(raw: bytes) -> str | None:
     if raw[:4] == b"\x7fELF":
-        raw[4]
         machine = struct_unpack_elf_machine(raw)
         if machine == 62:
             return "x64"
@@ -119,7 +118,7 @@ def _guess_arch_from_binary(raw: bytes) -> str | None:
 def struct_unpack_elf_machine(raw: bytes) -> int:
     import struct
 
-    endian = "<" if raw[5] == 1 else ">"
+    endian = "<" if len(raw) > 5 and raw[5] == 1 else ">"
     offset = 18
     if offset + 2 <= len(raw):
         return int(struct.unpack(endian + "H", raw[offset : offset + 2])[0])
@@ -176,6 +175,9 @@ def _resolve_symbol(raw: bytes, symbol: str) -> int | None:
 
 def _find_text_section(raw: bytes) -> int | None:
     import struct
+
+    if len(raw) < 64:
+        return None
 
     if raw[:4] == b"\x7fELF":
         bits = 64 if raw[4] == 2 else 32

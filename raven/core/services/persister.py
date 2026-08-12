@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import aiosqlite
+from raven.core.asyncdb import AsyncDB, connect_backend
 
 
 @dataclass
@@ -36,71 +36,79 @@ class PersisterBackend(ABC):
 
 class SQLitePersister(PersisterBackend):
     def __init__(self, db_path: str | Path) -> None:
-        self._path = Path(db_path)
-        self._conn: aiosqlite.Connection | None = None
+        self._path = str(db_path)
+        self._db: AsyncDB | None = None
 
-    async def _ensure(self) -> aiosqlite.Connection:
-        if self._conn is None:
-            self._conn = await aiosqlite.connect(str(self._path))
-            self._conn.row_factory = aiosqlite.Row
-            await self._conn.execute("""
-                CREATE TABLE IF NOT EXISTS entities (
-                    id TEXT PRIMARY KEY,
-                    collection TEXT NOT NULL,
-                    data TEXT NOT NULL,
-                    created_at TEXT DEFAULT (datetime('now'))
-                )
-            """)
-            await self._conn.execute("""
+    async def _ensure(self) -> AsyncDB:
+        if self._db is None:
+            self._db = connect_backend(self._path)
+            await self._db.connect()
+            if self._db.dialect == "postgresql":
+                await self._db.execute("""
+                    CREATE TABLE IF NOT EXISTS entities (
+                        id TEXT PRIMARY KEY,
+                        collection TEXT NOT NULL,
+                        data TEXT NOT NULL,
+                        created_at DOUBLE PRECISION NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())
+                    )
+                """)
+            else:
+                await self._db.execute("""
+                    CREATE TABLE IF NOT EXISTS entities (
+                        id TEXT PRIMARY KEY,
+                        collection TEXT NOT NULL,
+                        data TEXT NOT NULL,
+                        created_at TEXT DEFAULT (datetime('now'))
+                    )
+                """)
+            await self._db.execute("""
                 CREATE INDEX IF NOT EXISTS idx_entities_collection ON entities(collection)
             """)
-            await self._conn.commit()
-        return self._conn
+            await self._db.commit()
+        return self._db
 
     async def insert(self, collection: str, data: dict[str, Any]) -> str:
-        conn = await self._ensure()
+        db = await self._ensure()
         id = str(uuid.uuid4())
-        await conn.execute(
+        await db.execute(
             "INSERT INTO entities (id, collection, data) VALUES (?, ?, ?)",
             (id, collection, json.dumps(data, default=str)),
         )
-        await conn.commit()
+        await db.commit()
         return id
 
     async def get(self, collection: str, id: str) -> dict[str, Any] | None:
-        conn = await self._ensure()
-        cursor = await conn.execute(
+        db = await self._ensure()
+        row = await db.fetchone(
             "SELECT data FROM entities WHERE id = ? AND collection = ?",
             (id, collection),
         )
-        row = await cursor.fetchone()
         if row is None:
             return None
         data: dict[str, Any] = json.loads(row["data"])
         return data
 
     async def search(self, collection: str, query: str, limit: int = 10) -> list[dict[str, Any]]:
-        conn = await self._ensure()
-        cursor = await conn.execute(
+        db = await self._ensure()
+        rows = await db.fetchall(
             "SELECT id, data FROM entities WHERE collection = ? AND data LIKE ? LIMIT ?",
             (collection, f"%{query}%", limit),
         )
-        rows = await cursor.fetchall()
         return [{"id": r["id"], **json.loads(r["data"])} for r in rows]
 
     async def delete(self, collection: str, id: str) -> bool:
-        conn = await self._ensure()
-        cursor = await conn.execute(
+        db = await self._ensure()
+        rowcount = await db.execute(
             "DELETE FROM entities WHERE id = ? AND collection = ?",
             (id, collection),
         )
-        await conn.commit()
-        return cursor.rowcount > 0
+        await db.commit()
+        return rowcount is not None and rowcount > 0
 
     async def close(self) -> None:
-        if self._conn:
-            await self._conn.close()
-            self._conn = None
+        if self._db:
+            await self._db.close()
+            self._db = None
 
 
 _backend: PersisterBackend | None = None

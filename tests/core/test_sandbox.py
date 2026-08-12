@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from raven.core.sandbox import Sandbox, SandboxConfig
+
+
+def _block_docker_import(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "docker", None)
 
 
 @pytest.mark.asyncio
@@ -56,7 +62,8 @@ async def test_sandbox_subprocess_no_network():
 
 
 @pytest.mark.asyncio
-async def test_sandbox_docker_no_docker_package():
+async def test_sandbox_docker_no_docker_package(monkeypatch: pytest.MonkeyPatch):
+    _block_docker_import(monkeypatch)
     s = Sandbox(SandboxConfig(mode="docker"))
     result = await s.exec("print('hi')")
     assert "docker" in result.lower() or "not available" in result

@@ -158,9 +158,26 @@ class RavenPanel {
       const c = document.getElementById('messages');
       const d = document.createElement('div');
       d.className = 'msg ' + role;
-      const escaped = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      const withCode = escaped.replace(/\\\`\\\`\\\`(\\w*)\\n?([\\s\\S]*?)\\\`\\\`\\\`/g, '<pre><code>$2</code></pre>');
-      d.innerHTML = '<div class="bubble">' + withCode.replace(/\\n/g, '<br>') + '</div>';
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      const parts = text.split(/(\`\`\`\w*\\n?[\\s\\S]*?\`\`\`)/g);
+      for (const part of parts) {
+        const codeMatch = part.match(/^\`\`\`(\w*)\\n?([\\s\\S]*?)\`\`\`$/);
+        if (codeMatch) {
+          const pre = document.createElement('pre');
+          const code = document.createElement('code');
+          code.textContent = codeMatch[2];
+          pre.appendChild(code);
+          bubble.appendChild(pre);
+        } else if (part) {
+          const lines = part.split('\n');
+          for (let i = 0; i < lines.length; i++) {
+            if (i > 0) bubble.appendChild(document.createElement('br'));
+            bubble.appendChild(document.createTextNode(lines[i]));
+          }
+        }
+      }
+      d.appendChild(bubble);
       c.appendChild(d);
       c.scrollTop = c.scrollHeight;
     }

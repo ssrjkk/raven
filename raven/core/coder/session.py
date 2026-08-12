@@ -4,8 +4,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-import aiosqlite
-
 from raven.core._json import json
 from raven.core.coder.models import CodingSession, SessionStatus
 from raven.core.store import BaseStore
@@ -29,9 +27,28 @@ CREATE INDEX IF NOT EXISTS idx_cs_status ON coding_sessions(status);
 CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 """
 
+SCHEMA_POSTGRES = """
+CREATE TABLE IF NOT EXISTS coding_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT '',
+    channel TEXT NOT NULL DEFAULT '',
+    goal TEXT NOT NULL,
+    project_path TEXT NOT NULL DEFAULT '',
+    files TEXT DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'active',
+    history TEXT DEFAULT '[]',
+    created_at DOUBLE PRECISION NOT NULL,
+    updated_at DOUBLE PRECISION NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cs_user ON coding_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_cs_status ON coding_sessions(status);
+CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW());
+"""
+
 
 class CodingSessionManager(BaseStore):
     SCHEMA = SCHEMA
+    SCHEMA_POSTGRES = SCHEMA_POSTGRES
 
     def __init__(self, db_path: str | Path):
         super().__init__(db_path)
@@ -129,7 +146,7 @@ class CodingSessionManager(BaseStore):
         await self._execute("DELETE FROM coding_sessions WHERE id = ?", (session_id,))
         await self._commit()
 
-    def _row_to_session(self, row: aiosqlite.Row) -> CodingSession:
+    def _row_to_session(self, row: Any) -> CodingSession:
         return CodingSession(
             id=row["id"],
             user_id=row["user_id"] or "",

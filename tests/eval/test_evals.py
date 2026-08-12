@@ -5,6 +5,8 @@ import pytest
 from tests.eval.benchmarks import get_all_cases
 from tests.eval.harness import EvalRunner
 
+pytestmark = pytest.mark.eval
+
 
 @pytest.mark.asyncio
 async def test_eval_harness_init():

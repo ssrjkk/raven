@@ -35,6 +35,7 @@ from raven.core.services.persister import get_persister
 
 if TYPE_CHECKING:
     from raven.channels.base import BaseChannel
+from raven.core.asyncdb import is_postgres_dsn
 from raven.core.audit import audit_logger
 from raven.core.channel_guardian import ChannelGuardian
 from raven.core.failover import ModelFailover
@@ -140,11 +141,13 @@ class Gateway:
             send_fn=self._send,
         )
 
-    def _outbox_path(self) -> Path:
-        db_path = getattr(self.db, "db_path", None)
+    def _outbox_path(self) -> str:
+        db_path: Any = getattr(self.db, "db_path", None)
         if db_path:
-            return Path(db_path).parent / "outbox.db"
-        return Path("data/outbox.db")
+            if is_postgres_dsn(str(db_path)):
+                return str(db_path)
+            return str(Path(db_path).parent / "outbox.db")
+        return "data/outbox.db"
 
     async def register_channel(self, channel: BaseChannel):
         await self.channels.register(channel)
@@ -527,7 +530,7 @@ class Gateway:
                 await self._send(event.channel, event.session_id, f"Service temporarily unavailable (ref: {cid}).")
             except Exception as e:
                 logger.error("[{}] handle_message error: {}", cid, e)
-                metrics.inc("message_errors", {"channel": event.channel})
+                metrics.inc("message_errors", {"channel": event.channel, "reason": "handler"})
                 await self._send(event.channel, event.session_id, f"Sorry, an error occurred (ref: {cid}).")
 
     async def _bg_task(self, coro: Any) -> asyncio.Task[None]:

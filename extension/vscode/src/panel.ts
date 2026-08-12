@@ -131,9 +131,9 @@ export class RavenPanel {
       d.className = 'msg ' + role;
       const bubble = document.createElement('div');
       bubble.className = 'bubble';
-      const parts = text.split(/(```\w*\n?[\s\S]*?```)/g);
+      const parts = text.split(/(\`\`\`\w*\\n?[\\s\\S]*?\`\`\`)/g);
       for (const part of parts) {
-        const codeMatch = part.match(/^```(\w*)\n?([\s\S]*?)```$/);
+        const codeMatch = part.match(/^\`\`\`(\w*)\\n?([\\s\\S]*?)\`\`\`$/);
         if (codeMatch) {
           const pre = document.createElement('pre');
           const code = document.createElement('code');

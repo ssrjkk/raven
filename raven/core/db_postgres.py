@@ -8,6 +8,7 @@ import asyncpg
 from loguru import logger
 
 from raven.core._json import json
+from raven.core.asyncdb import PostgresDB
 from raven.core.models import Message, Session
 
 _MAX_CONNECT_RETRIES = 3
@@ -18,35 +19,23 @@ class _PostgresMigrator:
     def __init__(self, db: PostgresDatabase):
         self.db = db
 
+    def _shared_db(self) -> PostgresDB:
+        return PostgresDB(pool=self.db._pool)
+
     async def get_current_version(self) -> int:
-        async with self.db._p.acquire() as conn:
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS _migrations (
-                    version INTEGER PRIMARY KEY,
-                    applied_at TIMESTAMP DEFAULT NOW()
-                )
-            """)
-            row = await conn.fetchrow("SELECT COALESCE(MAX(version), 0) AS v FROM _migrations")
-            return row["v"] if row else 0
+        db = self._shared_db()
+        await db.execute(
+            "CREATE TABLE IF NOT EXISTS _migrations ("
+            "version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW()"
+            ")"
+        )
+        current = await db.fetchval("SELECT COALESCE(MAX(version), 0) FROM _migrations") or 0
+        return int(current)
 
     async def migrate(self):
-        current = await self.get_current_version()
-        from raven.core.migrations import _MIGRATIONS
+        from raven.core.migrations import apply_pending_migrations
 
-        pending = sorted([m for m in _MIGRATIONS if m.version > current], key=lambda m: m.version)
-        if not pending:
-            logger.info("Postgres DB is up-to-date (version {})", current)
-            return
-
-        async with self.db._p.acquire() as conn, conn.transaction():
-                for mig in pending:
-                    logger.info("Applying Postgres migration {}: {}", mig.version, mig.description)
-                    if mig.sql:
-                        await conn.execute(mig.sql)
-                    if mig.migrate_fn:
-                        await mig.migrate_fn(conn)
-                    await conn.execute("INSERT INTO _migrations (version) VALUES ($1)", mig.version)
-                    logger.info("Postgres Migration {} applied", mig.version)
+        await apply_pending_migrations(self._shared_db())
 
 
 class PostgresDatabase:
@@ -54,6 +43,11 @@ class PostgresDatabase:
         self.dsn = dsn
         self._pool: asyncpg.Pool | None = None
         self.migrator = _PostgresMigrator(self)
+
+    @property
+    def db_path(self) -> str:
+        """Compatibility shim: stores built from ``db.db_path`` use DATABASE_URL."""
+        return self.dsn
 
     @property
     def _p(self) -> asyncpg.Pool:
@@ -152,9 +146,14 @@ class PostgresDatabase:
                     interval_seconds INTEGER NOT NULL DEFAULT 300,
                     notify_channels TEXT NOT NULL DEFAULT '[]',
                     status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','error')),
-                    last_checked TIMESTAMP,
-                    last_triggered TIMESTAMP,
-                    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    user_id TEXT NOT NULL DEFAULT '',
+                    channel TEXT NOT NULL DEFAULT '',
+                    slo_target DOUBLE PRECISION NOT NULL DEFAULT 0.99,
+                    slo_window_seconds INTEGER NOT NULL DEFAULT 86400,
+                    "group" TEXT NOT NULL DEFAULT '',
+                    last_checked DOUBLE PRECISION,
+                    last_triggered DOUBLE PRECISION,
+                    created_at DOUBLE PRECISION NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())
                 )
                 """,
                 """
@@ -172,7 +171,7 @@ class PostgresDatabase:
                     channel TEXT NOT NULL DEFAULT '',
                     messages TEXT NOT NULL DEFAULT '[]',
                     agent_state TEXT NOT NULL DEFAULT '{}',
-                    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    created_at DOUBLE PRECISION NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())
                 )
                 """,
             ]

@@ -13,6 +13,7 @@ from raven.core.budget import TokenBudgetTracker, estimate_tokens
 from raven.core.config import settings
 from raven.core.db import Database
 from raven.core.llm import LLMRouter, ToolCall
+from raven.core.llm.queue import PRIORITY_LOW, PRIORITY_NORMAL
 from raven.core.models import Message, PluginTool, Session
 
 
@@ -36,6 +37,7 @@ class AgentConfig:
         use_memory: bool = True,
         stateless: bool = False,
         workspace: str | None = None,
+        priority: float = PRIORITY_NORMAL,
     ):
         self.agent_id = agent_id
         self.system_prompt = system_prompt
@@ -45,6 +47,7 @@ class AgentConfig:
         self.use_memory = False if stateless else use_memory
         self.stateless = stateless
         self.workspace = workspace
+        self.priority = priority
 
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -70,6 +73,7 @@ class Agent:
         self.db = db
         self.llm = llm
         self.config = config or AgentConfig()
+        self.priority = self.config.priority
         self._tool_map: dict[str, PluginTool] = {t.name: t for t in tools}
         self._tool_policy = tool_policy or self._init_tool_policy()
 
@@ -176,7 +180,7 @@ class Agent:
             {"role": "user", "content": f"Summarize:\n{conversation}"},
         ]
         try:
-            resp = await self.llm.complete(prompt)
+            resp = await self.llm.complete(prompt, priority=PRIORITY_LOW)
             summary = (resp.content or "")[:500]
             if summary.strip():
                 compressed = [messages[0], {"role": "system", "content": f"[Context summary: {summary}]"}]
@@ -286,7 +290,7 @@ class Agent:
                     state = AgentState.DONE
                     break
 
-                resp = await self.llm.complete(messages, tools=schemas)
+                resp = await self.llm.complete(messages, tools=schemas, priority=self.priority)
                 consecutive_errors = 0
                 delay = 0.5
                 content = resp.content or ""
@@ -339,7 +343,7 @@ class Agent:
             yield final_content
         elif tool_used:
             parts: list[str] = []
-            async for token in self.llm.complete_stream(messages):
+            async for token in self.llm.complete_stream(messages, priority=self.priority):
                 parts.append(token)
                 yield token
             final_content = "".join(parts)
@@ -385,5 +389,5 @@ class Agent:
             return {"error": str(e)[:500]}
 
     async def simple_complete(self, messages: list[dict[str, Any]]) -> AsyncIterator[str]:
-        async for token in self.llm.complete_stream(messages):
+        async for token in self.llm.complete_stream(messages, priority=self.priority):
             yield token

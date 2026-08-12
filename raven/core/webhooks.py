@@ -10,6 +10,7 @@ from loguru import logger
 
 from raven.core.config import settings
 from raven.core.db import Database
+from raven.core.llm.queue import PRIORITY_LOW
 from raven.core.models import IncomingMessage
 
 
@@ -58,6 +59,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
             session_id=f"webhook:{source}:{user_id}",
             text=text,
             metadata={"source": source, "body": safe_body},
+            priority=PRIORITY_LOW,
         )
         await handle_incoming(event)
         return {"ok": True, "source": source}

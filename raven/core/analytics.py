@@ -6,9 +6,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import aiosqlite
 from loguru import logger
 
+from raven.core.asyncdb import AsyncDB, connect_backend
 from raven.core.metrics import metrics
 
 _DB_PATH: Path | None = None
@@ -21,14 +21,14 @@ def configure(db_path: str | Path) -> None:
 
 class AnalyticsEngine:
     def __init__(self, db_path: str | Path, snapshot_interval: int = 60) -> None:
-        self._db_path = Path(db_path)
+        self._db_path = db_path
         self._interval = snapshot_interval
         self._task: asyncio.Task[None] | None = None
-        self._db: aiosqlite.Connection | None = None
+        self._db: AsyncDB | None = None
 
     async def start(self) -> None:
-        self._db = await aiosqlite.connect(str(self._db_path))
-        self._db.row_factory = aiosqlite.Row
+        self._db = connect_backend(self._db_path)
+        await self._db.connect()
         await self._ensure_tables()
         self._task = asyncio.create_task(self._loop())
         logger.info("analytics engine started (snapshot every {}s)", self._interval)
@@ -45,23 +45,40 @@ class AnalyticsEngine:
     async def _ensure_tables(self) -> None:
         if self._db is None:
             raise RuntimeError("AnalyticsEngine not started")
-        await self._db.execute("""
-            CREATE TABLE IF NOT EXISTS analytics_snapshots (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ts INTEGER NOT NULL,
-                metric_name TEXT NOT NULL,
-                metric_value REAL NOT NULL
-            )
-        """)
-        await self._db.execute("""
-            CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_ts
-            ON analytics_snapshots(ts)
-        """)
-        await self._db.execute("""
-            CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_name
-            ON analytics_snapshots(metric_name)
-        """)
-        await self._db.commit()
+        if self._db.dialect == "postgresql":
+            await self._db.run_script("""
+                CREATE TABLE IF NOT EXISTS analytics_snapshots (
+                    id BIGSERIAL PRIMARY KEY,
+                    ts BIGINT NOT NULL,
+                    metric_name TEXT NOT NULL,
+                    metric_value DOUBLE PRECISION NOT NULL
+                )
+            """)
+            await self._db.run_script("""
+                CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_ts
+                ON analytics_snapshots(ts)
+            """)
+            await self._db.run_script("""
+                CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_name
+                ON analytics_snapshots(metric_name)
+            """)
+        else:
+            await self._db.run_script("""
+                CREATE TABLE IF NOT EXISTS analytics_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts INTEGER NOT NULL,
+                    metric_name TEXT NOT NULL,
+                    metric_value REAL NOT NULL
+                )
+            """)
+            await self._db.run_script("""
+                CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_ts
+                ON analytics_snapshots(ts)
+            """)
+            await self._db.run_script("""
+                CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_name
+                ON analytics_snapshots(metric_name)
+            """)
 
     async def _loop(self) -> None:
         while True:
@@ -100,7 +117,7 @@ class AnalyticsEngine:
             raise RuntimeError("AnalyticsEngine not started")
         since = since if since is not None else int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
         bucket_sec = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400}.get(bucket, 300)
-        rows = await self._db.execute_fetchall(
+        rows = await self._db.fetchall(
             """
             SELECT
                 (ts / ?) * ? AS bucket_ts,
@@ -129,7 +146,7 @@ class AnalyticsEngine:
     async def query_metrics_list(self) -> list[str]:
         if self._db is None:
             raise RuntimeError("AnalyticsEngine not started")
-        rows = await self._db.execute_fetchall(
+        rows = await self._db.fetchall(
             "SELECT DISTINCT metric_name FROM analytics_snapshots ORDER BY metric_name"
         )
         return [r[0] for r in rows]
@@ -138,7 +155,7 @@ class AnalyticsEngine:
         if self._db is None:
             raise RuntimeError("AnalyticsEngine not started")
         since = since if since is not None else int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
-        totals = await self._db.execute_fetchall(
+        totals = await self._db.fetchall(
             """
             SELECT metric_name, AVG(metric_value) AS avg_val,
                    MAX(metric_value) AS max_val, COUNT(*) AS cnt
@@ -149,13 +166,11 @@ class AnalyticsEngine:
             """,
             (since,),
         )
-        total_points = list(
-            await self._db.execute_fetchall(
-                "SELECT COUNT(*) AS c FROM analytics_snapshots WHERE ts >= ?",
-                (since,),
-            )
+        total_points = await self._db.fetchall(
+            "SELECT COUNT(*) AS c FROM analytics_snapshots WHERE ts >= ?",
+            (since,),
         )
-        oldest = list(await self._db.execute_fetchall("SELECT MIN(ts) AS t FROM analytics_snapshots"))
+        oldest = await self._db.fetchall("SELECT MIN(ts) AS t FROM analytics_snapshots")
         data_rows = [
             {
                 "name": r[0],
@@ -180,7 +195,7 @@ class AnalyticsEngine:
         error_series = await self.query_series("raven_message_errors_total", since=since)
         total_received = sum(s["max"] - s["min"] for s in series) if series else 0
         total_errors = sum(s["max"] - s["min"] for s in error_series) if error_series else 0
-        rows = await self._db.execute_fetchall(
+        rows = await self._db.fetchall(
             "SELECT DISTINCT metric_name FROM analytics_snapshots "
             "WHERE metric_name LIKE '%latency%' OR metric_name LIKE '%response%' "
             "OR metric_name LIKE '%p99%'"
@@ -202,7 +217,7 @@ class AnalyticsEngine:
         if self._db is None:
             raise RuntimeError("AnalyticsEngine not started")
         since = since if since is not None else int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
-        rows = await self._db.execute_fetchall(
+        rows = await self._db.fetchall(
             "SELECT DISTINCT metric_name FROM analytics_snapshots WHERE metric_name LIKE '%tool_calls%' AND ts >= ?",
             (since,),
         )

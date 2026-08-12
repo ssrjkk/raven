@@ -4,8 +4,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-import aiosqlite
-
 from raven.core._json import json
 from raven.core.store import BaseStore
 from raven.core.task_engine.models import Task, TaskPriority, TaskStatus, TaskStep
@@ -51,9 +49,50 @@ CREATE INDEX IF NOT EXISTS idx_task_steps_status ON task_steps(status);
 CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 """
 
+SCHEMA_POSTGRES = """
+CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    channel TEXT NOT NULL DEFAULT '',
+    goal TEXT NOT NULL,
+    plan_summary TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    priority INTEGER NOT NULL DEFAULT 1,
+    current_step_index INTEGER NOT NULL DEFAULT 0,
+    result TEXT,
+    error TEXT,
+    created_at DOUBLE PRECISION NOT NULL,
+    updated_at DOUBLE PRECISION NOT NULL,
+    scheduled_at DOUBLE PRECISION,
+    metadata TEXT DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS task_steps (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    step_order INTEGER NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    tool TEXT NOT NULL DEFAULT '',
+    params TEXT DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending',
+    result TEXT,
+    error TEXT,
+    started_at DOUBLE PRECISION,
+    completed_at DOUBLE PRECISION
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
+CREATE INDEX IF NOT EXISTS idx_task_steps_task_id ON task_steps(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_steps_status ON task_steps(status);
+CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW());
+"""
+
 
 class TaskStore(BaseStore):
     SCHEMA = SCHEMA
+    SCHEMA_POSTGRES = SCHEMA_POSTGRES
 
     def __init__(self, db_path: str | Path):
         super().__init__(db_path)
@@ -62,50 +101,64 @@ class TaskStore(BaseStore):
 
     @measure_latency()
     async def save_task(self, task: Task) -> None:
-        conn = await self._conn()
-        await conn.execute(
-            """INSERT OR REPLACE INTO tasks
-               (id, user_id, channel, goal, plan_summary, status, priority,
-                current_step_index, result, error, created_at, updated_at,
-                scheduled_at, metadata)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                task.id,
-                task.user_id,
-                task.channel,
-                task.goal,
-                task.plan_summary,
-                task.status.value,
-                task.priority.value,
-                task.current_step_index,
-                task.result,
-                task.error,
-                task.created_at,
-                task.updated_at,
-                task.scheduled_at,
-                json.dumps(task.metadata, default=str),
-            ),
-        )
-        for step in task.steps:
-            await conn.execute(
-                """INSERT OR REPLACE INTO task_steps
-                   (id, task_id, step_order, description, tool, params,
-                    status, result, error, started_at, completed_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        db = await self._conn()
+        async with db.transaction():
+            await db.execute(
+                """INSERT INTO tasks
+                   (id, user_id, channel, goal, plan_summary, status, priority,
+                    current_step_index, result, error, created_at, updated_at,
+                    scheduled_at, metadata)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT (id) DO UPDATE SET
+                   user_id = excluded.user_id, channel = excluded.channel, goal = excluded.goal,
+                   plan_summary = excluded.plan_summary, status = excluded.status,
+                   priority = excluded.priority, current_step_index = excluded.current_step_index,
+                   result = excluded.result, error = excluded.error,
+                   created_at = excluded.created_at, updated_at = excluded.updated_at,
+                   scheduled_at = excluded.scheduled_at, metadata = excluded.metadata""",
                 (
-                    step.id,
-                    step.task_id,
-                    step.order,
-                    step.description,
-                    step.tool,
-                    json.dumps(step.params, default=str),
-                    step.status.value,
-                    json.dumps(step.result, default=str) if step.result is not None else None,
-                    step.error,
-                    step.started_at,
-                    step.completed_at,
+                    task.id,
+                    task.user_id,
+                    task.channel,
+                    task.goal,
+                    task.plan_summary,
+                    task.status.value,
+                    task.priority.value,
+                    task.current_step_index,
+                    task.result,
+                    task.error,
+                    task.created_at,
+                    task.updated_at,
+                    task.scheduled_at,
+                    json.dumps(task.metadata, default=str),
                 ),
             )
+            for step in task.steps:
+                await db.execute(
+                    """INSERT INTO task_steps
+                       (id, task_id, step_order, description, tool, params,
+                        status, result, error, started_at, completed_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       ON CONFLICT (id) DO UPDATE SET
+                       task_id = excluded.task_id, step_order = excluded.step_order,
+                       description = excluded.description, tool = excluded.tool,
+                       params = excluded.params, status = excluded.status,
+                       result = excluded.result, error = excluded.error,
+                       started_at = excluded.started_at, completed_at = excluded.completed_at""",
+                    (
+                        step.id,
+                        step.task_id,
+                        step.order,
+                        step.description,
+                        step.tool,
+                        json.dumps(step.params, default=str),
+                        step.status.value,
+                        json.dumps(step.result, default=str) if step.result is not None else None,
+                        step.error,
+                        step.started_at,
+                        step.completed_at,
+                    ),
+                )
         await self._commit()
 
     @measure_latency()
@@ -197,7 +250,7 @@ class TaskStore(BaseStore):
         )
         return row["cnt"] if row else 0
 
-    def _row_to_task(self, row: aiosqlite.Row) -> Task:
+    def _row_to_task(self, row: Any) -> Task:
         return Task(
             id=row["id"],
             user_id=row["user_id"],
@@ -216,7 +269,7 @@ class TaskStore(BaseStore):
             steps=[],
         )
 
-    def _row_to_step(self, row: aiosqlite.Row) -> TaskStep:
+    def _row_to_step(self, row: Any) -> TaskStep:
         return TaskStep(
             id=row["id"],
             task_id=row["task_id"],

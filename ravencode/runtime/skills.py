@@ -150,10 +150,12 @@ def discover_skills(cwd: Path | None = None) -> dict[str, Skill]:
 def load_skill(skill_id: str, cwd: Path | None = None) -> str:
     manager = _manager(cwd)
     index = manager.skill_index(skill_id) or manager.skill_index(skill_id.lower())
-    if index is None:
+    skill = _to_skill(index) if index is not None else None
+    if skill is None:
+        skill = _BUILTIN_SKILLS.get(skill_id) or _BUILTIN_SKILLS.get(skill_id.lower())
+    if skill is None:
         available = ", ".join(sorted(discover_skills(cwd)))
         return f"Skill '{skill_id}' not found. Available: {available or '(none)'}"
-    skill = _to_skill(index)
     return f"# Skill: {skill.name}\n\n{skill.description}\n\n## Instructions\n\n{skill.instructions}"
 
 

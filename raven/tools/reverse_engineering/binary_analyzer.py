@@ -16,7 +16,7 @@ def get_file_type(path: str) -> dict[str, Any]:
         return {"error": f"Not a file: {path}"}
 
     size = p.stat().st_size
-    raw = p.read_bytes()[:64]
+    raw = p.read_bytes()[:512]
     info: dict[str, Any] = {
         "file_name": p.name,
         "size": size,
@@ -62,7 +62,7 @@ def get_file_type(path: str) -> dict[str, Any]:
                 0x1C4: "ARMv7 Thumb",
             }
             info["architecture"] = machine_map.get(machine_id, f"unknown(0x{machine_id:04x})")
-            characteristics = struct.unpack("<H", raw[pe_offset + 22 : pe_offset + 24])[0]
+            characteristics = struct.unpack("<H", raw[pe_offset + 18 : pe_offset + 20])[0]
             if characteristics & 0x2000:
                 info["subsystem"] = "DLL"
             elif characteristics & 0x0002:
@@ -77,7 +77,7 @@ def get_file_type(path: str) -> dict[str, Any]:
         if raw[:4] == b"\xcf\xfa\xed\xfe":
             info["endian"] = "little"
 
-    elif raw[:8] == b"\xca\xfe\xba\xbe":
+    elif raw[:4] == b"\xca\xfe\xba\xbe":
         info["type"] = "Universal Mach-O (Fat Binary)"
 
     else:

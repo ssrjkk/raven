@@ -87,6 +87,8 @@ PATH_PERMISSIONS: dict[str, Permission] = {
 
 AUTH_REQUIRED_PREFIXES: tuple[str, ...] = ("/aios", "/api/tests")
 
+_PUBLIC_PATHS: tuple[str, ...] = ("/aios/health", "/aios/metrics", "/docs", "/openapi.json", "/redoc")
+
 _SLOW_REQUEST_THRESHOLD_S = 2.0
 
 
@@ -158,6 +160,8 @@ async def auth_middleware(request: Request, call_next):
             request.state.user_id = "admin"
 
     path = request.url.path
+    if path.startswith(_PUBLIC_PATHS):
+        return await call_next(request)
     for prefix in AUTH_REQUIRED_PREFIXES:
         if path.startswith(prefix) and request.state.user_id == "anonymous":
             return JSONResponse(

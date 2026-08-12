@@ -4,10 +4,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-import aiosqlite
 from loguru import logger
 
 from raven.core._json import json
+from raven.core.asyncdb import AsyncDB
 from raven.core.monitor.models import (
     CheckResult,
     Condition,
@@ -57,21 +57,82 @@ CREATE INDEX IF NOT EXISTS idx_monitor_checks_mid_at ON monitor_checks(monitor_i
 CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 """
 
+SCHEMA_POSTGRES = """
+CREATE TABLE IF NOT EXISTS monitors (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('price','http','rss','file','process')),
+    config TEXT NOT NULL DEFAULT '{}',
+    condition TEXT NOT NULL DEFAULT '',
+    cooldown_minutes INTEGER NOT NULL DEFAULT 30,
+    interval_seconds INTEGER NOT NULL DEFAULT 300,
+    notify_channels TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','error')),
+    user_id TEXT NOT NULL DEFAULT '',
+    channel TEXT NOT NULL DEFAULT '',
+    slo_target DOUBLE PRECISION NOT NULL DEFAULT 0.99,
+    slo_window_seconds INTEGER NOT NULL DEFAULT 86400,
+    "group" TEXT NOT NULL DEFAULT '',
+    last_checked DOUBLE PRECISION,
+    last_triggered DOUBLE PRECISION,
+    created_at DOUBLE PRECISION NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())
+);
+
+CREATE TABLE IF NOT EXISTS monitor_checks (
+    id BIGSERIAL PRIMARY KEY,
+    monitor_id TEXT NOT NULL REFERENCES monitors(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    checked_at DOUBLE PRECISION NOT NULL,
+    response_time_ms DOUBLE PRECISION,
+    triggered INTEGER DEFAULT 0,
+    result TEXT,
+    error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_monitor_status ON monitors(status);
+CREATE INDEX IF NOT EXISTS idx_monitor_checks_monitor_id ON monitor_checks(monitor_id);
+CREATE INDEX IF NOT EXISTS idx_monitor_checks_mid_at ON monitor_checks(monitor_id, checked_at);
+CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW());
+"""
+
 _MONITOR_ADDED_COLUMNS = (
     ("slo_target", "ALTER TABLE monitors ADD COLUMN slo_target REAL NOT NULL DEFAULT 0.99"),
     ("slo_window_seconds", "ALTER TABLE monitors ADD COLUMN slo_window_seconds INTEGER NOT NULL DEFAULT 86400"),
     ("group", 'ALTER TABLE monitors ADD COLUMN "group" TEXT NOT NULL DEFAULT \'\''),
 )
+_MONITOR_ADDED_COLUMNS_POSTGRES = (
+    (
+        "slo_target",
+        "ALTER TABLE monitors ADD COLUMN IF NOT EXISTS slo_target DOUBLE PRECISION NOT NULL DEFAULT 0.99",
+    ),
+    (
+        "slo_window_seconds",
+        "ALTER TABLE monitors ADD COLUMN IF NOT EXISTS slo_window_seconds INTEGER NOT NULL DEFAULT 86400",
+    ),
+    ("group", 'ALTER TABLE monitors ADD COLUMN IF NOT EXISTS "group" TEXT NOT NULL DEFAULT \'\''),
+)
 
 
 class MonitorStore(BaseStore):
     SCHEMA = SCHEMA
+    SCHEMA_POSTGRES = SCHEMA_POSTGRES
 
     def __init__(self, db_path: str | Path) -> None:
         super().__init__(db_path)
 
-    async def _post_schema(self, connection: aiosqlite.Connection) -> None:
-        existing = {r["name"] for r in await connection.execute_fetchall("PRAGMA table_info(monitors)")}
+    async def _post_schema(self, connection: AsyncDB) -> None:
+        if connection.dialect == "postgresql":
+            existing = {
+                r["column_name"]
+                for r in await connection.fetchall(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = ?", ("monitors",)
+                )
+            }
+            for col_name, ddl in _MONITOR_ADDED_COLUMNS_POSTGRES:
+                if col_name not in existing:
+                    await connection.execute(ddl)
+                    logger.info("MonitorStore migration: added column {}", col_name)
+            return
+        existing = {r["name"] for r in await connection.fetchall("PRAGMA table_info(monitors)")}
         for col_name, ddl in _MONITOR_ADDED_COLUMNS:
             if col_name not in existing:
                 await connection.execute(ddl)
@@ -87,11 +148,19 @@ class MonitorStore(BaseStore):
         )
         notify_json = json.dumps(monitor.notify_channels or [])
         await self._execute(
-            """INSERT OR REPLACE INTO monitors
+            """INSERT INTO monitors
                (id, name, type, config, condition, cooldown_minutes,
                 interval_seconds, notify_channels, status, user_id, channel,
                 slo_target, slo_window_seconds, "group", created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT (id) DO UPDATE SET
+               name = excluded.name, type = excluded.type, config = excluded.config,
+               condition = excluded.condition, cooldown_minutes = excluded.cooldown_minutes,
+               interval_seconds = excluded.interval_seconds,
+               notify_channels = excluded.notify_channels, status = excluded.status,
+               user_id = excluded.user_id, channel = excluded.channel,
+               slo_target = excluded.slo_target, slo_window_seconds = excluded.slo_window_seconds,
+               "group" = excluded."group", created_at = excluded.created_at""",
             (
                 monitor.id,
                 monitor.name,
@@ -121,9 +190,10 @@ class MonitorStore(BaseStore):
 
     @measure_latency()
     async def delete_monitor(self, monitor_id: str) -> None:
-        await self._execute("DELETE FROM monitors WHERE id = ?", (monitor_id,))
-        await self._execute("DELETE FROM monitor_checks WHERE monitor_id = ?", (monitor_id,))
-        await self._commit()
+        db = await self._conn()
+        async with db.transaction():
+            await db.execute("DELETE FROM monitor_checks WHERE monitor_id = ?", (monitor_id,))
+            await db.execute("DELETE FROM monitors WHERE id = ?", (monitor_id,))
 
     @measure_latency()
     async def list_monitors(
@@ -207,29 +277,30 @@ class MonitorStore(BaseStore):
     @measure_latency()
     async def save_check(self, check: MonitorCheck) -> None:
         result_json = json.dumps(check.result) if check.result else "{}"
-        await self._execute(
-            """INSERT INTO monitor_checks
-               (monitor_id, status, checked_at, response_time_ms, triggered, result, error)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (
-                check.monitor_id,
-                check.status,
-                check.checked_at or time.time(),
-                check.response_time_ms,
-                int(check.triggered),
-                result_json,
-                check.error,
-            ),
-        )
-        await self._execute(
-            "UPDATE monitors SET last_checked = ?, last_triggered = ? WHERE id = ?",
-            (
-                str(check.checked_at or time.time()),
-                str(check.checked_at or time.time()) if check.triggered else None,
-                check.monitor_id,
-            ),
-        )
-        await self._commit()
+        db = await self._conn()
+        async with db.transaction():
+            await db.execute(
+                """INSERT INTO monitor_checks
+                   (monitor_id, status, checked_at, response_time_ms, triggered, result, error)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    check.monitor_id,
+                    check.status,
+                    check.checked_at or time.time(),
+                    check.response_time_ms,
+                    int(check.triggered),
+                    result_json,
+                    check.error,
+                ),
+            )
+            await db.execute(
+                "UPDATE monitors SET last_checked = ?, last_triggered = ? WHERE id = ?",
+                (
+                    float(check.checked_at or time.time()),
+                    float(check.checked_at or time.time()) if check.triggered else None,
+                    check.monitor_id,
+                ),
+            )
 
     async def save_check_result(self, monitor_id: str, check: CheckResult) -> None:
         mc = MonitorCheck(
@@ -243,7 +314,7 @@ class MonitorStore(BaseStore):
         )
         await self.save_check(mc)
 
-    def _row_to_monitor(self, row: aiosqlite.Row) -> Monitor | None:
+    def _row_to_monitor(self, row: Any) -> Monitor | None:
         try:
             config = json.loads(row["config"]) if row["config"] else {}
             conditions_raw = json.loads(row["condition"]) if row["condition"] else []

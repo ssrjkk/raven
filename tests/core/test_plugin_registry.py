@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -104,7 +105,13 @@ class TestCatalogParsing:
                 {"name": "fileurl", "version": "1.0.0", "url": "file:///etc/passwd"},
             ]
         }
-        entries = await _parse_catalog(data)
+        async def _validate(url: str) -> str | None:
+            if url.startswith("http://10.0.0.5"):
+                return "URL resolves to a private IP range"
+            return None
+
+        with patch("raven.plugins.registry.validate_url_async", _validate):
+            entries = await _parse_catalog(data)
         assert [e.name for e in entries] == ["good"]
 
     async def test_non_dict_catalog_yields_empty(self) -> None:

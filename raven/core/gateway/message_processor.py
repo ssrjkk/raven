@@ -44,6 +44,7 @@ class MessageProcessor:
         await self._manage_context(session_id, msgs)
 
         agent = self.registry.create_agent(session)
+        agent.priority = event.priority
         history = [{"role": m.role, "content": m.content} for m in msgs]
 
         channel_obj = await self.channels.get(event.channel)

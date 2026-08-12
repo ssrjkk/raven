@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     llm_retry_max: int = 3
     llm_retry_delay: float = 1.0
     llm_max_concurrent: int = 10
+    llm_queue_timeout: float = 5.0
     agent_token_timeout: float = 30.0
     agent_tool_timeout: float = 120.0
     workspace_path: str = ""

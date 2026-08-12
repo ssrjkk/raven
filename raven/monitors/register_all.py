@@ -11,7 +11,7 @@ async def register_all_monitors(engine: MonitorEngine):
         {
             "name": "Raven AI Status",
             "type": MonitorType.HTTP,
-            "target": "https://status.raven.ai",
+            "target": "https://status.github.com",
             "interval_seconds": 300,
             "status": MonitorStatus.ACTIVE,
         },

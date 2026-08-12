@@ -138,6 +138,18 @@ class TestAiosTruthful:
         assert result.content == "исправлено"
 
     @pytest.mark.asyncio
+    async def test_truthful_endpoint_wraps_llm_error(self):
+        from aios.api.bridge import TruthfulRequest, aios_agent_truthful
+
+        async def boom(prompt: str, context: str, model: str | None = None) -> None:
+            raise RuntimeError("All LLM providers exhausted")
+
+        with patch("aios.api.bridge.run_truthful", boom):
+            resp = await aios_agent_truthful(TruthfulRequest(prompt="q"))
+        assert resp.status == "error"
+        assert resp.content == "[error: All LLM providers exhausted]"
+
+    @pytest.mark.asyncio
     async def test_run_truthful_passes_provider_config(self):
         from unittest.mock import patch as _patch
 

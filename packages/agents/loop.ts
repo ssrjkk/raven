@@ -6,6 +6,7 @@ export async function autonomousLoop(task: string) {
   const memory: string[] = []
   const maxSteps = 25
 
+  let verified = false
   for (let step = 0; step < maxSteps; step++) {
     const plan = await plannerAgent(task, memory)
     const actions = await coderAgent(plan.steps)
@@ -15,8 +16,9 @@ export async function autonomousLoop(task: string) {
     }
 
     const result = await debuggerAgent(memory)
-    if (result.verified) break
+    verified = result.verified
+    if (verified) break
   }
 
-  return { completed: result.verified, steps: memory.length }
+  return { completed: verified, steps: memory.length }
 }

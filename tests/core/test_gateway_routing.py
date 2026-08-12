@@ -103,7 +103,7 @@ class TestCircuitBreaker:
             await gateway.handle_message(_event("hello"))
             assert len(ch.sent_messages) > 0
             assert "error occurred" in ch.sent_messages[-1].content.lower()
-            m.inc.assert_any_call("message_errors", {"channel": "mock"})
+            m.inc.assert_any_call("message_errors", {"channel": "mock", "reason": "handler"})
         await gateway.stop()
 
 

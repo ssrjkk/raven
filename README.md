@@ -113,6 +113,24 @@ Open in your browser:
 docker compose up
 ```
 
+### PostgreSQL (optional, replaces SQLite)
+
+Raven stores per-service data in SQLite by default. Set `DATABASE_URL` (or pass a
+`postgresql://` DSN as the store `db_path`) to use PostgreSQL for all core stores
+(tasks, monitors, routines, auth, sessions, outbox, analytics, persister).
+
+```bash
+pip install "raven-agent[postgres]"   # installs asyncpg
+
+# Start a local Postgres (user/password/db = raven)
+docker compose -f docker-compose.postgres.yml up -d
+
+# In .env
+DATABASE_URL=postgresql://raven:raven@localhost:5432/raven
+```
+
+Migrations run automatically on first connect; no data is migrated from SQLite.
+
 ### Web Dashboard (development)
 
 ```bash
@@ -363,9 +381,9 @@ raven/
 
 | Layer | Technology |
 |-------|-----------|
-| **Backend** | Python 3.11+, FastAPI, asyncio, SQLite |
+| **Backend** | Python 3.11+, FastAPI, asyncio, SQLite (default) + PostgreSQL (optional) |
 | **LLM** | Ollama (local) → OpenRouter → Anthropic → OpenAI (failover) |
-| **Memory** | SQLite + ChromaDB + numpy vector store |
+| **Memory** | SQLite / PostgreSQL + ChromaDB + numpy vector store |
 | **RAG** | Qdrant vector store, fallback in-memory, n-gram embedding |
 | **Auth** | bcrypt, JWT (HS256), RBAC (4 roles, 16 permissions) |
 | **Frontend** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |

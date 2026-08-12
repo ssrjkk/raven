@@ -31,6 +31,12 @@ class TestLoadSkill:
         result = load_skill("nonexistent_skill_xyz")
         assert "not found" in result
 
+    def test_load_builtin(self):
+        result = load_skill("security-audit")
+        assert "# Skill: Security Audit" in result
+        assert "## Instructions" in result
+        assert "path injection" in result.lower()
+
     def test_load_from_raven_layer(self, tmp_path: Path):
         skill_dir = tmp_path / ".raven" / "skills" / "testskill"
         skill_dir.mkdir(parents=True)

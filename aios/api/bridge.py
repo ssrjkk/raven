@@ -147,7 +147,15 @@ async def run_truthful(prompt: str, context: str, model: str | None = None) -> T
 
 @router.post("/agent/truthful", response_model=TruthfulResponse)
 async def aios_agent_truthful(req: TruthfulRequest):
-    result = await run_truthful(req.prompt, req.context, req.model)
+    try:
+        result = await run_truthful(req.prompt, req.context, req.model)
+    except Exception as e:
+        logger.error("aios_agent_truthful failed: {}", e)
+        return TruthfulResponse(
+            status="error",
+            content=f"[error: {e}]",
+            thinking_process="",
+        )
     return TruthfulResponse(status=result.status, content=result.content, thinking_process=result.thinking_process)
 
 

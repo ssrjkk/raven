@@ -383,31 +383,57 @@ npm run dev
 - **`web/src/api/client.ts`**: Added `api.getTheme()` and `api.saveTheme(accentColor)`.
 - **Verification**: TypeScript 0 errors, ruff 0, mypy 0, vite build success.
 ## Fixes applied (Aug 2026, security hardening round 2)
+
 ### SSRF redirect-bypass hardening
+
 - **`raven/core/security/ssrf.py`**: Added `safe_fetch_async(url, method, max_redirects=5, timeout=30, **kwargs)` — validates scheme + IP-pins EVERY hop via `SSRFSafeTransport` (no redirect following), raises `ValueError` on invalid scheme/private redirect.
+
 - **`raven/plugins/api/plugin.py`**: Removed local `_validate_url` imitator and `_client` pool; `_request` now `validate_url()` → `safe_fetch_async()`; returns `[blocked]`/`[error]`.
+
 - **`raven/plugins/browser/plugin.py`**: `browse`/`screenshot` now `validate_url` on start AND final URL (blocks redirect to private via Playwright), fallback `safe_fetch_async`.
+
 - **`ravencode/runtime/tools.py`**: `web_fetch` rewritten on `safe_fetch_async` (redirect-safe).
+
 - **`ravencode/runtime/skills.py`**: `download_skill` validates `skill_id` (`/`, `..`, `.`-prefix denied) + `validate_url` on registry + no-redirect-follow with Location validation.
+
 ### Sandbox DoS fixes
+
 - **`raven/core/sandbox.py`**: `_exec_direct` moved into `asyncio.wait_for(asyncio.to_thread(...), timeout)` — infinite loops no longer freeze the event loop; returns "Execution timed out".
+
 - **`raven/tools/shell.py`**: `python_code` rewritten to run in a killable subprocess (`sys.executable -m raven.tools._pyrunner`) with the same AST restrictions + restricted builtins; TimeoutError kills the process. Added `import sys`.
+
 - **`raven/tools/_pyrunner.py`** (new): subprocess runner reusing `_RESTRICTED_BUILTINS` from `shell.py`; returns last-expression value or error text.
+
 - Verified: channels (`signal`, `matrix`, `github`, `gitlab`, `feishu`, `enterprise_base`) send to operator-configured URLs only (no user-URL SSRF); `client_manager` uses httpx default `follow_redirects=False`; `_restrict_key_file` runs in sync startup path only.
+
 ### Event-loop blocking fixes (sync subprocess in async context)
+
 - **`raven/coding/git_integration.py`**: `auto_commit_async`, `create_pr_async`, `llm_review` called sync `_run` (subprocess.run, timeout=60) directly on the event loop. Rewritten with `asyncio.to_thread` around every git op; `subprocess.CalledProcessError` now returns error results instead of 500s. Kept the stage_all-before-commit logic.
+
 - **`raven/core/git_api.py`**: All `/api/git/*` async handlers (status, branch, branches, log, log/detail, diff, diff/commit, blame, commit, push, pull, checkout) wrapped in `asyncio.to_thread` — no more event-loop freeze on slow git ops.
+
 - **`raven/tools/git.py`**: `git_commit` non-auto path now `await asyncio.to_thread(git.commit, ...)` (was sync call in async handler).
+
 - **`raven/unique/chaos_engineering.py`**: `inject()` fault dispatch (`_inject_service_kill/_inject_network_latency/_inject_disk_fill/_inject_cpu_storm/_inject_memory_leak/_inject_process_kill`) and `recover()`'s `_recover_fault` now run via `asyncio.to_thread`.
+
 - Verified: `raven/voice/conversation.py:163` already uses `asyncio.to_thread(self.tts.synthesize, ...)`; `tool_registry._run_handler` wraps sync tool handlers in `asyncio.to_thread`; all remaining sync `subprocess.run` sites are CLI-only (sync context). No `time.sleep` in async functions anywhere.
+
 ### SSRF on user-controlled outbound URLs (round 2)
+
 - **`raven/core/skills.py`**: `set_skill_registry` now validates http(s) scheme + hostname (invalid/empty clears registry, matching test semantics); `download_skill` validates `skill_id` (`/`, `..`, `.`-prefix) and `validate_url` on the constructed registry URL before `client_manager.get`.
+
 - **`raven/unique/plugin_marketplace.py`**: `_fetch_remote_metadata` (remote `install_plugin` GET of `{url}/plugin.json`) and `PluginCatalog.sync` now pass URLs through `validate_url` — blocks SSRF to private/internal hosts.
+
 - **`raven/tools/nodes.py`**: `NodeManager.register` rejects non-http(s) endpoints (scheme + hostname required); `execute` re-validates `node.endpoint` scheme before POST (guards endpoint tampering). Localhost/LAN endpoints are allowed — pairing local/LAN worker nodes is the intended use case, and agents already have the SSRF-guarded `http_request` tool for generic fetches.
+
 - **`ravencode/runtime/skills.py`**: `set_skill_registry` now requires http(s) scheme + hostname.
+
 - **`raven/core/monitor/checkers/http_check.py`**: switched to `client_manager.request` so `resp.text` is available — fixes broken `content_match` (was parsing JSON dict from `client_manager.get/post`).
+
 - Audited all remaining outbound HTTP call sites: `web_search.py`, `ravencode/runtime/tools.py` `_httpx_search` (fixed search hosts, safe), `media.py`, `media_api.py`, `github.py`/`github_api.py`/`ci.py` (fixed GitHub + operator-env GitLab/Jenkins hosts), `tools/http.py` (already per-hop validate_url) — no new user-URL SSRF vectors.
+
 ### Verification
+
 - ruff 0, mypy 0, full suite **2196 passed / 14 skipped / 22 deselected (e2e+load)**.
 
 ## Fixes applied (Aug 2027 — Desktop EXE packaging + dashboard serving)
@@ -424,4 +450,94 @@ npm run dev
 - `packaging/dist/Raven.exe --port 18999 --no-browser`: plugins load (42 tools), Uvicorn up, `/` serves React index.html (title "Raven AI"), JS bundle `/assets/index-*.js` → 200 (416 KB), `/dashboard` and SPA deep links (`/chat`) → 200 index.html, `/api/health/ready` → ok, `/api/status` → running, `/api/health` → degraded (LLM key not configured — honest status), unknown `/api/*` → 404. Telegram/Discord channels gracefully skip without tokens (guardian logs heartbeat misses + restart).
 - First EXE run crashed with `FileNotFoundError ...\_MEI...\raven\plugins` because `gateway_runner` loads plugins from `Path(__file__).parent.parent / "plugins"` — fixed by bundling `raven/plugins` package dirs as data.
 ### Verification
+
 - ruff 0 errors (incl. launcher SIM105/S110), mypy 0 errors, webchat tests 23/23 pass, PyInstaller build clean.
+
+
+
+## Fixes applied (Aug 2026, live gateway testing + bug hunt)
+
+### P0 — Prometheus "Incorrect label names" crash (real bug, live-reproduced)
+
+- **`raven/core/metrics.py`**: `_prom_inc`/`_prom_observe` cached a metric under its name with label_names from the FIRST call; a later call with a different label set raised `ValueError: Incorrect label names` from prometheus_client.
+
+- **Two conflicting pairs found live** (POST `/aios/ai` → 500):
+
+  - `llm_complete`: router.py used `{model,status}` while instrumented.py used `{provider,model,status}`
+
+  - `message_errors`: gateway.py used `{channel}` in one path and `{channel,reason}` in another
+
+- **Fix**: `raven/core/llm/router.py` renamed its metric to `llm_request_result` with `{model,status}` (both ok/error branches); `raven/core/gateway/gateway.py` `message_errors` now always passes `{channel,reason:"handler"}` / `{channel,reason:"circuit_breaker"}`. Metric label sets are now disjoint: `llm_complete{provider,model,status}` (instrumented), `llm_request_result{model,status}` (router), `message_errors{channel,reason}` (gateway).
+
+- **`tests/core/test_gateway_routing.py`**: updated `test_generic_exception_sends_error` to assert `{"channel","reason":"handler"}`.
+
+
+
+### Failover log double provider prefix
+
+- **`raven/core/failover.py`**: `auto_model_list()` returns provider-prefixed models (`ollama/llama3`); `ModelFailover` logged `{provider}/{model}` producing misleading `ollama/ollama/llama3`. The actual call was correct — only the log was wrong. Fixed all 5 log sites to print `model_cfg.model` only.
+
+
+
+### `/aios/agent/truthful` returned 500 on LLM failure
+
+- **`aios/api/bridge.py`**: `aios_agent_truthful` didn't catch provider exceptions → HTTP 500, while `/aios/agent` and `/aios/agent/multi` wrapped errors. Now catches and returns `TruthfulResponse(status="error", content="[error: ...]")`.
+
+- **`tests/test_aios_agent_ws.py`**: added `test_truthful_endpoint_wraps_llm_error`.
+
+
+
+### `TTSConfig(cache_dir=...)` silently appended `raven_tts_cache`
+
+- **`raven/voice/tts.py`**: `cache_dir` argument was joined with `/raven_tts_cache`, so a user-supplied directory was never used as-is. Fixed: only `tempfile.gettempdir()/raven_tts_cache` is the default; an explicit `cache_dir` is used verbatim.
+
+
+
+### Voice test fixes
+
+- **`tests/test_voice_stt.py`**: fake `vosk.Model` signature didn't match the real call (`vosk.Model(model_path)` is positional) — `model_path` was landing in the `lang` kwarg. Fake now takes `*args/**kwargs`. Default-model test uses `.get("model_path")`.
+
+- **`tests/test_voice_tts.py`**: `test_posix_branch` / `test_macos` monkeypatched `os.name="posix"`, but on Windows Python 3.12 `pathlib.Path` resolves per-`os.name` and instantiating `PosixPath` raises `NotImplementedError`. Both marked `@pytest.mark.skipif(os.name == "nt")` — POSIX branches can only run on POSIX hosts.
+
+
+
+### Verification (no LLM backend available — no ollama, no API keys)
+
+- Full suite: **3558 passed, 17 skipped, 29 deselected** (~265s).
+
+- ruff 0 errors, mypy 0 errors (459 source files).
+
+- Live gateway (`python -m raven aios gateway --port 19123`): `/aios/health`, `/aios/metrics`, `/aios/metrics/prometheus`, `/aios/ai`, `/aios/agent`, `/aios/agent/multi`, `/aios/agent/truthful`, `/aios/exec`, `/aios/sessions`, `/aios/sessions/{id}` all verified. LLM-dependent routes return an honest `[error: All LLM providers exhausted ...]` instead of crashing.
+
+## Fixes applied (Aug 2026, live gateway hardening round 2)
+### SQLite connection race in BaseStore._conn (real bug, concurrency test)
+- **`raven/core/store.py`**: `_conn()` checked `self._connection is None` before `await aiosqlite.connect()`. Under first concurrent access (10 workers x 20 writes) several coroutines created separate connections to the same file; the old ones leaked and held WAL locks, producing `sqlite3.OperationalError: database is locked` on the very first write.
+- **Fix**: whole connection bootstrap (connect + row_factory + PRAGMAs + schema + migrations) moved under self._lock. Single connection, no races, no leaks.
+- **Verification**: concurrency harness (10 async workers x 20 writes) now 200/200 ok for TaskStore and MonitorStore (was 199/200 + database is locked). Related suites pass: 142 passed (task_engine, monitors, pagination, admin_api).
+### Live-gateway verification of new middleware (previous round)
+- /aios/health public 200; /aios/exec without token > 401; rate limiter verified live: 200 rapid requests > 59x 200 + 141x 429 (limit 60/min with burst). Shell-injection covered by unit tests (27 passed in test_aios_runtime).
+
+- **`tests/core/test_sandbox.py`**: `test_sandbox_docker_no_docker_package` was environment-dependent — it asserted a fallback message, but when Docker Desktop is running the sandbox actually executes the code (returns "hi"). Now deterministic: monkeypatch.setitem(sys.modules, "docker", None) forces the "package not installed" path regardless of environment.
+### Verification (final)
+- Full suite: **3590 passed, 17 skipped, 1 xpassed** (was 3558). ruff 0 errors, mypy 0 errors (459 source files).
+
+## Fixes applied (Aug 2026, tests mypy cleanup round)
+- **Goal**: `check_all.py --quick` (ruff + mypy + imports + CLI) fully green including `tests/`. mypy on tests had 155 pre-existing errors (mock typing, `dict | list` unions, fake modules). Final result: **mypy 0 errors on 220 test files**.
+- **`tests/test_tools_github.py`**: `_github_api` returns `dict[str, Any] | list[Any]`; tests did `result["error"]` on the union. Added `assert isinstance(result, dict)` after every `result = await github_*`/`_github_api` call that reads dict keys (17 sites). 42 passed.
+- **`tests/test_tools_browser.py`**: fixture return type → `Generator[None, None, None]`; `_validate_url` returns None so `is None` asserts became bare calls (`# must not raise`); `browser_mod.socket` → local `socket` (same module object); mock assignments to module globals (`_browser_instance`, `_browser_context`, `_agent`) get `# type: ignore[assignment]`; `setattr(mod, "async_playwright", ...)` with `# noqa: B010`; callback-mock asserts get `# type: ignore[attr-defined]`; `list.append` in a lambda replaced with a real `_record` helper; dict/list args to `browser_fill_form`/`browser_set_headers`/`browser_set_cookies` get `# type: ignore[arg-type]`. 112 passed.
+- **`tests/test_voice_stt.py`**: `__exit__` return type `bool` → `None` (always returns False); `recognize_google` returns `str(...)` instead of `Any`; fake-module attribute sets use `setattr(...)` → ruff `B010` → reverted to direct assignment with `# type: ignore[attr-defined]`; `stt.tempfile` → local `tempfile`, `stt.Path` → local `Path` (same objects). 40 passed.
+- **`tests/test_voice_wake.py`**: `__exit__` → `None`; `WakeWordDetector.callback` typed `Callable[[str], Awaitable[str]] | None` but tests assign `async def cb(text) -> None` → `# type: ignore[assignment]`; `wake.logger` → `from loguru import logger` (same object). 12 passed.
+- **`tests/test_voice_tts.py`**: `_FakeSapi` module-level placeholder deleted, `_make_fake_sapi` returns `list[Any]`; `tts.Path` → local `Path`; `builtins.__import__` re-export gets `# type: ignore[arg-type]`; fake-module attrs `# type: ignore[attr-defined]`. 31 passed.
+- **`AGENTS.md` encoding repair**: the file had a single stray cp1252 byte `0x97` (em-dash) breaking strict UTF-8 read; `test_ravencode_context` (reads AGENTS.md as system prompt) crashed with `UnicodeDecodeError`. Repaired via surrogateescape + cp1252 mapping; also fixed two lines that had lost leading chars (store.py bullet, sandbox bullet) and removed a leftover `- **`. Full suite then: **3594 passed, 17 skipped, 1 xpassed**.
+- **Verification**: ruff 0, mypy 0 (220 test files), `check_all.py --quick` 4/4 PASS, full suite **3594 passed / 17 skipped / 1 xpassed**.
+
+## Fixes applied (2027-08, PostgreSQL migration)
+### Thin AsyncDB layer replaces per-store SQLite plumbing
+- **`raven/core/asyncdb.py`** (new core): `AsyncDB` abstract (transaction returns `AbstractAsyncContextManager[None]`), `SQLiteDB` (aiosqlite, WAL + `_rewrite` keeps `?` placeholders) and `PostgresDB` (asyncpg, rewrites `?` → `$n`, returns rowcount via `_rowcount()` parsing of asyncpg status). Factories `connect_backend(db_path)` (prefers `DATABASE_URL`/DSN → Postgres) and `is_postgres_dsn()`. Connection pooling + retry/backoff for Postgres.
+- **All core stores migrated** off raw aiosqlite onto `AsyncDB`: task_engine, monitor, routine, auth (incl. coder/session), plus `analytics.py`, `outbox.py`, `services/persister.py`. `BaseStore` gains `_path` (`None` for AsyncDB); DSN strings stored as `str` (never `Path` — `Path("postgresql://...")` corrupts the DSN on Windows).
+- **`raven/core/db_postgres.py`**: `PostgresDatabase` (shared pool, health, metrics) + `_PostgresMigrator` reusing the unified migration table with PG-syntax branches; `raven/core/db.py` and `tools/db.py` route to Postgres when `DATABASE_URL` is set.
+- **`docker-compose.postgres.yml`** (new): postgres:16-alpine, user/password/db=raven, volume, pg_isready healthcheck. `pyproject.toml` gains extra `[postgres] = ["asyncpg>=0.29"]`.
+- **Tests**: `tests/core/test_migrations.py` rewritten on `SQLiteDB`; `tests/integration/test_postgres_stores.py` (new, 9 tests) covers Task/Monitor/Routine/Auth stores, Outbox delivery+drop, AnalyticsEngine, Persister against a live PG — auto-skip without `DATABASE_URL`, `_clean_table()` guards outbox test idempotency.
+- **Verification**: ruff 0, mypy 0 (16 migrated files + tests), full suite **3594 passed / 26 skipped / 1 xpassed**, integration PG suite **9 passed** against a real server, `check_all.py --quick` 4/4 PASS.
+
+

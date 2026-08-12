@@ -58,17 +58,18 @@ class ModelFailover:
             cb = self._get_circuit(model_cfg.provider)
             try:
                 if not await cb.try_acquire():
-                    logger.info("Circuit open, skipping {}/{}", model_cfg.provider, model_cfg.model)
+                    logger.info("Circuit open, skipping {}", model_cfg.model)
                     last_error = CircuitBreakerOpenError(cb.name)
                     continue
 
-                logger.info("Failover trying model: {}/{}", model_cfg.provider, model_cfg.model)
-                resp = await cb.call(self.llm.complete, messages, model=model_cfg.model, tools=tools)
+                logger.info("Failover trying model: {}", model_cfg.model)
+                complete_fn = getattr(self.llm, "complete_unthrottled", self.llm.complete)
+                resp = await cb.call(complete_fn, messages, model=model_cfg.model, tools=tools)
                 if resp.content or resp.tool_calls:
                     metrics.inc("failover_success", {"provider": model_cfg.provider, "model": model_cfg.model})
                     return resp  # type: ignore[no-any-return]
                 logger.warning(
-                    "Failover: model {}/{} returned empty response, trying next", model_cfg.provider, model_cfg.model
+                    "Failover: model {} returned empty response, trying next", model_cfg.model
                 )
             except CircuitBreakerOpenError as e:
                 last_error = e
@@ -76,7 +77,7 @@ class ModelFailover:
             except Exception as e:
                 last_error = e
                 metrics.inc("failover_fallback", {"provider": model_cfg.provider, "model": model_cfg.model})
-                logger.warning("Failover: model {}/{} failed: {}", model_cfg.provider, model_cfg.model, e)
+                logger.warning("Failover: model {} failed: {}", model_cfg.model, e)
                 continue
         raise last_error or RuntimeError("All models exhausted")
 
@@ -86,14 +87,15 @@ class ModelFailover:
             cb = self._get_circuit(model_cfg.provider)
             try:
                 if not await cb.try_acquire():
-                    logger.info("Circuit open, skipping {}/{} stream", model_cfg.provider, model_cfg.model)
+                    logger.info("Circuit open, skipping {} stream", model_cfg.model)
                     last_error = CircuitBreakerOpenError(cb.name)
                     continue
 
-                logger.info("Failover stream trying: {}/{}", model_cfg.provider, model_cfg.model)
+                logger.info("Failover stream trying: {}", model_cfg.model)
 
                 try:
-                    async for token in self.llm.complete_stream(messages, model=model_cfg.model, tools=tools):
+                    stream_fn = getattr(self.llm, "complete_stream_unthrottled", self.llm.complete_stream)
+                    async for token in stream_fn(messages, model=model_cfg.model, tools=tools):
                         yield token
                 except Exception:
                     await cb.on_failure()
@@ -107,7 +109,7 @@ class ModelFailover:
                 continue
             except Exception as e:
                 last_error = e
-                logger.warning("Failover stream: model {}/{} failed: {}", model_cfg.provider, model_cfg.model, e)
+                logger.warning("Failover stream: model {} failed: {}", model_cfg.model, e)
                 continue
         raise last_error or RuntimeError("All models exhausted")
 

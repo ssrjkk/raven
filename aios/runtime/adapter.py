@@ -40,6 +40,8 @@ _ALLOWED_COMMANDS = frozenset(
     }
 )
 
+_SHELL_META = set("&|;<>^()")
+
 
 class RuntimeAdapter:
     @staticmethod
@@ -50,10 +52,13 @@ class RuntimeAdapter:
         if parts and parts[0] not in _ALLOWED_COMMANDS:
             return f"Command not allowed: {parts[0]}"
         if sys.platform == "win32":
+            for token in parts:
+                if any(c in _SHELL_META for c in token):
+                    return "Command not allowed: shell operators are forbidden on Windows"
             proc = await asyncio.create_subprocess_exec(
                 "cmd.exe",
                 "/c",
-                cmd,
+                *parts,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )

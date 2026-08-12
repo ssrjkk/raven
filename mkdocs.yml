@@ -25,7 +25,11 @@ nav:
   - Core Concepts:
     - Architecture: concepts/architecture.md
   - Configuration: configuration.md
+  - CLI: cli.md
+  - Plugins: plugins.md
+  - Security: security/overview.md
   - Development: development.md
+  - Sprint 1: sprint-1.md
 
 markdown_extensions:
   - admonition

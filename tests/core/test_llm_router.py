@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from raven.core.llm.protocol import LLMProvider, LLMResponse
+from raven.core.llm.queue import LLMQueueTimeoutError
 from raven.core.llm.router import LLMRouter
 
 
@@ -310,3 +311,85 @@ class TestGetDefaultProvider:
 
         fn = get_default_provider()
         assert callable(fn)
+
+
+class SelectiveProvider(LLMProvider):
+    """Fails for the primary model, succeeds for failover models."""
+
+    def __init__(self, backup_content: str = "backup ok"):
+        self._backup = backup_content
+
+    async def complete(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> LLMResponse:
+        if model.endswith("/test"):
+            raise RuntimeError("primary down")
+        return LLMResponse(content=self._backup)
+
+    async def complete_stream(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> Any:
+        if model.endswith("/test"):
+            raise RuntimeError("primary down")
+        for ch in self._backup:
+            yield ch
+
+    async def cleanup(self):
+        pass
+
+
+def _admission_settings(monkeypatch_patch: Any) -> None:
+    mock_settings = monkeypatch_patch
+    mock_settings.llm_retry_max = 1
+    mock_settings.llm_retry_delay = 0
+    mock_settings.llm_max_concurrent = 1
+    mock_settings.llm_queue_timeout = 0.05
+    mock_settings.ghost_mode = False
+    mock_settings.default_model = "ollama/test"
+
+
+class TestAdmissionIntegration:
+    async def test_complete_queue_timeout_raises(self):
+        with patch("raven.core.llm.router.settings") as mock_settings:
+            _admission_settings(mock_settings)
+            router = LLMRouter()
+            router._providers["ollama"] = DummyProvider("hello")
+            await router._admission.acquire()
+            with pytest.raises(LLMQueueTimeoutError):
+                await router.complete([{"role": "user", "content": "hi"}], model="ollama/test")
+            await router._admission.release()
+
+    async def test_complete_stream_queue_timeout_raises(self):
+        with patch("raven.core.llm.router.settings") as mock_settings:
+            _admission_settings(mock_settings)
+            router = LLMRouter()
+            router._providers["ollama"] = DummyProvider("hello")
+            await router._admission.acquire()
+            with pytest.raises(LLMQueueTimeoutError):
+                async for _ in router.complete_stream([{"role": "user", "content": "hi"}], model="ollama/test"):
+                    pass
+            await router._admission.release()
+
+    async def test_failover_bypasses_admission(self):
+        with patch("raven.core.failover.auto_model_list", return_value=["ollama/backup"]), \
+             patch("raven.core.failover.get_discovered_keys") as mock_disc, \
+             patch("raven.core.llm.router.settings") as mock_settings:
+            _admission_settings(mock_settings)
+            mock_disc.return_value.providers_available = ["ollama"]
+            router = LLMRouter()
+            router._providers["ollama"] = SelectiveProvider()
+            resp = await router.complete([{"role": "user", "content": "hi"}], model="ollama/test")
+            assert resp.content == "backup ok"
+
+    async def test_failover_stream_bypasses_admission(self):
+        with patch("raven.core.failover.auto_model_list", return_value=["ollama/backup"]), \
+             patch("raven.core.failover.get_discovered_keys") as mock_disc, \
+             patch("raven.core.llm.router.settings") as mock_settings:
+            _admission_settings(mock_settings)
+            mock_disc.return_value.providers_available = ["ollama"]
+            router = LLMRouter()
+            router._providers["ollama"] = SelectiveProvider()
+            parts = []
+            async for tok in router.complete_stream([{"role": "user", "content": "hi"}], model="ollama/test"):
+                parts.append(tok)
+            assert "".join(parts) == "backup ok"

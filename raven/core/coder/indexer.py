@@ -69,6 +69,18 @@ IGNORE_DIRS = frozenset(
         "target",
         "bin",
         "obj",
+        "allure-results",
+        ".hypothesis",
+        ".benchmarks",
+        "benchmarks",
+        "eval_results",
+        "logs",
+        "htmlcov",
+        ".coverage",
+        "coverage",
+        ".nyc_output",
+        "report",
+        "reports",
     }
 )
 
@@ -132,17 +144,25 @@ class CodeIndexer:
         }
 
     def _walk(self) -> list[Path]:
-        results = []
-        try:
-            for entry in self._root.rglob("*"):
-                if (
-                    entry.is_file()
-                    and entry.suffix in LANGUAGE_MAP
-                    and not any(part in IGNORE_DIRS for part in entry.relative_to(self._root).parts)
-                ):
-                    results.append(entry)
-        except PermissionError as e:
-            logger.debug("[indexer] permission denied walking {}: {}", self._root, e)
+        results: list[Path] = []
+        stack = [self._root]
+        while stack:
+            current = stack.pop()
+            try:
+                entries = list(current.iterdir())
+            except (PermissionError, OSError) as e:
+                logger.debug("[indexer] permission denied walking {}: {}", current, e)
+                continue
+            for entry in entries:
+                try:
+                    if entry.is_dir():
+                        if entry.name not in IGNORE_DIRS:
+                            stack.append(entry)
+                        continue
+                    if entry.suffix in LANGUAGE_MAP:
+                        results.append(entry)
+                except (PermissionError, OSError):
+                    continue
         return sorted(results)
 
     def _index_file(self, path: Path) -> CodeFile | None:

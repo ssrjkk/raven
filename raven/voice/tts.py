@@ -37,7 +37,10 @@ class TTSConfig:
         self.model = model
         self.speed = speed
         self.api_key = api_key or _ELEVENLABS_API_KEY
-        self.cache_dir = Path(cache_dir or tempfile.gettempdir()) / "raven_tts_cache"
+        if cache_dir:
+            self.cache_dir = Path(cache_dir)
+        else:
+            self.cache_dir = Path(tempfile.gettempdir()) / "raven_tts_cache"
         try:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
         except OSError as exc:

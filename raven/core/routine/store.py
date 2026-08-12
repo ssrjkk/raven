@@ -4,8 +4,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-import aiosqlite
-
 from raven.core._json import json
 from raven.core.routine.models import Routine, RoutineAction, RoutineLog, RoutineStatus, RoutineTrigger
 from raven.core.store import BaseStore
@@ -41,9 +39,40 @@ CREATE INDEX IF NOT EXISTS idx_routine_logs_routine_id ON routine_logs(routine_i
 CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 """
 
+SCHEMA_POSTGRES = """
+CREATE TABLE IF NOT EXISTS routines (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    trigger TEXT NOT NULL,
+    schedule TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    user_id TEXT NOT NULL DEFAULT '',
+    channel TEXT NOT NULL DEFAULT '',
+    last_run_status TEXT,
+    last_run_at DOUBLE PRECISION,
+    config TEXT DEFAULT '{}',
+    created_at DOUBLE PRECISION NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS routine_logs (
+    id TEXT PRIMARY KEY,
+    routine_id TEXT NOT NULL REFERENCES routines(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    message TEXT NOT NULL DEFAULT '',
+    duration_ms DOUBLE PRECISION,
+    created_at DOUBLE PRECISION NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_routine_status ON routines(status);
+CREATE INDEX IF NOT EXISTS idx_routine_user_id ON routines(user_id);
+CREATE INDEX IF NOT EXISTS idx_routine_logs_routine_id ON routine_logs(routine_id);
+CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW());
+"""
+
 
 class RoutineStore(BaseStore):
     SCHEMA = SCHEMA
+    SCHEMA_POSTGRES = SCHEMA_POSTGRES
 
     def __init__(self, db_path: str | Path):
         super().__init__(db_path)
@@ -52,10 +81,16 @@ class RoutineStore(BaseStore):
     async def save_routine(self, routine: Routine) -> None:
         config_json = json.dumps(routine.config)
         await self._execute(
-            """INSERT OR REPLACE INTO routines
+            """INSERT INTO routines
                (id, name, action, trigger, schedule, status,
                 user_id, channel, last_run_status, last_run_at, config, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT (id) DO UPDATE SET
+               name = excluded.name, action = excluded.action, trigger = excluded.trigger,
+               schedule = excluded.schedule, status = excluded.status,
+               user_id = excluded.user_id, channel = excluded.channel,
+               last_run_status = excluded.last_run_status, last_run_at = excluded.last_run_at,
+               config = excluded.config, created_at = excluded.created_at""",
             (
                 routine.id,
                 routine.name,
@@ -135,9 +170,13 @@ class RoutineStore(BaseStore):
     @measure_latency()
     async def save_log(self, log: RoutineLog) -> None:
         await self._execute(
-            """INSERT OR REPLACE INTO routine_logs
+            """INSERT INTO routine_logs
                (id, routine_id, status, message, duration_ms, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT (id) DO UPDATE SET
+               routine_id = excluded.routine_id, status = excluded.status,
+               message = excluded.message, duration_ms = excluded.duration_ms,
+               created_at = excluded.created_at""",
             (log.id, log.routine_id, log.status, log.message, log.duration_ms, log.created_at or time.time()),
         )
         await self._commit()
@@ -160,7 +199,7 @@ class RoutineStore(BaseStore):
             for r in rows
         ]
 
-    def _row_to_routine(self, row: aiosqlite.Row) -> Routine:
+    def _row_to_routine(self, row: Any) -> Routine:
         config = json.loads(row["config"]) if row["config"] else {}
         return Routine(
             id=row["id"],

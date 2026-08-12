@@ -20,6 +20,7 @@ import contextlib
 import importlib
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -61,9 +62,27 @@ class CheckResult:
 
 # -- Helpers -----------------------------------------------------------------
 
-def _run(cmd: list[str], timeout: int = 600, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[Any]:
+def _resolve_exe(name: str) -> str:
+    """Resolve an executable on Windows, preferring .cmd/.exe/.bat over .ps1."""
+    if os.name != "nt" or Path(name).suffix:
+        return name
+    for ext in (".cmd", ".exe", ".bat"):
+        found = shutil.which(name + ext)
+        if found:
+            return found
+    return name
+
+
+def _run(
+    cmd: list[str],
+    timeout: int = 600,
+    env: dict[str, str] | None = None,
+    cwd: str | Path | None = None,
+) -> subprocess.CompletedProcess[Any]:
     merged_env = {**os.environ, "LOGURU_LEVEL": "ERROR", **(env or {})}
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=merged_env)
+    if cmd:
+        cmd = [_resolve_exe(cmd[0]), *cmd[1:]]
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=merged_env, cwd=cwd)
 
 
 def _strip_ansi(text: str) -> str:
@@ -395,17 +414,17 @@ def check_frontend() -> CheckResult:
     t0 = time.time()
 
     # Check npm ci
-    r = _run(["npm", "ci"], timeout=120, env={"CI": "true"})
+    r = _run(["npm", "ci"], timeout=120, env={"CI": "true"}, cwd=web_dir)
     if r.returncode != 0:
         return CheckResult("frontend npm ci", "fail", time.time() - t0, r.stderr[:500])
 
     # TypeScript check
-    r = _run(["npx", "tsc", "--noEmit"], timeout=120)
+    r = _run(["npx", "tsc", "--noEmit"], timeout=120, cwd=web_dir)
     if r.returncode != 0:
         return CheckResult("frontend tsc", "fail", time.time() - t0, r.stderr[:500])
 
     # Build
-    r = _run(["npm", "run", "build"], timeout=120)
+    r = _run(["npm", "run", "build"], timeout=120, cwd=web_dir)
     dt = time.time() - t0
     if r.returncode != 0:
         return CheckResult("frontend build", "fail", dt, r.stderr[:500])
