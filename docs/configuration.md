@@ -50,6 +50,7 @@ Configuration is primarily managed through a `.env` file in the project root or 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DB_PATH` | Database file path | `data/raven.db` |
+| `DATABASE_URL` | Optional Postgres DSN (`postgresql://` or `postgresql+asyncpg://`); when set, all stores use Postgres instead of SQLite | — |
 | `LOG_FILE` | Log file path | `data/raven.log` |
 | `WORKSPACE_PATH` | Workspace directory | `workspace/` |
 
