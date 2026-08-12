@@ -10,6 +10,7 @@ import aiosqlite
 from loguru import logger
 
 from raven.core._json import json
+from raven.core.asyncdb import is_postgres_url, normalize_dsn
 from raven.core.metrics import metrics
 from raven.core.migrations import Migrator
 from raven.core.models import Message, Session
@@ -464,11 +465,12 @@ class DatabaseFactory:
     @staticmethod
     def create() -> Database | Any:
         dsn = os.environ.get("DATABASE_URL", "")
-        if dsn.startswith("postgresql://"):
+        if is_postgres_url(dsn):
             from raven.core.db_postgres import PostgresDatabase
 
-            logger.info("Creating PostgresDatabase (DSN: {}...)", dsn[:40])
-            return PostgresDatabase(dsn)
+            pg_dsn = normalize_dsn(dsn)
+            logger.info("Creating PostgresDatabase (DSN: {}...)", pg_dsn[:40])
+            return PostgresDatabase(pg_dsn)
         from raven.core.config import settings
 
         db_path = settings.resolved_db_path

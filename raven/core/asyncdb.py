@@ -275,6 +275,20 @@ class PostgresDB(AsyncDB):
                 self._tx = previous
 
 
+def is_postgres_url(value: str) -> bool:
+    """True for ``postgresql://`` and SQLAlchemy-style ``postgresql+<driver>://`` DSNs."""
+    v = value.strip().lower()
+    return v.startswith("postgresql://") or v.startswith("postgresql+")
+
+
+def normalize_dsn(value: str) -> str:
+    """Strip the SQLAlchemy ``+<driver>`` suffix so asyncpg accepts the URL."""
+    scheme, sep, rest = value.strip().partition("://")
+    if scheme.startswith("postgresql+"):
+        scheme = "postgresql"
+    return f"{scheme}{sep}{rest}"
+
+
 def connect_backend(db_path: str | Path | None = None, dsn: str | None = None) -> AsyncDB:
     """Build a backend for the configured environment.
 
@@ -284,8 +298,9 @@ def connect_backend(db_path: str | Path | None = None, dsn: str | None = None) -
     """
     path_str = str(db_path) if db_path is not None else ""
     candidate = dsn if dsn is not None else os.environ.get("DATABASE_URL", "")
-    if candidate.startswith("postgresql://") or path_str.startswith("postgresql://"):
-        return PostgresDB(candidate if candidate.startswith("postgresql://") else path_str)
+    if is_postgres_url(candidate) or is_postgres_url(path_str):
+        pg_dsn = candidate if is_postgres_url(candidate) else path_str
+        return PostgresDB(normalize_dsn(pg_dsn))
     if db_path is None:
         msg = "db_path is required for the SQLite backend"
         raise ValueError(msg)
@@ -294,8 +309,8 @@ def connect_backend(db_path: str | Path | None = None, dsn: str | None = None) -
 
 def postgres_dsn() -> str | None:
     dsn = os.environ.get("DATABASE_URL", "")
-    if dsn.startswith("postgresql://"):
-        return dsn
+    if is_postgres_url(dsn):
+        return normalize_dsn(dsn)
     return None
 
 
@@ -306,4 +321,4 @@ def is_postgres_dsn(db_path: str | Path) -> bool:
     ``//`` separators), so callers should branch on this before constructing a
     ``Path`` for the SQLite case.
     """
-    return str(db_path).startswith("postgresql://")
+    return is_postgres_url(str(db_path))
