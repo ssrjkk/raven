@@ -50,6 +50,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PyPI publishing configuration (pypi.yml workflow)
 - MkDocs documentation site structure
 - CI matrix expansion: Python 3.11, 3.12, 3.13 across ubuntu, windows, macOS
+- PostgreSQL backend: thin `AsyncDB` layer (`raven/core/asyncdb.py`) with `SQLiteDB` and `PostgresDB` backends — all core stores (tasks, monitors, routines, auth, sessions, outbox, analytics, persister) run against Postgres when `DATABASE_URL` (or a `postgresql://` DSN `db_path`) is set
+- `raven/core/db_postgres.py`: `PostgresDatabase` (shared pool, health, metrics) + `_PostgresMigrator` using the unified migration table
+- `docker-compose.postgres.yml` for local Postgres (postgres:16-alpine, user/password/db=raven)
+- `[postgres]` extras in `pyproject.toml` (`asyncpg>=0.29`)
+- Integration test suite `tests/integration/test_postgres_stores.py` (9 tests, auto-skip without a live Postgres)
+- LLM request queue with ordering + batching (`raven/core/llm/queue.py` + tests)
+- Test suites for tool packages, voice (STT/TTS/wake) and session store
+- MkDocs navigation for CLI, plugins, security and sprint-1 docs
 
 ### Enhanced
 - Security audit: 23 standard + 8 deep checks with fix hints
@@ -57,9 +65,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rate limiter: burst multiplier, automatic IP blocking, is_blocked() API
 - Input sanitization middleware: JSON depth limit, non-string key rejection
 - Self-heal module: configurable health checks, exponential backoff restart
+- `PostgresDB.execute` returns rowcount (parsed from asyncpg status), `?` placeholders rewritten to `$n`
+- Postgres connection pooling with retry/backoff; `is_postgres_dsn()` guard so DSN strings are never wrapped in `Path` on Windows
 
 ### Changed
 - All async tests migrated to `@pytest.mark.asyncio` pattern (no `asyncio.run()` in test files)
+- `tests/core/test_migrations.py` rewritten on `SQLiteDB`
+
+### Verification
+- ruff 0, mypy 0, `check_all.py --quick` 4/4 PASS
+- Full suite: **3594 passed, 26 skipped, 1 xpassed**; PG integration suite **9 passed** against a live server
 
 ## [0.3.0] - 2026-05-18
 
