@@ -387,6 +387,30 @@ class ReActAgent:
                 result_truncated = result[:10_000]
                 self.conversation.add_tool_result(tc.get("id", ""), result_truncated)
 
+                if (
+                    name == "create_artifact"
+                    and not result.startswith("[error]")
+                    and not result.startswith("[validation_error]")
+                    and not result.startswith("[execution_error]")
+                ):
+                    try:
+                        artifact_data = json.loads(result)
+                        if ee and "error" not in artifact_data:
+                            await ee.emit(
+                                AgentEvent(
+                                    "artifact_created",
+                                    {
+                                        "artifact_id": artifact_data.get("artifact_id"),
+                                        "title": artifact_data.get("title"),
+                                        "type": artifact_data.get("type"),
+                                        "file_path": artifact_data.get("file_path"),
+                                        "step": step,
+                                    },
+                                )
+                            )
+                    except json.JSONDecodeError:
+                        pass
+
                 if ee:
                     await ee.emit(AgentEvent("tool_result", {"name": name, "result": result_truncated, "step": step}))
 

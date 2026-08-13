@@ -305,6 +305,7 @@ async def aios_agent_ws(ws: WebSocket):
     ee.on("step_start", send_event)
     ee.on("tool_call", send_event)
     ee.on("tool_result", send_event)
+    ee.on("artifact_created", send_event)
     ee.on("message", send_event)
     ee.on("truthful", send_event)
     ee.on("done", send_event)

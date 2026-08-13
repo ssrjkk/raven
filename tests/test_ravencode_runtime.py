@@ -70,7 +70,7 @@ class TestExecuteToolValidation:
 
         monkeypatch.setitem(MODULE_TOOLS["write"], "handler", boom)
         result = await execute_tool("write", {"content": "x"})
-        assert result.startswith("[error]")
+        assert result.startswith("[validation_error]")
         assert "path" in result
 
     @pytest.mark.asyncio
@@ -80,7 +80,7 @@ class TestExecuteToolValidation:
 
         monkeypatch.setitem(MODULE_TOOLS["write"], "handler", boom)
         result = await execute_tool("write", {"path": "a.txt", "content": "x", "surprise": 1})
-        assert result.startswith("[error]")
+        assert result.startswith("[validation_error]")
         assert "surprise" in result
 
     @pytest.mark.asyncio
@@ -90,7 +90,7 @@ class TestExecuteToolValidation:
 
         monkeypatch.setitem(MODULE_TOOLS["write"], "handler", boom)
         result = await execute_tool("write", {"path": "a.txt", "content": 42})
-        assert result.startswith("[error]")
+        assert result.startswith("[validation_error]")
         assert "content" in result
 
     @pytest.mark.asyncio
@@ -107,3 +107,24 @@ class TestExecuteToolValidation:
         result = await execute_tool("definitely_not_a_tool", {})
         assert result.startswith("[error]")
         assert "unknown tool" in result
+
+    @pytest.mark.asyncio
+    async def test_long_output_truncated(self, monkeypatch):
+        async def long_handler(**kwargs):
+            return "x" * 20_000
+
+        monkeypatch.setitem(MODULE_TOOLS["write"], "handler", long_handler)
+        result = await execute_tool("write", {"path": "a.txt", "content": "hello"})
+        assert result.startswith("x" * 15_000)
+        assert "output truncated to 15k chars" in result
+        assert len(result) < 20_000
+
+    @pytest.mark.asyncio
+    async def test_handler_exception_returns_execution_error(self, monkeypatch):
+        async def boom(**kwargs):
+            raise RuntimeError("disk full")
+
+        monkeypatch.setitem(MODULE_TOOLS["write"], "handler", boom)
+        result = await execute_tool("write", {"path": "a.txt", "content": "x"})
+        assert result.startswith("[execution_error]")
+        assert "disk full" in result

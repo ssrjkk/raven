@@ -1715,20 +1715,24 @@ async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
     validation_error = validate_tool_arguments(name, tool.get("parameters", {}), arguments)
     if validation_error is not None:
         logger.warning("Tool call to '{}' rejected: {}", name, validation_error)
-        return f"[error] {validation_error}"
+        return f"[validation_error] Invalid arguments for '{name}': {validation_error}. Fix your JSON and try again."
     perm = _get_permission_for_tool(name, arguments)
     if not perm[0]:
         return f"[denied] {perm[1]}"
     try:
         result = await tool["handler"](**arguments)
         if isinstance(result, list):
-            return "\n".join(str(r) for r in result[:200])
-        return str(result)
+            result_str = "\n".join(str(r) for r in result[:200])
+        else:
+            result_str = str(result)
+        if len(result_str) > 15_000:
+            return result_str[:15_000] + "\n\n[... output truncated to 15k chars ...]"
+        return result_str
     except QuestionError:
         raise
-    except Exception:
+    except Exception as exc:
         logger.exception("Tool {} failed", name)
-        return f"[error] {name} failed: see server logs"
+        return f"[execution_error] {name} failed: {exc}"
 
 
 _PERMISSION_CHECKER: contextvars.ContextVar[Any] = contextvars.ContextVar("_PERMISSION_CHECKER", default=None)
