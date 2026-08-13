@@ -5,6 +5,7 @@ import {
   Bomb,
   BookOpen,
   Braces,
+  Bot,
   Clapperboard,
   Code2,
   Database,
@@ -67,6 +68,7 @@ const navSections: NavSection[] = [
     items: [
       { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
       { to: "/chat", label: "Chat", icon: MessageSquare },
+      { to: "/agent", label: "Agent Console", icon: Bot },
       { to: "/chat/history", label: "History", icon: History },
       { to: "/admin", label: "Admin", icon: Shield },
     ],

@@ -53,6 +53,7 @@ export default function App() {
             }
           >
             <Route index element={<Dashboard />} />
+            <Route path="agent" element={<AgentConsole />} />
             <Route path="chat" element={<Chat />} />
             <Route path="chat/history" element={<ChatHistory />} />
             <Route path="admin" element={<Admin />} />
@@ -99,6 +100,7 @@ export default function App() {
 // Lazy-loaded pages
 import { lazy } from "react";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const AgentConsole = lazy(() => import("./pages/AgentConsole"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Tasks = lazy(() => import("./pages/Tasks"));
 const Monitors = lazy(() => import("./pages/Monitors"));

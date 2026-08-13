@@ -120,6 +120,7 @@ async def test_create_artifact_emits_artifact_created_event(tmp_path: Path, monk
     assert data["title"] == "Login Form"
     assert data["type"] == "react"
     assert data["file_path"] == str(Path("components") / "Login.tsx")
+    assert data["content"] == "export default function Login() {}"
     assert len(data["artifact_id"]) == 8
 
 

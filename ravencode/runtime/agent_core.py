@@ -404,6 +404,7 @@ class ReActAgent:
                                         "title": artifact_data.get("title"),
                                         "type": artifact_data.get("type"),
                                         "file_path": artifact_data.get("file_path"),
+                                        "content": artifact_data.get("content"),
                                         "step": step,
                                     },
                                 )
