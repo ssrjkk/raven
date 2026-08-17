@@ -52,6 +52,7 @@ from raven.core.security.sandbox_policy import (
     MAIN_SESSION_POLICY,
     get_policy_for_channel,
 )
+from raven.core.self_heal import self_healer
 from raven.core.skills import Skill, skills_registry
 from raven.core.task_engine.store import TaskStore
 from raven.core.tracing import TracingManager, get_tracer
@@ -294,6 +295,7 @@ class Gateway:
             self.load_skills()
             self._register_skill_handlers()
             self._health.register_checks()
+            self_healer.start()
             await self.mcp.start(plugin_loader=self.plugin_loader)
             started.append("mcp")
             await self._guardian.start()
@@ -355,6 +357,10 @@ class Gateway:
         logger.info("Stopping gateway...")
         self._running = False
         await self.event_bus.publish("gateway.stopping")
+        try:
+            await self_healer.stop()
+        except Exception as e:
+            logger.warning("self-healer stop error: {}", e)
         for task in list(self._bg_tasks):
             task.cancel()
         if self._bg_tasks:

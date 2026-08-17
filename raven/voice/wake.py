@@ -32,6 +32,11 @@ class WakeWordDetector:
         self._task = asyncio.create_task(self._listen_loop())
         logger.info("WakeWordDetector started")
 
+    @staticmethod
+    def _capture(mic: Any, recognizer: Any) -> Any:
+        with mic as source:
+            return recognizer.listen(source, timeout=1, phrase_time_limit=3)
+
     async def stop(self):
         self._running = False
         if self._task:
@@ -55,12 +60,11 @@ class WakeWordDetector:
             return
 
         with mic as source:
-            recognizer.adjust_for_ambient_noise(source, duration=0.5)
+            await asyncio.to_thread(recognizer.adjust_for_ambient_noise, source, duration=0.5)
 
         while self._running:
             try:
-                with mic as source:
-                    audio = recognizer.listen(source, timeout=1, phrase_time_limit=3)
+                audio = await asyncio.to_thread(self._capture, mic, recognizer)
                 temp = Path(tempfile.gettempdir()) / "raven_wake.wav"
                 async with aiofiles.open(temp, "wb") as f:
                     await f.write(audio.get_wav_data())
@@ -68,8 +72,8 @@ class WakeWordDetector:
                 from raven.voice.stt import SpeechToText
 
                 stt = SpeechToText()
-                text = stt.transcribe(str(temp))
-                temp.unlink()
+                text = await asyncio.to_thread(stt.transcribe, str(temp))
+                await asyncio.to_thread(temp.unlink)
 
                 if not text:
                     continue

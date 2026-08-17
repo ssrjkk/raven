@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -9,7 +10,7 @@ from loguru import logger
 from raven.core.events import EventBus
 from raven.core.llm import LLMRouter
 from raven.core.mcp.mcp_client import MCPClientPool
-from raven.core.task_engine.models import Task
+from raven.core.task_engine.models import Task, TaskStatus
 from raven.core.task_engine.planner import TaskPlanner
 from raven.core.task_engine.runner import TaskRunner
 from raven.core.task_engine.store import TaskStore
@@ -17,6 +18,7 @@ from raven.tools.register_all import create_tool_registry
 
 
 class TaskOrchestrator:
+    STALE_TASK_TIMEOUT = 600.0
     def __init__(
         self,
         db: Any,
@@ -43,10 +45,29 @@ class TaskOrchestrator:
         self._planner = TaskPlanner(tools)
         self._runner = TaskRunner(self._store, tools)
         running = await self._store.list_tasks(limit=100)
+        now = time.time()
         async with self._lock:
             for t in running:
                 if t.status.value in ("pending", "running"):
-                    self._tasks[t.id] = t
+                    if t.updated_at and now - t.updated_at > self.STALE_TASK_TIMEOUT:
+                        logger.warning(
+                            "Task {} stale ({}) — marking failed after restart",
+                            t.id,
+                            t.status.value,
+                        )
+                        await self._store.update_status(
+                            t.id, TaskStatus.FAILED, error="Task interrupted by gateway restart"
+                        )
+                    else:
+                        self._tasks[t.id] = t
+                        try:
+                            await self._runner.submit(t)
+                            logger.info("Task {} resumed after restart (step {})", t.id, t.current_step_index)
+                        except Exception as e:
+                            logger.error("Task {} failed to resume after restart: {}", t.id, e)
+                            await self._store.update_status(
+                                t.id, TaskStatus.FAILED, error=f"Task failed to resume after restart: {e}"
+                            )
         logger.info("TaskOrchestrator started, {} active tasks", len(self._tasks))
 
     async def stop(self) -> None:
@@ -73,7 +94,7 @@ class TaskOrchestrator:
         channel: str,
         session_id: str = "",
     ) -> Task:
-        if self._planner is None or self._runner is None:
+        if self._planner is None or self._runner is None or self._store is None:
             raise RuntimeError("TaskOrchestrator not started")
 
         task = await self._planner.plan(
@@ -82,6 +103,16 @@ class TaskOrchestrator:
             user_id=user_id,
             channel=channel,
         )
+        if not task.steps:
+            task.status = TaskStatus.FAILED
+            task.error = "Task planning failed: no steps generated"
+            await self._store.save_task(task)
+            async with self._lock:
+                self._tasks[task.id] = task
+            await self._notify(channel, session_id, f"❌ Task failed: {task.error}")
+            logger.error("Planner produced no steps for goal: {}", goal[:80])
+            return task
+
         async with self._lock:
             self._tasks[task.id] = task
 
@@ -99,7 +130,7 @@ class TaskOrchestrator:
         if self._runner is None:
             raise RuntimeError("TaskOrchestrator not started")
         try:
-            task = await self._runner.wait(task.id, timeout=600)
+            task = await self._runner.wait(task.id, timeout=None)
             async with self._lock:
                 self._tasks[task.id] = task
             msg = self._format_result(task)

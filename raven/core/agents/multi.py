@@ -97,6 +97,7 @@ class DelegationOrchestrator:
         for i, task in enumerate(tasks):
             logger.info("[delegation] sequential task {}/{}: {} → {}", i + 1, len(tasks), task.description[:80], task.profile)
             result = await self._run_single(task)
+            result.index = i
             results.append(result)
         return results
 
@@ -107,7 +108,9 @@ class DelegationOrchestrator:
         async def run_one(i: int, task: DelegatedTask) -> None:
             async with sem:
                 logger.info("[delegation] parallel task {}/{}: {} → {}", i + 1, len(tasks), task.description[:80], task.profile)
-                results[i] = await self._run_single(task)
+                result = await self._run_single(task)
+                result.index = i
+                results[i] = result
 
         await asyncio.gather(*[run_one(i, t) for i, t in enumerate(tasks)])
         return [r for r in results if r is not None]
@@ -130,7 +133,9 @@ class DelegationOrchestrator:
 
             async def run_task(idx: int, task: DelegatedTask) -> DelegationResult:
                 async with sem:
-                    return await self._run_single(task)
+                    result = await self._run_single(task)
+                    result.index = idx
+                    return result
 
             for r in await asyncio.gather(*[run_task(i, tasks[i]) for i in batch]):
                 results[r.index] = r

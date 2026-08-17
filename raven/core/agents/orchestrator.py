@@ -216,6 +216,7 @@ class AgentOrchestrator:
         stalled_rounds = 0
         last_tool_names: set[str] = set()
         status: AgentStatus = "max_steps"
+        content = ""
 
         while total_iterations < self._max_total_iterations:
             total_iterations += 1
@@ -318,7 +319,7 @@ class AgentOrchestrator:
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(tool_result)})
 
         duration = time.monotonic() - started_at
-        final_content = self._extract_final_content(messages)
+        final_content = content if status == "success" else self._extract_final_content(messages)
         if status == "success" and not final_content:
             status = "error"
         return AgentResult(

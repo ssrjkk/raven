@@ -259,18 +259,16 @@ class DiscordChannel(BaseChannel):
             channel = self._bot.get_channel(channel_id)
         except (ValueError, TypeError):
             channel = None
-        if channel is None:
+        send_target: discord.abc.Messageable | None = channel  # type: ignore[assignment]
+        if send_target is None:
             dm_id = channel_id_str.replace("dm_", "")
             try:
-                user = await self._bot.fetch_user(int(dm_id))
-                channel = user
+                send_target = await self._bot.fetch_user(int(dm_id))
             except Exception as e:
                 logger.debug("[discord] ask_confirmation fetch user failed: {}", e)
                 return True
-        if not channel:
-            return True
         try:
-            msg = await channel.send(f"🛡️ Allow action: {action_description[:200]}?")  # type: ignore[union-attr]
+            msg = await send_target.send(f"🛡️ Allow action: {action_description[:200]}?")
             await msg.add_reaction("✅")
             await msg.add_reaction("❌")
 

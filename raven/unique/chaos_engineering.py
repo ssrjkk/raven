@@ -121,10 +121,10 @@ class SystemMonitor:
             await asyncio.sleep(self._interval)
 
     async def _collect_snapshot(self) -> SystemSnapshot:
-        cpu = self._get_cpu()
-        mem = self._get_memory()
-        disk = self._get_disk()
-        procs = self._get_process_count()
+        def _sample() -> tuple[float, float, float, int]:
+            return self._get_cpu(), self._get_memory(), self._get_disk(), self._get_process_count()
+
+        cpu, mem, disk, procs = await asyncio.to_thread(_sample)
         latency = await self._get_network_latency()
         return SystemSnapshot(
             cpu_percent=cpu,
@@ -255,9 +255,9 @@ class FaultInjector:
             elif config.fault_type == FaultType.DISK_FILL:
                 await asyncio.to_thread(self._inject_disk_fill, fault_record)
             elif config.fault_type == FaultType.CPU_STORM:
-                await asyncio.to_thread(self._inject_cpu_storm, fault_record)
+                await self._inject_cpu_storm(fault_record)
             elif config.fault_type == FaultType.MEMORY_LEAK:
-                await asyncio.to_thread(self._inject_memory_leak, fault_record)
+                await self._inject_memory_leak(fault_record)
             elif config.fault_type == FaultType.PROCESS_KILL:
                 await asyncio.to_thread(self._inject_process_kill, fault_record)
         except Exception as exc:
@@ -381,7 +381,7 @@ class FaultInjector:
             logger.warning("Disk fill failed: {}", exc)
             fault["details"] = {"fill_percent": round(fill_percent, 1), "target": str(target_dir), "error": str(exc)}
 
-    def _inject_cpu_storm(self, fault: dict[str, Any]) -> None:
+    async def _inject_cpu_storm(self, fault: dict[str, Any]) -> None:
         cores = max(1, int(fault["config"]["intensity"] * 8))
         logger.warning("Consuming {} CPU cores (real)", cores)
         fault["details"] = {"cores": cores}
@@ -403,7 +403,7 @@ class FaultInjector:
             for t in tasks:
                 t.cancel()
 
-    def _inject_memory_leak(self, fault: dict[str, Any]) -> None:
+    async def _inject_memory_leak(self, fault: dict[str, Any]) -> None:
         mb = max(1, int(fault["config"]["intensity"] * 1024))
         logger.warning("Allocating {}MB memory (real)", mb)
         fault["details"] = {"mb": mb}

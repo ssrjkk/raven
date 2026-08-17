@@ -41,11 +41,11 @@ class MessageProcessor:
 
         msgs = await self.db.get_session_messages(session_id, limit=200)
 
-        await self._manage_context(session_id, msgs)
+        managed = await self._manage_context(session_id, msgs)
+        history = [{"role": m["role"], "content": m["content"]} for m in managed]
 
         agent = self.registry.create_agent(session)
         agent.priority = event.priority
-        history = [{"role": m.role, "content": m.content} for m in msgs]
 
         channel_obj = await self.channels.get(event.channel)
         supports_stream = hasattr(channel_obj, "send_stream") if channel_obj else False
@@ -81,6 +81,11 @@ class MessageProcessor:
             logger.exception("Message processing error mid-stream for session {}", session_id)
             self.metrics.inc("message_processing_errors", {"channel": event.channel})
             error_hint = "\n\n[⚠ Error occurred while processing. Partial response shown above.]"
+        finally:
+            try:
+                await gen.aclose()  # type: ignore[attr-defined]
+            except Exception as e:
+                logger.debug("Failed to close agent generator for session {}: {}", session_id, e)
 
         if timed_out:
             tail = "\n\n[⏱ Response timed out. Try rephrasing or splitting your request.]"
@@ -102,21 +107,23 @@ class MessageProcessor:
             self.metrics.inc("messages_sent", {"channel": event.channel})
             self.metrics.observe("response_length", len(full_response), {"channel": event.channel})
 
-    async def _manage_context(self, session_id: str, msgs: list[Message]) -> None:
+    async def _manage_context(self, session_id: str, msgs: list[Message]) -> list[dict[str, Any]]:
         if self._ctxmgr is None:
-            return
+            return [{"role": m.role, "content": m.content} for m in msgs]
 
         if not msgs:
-            return
+            return []
 
-        msg_dicts = [{"role": m.role, "content": m.content, "created_at": m.created_at, "metadata": m.metadata} for m in msgs]
+        msg_dicts = [
+            {"role": m.role, "content": m.content, "created_at": m.created_at, "metadata": m.metadata} for m in msgs
+        ]
         total = await self._ctxmgr.estimate_tokens(msg_dicts)
         ratio = total / self._ctxmgr._config.max_tokens if self._ctxmgr._config.max_tokens > 0 else 0
 
         self.metrics.observe("context_window_pct", ratio * 100, {"session_id": session_id})
 
         if ratio < self._ctxmgr._config.warning_threshold:
-            return
+            return msg_dicts
 
         logger.info(
             "Context at {:.1f}% for session {} ({} / {} tokens)",
@@ -136,3 +143,4 @@ class MessageProcessor:
                 session_id,
                 ratio * 100,
             )
+        return managed

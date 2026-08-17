@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import inspect
 import os
 import tempfile
 from io import BytesIO
@@ -15,6 +16,14 @@ from raven.tools.file import _check_no_symlinks_in_path, _confine, _workspace
 
 _OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 _REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN", "")
+
+
+def _confine_output(path: str) -> Path:
+    """Resolve an output path inside the workspace (relative paths resolve against the workspace root)."""
+    p = Path(path)
+    if not p.is_absolute():
+        p = _workspace() / p
+    return _confine(str(p))
 
 
 async def image_generate(
@@ -176,7 +185,7 @@ async def image_edit(
                 fmt = src.format or "PNG"
 
             if output:
-                out_path = Path(output)
+                out_path = _confine_output(output)
                 out_path.parent.mkdir(parents=True, exist_ok=True)
                 src.save(out_path, format=fmt, quality=quality)
             else:
@@ -337,7 +346,11 @@ async def video_info(filepath: str) -> str:
     try:
         import ffmpeg
 
-        probe = await ffmpeg.probe(str(path))
+        probe_result = await asyncio.to_thread(ffmpeg.probe, str(path))
+        if inspect.iscoroutine(probe_result):
+            probe = await probe_result
+        else:
+            probe = probe_result
     except ImportError:
         return "[error] ffmpeg-python not installed (pip install raven-agent[media])"
     except Exception as e:
@@ -379,7 +392,7 @@ async def video_thumbnail(filepath: str, time_sec: float = 1.0, size: str = "320
         return "[error] ffmpeg-python not installed (pip install raven-agent[media])"
 
     if output:
-        out_path = Path(output)
+        out_path = _confine_output(output)
     else:
         out_path = path.parent / f"{path.stem}_thumb.jpg"
     await asyncio.to_thread(out_path.parent.mkdir, parents=True, exist_ok=True)

@@ -29,7 +29,7 @@ class ConfigWatcher:
         return self._env_path.stat().st_mtime
 
     async def start(self):
-        if self._env_path.exists():
+        if await asyncio.to_thread(self._env_path.exists):
             mtime = await asyncio.to_thread(self._get_mtime)
             self._last_mtime = mtime
         self._running = True
@@ -39,12 +39,12 @@ class ConfigWatcher:
         while self._running:
             await asyncio.sleep(self._check_interval)
             try:
-                if self._env_path.exists():
+                if await asyncio.to_thread(self._env_path.exists):
                     mtime = await asyncio.to_thread(self._get_mtime)
                     if mtime > self._last_mtime:
                         self._last_mtime = mtime
                         logger.info("[config] {} changed, reloading...", self._env_path.name)
-                        self._reload_env()
+                        await asyncio.to_thread(self._reload_env)
                         for listener in self._listeners:
                             try:
                                 listener()

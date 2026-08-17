@@ -286,7 +286,10 @@ def create_github_router() -> APIRouter:
             )
             _stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
-                raise HTTPException(500, f"Clone failed: {stderr.decode()[:500]}")
+                err = stderr.decode()[:500]
+                if token:
+                    err = err.replace(token, "***")
+                raise HTTPException(500, f"Clone failed: {err}")
             logger.info("Cloned {}/{} -> {}", owner, repo, target)
             return {"ok": True, "path": str(target)}
         except FileNotFoundError:

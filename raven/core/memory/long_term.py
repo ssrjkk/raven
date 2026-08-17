@@ -59,8 +59,9 @@ class LongTermMemory:
         return "general"
 
     async def store(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
+        single_line = " ".join(value.splitlines())[:500]
         category = self._category_for(key)
-        self._cache[category][key] = value[:500]
+        self._cache[category][key] = single_line
         try:
             await self._write_text(self._files[category], self._dump_category(category))
         except Exception:

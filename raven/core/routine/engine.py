@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from loguru import logger
@@ -51,14 +51,7 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
                     await asyncio.sleep(int(routine.schedule))
                     await self._execute_routine(routine)
                 elif routine.trigger == RoutineTrigger.SCHEDULED:
-                    now = datetime.now(UTC)
-                    parts = routine.schedule.split(":")
-                    target_hour = int(parts[0]) if len(parts) > 0 else 8
-                    target_min = int(parts[1]) if len(parts) > 1 else 0
-                    next_run = now.replace(hour=target_hour, minute=target_min, second=0, microsecond=0)
-                    if next_run <= now:
-                        next_run = next_run.replace(day=now.day + 1)
-                    delay = (next_run - now).total_seconds()
+                    delay = self._delay_until(routine.schedule)
                     await asyncio.sleep(delay)
                     await self._execute_routine(routine)
                 else:
@@ -101,6 +94,22 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
 
     def _active_status(self) -> RoutineStatus:
         return RoutineStatus.ACTIVE
+
+    @staticmethod
+    def _next_run_time(schedule: str, now: datetime | None = None) -> datetime:
+        parts = schedule.split(":")
+        target_hour = int(parts[0]) if len(parts) > 0 and parts[0] else 8
+        target_min = int(parts[1]) if len(parts) > 1 and parts[1] else 0
+        current = now or datetime.now(UTC)
+        next_run = current.replace(hour=target_hour, minute=target_min, second=0, microsecond=0)
+        if next_run <= current:
+            next_run = next_run + timedelta(days=1)
+        return next_run
+
+    @classmethod
+    def _delay_until(cls, schedule: str, now: datetime | None = None) -> float:
+        current = now or datetime.now(UTC)
+        return max((cls._next_run_time(schedule, current) - current).total_seconds(), 0.0)
 
     async def _execute_routine(self, routine: Routine):
         start = time.time()
@@ -162,19 +171,23 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
             if not config.get("imap_host"):
                 return "Email check skipped: no IMAP configured"
 
-            import imaplib
+            def _sync_check() -> int:
+                import imaplib
 
-            mail = imaplib.IMAP4_SSL(config["imap_host"], int(config.get("imap_port", "993")))
-            mail.login(config["imap_user"], config["imap_pass"])
-            mail.select("INBOX")
+                mail = imaplib.IMAP4_SSL(config["imap_host"], int(config.get("imap_port", "993")))
+                mail.login(config["imap_user"], config["imap_pass"])
+                mail.select("INBOX")
+                try:
+                    status, messages = mail.search(None, "UNSEEN")
+                    if status != "OK":
+                        return -1
+                    return len(messages[0].split()) if messages[0] else 0
+                finally:
+                    mail.logout()
 
-            status, messages = mail.search(None, "UNSEEN")
-            if status != "OK":
+            count = await asyncio.to_thread(_sync_check)
+            if count < 0:
                 return "Failed to search inbox"
-
-            unread_ids = messages[0].split() if messages[0] else []
-            count = len(unread_ids)
-            mail.logout()
 
             if count > 0 and self._gateway_ref:
                 session_id = f"{routine.channel}:{routine.user_id}:email"

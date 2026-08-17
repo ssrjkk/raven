@@ -164,12 +164,15 @@ class VoiceConversation:
             if audio_file and Path(audio_file).exists():
                 import wave
 
-                with wave.open(audio_file, "rb") as wf:
-                    frames = wf.readframes(wf.getnframes())
-                    sr = wf.getframerate()
+                def _read_wave(filepath: str) -> tuple[bytes, int]:
+                    with wave.open(filepath, "rb") as wf:
+                        frames = wf.readframes(wf.getnframes())
+                        return frames, wf.getframerate()
+
+                frames, sr = await asyncio.to_thread(_read_wave, audio_file)
                 data = np.frombuffer(frames, dtype=np.int16).reshape(-1, 1)
                 self.player.enqueue(data.tobytes(), sample_rate=int(sr))
-                Path(audio_file).unlink(missing_ok=True)
+                await asyncio.to_thread(Path(audio_file).unlink, missing_ok=True)
         except Exception as exc:
             logger.warning("TTS playback failed: {}", exc)
 

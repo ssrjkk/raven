@@ -347,6 +347,9 @@ class Agent:
                 parts.append(token)
                 yield token
             final_content = "".join(parts)
+        else:
+            final_content = "I couldn't generate a response to that. Please try rephrasing your message."
+            yield final_content
 
         if not self.config.stateless:
             user_msg = Message(

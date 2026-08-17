@@ -209,6 +209,55 @@ async def test_manage_context_no_messages(mock_db, mock_registry, mock_channels,
 
 
 @pytest.mark.asyncio
+async def test_process_passes_managed_history_to_agent(mock_db, mock_registry, mock_channels, mock_metrics):
+    cm, _ = mock_channels
+    send_fn = _make_send()
+    ctxmgr = MagicMock()
+    ctxmgr.estimate_tokens = AsyncMock(return_value=90000)
+    ctxmgr._config = MagicMock(max_tokens=100000, warning_threshold=0.8)
+    ctxmgr.manage = AsyncMock(return_value=[{"role": "user", "content": "summary"}])
+    processor = MessageProcessor(mock_db, mock_registry, cm, ctxmgr, mock_metrics, send_fn)
+
+    captured: dict[str, Any] = {}
+
+    async def capture_run(text, confirm_fn=None, history=None):
+        captured["history"] = history
+        yield "ok"
+
+    mock_registry.create_agent.return_value.run = capture_run
+    mock_db.get_session_messages = AsyncMock(
+        return_value=[MagicMock(role="user", content="old turn", created_at=0, metadata=None)]
+    )
+    event = IncomingMessage(channel="mock", user_id="u1", text="hi")
+    await processor.process(event, "sess1")
+
+    assert captured["history"] == [{"role": "user", "content": "summary"}]
+    mock_db.replace_session_messages.assert_called_once_with("sess1", [{"role": "user", "content": "summary"}])
+
+
+@pytest.mark.asyncio
+async def test_process_full_history_passed_when_no_ctxmgr(mock_db, mock_registry, mock_channels, mock_metrics):
+    cm, _ = mock_channels
+    send_fn = _make_send()
+    processor = MessageProcessor(mock_db, mock_registry, cm, None, mock_metrics, send_fn)
+
+    captured: dict[str, Any] = {}
+
+    async def capture_run(text, confirm_fn=None, history=None):
+        captured["history"] = history
+        yield "ok"
+
+    mock_registry.create_agent.return_value.run = capture_run
+    mock_db.get_session_messages = AsyncMock(
+        return_value=[MagicMock(role="user", content="first", created_at=0, metadata=None)]
+    )
+    event = IncomingMessage(channel="mock", user_id="u1", text="hi")
+    await processor.process(event, "sess1")
+
+    assert captured["history"] == [{"role": "user", "content": "first"}]
+
+
+@pytest.mark.asyncio
 async def test_confirm_fn(mock_db, mock_registry, mock_channels, mock_metrics):
     cm, channel = mock_channels
     channel.ask_confirmation = AsyncMock(return_value=True)

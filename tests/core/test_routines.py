@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
+from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -98,6 +102,43 @@ class TestRoutineStore:
         logs = await store.get_logs(routine.id)
         assert len(logs) == 1
         assert logs[0].status == "success"
+
+
+class TestRoutineScheduling:
+    def test_next_run_future_today(self):
+        now = datetime(2026, 1, 15, 7, 0, tzinfo=UTC)
+        nxt = RoutineEngine._next_run_time("08:00", now)
+        assert nxt == datetime(2026, 1, 15, 8, 0, tzinfo=UTC)
+
+    def test_next_run_passed_today_rolls_to_tomorrow(self):
+        now = datetime(2026, 1, 15, 9, 30, tzinfo=UTC)
+        nxt = RoutineEngine._next_run_time("08:00", now)
+        assert nxt == datetime(2026, 1, 16, 8, 0, tzinfo=UTC)
+
+    def test_next_run_month_end_does_not_crash(self):
+        now = datetime(2026, 1, 31, 9, 0, tzinfo=UTC)
+        nxt = RoutineEngine._next_run_time("08:00", now)
+        assert nxt == datetime(2026, 2, 1, 8, 0, tzinfo=UTC)
+
+    def test_next_run_exact_time_is_tomorrow(self):
+        now = datetime(2026, 1, 31, 8, 0, 0, tzinfo=UTC)
+        nxt = RoutineEngine._next_run_time("08:00", now)
+        assert nxt == datetime(2026, 2, 1, 8, 0, tzinfo=UTC)
+
+    def test_next_run_year_end_rolls_to_next_year(self):
+        now = datetime(2026, 12, 31, 23, 59, tzinfo=UTC)
+        nxt = RoutineEngine._next_run_time("08:00", now)
+        assert nxt == datetime(2027, 1, 1, 8, 0, tzinfo=UTC)
+
+    def test_delay_until_positive(self):
+        now = datetime(2026, 1, 31, 9, 0, tzinfo=UTC)
+        delay = RoutineEngine._delay_until("08:00", now)
+        assert 23 * 3600 <= delay <= 24 * 3600
+
+    def test_default_schedule_parts(self):
+        now = datetime(2026, 1, 15, 7, 0, tzinfo=UTC)
+        assert RoutineEngine._next_run_time("10", now).hour == 10
+        assert RoutineEngine._next_run_time("", now).hour == 8
 
 
 class TestRoutineEngine:
@@ -220,3 +261,63 @@ class TestRoutineEngine:
         assert "simulated failure" in logs[0].message
 
         await engine.stop()
+
+
+class TestRoutineEngineLoop:
+    async def test_interval_loop_sends_message_via_gateway(self, store: RoutineStore):
+        engine = RoutineEngine(store)
+        gw = SimpleNamespace(_send=AsyncMock(return_value=None))
+        engine._gateway_ref = gw
+        r = Routine(
+            name="reminder",
+            channel="mock",
+            user_id="u1",
+            action=RoutineAction.SEND_MESSAGE,
+            trigger=RoutineTrigger.INTERVAL,
+            schedule="1",
+            config={"text": "hello world"},
+        )
+        await store.save_routine(r)
+        try:
+            await engine.start()
+            for _ in range(50):
+                if gw._send.await_count > 0:
+                    break
+                await asyncio.sleep(0.1)
+            gw._send.assert_awaited_once()
+            call_args = gw._send.await_args.args
+            assert call_args[0] == "mock"
+            assert call_args[2] == "hello world"
+            logs = await store.get_logs(r.id)
+            assert len(logs) >= 1
+            assert logs[0].status == "success"
+            loaded = await store.load_routine(r.id)
+            assert loaded is not None
+            assert loaded.last_run_status == "success"
+        finally:
+            await engine.stop()
+
+    async def test_scheduled_loop_waits_and_executes(self, store: RoutineStore):
+        engine = RoutineEngine(store)
+        gw = SimpleNamespace(_send=AsyncMock(return_value=None))
+        engine._gateway_ref = gw
+        r = Routine(
+            name="brief",
+            channel="mock",
+            user_id="u1",
+            action=RoutineAction.SEND_BRIEFING,
+            trigger=RoutineTrigger.SCHEDULED,
+            schedule="08:00",
+        )
+        await store.save_routine(r)
+        try:
+            engine._schedule_item(r)
+            loop_task = engine._tasks[r.id]
+            # scheduled for the next 08:00 — must NOT fire within 0.5s
+            await asyncio.sleep(0.5)
+            gw._send.assert_not_awaited()
+            loop_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await loop_task
+        finally:
+            await engine.stop()

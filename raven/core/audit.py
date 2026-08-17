@@ -269,9 +269,9 @@ class AuditLogger:
                 logger.warning("Audit log not started, dropping event")
                 return
             try:
-                self._file.write(line + "\n")
-                self._file.flush()
-                os.fsync(self._file.fileno())
+                await asyncio.to_thread(self._file.write, line + "\n")
+                await asyncio.to_thread(self._file.flush)
+                await asyncio.to_thread(os.fsync, self._file.fileno())
             except OSError as e:
                 logger.error("Audit log write failed: {}", e)
 

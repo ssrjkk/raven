@@ -75,6 +75,21 @@ class TestPlannerExecutorCritic:
         assert result.content == "The task is done."
 
     @pytest.mark.asyncio
+    async def test_empty_final_response_is_error_not_plan_hint(self):
+        registry = make_registry({"echo": ({"text": {"type": "string"}}, lambda text: "ok")})
+        llm = FakeLLM(
+            plan_steps=["Step A", "Step B"],
+            responses=[LLMResponse(content="", finish_reason="stop")],
+        )
+        orch = AgentOrchestrator(llm=llm, tool_registry=registry, max_total_iterations=10)  # type: ignore[arg-type]
+        result = await orch.execute("implement the login feature", profile_override="coder")
+
+        assert result.status == "error"
+        assert "Step A" not in result.content
+        assert "Execution plan" not in result.content
+        assert result.content == "Task completed with partial results."
+
+    @pytest.mark.asyncio
     async def test_plan_steps_are_recorded_in_context(self):
         calls: list[str] = []
 

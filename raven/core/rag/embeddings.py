@@ -51,7 +51,7 @@ class EmbeddingEngine:
         if not self._dirty or self._cache_path is None:
             return
         try:
-            self._cache_path.parent.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(self._cache_path.parent.mkdir, parents=True, exist_ok=True)
             await asyncio.to_thread(self._write_cache)
             self._dirty = False
         except Exception as e:

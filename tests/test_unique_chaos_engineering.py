@@ -121,6 +121,7 @@ class TestFaultInjector:
         )
         result = await self.injector.inject(config)
         assert "cores" in result["details"]
+        assert result["error"] == ""
 
     @pytest.mark.asyncio
     async def test_inject_memory_leak(self):
@@ -129,6 +130,7 @@ class TestFaultInjector:
         )
         result = await self.injector.inject(config)
         assert result["details"]["mb"] == 512
+        assert result["error"] == ""
 
     @pytest.mark.asyncio
     async def test_recover_fault(self):

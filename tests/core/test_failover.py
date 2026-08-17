@@ -227,6 +227,26 @@ class TestCompleteStream:
         cb = f._get_circuit("p1")
         assert cb._metrics["successes"] >= 1
 
+    async def test_stream_skips_empty_first_model(self):
+        llm = FakeLLM()
+        llm.stream_results = {"a": [], "b": ["recovered"]}
+        f = ModelFailover(llm)
+        f._models = [ModelConfig("p1", "a"), ModelConfig("p2", "b")]
+        tokens = []
+        async for token in f.complete_stream([{"role": "user", "content": "hi"}]):
+            tokens.append(token)
+        assert tokens == ["recovered"]
+        assert [c["model"] for c in llm.complete_calls] == ["a", "b"]
+
+    async def test_stream_all_empty_raises(self):
+        llm = FakeLLM()
+        llm.stream_results = {"a": [], "b": []}
+        f = ModelFailover(llm)
+        f._models = [ModelConfig("p1", "a"), ModelConfig("p2", "b")]
+        with pytest.raises(RuntimeError, match="All models exhausted"):
+            async for _ in f.complete_stream([{"role": "user", "content": "hi"}]):
+                pass
+
 
 class TestCompleteWithToolCalls:
     async def test_tool_calls_returned(self):

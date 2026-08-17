@@ -42,9 +42,9 @@ async def test_sandbox_subprocess_simple():
 @pytest.mark.asyncio
 async def test_sandbox_subprocess_stderr():
     s = Sandbox(SandboxConfig(mode="subprocess"))
-    result = await s.exec("import sys; print('out'); sys.stderr.write('err')")
+    result = await s.exec("print('out'); raise ValueError('boom')")
     assert "out" in result
-    assert "err" in result
+    assert "boom" in result
 
 
 @pytest.mark.asyncio

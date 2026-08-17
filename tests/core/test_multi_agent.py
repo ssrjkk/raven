@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -156,6 +157,97 @@ class TestDelegationOrchestrator:
         assert len(results) == 1
         assert isinstance(results[0].content, str)
         assert results[0].duration >= 0
+
+    @pytest.mark.asyncio
+    async def test_run_sequential_sets_indexes(self):
+        from raven.core.agents.multi import DelegatedTask, DelegationOrchestrator, DelegationResult
+
+        orch = DelegationOrchestrator(llm=AsyncMock(), tool_registry=MockToolRegistry())  # type: ignore[arg-type]
+
+        async def fake_run_single(task: DelegatedTask) -> DelegationResult:
+            return DelegationResult(
+                index=0,
+                description=task.description,
+                profile=task.profile,
+                content=f"done:{task.description}",
+                success=True,
+                duration=0.0,
+                iterations=1,
+                tokens_used=0,
+                handoffs=0,
+            )
+
+        orch._run_single = fake_run_single  # type: ignore[method-assign]
+        tasks = [
+            DelegatedTask(description="t0", profile="coder"),
+            DelegatedTask(description="t1", profile="coder"),
+        ]
+        results = await orch.run_sequential(tasks)
+        assert [r.index for r in results] == [0, 1]
+        assert [r.description for r in results] == ["t0", "t1"]
+
+    @pytest.mark.asyncio
+    async def test_run_parallel_sets_indexes(self):
+        from raven.core.agents.multi import DelegatedTask, DelegationOrchestrator, DelegationResult
+
+        orch = DelegationOrchestrator(llm=AsyncMock(), tool_registry=MockToolRegistry())  # type: ignore[arg-type]
+
+        async def fake_run_single(task: DelegatedTask) -> DelegationResult:
+            return DelegationResult(
+                index=0,
+                description=task.description,
+                profile=task.profile,
+                content=f"done:{task.description}",
+                success=True,
+                duration=0.0,
+                iterations=1,
+                tokens_used=0,
+                handoffs=0,
+            )
+
+        orch._run_single = fake_run_single  # type: ignore[method-assign]
+        tasks = [
+            DelegatedTask(description="t0", profile="coder"),
+            DelegatedTask(description="t1", profile="coder"),
+            DelegatedTask(description="t2", profile="coder"),
+        ]
+        results = await orch.run_parallel(tasks)
+        assert [r.index for r in results] == [0, 1, 2]
+        assert [r.description for r in results] == ["t0", "t1", "t2"]
+
+    @pytest.mark.asyncio
+    async def test_run_dag_with_dependencies_returns_all_results(self):
+        from raven.core.agents.multi import DelegatedTask, DelegationOrchestrator, DelegationResult
+
+        orch = DelegationOrchestrator(llm=AsyncMock(), tool_registry=MockToolRegistry(), max_concurrent=2)  # type: ignore[arg-type]
+        calls: list[str] = []
+
+        async def fake_run_single(task: DelegatedTask) -> DelegationResult:
+            calls.append(task.description)
+            await asyncio.sleep(0.01)
+            return DelegationResult(
+                index=0,
+                description=task.description,
+                profile=task.profile,
+                content=f"done:{task.description}",
+                success=True,
+                duration=0.0,
+                iterations=1,
+                tokens_used=0,
+                handoffs=0,
+            )
+
+        orch._run_single = fake_run_single  # type: ignore[method-assign]
+        tasks = [
+            DelegatedTask(description="t0", profile="coder"),
+            DelegatedTask(description="t1", profile="coder", depends_on=[0]),
+            DelegatedTask(description="t2", profile="coder", depends_on=[0, 1]),
+        ]
+        results = await orch.run_dag(tasks)
+        assert [r.index for r in results] == [0, 1, 2]
+        assert [r.description for r in results] == ["t0", "t1", "t2"]
+        assert all(r.success for r in results)
+        assert calls == ["t0", "t1", "t2"]
 
 
 class TestDelegateFunction:

@@ -95,11 +95,19 @@ class ModelFailover:
 
                 try:
                     stream_fn = getattr(self.llm, "complete_stream_unthrottled", self.llm.complete_stream)
+                    yielded = False
                     async for token in stream_fn(messages, model=model_cfg.model, tools=tools):
+                        yielded = True
                         yield token
                 except Exception:
                     await cb.on_failure()
                     raise
+
+                if not yielded:
+                    logger.warning(
+                        "Failover stream: model {} returned empty stream, trying next", model_cfg.model
+                    )
+                    continue
 
                 await cb.on_success()
                 return

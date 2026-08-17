@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import re
 import shutil
@@ -113,33 +114,43 @@ class PluginRegistry:
         if entry is None:
             logger.info("Plugin {} not present in registry", name)
             return False
-        installed = read_installed_version(dest_dir / name)
+        installed = await asyncio.to_thread(read_installed_version, dest_dir / name)
         if not force and installed is not None and _version_ge(installed, entry.version):
             logger.info("Plugin {} already at or newer than catalog ({} >= {})", name, installed, entry.version)
             return True
 
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        tmp = dest_dir / f".{name}.tmp"
-        if tmp.exists():
-            shutil.rmtree(tmp, ignore_errors=True)
-        tmp.mkdir(parents=True)
-        try:
-            if entry.source is not None:
-                _copy_plugin_dir(entry.source, tmp)
-            elif entry.url is not None:
-                await _download_plugin(entry.url, tmp)
-            else:
-                raise RuntimeError(f"Plugin {name} has no installable source")
-            _normalize_plugin_root(tmp)
-            if read_installed_version(tmp) is None:
-                raise RuntimeError(f"Plugin {name} bundle contains no valid plugin.py/manifest.json")
-            target = dest_dir / name
-            if target.exists():
-                shutil.rmtree(target, ignore_errors=True)
-            tmp.rename(target)
-        except Exception:
-            shutil.rmtree(tmp, ignore_errors=True)
-            raise
+        content: bytes | None = None
+        if entry.source is None and entry.url is not None:
+            resp = await safe_fetch_async(entry.url, max_bytes=_MAX_ARCHIVE_BYTES)
+            if resp.status_code != 200:
+                raise RuntimeError(f"Plugin download failed: HTTP {resp.status_code}")
+            content = resp.content
+
+        def _stage() -> None:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            tmp = dest_dir / f".{name}.tmp"
+            if tmp.exists():
+                shutil.rmtree(tmp, ignore_errors=True)
+            tmp.mkdir(parents=True)
+            try:
+                if entry.source is not None:
+                    _copy_plugin_dir(entry.source, tmp)
+                elif content is not None:
+                    _extract_zip(content, tmp)
+                else:
+                    raise RuntimeError(f"Plugin {name} has no installable source")
+                _normalize_plugin_root(tmp)
+                if read_installed_version(tmp) is None:
+                    raise RuntimeError(f"Plugin {name} bundle contains no valid plugin.py/manifest.json")
+                target = dest_dir / name
+                if target.exists():
+                    shutil.rmtree(target, ignore_errors=True)
+                tmp.rename(target)
+            except Exception:
+                shutil.rmtree(tmp, ignore_errors=True)
+                raise
+
+        await asyncio.to_thread(_stage)
         logger.info("Plugin {} updated to v{}", name, entry.version)
         return True
 
@@ -192,13 +203,6 @@ async def _parse_catalog(data: Any) -> list[CatalogEntry]:
 
 def _copy_plugin_dir(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-
-
-async def _download_plugin(url: str, dest: Path) -> None:
-    resp = await safe_fetch_async(url, max_bytes=_MAX_ARCHIVE_BYTES)
-    if resp.status_code != 200:
-        raise RuntimeError(f"Plugin download failed: HTTP {resp.status_code}")
-    _extract_zip(resp.content, dest)
 
 
 def _extract_zip(content: bytes, dest: Path) -> None:

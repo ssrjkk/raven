@@ -14,6 +14,51 @@ SANDBOX_IMAGE = "python:3.12-slim"
 ALLOW_ALL_NETWORK = {"allow": ["*"]}
 DENY_ALL_NETWORK = {"allow": [], "deny": ["*"]}
 
+_AST_BLOCKED_NAMES = frozenset(
+    {
+        "__builtins__", "__import__", "exec", "eval", "compile", "open", "getattr",
+        "setattr", "delattr", "globals", "locals", "breakpoint", "exit", "quit",
+        "vars", "format", "format_map",
+    }
+)
+_AST_BLOCKED_MODULES = frozenset(
+    {
+        "os", "sys", "subprocess", "shutil", "socket", "ctypes", "importlib",
+        "builtins", "operator", "inspect", "pickle", "marshal", "code", "codeop",
+    }
+)
+
+
+def _validate_ast(code: str) -> str | None:
+    import ast
+
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as e:
+        return f"Syntax Error: {e}"
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id in _AST_BLOCKED_NAMES:
+            return f"[denied] access to '{node.id}' is not allowed"
+        if isinstance(node, ast.Attribute) and (
+            (node.attr.startswith("__") and node.attr.endswith("__"))
+            or node.attr in ("format", "format_map")
+        ):
+            return f"[denied] attribute '{node.attr}' is not allowed"
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                mod = alias.name.split(".")[0]
+                if mod in _AST_BLOCKED_MODULES:
+                    return f"[denied] import of '{alias.name}' is not allowed"
+    return None
+
+
+def _make_script(code: str, prefix: str) -> tuple[str, Path]:
+    tmpdir = tempfile.mkdtemp(prefix=prefix)
+    script = Path(tmpdir) / "script.py"
+    with script.open("w", encoding="utf-8") as f:
+        f.write(code)
+    return tmpdir, script
+
 
 class SandboxConfig:
     def __init__(
@@ -73,28 +118,11 @@ class Sandbox:
         return "Unknown sandbox mode"
 
     async def _exec_direct(self, code: str) -> str:
-        import ast
         import builtins
 
-        try:
-            tree = ast.parse(code)
-        except SyntaxError as e:
-            return f"Syntax Error: {e}"
-
-        _blocked_names = frozenset({"__builtins__", "__import__", "exec", "eval", "compile", "open", "getattr", "setattr", "delattr", "globals", "locals", "breakpoint", "exit", "quit", "vars", "format", "format_map"})
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Name) and node.id in _blocked_names:
-                return f"[denied] access to '{node.id}' is not allowed"
-            if isinstance(node, ast.Attribute) and (
-                (node.attr.startswith("__") and node.attr.endswith("__"))
-                or node.attr in ("format", "format_map")
-            ):
-                return f"[denied] attribute '{node.attr}' is not allowed"
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                for alias in node.names:
-                    mod = alias.name.split(".")[0]
-                    if mod in ("os", "sys", "subprocess", "shutil", "socket", "ctypes", "importlib", "builtins", "operator", "inspect", "pickle", "marshal", "code", "codeop"):
-                        return f"[denied] import of '{alias.name}' is not allowed"
+        error = _validate_ast(code)
+        if error is not None:
+            return error
 
         def _run() -> str:
             import io
@@ -145,13 +173,13 @@ class Sandbox:
             return "Execution timed out"
 
     async def _exec_subprocess(self, code: str) -> str:
+        error = _validate_ast(code)
+        if error is not None:
+            return error
         if len(code.splitlines()) > 5000:
             return "Error: Code exceeds 5000 line limit"
-        tmpdir = tempfile.mkdtemp(prefix="raven_sandbox_")
+        tmpdir, script = await asyncio.to_thread(_make_script, code, "raven_sandbox_")
         self._tmpdirs.append(tmpdir)
-        script = Path(tmpdir) / "script.py"
-        with script.open("w") as f:
-            f.write(code)
         env = os.environ.copy()
 
         net_rules = self.config.effective_network_rules
@@ -227,11 +255,8 @@ class Sandbox:
         except Exception as e:
             return f"Docker not available: {e}"
 
-        tmpdir = tempfile.mkdtemp(prefix="raven_sandbox_")
+        tmpdir, _ = await asyncio.to_thread(_make_script, code, "raven_sandbox_")
         self._tmpdirs.append(tmpdir)
-        script_path = Path(tmpdir) / "script.py"
-        with script_path.open("w") as f:
-            f.write(code)
 
         net_rules = self.config.effective_network_rules
         allow_list = net_rules.get("allow", [])
@@ -252,8 +277,8 @@ class Sandbox:
 
         if net_entrypoint:
             entrypoint_path = Path(tmpdir) / "entrypoint.sh"
-            entrypoint_path.write_text(net_entrypoint)
-            entrypoint_path.chmod(0o755)
+            await asyncio.to_thread(entrypoint_path.write_text, net_entrypoint)
+            await asyncio.to_thread(entrypoint_path.chmod, 0o755)
             container_kwargs["volumes"][tmpdir] = {"bind": "/sandbox", "mode": "ro"}
             container_kwargs["entrypoint"] = ["/bin/sh", "/sandbox/entrypoint.sh"]
             container_kwargs["command"] = ["python", "/sandbox/script.py"]

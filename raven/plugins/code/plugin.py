@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -19,10 +19,9 @@ async def run_python(code: str, timeout: int = 30) -> str:
     """Execute Python code in a sandbox and return stdout/stderr. Args: code (str): Python code to execute, timeout (int): Max execution time in seconds"""
     tmpdir = None
     try:
-        tmpdir = tempfile.mkdtemp(prefix="raven_sandbox_")
+        tmpdir = await asyncio.to_thread(tempfile.mkdtemp, prefix="raven_sandbox_")
         script_path = Path(tmpdir) / "script.py"
-        with script_path.open("w", encoding="utf-8") as f:
-            f.write(code)
+        await asyncio.to_thread(_write_script, script_path, code)
 
         env = os.environ.copy()
         env.pop("OPENROUTER_API_KEY", None)
@@ -67,10 +66,12 @@ async def run_python(code: str, timeout: int = 30) -> str:
         return f"Error: {e}"
     finally:
         if tmpdir and Path(tmpdir).exists():
-            import shutil
+            await asyncio.to_thread(shutil.rmtree, tmpdir, ignore_errors=True)
 
-            with contextlib.suppress(FileNotFoundError, PermissionError, OSError):
-                shutil.rmtree(tmpdir)
+
+def _write_script(path: Path, code: str) -> None:
+    with path.open("w", encoding="utf-8") as f:
+        f.write(code)
 
 
 def review_code(code: str, language: str = "auto") -> str:

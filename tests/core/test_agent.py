@@ -55,6 +55,16 @@ class TestAgent:
         result = "".join(tokens)
         assert "Hello from Raven" in result
 
+    async def test_run_empty_response_fallback(self, session, tools, mock_db):
+        from raven.core.llm import LLMResponse
+
+        llm = AsyncMock()
+        llm.complete = AsyncMock(return_value=LLMResponse(content="", finish_reason="stop"))
+        config = AgentConfig(max_tool_rounds=3, use_memory=False)
+        agent = Agent(session=session, tools=tools, db=mock_db, llm=llm, config=config)
+        tokens = [t async for t in agent.run("hello")]
+        assert "".join(tokens) == "I couldn't generate a response to that. Please try rephrasing your message."
+
     async def test_run_with_tool(self, session, tools, mock_db):
         llm = AsyncMock()
         from raven.core.llm import LLMResponse, ToolCall

@@ -40,6 +40,7 @@ class HTTPClientPool:
 
     async def close_all(self):
         async with self._lock:
+            freed = len(self._clients)
             for _key, client in self._clients.items():
                 try:
                     await client.aclose()
@@ -47,7 +48,7 @@ class HTTPClientPool:
                     logger.warning("Failed to close HTTP client {}: connection error", _key)
             self._clients.clear()
             self._closed = True
-            logger.info("HTTP client pool closed ({} connections freed)", len(self._clients))
+            logger.info("HTTP client pool closed ({} connections freed)", freed)
 
     async def health_check(self) -> bool:
         return not self._closed

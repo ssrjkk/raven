@@ -50,7 +50,7 @@ def _confine_fd(path: str, flags: int) -> int:
 
 
 async def _read_file(path: str) -> str:
-    fd = _confine_fd(path, os.O_RDONLY)
+    fd = await asyncio.to_thread(_confine_fd, path, os.O_RDONLY)
     try:
         size = await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_END)
         await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_SET)
@@ -61,7 +61,7 @@ async def _read_file(path: str) -> str:
 
 
 async def _write_file(path: str, content: str, flags: int = os.O_WRONLY | os.O_CREAT | os.O_TRUNC) -> None:
-    fd = _confine_fd(path, flags | _O_NOFOLLOW)
+    fd = await asyncio.to_thread(_confine_fd, path, flags | _O_NOFOLLOW)
     try:
         await asyncio.to_thread(os.write, fd, content.encode("utf-8"))
     finally:
@@ -69,7 +69,7 @@ async def _write_file(path: str, content: str, flags: int = os.O_WRONLY | os.O_C
 
 
 async def file_read(path: str, max_size: int = 50000) -> str:
-    fd = _confine_fd(path, os.O_RDONLY)
+    fd = await asyncio.to_thread(_confine_fd, path, os.O_RDONLY)
     try:
         size = await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_END)
         await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_SET)

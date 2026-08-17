@@ -204,11 +204,29 @@ async def github_clone_repo(owner: str, repo: str, branch: str = "main") -> dict
         token = _resolve_oauth_token()
     if not token:
         return {"error": "GitHub token not configured"}
-    repo_url = f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
+    if (
+        not owner
+        or not repo
+        or "/" in owner
+        or "\\" in owner
+        or "/" in repo
+        or "\\" in repo
+        or owner in (".", "..")
+        or repo in (".", "..")
+    ):
+        return {"error": "Invalid repository name"}
+    ws_root = (Path.cwd() / "workspace").resolve()
     target = Path("workspace") / "cloned" / owner / repo
+    try:
+        resolved = target.resolve()
+    except OSError:
+        resolved = target.absolute()
+    if resolved != ws_root and not resolved.is_relative_to(ws_root):
+        return {"error": "Invalid repository name"}
     if target.exists():
         return {"ok": True, "path": str(target), "existing": True}
     target.mkdir(parents=True, exist_ok=True)
+    repo_url = f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
     try:
         proc = await asyncio.create_subprocess_exec(
             "git",
@@ -224,7 +242,10 @@ async def github_clone_repo(owner: str, repo: str, branch: str = "main") -> dict
         )
         _stdout, stderr = await proc.communicate()
         if proc.returncode != 0:
-            return {"error": f"Clone failed: {stderr.decode()[:500]}"}
+            err = stderr.decode()[:500]
+            if token:
+                err = err.replace(token, "***")
+            return {"error": f"Clone failed: {err}"}
         logger.info("Cloned {}/{} -> {}", owner, repo, target)
         return {"ok": True, "path": str(target)}
     except FileNotFoundError:

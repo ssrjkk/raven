@@ -701,7 +701,14 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     @api_app.post("/api/memory/restore")
     async def api_memory_restore(body: dict[str, str]):
         from raven.core.backup import import_memory
-        source = Path(body.get("path", ""))
+        from raven.core.security.path_guard import confine_path
+
+        data_dir = Path("data").resolve()
+        raw = Path(body.get("path", ""))
+        try:
+            source = confine_path(str(raw), data_dir)
+        except PermissionError:
+            return {"ok": False, "error": "Access denied: path outside data directory"}
         if not source.is_file():
             return {"ok": False, "error": f"File not found: {source}"}
         counts = await import_memory(memory_manager, source)

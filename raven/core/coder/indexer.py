@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import re
 import time
 from pathlib import Path
@@ -608,7 +609,7 @@ class CodeIndexer:
         return symbols
 
     async def index_async(self, max_files: int = 5000) -> dict[str, CodeFile]:
-        self.index(max_files)
+        await asyncio.to_thread(self.index, max_files)
         await self._lsp_enrich()
         return self._files
 
