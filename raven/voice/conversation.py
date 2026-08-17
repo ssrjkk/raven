@@ -219,8 +219,13 @@ class VoiceConversation:
                         continue
                     break
                 audio_path = self.recorder.save_to_temp(audio_data)
-                text = await self.process_utterance(audio_path)
-                Path(audio_path).unlink(missing_ok=True)
+                try:
+                    text = await self.process_utterance(audio_path)
+                except Exception as exc:
+                    logger.error("Voice utterance processing failed: {}", exc)
+                    continue
+                finally:
+                    Path(audio_path).unlink(missing_ok=True)
                 if not text:
                     continue
                 if wake_mode and self.wake_word not in text.lower():

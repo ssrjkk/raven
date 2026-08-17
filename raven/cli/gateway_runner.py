@@ -695,6 +695,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     @api_app.post("/api/memory/backup")
     async def api_memory_backup():
         from raven.core.backup import export_memory
+
         path = await export_memory(memory_manager)
         return {"ok": True, "path": str(path)}
 
@@ -711,12 +712,16 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             return {"ok": False, "error": "Access denied: path outside data directory"}
         if not source.is_file():
             return {"ok": False, "error": f"File not found: {source}"}
-        counts = await import_memory(memory_manager, source)
+        try:
+            counts = await import_memory(memory_manager, source)
+        except (ValueError, TypeError) as exc:
+            return {"ok": False, "error": str(exc)}
         return {"ok": True, "restored": counts}
 
     @api_app.get("/api/memory/backups")
     async def api_memory_backups():
         from raven.core.backup import list_backups
+
         backups = await list_backups()
         return {"backups": backups}
 
@@ -754,6 +759,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     def _get_dream_skills() -> list[dict[str, Any]]:
         from raven.core.skills import list_skills
+
         return [s for s in list_skills() if s.get("source") == "dream"]
 
     ws = settings.resolved_workspace
@@ -766,9 +772,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         await routine_engine.start()
         await analytics_engine.start()
         await dream_engine.start()
-        if web_port < 1024 or web_port not in (18888, 18789):
-            logger.warning("Binding to 0.0.0.0:{}. Ensure firewall/reverse proxy is configured.", web_port)
-        config = uvicorn.Config(api_app, host="0.0.0.0", port=web_port, log_level="info", ws="auto")
+        if settings.web_host in ("0.0.0.0", "::", ""):
+            logger.warning("Binding to {}:{}. Ensure firewall/reverse proxy is configured.", settings.web_host, web_port)
+        config = uvicorn.Config(api_app, host=settings.web_host, port=web_port, log_level="info", ws="auto")
         server = uvicorn.Server(config)
         server_task = asyncio.create_task(server.serve())
 

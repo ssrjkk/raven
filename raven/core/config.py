@@ -60,6 +60,8 @@ class Settings(BaseSettings):
 
     dm_policy: str = "pairing"
     web_port: int = 18888
+    web_host: str = "127.0.0.1"
+    """Bind address for the web API. Use 0.0.0.0 only when a firewall/reverse proxy guards it."""
     ravenflow_port: int = 18789
     web_secret_key: SafeSecretStr = SafeSecretStr("")
     web_cors_origins: str = "http://localhost:5173,http://localhost:3000,http://localhost:18888"
@@ -157,8 +159,28 @@ class Settings(BaseSettings):
             logger.info("Auto-selected model: {}", self.default_model)
         if not self.web_secret_key:
             import secrets
-            self.web_secret_key = SafeSecretStr(secrets.token_hex(32))
-            logger.info("Auto-generated WEB_SECRET_KEY")
+
+            key_file = self.resolved_data_dir / "web_secret_key"
+            stored: str | None = None
+            try:
+                if key_file.is_file():
+                    candidate = key_file.read_text(encoding="utf-8").strip()
+                    if candidate:
+                        stored = candidate
+            except OSError as exc:
+                logger.warning("Failed to read WEB_SECRET_KEY file {}: {}", key_file, exc)
+            if stored:
+                self.web_secret_key = SafeSecretStr(stored)
+                logger.info("Loaded WEB_SECRET_KEY from {}", key_file)
+            else:
+                self.web_secret_key = SafeSecretStr(secrets.token_hex(32))
+                logger.info("Auto-generated WEB_SECRET_KEY")
+                try:
+                    key_file.parent.mkdir(parents=True, exist_ok=True)
+                    key_file.write_text(self.web_secret_key.get_secret_value(), encoding="utf-8")
+                    logger.info("Persisted WEB_SECRET_KEY to {}", key_file)
+                except OSError as exc:
+                    logger.warning("Failed to persist WEB_SECRET_KEY to {}: {}", key_file, exc)
 
     metrics_port: int = 9090
     otlp_endpoint: str = ""

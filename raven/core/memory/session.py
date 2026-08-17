@@ -51,7 +51,7 @@ class SessionMemory:
             return None
         try:
             session_id = self._keys.get(key, "default")
-            msgs = await self._db.get_session_messages(session_id, limit=200)
+            msgs = await self._db.get_session_messages(session_id, limit=5000)
             for m in reversed(msgs):
                 meta = getattr(m, "metadata", {}) or {}
                 if isinstance(meta, dict) and meta.get("memory_key") == key:
@@ -68,11 +68,7 @@ class SessionMemory:
         session_id = self._keys.pop(key, "default")
         try:
             msgs = await self._db.get_session_messages(session_id, limit=5000)
-            kept = [
-                m
-                for m in msgs
-                if (m.metadata or {}).get("memory_key") != key
-            ]
+            kept = [m for m in msgs if (m.metadata or {}).get("memory_key") != key]
             if len(kept) == len(msgs):
                 return False
             await self._db.replace_session_messages(session_id, [dict(m.__dict__) for m in kept])
@@ -88,7 +84,7 @@ class SessionMemory:
         q = query.lower()
         try:
             for session_id in set(self._keys.values()) | {"default"}:
-                msgs = await self._db.get_session_messages(session_id, limit=100)
+                msgs = await self._db.get_session_messages(session_id, limit=5000)
                 for m in msgs:
                     if q in m.content.lower():
                         results.append(

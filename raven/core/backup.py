@@ -53,7 +53,14 @@ async def import_memory(memory: MemoryManager, source: Path) -> dict[str, int]:
         raise FileNotFoundError(f"Backup file not found: {source}")
 
     raw = source.read_text(encoding="utf-8")
-    data: dict[str, Any] = json.loads(raw)
+    try:
+        data: dict[str, Any] = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        msg = f"Backup file is not valid JSON: {source}"
+        raise ValueError(msg) from exc
+    if not isinstance(data, dict):
+        msg = f"Backup file has invalid structure: {source}"
+        raise TypeError(msg)
     version = data.get("version", 0)
     if version < 1:
         raise ValueError(f"Unknown backup version: {version}")
@@ -94,10 +101,12 @@ async def list_backups(backup_dir: Path | None = None) -> list[dict[str, Any]]:
         return []
     backups = []
     for f in sorted(backup_dir.glob("memory_backup_*.json"), reverse=True):
-        backups.append({
-            "path": str(f),
-            "filename": f.name,
-            "size_bytes": f.stat().st_size,
-            "modified": f.stat().st_mtime,
-        })
+        backups.append(
+            {
+                "path": str(f),
+                "filename": f.name,
+                "size_bytes": f.stat().st_size,
+                "modified": f.stat().st_mtime,
+            }
+        )
     return backups

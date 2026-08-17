@@ -13,6 +13,14 @@ from raven.core.config import settings
 console = Console()
 
 
+def _headers() -> dict[str, str]:
+    headers: dict[str, str] = {}
+    key = settings.web_secret_key.get_secret_value() if settings.web_secret_key else ""
+    if key:
+        headers["X-Raven-Key"] = key
+    return headers
+
+
 @click.group(name="backup")
 def backup_group() -> None:
     """Backup and restore memory"""
@@ -23,7 +31,9 @@ def backup_group() -> None:
 def export(output: str | None) -> None:
     """Export all memory tiers to a JSON backup file"""
     try:
-        resp = httpx.post(f"http://localhost:{settings.web_port}/api/memory/backup", timeout=30)
+        resp = httpx.post(
+            f"http://localhost:{settings.web_port}/api/memory/backup", headers=_headers(), timeout=30
+        )
         resp.raise_for_status()
         data = resp.json()
         path = data.get("path", "unknown")
@@ -42,6 +52,7 @@ def restore(path: str) -> None:
         resp = httpx.post(
             f"http://localhost:{settings.web_port}/api/memory/restore",
             json={"path": str(Path(path).resolve())},
+            headers=_headers(),
             timeout=60,
         )
         resp.raise_for_status()
@@ -63,7 +74,9 @@ def restore(path: str) -> None:
 def list_backups() -> None:
     """List available memory backups"""
     try:
-        resp = httpx.get(f"http://localhost:{settings.web_port}/api/memory/backups", timeout=10)
+        resp = httpx.get(
+            f"http://localhost:{settings.web_port}/api/memory/backups", headers=_headers(), timeout=10
+        )
         resp.raise_for_status()
         data = resp.json()
         backups = data.get("backups", [])

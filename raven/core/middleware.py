@@ -87,6 +87,15 @@ PATH_PERMISSIONS: dict[str, Permission] = {
 
 AUTH_REQUIRED_PREFIXES: tuple[str, ...] = ("/aios", "/api/tests")
 
+_MUTATING_METHODS: frozenset[str] = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+# Mutating endpoints that legitimately accept unauthenticated calls.
+# Permission-gated endpoints (PATH_PERMISSIONS) still apply on top.
+_PUBLIC_MUTATING_PREFIXES: tuple[str, ...] = (
+    "/api/auth/",  # login / register / logout
+    "/api/webhooks/",  # external channel callbacks with their own secrets
+)
+
 _PUBLIC_PATHS: tuple[str, ...] = ("/aios/health", "/aios/metrics", "/docs", "/openapi.json", "/redoc")
 
 _SLOW_REQUEST_THRESHOLD_S = 2.0
@@ -171,6 +180,17 @@ async def auth_middleware(request: Request, call_next):
     for prefix, required_perm in PATH_PERMISSIONS.items():
         if path.startswith(prefix) and not rbac.has_permission(request.state.user_role, required_perm):
             return JSONResponse(status_code=403, content={"error": "Forbidden", "required": required_perm.value})
+
+    if (
+        request.method in _MUTATING_METHODS
+        and path.startswith("/api")
+        and not path.startswith(_PUBLIC_MUTATING_PREFIXES)
+        and request.state.user_id == "anonymous"
+    ):
+        return JSONResponse(
+            status_code=401,
+            content={"error": "Authentication required", "required": "Bearer token or X-Raven-Key"},
+        )
 
     return await call_next(request)
 

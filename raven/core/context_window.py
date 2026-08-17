@@ -58,6 +58,17 @@ class ContextWindowManager:
             logger.warning("Message summarization failed: {}", exc)
             return ""
 
+    @staticmethod
+    def _trim_orphan_tools(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Drop leading tool messages whose parent tool_calls message was dropped by the window."""
+        start = 0
+        for m in messages:
+            if m.get("role") == "tool":
+                start += 1
+            else:
+                break
+        return messages[start:] if start else messages
+
     async def manage(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not messages:
             return messages
@@ -98,10 +109,10 @@ class ContextWindowManager:
                         "role": "system",
                         "content": f"[Summarized earlier context: {summary_text}]",
                     }
-                    keep = non_system[-keep_count:] if keep_count > 0 else []
+                    keep = self._trim_orphan_tools(non_system[-keep_count:]) if keep_count > 0 else []
                     return [*system_msgs, summary_msg, *keep]
                 logger.info("Summarization returned empty, dropping oldest batch")
-            keep = non_system[-keep_count:] if keep_count > 0 else []
+            keep = self._trim_orphan_tools(non_system[-keep_count:]) if keep_count > 0 else []
             return system_msgs + keep
 
         logger.warning(
@@ -109,5 +120,5 @@ class ContextWindowManager:
             ratio * 100,
         )
         keep_count = min(self._config.sliding_window_size, len(non_system))
-        keep = non_system[-keep_count:] if keep_count > 0 else []
+        keep = self._trim_orphan_tools(non_system[-keep_count:]) if keep_count > 0 else []
         return system_msgs + keep

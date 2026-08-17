@@ -137,8 +137,55 @@ class TestRoutineScheduling:
 
     def test_default_schedule_parts(self):
         now = datetime(2026, 1, 15, 7, 0, tzinfo=UTC)
-        assert RoutineEngine._next_run_time("10", now).hour == 10
-        assert RoutineEngine._next_run_time("", now).hour == 8
+        single = RoutineEngine._next_run_time("10", now)
+        assert single is not None and single.hour == 10
+        empty = RoutineEngine._next_run_time("", now)
+        assert empty is not None and empty.hour == 8
+
+    def test_cron_every_5_minutes(self):
+        now = datetime(2026, 1, 15, 7, 2, tzinfo=UTC)
+        nxt = RoutineEngine._next_run_time("*/5 * * * *", now)
+        assert nxt == datetime(2026, 1, 15, 7, 5, tzinfo=UTC)
+
+    def test_cron_daily_time(self):
+        now = datetime(2026, 1, 15, 7, 0, tzinfo=UTC)
+        nxt = RoutineEngine._next_run_time("30 8 * * *", now)
+        assert nxt == datetime(2026, 1, 15, 8, 30, tzinfo=UTC)
+
+    def test_cron_weekday(self):
+        now = datetime(2026, 1, 15, 7, 0, tzinfo=UTC)
+        assert now.weekday() == 3
+        nxt = RoutineEngine._next_run_time("0 9 31 * 1", now)
+        assert nxt == datetime(2026, 1, 19, 9, 0, tzinfo=UTC)
+        assert nxt.weekday() == 0
+
+    def test_cron_sunday_alias_7(self):
+        now = datetime(2026, 1, 15, 7, 0, tzinfo=UTC)
+        nxt = RoutineEngine._next_run_time("0 0 1 * 7", now)
+        assert nxt == datetime(2026, 1, 18, 0, 0, tzinfo=UTC)
+        assert nxt.weekday() == 6
+
+    def test_cron_wildcard_dom_matches_every_day(self):
+        now = datetime(2026, 1, 15, 7, 0, tzinfo=UTC)
+        nxt = RoutineEngine._next_run_time("0 0 * * 7", now)
+        assert nxt == datetime(2026, 1, 16, 0, 0, tzinfo=UTC)
+
+    def test_cron_range_with_step(self):
+        now = datetime(2026, 1, 15, 17, 59, tzinfo=UTC)
+        nxt = RoutineEngine._next_run_time("*/15 9-17 * * *", now)
+        assert nxt == datetime(2026, 1, 16, 9, 0, tzinfo=UTC)
+
+    def test_cron_first_of_month_union_semantics(self):
+        now = datetime(2026, 1, 15, 7, 0, tzinfo=UTC)
+        nxt = RoutineEngine._next_run_time("0 0 1 * *", now)
+        assert nxt == datetime(2026, 1, 16, 0, 0, tzinfo=UTC)
+
+    def test_cron_invalid_schedule_returns_none(self):
+        now = datetime(2026, 1, 15, 7, 0, tzinfo=UTC)
+        assert RoutineEngine._next_run_time("not a cron at all", now) is None
+        assert RoutineEngine._next_run_time("* * * *", now) is None
+        assert RoutineEngine._delay_until("bad schedule", now) == -1.0
+        assert RoutineEngine._delay_until("a:b:c", now) == -1.0
 
 
 class TestRoutineEngine:
@@ -321,3 +368,69 @@ class TestRoutineEngineLoop:
                 await loop_task
         finally:
             await engine.stop()
+
+    async def test_cron_loop_fires_at_match(self, store: RoutineStore, monkeypatch: pytest.MonkeyPatch):
+        engine = RoutineEngine(store)
+        gw = SimpleNamespace(_send=AsyncMock(return_value=None))
+        engine._gateway_ref = gw
+        monkeypatch.setattr(RoutineEngine, "_delay_until", classmethod(lambda cls, schedule, now=None: 0.0))
+        r = Routine(
+            name="cron",
+            channel="mock",
+            user_id="u1",
+            action=RoutineAction.SEND_BRIEFING,
+            trigger=RoutineTrigger.SCHEDULED,
+            schedule="*/5 * * * *",
+        )
+        await store.save_routine(r)
+        try:
+            await engine.start()
+            for _ in range(50):
+                if gw._send.await_count > 0:
+                    break
+                await asyncio.sleep(0.1)
+            gw._send.assert_awaited()
+            logs = await store.get_logs(r.id)
+            assert any(log.status == "success" for log in logs)
+        finally:
+            await engine.stop()
+
+    async def test_invalid_interval_schedule_loop_survives(self, store: RoutineStore):
+        engine = RoutineEngine(store)
+        r = Routine(
+            name="broken",
+            action=RoutineAction.SEND_MESSAGE,
+            trigger=RoutineTrigger.INTERVAL,
+            schedule="not-a-number",
+        )
+        await store.save_routine(r)
+        try:
+            await engine.start()
+            await asyncio.sleep(0.3)
+            task = engine._tasks.get(r.id)
+            assert task is not None and not task.done()
+        finally:
+            await engine.stop()
+
+
+class TestRoutineActions:
+    async def test_organize_files_uses_configured_workspace(
+        self, tmp_path: Path, store: RoutineStore, monkeypatch: pytest.MonkeyPatch
+    ):
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        (workspace / "notes.txt").write_text("a")
+        (workspace / "main.py").write_text("print(1)")
+        (workspace / "archive.zip").write_bytes(b"\x00")
+        engine = RoutineEngine(store)
+        r = Routine(name="org", action=RoutineAction.ORGANIZE_FILES, trigger=RoutineTrigger.MANUAL)
+        engine._gateway_ref = SimpleNamespace(_send=AsyncMock(return_value=None))
+        monkeypatch.setattr(
+            "raven.core.config.get_settings",
+            lambda: SimpleNamespace(resolved_workspace=workspace),
+        )
+        result = await engine._execute_file_organization(r)
+        assert "2" in result
+        assert (workspace / "text" / "notes.txt").exists()
+        assert (workspace / "code" / "main.py").exists()
+        assert (workspace / "archive.zip").exists()

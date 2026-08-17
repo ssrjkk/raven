@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from loguru import logger
+
 from raven.core.gateway.commands.base import CommandContext, CommandHandler
 from raven.core.security.sandbox_policy import MAIN_SESSION_POLICY, check_tool_allowed, get_policy_for_channel
 
@@ -25,16 +27,27 @@ class CompactCommand(CommandHandler):
             return True
         history_text = "\n".join(f"{m.role}: {m.content[:200]}" for m in msgs)
         summary = ""
-        async for token in agent.simple_complete(
-            [
-                {"role": "system", "content": "Summarize this conversation concisely in 2-3 sentences."},
-                {"role": "user", "content": f"Summarize:\n{history_text}"},
-            ]
-        ):
-            summary += token
-        if summary.strip():
-            await gateway.db.replace_session_messages(
-                session.id, [{"role": "system", "content": f"[Session compacted: {summary[:500]}]"}]
+        try:
+            async for token in agent.simple_complete(
+                [
+                    {"role": "system", "content": "Summarize this conversation concisely in 2-3 sentences."},
+                    {"role": "user", "content": f"Summarize:\n{history_text}"},
+                ]
+            ):
+                summary += token
+        except Exception as exc:
+            logger.warning("Compact failed: {}", exc)
+            await gateway._send(ctx.event.channel, ctx.event.session_id, "Compact failed — conversation left unchanged.")
+            return True
+        if not summary.strip():
+            await gateway._send(
+                ctx.event.channel,
+                ctx.event.session_id,
+                "Compact failed: the model returned an empty summary — conversation left unchanged.",
             )
+            return True
+        await gateway.db.replace_session_messages(
+            session.id, [{"role": "system", "content": f"[Session compacted: {summary[:500]}]"}]
+        )
         await gateway._send(ctx.event.channel, ctx.event.session_id, f"Session compacted.\nSummary: {summary[:300]}")
         return True

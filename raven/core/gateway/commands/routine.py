@@ -60,8 +60,18 @@ class RoutineCommand(CommandHandler):
                 )
                 return True
             action = sub_args[0].lower()
-            schedule = sub_args[1]
-            name = " ".join(sub_args[2:]) if len(sub_args) > 2 else f"{action}@{schedule}"
+            raw_schedule = sub_args[1:]
+
+            def _cron_field(tok: str) -> bool:
+                t = tok.strip("'\"")
+                return t == "*" or t.isdigit() or any(c in t for c in "*/,-")
+
+            if len(raw_schedule) >= 5 and all(_cron_field(t) for t in raw_schedule[:5]):
+                schedule = " ".join(t.strip("'\"") for t in raw_schedule[:5])
+                name = " ".join(raw_schedule[5:]) if len(raw_schedule) > 5 else f"{action}@{schedule}"
+            else:
+                schedule = raw_schedule[0]
+                name = " ".join(raw_schedule[1:]) if len(raw_schedule) > 1 else f"{action}@{schedule}"
             action_map = {
                 "send_briefing": RoutineAction.SEND_BRIEFING,
                 "send_message": RoutineAction.SEND_MESSAGE,

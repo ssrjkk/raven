@@ -91,6 +91,25 @@ class TestRoutineCommands:
         result = await gateway_with_perms._handle_command(_event("/routine add send_briefing '0 9 * * *'"), user)
         assert result is True
 
+    async def test_routine_add_unquoted_cron(self, gateway_with_perms: Gateway, user: dict[str, Any]):
+        await gateway_with_perms.start()
+        result = await gateway_with_perms._handle_command(_event("/routine add send_briefing 0 9 * * *"), user)
+        assert result is True
+        routines = await gateway_with_perms._routine_store.list_routines(user_id="U1")
+        assert routines
+        assert routines[0].schedule == "0 9 * * *"
+
+    async def test_routine_add_cron_with_name(self, gateway_with_perms: Gateway, user: dict[str, Any]):
+        await gateway_with_perms.start()
+        result = await gateway_with_perms._handle_command(
+            _event("/routine add send_briefing */30 9-18 * * 1-5 brief"), user
+        )
+        assert result is True
+        routines = await gateway_with_perms._routine_store.list_routines(user_id="U1")
+        assert routines
+        assert routines[0].schedule == "*/30 9-18 * * 1-5"
+        assert routines[0].name == "brief"
+
 
 class TestTaskCommands:
     async def test_task_command_routes(self, gateway: Gateway, user: dict[str, Any]):

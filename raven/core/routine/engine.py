@@ -48,10 +48,20 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
         while self._running:
             try:
                 if routine.trigger == RoutineTrigger.INTERVAL:
-                    await asyncio.sleep(int(routine.schedule))
+                    try:
+                        interval = int(routine.schedule)
+                    except (TypeError, ValueError):
+                        logger.error("Routine {} has invalid interval schedule: {!r}", routine.id, routine.schedule)
+                        await asyncio.sleep(3600)
+                        continue
+                    await asyncio.sleep(interval)
                     await self._execute_routine(routine)
                 elif routine.trigger == RoutineTrigger.SCHEDULED:
                     delay = self._delay_until(routine.schedule)
+                    if delay < 0:
+                        logger.error("Routine {} has invalid schedule: {!r}", routine.id, routine.schedule)
+                        await asyncio.sleep(3600)
+                        continue
                     await asyncio.sleep(delay)
                     await self._execute_routine(routine)
                 else:
@@ -96,20 +106,102 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
         return RoutineStatus.ACTIVE
 
     @staticmethod
-    def _next_run_time(schedule: str, now: datetime | None = None) -> datetime:
-        parts = schedule.split(":")
-        target_hour = int(parts[0]) if len(parts) > 0 and parts[0] else 8
-        target_min = int(parts[1]) if len(parts) > 1 and parts[1] else 0
+    def _parse_cron_field(field: str, lo: int, hi: int) -> set[int] | None:
+        result: set[int] = set()
+        for part in field.split(","):
+            part = part.strip()
+            if not part:
+                return None
+            step = 1
+            if "/" in part:
+                base, _, step_s = part.partition("/")
+                try:
+                    step = int(step_s)
+                except ValueError:
+                    return None
+                if step <= 0:
+                    return None
+            else:
+                base = part
+            if base == "*":
+                start, end = lo, hi
+            elif "-" in base:
+                a, _, b = base.partition("-")
+                try:
+                    start, end = int(a), int(b)
+                except ValueError:
+                    return None
+            else:
+                try:
+                    value = int(base)
+                except ValueError:
+                    return None
+                start = end = value
+            if start < lo or end > hi or start > end:
+                return None
+            result.update(range(start, end + 1, step))
+        return result
+
+    @classmethod
+    def _next_cron_run(cls, schedule: str, now: datetime) -> datetime | None:
+        fields = schedule.split()
+        if len(fields) != 5:
+            return None
+        minutes = cls._parse_cron_field(fields[0], 0, 59)
+        hours = cls._parse_cron_field(fields[1], 0, 23)
+        days = cls._parse_cron_field(fields[2], 1, 31)
+        months = cls._parse_cron_field(fields[3], 1, 12)
+        dows = cls._parse_cron_field(fields[4], 0, 7)
+        if minutes is None or hours is None or days is None or months is None or dows is None:
+            return None
+        # cron: 0 or 7 = Sunday; Python weekday: Monday=0 .. Sunday=6
+        dows = {6 if d in (0, 7) else d - 1 for d in dows}
+        current = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
+        deadline = now + timedelta(days=366)
+        while current <= deadline:
+            if current.month not in months:
+                year = current.year + (1 if current.month == 12 else 0)
+                month = 1 if current.month == 12 else current.month + 1
+                current = datetime(year, month, 1, tzinfo=now.tzinfo)
+                continue
+            if current.day not in days and current.weekday() not in dows:
+                current = current.replace(hour=0, minute=0) + timedelta(days=1)
+                continue
+            if current.hour not in hours:
+                current = current.replace(minute=0) + timedelta(hours=1)
+                continue
+            if current.minute not in minutes:
+                current += timedelta(minutes=1)
+                continue
+            return current
+        return None
+
+    @staticmethod
+    def _next_run_time(schedule: str, now: datetime | None = None) -> datetime | None:
         current = now or datetime.now(UTC)
-        next_run = current.replace(hour=target_hour, minute=target_min, second=0, microsecond=0)
-        if next_run <= current:
-            next_run = next_run + timedelta(days=1)
-        return next_run
+        if len(schedule.split()) == 5:
+            return RoutineEngine._next_cron_run(schedule, current)
+        parts = schedule.split(":")
+        if len(parts) <= 2:
+            if len(parts) == 2 and not (parts[0].isdigit() and parts[1].isdigit()):
+                return None
+            if len(parts) == 1 and parts[0] and not parts[0].isdigit():
+                return None
+            target_hour = int(parts[0]) if len(parts) > 0 and parts[0].isdigit() else 8
+            target_min = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+            next_run = current.replace(hour=target_hour, minute=target_min, second=0, microsecond=0)
+            if next_run <= current:
+                next_run = next_run + timedelta(days=1)
+            return next_run
+        return RoutineEngine._next_cron_run(schedule, current)
 
     @classmethod
     def _delay_until(cls, schedule: str, now: datetime | None = None) -> float:
         current = now or datetime.now(UTC)
-        return max((cls._next_run_time(schedule, current) - current).total_seconds(), 0.0)
+        next_run = cls._next_run_time(schedule, current)
+        if next_run is None:
+            return -1.0
+        return max((next_run - current).total_seconds(), 0.0)
 
     async def _execute_routine(self, routine: Routine):
         start = time.time()
@@ -203,7 +295,14 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
         import shutil
         from pathlib import Path
 
-        workspace = Path("workspace")
+        try:
+            from raven.core.config import get_settings
+
+            configured = get_settings()
+        except ImportError:
+            configured = None
+        resolved = configured.resolved_workspace if configured is not None else None
+        workspace = resolved if resolved is not None else Path("workspace")
         organized = 0
 
         rules = {
