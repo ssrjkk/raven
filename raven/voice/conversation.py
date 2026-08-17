@@ -31,7 +31,7 @@ class AudioPlayer:
         try:
             while not self._stop:
                 data = self._queue.get()
-                if data is None:
+                if data is None or self._stop:
                     break
                 self._playing = True
                 sd.play(data, samplerate=24000)
@@ -55,6 +55,12 @@ class AudioPlayer:
         with self._queue.mutex:
             self._queue.queue.clear()
         self._playing = False
+        try:
+            import sounddevice as sd
+
+            sd.stop()
+        except ImportError:
+            pass
 
     def is_playing(self) -> bool:
         return self._playing
@@ -203,6 +209,15 @@ class VoiceConversation:
             logger.error("LLM error: {}", exc)
             return f"Sorry, I encountered an error: {exc}"
 
+    def _strip_wake_word(self, text: str) -> str | None:
+        """Strip the wake word only when it leads the utterance; keep casing."""
+        if self.wake_word not in text.lower():
+            return None
+        stripped = text.strip()
+        if stripped.lower().startswith(self.wake_word):
+            stripped = stripped[len(self.wake_word) :].lstrip()
+        return stripped or None
+
     async def start(self, wake_mode: bool = True) -> None:
         self._running = True
         self.player.start()
@@ -232,7 +247,7 @@ class VoiceConversation:
                     logger.debug("Wake word not found in: {}", text)
                     continue
                 if wake_mode:
-                    text = text.lower().replace(self.wake_word, "", 1).strip()
+                    text = self._strip_wake_word(text)
                     if not text:
                         continue
                 self.player.stop_playback()

@@ -37,6 +37,32 @@ def routine() -> Routine:
     )
 
 
+class TestValidateSchedule:
+    def test_valid_interval(self) -> None:
+        assert RoutineEngine.validate_schedule("3600") is None
+
+    def test_zero_interval_rejected(self) -> None:
+        assert RoutineEngine.validate_schedule("0") is not None
+
+    def test_negative_interval_rejected(self) -> None:
+        assert RoutineEngine.validate_schedule("-5") is not None
+
+    def test_float_schedule_rejected(self) -> None:
+        assert RoutineEngine.validate_schedule("5.5") is not None
+
+    def test_valid_hhmm(self) -> None:
+        assert RoutineEngine.validate_schedule("14:30") is None
+
+    def test_bad_hhmm_rejected(self) -> None:
+        assert RoutineEngine.validate_schedule("25:99") is not None
+
+    def test_valid_cron(self) -> None:
+        assert RoutineEngine.validate_schedule("*/5 * * * *") is None
+
+    def test_short_cron_rejected(self) -> None:
+        assert RoutineEngine.validate_schedule("*/5 * *") is not None
+
+
 class TestRoutineStore:
     @pytest.mark.asyncio
     async def test_save_and_load(self, store: RoutineStore, routine: Routine):

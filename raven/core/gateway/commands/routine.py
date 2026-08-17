@@ -89,6 +89,13 @@ class RoutineCommand(CommandHandler):
                     trigger = RoutineTrigger.INTERVAL
                 except ValueError:
                     trigger = RoutineTrigger.SCHEDULED
+
+            from raven.core.routine.engine import RoutineEngine
+
+            validation_error = RoutineEngine.validate_schedule(schedule)
+            if validation_error:
+                await gateway._send(ctx.event.channel, ctx.event.session_id, f"❌ {validation_error}")
+                return True
             routine = Routine(
                 name=name,
                 action=action_map[action],

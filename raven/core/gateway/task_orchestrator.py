@@ -97,12 +97,17 @@ class TaskOrchestrator:
         if self._planner is None or self._runner is None or self._store is None:
             raise RuntimeError("TaskOrchestrator not started")
 
-        task = await self._planner.plan(
-            goal,
-            self._llm,
-            user_id=user_id,
-            channel=channel,
-        )
+        try:
+            task = await self._planner.plan(
+                goal,
+                self._llm,
+                user_id=user_id,
+                channel=channel,
+            )
+        except Exception as e:
+            logger.error("Task planning failed for goal {}: {}", goal[:80], e)
+            await self._notify(channel, session_id, f"❌ Task planning failed: {e}")
+            raise
         if not task.steps:
             task.status = TaskStatus.FAILED
             task.error = "Task planning failed: no steps generated"

@@ -143,6 +143,22 @@ class TestEmptyPlan:
         finally:
             await orch.stop()
 
+    async def test_create_and_run_planning_error_notifies_user(self, db_path: str, monkeypatch: pytest.MonkeyPatch):
+        orch = await _make_orchestrator(db_path, monkeypatch)
+        await orch.start()
+        try:
+            assert orch._planner is not None
+            orch._planner.plan = AsyncMock(side_effect=RuntimeError("llm down"))  # type: ignore[method-assign]
+            with pytest.raises(RuntimeError, match="llm down"):
+                await orch.create_and_run("goal", "user1", "test", "sess1")
+            assert orch._send_notification is not None
+            orch._send_notification.assert_awaited_once()  # type: ignore[attr-defined]
+            notification_text = orch._send_notification.await_args.args[2]  # type: ignore[attr-defined]
+            assert "planning failed" in notification_text
+            assert "llm down" in notification_text
+        finally:
+            await orch.stop()
+
 
 class TestFullCycle:
     async def test_create_plan_execute_complete_with_llm_plan(self, db_path: str, monkeypatch: pytest.MonkeyPatch):

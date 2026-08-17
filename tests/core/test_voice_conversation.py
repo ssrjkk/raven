@@ -91,3 +91,49 @@ async def test_speak_missing_file_is_noop(tmp_path):
     conv.tts.synthesize = MagicMock(return_value=str(tmp_path / "missing.wav"))  # type: ignore[method-assign]
     await conv.speak("hello")
     conv.player.enqueue.assert_not_called()  # type: ignore[attr-defined]
+
+
+class TestStripWakeWord:
+    def test_strips_leading_wake_word(self):
+        conv = _make_conversation()
+        assert conv._strip_wake_word("raven привет") == "привет"
+
+    def test_case_insensitive_leading(self):
+        conv = _make_conversation()
+        assert conv._strip_wake_word("RaVeN hello") == "hello"
+
+    def test_keeps_mid_text(self):
+        conv = _make_conversation()
+        assert conv._strip_wake_word("a raven flies") == "a raven flies"
+
+    def test_keeps_casing_of_rest(self):
+        conv = _make_conversation()
+        assert conv._strip_wake_word("raven Hello World") == "Hello World"
+
+    def test_wake_word_only_returns_none(self):
+        conv = _make_conversation()
+        assert conv._strip_wake_word("raven") is None
+
+    def test_no_wake_word_returns_none(self):
+        conv = _make_conversation()
+        assert conv._strip_wake_word("hello there") is None
+
+
+class TestAudioPlayerStop:
+    def test_stop_playback_clears_queue_and_stops_device(self, monkeypatch: pytest.MonkeyPatch):
+        import sys
+        from types import ModuleType
+
+        fake_sd = ModuleType("sounddevice")
+        fake_sd.stop = MagicMock()  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+        from raven.voice.conversation import AudioPlayer
+
+        player = AudioPlayer()
+        player.enqueue(b"\x00\x00" * 40)
+        assert player._queue.qsize() == 1
+        player.stop_playback()
+        assert player._queue.qsize() == 0
+        fake_sd.stop.assert_called_once()
+        assert player.is_playing() is False

@@ -110,6 +110,20 @@ class TestRoutineCommands:
         assert routines[0].schedule == "*/30 9-18 * * 1-5"
         assert routines[0].name == "brief"
 
+    async def test_routine_add_invalid_schedule_rejected(self, gateway_with_perms: Gateway, user: dict[str, Any]):
+        await gateway_with_perms.start()
+        result = await gateway_with_perms._handle_command(_event("/routine add send_briefing 5.5"), user)
+        assert result is True
+        routines = await gateway_with_perms._routine_store.list_routines(user_id="U1")
+        assert routines == []
+
+    async def test_routine_add_zero_interval_rejected(self, gateway_with_perms: Gateway, user: dict[str, Any]):
+        await gateway_with_perms.start()
+        result = await gateway_with_perms._handle_command(_event("/routine add send_briefing 0"), user)
+        assert result is True
+        routines = await gateway_with_perms._routine_store.list_routines(user_id="U1")
+        assert routines == []
+
 
 class TestTaskCommands:
     async def test_task_command_routes(self, gateway: Gateway, user: dict[str, Any]):

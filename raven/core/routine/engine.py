@@ -54,6 +54,10 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
                         logger.error("Routine {} has invalid interval schedule: {!r}", routine.id, routine.schedule)
                         await asyncio.sleep(3600)
                         continue
+                    if interval < 1:
+                        logger.error("Routine {} has invalid interval schedule: {!r}", routine.id, routine.schedule)
+                        await asyncio.sleep(3600)
+                        continue
                     await asyncio.sleep(interval)
                     await self._execute_routine(routine)
                 elif routine.trigger == RoutineTrigger.SCHEDULED:
@@ -189,11 +193,28 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
                 return None
             target_hour = int(parts[0]) if len(parts) > 0 and parts[0].isdigit() else 8
             target_min = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+            if not (0 <= target_hour <= 23 and 0 <= target_min <= 59):
+                return None
             next_run = current.replace(hour=target_hour, minute=target_min, second=0, microsecond=0)
             if next_run <= current:
                 next_run = next_run + timedelta(days=1)
             return next_run
         return RoutineEngine._next_cron_run(schedule, current)
+
+    @staticmethod
+    def validate_schedule(schedule: str) -> str | None:
+        """Return an error message for an invalid schedule, or None when valid."""
+        try:
+            interval = int(schedule)
+        except (TypeError, ValueError):
+            interval = None
+        if interval is not None:
+            if interval < 1:
+                return f"Interval must be a positive number of seconds, got: {schedule!r}"
+            return None
+        if RoutineEngine._next_run_time(schedule) is None:
+            return f"Invalid schedule: {schedule!r} (expected HH:MM, cron 'm h dom mon dow', or interval seconds)"
+        return None
 
     @classmethod
     def _delay_until(cls, schedule: str, now: datetime | None = None) -> float:
