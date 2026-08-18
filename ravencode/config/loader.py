@@ -55,7 +55,7 @@ def strip_jsonc(text: str) -> str:
             continue
         if stripped.startswith(("//", "#")):
             continue
-        m = _COMMENT_RE.match(line)
+        m = _COMMENT_RE.search(line)
         if m and m.group(1):
             before = line[: m.start(1)].rstrip()
             lines.append(before)

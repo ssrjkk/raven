@@ -3,7 +3,14 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from ravencode.runtime.undo import UndoEntry, UndoManager, get_undo_manager, record_undo
+from ravencode.runtime.undo import (
+    UndoEntry,
+    UndoManager,
+    get_undo_manager,
+    record_undo,
+    redo_last,
+    undo_last,
+)
 
 
 class TestUndoEntry:
@@ -114,3 +121,40 @@ class TestGlobalFunctions:
         record_undo("/tmp/test.txt", "old", "new", "test")
         assert m.can_undo
         m.undo()
+
+    async def test_undo_last_empty(self):
+        import ravencode.runtime.undo as undo_mod
+
+        undo_mod._undo_manager = UndoManager()
+        assert await undo_last() == "[undo] nothing to undo"
+
+    async def test_undo_last_pops(self, tmp_path):
+        import ravencode.runtime.undo as undo_mod
+
+        f = tmp_path / "a.txt"
+        f.write_text("modified", encoding="utf-8")
+        m = UndoManager()
+        m.record(str(f), "original", "modified", "write")
+        undo_mod._undo_manager = m
+        result = await undo_last()
+        assert result == "[undo] write on " + str(f)
+        assert f.read_text(encoding="utf-8") == "original"
+
+    async def test_redo_last_empty(self):
+        import ravencode.runtime.undo as undo_mod
+
+        undo_mod._undo_manager = UndoManager()
+        assert await redo_last() == "[redo] nothing to redo"
+
+    async def test_redo_last_pops(self, tmp_path):
+        import ravencode.runtime.undo as undo_mod
+
+        f = tmp_path / "a.txt"
+        f.write_text("original", encoding="utf-8")
+        m = UndoManager()
+        m.record(str(f), "original", "modified", "write")
+        m.undo()
+        undo_mod._undo_manager = m
+        result = await redo_last()
+        assert result == "[redo] write on " + str(f)
+        assert f.read_text(encoding="utf-8") == "modified"

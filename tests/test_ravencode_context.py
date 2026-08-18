@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+from unittest.mock import AsyncMock
 
-from ravencode.runtime.context import Conversation, MemoryStore, create_conversation
+from ravencode.runtime.context import Conversation, MemoryStore, create_conversation, load_system_prompt_from_file
 
 
 class TestMemoryStore:
@@ -157,6 +161,68 @@ class TestMemoryStore:
         finally:
             Path(path).unlink(missing_ok=True)
 
+    async def test_schedule_flush_reenqueue(self):
+        store = MemoryStore(path=":memory:")
+        store._flush_task = asyncio.create_task(asyncio.sleep(0.2))
+        store["k"] = "v"
+        assert store._flush_pending is True
+        store._flush_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await store._flush_task
+
+
+class TestLoadSystemPromptFromFile:
+    def _neutralize(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(Path, "cwd", classmethod(lambda cls: tmp_path))
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+
+    def test_explicit_path(self, tmp_path, monkeypatch):
+        self._neutralize(monkeypatch, tmp_path)
+        f = tmp_path / "prompt.md"
+        f.write_text("custom instructions", encoding="utf-8")
+        assert load_system_prompt_from_file(str(f)) == "custom instructions"
+
+    def test_falls_back_to_candidates(self, tmp_path, monkeypatch):
+        self._neutralize(monkeypatch, tmp_path)
+        f = tmp_path / "AGENTS.md"
+        f.write_text("from cwd", encoding="utf-8")
+        assert load_system_prompt_from_file() == "from cwd"
+
+    def test_opencode_candidate(self, tmp_path, monkeypatch):
+        self._neutralize(monkeypatch, tmp_path)
+        f = tmp_path / ".opencode" / "AGENTS.md"
+        f.parent.mkdir()
+        f.write_text("from opencode", encoding="utf-8")
+        assert load_system_prompt_from_file() == "from opencode"
+
+    def test_home_candidate(self, tmp_path, monkeypatch):
+        self._neutralize(monkeypatch, tmp_path)
+        f = tmp_path / "home" / ".config" / "opencode" / "AGENTS.md"
+        f.parent.mkdir(parents=True)
+        f.write_text("from home", encoding="utf-8")
+        assert load_system_prompt_from_file() == "from home"
+
+    def test_none_found(self, tmp_path, monkeypatch):
+        self._neutralize(monkeypatch, tmp_path)
+        assert load_system_prompt_from_file() is None
+
+    def test_oserror_continues(self, tmp_path, monkeypatch):
+        self._neutralize(monkeypatch, tmp_path)
+        bad = tmp_path / "bad.txt"
+        bad.write_text("x", encoding="utf-8")
+        ok = tmp_path / "AGENTS.md"
+        ok.write_text("recovered", encoding="utf-8")
+
+        orig_read = Path.read_text
+
+        def fake_read(self, encoding="utf-8"):
+            if self.name == "bad.txt":
+                raise OSError("denied")
+            return orig_read(self, encoding=encoding)
+
+        monkeypatch.setattr(Path, "read_text", fake_read)
+        assert load_system_prompt_from_file(str(bad)) == "recovered"
+
 
 class TestConversation:
     def test_initializes_with_system_prompt(self):
@@ -230,6 +296,12 @@ class TestConversation:
         c = Conversation()
         assert len(c.system_prompt) > 0
 
+    def test_default_system_prompt_fallback(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(Path, "cwd", classmethod(lambda cls: tmp_path))
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+        c = Conversation()
+        assert "Raven" in c.system_prompt
+
     def test_summarize_oldest_removes_when_no_llm(self):
         c = Conversation(system_prompt="test")
 
@@ -258,6 +330,75 @@ class TestConversation:
         c.add_user_message("x" * 100)
         assert c.messages[0]["role"] == "system"
         assert c.messages[0]["content"] == "keep"
+
+    def test_estimate_tokens_list_blocks(self):
+        c = Conversation(system_prompt="test")
+        blocks: list[Any] = [
+            {"type": "text", "text": "hello world"},
+            {"type": "image_url", "image_url": {"url": "data:img"}},
+            {"type": "audio"},
+            42,
+        ]
+        assert c._estimate_tokens(blocks) > 0
+
+    def test_trim_pops_multiple(self):
+        c = Conversation(system_prompt="keep", max_tokens=40)
+        for _ in range(6):
+            c.add_user_message("x" * 80)
+        assert len(c.messages) < 6
+        assert c.messages[0]["role"] == "system"
+
+    def test_summarize_oldest_idx_two_when_second_is_system(self):
+        c = Conversation(system_prompt="test")
+        c.messages.insert(1, {"role": "system", "content": "extra"})
+        c.add_user_message("m1")
+        c.add_assistant_message("r1")
+
+        async def run():
+            await c.summarize_oldest(llm=None)
+            assert len(c.messages) == 3
+            assert "m1" not in [m.get("content", "") for m in c.messages]
+
+        asyncio.run(run())
+
+    def test_summarize_oldest_with_llm(self):
+        c = Conversation(system_prompt="test")
+
+        async def run():
+            c.add_user_message("first question")
+            c.add_assistant_message("first answer")
+            c.add_user_message("second question")
+            llm = SimpleNamespace(complete=AsyncMock(return_value=SimpleNamespace(content="compressed summary")))
+            await c.summarize_oldest(llm=llm)
+            assert any("[summarized]" in m.get("content", "") for m in c.messages)
+
+        asyncio.run(run())
+
+    def test_summarize_oldest_with_llm_empty(self):
+        c = Conversation(system_prompt="test")
+
+        async def run():
+            c.add_user_message("q1")
+            c.add_assistant_message("a1")
+            c.add_user_message("q2")
+            llm = SimpleNamespace(complete=AsyncMock(return_value=SimpleNamespace(content="")))
+            await c.summarize_oldest(llm=llm)
+            assert len(c.messages) == 4
+
+        asyncio.run(run())
+
+    def test_summarize_oldest_with_llm_exception(self):
+        c = Conversation(system_prompt="test")
+
+        async def run():
+            c.add_user_message("q1")
+            c.add_assistant_message("a1")
+            c.add_user_message("q2")
+            llm = SimpleNamespace(complete=AsyncMock(side_effect=RuntimeError("llm down")))
+            await c.summarize_oldest(llm=llm)
+            assert len(c.messages) == 3
+
+        asyncio.run(run())
 
 
 class TestCreateConversation:

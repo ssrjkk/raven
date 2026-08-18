@@ -92,11 +92,11 @@ class Orchestrator:
             }
             handler = dispatch_map.get(agent_type)
             if handler is None:
-                return AgentResult(agent=agent_type.value, success=False, error=f"Unknown agent: {agent_type}")
+                return AgentResult(agent=str(agent_type), success=False, error=f"Unknown agent: {agent_type}")
             return await handler(task, memory_path=memory_path, agent_config_override=agent_config_override)
         except Exception as exc:
             logger.exception("Agent dispatch failed")
-            return AgentResult(agent=agent_type.value, success=False, error=str(exc))
+            return AgentResult(agent=str(agent_type), success=False, error=str(exc))
 
     async def _run_planner(
         self, task: str, memory_path: str | None = None, agent_config_override: AgentConfig | None = None
