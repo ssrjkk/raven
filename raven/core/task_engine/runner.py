@@ -90,7 +90,7 @@ class TaskRunner:
         runner = self._running.get(task_id)
         if runner:
             with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(runner, timeout=timeout)
+                await asyncio.wait_for(asyncio.shield(runner), timeout=timeout)
         task = await self._store.load_task(task_id)
         return task or Task(goal="")
 
@@ -108,10 +108,21 @@ class TaskRunner:
 
         task.status = TaskStatus.RUNNING
         task.updated_at = time.time()
-        await self._store.save_task(task)
-
-        pause_ev = self._pause_events.get(task_id) or asyncio.Event()
         started_at = time.time()
+        pause_ev = self._pause_events.get(task_id) or asyncio.Event()
+        try:
+            await self._store.save_task(task)
+        except Exception as e:
+            logger.error("Task {} failed to persist RUNNING state: {}", task_id, e)
+            task.status = TaskStatus.FAILED
+            task.error = f"Internal error: {e}"
+            task.updated_at = time.time()
+            self._record_outcome(task, started_at)
+            try:
+                await self._store.save_task(task)
+            except Exception as save_exc:
+                logger.error("Failed to persist task {} failure: {}", task_id, save_exc)
+            return
 
         try:
             for i in range(task.current_step_index, len(task.steps)):
@@ -200,6 +211,16 @@ class TaskRunner:
             await self._store.save_task(task)
             self._record_outcome(task, started_at)
             raise
+        except Exception as e:
+            logger.error("Task {} crashed unexpectedly: {}", task_id, e)
+            task.status = TaskStatus.FAILED
+            task.error = f"Internal error: {e}"
+            task.updated_at = time.time()
+            self._record_outcome(task, started_at)
+            try:
+                await self._store.save_task(task)
+            except Exception as save_exc:
+                logger.error("Failed to persist task {} failure: {}", task_id, save_exc)
 
     def on_complete(self, task_id: str, callback: Callable[[], None]) -> None:
         task = self._running.get(task_id)

@@ -17,12 +17,12 @@ async def check_price(monitor: Monitor) -> str | None:
         data = await client_manager.get(url)
     except Exception as e:
         logger.debug("Price check failed for {}: {}", coin_id, e)
-        return None
+        return f"Price check failed for {coin_id}: {e}"
     if not data or coin_id not in data:
-        return None
+        return f"Price check failed: coin '{coin_id}' not found"
     price = data[coin_id].get("usd")
     if price is None:
-        return None
+        return f"Price check failed: no USD price for '{coin_id}'"
     threshold = monitor.config.get("threshold")
     if threshold is not None:
         if price >= float(threshold):

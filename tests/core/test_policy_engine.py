@@ -583,6 +583,21 @@ class TestAdversarialBudgetExceeded:
         assert denied_at is not None, "Budget should have been exceeded"
         assert denied_at == 13, f"Expected denial at msg 13 (13*40k=520k > 500k), got {denied_at}"
 
+    @pytest.mark.asyncio
+    async def test_check_budget_then_record_usage_counts_each_once(self):
+        """check_budget consumes input; record_usage must consume only output (no double charge)."""
+        from raven.core.budget import TokenBudgetTracker
+
+        tracker = TokenBudgetTracker()
+        allowed = await tracker.check_budget("u", 100, 0, 500, 3600)
+        assert allowed
+        allowed = await tracker.record_usage("u", 50, 500, 3600)
+        assert allowed
+        allowed = await tracker.check_budget("u", 300, 0, 500, 3600)
+        assert allowed, "100 (input) + 50 (output) + 300 = 450 <= 500"
+        allowed = await tracker.check_budget("u", 100, 0, 500, 3600)
+        assert not allowed, "550 > 500 — double charging would have denied earlier anyway"
+
 
 class TestAdversarialIntegrationSpy:
     """Доказательство 3: spy on policy_engine.check() proves deny reaches engine.

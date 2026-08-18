@@ -32,6 +32,10 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
     async def add_routine(self, routine: Routine):
         await self.add_item(routine)
 
+    def set_gateway(self, gateway: Any) -> None:
+        """Bind the gateway so routine actions can deliver notifications."""
+        self._gateway_ref = gateway
+
     async def remove_routine(self, routine_id: str):
         await self.remove_item(routine_id)
 

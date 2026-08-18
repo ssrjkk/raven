@@ -346,6 +346,30 @@ class TestCheckerSignatures:
         result = await check_price(m)
         assert result is None or isinstance(result, str)
 
+    async def test_price_checker_reports_failure(self, monkeypatch):
+        from raven.core.monitor.checkers import price
+
+        async def boom(url, headers=None, timeout=15.0):
+            raise RuntimeError("coingecko down")
+
+        monkeypatch.setattr("raven.core.monitor.checkers.price.client_manager.get", boom)
+        m = Monitor(name="test-price", type=MonitorType.PRICE, target="btc")
+        result = await price.check_price(m)
+        assert isinstance(result, str)
+        assert "failed" in result.lower()
+
+    async def test_price_checker_reports_unknown_coin(self, monkeypatch):
+        from raven.core.monitor.checkers import price
+
+        async def empty(url, headers=None, timeout=15.0):
+            return {}
+
+        monkeypatch.setattr("raven.core.monitor.checkers.price.client_manager.get", empty)
+        m = Monitor(name="test-price", type=MonitorType.PRICE, target="notacoin")
+        result = await price.check_price(m)
+        assert isinstance(result, str)
+        assert "not found" in result
+
     async def test_http_checker_returns_str_or_none(self):
         from raven.core.monitor.checkers.http_check import check_http
 
@@ -365,6 +389,32 @@ class TestCheckerSignatures:
         except Exception:
             result = None
         assert result is None or isinstance(result, str)
+
+    async def test_rss_checker_parses_xml_feed(self, monkeypatch):
+        import httpx
+
+        from raven.core.monitor.checkers import rss
+
+        xml = (
+            '<?xml version="1.0"?><rss version="2.0"><channel><item>'
+            "<title>New post</title><link>https://example.com/1</link><guid>g1</guid>"
+            "</item></channel></rss>"
+        )
+
+        class _Resp:
+            text = xml
+
+        async def fake_request(method: str, url: str, **kwargs) -> httpx.Response:
+            return _Resp()  # type: ignore[return-value]
+
+        monkeypatch.setattr("raven.core.monitor.checkers.rss.client_manager.request", fake_request)
+        m = Monitor(id="m1", name="test-rss", type=MonitorType.RSS, target="https://example.com/feed.xml")
+        result = await rss.check_rss(m)
+        assert isinstance(result, str)
+        assert "New post" in result
+
+        result_again = await rss.check_rss(m)
+        assert result_again is None, "same entry must not alert twice"
 
 
 class TestEngineFromDb:

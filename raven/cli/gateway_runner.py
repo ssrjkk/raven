@@ -656,6 +656,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     routine_store = RoutineStore(settings.resolved_db_path)
     routine_engine = RoutineEngine(routine_store)
+    routine_engine.set_gateway(gateway)
     register_routine_engine(routine_engine)
     await register_all_routines(routine_engine)
     api_app.state.routine_engine = routine_engine

@@ -35,13 +35,8 @@ async def check_rss(monitor: Monitor) -> str | None:
     try:
         import feedparser
 
-        raw = await client_manager.get(url)
-        if isinstance(raw, dict):
-            raw_text = str(raw)
-        elif isinstance(raw, str):
-            raw_text = raw
-        else:
-            raw_text = str(raw)
+        resp = await client_manager.request("GET", url)
+        raw_text = resp.text
         feed = feedparser.parse(raw_text)
     except Exception as exc:
         logger.error("RSS check failed for {}: {}", url, exc)

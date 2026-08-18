@@ -198,6 +198,55 @@ class TestTaskPlanner:
         task = await planner.plan("test", mock_llm)
         assert task.steps == []
 
+    @patch("raven.core.task_engine.planner.LLMRouter")
+    async def test_plan_survives_null_steps(self, mock_llm_cls):
+        mock_llm = MagicMock()
+        mock_llm.complete_stream = lambda messages, model=None, tools=None: _async_gen(
+            ['{"summary": "s", "steps": null}']
+        )
+        from raven.core.task_engine.planner import TaskPlanner
+
+        planner = TaskPlanner(ToolRegistry())
+        task = await planner.plan("test", mock_llm)
+        assert task.steps == []
+        assert task.plan_summary == "s"
+
+    @patch("raven.core.task_engine.planner.LLMRouter")
+    async def test_plan_skips_non_object_steps(self, mock_llm_cls):
+        mock_llm = MagicMock()
+        mock_llm.complete_stream = lambda messages, model=None, tools=None: _async_gen(
+            ['{"summary": "s", "steps": ["do thing", {"description": "ok", "tool": "web_search", "params": {}}]}']
+        )
+        from raven.core.task_engine.planner import TaskPlanner
+
+        planner = TaskPlanner(ToolRegistry())
+        task = await planner.plan("test", mock_llm)
+        assert len(task.steps) == 1
+        assert task.steps[0].tool == "web_search"
+
+    @patch("raven.core.task_engine.planner.LLMRouter")
+    async def test_plan_coerces_non_object_params(self, mock_llm_cls):
+        mock_llm = MagicMock()
+        mock_llm.complete_stream = lambda messages, model=None, tools=None: _async_gen(
+            ['{"summary": "s", "steps": [{"description": "d", "tool": "web_search", "params": "a=1"}]}']
+        )
+        from raven.core.task_engine.planner import TaskPlanner
+
+        planner = TaskPlanner(ToolRegistry())
+        task = await planner.plan("test", mock_llm)
+        assert len(task.steps) == 1
+        assert task.steps[0].params == {}
+
+    @patch("raven.core.task_engine.planner.LLMRouter")
+    async def test_plan_survives_non_object_response(self, mock_llm_cls):
+        mock_llm = MagicMock()
+        mock_llm.complete_stream = lambda messages, model=None, tools=None: _async_gen(["[1, 2, 3]"])
+        from raven.core.task_engine.planner import TaskPlanner
+
+        planner = TaskPlanner(ToolRegistry())
+        task = await planner.plan("test", mock_llm)
+        assert task.steps == []
+
 
 class TestTaskRunner:
     async def test_submit_and_complete(self, store: TaskStore, registry: ToolRegistry, task: Task):
@@ -320,3 +369,56 @@ class TestTaskRunner:
         assert result.status == TaskStatus.CANCELLED
         snap = metrics.snapshot()
         assert snap.get("raven_task_cancelled_total") == 1
+
+    async def test_wait_timeout_does_not_cancel_task(self, store: TaskStore, registry: ToolRegistry):
+        from raven.core.task_engine.runner import TaskRunner
+
+        async def slow_handler():
+            await asyncio.sleep(1.0)
+
+        registry.register(
+            ToolSpec(name="slow", description="slow", parameters={}, handler=slow_handler, timeout=30)
+        )
+        t = Task(
+            goal="shield test",
+            steps=[TaskStep(task_id="", order=0, description="slow", tool="slow", params={})],
+        )
+        for s in t.steps:
+            s.task_id = t.id
+        runner = TaskRunner(store, registry)
+        await runner.submit(t)
+
+        early = await runner.wait(t.id, timeout=0.05)
+        assert early is not None
+        assert early.status != TaskStatus.CANCELLED
+
+        final = await runner.wait(t.id, timeout=10)
+        assert final.status == TaskStatus.COMPLETED
+
+    async def test_store_failure_marks_task_failed(self, store: TaskStore, registry: ToolRegistry):
+        from raven.core.metrics import metrics
+        from raven.core.task_engine.runner import TaskRunner
+
+        t = Task(
+            goal="store crash",
+            steps=[TaskStep(task_id="", order=0, description="ok", tool="echo", params={})],
+        )
+        for s in t.steps:
+            s.task_id = t.id
+        for s in t.steps:
+            s.result = "done"
+            s.status = TaskStatus.COMPLETED
+        t.current_step_index = len(t.steps)
+
+        failing_store = MagicMock(spec=store)
+        failing_store.load_task = AsyncMock(return_value=t)
+        failing_store.save_task = AsyncMock(side_effect=RuntimeError("db locked"))
+        failing_store.update_step = AsyncMock(side_effect=RuntimeError("db locked"))
+        failing_store.update_status = AsyncMock(side_effect=RuntimeError("db locked"))
+        failing_store.list_tasks = AsyncMock(return_value=[t])
+
+        metrics.clear()
+        runner = TaskRunner(failing_store, registry)
+        await runner._execute(t.id, asyncio.Event())
+        snap = metrics.snapshot()
+        assert snap.get("raven_task_failed_total") == 1

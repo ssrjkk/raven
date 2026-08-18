@@ -295,9 +295,9 @@ class Agent:
                 delay = 0.5
                 content = resp.content or ""
 
-                actual_input = resp.prompt_tokens or input_tokens
                 actual_output = resp.completion_tokens or estimate_tokens(content)
-                await _budget_tracker.record_usage(self.session.user_id, actual_input + actual_output, _budget_limit, 3600)
+                # input tokens were already accounted for by check_budget above
+                await _budget_tracker.record_usage(self.session.user_id, actual_output, _budget_limit, 3600)
 
                 if resp.tool_calls:
                     state = AgentState.TOOL_CALL

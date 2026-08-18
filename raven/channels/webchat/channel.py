@@ -151,9 +151,15 @@ class WebChatChannel(BaseChannel):
             try:
                 while True:
                     data = await websocket.receive_text()
-                    msg_data = json.loads(data)
+                    try:
+                        msg_data = json.loads(data)
+                    except (json.JSONDecodeError, TypeError):
+                        await websocket.send_json({"type": "error", "content": "invalid JSON"})
+                        continue
                     text = msg_data.get("text", "")
-                    session_id = msg_data.get("session_id", session_id)
+                    candidate = msg_data.get("session_id", "")
+                    if isinstance(candidate, str) and candidate.startswith(f"webchat:{client_id}:"):
+                        session_id = candidate
                     if text and self._handler:
                         event = IncomingMessage(
                             channel="webchat",
@@ -183,7 +189,11 @@ class WebChatChannel(BaseChannel):
             try:
                 while True:
                     data = await websocket.receive_text()
-                    msg_data = json.loads(data)
+                    try:
+                        msg_data = json.loads(data)
+                    except (json.JSONDecodeError, TypeError):
+                        await websocket.send_json({"type": "error", "content": "invalid JSON"})
+                        continue
                     text = msg_data.get("text", "")
                     if text:
                         await handler.handle_message(text)
@@ -201,7 +211,11 @@ class WebChatChannel(BaseChannel):
             try:
                 while True:
                     data = await websocket.receive_text()
-                    msg = json.loads(data)
+                    try:
+                        msg = json.loads(data)
+                    except (json.JSONDecodeError, TypeError):
+                        await websocket.send_json({"type": "error", "content": "invalid JSON"})
+                        continue
                     action = msg.get("action", "")
                     if action == "render":
                         from raven.core.canvas import CanvasComponent
@@ -219,7 +233,11 @@ class WebChatChannel(BaseChannel):
                             session.render(comp)
                             await websocket.send_json({"type": "canvas_rendered", "session_id": session.session_id})
                     elif action == "update_props":
-                        session.update_props(msg["component_id"], msg.get("props", {}))
+                        component_id = msg.get("component_id")
+                        if not isinstance(component_id, str):
+                            await websocket.send_json({"type": "error", "content": "component_id required"})
+                            continue
+                        session.update_props(component_id, msg.get("props", {}))
                         await websocket.send_json({"type": "props_updated"})
                     elif action == "action":
                         result = canvas_manager.handle_action(

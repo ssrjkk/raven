@@ -188,3 +188,58 @@ class TestCanvasLinkProxy:
             response = TestClient(channel.app).get("/api/canvas/link", params={"url": "https://example.com/x"})
         assert response.status_code == 502
         assert response.json()["error"] == "Proxy failed"
+
+
+class TestWebSocketEndpoints:
+    @staticmethod
+    def _ws_token() -> str:
+        from raven.core.config import settings
+
+        return settings.web_secret_key.get_secret_value()
+
+    def test_invalid_json_keeps_connection_alive(self, channel):
+        handler = AsyncMock()
+        channel._handler = handler
+        client = TestClient(channel.app)
+        with client.websocket_connect(f"/ws?token={self._ws_token()}") as ws:
+            ws.send_text("this is not json")
+            error = ws.receive_json()
+            assert error["type"] == "error"
+            ws.send_text('{"text": "hello"}')
+            handler.assert_awaited_once()
+            assert handler.await_args is not None
+            event = handler.await_args.args[0]
+            assert event.text == "hello"
+
+    def test_foreign_session_id_is_ignored(self, channel):
+        handler = AsyncMock()
+        channel._handler = handler
+        client = TestClient(channel.app)
+        with client.websocket_connect(f"/ws?token={self._ws_token()}") as ws:
+            ws.send_text('{"text": "hi", "session_id": "webchat:attacker_client:default"}')
+            handler.assert_awaited_once()
+            assert handler.await_args is not None
+            event = handler.await_args.args[0]
+            assert event.session_id.startswith("webchat:")
+            assert "attacker_client" not in event.session_id
+
+    def test_stream_invalid_json_keeps_connection_alive(self, channel):
+        client = TestClient(channel.app)
+        with client.websocket_connect(f"/ws/stream?token={self._ws_token()}") as ws:
+            ws.send_text("not json")
+            error = ws.receive_json()
+            assert error["type"] == "error"
+
+    def test_canvas_invalid_json_keeps_connection_alive(self, channel):
+        client = TestClient(channel.app)
+        with client.websocket_connect(f"/ws/canvas?token={self._ws_token()}") as ws:
+            ws.send_text("not json")
+            error = ws.receive_json()
+            assert error["type"] == "error"
+
+    def test_canvas_update_props_requires_component_id(self, channel):
+        client = TestClient(channel.app)
+        with client.websocket_connect(f"/ws/canvas?token={self._ws_token()}") as ws:
+            ws.send_text('{"action": "update_props", "props": {"x": 1}}')
+            error = ws.receive_json()
+            assert error["type"] == "error"

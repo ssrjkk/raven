@@ -54,16 +54,23 @@ class TaskPlanner:
             response += token
 
         plan_data = self._parse_response(response)
+        if not isinstance(plan_data, dict):
+            plan_data = {"summary": response[:100], "steps": []}
 
         steps: list[TaskStep] = []
-        for i, s in enumerate(plan_data.get("steps", [])):
+        for i, s in enumerate(plan_data.get("steps") or []):
+            if not isinstance(s, dict):
+                continue
+            params = s.get("params")
+            if not isinstance(params, dict):
+                params = {}
             steps.append(
                 TaskStep(
                     task_id=task_id,
                     order=i,
                     description=s.get("description", ""),
                     tool=s.get("tool", ""),
-                    params=s.get("params", {}),
+                    params=params,
                 )
             )
 
@@ -88,10 +95,14 @@ class TaskPlanner:
         try:
             start = text.index("{")
             end = text.rindex("}") + 1
-            return json.loads(text[start:end])  # type: ignore[no-any-return]
+            data = json.loads(text[start:end])
         except (ValueError, json.JSONDecodeError):
             logger.warning("Planner: failed to parse LLM response, returning default")
+            data = None
+        if not isinstance(data, dict):
+            logger.warning("Planner: LLM response is not a JSON object, returning default")
             return {
                 "summary": text[:100],
                 "steps": [],
             }
+        return data
