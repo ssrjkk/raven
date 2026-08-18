@@ -53,6 +53,8 @@ class Retriever:
     async def index_chunks(self, chunks: list[dict[str, Any]], prefix: str = ""):
         items = []
         for i, chunk in enumerate(chunks):
+            if chunk.get("type") == "overlap":
+                continue
             doc_id = f"{prefix}:{i}" if prefix else str(i)
             text: str = chunk.get("text", "")
             meta = {k: v for k, v in chunk.items() if k != "text"}

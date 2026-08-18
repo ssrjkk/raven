@@ -39,12 +39,21 @@ def _next_event_id() -> str:
     return f"evt-{int(time.time() * 1000)}-{counter}"
 
 
+def _parse_event_seq(event_id: str) -> tuple[int, int] | None:
+    try:
+        _, ms, counter = event_id.split("-")
+        return int(ms), int(counter)
+    except ValueError:
+        return None
+
+
 class SSEEvent:
     def __init__(self, event: str, data: dict[str, Any] | str | None, retry: int | None = None, event_id: str | None = None):
         self.event = event
         self.data = data
         self.retry = retry
         self.id = event_id or _next_event_id()
+        self.seq = _parse_event_seq(self.id)
 
     def serialize(self) -> str:
         lines: list[str] = []
@@ -147,10 +156,10 @@ class SSEStream:
                 logger.warning("SSE queue full for session {}, dropping event {}", session_id, payload.event)
         elif self._backpressure == Backpressure.BLOCK:
             try:
-                await q.put(payload)
+                await asyncio.wait_for(q.put(payload), timeout=5.0)
                 self._total_pushed += 1
                 self._track_event_id(session_id, payload.id)
-            except asyncio.QueueFull:
+            except (TimeoutError, asyncio.QueueFull):
                 self._total_dropped += 1
                 logger.warning("SSE queue full for session {}, blocking dropped {}", session_id, payload.event)
         elif self._backpressure == Backpressure.THROTTLE:
@@ -169,13 +178,14 @@ class SSEStream:
 
     async def stream(self, session_id: str, last_event_id: str | None = None):
         q = self.subscribe(session_id)
+        last_seq = _parse_event_seq(last_event_id) if last_event_id else None
         try:
             yield SSEEvent("connected", {"session": session_id, "time": time.time()}).serialize()
             while True:
                 try:
                     payload = await asyncio.wait_for(q.get(), timeout=30.0)
                     self._track_get(session_id)
-                    if last_event_id and payload.id <= last_event_id:
+                    if last_seq is not None and payload.seq is not None and payload.seq <= last_seq:
                         continue
                     yield payload.serialize()
                 except TimeoutError:

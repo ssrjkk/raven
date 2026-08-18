@@ -91,9 +91,15 @@ class MemoryManager:
         return {"working_expired": await self.working.cleanup_expired()}
 
     async def status(self) -> dict[str, int]:
-        return {
-            "working": len(await self.working.list_keys()),
-            "session": len(await self.session.list_keys()),
-            "long_term": len(await self.long_term.list_keys()),
-            "knowledge": len(await self.knowledge.list_keys()),
-        }
+        counts: dict[str, int] = {}
+        for tier in MemoryTier:
+            store = self._tiers.get(tier)
+            if not store:
+                counts[tier.value] = 0
+                continue
+            try:
+                counts[tier.value] = len(await store.list_keys())
+            except Exception:
+                logger.opt(exception=True).warning("[memory] status failed for {}", tier.value)
+                counts[tier.value] = -1
+        return counts

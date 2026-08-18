@@ -144,15 +144,18 @@ def test_process_default_format_vertical_flip(client: TestClient, tmp_path: Path
     assert body["bytes"] > 0
 
 
-def test_process_ignores_bad_ops(client: TestClient, tmp_path: Path) -> None:
+def test_process_rejects_bad_ops(client: TestClient, tmp_path: Path) -> None:
     img = tmp_path / "in.png"
     _make_png(img)
     resp = client.post(
         "/api/media/process",
         params={"filepath": str(img), "crop": "a,b,c,d", "resize": "abc", "rotate": 0, "flip": "none"},
     )
-    assert resp.status_code == 200
-    assert resp.json()["width"] == 10
+    assert resp.status_code == 400
+    resp = client.post("/api/media/process", params={"filepath": str(img), "resize": "0x100"})
+    assert resp.status_code == 400
+    resp = client.post("/api/media/process", params={"filepath": str(img), "crop": "1,2,1,2"})
+    assert resp.status_code == 400
 
 
 def test_process_bad_format_500(client: TestClient, tmp_path: Path) -> None:

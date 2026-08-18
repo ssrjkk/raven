@@ -214,7 +214,7 @@ class AgentOrchestrator:
             messages.append({"role": "assistant", "content": f"Execution plan:\n{plan_hint}\n\nProceeding step by step."})
 
         stalled_rounds = 0
-        last_tool_names: set[str] = set()
+        last_tool_names: set[tuple[str, str]] = set()
         status: AgentStatus = "max_steps"
         content = ""
 
@@ -297,7 +297,9 @@ class AgentOrchestrator:
             assistant_msg["tool_calls"] = [tc.to_dict() for tc in tool_calls]
             messages.append(assistant_msg)
 
-            current_tool_names = {tc.name for tc in tool_calls}
+            current_tool_names = {
+                (tc.name, json.dumps(tc.arguments, sort_keys=True, ensure_ascii=False)) for tc in tool_calls
+            }
             if current_tool_names == last_tool_names and current_tool_names:
                 stalled_rounds += 1
                 logger.warning("AgentOrchestrator: stalled (same tools: {})", current_tool_names)
@@ -323,7 +325,8 @@ class AgentOrchestrator:
         if status == "success" and not final_content:
             status = "error"
         return AgentResult(
-            content=final_content or "Task completed with partial results.",
+            content=final_content
+            or ("Task completed with partial results." if status == "success" else "[error: task failed]"),
             profile=current_profile.name,
             iterations=total_iterations,
             handoffs=handoffs,

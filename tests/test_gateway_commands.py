@@ -39,10 +39,47 @@ class TestBasicCommands:
         result = await gateway._handle_command(_event("/new"), user)
         assert result is True
 
-    async def test_reset_command(self, gateway: Gateway, user: dict[str, Any]):
+    async def test_new_command_clears_default_session(self, gateway: Gateway, user: dict[str, Any]):
+        from raven.core.models import Message
+
         await gateway.start()
-        result = await gateway._handle_command(_event("/reset"), user)
+        sid = "mock:C1:default"
+        await gateway.db.get_or_create_session(sid, "mock", "U1")
+        await gateway.db.save_message(Message(session_id=sid, role="user", content="hello"))
+        await gateway._handle_command(_event("/new"), user)
+        msgs = await gateway.db.get_session_messages(sid)
+        assert not msgs
+
+    async def test_reset_command_clears_default_session(self, gateway: Gateway, user: dict[str, Any]):
+        from raven.core.models import Message
+
+        await gateway.start()
+        sid = "mock:C1:default"
+        await gateway.db.get_or_create_session(sid, "mock", "U1")
+        await gateway.db.save_message(Message(session_id=sid, role="user", content="hello"))
+        await gateway._handle_command(_event("/reset"), user)
+        msgs = await gateway.db.get_session_messages(sid)
+        assert not msgs
+
+    async def test_think_command_stores_pref(self, gateway: Gateway, user: dict[str, Any]):
+        result = await gateway._handle_command(_event("/think high"), user)
         assert result is True
+        assert gateway.get_pref("mock", "U1", "think_level") == "high"
+
+    async def test_think_command_invalid_usage(self, gateway: Gateway, user: dict[str, Any]):
+        result = await gateway._handle_command(_event("/think insane"), user)
+        assert result is True
+        assert gateway.get_pref("mock", "U1", "think_level", "high") == "high"
+
+    async def test_verbose_command_stores_pref(self, gateway: Gateway, user: dict[str, Any]):
+        result = await gateway._handle_command(_event("/verbose on"), user)
+        assert result is True
+        assert gateway.get_pref("mock", "U1", "verbose") == "on"
+
+    async def test_activation_command_stores_pref(self, gateway: Gateway, user: dict[str, Any]):
+        result = await gateway._handle_command(_event("/activation always"), user)
+        assert result is True
+        assert gateway.get_pref("mock", "U1", "activation_mode") == "always"
 
     async def test_help_command(self, gateway: Gateway, user: dict[str, Any]):
         result = await gateway._handle_command(_event("/help"), user)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
 
@@ -196,6 +197,42 @@ async def test_sse_stream_generator_last_event_id():
     gen = stream.stream("s1", last_event_id=p1.id)
     first = await gen.__anext__()
     assert "event: connected" in first
+    stream.unsubscribe("s1")
+
+
+@pytest.mark.asyncio
+async def test_sse_stream_replay_skips_only_older_events():
+    stream = SSEStream()
+    q = stream.subscribe("s1")
+    for i in range(15):
+        await stream.push("e", {"i": i}, session_id="s1")
+    last_ten = f"evt-{int(time.time() * 1000)}-10"
+    gen = stream.stream("s1", last_event_id=last_ten)
+    items = []
+    async for item in gen:
+        items.append(item)
+        if len(items) == 6:
+            break
+    assert len(items) == 6, "connected + events 11..15 must pass replay filter"
+    assert "event: connected" in items[0]
+    assert all("event: e" in it for it in items[1:])
+
+
+def test_sse_event_seq_pair():
+    evt = SSEEvent("msg", {"x": 1})
+    assert evt.seq is not None
+    assert isinstance(evt.seq[0], int)
+    assert isinstance(evt.seq[1], int)
+
+
+@pytest.mark.asyncio
+async def test_sse_backpressure_block_times_out_on_full_queue():
+    stream = SSEStream(max_queue=1, backpressure=Backpressure.BLOCK)
+    stream.subscribe("s1")
+    await stream.push("a", {}, session_id="s1")
+    await stream.push("b", {}, session_id="s1")
+    assert stream.total_pushed == 1
+    assert stream.total_dropped == 1
     stream.unsubscribe("s1")
 
 

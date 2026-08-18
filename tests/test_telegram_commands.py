@@ -68,7 +68,7 @@ class TestCmdNew:
         assert event.channel == "telegram"
         assert "/new" in event.text
 
-    async def test_cmd_new_generates_unique_session(self, channel):
+    async def test_cmd_new_uses_canonical_session(self, channel):
         handler = AsyncMock()
         channel._handler = handler
         update1, ctx1 = _make_update("/new")
@@ -77,7 +77,8 @@ class TestCmdNew:
         await channel._cmd_new(update2, ctx2)
         event1 = handler.call_args_list[0][0][0]
         event2 = handler.call_args_list[1][0][0]
-        assert event1.session_id != event2.session_id
+        assert event1.session_id == "telegram:12345:default"
+        assert event2.session_id == "telegram:12345:default"
 
 
 class TestCmdReset:
@@ -97,7 +98,8 @@ class TestCmdReset:
         await channel._cmd_reset(update, context)
         handler.assert_awaited_once()
         event = handler.call_args[0][0]
-        assert "/new" in event.text
+        assert event.text == "/reset"
+        assert event.session_id == "telegram:12345:default"
 
 
 class TestCmdPair:

@@ -268,7 +268,7 @@ class UnifiedAgent:
             if result and stream_used is not None and not stream_used[0]:
                 await queue.put(result)
         except Exception as exc:
-            await queue.put(f"[error: {exc}]")
+            logger.error("Stream error in process(): {}", exc)
             raise
         finally:
             await queue.put(None)

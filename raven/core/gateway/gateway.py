@@ -88,6 +88,7 @@ class Gateway:
         self._outbox = Outbox(self._outbox_path(), self._send_now)
         self._send_semaphores: dict[str, asyncio.Semaphore] = {}
         self._send_cbs: dict[str, CircuitBreaker] = {}
+        self._prefs: dict[str, dict[str, str]] = {}
 
         self._ctxmgr: ContextWindowManager | None = None
         if settings.context_window_enabled and settings.context_window_max_tokens > 0:
@@ -141,6 +142,12 @@ class Gateway:
             metrics=metrics,
             send_fn=self._send,
         )
+
+    def set_pref(self, channel: str, user_id: str, key: str, value: str) -> None:
+        self._prefs.setdefault(f"{channel}:{user_id}", {})[key] = value
+
+    def get_pref(self, channel: str, user_id: str, key: str, default: str = "") -> str:
+        return self._prefs.get(f"{channel}:{user_id}", {}).get(key, default)
 
     def _outbox_path(self) -> str:
         db_path: Any = getattr(self.db, "db_path", None)

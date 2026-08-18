@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from loguru import logger
 
@@ -122,14 +123,11 @@ class DiscordChannel(BaseChannel):
             if self._handler:
                 user_id = str(ctx.author.id)
                 channel_id = str(ctx.channel.id)
-                from uuid import uuid4
-
-                new_session = f"discord:{channel_id}:{uuid4().hex[:8]}"
                 event = IncomingMessage(
                     channel="discord",
                     user_id=user_id,
-                    session_id=new_session,
-                    text="/new",
+                    session_id=f"discord:{channel_id}:default",
+                    text="/reset",
                     metadata={"channel_id": channel_id, "username": str(ctx.author)},
                 )
                 await self._handler(event)
@@ -148,7 +146,16 @@ class DiscordChannel(BaseChannel):
         self._register_slash_commands()
         task = asyncio.create_task(self._bot.start(self._token))
         self._bg_tasks.add(task)
-        task.add_done_callback(self._bg_tasks.discard)
+
+        def _on_bot_task_done(done: asyncio.Task[Any]) -> None:
+            self._bg_tasks.discard(done)
+            if done.cancelled():
+                return
+            exc = done.exception()
+            if exc is not None:
+                logger.error("Discord bot task failed: {}", exc)
+
+        task.add_done_callback(_on_bot_task_done)
 
     def _register_slash_commands(self):
         if not self._tree:

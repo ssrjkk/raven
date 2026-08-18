@@ -113,6 +113,7 @@ class VectorStore:
         self._vectors[doc_id] = list(self._as_np(vecs[0]))
         self._metadata[doc_id] = {
             "text": text[:1000],
+            "full_text": text,
             "timestamp": time.time(),
             **(metadata or {}),
         }
@@ -126,6 +127,7 @@ class VectorStore:
             self._vectors[doc_id] = list(self._as_np(vecs[i]))
             self._metadata[doc_id] = {
                 "text": text[:1000],
+                "full_text": text,
                 "timestamp": time.time(),
                 **(meta or {}),
             }
@@ -193,7 +195,7 @@ class VectorStore:
                 results.append(
                     {
                         "id": doc_id,
-                        "text": meta.get("text", ""),
+                        "text": meta.get("full_text") or meta.get("text", ""),
                         "score": float(1.0 - dist),
                         "metadata": meta,
                         "scores": {"semantic": float(1.0 - dist), "lexical": 0.0},
@@ -216,7 +218,7 @@ class VectorStore:
             results.append(
                 {
                     "id": doc_id,
-                    "text": meta.get("text", ""),
+                    "text": meta.get("full_text") or meta.get("text", ""),
                     "score": float(sims[idx]),
                     "metadata": meta,
                     "scores": {"semantic": float(sims[idx]), "lexical": 0.0},
@@ -269,7 +271,7 @@ class VectorStore:
                 continue
             entry: dict[str, Any] = {
                 "id": doc_id,
-                "text": texts[idx],
+                "text": meta.get("full_text") or texts[idx],
                 "score": float(scores[idx]),
                 "metadata": meta,
                 "scores": {"semantic": float(semantic_scores[idx]) if semantic_scores else 0.0, "lexical": 0.0},

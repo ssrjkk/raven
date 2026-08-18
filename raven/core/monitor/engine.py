@@ -42,6 +42,7 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
         self._consecutive_failures: dict[str, int] = {}
         self._consecutive_successes: dict[str, int] = {}
         self._effective_intervals: dict[str, int] = {}
+        self._last_alert_at: dict[str, float] = {}
 
     @classmethod
     def from_db(cls, db_path: str, send_fn: Any = None) -> MonitorEngine:
@@ -69,6 +70,7 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
         monitor = await self._load_item(monitor_id)
         if not monitor:
             return None
+        self._init_alert_clock(monitor)
         alert_text = await self._run_item(monitor)
         if alert_text:
             await self._alert(monitor, alert_text)
@@ -124,17 +126,26 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
         return report
 
     async def _run_loop(self, monitor: Monitor) -> None:
+        self._init_alert_clock(monitor)
         while self._running:
             try:
                 alert_text = await self._run_item(monitor)
                 if alert_text and self._running:
                     await self._alert(monitor, alert_text)
-                await asyncio.sleep(monitor.interval_seconds)
+                await asyncio.sleep(self._get_interval(monitor))
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error("Monitor {} loop error: {}", monitor.id, e)
                 await asyncio.sleep(60)
+
+    def _init_alert_clock(self, monitor: Monitor) -> None:
+        if (
+            monitor.id not in self._last_alert_at
+            and monitor.last_check is not None
+            and monitor.last_check.triggered
+        ):
+            self._last_alert_at[monitor.id] = monitor.last_check.checked_at
 
     async def _run_item(self, monitor: Monitor) -> str | None:
         start = time.time()
@@ -294,12 +305,18 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
         return None
 
     async def _alert(self, monitor: Monitor, alert_text: str) -> None:
-        if not monitor.should_notify():
+        last_alert = self._last_alert_at.get(monitor.id)
+        if last_alert is not None and (time.time() - last_alert) / 60 < monitor.cooldown_minutes:
             logger.debug("Monitor {} cooldown active, skipping alert", monitor.id)
             return
         channel_id = monitor.channel or monitor.config.get("channel")
         if self._send_fn and channel_id:
-            await self._send_fn(channel_id, alert_text)
+            try:
+                await self._send_fn(channel_id, alert_text)
+            except Exception as e:
+                logger.error("Monitor {} alert delivery failed: {}", monitor.id, e)
+                return
+        self._last_alert_at[monitor.id] = time.time()
         logger.info("Monitor {} alert: {}", monitor.id, alert_text[:100])
         if self._event_bus is not None:
             await self._event_bus.publish(

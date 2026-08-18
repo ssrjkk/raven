@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 from typing import Any
@@ -68,13 +69,21 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
 
             src: Any = PILImage.open(target)
             if crop:
-                vals = [x.strip() for x in crop.split(",")]
-                if len(vals) == 4 and all(v.lstrip("-").isdigit() for v in vals):
-                    src = src.crop((int(vals[0]), int(vals[1]), int(vals[2]), int(vals[3])))
+                parts = [x.strip() for x in crop.split(",")]
+                if len(parts) != 4 or not all(p.lstrip("-").isdigit() for p in parts):
+                    raise HTTPException(400, f"Invalid crop: {crop}")
+                left, upper, right, lower = (int(p) for p in parts)
+                if not (0 <= left < right and 0 <= upper < lower):
+                    raise HTTPException(400, f"Invalid crop box: {crop}")
+                src = src.crop((left, upper, right, lower))
             if resize:
-                vals = resize.lower().split("x")
-                if len(vals) == 2 and vals[0].strip().isdigit() and vals[1].strip().isdigit():
-                    src = src.resize((int(vals[0]), int(vals[1])), PILImage.Resampling.LANCZOS)
+                parts = resize.lower().split("x")
+                if len(parts) != 2 or not parts[0].strip().isdigit() or not parts[1].strip().isdigit():
+                    raise HTTPException(400, f"Invalid resize: {resize}")
+                width, height = int(parts[0]), int(parts[1])
+                if width <= 0 or height <= 0:
+                    raise HTTPException(400, f"Invalid resize: {resize}")
+                src = src.resize((width, height), PILImage.Resampling.LANCZOS)
             if rotate:
                 src = src.rotate(rotate, expand=True)
             if flip == "horizontal":
@@ -94,6 +103,8 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
                 "bytes": buf.tell(),
                 "data_url": f"data:image/{fmt.lower()};base64,{b64}",
             }
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error("Image process error: {}", e)
             raise HTTPException(500, str(e)) from e
@@ -202,7 +213,7 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
         dest = ws / safe_name
         try:
             content = await file.read()
-            dest.write_bytes(content)
+            await asyncio.to_thread(dest.write_bytes, content)
             return {"path": str(dest), "size": len(content), "filename": safe_name}
         except Exception as e:
             logger.error("Upload error: {}", e)

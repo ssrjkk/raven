@@ -11,6 +11,7 @@ from raven.core.monitor.alert import AlertDispatcher
 from raven.core.monitor.conditions import ConditionEvaluator
 from raven.core.monitor.engine import MonitorEngine
 from raven.core.monitor.models import (
+    CheckResult,
     Condition,
     ConditionOperator,
     Monitor,
@@ -336,6 +337,63 @@ class TestCooldown:
         await store.save_monitor(m)
         await engine.check_now(m.id)
         assert len(sent) >= 1
+
+    async def test_cooldown_measured_from_last_alert(self, store: MonitorStore):
+        sent: list[str] = []
+
+        async def send_fn(channel: str, text: str):
+            sent.append(f"{channel}:{text}")
+
+        engine = MonitorEngine(store, send_fn=send_fn)
+        handler = AsyncMock(return_value="alert")
+        engine.register_handler("http", handler)
+        m = Monitor(
+            name="test", type=MonitorType.HTTP, target="https://example.com", cooldown_minutes=30, channel="test_ch"
+        )
+        await store.save_monitor(m)
+        await engine.check_now(m.id)
+        assert len(sent) == 1
+        engine._last_alert_at[m.id] = time.time() - 3600
+        await engine.check_now(m.id)
+        assert len(sent) == 2, "alert must fire again once cooldown elapsed"
+
+    async def test_cooldown_initialized_from_last_triggered(self, store: MonitorStore):
+        sent: list[str] = []
+
+        async def send_fn(channel: str, text: str):
+            sent.append(f"{channel}:{text}")
+
+        engine = MonitorEngine(store, send_fn=send_fn)
+        handler = AsyncMock(return_value="alert")
+        engine.register_handler("http", handler)
+        m = Monitor(
+            name="test", type=MonitorType.HTTP, target="https://example.com", cooldown_minutes=30, channel="test_ch"
+        )
+        m.last_check = CheckResult(
+            status="down",
+            checked_at=time.time() - 60,
+            response_time_ms=5,
+            triggered=True,
+            error=None,
+        )
+        engine._init_alert_clock(m)
+        await store.save_monitor(m)
+        await engine.check_now(m.id)
+        assert len(sent) == 0, "cooldown must count from previous triggered check"
+
+    async def test_alert_delivery_failure_does_not_raise(self, store: MonitorStore):
+        async def boom_send(channel: str, text: str):
+            raise RuntimeError("channel dead")
+
+        engine = MonitorEngine(store, send_fn=boom_send)
+        handler = AsyncMock(return_value="alert")
+        engine.register_handler("http", handler)
+        m = Monitor(
+            name="test", type=MonitorType.HTTP, target="https://example.com", cooldown_minutes=0, channel="test_ch"
+        )
+        await store.save_monitor(m)
+        result = await engine.check_now(m.id)
+        assert result == "alert"
 
 
 class TestCheckerSignatures:

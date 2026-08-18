@@ -87,7 +87,7 @@ class TestPlannerExecutorCritic:
         assert result.status == "error"
         assert "Step A" not in result.content
         assert "Execution plan" not in result.content
-        assert result.content == "Task completed with partial results."
+        assert result.content == "[error: task failed]"
 
     @pytest.mark.asyncio
     async def test_plan_steps_are_recorded_in_context(self):

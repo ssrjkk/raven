@@ -95,7 +95,7 @@ class TestStreamProcess:
         agent = UnifiedAgent()
         agent.process = AsyncMock(side_effect=RuntimeError("boom"))  # type: ignore[method-assign]
         tokens = [t async for t in agent.stream_process("hi")]
-        assert any("error" in t for t in tokens)
+        assert tokens == ["[error: boom]"]
 
 
 class TestContextManagement:

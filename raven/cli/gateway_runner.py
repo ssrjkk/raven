@@ -320,6 +320,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     pattern_checker_router = create_pattern_checker_router(workspace=str(settings.resolved_workspace))
     api_app.include_router(pattern_checker_router)
 
+    from raven.core.sse import sse_stream
     from raven.core.sse_api import create_sse_router
 
     api_app.include_router(create_sse_router())
@@ -773,6 +774,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         await routine_engine.start()
         await analytics_engine.start()
         await dream_engine.start()
+        sse_stream.start_cleanup()
         if settings.web_host in ("0.0.0.0", "::", ""):
             logger.warning("Binding to {}:{}. Ensure firewall/reverse proxy is configured.", settings.web_host, web_port)
         config = uvicorn.Config(api_app, host=settings.web_host, port=web_port, log_level="info", ws="auto")
@@ -813,6 +815,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             await audit_logger.stop()
         except Exception as e:
             logger.warning("Shutdown audit_logger: {}", e)
+        with contextlib.suppress(Exception):
+            await sse_stream.stop()
         register_routine_engine(None)
         sv_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):

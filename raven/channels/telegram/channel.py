@@ -145,32 +145,36 @@ class TelegramChannel(BaseChannel):
             kb = None
             if message.metadata and message.metadata.get("show_menu"):
                 kb = build_menu_keyboard()
-            try:
-                await self._app.bot.send_message(
-                    chat_id=int(chat_id),
-                    text=text,
-                    parse_mode="Markdown",
-                    reply_markup=kb,
-                )
-            except Exception as markdown_err:
-                logger.debug("Telegram Markdown send failed: {}, retrying without Markdown", markdown_err)
+            for i in range(0, len(text), 4000):
+                chunk = text[i : i + 4000]
                 try:
                     await self._app.bot.send_message(
                         chat_id=int(chat_id),
-                        text=text,
-                        reply_markup=kb,
+                        text=chunk,
+                        parse_mode="Markdown",
+                        reply_markup=kb if i == 0 else None,
                     )
-                except Exception as e:
-                    logger.error("Telegram send failed: {}", e)
+                except Exception as markdown_err:
+                    logger.debug("Telegram Markdown send failed: {}, retrying without Markdown", markdown_err)
+                    try:
+                        await self._app.bot.send_message(
+                            chat_id=int(chat_id),
+                            text=chunk,
+                            reply_markup=kb if i == 0 else None,
+                        )
+                    except Exception as e:
+                        logger.error("Telegram send failed: {}", e)
 
     async def send_typing(self, chat_id: int):
         if not self._app:
             return
-        with contextlib.suppress(ConnectionError, TimeoutError):
+        try:
             await self._app.bot.send_chat_action(
                 chat_id=chat_id,
                 action="typing",
             )
+        except Exception as e:
+            logger.debug("Telegram send_typing failed: {}", e)
 
     async def send_menu(self, chat_id: int, text: str = "Choose an action:"):
         if not self._app:
@@ -283,12 +287,7 @@ class TelegramChannel(BaseChannel):
                 await query.edit_message_text("⏳ This confirmation has expired.")
             return
         if data == "menu_new":
-            await self._incoming(
-                update,
-                "/new",
-                session_id=f"telegram:{self._chat_id(update)}:{uuid4().hex[:8]}",
-                extra_meta={"callback": data},
-            )
+            await self._incoming(update, "/new", extra_meta={"callback": data})
         elif data == "menu_help":
             await query.edit_message_text(TELEGRAM_HELP, reply_markup=build_menu_keyboard())
         elif data == "menu_tasks":
@@ -318,11 +317,7 @@ class TelegramChannel(BaseChannel):
         await self.send_menu(int(self._chat_id(update)))
 
     async def _cmd_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await self._incoming(
-            update,
-            "/new",
-            session_id=f"telegram:{self._chat_id(update)}:{uuid4().hex[:8]}",
-        )
+        await self._incoming(update, "/new")
 
     async def _cmd_pair(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         code = " ".join(context.args) if context.args else ""
@@ -331,11 +326,7 @@ class TelegramChannel(BaseChannel):
     async def _cmd_reset(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.message is None:
             return
-        await self._incoming(
-            update,
-            "/new",
-            session_id=f"telegram:{self._chat_id(update)}:{uuid4().hex[:8]}",
-        )
+        await self._incoming(update, "/reset")
         await update.message.reply_text("Session reset.")
 
     async def _cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
