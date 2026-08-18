@@ -73,6 +73,28 @@ async def test_max_attempts_drops_message(db_path: str) -> None:
         await box.stop()
 
 
+async def test_purge_dropped_removes_old_rows(db_path: str) -> None:
+    import time
+
+    box = Outbox(db_path, _always_fail, max_attempts=3, backoff_base=0.0)
+    await box.start()
+    try:
+        await box.enqueue("telegram", "s1", "hello")
+        for _ in range(3):
+            await box.flush()
+        assert await box.dropped_count() == 1
+
+        old = time.time() - Outbox._DROPPED_RETENTION_DAYS * 86400 - 60
+        assert box._db is not None
+        await box._db.execute("UPDATE outbox SET created_at = ? WHERE status = 'dropped'", (old,))
+        await box._db.commit()
+
+        await box._purge_dropped()
+        assert await box.dropped_count() == 0
+    finally:
+        await box.stop()
+
+
 async def test_worker_delivers_after_retry_interval(db_path: str) -> None:
     attempts = {"n": 0}
 

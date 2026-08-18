@@ -18,6 +18,9 @@ SendFn = Callable[[str, str, str], Awaitable[None]]
 class Outbox:
     """Persistent retry queue for outbound channel messages (delivery guarantee)."""
 
+    _DROPPED_RETENTION_DAYS = 7
+    """Dropped (failed after max_attempts) rows are purged after this age."""
+
     def __init__(
         self,
         db_path: str | Path,
@@ -106,10 +109,22 @@ class Outbox:
                 if not self._running:
                     break
                 await self._process_due()
+                await self._purge_dropped()
             except asyncio.CancelledError:
                 break
             except Exception:
                 logger.opt(exception=True).error("Outbox worker error")
+
+    async def _purge_dropped(self) -> None:
+        if self._db is None:
+            return
+        cutoff = time.time() - self._DROPPED_RETENTION_DAYS * 86400
+        async with self._db.transaction():
+            deleted = await self._db.execute(
+                "DELETE FROM outbox WHERE status = 'dropped' AND created_at < ?", (cutoff,)
+            ) or 0
+        if deleted:
+            logger.info("Outbox purged {} dropped messages older than {} days", deleted, self._DROPPED_RETENTION_DAYS)
 
     async def _process_due(self) -> None:
         if self._db is None:

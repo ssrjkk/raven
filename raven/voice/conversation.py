@@ -17,7 +17,7 @@ from raven.voice.tts import TextToSpeech, TTSConfig, TTSProvider
 
 class AudioPlayer:
     def __init__(self) -> None:
-        self._queue: queue.Queue[np.ndarray | None] = queue.Queue()
+        self._queue: queue.Queue[tuple[np.ndarray, int] | None] = queue.Queue()
         self._thread: threading.Thread | None = None
         self._playing = False
         self._stop = False
@@ -30,11 +30,12 @@ class AudioPlayer:
             return
         try:
             while not self._stop:
-                data = self._queue.get()
-                if data is None or self._stop:
+                item = self._queue.get()
+                if item is None or self._stop:
                     break
+                data, sample_rate = item
                 self._playing = True
-                sd.play(data, samplerate=24000)
+                sd.play(data, samplerate=sample_rate)
                 sd.wait()
                 self._playing = False
         except Exception as exc:
@@ -49,7 +50,7 @@ class AudioPlayer:
 
     def enqueue(self, audio_data: bytes, sample_rate: int = 24000) -> None:
         data = np.frombuffer(audio_data, dtype=np.int16).reshape(-1, 1)
-        self._queue.put(data)
+        self._queue.put((data, sample_rate))
 
     def stop_playback(self) -> None:
         with self._queue.mutex:

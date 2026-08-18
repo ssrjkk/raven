@@ -137,3 +137,22 @@ class TestAudioPlayerStop:
         assert player._queue.qsize() == 0
         fake_sd.stop.assert_called_once()
         assert player.is_playing() is False
+
+    def test_enqueue_keeps_sample_rate_for_worker(self, monkeypatch: pytest.MonkeyPatch):
+        import sys
+        from types import ModuleType
+
+        fake_sd = ModuleType("sounddevice")
+        fake_sd.play = MagicMock()  # type: ignore[attr-defined]
+        fake_sd.wait = MagicMock()  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+        from raven.voice.conversation import AudioPlayer
+
+        player = AudioPlayer()
+        player.enqueue(b"\x00\x00" * 40, sample_rate=16000)
+        item = player._queue.get()
+        assert item is not None
+        data, rate = item
+        assert rate == 16000
+        assert data.shape[1] == 1
