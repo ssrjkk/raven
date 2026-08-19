@@ -106,15 +106,129 @@ class TestAgent:
         result = await agent._execute_tool(tc)
         assert "error" in result
 
+    async def test_run_caps_tool_calls_per_round(self, session, mock_db):
+        from raven.core.llm import LLMResponse, ToolCall
+
+        executed: list[str] = []
+
+        async def ping() -> str:
+            executed.append("ping")
+            return "pong"
+
+        ping_tool = PluginTool(
+            name="ping",
+            description="Ping test",
+            parameters={"type": "object", "properties": {}},
+            handler=ping,
+        )
+        calls = [ToolCall(id=f"call{i}", name="ping", arguments={}) for i in range(12)]
+        llm = AsyncMock()
+        llm.complete = AsyncMock(
+            side_effect=[
+                LLMResponse(content="", tool_calls=calls, finish_reason="tool_calls"),
+                LLMResponse(content="done", finish_reason="stop"),
+            ]
+        )
+        from raven.core.security.tool_policy import ToolPolicyEvaluator
+
+        config = AgentConfig(max_tool_rounds=3, use_memory=False, max_tool_calls_per_round=8)
+        agent = Agent(
+            session=session,
+            tools=[ping_tool],
+            db=mock_db,
+            llm=llm,
+            config=config,
+            tool_policy=ToolPolicyEvaluator("full", "", ""),  # type: ignore[arg-type]
+        )
+        tokens = [t async for t in agent.run("go")]
+        assert len(executed) == 8
+        assert "done" in "".join(tokens)
+
     async def test_agent_config_defaults(self):
         config = AgentConfig()
         assert config.max_tool_rounds == 10
+        assert config.max_tool_calls_per_round == 8
         assert config.use_memory is True
         assert config.agent_id == "default"
 
     async def test_build_system_prompt(self, agent):
         prompt = await agent._build_system_prompt()
         assert "Raven" in prompt
+
+
+class TestLoopDetection:
+    def test_detect_loop_no_tool_calls(self, agent):
+        history = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "ok"}]
+        assert agent._detect_loop(history) is False
+
+    def test_detect_loop_empty_history(self, agent):
+        assert agent._detect_loop([]) is False
+
+    def test_detect_loop_few_calls(self, agent):
+        history = [
+            {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "ping"}}]}
+            for _ in range(3)
+        ]
+        assert agent._detect_loop(history) is False
+
+    def test_detect_loop_same_tool_four_times(self, agent):
+        history = [
+            {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "ping"}}]}
+            for _ in range(4)
+        ]
+        assert agent._detect_loop(history) is True
+
+    def test_detect_loop_mixed_tools_no_loop(self, agent):
+        history = [
+            {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": n}}]}
+            for n in ("ping", "pong", "ping", "pong")
+        ]
+        assert agent._detect_loop(history) is False
+
+    def test_detect_loop_empty_tool_calls_list(self, agent):
+        history = [{"role": "assistant", "content": "", "tool_calls": []} for _ in range(5)]
+        assert agent._detect_loop(history) is False
+
+
+class TestCompression:
+    async def test_compress_short_history_untouched(self, agent):
+        messages = [{"role": "user", "content": "a"} for _ in range(5)]
+        assert await agent._compress(messages) == messages
+
+    async def test_compress_fallback_on_empty_summary(self, session, tools, mock_db):
+        from raven.core.llm import LLMResponse
+
+        llm = AsyncMock()
+        llm.complete = AsyncMock(return_value=LLMResponse(content="", finish_reason="stop"))
+        config = AgentConfig(max_tool_rounds=3, use_memory=False)
+        agent = Agent(session=session, tools=tools, db=mock_db, llm=llm, config=config)
+        messages = [{"role": "user", "content": f"msg-{i}"} for i in range(10)]
+        compressed = await agent._compress(messages)
+        assert compressed[0] == messages[0]
+        assert compressed[-8:] == messages[-8:]
+        assert len(compressed) == 9
+
+    async def test_compress_uses_summary(self, session, tools, mock_db):
+        from raven.core.llm import LLMResponse
+
+        llm = AsyncMock()
+        llm.complete = AsyncMock(return_value=LLMResponse(content="Key points summary", finish_reason="stop"))
+        config = AgentConfig(max_tool_rounds=3, use_memory=False)
+        agent = Agent(session=session, tools=tools, db=mock_db, llm=llm, config=config)
+        messages = [{"role": "user", "content": f"msg-{i}"} for i in range(10)]
+        compressed = await agent._compress(messages)
+        assert any("[Context summary: Key points summary]" in m.get("content", "") for m in compressed)
+        assert compressed[-4:] == messages[-4:]
+
+    async def test_compress_llm_failure_falls_back(self, session, tools, mock_db):
+        llm = AsyncMock()
+        llm.complete = AsyncMock(side_effect=RuntimeError("provider down"))
+        config = AgentConfig(max_tool_rounds=3, use_memory=False)
+        agent = Agent(session=session, tools=tools, db=mock_db, llm=llm, config=config)
+        messages = [{"role": "user", "content": f"msg-{i}"} for i in range(12)]
+        compressed = await agent._compress(messages)
+        assert compressed[0] == messages[0]
+        assert compressed[-8:] == messages[-8:]
 
 
 class TestAgentRegistry:

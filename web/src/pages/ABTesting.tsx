@@ -86,7 +86,9 @@ export default function ABTesting() {
         const [exp, res] = await Promise.all([api.abGet(id), api.abResults(id)]);
         setSelected(exp);
         setResults(res);
-      } catch { /* ignore */ }
+      } catch (e) {
+        console.error("Failed to refresh experiment after status change", e);
+      }
     },
     onError: (e: any) => setError(e.message),
   });

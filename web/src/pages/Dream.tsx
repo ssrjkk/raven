@@ -17,7 +17,8 @@ export default function Dream() {
       const res = await api.dreamCycle();
       setCycleResult(res.stats);
       await refetch();
-    } catch {
+    } catch (e) {
+      console.error("Dream cycle failed", e);
       setCycleResult(null);
     } finally {
       setCycling(false);

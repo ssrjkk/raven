@@ -206,7 +206,8 @@ async def test_sse_stream_replay_skips_only_older_events():
     q = stream.subscribe("s1")
     for i in range(15):
         await stream.push("e", {"i": i}, session_id="s1")
-    last_ten = f"evt-{int(time.time() * 1000)}-10"
+    events = list(q._queue)  # type: ignore[attr-defined]
+    last_ten = events[9].id
     gen = stream.stream("s1", last_event_id=last_ten)
     items = []
     async for item in gen:

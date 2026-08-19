@@ -15,6 +15,7 @@ from raven.core.db import Database
 from raven.core.llm import LLMRouter, ToolCall
 from raven.core.llm.queue import PRIORITY_LOW, PRIORITY_NORMAL
 from raven.core.models import Message, PluginTool, Session
+from raven.core.security.tool_policy import ToolPolicyEvaluator
 
 
 class AgentState(Enum):
@@ -33,6 +34,7 @@ class AgentConfig:
         system_prompt: str | None = None,
         model: str | None = None,
         max_tool_rounds: int = 10,
+        max_tool_calls_per_round: int = 8,
         max_history: int = 50,
         use_memory: bool = True,
         stateless: bool = False,
@@ -43,6 +45,7 @@ class AgentConfig:
         self.system_prompt = system_prompt
         self.model = model
         self.max_tool_rounds = max_tool_rounds
+        self.max_tool_calls_per_round = max_tool_calls_per_round
         self.max_history = 0 if stateless else max_history
         self.use_memory = False if stateless else use_memory
         self.stateless = stateless
@@ -66,7 +69,7 @@ class Agent:
         db: Database,
         llm: LLMRouter,
         config: AgentConfig | None = None,
-        tool_policy: Any = None,
+        tool_policy: ToolPolicyEvaluator | None = None,
     ):
         self.session = session
         self.tools = tools
@@ -75,9 +78,9 @@ class Agent:
         self.config = config or AgentConfig()
         self.priority = self.config.priority
         self._tool_map: dict[str, PluginTool] = {t.name: t for t in tools}
-        self._tool_policy = tool_policy or self._init_tool_policy()
+        self._tool_policy: ToolPolicyEvaluator = tool_policy or self._init_tool_policy()
 
-    def _init_tool_policy(self):
+    def _init_tool_policy(self) -> ToolPolicyEvaluator:
         from raven.core.config import _DEFAULT_TOOLS_DENY, settings
         from raven.core.security.tool_policy import ExecAskMode, ExecSecurity, ToolPolicyEvaluator
 
@@ -302,14 +305,21 @@ class Agent:
                 if resp.tool_calls:
                     state = AgentState.TOOL_CALL
                     tool_used = True
+                    tool_calls = resp.tool_calls[: self.config.max_tool_calls_per_round]
+                    if len(tool_calls) < len(resp.tool_calls):
+                        logger.warning(
+                            "Agent: capped tool calls {} -> {} per round",
+                            len(resp.tool_calls),
+                            self.config.max_tool_calls_per_round,
+                        )
                     messages.append(
                         {
                             "role": "assistant",
                             "content": content,
-                            "tool_calls": [tc.to_dict() for tc in resp.tool_calls],
+                            "tool_calls": [tc.to_dict() for tc in tool_calls],
                         }
                     )
-                    for tc in resp.tool_calls:
+                    for tc in tool_calls:
                         tool_result = await self._execute_tool(tc)
                         messages.append(
                             {
