@@ -196,6 +196,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/github-actions")
     async def github_actions_webhook(body: dict[str, Any], request: Request):
+        await _verify_webhook_signature(request)
         workflow_run = body.get("workflow_run", {}) or {}
         action = body.get("action", "")
         conclusion = workflow_run.get("conclusion", "")
@@ -238,6 +239,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/allure")
     async def allure_webhook(body: dict[str, Any], request: Request):
+        await _verify_webhook_signature(request)
         results_url = body.get("results_url", "") or body.get("results_path", "")
         if not results_url:
             raise HTTPException(status_code=400, detail="No results_url or results_path provided")

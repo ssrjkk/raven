@@ -37,6 +37,10 @@ export default function Chat() {
   }, []);
 
   const onWsMessage = useCallback((data: { type: string; role?: string; content?: string; session_id?: string; event?: string; profile?: string; detail?: string; data?: Record<string, unknown> }) => {
+    if (data.type === "session" && data.session_id) {
+      setCurrentSession(data.session_id);
+      return;
+    }
     if (data.type === "message") {
       setMessages((prev) => [
         ...prev,

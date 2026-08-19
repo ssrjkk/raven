@@ -41,6 +41,26 @@ def _make_full_app() -> FastAPI:
     async def webhook() -> dict[str, str]:
         return {"ok": "webhook"}
 
+    @app.get("/api/chat/search")
+    async def chat_search() -> dict[str, str]:
+        return {"ok": "search"}
+
+    @app.get("/api/email/inbox")
+    async def email_inbox() -> dict[str, str]:
+        return {"ok": "inbox"}
+
+    @app.get("/api/email/config")
+    async def email_config() -> dict[str, str]:
+        return {"ok": "config"}
+
+    @app.get("/api/insights/workspace")
+    async def insights() -> dict[str, str]:
+        return {"ok": "insights"}
+
+    @app.get("/api/rag/stats")
+    async def rag_stats() -> dict[str, str]:
+        return {"ok": "rag"}
+
     return app
 
 
@@ -105,3 +125,29 @@ class TestApiMutationGuard:
         client = TestClient(_make_full_app())
         resp = client.post("/api/echo", content=b"{not json", headers={"content-type": "application/json"})
         assert resp.status_code == 401
+
+
+class TestPrivateReadGuard:
+    def test_private_read_rejected_anonymous_when_secured(self) -> None:
+        from raven.core.config import settings
+
+        if not settings.web_secret_key:
+            pytest.skip("web_secret_key not set")
+        client = TestClient(_make_full_app())
+        for path in ("/api/chat/search", "/api/email/inbox", "/api/email/config", "/api/insights/workspace", "/api/rag/stats"):
+            assert client.get(path).status_code == 401, path
+
+    def test_private_read_allowed_with_bearer(self) -> None:
+        token = token_manager.create_token("u1", "user")
+        client = TestClient(_make_full_app())
+        for path in ("/api/chat/search", "/api/email/inbox", "/api/email/config", "/api/insights/workspace", "/api/rag/stats"):
+            assert client.get(path, headers={"Authorization": f"Bearer {token}"}).status_code == 200, path
+
+    def test_private_read_open_when_unsecured(self, monkeypatch) -> None:
+        from pydantic import SecretStr
+
+        from raven.core.config import settings
+
+        monkeypatch.setattr(settings, "web_secret_key", SecretStr(""))
+        client = TestClient(_make_full_app())
+        assert client.get("/api/chat/search").status_code == 200

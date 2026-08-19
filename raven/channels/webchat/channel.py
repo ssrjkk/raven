@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from loguru import logger
 
@@ -79,6 +79,34 @@ async def _authenticate_ws(websocket: WebSocket) -> dict[str, Any] | None:
     return payload
 
 
+def _secure_endpoints_enabled() -> bool:
+    from raven.core.config import settings
+
+    secret = settings.web_secret_key.get_secret_value() if settings.web_secret_key else ""
+    return bool(secret)
+
+
+async def _authenticate_request(request: Request) -> bool:
+    from raven.core.auth.auth_handler import auth_handler
+    from raven.core.config import settings
+
+    token = request.headers.get("authorization", "")
+    if token.startswith("Bearer "):
+        token = token[7:]
+    if not token:
+        token = request.query_params.get("token", "")
+    if not token:
+        return False
+    secret = settings.web_secret_key.get_secret_value()
+    if secret and hmac.compare_digest(token, secret):
+        return True
+    try:
+        payload = await auth_handler.decode_token(token)
+    except Exception:
+        return False
+    return payload is not None
+
+
 class WebChatChannel(BaseChannel):
     channel_id = "webchat"
 
@@ -101,7 +129,9 @@ class WebChatChannel(BaseChannel):
             return HTMLResponse(html)
 
         @app.get("/api/sessions")
-        async def list_sessions():
+        async def list_sessions(request: Request):
+            if _secure_endpoints_enabled() and not await _authenticate_request(request):
+                return JSONResponse(status_code=401, content={"error": "Authentication required"})
             sessions = await self._db.get_sessions()
             return [
                 {
@@ -126,7 +156,9 @@ class WebChatChannel(BaseChannel):
             return {"ok": True}
 
         @app.get("/api/messages/{session_id}")
-        async def get_messages(session_id: str):
+        async def get_messages(session_id: str, request: Request):
+            if _secure_endpoints_enabled() and not await _authenticate_request(request):
+                return JSONResponse(status_code=401, content={"error": "Authentication required"})
             msgs = await self._db.get_session_messages(session_id, limit=50)
             return [
                 {
@@ -148,6 +180,7 @@ class WebChatChannel(BaseChannel):
             client_id = str(uuid4().hex[:8])
             self._connections[client_id] = websocket
             session_id = f"webchat:{client_id}:default"
+            await websocket.send_json({"type": "session", "session_id": session_id})
             try:
                 while True:
                     data = await websocket.receive_text()
@@ -350,7 +383,7 @@ class WebChatChannel(BaseChannel):
                             "session_id": session_id,
                         }
                     )
-            except (json.JSONDecodeError, Exception) as e:
+            except Exception as e:
                 logger.error("WebChat send_stream failed: {}", e)
 
     @property
@@ -492,7 +525,9 @@ const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
 this.ws = new WebSocket(`${protocol}//${location.host}/ws`);
 this.ws.onmessage = (e) => {
 const data = JSON.parse(e.data);
-if (data.type === 'message') {
+if (data.type === 'session' && data.session_id) {
+this.currentSession = data.session_id;
+} else if (data.type === 'message') {
 this.messages.push({ id: Date.now(), role: data.role, content: data.content, created_at: new Date().toISOString() });
 this.isLoading = false;
 this.$nextTick(() => this.scrollDown());

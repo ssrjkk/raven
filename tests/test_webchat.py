@@ -81,9 +81,22 @@ class TestWebChatChannel:
         assert "alpinejs" in INDEX_HTML
 
     def test_api_sessions_list(self, channel):
+        from raven.core.config import settings
+
+        secret = settings.web_secret_key.get_secret_value() if settings.web_secret_key else ""
+        client = TestClient(channel.app)
+        headers = {"Authorization": f"Bearer {secret}"} if secret else {}
+        response = client.get("/api/sessions", headers=headers)
+        assert response.status_code == 200
+
+    def test_api_sessions_list_rejects_anonymous_when_secured(self, channel):
+        from raven.core.config import settings
+
+        if not settings.web_secret_key:
+            pytest.skip("web_secret_key not set")
         client = TestClient(channel.app)
         response = client.get("/api/sessions")
-        assert response.status_code == 200
+        assert response.status_code == 401
 
     def test_api_create_session(self, channel):
         client = TestClient(channel.app)
@@ -97,8 +110,12 @@ class TestWebChatChannel:
         assert response.json()["ok"] is True
 
     def test_api_messages(self, channel):
+        from raven.core.config import settings
+
+        secret = settings.web_secret_key.get_secret_value() if settings.web_secret_key else ""
         client = TestClient(channel.app)
-        response = client.get("/api/messages/test_sid")
+        headers = {"Authorization": f"Bearer {secret}"} if secret else {}
+        response = client.get("/api/messages/test_sid", headers=headers)
         assert response.status_code == 200
         assert response.json() == []
 
@@ -202,6 +219,9 @@ class TestWebSocketEndpoints:
         channel._handler = handler
         client = TestClient(channel.app)
         with client.websocket_connect(f"/ws?token={self._ws_token()}") as ws:
+            first = ws.receive_json()
+            assert first["type"] == "session"
+            assert first["session_id"].startswith("webchat:")
             ws.send_text("this is not json")
             error = ws.receive_json()
             assert error["type"] == "error"
@@ -211,11 +231,24 @@ class TestWebSocketEndpoints:
             event = handler.await_args.args[0]
             assert event.text == "hello"
 
+    def test_ws_announces_session_id(self, channel):
+        handler = AsyncMock()
+        channel._handler = handler
+        client = TestClient(channel.app)
+        with client.websocket_connect(f"/ws?token={self._ws_token()}") as ws:
+            first = ws.receive_json()
+            assert first["type"] == "session"
+            assert first["session_id"].startswith("webchat:")
+            ws.send_text('{"text": "hi"}')
+            handler.assert_awaited_once()
+
     def test_foreign_session_id_is_ignored(self, channel):
         handler = AsyncMock()
         channel._handler = handler
         client = TestClient(channel.app)
         with client.websocket_connect(f"/ws?token={self._ws_token()}") as ws:
+            first = ws.receive_json()
+            assert first["type"] == "session"
             ws.send_text('{"text": "hi", "session_id": "webchat:attacker_client:default"}')
             handler.assert_awaited_once()
             assert handler.await_args is not None

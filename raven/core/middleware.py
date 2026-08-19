@@ -98,7 +98,23 @@ _PUBLIC_MUTATING_PREFIXES: tuple[str, ...] = (
 
 _PUBLIC_PATHS: tuple[str, ...] = ("/aios/health", "/aios/metrics", "/docs", "/openapi.json", "/redoc")
 
+# Read-only endpoints exposing private data (chat history across channels,
+# email content, workspace/insight metadata, RAG stats). Require auth when a
+# web_secret_key is configured (production mode); left open in local mode.
+_PRIVATE_READ_PREFIXES: tuple[str, ...] = (
+    "/api/chat/search",
+    "/api/email/inbox",
+    "/api/email/config",
+    "/api/insights",
+    "/api/rag",
+)
+
 _SLOW_REQUEST_THRESHOLD_S = 2.0
+
+
+def _secure_mode() -> bool:
+    secret = settings.web_secret_key.get_secret_value() if settings.web_secret_key else ""
+    return bool(secret)
 
 
 async def request_id_middleware(request: Request, call_next):
@@ -171,6 +187,13 @@ async def auth_middleware(request: Request, call_next):
     path = request.url.path
     if path.startswith(_PUBLIC_PATHS):
         return await call_next(request)
+    if _secure_mode() and request.state.user_id == "anonymous":
+        for prefix in _PRIVATE_READ_PREFIXES:
+            if path.startswith(prefix):
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": "Authentication required", "required": "Bearer token or X-Raven-Key"},
+                )
     for prefix in AUTH_REQUIRED_PREFIXES:
         if path.startswith(prefix) and request.state.user_id == "anonymous":
             return JSONResponse(
