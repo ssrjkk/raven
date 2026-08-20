@@ -13,6 +13,40 @@ from loguru import logger
 from raven.core.cost_management import _cost
 
 
+def _scan_workspace(root: Path) -> dict[str, Any]:
+    stats: dict[str, Any] = {
+        "total_files": 0,
+        "total_dirs": 0,
+        "by_extension": {},
+        "largest_files": [],
+        "recently_modified": [],
+    }
+    exts: Counter[str] = Counter()
+    sized: list[tuple[str, int]] = []
+    modified: list[tuple[str, float]] = []
+    for f in root.rglob("*"):
+        if f.is_file() and not f.name.startswith("."):
+            ext = f.suffix.lower() or "(no ext)"
+            exts[ext] += 1
+            try:
+                sz = f.stat().st_size
+                sized.append((str(f.relative_to(root)), sz))
+                modified.append((str(f.relative_to(root)), f.stat().st_mtime))
+            except OSError:
+                pass
+        elif f.is_dir():
+            stats["total_dirs"] += 1
+    stats["total_files"] = sum(exts.values())
+    stats["by_extension"] = dict(exts.most_common(30))
+    sized.sort(key=lambda x: -x[1])
+    stats["largest_files"] = [{"path": p, "size_bytes": s} for p, s in sized[:20]]
+    modified.sort(key=lambda x: -x[1])
+    stats["recently_modified"] = [
+        {"path": p, "modified_at": datetime.fromtimestamp(t, tz=UTC).isoformat()} for p, t in modified[:20]
+    ]
+    return stats
+
+
 def create_insights_router(workspace: str = "") -> APIRouter:
     router = APIRouter(prefix="/api/insights", tags=["insights"])
     ws = Path(workspace).resolve() if workspace else Path.cwd().resolve()
@@ -87,39 +121,17 @@ def create_insights_router(workspace: str = "") -> APIRouter:
 
     @router.get("/workspace")
     async def workspace_insights():
-        stats: dict[str, Any] = {
-            "total_files": 0,
-            "total_dirs": 0,
-            "by_extension": {},
-            "largest_files": [],
-            "recently_modified": [],
-        }
         try:
-            exts: Counter[str] = Counter()
-            sized: list[tuple[str, int]] = []
-            modified: list[tuple[str, float]] = []
-            for f in ws.rglob("*"):
-                if f.is_file() and not f.name.startswith("."):
-                    ext = f.suffix.lower() or "(no ext)"
-                    exts[ext] += 1
-                    try:
-                        sz = f.stat().st_size
-                        sized.append((str(f.relative_to(ws)), sz))
-                        modified.append((str(f.relative_to(ws)), f.stat().st_mtime))
-                    except OSError:
-                        pass
-                elif f.is_dir():
-                    stats["total_dirs"] += 1
-            stats["total_files"] = sum(exts.values())
-            stats["by_extension"] = dict(exts.most_common(30))
-            sized.sort(key=lambda x: -x[1])
-            stats["largest_files"] = [{"path": p, "size_bytes": s} for p, s in sized[:20]]
-            modified.sort(key=lambda x: -x[1])
-            stats["recently_modified"] = [
-                {"path": p, "modified_at": datetime.fromtimestamp(t, tz=UTC).isoformat()} for p, t in modified[:20]
-            ]
+            stats = await asyncio.to_thread(_scan_workspace, ws)
         except OSError as e:
             logger.warning("[insights] workspace scan failed: {}", e)
+            stats = {
+                "total_files": 0,
+                "total_dirs": 0,
+                "by_extension": {},
+                "largest_files": [],
+                "recently_modified": [],
+            }
         return stats
 
     return router

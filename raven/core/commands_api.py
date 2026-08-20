@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -266,7 +267,7 @@ def create_commands_router(data_dir: str | None = None) -> APIRouter:
 
     @router.get("/contextual", response_model=list[CommandResponse])
     async def get_contextual_commands():
-        project_state = _detect_project_state()
+        project_state = await asyncio.to_thread(_detect_project_state)
 
         commands: list[CommandResponse] = []
 

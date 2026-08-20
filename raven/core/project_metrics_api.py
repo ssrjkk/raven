@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import os
 import re
@@ -165,9 +166,11 @@ def create_project_metrics_router() -> APIRouter:
                 "dependencies": {"total_unique": 0, "top_modules": []},
                 "activity": {},
             }
-        code_stats = _scan_code_stats(ws)
-        deps = _scan_dependencies(ws)
-        activity = _scan_recent_activity(ws)
+        code_stats, deps, activity = await asyncio.gather(
+            asyncio.to_thread(_scan_code_stats, ws),
+            asyncio.to_thread(_scan_dependencies, ws),
+            asyncio.to_thread(_scan_recent_activity, ws),
+        )
         total_files = sum(v["files"] for v in code_stats.values())
         total_lines = sum(v["lines"] for v in code_stats.values())
         total_code = sum(v["code"] for v in code_stats.values())

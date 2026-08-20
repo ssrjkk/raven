@@ -9,6 +9,10 @@ interface TemplateStep {
   params: Record<string, string>;
 }
 
+interface EditStep extends TemplateStep {
+  uid: string;
+}
+
 interface WorkflowTemplate {
   id: string;
   name: string;
@@ -42,7 +46,7 @@ export default function Workflows() {
   const [showBuilder, setShowBuilder] = useState<string | null>(null);
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [showRuns, setShowRuns] = useState(false);
-  const [editSteps, setEditSteps] = useState<TemplateStep[]>([]);
+  const [editSteps, setEditSteps] = useState<EditStep[]>([]);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const dragOverIdx = useRef<number | null>(null);
 
@@ -83,7 +87,7 @@ export default function Workflows() {
   // ── Drag & Drop step reorder ──────────────────────────
   function openBuilder(t: WorkflowTemplate) {
     setShowBuilder(t.id);
-    setEditSteps(t.predefined_steps ? t.predefined_steps.map((s) => ({ ...s, params: { ...s.params } })) : []);
+    setEditSteps(t.predefined_steps ? t.predefined_steps.map((s) => ({ ...s, params: { ...s.params }, uid: crypto.randomUUID() })) : []);
   }
 
   function closeBuilder() {
@@ -92,7 +96,7 @@ export default function Workflows() {
   }
 
   function addStep() {
-    setEditSteps((prev) => [...prev, { description: "", tool: null, params: {} }]);
+    setEditSteps((prev) => [...prev, { description: "", tool: null, params: {}, uid: crypto.randomUUID() }]);
   }
 
   function removeStep(idx: number) {
@@ -146,7 +150,7 @@ export default function Workflows() {
     setMsg(`Generating steps for ${t.name}...`);
     try {
       const r = await api.workflowGenerateSteps(t.id);
-      setEditSteps(r.steps as TemplateStep[]);
+      setEditSteps(r.steps.map((s) => ({ ...s, uid: crypto.randomUUID() })));
       setMsg("Steps generated");
     } catch (e) {
       setMsg(`Error: ${e}`);
@@ -393,7 +397,7 @@ export default function Workflows() {
                           )}
                           {editSteps.map((step, idx) => (
                             <div
-                              key={idx}
+                              key={step.uid}
                               draggable
                               onDragStart={() => onDragStart(idx)}
                               onDragOver={(e) => onDragOver(e, idx)}

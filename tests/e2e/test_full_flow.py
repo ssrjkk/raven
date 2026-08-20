@@ -52,7 +52,6 @@ async def real_gateway(tmp_path: Path, monkeypatch) -> Any:
     monkeypatch.setattr("raven.core.gateway.gateway.settings.dm_policy", "open")
     monkeypatch.setattr("raven.core.gateway.gateway.settings.context_visibility", "public")
     monkeypatch.setattr("raven.core.gateway.gateway.settings.channel_allow_from", "")
-    monkeypatch.setattr("raven.core.llm.router._HAS_TIER_CONFIG", None)
 
     db = Database(tmp_path / "full.db")
     await db.connect()

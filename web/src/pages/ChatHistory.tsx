@@ -11,6 +11,7 @@ export default function ChatHistory() {
   const [searched, setSearched] = useState(false);
   const [selected, setSelected] = useState<ChatSearchResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchSeqRef = useRef(0);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -18,19 +19,22 @@ export default function ChatHistory() {
     e?.preventDefault();
     const q = query.trim();
     if (!q) return;
+    const seq = ++searchSeqRef.current;
     setLoading(true);
     setSearched(true);
     setSelected(null);
     try {
       const res = await api.chatSearch(q, 50);
+      if (seq !== searchSeqRef.current) return;
       setResults(res.results);
       setTotal(res.total);
     } catch (err) {
+      if (seq !== searchSeqRef.current) return;
       console.error("Chat search failed:", err);
       setResults([]);
       setTotal(0);
     } finally {
-      setLoading(false);
+      if (seq === searchSeqRef.current) setLoading(false);
     }
   }
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from pathlib import Path
@@ -43,16 +44,16 @@ async def export_memory(memory: MemoryManager, dest: Path | None = None) -> Path
         except Exception as e:
             logger.warning("[backup] failed to export tier {}: {}", tier.value, e)
 
-    dest.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+    await asyncio.to_thread(dest.write_text, json.dumps(data, indent=2, default=str), "utf-8")
     logger.info("[backup] exported {} tiers to {} ({} KB)", len(data["tiers"]), dest, dest.stat().st_size // 1024)
     return dest
 
 
 async def import_memory(memory: MemoryManager, source: Path) -> dict[str, int]:
-    if not source.is_file():
+    if not await asyncio.to_thread(source.is_file):
         raise FileNotFoundError(f"Backup file not found: {source}")
 
-    raw = source.read_text(encoding="utf-8")
+    raw = await asyncio.to_thread(source.read_text, "utf-8")
     try:
         data: dict[str, Any] = json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:

@@ -26,7 +26,7 @@ class CheckpointManager:
     async def save(self, description: str = "") -> str:
         cid = f"cp_{int(time.time())}"
         cp_dir = self._storage / cid
-        cp_dir.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(cp_dir.mkdir, parents=True, exist_ok=True)
         snapshot: dict[str, str] = {}
         for p in self._workspace.rglob("*"):
             if p.is_file():
@@ -52,25 +52,25 @@ class CheckpointManager:
             encoding="utf-8",
         )
         self._checkpoints[cid] = info
-        self._save_index()
+        await asyncio.to_thread(self._save_index)
         logger.info("Checkpoint saved: {} ({} files)", cid, len(snapshot))
         return f"[ok] checkpoint '{cid}' saved ({len(snapshot)} files)"
 
     async def restore(self, cid: str) -> str:
         cp_dir = self._storage / cid
-        if not cp_dir.is_dir():
+        if not await asyncio.to_thread(cp_dir.is_dir):
             return f"[error] checkpoint not found: {cid}"
         snapshot_file = cp_dir / "snapshot.json"
-        if not snapshot_file.is_file():
+        if not await asyncio.to_thread(snapshot_file.is_file):
             return f"[error] snapshot data missing for: {cid}"
         try:
-            snapshot = json.loads(snapshot_file.read_text(encoding="utf-8"))
+            snapshot = json.loads(await asyncio.to_thread(snapshot_file.read_text, encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
             return f"[error] cannot read snapshot: {exc}"
         restored = 0
         for rel_path, content in snapshot.items():
             target = self._workspace / rel_path
-            target.parent.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
             await asyncio.to_thread(target.write_text, content, encoding="utf-8")
             restored += 1
         logger.info("Checkpoint restored: {} ({} files)", cid, restored)

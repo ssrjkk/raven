@@ -49,6 +49,7 @@ export function useAgentSocket(onEvent: (ev: AgentSocketEvent) => void) {
     };
     ws.onclose = () => {
       setConnected(false);
+      setRunning(false);
       if (!mountedRef.current) return;
       const delay = reconnectDelay(attemptRef.current);
       attemptRef.current += 1;

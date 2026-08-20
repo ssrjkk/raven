@@ -158,6 +158,15 @@ Examples:
 """
 
 
+_SECRET_KEYS = ("api_key", "token", "secret", "password", "authorization", "cookie")
+
+
+def _redact_audit_args(args: dict[str, Any]) -> dict[str, Any]:
+    return {
+        k: ("***" if any(s in k.lower() for s in _SECRET_KEYS) else v) for k, v in args.items()
+    }
+
+
 class AgentOrchestrator:
     def __init__(
         self,
@@ -223,9 +232,20 @@ class AgentOrchestrator:
             total_iterations += 1
             agent_ctx.iteration = total_iterations
 
+            if len(messages) > 60:
+                system = messages[0]
+                messages = [
+                    system,
+                    {"role": "system", "content": "[earlier context truncated to save tokens]"},
+                    *messages[-20:],
+                ]
+
             if stalled_rounds >= 3:
-                msg = "I've been trying different approaches but keep hitting the same issue. Could you clarify or simplify what you need?"
-                messages.append({"role": "user", "content": msg})
+                msg = (
+                    "You seem stuck in a loop. Continue with your best assumption; "
+                    "if you need clarification, finish your reply with a short question for the user."
+                )
+                messages.append({"role": "system", "content": msg})
                 await st.thinking(current_profile.name, "Self-correction: asking user for guidance")
                 stalled_rounds = 0
 
@@ -314,7 +334,7 @@ class AgentOrchestrator:
                     AuditEventType.TOOL_EXEC,
                     f"agent:{current_profile.name}",
                     target=tc.name,
-                    detail={"args": tc.arguments},
+                    detail={"args": _redact_audit_args(tc.arguments or {})},
                 )
             tool_results = await asyncio.gather(
                 *(self._execute_tool_safe(tc, current_profile, agent_ctx) for tc in tool_calls),
@@ -472,7 +492,7 @@ class AgentOrchestrator:
                 model="",
             )
             text = (resp.content or "").strip()
-            if not text or text.upper().startswith("ACCEPT"):
+            if not text or re.match(r"^\s*ACCEPT(?:\s|$)", text.upper()):
                 return None
             return text[:800] or None
         except Exception as e:

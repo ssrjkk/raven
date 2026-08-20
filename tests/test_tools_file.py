@@ -295,6 +295,21 @@ class TestReadRelevant:
         assert "fn_30" not in result
         assert "pruned" in result
 
+    async def test_python_keeps_decorators(self, tmp_workspace: Path) -> None:
+        f = tmp_workspace / "api_big.py"
+        source = "\n".join(
+            [
+                "from fastapi import APIRouter\n\n",
+                "router = APIRouter()\n\n",
+                "def _helper():\n    return 1\n\n",
+                "@router.get('/ping')\nasync def ping():\n    return {'ok': True}\n\n" * 30,
+            ]
+        )
+        f.write_text(source, encoding="utf-8")
+        result = await file_read_relevant(str(f), query="ping", max_lines=8)
+        assert "@router.get" in result
+        assert "async def ping" in result
+
     async def test_missing_file_raises(self, tmp_workspace: Path) -> None:
         with pytest.raises(OSError):
             await file_read_relevant(str(tmp_workspace / "ghost.py"))

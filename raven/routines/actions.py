@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import email
+import asyncio
 import fnmatch
 import imaplib
 from datetime import UTC, datetime
@@ -36,6 +36,37 @@ async def execute_briefing(routine: Routine, llm_provider: Any = None) -> str:
     return briefing
 
 
+def _imap_check(config: dict[str, Any]) -> str:
+    import email
+
+    conn = imaplib.IMAP4_SSL(config.get("server", ""), timeout=15)
+    conn.login(config.get("username", ""), config.get("password", ""))
+    conn.select("INBOX")
+    status, data = conn.search(None, "UNSEEN")
+    if status != "OK":
+        return "[error] IMAP search failed"
+    unread_ids = data[0].split() if data[0] else []
+    count = len(unread_ids)
+    previews = []
+    for mid in unread_ids[: config.get("max_emails", 5)]:
+        status, msg_data = conn.fetch(mid, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
+        if status == "OK" and msg_data and msg_data[0]:
+            raw = msg_data[0][1] if isinstance(msg_data[0], tuple) and len(msg_data[0]) > 1 else msg_data[0]
+            msg = email.message_from_bytes(raw)
+            previews.append(
+                {
+                    "from": msg.get("From", "unknown"),
+                    "subject": msg.get("Subject", "(no subject)"),
+                    "date": msg.get("Date", ""),
+                }
+            )
+    conn.logout()
+    result = f"Unread: {count} emails"
+    if previews:
+        result += "\n" + "\n".join(f"  • From: {e['from'][:60]} — Subject: {e['subject'][:80]}" for e in previews)
+    return result
+
+
 async def check_email(routine: Routine) -> str:
     config = routine.config
     provider = config.get("provider", "imap")
@@ -52,34 +83,7 @@ async def check_email(routine: Routine) -> str:
             return f"[error] gmail check failed: {exc}"
     elif provider == "imap" and server:
         try:
-            conn = imaplib.IMAP4_SSL(server, timeout=15)
-            conn.login(config.get("username", ""), config.get("password", ""))
-            conn.select("INBOX")
-            status, data = conn.search(None, "UNSEEN")
-            if status != "OK":
-                return "[error] IMAP search failed"
-            unread_ids = data[0].split() if data[0] else []
-            count = len(unread_ids)
-            previews = []
-            for mid in unread_ids[: config.get("max_emails", 5)]:
-                status, msg_data = conn.fetch(mid, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
-                if status == "OK" and msg_data and msg_data[0]:
-                    raw = msg_data[0][1] if isinstance(msg_data[0], tuple) and len(msg_data[0]) > 1 else msg_data[0]
-                    msg = email.message_from_bytes(raw)
-                    previews.append(
-                        {
-                            "from": msg.get("From", "unknown"),
-                            "subject": msg.get("Subject", "(no subject)"),
-                            "date": msg.get("Date", ""),
-                        }
-                    )
-            conn.logout()
-            result = f"Unread: {count} emails"
-            if previews:
-                result += "\n" + "\n".join(
-                    f"  • From: {e['from'][:60]} — Subject: {e['subject'][:80]}" for e in previews
-                )
-            return result
+            return await asyncio.to_thread(_imap_check, config)
         except ImportError:
             return "[error] imaplib not available"
         except Exception as exc:
@@ -137,8 +141,8 @@ _EXTENSION_MAP: dict[str, str] = {
 }
 
 
-async def organize_files(routine: Routine) -> str:
-    src_dir = Path(routine.config.get("source_dir", "downloads")).expanduser().resolve()
+def _organize_impl(config: dict[str, Any]) -> str:
+    src_dir = Path(config.get("source_dir", "downloads")).expanduser().resolve()
     if not src_dir.is_dir():
         return f"[error] source directory not found: {src_dir}"
 
@@ -146,8 +150,8 @@ async def organize_files(routine: Routine) -> str:
     organized = 0
     skipped = 0
     errors = 0
-    dry_run = routine.config.get("dry_run", False)
-    pattern = routine.config.get("pattern", "*")
+    dry_run = config.get("dry_run", False)
+    pattern = config.get("pattern", "*")
 
     for entry in sorted(src_dir.iterdir()):
         if not entry.is_file():
@@ -179,3 +183,7 @@ async def organize_files(routine: Routine) -> str:
     if errors:
         parts.append(f"({errors} errors)")
     return " ".join(parts)
+
+
+async def organize_files(routine: Routine) -> str:
+    return await asyncio.to_thread(_organize_impl, routine.config)

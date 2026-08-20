@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertCircle } from "lucide-react";
 
@@ -12,6 +12,16 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
   const navigate = useNavigate();
+  const oauthHandlerRef = useRef<((event: MessageEvent) => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (oauthHandlerRef.current) {
+        window.removeEventListener("message", oauthHandlerRef.current);
+        oauthHandlerRef.current = null;
+      }
+    };
+  }, []);
 
   const { data: providersData } = useApiQuery<{ providers: { name: string; icon: string; enabled: boolean }[] }>(["oauthProviders"], () => api.oauthProviders());
   const providers = (providersData?.providers ?? []).filter((p) => p.enabled);
@@ -41,14 +51,19 @@ export default function Login() {
         setError("Pop-up blocked. Allow pop-ups for this site.");
         return;
       }
+      if (oauthHandlerRef.current) {
+        window.removeEventListener("message", oauthHandlerRef.current);
+      }
       const handler = (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
+        if (event.source !== popup || event.origin !== window.location.origin) return;
         if (event.data?.type === "oauth_callback") {
           window.removeEventListener("message", handler);
+          oauthHandlerRef.current = null;
           setToken(event.data.token);
           navigate("/");
         }
       };
+      oauthHandlerRef.current = handler;
       window.addEventListener("message", handler);
     } catch (e: any) {
       setError(e.message);

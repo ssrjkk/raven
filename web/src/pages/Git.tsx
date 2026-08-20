@@ -81,65 +81,86 @@ export default function Git() {
   useEffect(() => { refresh(); }, [refresh]);
 
   async function handleCommit() {
-    const r = await api.gitCommit(commitMsg, false, repo);
-    setMsg(r.success ? `Committed: ${r.commit_hash}` : `Error: ${r.error}`);
-    setCommitMsg("");
-    refresh();
+    try {
+      const r = await api.gitCommit(commitMsg, false, repo);
+      setMsg(r.success ? `Committed: ${r.commit_hash}` : `Error: ${r.error}`);
+      setCommitMsg("");
+      refresh();
+    } catch (e) { console.error("git commit:", e); setMsg("Error: commit failed"); }
   }
 
   async function handleAutoCommit() {
-    const r = await api.gitCommit("", true, repo);
-    setMsg(r.success ? `Auto-committed: ${r.commit_hash}` : `Error: ${r.error}`);
-    refresh();
+    try {
+      const r = await api.gitCommit("", true, repo);
+      setMsg(r.success ? `Auto-committed: ${r.commit_hash}` : `Error: ${r.error}`);
+      refresh();
+    } catch (e) { console.error("git auto-commit:", e); setMsg("Error: auto-commit failed"); }
   }
 
   async function handlePush() {
-    const r = await api.gitPush(repo);
-    setMsg(r.ok ? "Pushed" : `Push failed: ${r.output}`);
+    try {
+      const r = await api.gitPush(repo);
+      setMsg(r.ok ? "Pushed" : `Push failed: ${r.output}`);
+    } catch (e) { console.error("git push:", e); setMsg("Error: push failed"); }
   }
 
   async function handlePull() {
-    const r = await api.gitPull(repo);
-    setMsg(r.ok ? "Pulled" : `Pull failed: ${r.output}`);
-    refresh();
+    try {
+      const r = await api.gitPull(repo);
+      setMsg(r.ok ? "Pulled" : `Pull failed: ${r.output}`);
+      refresh();
+    } catch (e) { console.error("git pull:", e); setMsg("Error: pull failed"); }
   }
 
   async function handleCreateBranch() {
-    const r = await api.gitCheckout(newBranch, true, repo);
-    setMsg(r.ok ? `Created and switched to ${r.branch}` : `Error: ${r.output}`);
-    setNewBranch("");
-    refresh();
+    try {
+      const r = await api.gitCheckout(newBranch, true, repo);
+      setMsg(r.ok ? `Created and switched to ${r.branch}` : `Error: ${r.output}`);
+      setNewBranch("");
+      refresh();
+    } catch (e) { console.error("git checkout:", e); setMsg("Error: checkout failed"); }
   }
 
   async function handlePr() {
-    const r = await api.gitCreatePr(prTitle, prBody, repo);
-    setMsg(r.success ? `PR created: ${r.url}` : `Error: ${r.error}`);
+    try {
+      const r = await api.gitCreatePr(prTitle, prBody, repo);
+      setMsg(r.success ? `PR created: ${r.url}` : `Error: ${r.error}`);
+    } catch (e) { console.error("git pr:", e); setMsg("Error: PR creation failed"); }
   }
 
   async function handleReview() {
-    const r = await api.gitReview("", repo);
-    setReviewResult(r);
+    try {
+      const r = await api.gitReview("", repo);
+      setReviewResult(r);
+    } catch (e) { console.error("git review:", e); setMsg("Error: review failed"); }
   }
 
   async function loadDiff() {
-    const r = await api.gitDiff(false, repo);
-    setDiff(r.diff);
-    setDiffFiles([]);
-    setSelectedCommit(null);
-    setTab("diff");
+    try {
+      const r = await api.gitDiff(false, repo);
+      setDiff(r.diff);
+      setDiffFiles([]);
+      setSelectedCommit(null);
+      setTab("diff");
+    } catch (e) { console.error("git diff:", e); setMsg("Error: diff failed"); }
   }
 
   async function openCommit(hash: string) {
     setSelectedCommit(null);
-    const detail = await api.gitLogDetail(hash, repo);
-    if (detail.error) {
-      setMsg(`Error: ${detail.error}`);
-      return;
+    try {
+      const detail = await api.gitLogDetail(hash, repo);
+      if (detail.error) {
+        setMsg(`Error: ${detail.error}`);
+        return;
+      }
+      setSelectedCommit(detail);
+      setDiff(detail.diff);
+      setDiffFiles(detail.files || []);
+      setTab("diff");
+    } catch (e) {
+      console.error("git log detail:", e);
+      setMsg("Error: failed to load commit");
     }
-    setSelectedCommit(detail);
-    setDiff(detail.diff);
-    setDiffFiles(detail.files || []);
-    setTab("diff");
   }
 
   async function loadBlame() {

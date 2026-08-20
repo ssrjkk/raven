@@ -61,7 +61,11 @@ export function isAuthenticated(): boolean {
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const isForm = init?.body instanceof FormData;
+  const headers: Record<string, string> = {};
+  if (!isForm) {
+    headers["Content-Type"] = "application/json";
+  }
   const token = getToken();
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;

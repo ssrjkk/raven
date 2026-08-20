@@ -59,10 +59,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const dismiss = useCallback((id: string) => {
     setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, leaving: true } : t)));
-    timersRef.current.delete(id);
-    setTimeout(() => {
+    const existing = timersRef.current.get(id);
+    if (existing) clearTimeout(existing);
+    const exitTimer = setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
+      timersRef.current.delete(id);
     }, EXIT_MS);
+    timersRef.current.set(id, exitTimer);
   }, []);
 
   const toast = useCallback((message: string, type: ToastType = "info") => {

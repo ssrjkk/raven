@@ -48,6 +48,8 @@ def _detect_provider_family() -> str:
         return "anthropic"
     if model.startswith(("gpt", "o1", "o3")):
         return "openai"
+    if model.startswith(("groq/", "vertex/", "gemini/", "bedrock/", "copilot/", "vllm/", "azure/")):
+        return "unknown"
     return "ollama"
 
 
@@ -56,10 +58,12 @@ def tiers_configured() -> bool:
 
 
 def _estimate_complexity(messages: list[dict[str, Any]]) -> str:
-    total_chars = sum(len(m.get("content", "")) for m in messages)
+    if not messages:
+        return "simple"
+    total_chars = sum(len(m.get("content") or "") for m in messages)
     total_messages = len(messages)
-    has_code = any("```" in m.get("content", "") or "`" in m.get("content", "") for m in messages)
-    last_content = messages[-1].get("content", "") if messages else ""
+    has_code = any("```" in (m.get("content") or "") for m in messages)
+    last_content = messages[-1].get("content") or ""
 
     code_keywords = ["implement", "write", "code", "function", "class", "debug", "refactor", "optimize"]
     simple_keywords = ["hello", "hi", "thanks", "yes", "no", "ok", "what", "who", "when", "where"]
@@ -84,6 +88,8 @@ def _resolve_default_model(tier: ModelTier | str) -> str:
     if config_map.get(tier_obj):
         return config_map[tier_obj]
     family = _detect_provider_family()
+    if family == "unknown":
+        return settings.default_model
     mapping = TIER_MODELS.get(family, TIER_MODELS["ollama"])
     return mapping.get(tier_obj.value, settings.default_model)
 

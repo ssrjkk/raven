@@ -416,7 +416,7 @@ class RefactoringEngine:
                     g.add_edge(DependencyEdge(source=str(search_path), target=dep))
             elif search_path.is_dir():
                 for py_file in search_path.rglob("*.py"):
-                    deps = self._extract_imports(str(py_file))
+                    deps = await asyncio.to_thread(self._extract_imports, str(py_file))
                     g.add_node(str(py_file))
                     for dep in deps:
                         g.add_edge(DependencyEdge(source=str(py_file), target=dep))
@@ -666,7 +666,7 @@ class RefactoringEngine:
 
         await self.build_dependency_graph()
 
-        apply_results = self.apply_changes(changes, backup=backup)
+        apply_results = await asyncio.to_thread(self.apply_changes, changes, backup)
         failed_applies = [r for r in apply_results if r.startswith("Failed")]
         if failed_applies:
             for r in failed_applies:
@@ -680,7 +680,9 @@ class RefactoringEngine:
 
         if type_issues:
             logger.warning("Type checking failed after refactoring, rolling back")
-            rollback_results = self.rollback([str(self._workspace / c.path) for c in changes])
+            rollback_results = await asyncio.to_thread(
+                self.rollback, [str(self._workspace / c.path) for c in changes]
+            )
             for r in rollback_results:
                 logger.info(r)
             msg_0 = f"Type checking failed: {'; '.join(type_issues[:3])}"

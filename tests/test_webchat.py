@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -214,6 +215,13 @@ class TestWebSocketEndpoints:
 
         return settings.web_secret_key.get_secret_value()
 
+    @staticmethod
+    def _wait_handler_called(handler: AsyncMock, timeout: float = 2.0) -> None:
+        deadline = time.monotonic() + timeout
+        while handler.await_count < 1 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        handler.assert_awaited_once()
+
     def test_invalid_json_keeps_connection_alive(self, channel):
         handler = AsyncMock()
         channel._handler = handler
@@ -226,7 +234,7 @@ class TestWebSocketEndpoints:
             error = ws.receive_json()
             assert error["type"] == "error"
             ws.send_text('{"text": "hello"}')
-            handler.assert_awaited_once()
+            self._wait_handler_called(handler)
             assert handler.await_args is not None
             event = handler.await_args.args[0]
             assert event.text == "hello"
@@ -240,7 +248,7 @@ class TestWebSocketEndpoints:
             assert first["type"] == "session"
             assert first["session_id"].startswith("webchat:")
             ws.send_text('{"text": "hi"}')
-            handler.assert_awaited_once()
+            self._wait_handler_called(handler)
 
     def test_foreign_session_id_is_ignored(self, channel):
         handler = AsyncMock()
@@ -250,7 +258,7 @@ class TestWebSocketEndpoints:
             first = ws.receive_json()
             assert first["type"] == "session"
             ws.send_text('{"text": "hi", "session_id": "webchat:attacker_client:default"}')
-            handler.assert_awaited_once()
+            self._wait_handler_called(handler)
             assert handler.await_args is not None
             event = handler.await_args.args[0]
             assert event.session_id.startswith("webchat:")

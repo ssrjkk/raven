@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import re
 import time
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Callable
@@ -20,15 +21,9 @@ from raven.core.llm.queue import PRIORITY_NORMAL, LLMQueueTimeoutError, Priority
 from raven.core.metrics import metrics
 from raven.core.tracing import trace_llm_call
 
-_HAS_TIER_CONFIG: bool | None = None
-
 
 def _tiers_configured() -> bool:
-    global _HAS_TIER_CONFIG
-    if _HAS_TIER_CONFIG is not None:
-        return _HAS_TIER_CONFIG
-    _HAS_TIER_CONFIG = bool(settings.model_fast or settings.model_balanced or settings.model_quality)
-    return _HAS_TIER_CONFIG
+    return bool(settings.model_fast or settings.model_balanced or settings.model_quality)
 
 
 class LLMRouter:
@@ -72,7 +67,7 @@ class LLMRouter:
         for m in messages:
             item = dict(m)
             if m.get("role") == "user" and isinstance(m.get("content"), str):
-                item["content"] = " ".join(m["content"].split())
+                item["content"] = re.sub(r"[ \t]+", " ", m["content"]).strip()
             normalized.append(item)
         payload = json.dumps({"m": normalized, "t": tools}, sort_keys=True)
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -308,7 +303,7 @@ class LLMRouter:
                 primary_exc = e
                 logger.warning("LLM call failed: {}", e)
                 break
-        raise primary_exc or RuntimeError(f"Primary model '{model}' failed")
+        raise _as_runtime_error(primary_exc, f"Primary model '{model}' failed")
 
     async def _stream_with_failover(
         self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None
@@ -338,15 +333,20 @@ class LLMRouter:
         self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None
     ) -> AsyncIterator[str]:
         last_exc: Exception | None = None
+        yielded = False
         for attempt in range(max(1, settings.llm_retry_max)):
             try:
                 provider = self._get_provider(model)
                 metrics.inc("llm_stream_start", {"model": model, "provider": type(provider).__name__})
                 with trace_llm_call(model=model):
                     async for token in provider.complete_stream(messages, model, tools):
+                        yielded = True
                         yield token
                 return
             except (RuntimeError, httpx.HTTPStatusError, httpx.TimeoutException, httpx.NetworkError) as e:
+                if yielded:
+                    # tokens already delivered: retrying would duplicate the stream mid-way
+                    raise RuntimeError(f"Stream '{model}' failed after {attempt + 1} attempt(s) mid-stream") from e
                 last_exc = e
                 if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429:
                     retry_after = _parse_retry_after(e.response.headers, 5)
@@ -368,7 +368,17 @@ class LLMRouter:
                         "Primary stream '{}' failed after {} attempts: {}", model, settings.llm_retry_max, e
                     )
                     metrics.inc("llm_stream_error", {"model": model, "error": type(e).__name__})
+            except Exception as e:
+                raise RuntimeError(f"Primary stream '{model}' failed: {e}") from e
         raise last_exc or RuntimeError(f"Primary stream '{model}' failed")
+
+
+def _as_runtime_error(exc: Exception | None, fallback_msg: str) -> RuntimeError:
+    if isinstance(exc, RuntimeError):
+        return exc
+    err = RuntimeError(f"{fallback_msg}: {exc}")
+    err.__cause__ = exc
+    return err
 
 
 def _parse_retry_after(headers: Any, default: int = 5) -> int:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import os
 import re
 from collections.abc import Callable
@@ -140,12 +141,12 @@ def create_pattern_checker_router(workspace: str = "") -> APIRouter:
                 return {"error": f"File not found: {file}", "violations": []}
             files_to_check = [target]
         else:
-            files_to_check = _find_python_files(ws_root, max_files)
+            files_to_check = await asyncio.to_thread(_find_python_files, ws_root, max_files)
 
         all_violations: list[dict[str, Any]] = []
         for f in files_to_check:
             try:
-                content = f.read_text("utf-8")
+                content = await asyncio.to_thread(f.read_text, "utf-8")
             except OSError:
                 continue
             lines = content.split("\n")

@@ -55,8 +55,15 @@ async def _read_file(path: str) -> str:
     try:
         size = await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_END)
         await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_SET)
-        raw = await asyncio.to_thread(os.read, fd, size)
-        return raw.decode("utf-8", errors="replace")
+        chunks: list[bytes] = []
+        remaining = size
+        while remaining > 0:
+            chunk = await asyncio.to_thread(os.read, fd, remaining)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return b"".join(chunks).decode("utf-8", errors="replace")
     finally:
         await asyncio.to_thread(os.close, fd)
 
@@ -75,8 +82,15 @@ async def file_read(path: str, max_size: int = 50000) -> str:
         size = await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_END)
         await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_SET)
         to_read = min(size, max_size)
-        raw = await asyncio.to_thread(os.read, fd, to_read)
-        content = raw.decode("utf-8", errors="replace")
+        chunks: list[bytes] = []
+        remaining = to_read
+        while remaining > 0:
+            chunk = await asyncio.to_thread(os.read, fd, remaining)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        content = b"".join(chunks).decode("utf-8", errors="replace")
         if size > max_size:
             content += f"\n... (truncated, {size} total bytes)"
         return content
@@ -88,7 +102,7 @@ _BLOCK_SIGNATURE_RE = re.compile(
     r"^\s*(?:"
     r"(?:async\s+)?def\s+\w+|"
     r"class\s+\w+|"
-    r"(?:export\s+)?(?:function|class)\s+\w+|"
+    r"(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function|class)\s+\w+|"
     r"(?:pub\s+)?fn\s+\w+|"
     r"func\s+\w+|"
     r"impl\s+\w+"
@@ -118,8 +132,11 @@ def _prune_python_source(source: str, query: str, max_lines: int) -> str:
         return any(t in name_l for t in terms)
 
     def _text(node: ast.AST) -> str:
-        seg = ast.get_source_segment(source, node)
-        return seg if seg is not None else ""
+        start = int(getattr(node, "lineno", 1))
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.decorator_list:
+            start = min(d.lineno for d in node.decorator_list)
+        lines = source.splitlines()
+        return "\n".join(lines[start - 1 : getattr(node, "end_lineno", start)])
 
     blocks: list[str] = []
     for node in tree.body:
@@ -142,7 +159,7 @@ def _prune_python_source(source: str, query: str, max_lines: int) -> str:
     for block in blocks:
         block_lines = block.count("\n") + 1
         if block_lines > budget:
-            break
+            continue
         out.append(block)
         budget -= block_lines
     return "\n\n".join(out)
@@ -183,7 +200,7 @@ def _prune_generic_source(source: str, query: str, max_lines: int) -> str:
     for start, end in wanted:
         block_lines = end - start
         if block_lines > budget:
-            break
+            continue
         out.append("\n".join(lines[start:end]))
         budget -= block_lines
     return "\n\n".join(out)
@@ -206,7 +223,10 @@ async def file_read_relevant(path: str, query: str = "", max_lines: int = 300) -
         pruned = _prune_generic_source(source, query, max_lines)
     pruned_lines = len(pruned.splitlines())
     if not pruned.strip():
-        return f"# No relevant symbols found for query: {query or '(none)'}\n# File has {total} lines."
+        if query.strip():
+            return f"# No relevant symbols found for query: {query}\n# File has {total} lines."
+        head = "\n".join(source.splitlines()[:max_lines])
+        return f"{head}\n... (pruned: {total} -> {pruned_lines} lines)"
     if pruned_lines >= total * 0.9:
         return source
     return f"{pruned}\n... (pruned: {total} -> {pruned_lines} lines)"
@@ -240,7 +260,7 @@ async def file_list(path: str = ".", pattern: str = "*") -> str:
         msg = f"Directory not found: {p}"
         raise FileNotFoundError(msg)
     items: list[str] = []
-    depth = 0
+    max_depth = 0
     for f in await asyncio.to_thread(lambda: list(p.glob(pattern))):
         if len(items) >= _MAX_LIST_ITEMS:
             items.append("... (truncated, too many files)")
@@ -250,12 +270,11 @@ async def file_list(path: str = ".", pattern: str = "*") -> str:
         items.append(f"{kind} {f.name}  ({size} bytes)" if size else f"{kind} {f.name}")
         try:
             rel = f.relative_to(p)
-            depth = len(rel.parts)
+            max_depth = max(max_depth, len(rel.parts))
         except ValueError:
             pass
-        if depth > 10:
-            items.append("... (truncated, depth limit reached)")
-            break
+    if max_depth > 10:
+        items.append("... (truncated, depth limit reached)")
     return "\n".join(items[:200]) if items else "(empty)"
 
 

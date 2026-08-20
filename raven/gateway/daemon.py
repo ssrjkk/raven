@@ -309,10 +309,10 @@ class RavenFlowDaemon:
         for session_id in dirty:
             session = self.sessions.get(session_id)
             if session is None:
-                self._store.remove(session_id)
+                await asyncio.to_thread(self._store.remove, session_id)
                 continue
             try:
-                self._store.save(session)
+                await asyncio.to_thread(self._store.save, session)
             except Exception as exc:
                 logger.error("SessionStore: failed to save {}: {}", session_id, exc)
 
@@ -346,7 +346,7 @@ class RavenFlowDaemon:
         setup_logging()
         import uvicorn
 
-        self._load_persisted_sessions()
+        await asyncio.to_thread(self._load_persisted_sessions)
         logger.warning("Binding to 0.0.0.0:{}. Ensure firewall/reverse proxy is configured.", self.port)
         config = uvicorn.Config(self.app, host="0.0.0.0", port=self.port, log_level="info")
         server = uvicorn.Server(config)

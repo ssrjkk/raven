@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
@@ -93,11 +93,13 @@ export default function GitHub() {
   const [codeQuery, setCodeQuery] = useState("");
   const [codeResults, setCodeResults] = useState<CodeSearchResult[]>([]);
   const [cloning, setCloning] = useState(false);
+  const repoSeqRef = useRef(0);
 
   useEffect(() => {
     api.githubTokenStatus().then(setTokenStatus).catch(() => setTokenStatus(null));
     api.githubUser().then(setUser).catch(() => setUser(null));
     loadRepos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadRepos() {
@@ -120,27 +122,31 @@ export default function GitHub() {
     setTab("files");
     setContentPath("");
     setFileViewer(null);
+    const seq = ++repoSeqRef.current;
     const [owner, repo] = fullName.split("/");
     try {
       const b = await api.githubBranches(owner, repo);
+      if (seq !== repoSeqRef.current) return;
       setBranches(Array.isArray(b) ? b : []);
       const def = (Array.isArray(b) && b.length > 0) ? b[0].name : "main";
       setCurrentBranch(def);
       loadContents(owner, repo, "", def);
       const p = await api.githubPulls(owner, repo);
-      setPulls(Array.isArray(p) ? p : []);
+      if (seq === repoSeqRef.current) setPulls(Array.isArray(p) ? p : []);
       const iss = await api.githubIssues(owner, repo);
-      setIssues(Array.isArray(iss) ? iss : []);
-    } catch (e) { console.error(e); setBranches([]); setPulls([]); setIssues([]); }
+      if (seq === repoSeqRef.current) setIssues(Array.isArray(iss) ? iss : []);
+    } catch (e) { if (seq === repoSeqRef.current) { console.error(e); setBranches([]); setPulls([]); setIssues([]); } }
   }
 
   async function loadContents(owner: string, repo: string, path: string, ref: string) {
+    const seq = repoSeqRef.current;
     try {
       const data = await api.githubContents(owner, repo, path, ref);
+      if (seq !== repoSeqRef.current) return;
       setContents(Array.isArray(data) ? data : []);
       setContentPath(path);
       setFileViewer(null);
-    } catch (e) { console.error(e); setContents([]); }
+    } catch (e) { if (seq === repoSeqRef.current) { console.error(e); setContents([]); } }
   }
 
   function navigateDir(dir: string) {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import re
 import subprocess
 import sys
@@ -293,7 +294,7 @@ class TestGenerator:
         if not full_path.exists():
             return f"# File not found: {file_path}"
 
-        types = self.extract_types(file_path)
+        types = await asyncio.to_thread(self.extract_types, file_path)
         output: list[str] = [f"# Auto-generated tests for {file_path}", ""]
 
         for t in types:
@@ -332,9 +333,9 @@ class TestGenerator:
             test_content = await self.generate_tests(source_path)
         src = self._resolve_path(source_path)
         test_dir = src.parent / "test"
-        test_dir.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(test_dir.mkdir, parents=True, exist_ok=True)
         test_file = test_dir / f"test_{src.stem}.py"
-        test_file.write_text(test_content, encoding="utf-8")
+        await asyncio.to_thread(test_file.write_text, test_content, "utf-8")
         return f"Tests saved to {test_file}"
 
     def _resolve_path(self, path: str) -> Path:

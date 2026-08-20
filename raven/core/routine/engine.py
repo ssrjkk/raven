@@ -317,6 +317,7 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
             return f"Email check failed: {e}"
 
     async def _execute_file_organization(self, routine: Routine) -> str:
+        import asyncio
         import shutil
         from pathlib import Path
 
@@ -353,22 +354,27 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
             ".xlsx": "documents",
         }
 
-        if not workspace.exists():
+        if not await asyncio.to_thread(workspace.exists):
             return "No workspace directory found"
 
-        for item in sorted(workspace.iterdir()):
-            if not item.is_file():
-                continue
-            ext = item.suffix.lower()
-            folder_name = rules.get(ext)
-            if not folder_name:
-                continue
-            target_dir = workspace / folder_name
-            target_dir.mkdir(exist_ok=True)
-            target_path = target_dir / item.name
-            if not target_path.exists():
-                shutil.move(str(item), str(target_path))
-                organized += 1
+        def _organize() -> int:
+            moved = 0
+            for item in sorted(workspace.iterdir()):
+                if not item.is_file():
+                    continue
+                ext = item.suffix.lower()
+                folder_name = rules.get(ext)
+                if not folder_name:
+                    continue
+                target_dir = workspace / folder_name
+                target_dir.mkdir(exist_ok=True)
+                target_path = target_dir / item.name
+                if not target_path.exists():
+                    shutil.move(str(item), str(target_path))
+                    moved += 1
+            return moved
+
+        organized = await asyncio.to_thread(_organize)
 
         if organized > 0 and self._gateway_ref:
             session_id = f"{routine.channel}:{routine.user_id}:organize"

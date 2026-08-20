@@ -501,6 +501,27 @@ class TestWorkflows:
             filtered = client.get("/api/admin/workflows", params={"category": c}).json()
             assert filtered and all(w["category"] == c for w in filtered)
 
+    def test_update_steps_roundtrip(self, gateway, registry, channels) -> None:
+        client = _make_client(gateway, registry, channels)
+        lst = client.get("/api/admin/workflows").json()
+        tid = lst[0]["id"]
+        body = {"steps": [{"description": "Step A", "tool": None, "params": {"k": "v"}}]}
+        r = client.put(f"/api/admin/workflows/{tid}/steps", json=body)
+        assert r.status_code == 200
+        detail = client.get(f"/api/admin/workflows/{tid}").json()
+        assert detail["predefined_steps"] == [{"description": "Step A", "tool": None, "params": {"k": "v"}}]
+        assert client.put("/api/admin/workflows/does-not-exist/steps", json=body).status_code == 404
+
+    def test_generate_steps(self, gateway, registry, channels) -> None:
+        client = _make_client(gateway, registry, channels)
+        lst = client.get("/api/admin/workflows").json()
+        tid = next(w["id"] for w in lst if w["steps_goal"])
+        r = client.post(f"/api/admin/workflows/{tid}/generate-steps")
+        assert r.status_code == 200
+        steps = r.json()["steps"]
+        assert steps and all(s["description"] for s in steps)
+        assert client.post("/api/admin/workflows/does-not-exist/generate-steps").status_code == 404
+
 
 class TestSecrets:
     def test_secrets_require_admin(self, gateway, registry, channels) -> None:

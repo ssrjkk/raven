@@ -412,8 +412,10 @@ async def read_image(path: str) -> str:
         return f"[error] unsupported image format: {ext}"
     import base64
 
-    data = base64.b64encode(p.read_bytes()[:500_000]).decode("ascii")
-    return f"Image ({p.stat().st_size} bytes, {ext}): data:image/{ext[1:]};base64,{data}"
+    raw = await asyncio.to_thread(p.read_bytes)
+    size = await asyncio.to_thread(p.stat)
+    data = base64.b64encode(raw[:500_000]).decode("ascii")
+    return f"Image ({size.st_size} bytes, {ext}): data:image/{ext[1:]};base64,{data}"
 
 
 # ---------------------------------------------------------------------------
@@ -433,7 +435,7 @@ async def create_artifact(title: str, artifact_type: str, content: str, path: st
             except PermissionError as exc:
                 return json.dumps({"error": f"Path confinement failed: {exc}"}, ensure_ascii=False)
             safe_path.parent.mkdir(parents=True, exist_ok=True)
-            safe_path.write_text(content, encoding="utf-8")
+            await asyncio.to_thread(safe_path.write_text, content, encoding="utf-8")
             file_path = str(safe_path.relative_to(ws))
         artifact_id = hashlib.sha256(f"{title}:{content[:50]}".encode()).hexdigest()[:8]
         return json.dumps(
@@ -457,12 +459,12 @@ async def create_artifact(title: str, artifact_type: str, content: str, path: st
 
 
 async def undo_action() -> str:
-    result = get_undo_manager().undo()
+    result = await asyncio.to_thread(get_undo_manager().undo)
     return result or "[undo] nothing to undo"
 
 
 async def redo_action() -> str:
-    result = get_undo_manager().redo()
+    result = await asyncio.to_thread(get_undo_manager().redo)
     return result or "[redo] nothing to redo"
 
 
@@ -486,7 +488,7 @@ async def checkpoint_restore_tool(cid: str) -> str:
 async def checkpoint_list_tool() -> str:
     from ravencode.runtime.checkpoints import get_checkpoint_manager
 
-    cps = get_checkpoint_manager().list()
+    cps = await asyncio.to_thread(get_checkpoint_manager().list)
     if not cps:
         return "(no checkpoints)"
     return "\n".join(f"{cp['id']}: {cp['description']} ({cp['created']})" for cp in cps)
@@ -547,7 +549,8 @@ async def smart_edit_tool(
 ) -> str:
     from ravencode.runtime.diff import smart_edit
 
-    return smart_edit(
+    return await asyncio.to_thread(
+        smart_edit,
         path,
         old_text=old_text,
         new_text=new_text,
@@ -560,7 +563,7 @@ async def smart_edit_tool(
 async def patch_file_tool(path: str, diff_text: str) -> str:
     from ravencode.runtime.diff import apply_patch
 
-    return apply_patch(path, diff_text)
+    return await asyncio.to_thread(apply_patch, path, diff_text)
 
 
 # ---------------------------------------------------------------------------

@@ -242,7 +242,7 @@ class Agent:
 
     def _detect_loop(self, history: list[dict[str, Any]]) -> bool:
         tool_calls = [
-            m.get("tool_calls", [{}])[0].get("function", {}).get("name", "")
+            (m.get("tool_calls") or [{}])[0].get("function", {}).get("name", "")
             for m in history
             if m.get("role") == "assistant" and m.get("tool_calls")
         ]
@@ -285,12 +285,16 @@ class Agent:
             fix_resp = await asyncio.wait_for(
                 self.llm.complete(
                     [
-                        {"role": "system", "content": system},
                         {
-                            "role": "user",
-                            "content": f"Fix this issue: {issue}\n\nKeep the exact same structure, "
-                            f"fix only what is wrong.\n\n{content}",
+                            "role": "system",
+                            "content": (
+                                "You are a coding assistant. The response below has this issue: "
+                                f"{issue}\n"
+                                "Rewrite the response fixing ONLY that issue. "
+                                "Reply with the corrected response text only, no VERIFIED/ISSUE markers."
+                            ),
                         },
+                        {"role": "user", "content": content},
                     ],
                     model=audit_model,
                     priority=PRIORITY_LOW,
@@ -298,7 +302,7 @@ class Agent:
                 timeout=30,
             )
             fixed = (fix_resp.content or "").strip()
-            if fixed and "ISSUE" not in fixed.upper():
+            if fixed and "VERIFIED" not in fixed.upper() and "ISSUE" not in fixed.upper():
                 return fixed
             logger.warning("Audit did not converge for agent {}; keeping original", self.config.agent_id)
         except Exception as e:
@@ -433,10 +437,16 @@ class Agent:
         elif tool_used:
             parts: list[str] = []
             streamed = True
-            async for token in self.llm.complete_stream(messages, priority=self.priority):
-                parts.append(token)
-                yield token
-            final_content = "".join(parts)
+            try:
+                async for token in self.llm.complete_stream(messages, priority=self.priority):
+                    parts.append(token)
+                    yield token
+                final_content = "".join(parts)
+            except Exception as e:
+                logger.error("Agent: stream failed: {}", e)
+                final_content = "".join(parts) or "An error occurred while streaming the response."
+                if final_content:
+                    yield "\n[error: streaming failed, partial response above]"
         else:
             final_content = "I couldn't generate a response to that. Please try rephrasing your message."
             yield final_content
@@ -453,27 +463,27 @@ class Agent:
             await self._auto_memory(user_message, final_content)
 
     async def _execute_tool(self, tc: ToolCall) -> dict[str, Any]:
-        tool = self._tool_map.get(tc.name)
-        if not tool:
-            logger.warning("Unknown tool: {}", tc.name)
-            return {"error": f"Unknown tool: {tc.name}"}
-        allowed = self._tool_policy.is_tool_allowed(tc.name)
-        if not allowed:
-            logger.warning("Tool '{}' denied by policy", tc.name)
-            return {"error": f"Tool '{tc.name}' is denied by security policy"}
-        if tool.confirm and self._confirm_fn:
-            confirmed = await self._confirm_fn(tc.name, tc.arguments or {})
-            if not confirmed:
-                logger.info("Tool '{}' cancelled by user", tc.name)
-                return {"error": f"Tool '{tc.name}' cancelled — user denied confirmation"}
-        path_arg = (
-            (tc.arguments or {}).get("path")
-            or (tc.arguments or {}).get("file")
-            or (tc.arguments or {}).get("directory")
-        )
-        if path_arg and not self._tool_policy.check_path(str(path_arg)):
-            return {"error": "Path outside workspace root — denied by security policy"}
         try:
+            tool = self._tool_map.get(tc.name)
+            if not tool:
+                logger.warning("Unknown tool: {}", tc.name)
+                return {"error": f"Unknown tool: {tc.name}"}
+            allowed = self._tool_policy.is_tool_allowed(tc.name)
+            if not allowed:
+                logger.warning("Tool '{}' denied by policy", tc.name)
+                return {"error": f"Tool '{tc.name}' is denied by security policy"}
+            if tool.confirm and self._confirm_fn:
+                confirmed = await self._confirm_fn(tc.name, tc.arguments or {})
+                if not confirmed:
+                    logger.info("Tool '{}' cancelled by user", tc.name)
+                    return {"error": f"Tool '{tc.name}' cancelled — user denied confirmation"}
+            path_arg = (
+                (tc.arguments or {}).get("path")
+                or (tc.arguments or {}).get("file")
+                or (tc.arguments or {}).get("directory")
+            )
+            if path_arg and not self._tool_policy.check_path(str(path_arg)):
+                return {"error": "Path outside workspace root — denied by security policy"}
             logger.info("Tool call: {} args={}", tc.name, tc.arguments)
             result = await tool.handler(**(tc.arguments or {}))
             return {"result": str(result)[:4000]}

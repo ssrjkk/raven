@@ -30,6 +30,8 @@ export default function Chat() {
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const currentSessionRef = useRef<string | null>(null);
+  const sessionSeqRef = useRef(0);
   const { toast } = useToast();
 
   const scrollToBottom = useCallback(() => {
@@ -38,10 +40,15 @@ export default function Chat() {
 
   const onWsMessage = useCallback((data: { type: string; role?: string; content?: string; session_id?: string; event?: string; profile?: string; detail?: string; data?: Record<string, unknown> }) => {
     if (data.type === "session" && data.session_id) {
+      currentSessionRef.current = data.session_id;
+      sessionSeqRef.current += 1;
       setCurrentSession(data.session_id);
+      setMessages([]);
+      setAgentEvents([]);
       return;
     }
     if (data.type === "message") {
+      if (data.session_id && currentSessionRef.current && data.session_id !== currentSessionRef.current) return;
       setMessages((prev) => [
         ...prev,
         { id: crypto.randomUUID(), role: (data.role ?? "assistant") as "assistant", content: data.content ?? "", created_at: new Date().toISOString() },
@@ -73,27 +80,35 @@ export default function Chat() {
     try {
       const list = await api.sessions();
       setSessions(list);
-      if (!currentSession && list.length > 0) setCurrentSession(list[0].id);
+      if (!currentSessionRef.current && list.length > 0) {
+        currentSessionRef.current = list[0].id;
+        sessionSeqRef.current += 1;
+        setCurrentSession(list[0].id);
+      }
     } catch (e) {
       console.error("Failed to load sessions:", e);
       toast("Failed to load sessions", "error");
     }
-  }, [currentSession, toast]);
+  }, [toast]);
 
   const loadMessages = useCallback(async () => {
-    if (!currentSession) return;
+    if (!currentSessionRef.current) return;
+    const seq = ++sessionSeqRef.current;
+    const sessionId = currentSessionRef.current;
     try {
-      const msgs = await api.sessionMessages(currentSession);
-      setMessages(msgs);
+      const msgs = await api.sessionMessages(sessionId);
+      if (seq === sessionSeqRef.current && currentSessionRef.current === sessionId) {
+        setMessages(msgs);
+      }
     } catch (e) {
       console.error("Failed to load messages:", e);
       toast("Failed to load messages", "error");
     }
-  }, [currentSession, toast]);
+  }, [toast]);
 
   useEffect(() => { scrollToBottom(); }, [messages]);
   useEffect(() => { loadSessions(); }, [loadSessions]);
-  useEffect(() => { if (currentSession) loadMessages(); }, [currentSession, loadMessages]);
+  useEffect(() => { if (currentSession) { currentSessionRef.current = currentSession; loadMessages(); } }, [currentSession, loadMessages]);
 
   function autogrow() {
     const el = textareaRef.current;

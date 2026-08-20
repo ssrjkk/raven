@@ -288,15 +288,17 @@ class Sandbox:
             container_kwargs["network_disabled"] = not self.config.allow_network
 
         container = None
+        loop = asyncio.get_running_loop()
         try:
-            container = client.containers.create(**container_kwargs)
-            loop = asyncio.get_running_loop()
+            container = await loop.run_in_executor(None, lambda: client.containers.create(**container_kwargs))
             await loop.run_in_executor(None, container.start)
             exit_code = await loop.run_in_executor(
                 None,
                 lambda: container.wait(timeout=self.config.timeout).get("StatusCode", -1),
             )
-            logs = container.logs(stdout=True, stderr=True).decode("utf-8", errors="replace")
+            logs = await loop.run_in_executor(
+                None, lambda: container.logs(stdout=True, stderr=True).decode("utf-8", errors="replace")
+            )
             return logs[:5000] or f"(exit code {exit_code})"
         except Exception as e:
             return f"Docker execution error: {e}"

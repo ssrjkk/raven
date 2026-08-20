@@ -255,6 +255,7 @@ const CanvasViewer = memo(function CanvasViewer({ sessionId, className }: { sess
   const [canvas, setCanvas] = useState<CanvasState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const ws = useRef<WebSocket | null>(null);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -280,12 +281,20 @@ const CanvasViewer = memo(function CanvasViewer({ sessionId, className }: { sess
     };
     sock.onclose = () => {
       if (ws.current) return;
-      setTimeout(() => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = setTimeout(() => {
         setCanvas(null);
+        resetTimerRef.current = null;
       }, 3000);
     };
     ws.current = sock;
-    return () => sock.close();
+    return () => {
+      if (resetTimerRef.current) {
+        clearTimeout(resetTimerRef.current);
+        resetTimerRef.current = null;
+      }
+      sock.close();
+    };
   }, [sessionId]);
 
   const onAction = useCallback((componentId: string, action: string, data?: Record<string, unknown>) => {

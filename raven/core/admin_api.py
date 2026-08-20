@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from loguru import logger
+from pydantic import BaseModel, Field
 
 from raven.core.admin.models import (
     AuthLoginRequest,
@@ -21,9 +25,20 @@ from raven.core.jobs import job_manager
 from raven.core.metrics import metrics
 from raven.core.secrets import secrets
 from raven.core.workflow import BUILTIN_TEMPLATES, WorkflowStore
+from raven.core.workflow.models import TemplateStep
 
 _workflow_store = WorkflowStore()
 _workflow_store.register_many(BUILTIN_TEMPLATES)
+
+
+class StepInput(BaseModel):
+    description: str
+    tool: str | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkflowStepsRequest(BaseModel):
+    steps: list[StepInput]
 
 
 def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> APIRouter:
@@ -318,6 +333,11 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
                 "default_schedule": t.default_schedule,
                 "default_interval": t.default_interval,
                 "config_schema": t.config_schema,
+                "steps_goal": t.steps_goal,
+                "predefined_steps": [
+                    {"description": s.description, "tool": s.tool, "params": s.params}
+                    for s in (t.predefined_steps or [])
+                ],
             }
             for t in _workflow_store.list_templates(category=category)
         ]
@@ -332,6 +352,30 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     @router.get("/workflow-categories")
     def admin_workflow_categories():
         return {"categories": _workflow_store.list_categories()}
+
+    @router.put("/workflows/{template_id}/steps")
+    def admin_workflow_update_steps(template_id: str, req: WorkflowStepsRequest):
+        t = _workflow_store.get(template_id)
+        if not t:
+            raise HTTPException(404, "Template not found")
+        steps: list[TemplateStep] = [
+            TemplateStep(description=s.description, tool=s.tool, params=s.params) for s in req.steps
+        ]
+        _workflow_store.register(replace(t, predefined_steps=steps))
+        logger.info("Admin updated {} steps for workflow '{}'", len(steps), template_id)
+        return t.to_dict()
+
+    @router.post("/workflows/{template_id}/generate-steps")
+    def admin_workflow_generate_steps(template_id: str):
+        t = _workflow_store.get(template_id)
+        if not t:
+            raise HTTPException(404, "Template not found")
+        goal = t.steps_goal or t.description
+        lines = [ln.strip().lstrip("-• ") for ln in goal.splitlines() if ln.strip()]
+        if len(lines) < 2:
+            lines = [ln.strip() for ln in goal.split(".") if ln.strip()][:6]
+        steps: list[dict[str, Any]] = [{"description": ln, "tool": None, "params": {}} for ln in lines if ln]
+        return {"steps": steps}
 
     @router.get("/jobs")
     def admin_jobs(status: str | None = None):
