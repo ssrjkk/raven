@@ -3,15 +3,23 @@ import PageHeader from "../components/PageHeader";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useApiQuery } from "../hooks/useApiQuery";
 import { useSessionEvents } from "../hooks/useSessionEvents";
-import { Bot, Cpu, Puzzle, Radio } from "lucide-react";
+import { Bot, Cpu, GitBranch, ListTodo, MessageSquare, Puzzle, Radio, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { data: status } = useApiQuery<StatusData | null>(["status"], () => api.status().catch((e: unknown) => { console.error("status load failed:", e); return null; }));
   const { data: health } = useApiQuery<HealthData | null>(["health"], () => api.health().catch((e: unknown) => { console.error("health load failed:", e); return null; }));
   const { data: metricsData } = useApiQuery<MetricsSnapshot>(["metrics"], () => api.metrics().catch((e: unknown) => { console.error("metrics load failed:", e); return {} as MetricsSnapshot; }));
   const { data: sys, isLoading } = useApiQuery<{ channels: number; agents: number; running: boolean; version: string } | null>(["systemStatus"], () => api.systemStatus().catch((e: unknown) => { console.error("system status load failed:", e); return null; }));
   const metrics = metricsData ?? ({} as MetricsSnapshot);
   const flowSessions = useSessionEvents();
+
+  const quickActions = [
+    { label: "Новый чат", icon: MessageSquare, to: "/chat" },
+    { label: "Создать задачу", icon: ListTodo, to: "/tasks" },
+    { label: "Git-статус", icon: GitBranch, to: "/git" },
+  ];
 
   const metricCards = [
     { label: "Channels", value: sys?.channels ?? status?.channels.length ?? "—", icon: Radio },
@@ -49,6 +57,38 @@ export default function Dashboard() {
           </span>
         }
       />
+
+      <div className="card relative overflow-hidden p-6">
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(600px 220px at 90% -20%, var(--dt-colors-accent-subtle, rgba(124, 58, 237, 0.14)), transparent 70%)",
+          }}
+        />
+        <div className="relative flex flex-col md:flex-row md:items-center gap-5">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2.5 mb-1">
+              <Sparkles size={17} className="shrink-0" style={{ color: "var(--dt-colors-accent-default)" }} />
+              <h2 className="text-xl font-bold tracking-tight gradient-text">Welcome back</h2>
+            </div>
+            <p className="text-sm" style={{ color: "var(--dt-colors-text-tertiary)" }}>
+              Raven в сети
+              {sys?.channels ? ` — активно каналов: ${sys.channels}` : ""}
+              {status?.agents?.length ? `, агентов: ${status.agents.length}` : ""}
+              {status?.plugins ? `, плагинов: ${status.plugins}` : ""}.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {quickActions.map(({ label, icon: Icon, to }) => (
+              <button key={to} onClick={() => navigate(to)} className="btn-outline px-3.5 py-2 text-xs">
+                <Icon size={14} />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {metricCards.map((c) => (

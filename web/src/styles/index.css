@@ -152,12 +152,46 @@ p code {
   border: 1px solid var(--dt-colors-border-default);
   border-radius: 1rem;
   box-shadow: var(--dt-shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.3));
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition: border-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
 }
 .composer:focus-within {
   border-color: var(--dt-colors-border-focus);
   box-shadow: 0 0 0 3px var(--dt-colors-accent-muted, rgba(124, 58, 237, 0.18));
 }
+.composer:has(textarea:disabled) { opacity: 0.65; }
+
+/* Message bubbles */
+.msg-enter { animation: fadeUp 0.28s var(--dt-animation-easing-out, ease-out) both; }
+
+/* Chat welcome suggestion cards */
+.suggestion-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: left;
+  color: var(--dt-colors-text-secondary);
+  background-color: var(--dt-colors-bg-tertiary);
+  border: 1px solid var(--dt-colors-border-default);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 200ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.suggestion-card:hover {
+  border-color: var(--dt-colors-accent-muted, rgba(124, 58, 237, 0.5));
+  background-color: var(--dt-colors-bg-secondary);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px var(--dt-colors-accent-muted, rgba(124, 58, 237, 0.18));
+  color: var(--dt-colors-text-primary);
+}
+.suggestion-card:active { transform: translateY(0); }
 
 /* Toasts */
 .toast-enter { animation: slideInRight 0.3s var(--dt-animation-easing-out, ease-out) both; }
@@ -570,4 +604,19 @@ p code {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--dt-colors-text-tertiary);
+}
+
+/* Sidebar navigation items */
+.nav-item {
+  color: var(--dt-colors-text-secondary);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.nav-item:hover {
+  background-color: var(--dt-colors-bg-hover);
+  color: var(--dt-colors-text-primary);
+}
+.nav-item-active,
+.nav-item-active:hover {
+  background-color: var(--dt-colors-accent-muted);
+  color: var(--dt-colors-accent-default);
 }

@@ -215,21 +215,21 @@ export default function Chat() {
       </div>
 
       {showWelcome && (
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
+        <div className="flex-1 flex flex-col items-center justify-center text-center px-4 msg-enter">
           <div
-            className="w-14 h-14 rounded-2xl flex items-center justify-center text-white text-2xl font-black mb-4"
+            className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-black mb-5"
             style={{
               backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), #d946ef)",
-              boxShadow: "0 8px 28px var(--dt-colors-accent-muted, rgba(124, 58, 237, 0.4))",
+              boxShadow: "0 10px 32px var(--dt-colors-accent-muted, rgba(124, 58, 237, 0.45))",
             }}
           >
             R
           </div>
-          <h2 className="text-xl font-bold tracking-tight">Чем помочь сегодня?</h2>
-          <p className="text-sm mt-1 mb-6" style={{ color: "var(--dt-colors-text-tertiary)" }}>
+          <h2 className="text-2xl font-bold tracking-tight gradient-text">Чем помочь сегодня?</h2>
+          <p className="text-sm mt-2 mb-7" style={{ color: "var(--dt-colors-text-tertiary)" }}>
             Начните разговор с агентами или выберите быстрый сценарий
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-lg">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-xl">
             {SUGGESTIONS.map(({ icon: Icon, label, prompt }) => (
               <button
                 key={label}
@@ -237,14 +237,17 @@ export default function Chat() {
                   setInput(prompt);
                   textareaRef.current?.focus();
                 }}
-                className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition hover:scale-[1.02] active:scale-[0.98]"
-                style={{
-                  backgroundColor: "var(--dt-colors-bg-tertiary)",
-                  color: "var(--dt-colors-text-secondary)",
-                  border: "1px solid var(--dt-colors-border-default)",
-                }}
+                className="suggestion-card"
               >
-                <Icon size={15} className="shrink-0" style={{ color: "var(--dt-colors-accent-default)" }} />
+                <span
+                  className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center"
+                  style={{
+                    backgroundColor: "var(--dt-colors-accent-muted)",
+                    color: "var(--dt-colors-accent-default)",
+                  }}
+                >
+                  <Icon size={15} />
+                </span>
                 <span className="truncate">{label}</span>
               </button>
             ))}
@@ -262,17 +265,18 @@ export default function Chat() {
           onChange={(e) => { setInput(e.target.value); autogrow(); }}
           onKeyDown={onComposerKeyDown}
           rows={1}
-          placeholder="Сообщение… (Enter — отправить, Shift+Enter — новая строка)"
-          className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm outline-none text-primary placeholder:text-[var(--dt-colors-text-tertiary)]"
+          disabled={!connected}
+          placeholder={connected ? "Сообщение… (Enter — отправить, Shift+Enter — новая строка)" : "Подключение к серверу…"}
+          className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm outline-none text-primary placeholder:text-[var(--dt-colors-text-tertiary)] disabled:opacity-60"
           style={{ maxHeight: 160 }}
         />
         <div className="flex items-center justify-between gap-2 px-3 pb-2.5">
           <span className="text-[11px]" style={{ color: "var(--dt-colors-text-tertiary)" }}>
-            Enter — отправить · Shift+Enter — новая строка
+            {connected ? "Enter — отправить · Shift+Enter — новая строка" : "Ожидание соединения…"}
           </span>
           <button
             type="submit"
-            disabled={!input.trim() || loading}
+            disabled={!input.trim() || loading || !connected}
             className="btn-primary px-4 py-2 rounded-xl"
             aria-label="Send message"
           >

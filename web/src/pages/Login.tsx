@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { AlertCircle } from "lucide-react";
 
 import { api, setToken } from "../api/client";
 import { useApiQuery } from "../hooks/useApiQuery";
@@ -68,8 +69,14 @@ export default function Login() {
           backgroundImage: "radial-gradient(closest-side, var(--dt-colors-accent-subtle, rgba(217,70,239,0.18)), transparent)",
         }}
       />
+      <div
+        className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[36rem] h-[24rem] rounded-full pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(closest-side, var(--dt-colors-accent-subtle, rgba(124,58,237,0.08)), transparent)",
+        }}
+      />
 
-      <div className="card rounded-2xl p-8 w-full max-w-sm space-y-6 relative">
+      <div className="card rounded-2xl p-8 w-full max-w-sm space-y-6 relative" style={{ boxShadow: "0 20px 60px rgba(0, 0, 0, 0.35)" }}>
         <div className="text-center space-y-2">
           <div
             className="mx-auto w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-2xl shadow-lg"
@@ -116,6 +123,8 @@ export default function Login() {
               onChange={(e) => setUsername(e.target.value)}
               className="input-base w-full"
               required
+              autoFocus
+              autoComplete="username"
             />
           </div>
           <div>
@@ -127,6 +136,7 @@ export default function Login() {
               onChange={(e) => setPassword(e.target.value)}
               className="input-base w-full"
               required
+              autoComplete="current-password"
             />
           </div>
           {error && (
@@ -138,6 +148,7 @@ export default function Login() {
                 border: "1px solid var(--dt-colors-status-error)",
               }}
             >
+              <AlertCircle size={14} className="shrink-0" />
               {error}
             </p>
           )}

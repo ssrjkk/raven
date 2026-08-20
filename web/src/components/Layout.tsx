@@ -241,16 +241,10 @@ export default function Layout() {
                     to={item.to}
                     end={item.end}
                     onClick={() => setSidebarOpen(false)}
-                    className="relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition group"
-                    style={({ isActive }) =>
-                      isActive
-                        ? {
-                            backgroundColor: "var(--dt-colors-accent-muted)",
-                            color: "var(--dt-colors-accent-default)",
-                          }
-                        : {
-                            color: "var(--dt-colors-text-secondary)",
-                          }
+                    className={({ isActive }) =>
+                      `relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition group ${
+                        isActive ? "nav-item-active" : "nav-item"
+                      }`
                     }
                   >
                     {({ isActive }) => (

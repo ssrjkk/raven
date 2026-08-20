@@ -57,10 +57,10 @@ const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProp
   }
 
   return (
-    <div className={`flex items-end gap-2.5 ${isUser ? "justify-end" : "justify-start"}`}>
+    <div className={`flex items-end gap-2.5 msg-enter ${isUser ? "justify-end" : "justify-start"}`}>
       {!isUser && <Avatar role="assistant" />}
       <div
-        className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${
+        className={`group relative max-w-[78%] rounded-2xl px-4 py-2.5 ${
           isUser ? "text-white rounded-br-sm" : "rounded-bl-sm"
         }`}
         style={
@@ -76,9 +76,13 @@ const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProp
               }
         }
       >
-        <div className="text-[11px] font-medium mb-1 opacity-60 flex items-center gap-2">
-          <span>{isUser ? "You" : "Raven"}</span>
-          {ts && <span className="text-[10px] opacity-50">{ts}</span>}
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[11px] font-medium opacity-60">{isUser ? "You" : "Raven"}</span>
+          {ts && (
+            <span className="text-[10px] opacity-0 transition-opacity duration-150 group-hover:opacity-50">
+              {ts}
+            </span>
+          )}
         </div>
         <div className="text-sm leading-relaxed prose prose-invert max-w-none">
           {isUser ? (
@@ -87,7 +91,11 @@ const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProp
             <ArtifactRenderer content={message.content} />
           )}
         </div>
-        {!isUser && <CopyButton content={message.content} />}
+        {!isUser && (
+          <div className="absolute -bottom-0.5 right-2 translate-y-full opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+            <CopyButton content={message.content} />
+          </div>
+        )}
       </div>
       {isUser && <Avatar role="user" />}
     </div>
@@ -136,7 +144,7 @@ function CopyButton({ content }: { content: string }) {
     <button
       type="button"
       onClick={copy}
-      className="mt-1.5 inline-flex items-center gap-1 text-[10px] opacity-50 hover:opacity-100 transition-opacity"
+      className="inline-flex items-center gap-1 text-[10px]"
       style={{ color: "var(--dt-colors-text-tertiary)" }}
       aria-label="Copy response"
     >
