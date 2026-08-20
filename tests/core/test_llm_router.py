@@ -83,6 +83,20 @@ class TestCacheKey:
         k2 = LLMRouter._cache_key(msgs, "m", [{"type": "function", "function": {"name": "f"}}])
         assert k1 != k2
 
+    def test_whitespace_normalized(self):
+        k1 = LLMRouter._cache_key([{"role": "user", "content": "write a  function   now"}], "m", None)
+        k2 = LLMRouter._cache_key([{"role": "user", "content": "write a function now"}], "m", None)
+        assert k1 == k2
+
+    def test_tool_content_not_normalized(self):
+        k1 = LLMRouter._cache_key(
+            [{"role": "user", "content": "hi"}, {"role": "tool", "content": "a  b\n  c"}], "m", None
+        )
+        k2 = LLMRouter._cache_key(
+            [{"role": "user", "content": "hi"}, {"role": "tool", "content": "ab c"}], "m", None
+        )
+        assert k1 != k2
+
 
 class TestCacheOps:
     async def test_set_and_get(self):

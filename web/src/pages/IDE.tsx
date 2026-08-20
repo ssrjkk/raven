@@ -4,6 +4,7 @@ import { useCallback,useRef, useState } from "react"
 
 import { api } from "../api/client"
 import DebugPanel from "../components/DebugPanel"
+import { useTheme } from "../design/ThemeContext"
 
 interface TerminalLine {
   input: string
@@ -26,6 +27,7 @@ const TRUTHFUL_STATUS: Record<string, { label: string; color: string }> = {
 }
 
 export default function IDEPage() {
+  const { theme } = useTheme();
   const [code, setCode] = useState(`export default function App() {\n  return <h1>Hello Raven</h1>\n}`)
   const [output, setOutput] = useState("")
   const [aiPrompt, setAiPrompt] = useState("")
@@ -134,7 +136,7 @@ export default function IDEPage() {
           <Editor
             height="100%"
             defaultLanguage="typescript"
-            theme="vs-dark"
+            theme={theme === "dark" ? "vs-dark" : "light"}
             value={code}
             onChange={(val) => setCode(val ?? "")}
             options={{ minimap: { enabled: false }, fontSize: 14, padding: { top: 16 } }}

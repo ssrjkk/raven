@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -81,6 +82,134 @@ async def file_read(path: str, max_size: int = 50000) -> str:
         return content
     finally:
         await asyncio.to_thread(os.close, fd)
+
+
+_BLOCK_SIGNATURE_RE = re.compile(
+    r"^\s*(?:"
+    r"(?:async\s+)?def\s+\w+|"
+    r"class\s+\w+|"
+    r"(?:export\s+)?(?:function|class)\s+\w+|"
+    r"(?:pub\s+)?fn\s+\w+|"
+    r"func\s+\w+|"
+    r"impl\s+\w+"
+    r")",
+    re.MULTILINE,
+)
+
+def _block_name(line: str) -> str:
+    match = re.search(r"\b(?:async\s+def|def|class|function|fn|func|impl)\s+(\w+)", line)
+    return match.group(1) if match else ""
+
+
+def _prune_python_source(source: str, query: str, max_lines: int) -> str:
+    import ast
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return _prune_generic_source(source, query, max_lines)
+
+    terms = [t.lower() for t in query.split() if len(t) > 2] if query.strip() else []
+
+    def _matches(name: str) -> bool:
+        if not terms:
+            return True
+        name_l = name.lower()
+        return any(t in name_l for t in terms)
+
+    def _text(node: ast.AST) -> str:
+        seg = ast.get_source_segment(source, node)
+        return seg if seg is not None else ""
+
+    blocks: list[str] = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and _matches(node.name):
+            blocks.append(_text(node))
+
+    header: list[str] = []
+    for node in tree.body:
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            header.append(_text(node))
+
+    out: list[str] = []
+    budget = max_lines
+    if header:
+        header_block = "\n".join(header)
+        header_lines = header_block.count("\n") + 1
+        if header_lines <= budget:
+            out.append(header_block)
+            budget -= header_lines
+    for block in blocks:
+        block_lines = block.count("\n") + 1
+        if block_lines > budget:
+            break
+        out.append(block)
+        budget -= block_lines
+    return "\n\n".join(out)
+
+
+def _prune_generic_source(source: str, query: str, max_lines: int) -> str:
+    terms = [t.lower() for t in query.split() if len(t) > 2] if query.strip() else []
+    lines = source.splitlines()
+    sigs: list[tuple[int, str]] = [(i, ln) for i, ln in enumerate(lines) if _BLOCK_SIGNATURE_RE.match(ln)]
+    if not sigs:
+        return "\n".join(lines[:max_lines])
+
+    wanted: list[tuple[int, int]] = []
+    for i, (idx, line) in enumerate(sigs):
+        name = _block_name(line).lower()
+        if terms and not any(t in name for t in terms):
+            continue
+        indent = len(line) - len(line.lstrip())
+        end = len(lines)
+        for j in range(i + 1, len(sigs)):
+            j_line = sigs[j][1]
+            j_indent = len(j_line) - len(j_line.lstrip())
+            if j_indent <= indent:
+                end = sigs[j][0]
+                break
+        wanted.append((idx, end))
+
+    preamble: list[str] = []
+    for ln in lines[: sigs[0][0]][:12]:
+        if ln.startswith(("import ", "use ", "require(", "const ", "let ", "var ", "#", "//", "/*", "*", "package ", "from ")):
+            preamble.append(ln)
+
+    out: list[str] = []
+    budget = max_lines
+    if preamble and len(preamble) <= budget:
+        out.append("\n".join(preamble))
+        budget -= len(preamble)
+    for start, end in wanted:
+        block_lines = end - start
+        if block_lines > budget:
+            break
+        out.append("\n".join(lines[start:end]))
+        budget -= block_lines
+    return "\n\n".join(out)
+
+
+async def file_read_relevant(path: str, query: str = "", max_lines: int = 300) -> str:
+    """Read only the relevant functions/classes matching a query (AST pruning).
+
+    For small files (<= max_lines) the whole file is returned. For larger files
+    only the matching top-level blocks plus the import header are kept, cutting
+    token cost and noise for the LLM.
+    """
+    source = await _read_file(path)
+    total = len(source.splitlines())
+    if total <= max_lines:
+        return source
+    if path.lower().endswith(".py"):
+        pruned = _prune_python_source(source, query, max_lines)
+    else:
+        pruned = _prune_generic_source(source, query, max_lines)
+    pruned_lines = len(pruned.splitlines())
+    if not pruned.strip():
+        return f"# No relevant symbols found for query: {query or '(none)'}\n# File has {total} lines."
+    if pruned_lines >= total * 0.9:
+        return source
+    return f"{pruned}\n... (pruned: {total} -> {pruned_lines} lines)"
 
 
 async def file_write(path: str, content: str) -> str:
@@ -216,6 +345,20 @@ def register_file_tools(registry: ToolRegistry) -> None:
                 "new_string": {"type": "string", "description": "Replacement text", "required": True},
             },
             handler=file_edit,
+            category="file",
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="file_read_relevant",
+            description="Read only the functions/classes of a file relevant to a query (AST pruning, "
+            "keeps imports + matching blocks, drops the rest). Prefer over file_read for large files.",
+            parameters={
+                "path": {"type": "string", "description": "Path to the file", "required": True},
+                "query": {"type": "string", "description": "What the task is about (symbol names)", "required": False},
+                "max_lines": {"type": "integer", "description": "Max output lines", "required": False},
+            },
+            handler=file_read_relevant,
             category="file",
         )
     )

@@ -17,6 +17,7 @@ from raven.tools.file import (
     file_edit,
     file_list,
     file_read,
+    file_read_relevant,
     file_write,
     register_file_tools,
 )
@@ -252,12 +253,59 @@ class TestFileDelete:
             await file_delete(str(tmp_workspace / "ghost.txt"))
 
 
+class TestReadRelevant:
+    async def test_small_file_returned_whole(self, tmp_workspace: Path) -> None:
+        f = tmp_workspace / "small.py"
+        f.write_text("import os\n\nVALUE = 1\n", encoding="utf-8")
+        result = await file_read_relevant(str(f), query="anything")
+        assert result == "import os\n\nVALUE = 1\n"
+
+    async def test_python_prunes_to_matching_blocks(self, tmp_workspace: Path) -> None:
+        f = tmp_workspace / "big.py"
+        source = "\n".join(
+            [
+                "import os\nimport sys\n\n",
+                "def _helper():\n    return 1\n\n",
+                "def heavy_unrelated():\n    return 'x' * 1000\n\n" * 40,
+                "class Calculator:\n    def add(self, a, b):\n        return a + b\n",
+            ]
+        )
+        f.write_text(source, encoding="utf-8")
+        result = await file_read_relevant(str(f), query="Calculator", max_lines=15)
+        assert "import os" in result
+        assert "class Calculator" in result
+        assert "heavy_unrelated" not in result
+        assert "pruned" in result
+        assert len(result.splitlines()) <= 16
+
+    async def test_python_no_match_returns_notice(self, tmp_workspace: Path) -> None:
+        f = tmp_workspace / "big2.py"
+        f.write_text("def alpha():\n    return 1\n\ndef beta():\n    return 2\n" * 40, encoding="utf-8")
+        result = await file_read_relevant(str(f), query="gamma", max_lines=5)
+        assert "No relevant symbols found" in result
+
+    async def test_generic_js_prunes_by_function(self, tmp_workspace: Path) -> None:
+        f = tmp_workspace / "app.js"
+        body = "\n\n".join(
+            [f"export function fn_{i}(x) {{\n  return x * {i};\n}}" for i in range(1, 31)]
+        )
+        f.write_text(body, encoding="utf-8")
+        result = await file_read_relevant(str(f), query="fn_7", max_lines=10)
+        assert "fn_7" in result
+        assert "fn_30" not in result
+        assert "pruned" in result
+
+    async def test_missing_file_raises(self, tmp_workspace: Path) -> None:
+        with pytest.raises(OSError):
+            await file_read_relevant(str(tmp_workspace / "ghost.py"))
+
+
 class TestRegisterFileTools:
     def test_registers_tools(self) -> None:
         registry = ToolRegistry()
         register_file_tools(registry)
-        assert registry.count == 6
-        for name in ("file_read", "file_write", "file_append", "file_edit", "file_list", "file_delete"):
+        assert registry.count == 7
+        for name in ("file_read", "file_write", "file_append", "file_edit", "file_list", "file_delete", "file_read_relevant"):
             spec = registry.get(name)
             assert spec is not None
             assert spec.category == "file"

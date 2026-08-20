@@ -1,6 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -284,6 +284,76 @@ class TestCompression:
         assert compressed[-8:] == messages[-8:]
 
 
+class TestTruthfulAudit:
+    CODE_REPLY = "Here is the code:\n```python\ndef add(a, b):\n    return a + b\n```"
+
+    @pytest.fixture
+    def audit_agent(self, session, tools, mock_db, mock_llm):
+        config = AgentConfig(max_tool_rounds=3, use_memory=False, truthful_audit=True)
+        return Agent(session=session, tools=tools, db=mock_db, llm=mock_llm, config=config)
+
+    async def test_audit_verifies_code_response(self, audit_agent, mock_llm):
+        from raven.core.llm import LLMResponse
+
+        mock_llm.complete = AsyncMock(
+            side_effect=[
+                LLMResponse(content=self.CODE_REPLY, finish_reason="stop"),
+                LLMResponse(content="VERIFIED: TRUE", finish_reason="stop"),
+            ]
+        )
+        with patch("raven.core.model_tiers.tiers_configured", return_value=True), patch(
+            "raven.core.model_tiers.select_model", return_value="fast"
+        ):
+            tokens = [t async for t in audit_agent.run("write add function")]
+        result = "".join(tokens)
+        assert "def add" in result
+        assert mock_llm.complete.await_count == 2
+
+    async def test_audit_fixes_issue(self, audit_agent, mock_llm):
+        from raven.core.llm import LLMResponse
+
+        mock_llm.complete = AsyncMock(
+            side_effect=[
+                LLMResponse(content=self.CODE_REPLY, finish_reason="stop"),
+                LLMResponse(content="ISSUE: add has no return type", finish_reason="stop"),
+                LLMResponse(content="```python\ndef add(a: int, b: int) -> int:\n    return a + b\n```", finish_reason="stop"),
+            ]
+        )
+        with patch("raven.core.model_tiers.tiers_configured", return_value=True), patch(
+            "raven.core.model_tiers.select_model", return_value="fast"
+        ):
+            tokens = [t async for t in audit_agent.run("write add function")]
+        result = "".join(tokens)
+        assert "-> int" in result
+        assert mock_llm.complete.await_count == 3
+
+    async def test_audit_skipped_without_tiers(self, audit_agent, mock_llm):
+        from raven.core.llm import LLMResponse
+
+        mock_llm.complete = AsyncMock(return_value=LLMResponse(content=self.CODE_REPLY, finish_reason="stop"))
+        with patch("raven.core.model_tiers.tiers_configured", return_value=False):
+            tokens = [t async for t in audit_agent.run("write add function")]
+        result = "".join(tokens)
+        assert "def add" in result
+        assert mock_llm.complete.await_count == 1
+
+    async def test_audit_keeps_original_on_auditor_failure(self, audit_agent, mock_llm):
+        from raven.core.llm import LLMResponse
+
+        mock_llm.complete = AsyncMock(
+            side_effect=[
+                LLMResponse(content=self.CODE_REPLY, finish_reason="stop"),
+                LLMResponse(content="", finish_reason="stop"),
+            ]
+        )
+        with patch("raven.core.model_tiers.tiers_configured", return_value=True), patch(
+            "raven.core.model_tiers.select_model", return_value="fast"
+        ):
+            tokens = [t async for t in audit_agent.run("write add function")]
+        result = "".join(tokens)
+        assert "def add" in result
+
+
 class TestAgentRegistry:
     @pytest.fixture
     def registry(self, mock_db, mock_llm):
@@ -306,3 +376,4 @@ class TestAgentRegistry:
         agent = registry.create_agent(session)
         assert agent is not None
         assert agent.session.id == "s1"
+

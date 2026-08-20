@@ -68,7 +68,13 @@ class LLMRouter:
 
     @staticmethod
     def _cache_key(messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None) -> str:
-        payload = json.dumps({"m": messages, "t": tools}, sort_keys=True)
+        normalized: list[dict[str, Any]] = []
+        for m in messages:
+            item = dict(m)
+            if m.get("role") == "user" and isinstance(m.get("content"), str):
+                item["content"] = " ".join(m["content"].split())
+            normalized.append(item)
+        payload = json.dumps({"m": normalized, "t": tools}, sort_keys=True)
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
         return f"{model}|{digest}"
 

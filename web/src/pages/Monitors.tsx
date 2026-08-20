@@ -21,12 +21,21 @@ export default function Monitors() {
 
   const toggle = useMutation({
     mutationFn: ({ action, id }: { action: string; id: string }) => api.monitorToggle(action, id),
+    onMutate: async ({ action, id }) => {
+      await qc.cancelQueries({ queryKey: ["monitors"] });
+      const prev = qc.getQueryData<import("../api/client").MonitorData[]>(["monitors"]);
+      qc.setQueryData<import("../api/client").MonitorData[]>(["monitors"], (old) =>
+        (old ?? []).map((m) => (m.id === id ? { ...m, status: action === "pause" ? "paused" : "active" } : m)),
+      );
+      return { prev };
+    },
     onSuccess: (_data, { action }) => {
       toast(`Monitor ${action}ed`, "success");
       qc.invalidateQueries({ queryKey: ["monitors"] });
     },
-    onError: (_err, { action }) => {
-      toast(`Failed to ${action} monitor`, "error");
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["monitors"], ctx.prev);
+      toast("Failed to update monitor", "error");
     },
   });
 

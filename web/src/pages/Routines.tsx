@@ -20,12 +20,21 @@ export default function Routines() {
 
   const toggle = useMutation({
     mutationFn: ({ action, id }: { action: string; id: string }) => api.routineToggle(action, id),
+    onMutate: async ({ action, id }) => {
+      await qc.cancelQueries({ queryKey: ["routines"] });
+      const prev = qc.getQueryData<RoutineData[]>(["routines"]);
+      qc.setQueryData<RoutineData[]>(["routines"], (old) =>
+        (old ?? []).map((r) => (r.id === id ? { ...r, status: action === "pause" ? "paused" : "active" } : r)),
+      );
+      return { prev };
+    },
     onSuccess: (_data, { action }) => {
       toast(`Routine ${action}ed`, "success");
       qc.invalidateQueries({ queryKey: ["routines"] });
     },
-    onError: (_err, { action }) => {
-      toast(`Failed to ${action} routine`, "error");
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["routines"], ctx.prev);
+      toast("Failed to update routine", "error");
     },
   });
 

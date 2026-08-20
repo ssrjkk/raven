@@ -40,6 +40,7 @@ class AgentConfig:
         stateless: bool = False,
         workspace: str | None = None,
         priority: float = PRIORITY_NORMAL,
+        truthful_audit: bool = True,
     ):
         self.agent_id = agent_id
         self.system_prompt = system_prompt
@@ -51,6 +52,7 @@ class AgentConfig:
         self.stateless = stateless
         self.workspace = workspace
         self.priority = priority
+        self.truthful_audit = truthful_audit
 
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -249,6 +251,60 @@ class Agent:
         recent = tool_calls[-4:]
         return len(set(recent)) == 1
 
+    async def _audit_response(self, content: str) -> str:
+        """CoVe-style truthful audit: verify code-bearing final answers."""
+        try:
+            from raven.core.model_tiers import select_model, tiers_configured
+        except ImportError:
+            return content
+        if not tiers_configured():
+            return content
+        system = (
+            "You are a strict truthful auditor. The user asked for code. Audit the final response below:\n"
+            "1. All code must be valid and syntactically plausible for its language.\n"
+            "2. Claims must not contradict the tool results the assistant saw.\n"
+            "3. No invented files, APIs, or values.\n"
+            "Reply with exactly one line: 'VERIFIED: TRUE' or 'ISSUE: <short description>'."
+        )
+        try:
+            audit_model = select_model([{"role": "user", "content": content}], prefer_tier="fast")
+            audit_resp = await asyncio.wait_for(
+                self.llm.complete(
+                    [{"role": "system", "content": system}, {"role": "user", "content": content}],
+                    model=audit_model,
+                    priority=PRIORITY_LOW,
+                ),
+                timeout=20,
+            )
+            verdict = (audit_resp.content or "").strip()
+            if "VERIFIED: TRUE" in verdict.upper():
+                return content
+            issue = verdict.replace("ISSUE:", "", 1).strip() if "ISSUE" in verdict.upper() else verdict
+            if not issue or len(issue) > 300:
+                return content
+            fix_resp = await asyncio.wait_for(
+                self.llm.complete(
+                    [
+                        {"role": "system", "content": system},
+                        {
+                            "role": "user",
+                            "content": f"Fix this issue: {issue}\n\nKeep the exact same structure, "
+                            f"fix only what is wrong.\n\n{content}",
+                        },
+                    ],
+                    model=audit_model,
+                    priority=PRIORITY_LOW,
+                ),
+                timeout=30,
+            )
+            fixed = (fix_resp.content or "").strip()
+            if fixed and "ISSUE" not in fixed.upper():
+                return fixed
+            logger.warning("Audit did not converge for agent {}; keeping original", self.config.agent_id)
+        except Exception as e:
+            logger.debug("Truthful audit skipped: {}", e)
+        return content
+
     async def run(
         self,
         user_message: str,
@@ -261,6 +317,7 @@ class Agent:
         self._confirm_fn = confirm_fn
         tool_used = False
         final_content = ""
+        streamed = False
         consecutive_errors = 0
         delay = 0.5
 
@@ -370,9 +427,12 @@ class Agent:
             final_content = "I apologize, but I couldn't complete that request in the allotted steps."
 
         if final_content:
+            if self.config.truthful_audit and "```" in final_content and not streamed:
+                final_content = await self._audit_response(final_content)
             yield final_content
         elif tool_used:
             parts: list[str] = []
+            streamed = True
             async for token in self.llm.complete_stream(messages, priority=self.priority):
                 parts.append(token)
                 yield token
