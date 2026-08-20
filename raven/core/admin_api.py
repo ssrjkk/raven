@@ -503,7 +503,10 @@ def init_auth_routes(app, db_path: str) -> None:
         return {"token": token, "user_id": user.id, "role": user.role.value, "username": user.username}
 
     @app.post("/api/auth/register")  # type: ignore[untyped-decorator]
-    async def auth_register(body: AuthRegisterRequest):
+    async def auth_register(body: AuthRegisterRequest, request: Request):
+        ip = request.client.host if request.client else "unknown"
+        if not _check_login_rate(ip):
+            raise HTTPException(429, "Too many registration attempts. Try again later.")
         display = body.display_name or body.username
         existing = await store.get_user(body.username)
         if existing:

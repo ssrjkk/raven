@@ -221,6 +221,18 @@ class Agent:
             logger.debug("Recall error: {}", e)
             return None
 
+    @staticmethod
+    def _mark_untrusted(text: str) -> str:
+        if "<<<EXTERNAL_UNTRUSTED_CONTENT>>>" in text:
+            return text
+        return (
+            "<<<EXTERNAL_UNTRUSTED_CONTENT>>>\n"
+            "Source: channel message\n"
+            "---\n"
+            f"{text}\n"
+            "<<<END_EXTERNAL_CONTENT>>>"
+        )
+
     def _detect_loop(self, history: list[dict[str, Any]]) -> bool:
         tool_calls = [
             m.get("tool_calls", [{}])[0].get("function", {}).get("name", "")
@@ -255,7 +267,7 @@ class Agent:
         if not self.config.stateless:
             history = history if history is not None else await self._load_history()
             messages.extend(history[: self.config.max_history])
-        messages.append({"role": "user", "content": user_message})
+        messages.append({"role": "user", "content": self._mark_untrusted(user_message)})
 
         if not self.config.stateless and len(messages) > self.config.max_history + 3:
             messages = await self._compress(messages)

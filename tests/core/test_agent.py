@@ -191,6 +191,16 @@ class TestLoopDetection:
 
 
 class TestCompression:
+    def test_mark_untrusted_wraps_plain_text(self, agent):
+        marked = agent._mark_untrusted("hello world")
+        assert marked.startswith("<<<EXTERNAL_UNTRUSTED_CONTENT>>>")
+        assert "hello world" in marked
+        assert marked.endswith("<<<END_EXTERNAL_CONTENT>>>")
+
+    def test_mark_untrusted_skips_already_marked(self, agent):
+        already = "<<<EXTERNAL_UNTRUSTED_CONTENT>>>\nSource: webhook\n---\npayload\n<<<END_EXTERNAL_CONTENT>>>"
+        assert agent._mark_untrusted(already) == already
+
     async def test_compress_short_history_untouched(self, agent):
         messages = [{"role": "user", "content": "a"} for _ in range(5)]
         assert await agent._compress(messages) == messages
