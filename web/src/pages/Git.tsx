@@ -204,12 +204,8 @@ export default function Git() {
       )}
 
       <div className="flex flex-wrap gap-2">
-        <button onClick={handlePull} className="px-4 py-2 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
-          Pull
-        </button>
-        <button onClick={handlePush} className="px-4 py-2 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
-          Push
-        </button>
+        <button onClick={handlePull} className="btn-soft px-4 py-2">Pull</button>
+        <button onClick={handlePush} className="btn-soft px-4 py-2">Push</button>
         <div className="flex items-center gap-2">
           <input
             className="input-base"
@@ -218,19 +214,11 @@ export default function Git() {
             onChange={(e) => setCommitMsg(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleCommit()}
           />
-          <button onClick={handleCommit} className="px-3 py-1.5 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
-            Commit
-          </button>
-          <button onClick={handleAutoCommit} className="px-3 py-1.5 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
-            Auto
-          </button>
+          <button onClick={handleCommit} className="btn-soft px-3 py-2">Commit</button>
+          <button onClick={handleAutoCommit} className="btn-soft px-3 py-2">Auto</button>
         </div>
-        <button onClick={loadDiff} className="px-4 py-2 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
-          Show Diff
-        </button>
-        <button onClick={handleReview} className="px-4 py-2 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
-          LLM Review
-        </button>
+        <button onClick={loadDiff} className="btn-soft px-4 py-2">Show Diff</button>
+        <button onClick={handleReview} className="btn-soft px-4 py-2">LLM Review</button>
       </div>
 
       {branches && (
@@ -255,7 +243,7 @@ export default function Git() {
             onChange={(e) => setNewBranch(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleCreateBranch()}
           />
-          <button onClick={handleCreateBranch} className="px-3 py-1.5 rounded text-sm font-medium transition bg-accent-muted text-accent">
+          <button onClick={handleCreateBranch} className="btn-soft px-3 py-1.5">
             Create & Switch
           </button>
         </div>
@@ -296,12 +284,7 @@ export default function Git() {
               <button
                 key={entry.hash}
                 onClick={() => openCommit(entry.hash)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition hover:opacity-80"
-                style={{
-                  backgroundColor: "var(--dt-colors-bg-secondary)",
-                  border: "1px solid var(--dt-colors-border-default)",
-                  color: "var(--dt-colors-text-primary)",
-                }}
+                className="commit-card w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left group"
               >
                 <span className="font-mono text-xs px-2 py-0.5 rounded flex-shrink-0" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-accent-default)" }}>
                   {entry.hash}
@@ -355,7 +338,7 @@ export default function Git() {
               onKeyDown={(e) => e.key === "Enter" && loadBlame()}
             />
             <button onClick={loadBlame} disabled={blameLoading}
-              className="px-4 py-1.5 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
+              className="btn-soft px-4 py-1.5">
               {blameLoading ? "..." : "Blame"}
             </button>
           </div>
@@ -412,7 +395,7 @@ export default function Git() {
               )}
             </>
           )}
-          <button onClick={handleReview} className="px-4 py-2 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
+          <button onClick={handleReview} className="btn-soft px-4 py-2">
             Run LLM Review
           </button>
         </div>
@@ -433,7 +416,7 @@ export default function Git() {
             value={prBody}
             onChange={(e) => setPrBody(e.target.value)}
           />
-          <button onClick={handlePr} className="px-4 py-2 rounded-lg text-sm font-medium transition bg-accent-muted text-accent">
+          <button onClick={handlePr} className="btn-soft px-4 py-2">
             Create Pull Request
           </button>
         </div>

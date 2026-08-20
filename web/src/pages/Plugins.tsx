@@ -120,7 +120,7 @@ export default function Plugins() {
       {tab === "installed" && (
         <div className="space-y-3">
           {installed.length === 0 ? (
-            <p className="text-sm text-tertiary">No plugins installed</p>
+            <p className="empty-state">No plugins installed yet</p>
           ) : (
             installed.map((p) => (
               <div key={p.id || p.name} className="card text-sm">
@@ -132,11 +132,11 @@ export default function Plugins() {
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => handleUpdate(p.name)}
-                      className="px-2 py-1 rounded text-xs font-medium transition bg-accent-muted text-accent">
+                      className="btn-soft px-2.5 py-1 text-xs">
                       Update
                     </button>
                     <button onClick={() => handleUninstall(p.name)}
-                      className="px-2 py-1 rounded text-xs font-medium transition bg-danger-subtle text-danger">
+                      className="btn-soft px-2.5 py-1 text-xs text-danger" style={{ backgroundColor: "rgba(239, 68, 68, 0.12)" }}>
                       Uninstall
                     </button>
                   </div>
@@ -176,7 +176,7 @@ export default function Plugins() {
           <div>
             <h3 className="text-sm font-semibold mb-2 text-secondary">All Plugins ({catalog.length})</h3>
             {catalog.length === 0 ? (
-              <p className="text-sm text-tertiary">Catalog empty (no remote configured)</p>
+              <p className="empty-state">Catalog empty (no remote configured)</p>
             ) : (
               catalog.map((p) => (
                 <div key={p.id} className="card-bordered text-sm mb-2 p-3">
@@ -187,7 +187,7 @@ export default function Plugins() {
                       <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: categoryColor(p.category ?? ""), color: "#fff" }}>{p.category}</span>
                     </div>
                     <button onClick={() => { setInstallUrl(p.id ?? ""); setTab("install"); }}
-                      className="px-3 py-1 rounded text-xs font-medium transition bg-accent-muted text-accent">
+                      className="btn-soft px-3 py-1 text-xs">
                       Install
                     </button>
                   </div>
@@ -223,7 +223,7 @@ export default function Plugins() {
           {searchResults !== null && (
             <div className="space-y-2">
               {searchResults.length === 0 ? (
-                <p className="text-sm text-tertiary">No results</p>
+                <p className="empty-state">No results for "{searchQuery}"</p>
               ) : (
                 searchResults.map((p) => (
                   <div key={p.id} className="card-bordered text-sm p-3">
