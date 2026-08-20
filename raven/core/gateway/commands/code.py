@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from raven.core.auth import Permission
 from raven.core.config import settings
 from raven.core.gateway.commands.base import CommandContext, CommandHandler
+from raven.core.security.path_guard import confine_path
 from raven.core.security.sandbox_policy import check_tool_allowed, get_policy_for_channel
 
 if TYPE_CHECKING:
@@ -39,7 +40,16 @@ class CodeCommand(CommandHandler):
         sub_args = ctx.args[1:] if len(ctx.args) > 1 else []
 
         if sub == "index":
-            root = sub_args[0] if sub_args else str(Path.cwd())
+            ws = settings.resolved_workspace
+            root_arg = sub_args[0] if sub_args else str(Path.cwd())
+            if ws:
+                try:
+                    root = str(confine_path(root_arg, ws))
+                except PermissionError as exc:
+                    await gateway._send(ctx.event.channel, ctx.event.session_id, f"Access denied: {exc}")
+                    return True
+            else:
+                root = root_arg
             await gateway._send(ctx.event.channel, ctx.event.session_id, f"Indexing {root}...")
             indexer = CodeIndexer(root)
             await asyncio.to_thread(indexer.index, max_files=2000)
@@ -66,11 +76,17 @@ class CodeCommand(CommandHandler):
 
         elif sub == "review" and sub_args:
             path = " ".join(sub_args)
-            p = Path(path).expanduser().resolve()
+            p = Path(path).expanduser()
             ws = settings.resolved_workspace
-            if ws and not str(p).startswith(str(ws.resolve())):
-                await gateway._send(ctx.event.channel, ctx.event.session_id, "File outside workspace — denied")
-                return True
+            if ws:
+                p = p if p.is_absolute() else ws / p
+                try:
+                    p = confine_path(str(p), ws)
+                except PermissionError as exc:
+                    await gateway._send(ctx.event.channel, ctx.event.session_id, f"Access denied: {exc}")
+                    return True
+            else:
+                p = p.resolve()
             is_file = await asyncio.to_thread(p.is_file)
             if not is_file:
                 await gateway._send(ctx.event.channel, ctx.event.session_id, f"File not found: {p}")

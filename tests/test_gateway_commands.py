@@ -187,6 +187,70 @@ class TestCodeCommands:
         result = await gateway_with_perms._handle_command(_event("/code review test.py"), user)
         assert result is True
 
+    async def test_code_index_denied_outside_workspace(
+        self, gateway_with_perms: Gateway, user: dict[str, Any], monkeypatch, tmp_path
+    ):
+        from raven.core.config import settings
+
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        monkeypatch.setattr(settings, "workspace_path", str(ws))
+        sent: list[tuple[str, str]] = []
+
+        async def fake_send(channel_id: str, session_id: str, text: str, streaming: bool = False):
+            sent.append((channel_id, text))
+
+        gateway_with_perms._send = fake_send  # type: ignore[method-assign]
+        result = await gateway_with_perms._handle_command(
+            _event(f"/code index {tmp_path / 'outside'}"), user
+        )
+        assert result is True
+        assert any("Access denied" in text for _, text in sent)
+
+    async def test_code_review_denied_prefix_sibling(
+        self, gateway_with_perms: Gateway, user: dict[str, Any], monkeypatch, tmp_path
+    ):
+        from raven.core.config import settings
+
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        evil = tmp_path / "ws_evil"
+        evil.mkdir()
+        secret = evil / "secret.py"
+        secret.write_text("password = 'hunter2'\n", encoding="utf-8")
+        monkeypatch.setattr(settings, "workspace_path", str(ws))
+        sent: list[tuple[str, str]] = []
+
+        async def fake_send(channel_id: str, session_id: str, text: str, streaming: bool = False):
+            sent.append((channel_id, text))
+
+        gateway_with_perms._send = fake_send  # type: ignore[method-assign]
+        result = await gateway_with_perms._handle_command(
+            _event(f"/code review {secret!s}"), user
+        )
+        assert result is True
+        assert any("Access denied" in text for _, text in sent)
+
+    async def test_code_review_allowed_inside_workspace(
+        self, gateway_with_perms: Gateway, user: dict[str, Any], monkeypatch, tmp_path
+    ):
+        from raven.core.config import settings
+
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        target = ws / "ok.py"
+        target.write_text("x = 1\n", encoding="utf-8")
+        monkeypatch.setattr(settings, "workspace_path", str(ws))
+        sent: list[tuple[str, str]] = []
+
+        async def fake_send(channel_id: str, session_id: str, text: str, streaming: bool = False):
+            sent.append((channel_id, text))
+
+        gateway_with_perms._send = fake_send  # type: ignore[method-assign]
+        result = await gateway_with_perms._handle_command(_event(f"/code review {target!s}"), user)
+        assert result is True
+        assert not any("Access denied" in text for _, text in sent)
+
 
 class TestVoiceCommands:
     async def test_voice_tts(self, gateway: Gateway, user: dict[str, Any]):
