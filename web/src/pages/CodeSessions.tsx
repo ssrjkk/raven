@@ -21,7 +21,7 @@ export default function CodeSessions() {
       <PageHeader title="Code Sessions" subtitle="Session history and status" />
       <div className="space-y-2">
         {sessions.map((s) => (
-          <div key={s.id} className="card">
+          <div key={s.id} className="card p-3">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-sm font-medium">{s.goal}</div>
@@ -35,7 +35,7 @@ export default function CodeSessions() {
             </div>
           </div>
         ))}
-        {sessions.length === 0 && <p className="text-sm text-tertiary text-center py-8">No coding sessions.</p>}
+        {sessions.length === 0 && <p className="empty-state">No coding sessions.</p>}
       </div>
     </div>
   );

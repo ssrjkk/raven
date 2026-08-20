@@ -51,6 +51,10 @@ def _detect_provider_family() -> str:
     return "ollama"
 
 
+def tiers_configured() -> bool:
+    return bool(settings.model_fast or settings.model_balanced or settings.model_quality)
+
+
 def _estimate_complexity(messages: list[dict[str, Any]]) -> str:
     total_chars = sum(len(m.get("content", "")) for m in messages)
     total_messages = len(messages)

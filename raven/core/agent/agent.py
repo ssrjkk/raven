@@ -183,7 +183,12 @@ class Agent:
             {"role": "user", "content": f"Summarize:\n{conversation}"},
         ]
         try:
-            resp = await self.llm.complete(prompt, priority=PRIORITY_LOW)
+            from raven.core.model_tiers import select_model, tiers_configured
+
+            kwargs: dict[str, Any] = {}
+            if tiers_configured():
+                kwargs["model"] = select_model(prompt, prefer_tier="fast")
+            resp = await self.llm.complete(prompt, priority=PRIORITY_LOW, **kwargs)
             summary = (resp.content or "")[:500]
             if summary.strip():
                 compressed = [messages[0], {"role": "system", "content": f"[Context summary: {summary}]"}]
@@ -331,8 +336,11 @@ class Agent:
                             "tool_calls": [tc.to_dict() for tc in tool_calls],
                         }
                     )
-                    for tc in tool_calls:
-                        tool_result = await self._execute_tool(tc)
+                    tool_results = await asyncio.gather(
+                        *(self._execute_tool(tc) for tc in tool_calls),
+                        return_exceptions=False,
+                    )
+                    for tc, tool_result in zip(tool_calls, tool_results, strict=True):
                         messages.append(
                             {
                                 "role": "tool",

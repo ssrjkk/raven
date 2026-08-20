@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
@@ -315,7 +316,11 @@ class AgentOrchestrator:
                     target=tc.name,
                     detail={"args": tc.arguments},
                 )
-                tool_result = await self._execute_tool_safe(tc, current_profile, agent_ctx)
+            tool_results = await asyncio.gather(
+                *(self._execute_tool_safe(tc, current_profile, agent_ctx) for tc in tool_calls),
+                return_exceptions=False,
+            )
+            for tc, tool_result in zip(tool_calls, tool_results, strict=True):
                 tool_status = "ok" if "error" not in tool_result else "error"
                 await st.tool_result(current_profile.name, tc.name, tool_status)
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(tool_result)})
@@ -432,12 +437,15 @@ class AgentOrchestrator:
         if not self._planner_enabled:
             return []
         try:
+            from raven.core.model_tiers import select_model, tiers_configured
+
+            plan_messages = [
+                {"role": "system", "content": _PLAN_PROMPT},
+                {"role": "user", "content": f"Request: {query}\nCurrent role: {profile.display_name}"},
+            ]
             resp = await self._llm.complete(
-                [
-                    {"role": "system", "content": _PLAN_PROMPT},
-                    {"role": "user", "content": f"Request: {query}\nCurrent role: {profile.display_name}"},
-                ],
-                model="",
+                plan_messages,
+                model=select_model(plan_messages, prefer_tier="fast") if tiers_configured() else "",
             )
             return _parse_plan_steps(resp.content or "")
         except Exception as e:

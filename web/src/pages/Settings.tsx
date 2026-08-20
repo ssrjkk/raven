@@ -245,7 +245,7 @@ export default function Settings() {
       </div>
 
       <button onClick={() => shutdown.mutate()} disabled={shutdown.isPending}
-        className="px-5 py-2 rounded-xl text-sm font-medium transition bg-danger-subtle text-danger disabled:opacity-50">
+        className="btn-soft px-5 py-2 text-danger" style={{ backgroundColor: "rgba(239, 68, 68, 0.12)" }}>
         {shutdown.isPending ? "Shutting down..." : "Shutdown Raven"}
       </button>
     </div>

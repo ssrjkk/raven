@@ -144,6 +144,49 @@ class TestAgent:
         assert len(executed) == 8
         assert "done" in "".join(tokens)
 
+    async def test_run_executes_parallel_tool_calls(self, session, mock_db):
+        import asyncio
+
+        from raven.core.llm import LLMResponse, ToolCall
+        from raven.core.security.tool_policy import ToolPolicyEvaluator
+
+        order: list[str] = []
+
+        async def ping() -> str:
+            order.append("start")
+            await asyncio.sleep(0.05)
+            order.append("end")
+            return "pong"
+
+        ping_tool = PluginTool(
+            name="ping",
+            description="Ping test",
+            parameters={"type": "object", "properties": {}},
+            handler=ping,
+        )
+        calls = [ToolCall(id=f"call{i}", name="ping", arguments={}) for i in range(3)]
+        llm = AsyncMock()
+        llm.complete = AsyncMock(
+            side_effect=[
+                LLMResponse(content="", tool_calls=calls, finish_reason="tool_calls"),
+                LLMResponse(content="done", finish_reason="stop"),
+            ]
+        )
+        agent = Agent(
+            session=session,
+            tools=[ping_tool],
+            db=mock_db,
+            llm=llm,
+            config=AgentConfig(max_tool_rounds=3, use_memory=False),
+            tool_policy=ToolPolicyEvaluator("full", "", ""),  # type: ignore[arg-type]
+        )
+        tokens = [t async for t in agent.run("go")]
+        assert "done" in "".join(tokens)
+        assert order.count("start") == 3 and order.count("end") == 3
+        starts = [i for i, x in enumerate(order) if x == "start"]
+        ends = [i for i, x in enumerate(order) if x == "end"]
+        assert max(starts) < min(ends)
+
     async def test_agent_config_defaults(self):
         config = AgentConfig()
         assert config.max_tool_rounds == 10

@@ -1,10 +1,17 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AlertCircle, Pause, Play, Activity } from "lucide-react";
 
 import { api, type RoutineData } from "../api/client";
 import PageHeader from "../components/PageHeader";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 import { useApiQuery } from "../hooks/useApiQuery";
+
+const routineStatusIcon: Record<string, { icon: typeof Activity; color: string }> = {
+  active: { icon: Activity, color: "var(--dt-colors-status-success)" },
+  paused: { icon: Pause, color: "var(--dt-colors-status-warning)" },
+  error: { icon: AlertCircle, color: "var(--dt-colors-status-error)" },
+};
 
 export default function Routines() {
   const qc = useQueryClient();
@@ -36,25 +43,41 @@ export default function Routines() {
       <PageHeader title="Routines" subtitle="Recurring routines executed on a schedule" />
       <div className="space-y-2">
         {routines?.map((r: RoutineData) => {
-          const icons: Record<string, string> = { active: "🟢", paused: "⏸", error: "🔴" };
+          const cfg = routineStatusIcon[r.status] ?? routineStatusIcon.error;
+          const StatusIcon = cfg.icon;
           return (
             <div key={r.id} className="card flex items-center justify-between p-3">
-              <div>
-                <div className="font-medium">{r.name}</div>
-                <div className="text-xs text-tertiary">
-                  {r.action} · every {r.schedule} · {r.trigger}
+              <div className="flex items-center gap-3">
+                <span
+                  className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}
+                >
+                  <StatusIcon size={16} style={{ color: cfg.color }} />
+                </span>
+                <div>
+                  <div className="font-medium">{r.name}</div>
+                  <div className="text-xs text-tertiary">
+                    {r.action} · every {r.schedule} · {r.trigger}
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <span title={r.status}>{icons[r.status] || "⚪"}</span>
+                <span
+                  className="text-[10px] font-semibold uppercase tracking-wider"
+                  style={{ color: cfg.color }}
+                >
+                  {r.status}
+                </span>
                 {r.status === "active" ? (
                   <button onClick={() => toggle.mutate({ action: "pause", id: r.id })}
-                    className="px-2 py-1 rounded text-xs font-medium" style={{ backgroundColor: "var(--dt-colors-status-warning-bg)", color: "var(--dt-colors-status-warning)" }}>
+                    className="btn-soft px-2.5 py-1 text-xs" style={{ color: "var(--dt-colors-status-warning)", backgroundColor: "var(--dt-colors-status-warning-bg)" }}>
+                    <Pause size={11} />
                     Pause
                   </button>
                 ) : (
                   <button onClick={() => toggle.mutate({ action: "resume", id: r.id })}
-                    className="px-2 py-1 rounded text-xs font-medium" style={{ backgroundColor: "var(--dt-colors-status-success-bg)", color: "var(--dt-colors-status-success)" }}>
+                    className="btn-soft px-2.5 py-1 text-xs" style={{ color: "var(--dt-colors-status-success)", backgroundColor: "var(--dt-colors-status-success-bg)" }}>
+                    <Play size={11} />
                     Resume
                   </button>
                 )}
@@ -63,7 +86,7 @@ export default function Routines() {
           );
         })}
         {(!routines || routines.length === 0) && (
-          <p className="text-sm text-tertiary">No routines configured.</p>
+          <p className="empty-state">No routines configured yet.</p>
         )}
       </div>
     </div>

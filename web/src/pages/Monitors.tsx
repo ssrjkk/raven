@@ -1,10 +1,17 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Activity, AlertCircle, CheckCircle2, Pause, XCircle } from "lucide-react";
 
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 import { useApiQuery } from "../hooks/useApiQuery";
+
+const monitorStatusIcon: Record<string, { icon: typeof Activity; color: string }> = {
+  active: { icon: Activity, color: "var(--dt-colors-status-success)" },
+  paused: { icon: Pause, color: "var(--dt-colors-status-warning)" },
+  error: { icon: AlertCircle, color: "var(--dt-colors-status-error)" },
+};
 
 export default function Monitors() {
   const qc = useQueryClient();
@@ -37,12 +44,18 @@ export default function Monitors() {
       <PageHeader title="Monitors" subtitle="Health checks for your services" />
       <div className="space-y-2">
         {monitors.map((m) => {
-          const icons: Record<string, string> = { active: "🟢", paused: "⏸", error: "🔴" };
+          const cfg = monitorStatusIcon[m.status] ?? monitorStatusIcon.error;
+          const StatusIcon = cfg.icon;
           return (
-            <div key={m.id} className="card">
+            <div key={m.id} className="card p-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <span>{icons[m.status] || "❓"}</span>
+                  <span
+                    className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center"
+                    style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}
+                  >
+                    <StatusIcon size={16} style={{ color: cfg.color }} />
+                  </span>
                   <div>
                     <div className="text-sm font-medium">{m.name}</div>
                     <div className="text-xs text-tertiary">
@@ -52,17 +65,20 @@ export default function Monitors() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-tertiary">{m.interval_seconds}s</span>
-                  {m.last_check && <span className="text-xs">{m.last_check.status === "up" ? "✅" : "❌"}</span>}
+                  {m.last_check && (
+                    <span className="flex items-center gap-1 text-xs" style={{ color: m.last_check.status === "up" ? "var(--dt-colors-status-success)" : "var(--dt-colors-status-error)" }}>
+                      {m.last_check.status === "up" ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+                      {m.last_check.status}
+                    </span>
+                  )}
                     {m.status === "active" ? (
                     <button onClick={() => toggle.mutate({ action: "pause", id: m.id })}
-                      className="px-2 py-1 rounded text-xs font-medium transition hover:brightness-125"
-                      style={{ color: "var(--dt-colors-status-warning)", backgroundColor: "var(--dt-colors-status-warning-bg)" }}>
+                      className="btn-soft px-2.5 py-1 text-xs" style={{ color: "var(--dt-colors-status-warning)", backgroundColor: "var(--dt-colors-status-warning-bg)" }}>
                       Pause
                     </button>
                   ) : (
                     <button onClick={() => toggle.mutate({ action: "resume", id: m.id })}
-                      className="px-2 py-1 rounded text-xs font-medium transition hover:brightness-125"
-                      style={{ color: "var(--dt-colors-status-success)", backgroundColor: "var(--dt-colors-status-success-bg)" }}>
+                      className="btn-soft px-2.5 py-1 text-xs" style={{ color: "var(--dt-colors-status-success)", backgroundColor: "var(--dt-colors-status-success-bg)" }}>
                       Resume
                     </button>
                   )}
@@ -71,7 +87,7 @@ export default function Monitors() {
             </div>
           );
         })}
-        {monitors.length === 0 && <p className="text-sm text-tertiary text-center py-8">No monitors configured.</p>}
+        {monitors.length === 0 && <p className="empty-state">No monitors configured.</p>}
       </div>
     </div>
   );

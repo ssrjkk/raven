@@ -223,6 +223,39 @@ class TestPlannerExecutorCritic:
         assert calls == [str(inside)]
 
     @pytest.mark.asyncio
+    async def test_parallel_tool_calls_in_one_round(self):
+        import asyncio
+
+        order: list[str] = []
+
+        async def slow(text: str) -> str:
+            order.append(f"s:{text}")
+            await asyncio.sleep(0.05)
+            order.append(f"e:{text}")
+            return f"ok:{text}"
+
+        registry = make_registry({"slow": ({"text": {"type": "string", "required": True}}, slow)})
+        llm = FakeLLM(
+            responses=[
+                LLMResponse(
+                    tool_calls=[
+                        ToolCall(id="1", name="slow", arguments={"text": "a"}),
+                        ToolCall(id="2", name="slow", arguments={"text": "b"}),
+                        ToolCall(id="3", name="slow", arguments={"text": "c"}),
+                    ]
+                ),
+                LLMResponse(content="done"),
+            ]
+        )
+        orch = AgentOrchestrator(llm=llm, tool_registry=registry, max_total_iterations=10)  # type: ignore[arg-type]
+        result = await orch.execute("go", profile_override="coder")
+
+        assert result.success is True
+        assert sorted(order) == sorted(["s:a", "s:b", "s:c", "e:a", "e:b", "e:c"])
+        prefixes = [x[0] for x in order]
+        assert prefixes == ["s", "s", "s", "e", "e", "e"]
+
+    @pytest.mark.asyncio
     async def test_max_iterations_returns_max_steps(self):
         registry = make_registry({"echo": ({"text": {"type": "string", "required": True}}, lambda text: "echo")})
         responses = [LLMResponse(tool_calls=[ToolCall(id=str(i), name="echo", arguments={"text": "x"})]) for i in range(20)]
