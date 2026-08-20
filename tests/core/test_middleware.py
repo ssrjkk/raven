@@ -61,6 +61,10 @@ def _make_full_app() -> FastAPI:
     async def rag_stats() -> dict[str, str]:
         return {"ok": "rag"}
 
+    @app.get("/api/collab/sessions")
+    async def collab_sessions() -> dict[str, str]:
+        return {"ok": "collab"}
+
     return app
 
 
@@ -134,13 +138,27 @@ class TestPrivateReadGuard:
         if not settings.web_secret_key:
             pytest.skip("web_secret_key not set")
         client = TestClient(_make_full_app())
-        for path in ("/api/chat/search", "/api/email/inbox", "/api/email/config", "/api/insights/workspace", "/api/rag/stats"):
+        for path in (
+            "/api/chat/search",
+            "/api/collab/sessions",
+            "/api/email/inbox",
+            "/api/email/config",
+            "/api/insights/workspace",
+            "/api/rag/stats",
+        ):
             assert client.get(path).status_code == 401, path
 
     def test_private_read_allowed_with_bearer(self) -> None:
         token = token_manager.create_token("u1", "user")
         client = TestClient(_make_full_app())
-        for path in ("/api/chat/search", "/api/email/inbox", "/api/email/config", "/api/insights/workspace", "/api/rag/stats"):
+        for path in (
+            "/api/chat/search",
+            "/api/collab/sessions",
+            "/api/email/inbox",
+            "/api/email/config",
+            "/api/insights/workspace",
+            "/api/rag/stats",
+        ):
             assert client.get(path, headers={"Authorization": f"Bearer {token}"}).status_code == 200, path
 
     def test_private_read_open_when_unsecured(self, monkeypatch) -> None:

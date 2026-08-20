@@ -103,6 +103,7 @@ _PUBLIC_PATHS: tuple[str, ...] = ("/aios/health", "/aios/metrics", "/docs", "/op
 # web_secret_key is configured (production mode); left open in local mode.
 _PRIVATE_READ_PREFIXES: tuple[str, ...] = (
     "/api/chat/search",
+    "/api/collab",
     "/api/email/inbox",
     "/api/email/config",
     "/api/insights",

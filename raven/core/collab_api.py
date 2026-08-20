@@ -1,10 +1,36 @@
 from __future__ import annotations
 
+import hmac
+
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from loguru import logger
 from pydantic import BaseModel
 
 from raven.unique.collaboration import CollaborationManager, TextChange, WebSocketManager
+
+
+def _secure_mode() -> bool:
+    from raven.core.config import settings
+
+    secret = settings.web_secret_key.get_secret_value() if settings.web_secret_key else ""
+    return bool(secret)
+
+
+async def _ws_authenticated(websocket: WebSocket) -> bool:
+    from raven.core.auth.auth_handler import auth_handler
+    from raven.core.config import settings
+
+    token = websocket.query_params.get("token", "")
+    if not token:
+        return False
+    secret = settings.web_secret_key.get_secret_value()
+    if secret and hmac.compare_digest(token, secret):
+        return True
+    try:
+        payload = await auth_handler.decode_token(token)
+    except Exception:
+        return False
+    return payload is not None
 
 _manager: CollaborationManager | None = None
 _ws_manager: WebSocketManager | None = None
@@ -158,6 +184,9 @@ def create_collab_router() -> APIRouter:
         await websocket.accept()
         user_id = "anon"
         try:
+            if _secure_mode() and not await _ws_authenticated(websocket):
+                await websocket.close(code=1008, reason="Authentication required")
+                return
             msg = await websocket.receive_json()
             if msg.get("kind") == "auth" and msg.get("user_id"):
                 user_id = msg["user_id"]
