@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import itertools
 from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -23,8 +24,8 @@ async def detect_patterns(memory: MemoryManager, min_frequency: int = 2) -> list
         if ":" in content:
             content = content.split(":", 1)[-1].strip()
         segments = content.lower().split()
-        for i in range(len(segments) - 1):
-            phrase = f"{segments[i]} {segments[i+1]}"
+        for seg, next_seg in itertools.pairwise(segments):
+            phrase = f"{seg} {next_seg}"
             if len(phrase) > 8:
                 topics[phrase] += 1
 

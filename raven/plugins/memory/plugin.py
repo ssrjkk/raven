@@ -83,7 +83,7 @@ async def search_memory(query: str, n_results: int = 5) -> str:
             docs = results.get("documents", [[]])[0]
             ids = results.get("ids", [[]])[0]
             if docs:
-                lines = [f"- `{ids[i]}`: {docs[i][:200]}" for i in range(len(docs))]
+                lines = [f"- `{doc_id}`: {doc[:200]}" for doc_id, doc in zip(ids, docs, strict=False)]
                 return "Memory search results:\n" + "\n".join(lines)
         except Exception as e:
             logger.warning("[memory] ChromaDB search failed: {}", e)

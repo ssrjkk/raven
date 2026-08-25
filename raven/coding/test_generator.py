@@ -41,7 +41,7 @@ class LLMProviderAdapter(LLMInterface):
         return resp.content  # type: ignore[no-any-return]
 
 
-@dataclass
+@dataclass(slots=True)
 class TestResult:
     passed: bool = True
     coverage: float = 0.0
@@ -49,7 +49,7 @@ class TestResult:
     edge_cases: list[str] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class TypeInfo:
     name: str
     type_hint: str
@@ -57,7 +57,7 @@ class TypeInfo:
     docstring: str = ""
 
 
-@dataclass
+@dataclass(slots=True)
 class FunctionInfo:
     name: str
     args: list[TypeInfo] = field(default_factory=list)
@@ -67,7 +67,7 @@ class FunctionInfo:
     is_method: bool = False
 
 
-@dataclass
+@dataclass(slots=True)
 class ClassInfo:
     name: str
     methods: list[FunctionInfo] = field(default_factory=list)

@@ -49,7 +49,7 @@ _OPTIMIZATION_HINTS: dict[str, str] = {
 }
 
 
-@dataclass
+@dataclass(slots=True)
 class ProfileFrame:
     filename: str
     line: int
@@ -59,7 +59,7 @@ class ProfileFrame:
     ncalls: int
 
 
-@dataclass
+@dataclass(slots=True)
 class ProfileResult:
     code_text: str
     total_time: float
@@ -72,7 +72,7 @@ class ProfileResult:
     error: str | None = None
 
 
-@dataclass
+@dataclass(slots=True)
 class Bottleneck:
     function: str
     filename: str
@@ -82,7 +82,7 @@ class Bottleneck:
     severity: str = "medium"
 
 
-@dataclass
+@dataclass(slots=True)
 class ProcessProfileResult:
     pid: int
     duration: float

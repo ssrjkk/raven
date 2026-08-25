@@ -81,7 +81,7 @@ class PluginCatalog:
             if query_lower in plugin.description.lower():
                 results.append(plugin)
                 continue
-            if query_lower in [t.lower() for t in plugin.tags]:
+            if any(query_lower == t.lower() for t in plugin.tags):
                 results.append(plugin)
                 continue
             if query_lower == plugin.category.value:

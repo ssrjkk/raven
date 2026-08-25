@@ -69,7 +69,7 @@ class BreakingChangeError(Exception):
         super().__init__(message)
 
 
-@dataclass
+@dataclass(slots=True)
 class FileChange:
     path: str
     old_content: str
@@ -77,7 +77,7 @@ class FileChange:
     change_type: str = "edit"
 
 
-@dataclass
+@dataclass(slots=True)
 class RefactoringPlan:
     description: str
     changes: list[FileChange] = field(default_factory=list)
@@ -85,7 +85,7 @@ class RefactoringPlan:
     safe_to_apply: bool = False
 
 
-@dataclass
+@dataclass(slots=True)
 class DependencyEdge:
     source: str
     target: str
@@ -131,13 +131,13 @@ class DependencyGraph:
         return result
 
 
-@dataclass
+@dataclass(slots=True)
 class ParamInfo:
     name: str
     has_default: bool
 
 
-@dataclass
+@dataclass(slots=True)
 class FunctionInfo:
     name: str
     params: list[ParamInfo]
@@ -146,7 +146,7 @@ class FunctionInfo:
     end_line: int
 
 
-@dataclass
+@dataclass(slots=True)
 class ClassInfo:
     name: str
     methods: list[FunctionInfo]

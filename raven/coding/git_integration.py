@@ -18,7 +18,7 @@ except ImportError:
     LLMProvider = None  # type: ignore[assignment,misc]
 
 
-@dataclass
+@dataclass(slots=True)
 class FileChange:
     path: str
     old_content: str = ""
@@ -26,7 +26,7 @@ class FileChange:
     change_type: str = "edit"
 
 
-@dataclass
+@dataclass(slots=True)
 class CommitResult:
     success: bool
     message: str
@@ -34,14 +34,14 @@ class CommitResult:
     error: str = ""
 
 
-@dataclass
+@dataclass(slots=True)
 class PRResult:
     success: bool
     url: str = ""
     error: str = ""
 
 
-@dataclass
+@dataclass(slots=True)
 class ReviewComment:
     file: str
     line: int
@@ -49,7 +49,7 @@ class ReviewComment:
     message: str
 
 
-@dataclass
+@dataclass(slots=True)
 class ReviewResult:
     comments: list[ReviewComment] = field(default_factory=list)
     summary: str = ""
