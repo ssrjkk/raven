@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
+from raven.core.api_errors import internal_error
 from raven.core.workflow.runner import TemplateRunner
 from raven.core.workflow.store import WorkflowStore
 
@@ -118,7 +119,7 @@ def create_workflow_router() -> APIRouter:
         except Exception as e:
             await task_store.close()
             logger.warning("[workflow] instantiate failed: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/templates/{template_id}/schedule")
     async def api_workflow_schedule(template_id: str, req: ScheduleRequest):
@@ -139,6 +140,6 @@ def create_workflow_router() -> APIRouter:
             return {"ok": True, "routine_id": routine_id}
         except Exception as e:
             logger.warning("[workflow] schedule failed: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     return router

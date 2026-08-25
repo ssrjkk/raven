@@ -406,6 +406,10 @@ class RefactoringEngine:
         self._dep_graph = DependencyGraph()
 
     async def build_dependency_graph(self, paths: list[str] | None = None) -> DependencyGraph:
+        self._dep_graph = await asyncio.to_thread(self._build_graph_sync, paths)
+        return self._dep_graph
+
+    def _build_graph_sync(self, paths: list[str] | None) -> DependencyGraph:
         g = DependencyGraph()
         search_paths = [self._workspace / p for p in paths] if paths else [self._workspace]
         for search_path in search_paths:
@@ -416,11 +420,10 @@ class RefactoringEngine:
                     g.add_edge(DependencyEdge(source=str(search_path), target=dep))
             elif search_path.is_dir():
                 for py_file in search_path.rglob("*.py"):
-                    deps = await asyncio.to_thread(self._extract_imports, str(py_file))
+                    deps = self._extract_imports(str(py_file))
                     g.add_node(str(py_file))
                     for dep in deps:
                         g.add_edge(DependencyEdge(source=str(py_file), target=dep))
-        self._dep_graph = g
         return g
 
     def _extract_imports(self, file_path: str) -> list[str]:

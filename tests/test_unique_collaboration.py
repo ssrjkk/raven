@@ -30,6 +30,21 @@ class TestCollaborationSession:
         result = self.session.apply_change(change)
         assert result is True
         assert self.session.document.content == "hello there"
+        assert self.session.document.change_count == 1
+
+    def test_change_history_bounded(self):
+        from raven.unique.collaboration import _MAX_CHANGE_HISTORY
+
+        self.session.document.content = "x"
+        for _i in range(_MAX_CHANGE_HISTORY + 50):
+            change = TextChange(user_id="u1", file="test.py",
+                                start_line=0, start_col=0, end_line=0, end_col=1,
+                                old_text="x", new_text="x")
+            assert self.session.apply_change(change) is True
+        assert len(self.session.document.changes) == _MAX_CHANGE_HISTORY
+        assert self.session.document.change_count == _MAX_CHANGE_HISTORY + 50
+        state = self.session.get_state()
+        assert state["changes"] == _MAX_CHANGE_HISTORY + 50
 
     def test_apply_change_multiline(self):
         self.session.document.content = "line1\nline2\nline3"
@@ -120,3 +135,26 @@ class TestCollaborationManager:
         s2.add_user("u2", "Bob")
         users = self.manager.list_active_users()
         assert len(users) == 2
+
+
+class TestCollabApiDelete:
+    def test_delete_session_endpoint(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        import raven.core.collab_api as collab_api
+
+        app = FastAPI()
+        app.include_router(collab_api.create_collab_router())
+        client = TestClient(app)
+
+        resp = client.post("/api/collab/sessions", json={"session_id": "del1", "file_path": "a.py"})
+        assert resp.status_code == 200
+
+        resp = client.delete("/api/collab/sessions/del1")
+        assert resp.status_code == 200
+        assert resp.json() == {"success": True}
+        assert collab_api._get_manager().get_session("del1") is None
+
+        resp = client.delete("/api/collab/sessions/del1")
+        assert resp.status_code == 404

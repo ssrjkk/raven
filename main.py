@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 with contextlib.suppress(ImportError):
-    import uvloop  # type: ignore[no-unused-import]
+    import uvloop
 
     uvloop.install()
 
@@ -61,12 +61,14 @@ async def main() -> None:
     )
     for p in pending:
         p.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)
     logger.info("Raven AI stopped.")
 
 
 async def _start_web(port: int) -> None:
     try:
-        from raven.cli.main import _run_gateway, create_gateway
+        from raven.cli.gateway_runner import _run_gateway, create_gateway
+
         gateway = create_gateway()
         await _run_gateway(gateway, port)
     except ImportError as exc:

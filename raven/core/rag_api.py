@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
+from raven.core.api_errors import internal_error
 from raven.core.events import EventBus
 from raven.core.metrics import metrics
 from raven.unique.multi_modal_rag import Document, MultiModalRAG
@@ -86,7 +87,7 @@ def create_rag_router(event_bus: EventBus | None = None) -> APIRouter:
         except Exception as e:
             metrics.error("rag_search", {})
             logger.error("RAG search error: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
         return {
             "results": [
                 {

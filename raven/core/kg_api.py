@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 
+from raven.core.api_errors import internal_error
 from raven.unique.knowledge_graph import Document, KnowledgeGraph
 
 _KG_PATH = Path(__file__).parent.parent / "data" / "knowledge_graph.json"
@@ -40,7 +41,7 @@ def create_knowledge_router() -> APIRouter:
             return {"result": result, "stats": stats}
         except Exception as e:
             logger.error("KG extract error: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/search")
     def search(query: str, max_depth: int = 2):
@@ -53,7 +54,7 @@ def create_knowledge_router() -> APIRouter:
             return {"results": results, "stats": stats}
         except Exception as e:
             logger.error("KG search error: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.get("/stats")
     def stats():
@@ -83,7 +84,7 @@ def create_knowledge_router() -> APIRouter:
             _save_kg(kg)
             return {"entity": {"id": entity.id, "name": entity.name, "type": entity.type}}
         except Exception as e:
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/relation")
     def add_relation(source: str, target: str, type: str = "related_to"):
@@ -103,6 +104,6 @@ def create_knowledge_router() -> APIRouter:
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
         except Exception as e:
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     return router

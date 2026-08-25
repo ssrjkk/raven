@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 from typing import Any
 
@@ -38,20 +39,23 @@ async def _compute_diff(img_a: bytes, img_b: bytes) -> float:
 
         from PIL import Image
 
-        a = Image.open(BytesIO(img_a)).convert("RGB")
-        b = Image.open(BytesIO(img_b)).convert("RGB")
-        if a.size != b.size:
-            b = b.resize(a.size)
-        diff = 0
-        total = a.size[0] * a.size[1]
-        for x in range(a.size[0]):
-            for y in range(a.size[1]):
-                pa = a.getpixel((x, y))
-                pb = b.getpixel((x, y))
-                if isinstance(pa, (tuple, list)) and isinstance(pb, (tuple, list)):
-                    diff += abs(pa[0] - pb[0]) + abs(pa[1] - pb[1]) + abs(pa[2] - pb[2])
-        max_diff = total * 3 * 255
-        return round((diff / max_diff) * 100, 2)
+        def _diff() -> float:
+            a = Image.open(BytesIO(img_a)).convert("RGB")
+            b = Image.open(BytesIO(img_b)).convert("RGB")
+            if a.size != b.size:
+                b = b.resize(a.size)
+            diff = 0
+            total = a.size[0] * a.size[1]
+            for x in range(a.size[0]):
+                for y in range(a.size[1]):
+                    pa = a.getpixel((x, y))
+                    pb = b.getpixel((x, y))
+                    if isinstance(pa, (tuple, list)) and isinstance(pb, (tuple, list)):
+                        diff += abs(pa[0] - pb[0]) + abs(pa[1] - pb[1]) + abs(pa[2] - pb[2])
+            max_diff = total * 3 * 255
+            return round((diff / max_diff) * 100, 2)
+
+        return await asyncio.to_thread(_diff)
     except ImportError:
         return -1.0
     except Exception as e:

@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
+from raven.core.api_errors import internal_error
 from raven.unique.chaos_engineering import (
     ChaosEngineering,
     ExperimentConfig,
@@ -60,7 +61,7 @@ def create_chaos_router() -> APIRouter:
             return await ce.injector.inject(config)
         except Exception as e:
             logger.error("Inject failed: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/recover")
     async def recover(req: RecoverRequest):
@@ -127,7 +128,7 @@ def create_chaos_router() -> APIRouter:
             }
         except Exception as e:
             logger.error("Experiment failed: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.get("/experiments")
     async def list_experiments():

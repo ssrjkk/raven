@@ -453,6 +453,8 @@ class TestCheckerSignatures:
 
         from raven.core.monitor.checkers import rss
 
+        rss._seen_guids.clear()
+
         xml = (
             '<?xml version="1.0"?><rss version="2.0"><channel><item>'
             "<title>New post</title><link>https://example.com/1</link><guid>g1</guid>"

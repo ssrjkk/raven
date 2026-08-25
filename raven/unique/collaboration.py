@@ -4,7 +4,7 @@ import asyncio
 import json
 import time
 import uuid
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -17,6 +17,8 @@ try:
 except ImportError:
     HAS_YPY = False
     logger.warning("y-py not available, using fallback CRDT implementation")
+
+_MAX_CHANGE_HISTORY = 500
 
 
 @dataclass
@@ -58,7 +60,8 @@ class Comment:
 class DocumentState:
     content: str
     version: int = 0
-    changes: list[TextChange] = field(default_factory=list)
+    changes: deque[TextChange] = field(default_factory=lambda: deque(maxlen=_MAX_CHANGE_HISTORY))
+    change_count: int = 0
 
 
 @dataclass
@@ -223,6 +226,7 @@ class CollaborationSession:
             self.document.content = str(self._ytext)
             self.document.version += 1
             self.document.changes.append(change)
+            self.document.change_count += 1
             return True
         except Exception as exc:
             logger.error("CRDT apply_change failed: {}", exc)
@@ -256,6 +260,7 @@ class CollaborationSession:
         self.document.content = "\n".join(lines)
         self.document.version += 1
         self.document.changes.append(change)
+        self.document.change_count += 1
         return True
 
     def _pos_to_offset(self, lines: list[str], line: int, col: int) -> int:
@@ -375,7 +380,7 @@ class CollaborationSession:
             "version": self.document.version,
             "users": len(self.users),
             "connected_users": sum(1 for u in self.user_info.values() if u.connected),
-            "changes": len(self.document.changes),
+            "changes": self.document.change_count,
             "comments": len(self.comments),
             "crdt_enabled": HAS_YPY and self._ydoc is not None,
         }

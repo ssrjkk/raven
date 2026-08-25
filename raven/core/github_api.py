@@ -8,58 +8,58 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, HTTPException
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from raven.core.config import settings
 from raven.core.secrets import secrets
 
 
 class CreatePRRequest(BaseModel):
-    owner: str
-    repo: str
-    title: str
-    body: str = ""
-    head: str = "main"
-    base: str = "main"
+    owner: str = Field(..., max_length=100)
+    repo: str = Field(..., max_length=100)
+    title: str = Field(..., max_length=256)
+    body: str = Field(default="", max_length=65536)
+    head: str = Field(default="main", max_length=100)
+    base: str = Field(default="main", max_length=100)
 
 
 class CreateIssueRequest(BaseModel):
-    owner: str
-    repo: str
-    title: str
-    body: str = ""
-    labels: list[str] = []
+    owner: str = Field(..., max_length=100)
+    repo: str = Field(..., max_length=100)
+    title: str = Field(..., max_length=256)
+    body: str = Field(default="", max_length=65536)
+    labels: list[str] = Field(default_factory=list, max_length=100)
 
 
 class WorkflowDispatchRequest(BaseModel):
-    owner: str
-    repo: str
-    workflow_id: str
-    ref: str = "main"
-    inputs: dict[str, str] = {}
+    owner: str = Field(..., max_length=100)
+    repo: str = Field(..., max_length=100)
+    workflow_id: str = Field(..., max_length=100)
+    ref: str = Field(default="main", max_length=100)
+    inputs: dict[str, str] = Field(default_factory=dict, max_length=50)
 
 
 class CreateReviewRequest(BaseModel):
-    owner: str
-    repo: str
-    pull_number: int
-    body: str = ""
-    event: str = "COMMENT"
-    commit_id: str = ""
+    owner: str = Field(..., max_length=100)
+    repo: str = Field(..., max_length=100)
+    pull_number: int = Field(..., ge=0)
+    body: str = Field(default="", max_length=65536)
+    event: str = Field(default="COMMENT", max_length=20)
+    commit_id: str = Field(default="", max_length=40)
 
 
 class MergePRRequest(BaseModel):
-    owner: str
-    repo: str
-    pull_number: int
-    commit_title: str = ""
-    commit_message: str = ""
-    merge_method: str = "merge"
+    owner: str = Field(..., max_length=100)
+    repo: str = Field(..., max_length=100)
+    pull_number: int = Field(..., ge=0)
+    commit_title: str = Field(default="", max_length=256)
+    commit_message: str = Field(default="", max_length=65536)
+    merge_method: str = Field(default="merge", max_length=10)
 
 
 class CloneRepoRequest(BaseModel):
-    owner: str
-    repo: str
+    owner: str = Field(..., max_length=100)
+    repo: str = Field(..., max_length=100)
     branch: str = "main"
     target_dir: str = ""
 

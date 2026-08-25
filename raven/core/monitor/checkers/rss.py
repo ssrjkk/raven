@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -13,6 +14,8 @@ if TYPE_CHECKING:
 
 _seen_guids: dict[str, set[str]] = {}
 _seen_lock = asyncio.Lock()
+_SEEN_TTL_SECONDS: int = 86400 * 7  # 7 days
+_seen_timestamps: dict[str, float] = {}
 
 
 async def _mark_seen(monitor_id: str, guid: str):
@@ -20,6 +23,7 @@ async def _mark_seen(monitor_id: str, guid: str):
         if monitor_id not in _seen_guids:
             _seen_guids[monitor_id] = set()
         _seen_guids[monitor_id].add(guid)
+        _seen_timestamps[f"{monitor_id}:{guid}"] = time.time()
 
 
 async def _is_seen(monitor_id: str, guid: str) -> bool:
@@ -27,7 +31,17 @@ async def _is_seen(monitor_id: str, guid: str) -> bool:
         return guid in _seen_guids.get(monitor_id, set())
 
 
+async def _cleanup_stale_guids() -> None:
+    now = time.time()
+    stale_keys = [k for k, ts in _seen_timestamps.items() if now - ts > _SEEN_TTL_SECONDS]
+    for k in stale_keys:
+        monitor_id, guid = k.split(":", 1)
+        _seen_guids.get(monitor_id, set()).discard(guid)
+        _seen_timestamps.pop(k, None)
+
+
 async def check_rss(monitor: Monitor) -> str | None:
+    await _cleanup_stale_guids()
     url = monitor.config.get("target", monitor.target)
     error = validate_url(url)
     if error:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from collections import Counter
 from pathlib import Path
@@ -53,15 +54,19 @@ async def detect_patterns(memory: MemoryManager, min_frequency: int = 2) -> list
 
 async def _read_all_lt_lines(memory: MemoryManager) -> list[str]:
     root = memory.long_term.root if hasattr(memory.long_term, "root") else Path(".raven/memory")
-    if not root.is_dir():
-        return []
-    lines: list[str] = []
-    for f in sorted(root.iterdir()):
-        if f.suffix == ".md":
+
+    def _read() -> list[str]:
+        if not root.is_dir():
+            return []
+        lines: list[str] = []
+        for f in sorted(root.iterdir()):
+            if f.suffix == ".md":
                 with contextlib.suppress(Exception):
                     text = f.read_text(encoding="utf-8", errors="replace")
                     lines.extend(text.splitlines())
-    return [ln for ln in lines if ln.strip()]
+        return [ln for ln in lines if ln.strip()]
+
+    return await asyncio.to_thread(_read)
 
 
 async def _extract_recurring_topics(memory: MemoryManager, raw_lines: list[str]) -> list[tuple[str, int]]:

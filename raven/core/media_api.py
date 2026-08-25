@@ -8,7 +8,11 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, UploadFile
 from loguru import logger
 
+from raven.core.api_errors import internal_error
 from raven.tools.file import _check_no_symlinks_in_path
+
+MAX_UPLOAD_BYTES: int = 50 * 1024 * 1024  # 50 MB
+_UPLOAD_CHUNK = 65536
 
 
 def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
@@ -39,7 +43,7 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
             raise
         except Exception as e:
             logger.error("Image generation API error: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/process")
     def process_image(
@@ -68,46 +72,50 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
             from PIL import Image as PILImage
 
             src: Any = PILImage.open(target)
-            if crop:
-                parts = [x.strip() for x in crop.split(",")]
-                if len(parts) != 4 or not all(p.lstrip("-").isdigit() for p in parts):
-                    raise HTTPException(400, f"Invalid crop: {crop}")
-                left, upper, right, lower = (int(p) for p in parts)
-                if not (0 <= left < right and 0 <= upper < lower):
-                    raise HTTPException(400, f"Invalid crop box: {crop}")
-                src = src.crop((left, upper, right, lower))
-            if resize:
-                parts = resize.lower().split("x")
-                if len(parts) != 2 or not parts[0].strip().isdigit() or not parts[1].strip().isdigit():
-                    raise HTTPException(400, f"Invalid resize: {resize}")
-                width, height = int(parts[0]), int(parts[1])
-                if width <= 0 or height <= 0:
-                    raise HTTPException(400, f"Invalid resize: {resize}")
-                src = src.resize((width, height), PILImage.Resampling.LANCZOS)
-            if rotate:
-                src = src.rotate(rotate, expand=True)
-            if flip == "horizontal":
-                src = src.transpose(PILImage.FLIP_LEFT_RIGHT)  # type: ignore[attr-defined]
-            elif flip == "vertical":
-                src = src.transpose(PILImage.FLIP_TOP_BOTTOM)  # type: ignore[attr-defined]
-            fmt = output_format.upper() if output_format else (src.format or "PNG")
-            if fmt == "JPEG" and src.mode in ("RGBA", "P"):
-                src = src.convert("RGB")
-            buf = BytesIO()
-            src.save(buf, format=fmt, quality=quality)
-            b64 = base64.b64encode(buf.getvalue()).decode()
-            return {
-                "format": fmt.lower(),
-                "width": src.size[0],
-                "height": src.size[1],
-                "bytes": buf.tell(),
-                "data_url": f"data:image/{fmt.lower()};base64,{b64}",
-            }
+            _orig_src = src
+            try:
+                if crop:
+                    parts = [x.strip() for x in crop.split(",")]
+                    if len(parts) != 4 or not all(p.lstrip("-").isdigit() for p in parts):
+                        raise HTTPException(400, f"Invalid crop: {crop}")
+                    left, upper, right, lower = (int(p) for p in parts)
+                    if not (0 <= left < right and 0 <= upper < lower):
+                        raise HTTPException(400, f"Invalid crop box: {crop}")
+                    src = src.crop((left, upper, right, lower))
+                if resize:
+                    parts = resize.lower().split("x")
+                    if len(parts) != 2 or not parts[0].strip().isdigit() or not parts[1].strip().isdigit():
+                        raise HTTPException(400, f"Invalid resize: {resize}")
+                    width, height = int(parts[0]), int(parts[1])
+                    if width <= 0 or height <= 0:
+                        raise HTTPException(400, f"Invalid resize: {resize}")
+                    src = src.resize((width, height), PILImage.Resampling.LANCZOS)
+                if rotate:
+                    src = src.rotate(rotate, expand=True)
+                if flip == "horizontal":
+                    src = src.transpose(PILImage.FLIP_LEFT_RIGHT)  # type: ignore[attr-defined]
+                elif flip == "vertical":
+                    src = src.transpose(PILImage.FLIP_TOP_BOTTOM)  # type: ignore[attr-defined]
+                fmt = output_format.upper() if output_format else (src.format or "PNG")
+                if fmt == "JPEG" and src.mode in ("RGBA", "P"):
+                    src = src.convert("RGB")
+                buf = BytesIO()
+                src.save(buf, format=fmt, quality=quality)
+                b64 = base64.b64encode(buf.getvalue()).decode()
+                return {
+                    "format": fmt.lower(),
+                    "width": src.size[0],
+                    "height": src.size[1],
+                    "bytes": buf.tell(),
+                    "data_url": f"data:image/{fmt.lower()};base64,{b64}",
+                }
+            finally:
+                _orig_src.close()
         except HTTPException:
             raise
         except Exception as e:
             logger.error("Image process error: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/parse")
     def parse_document(filepath: str, pages: str = ""):
@@ -200,7 +208,7 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
             raise HTTPException(500, f"Missing dependency: {e}") from e
         except Exception as e:
             logger.error("Document parse error: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/upload")
     async def upload_file(file: UploadFile):
@@ -212,12 +220,24 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
         ws.mkdir(parents=True, exist_ok=True)
         dest = ws / safe_name
         try:
-            content = await file.read()
+            chunks: list[bytes] = []
+            total = 0
+            while True:
+                chunk = await file.read(_UPLOAD_CHUNK)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_UPLOAD_BYTES:
+                    raise HTTPException(413, f"File too large (max {MAX_UPLOAD_BYTES // (1024*1024)} MB)")
+                chunks.append(chunk)
+            content = b"".join(chunks)
             await asyncio.to_thread(dest.write_bytes, content)
             return {"path": str(dest), "size": len(content), "filename": safe_name}
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error("Upload error: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/analyze")
     async def analyze_image(filepath: str, prompt: str = "Describe this image in detail"):

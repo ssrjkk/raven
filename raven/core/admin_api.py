@@ -18,6 +18,7 @@ from raven.core.admin.models import (
     SecretRequest,
     SSEPushRequest,
 )
+from raven.core.api_errors import internal_error
 from raven.core.audit import AuditEventType, audit_logger
 from raven.core.config import settings
 from raven.core.health import health
@@ -249,7 +250,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
             await audit_logger.log(AuditEventType.CHANNEL_START, "admin", channel_id)
             return {"ok": True, "channel": channel_id}
         except Exception as e:
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.get("/agents")
     def admin_agents():
@@ -263,7 +264,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
             registry.setup_defaults()
             return {"ok": True, "agent": agent_id}
         except Exception as e:
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.get("/sessions")
     async def admin_sessions(limit: int = 50, offset: int = 0):
@@ -510,11 +511,18 @@ def init_auth_routes(app, db_path: str) -> None:
     store = AuthStore(db_path)
 
     _login_attempts: dict[str, list[float]] = {}
+    _last_cleanup: float = 0.0
 
     def _check_login_rate(ip: str) -> bool:
         import time
 
         now = time.monotonic()
+        nonlocal _last_cleanup
+        if now - _last_cleanup > 300:
+            stale = [k for k, v in _login_attempts.items() if not v or now - v[-1] > 300]
+            for k in stale:
+                del _login_attempts[k]
+            _last_cleanup = now
         attempts = _login_attempts.get(ip, [])
         attempts[:] = [t for t in attempts if now - t < 60]
         if len(attempts) >= 5:

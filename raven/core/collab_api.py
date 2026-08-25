@@ -4,8 +4,9 @@ import hmac
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from raven.core.api_errors import internal_error
 from raven.unique.collaboration import CollaborationManager, TextChange, WebSocketManager
 
 
@@ -51,39 +52,39 @@ def _get_manager() -> CollaborationManager:
 
 
 class CreateSessionRequest(BaseModel):
-    session_id: str
-    file_path: str
+    session_id: str = Field(..., max_length=100)
+    file_path: str = Field(..., max_length=500)
 
 
 class JoinSessionRequest(BaseModel):
-    session_id: str
-    user_id: str
-    user_name: str
+    session_id: str = Field(..., max_length=100)
+    user_id: str = Field(..., max_length=100)
+    user_name: str = Field(..., max_length=100)
 
 
 class LeaveSessionRequest(BaseModel):
-    session_id: str
-    user_id: str
+    session_id: str = Field(..., max_length=100)
+    user_id: str = Field(..., max_length=100)
 
 
 class ApplyChangeRequest(BaseModel):
-    session_id: str
-    user_id: str = "api"
-    file: str
-    start_line: int
-    start_col: int
-    end_line: int
-    end_col: int
-    old_text: str
-    new_text: str
+    session_id: str = Field(..., max_length=100)
+    user_id: str = Field(default="api", max_length=100)
+    file: str = Field(..., max_length=500)
+    start_line: int = Field(..., ge=0)
+    start_col: int = Field(..., ge=0)
+    end_line: int = Field(..., ge=0)
+    end_col: int = Field(..., ge=0)
+    old_text: str = Field(..., max_length=50000)
+    new_text: str = Field(..., max_length=50000)
 
 
 class AddCommentRequest(BaseModel):
-    session_id: str
-    user_id: str
-    file: str
-    line: int
-    text: str
+    session_id: str = Field(..., max_length=100)
+    user_id: str = Field(..., max_length=100)
+    file: str = Field(..., max_length=500)
+    line: int = Field(..., ge=0)
+    text: str = Field(..., max_length=10000)
 
 
 def create_collab_router() -> APIRouter:
@@ -96,7 +97,7 @@ def create_collab_router() -> APIRouter:
             session = mgr.create_session(req.session_id, req.file_path)
             return {"session_id": session.session_id, "file_path": session.file_path}
         except Exception as e:
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.get("/sessions")
     async def list_sessions():
@@ -119,6 +120,15 @@ def create_collab_router() -> APIRouter:
         if not session:
             raise HTTPException(404, f"Session '{session_id}' not found")
         session.remove_user(req.user_id)
+        return {"success": True}
+
+    @router.delete("/sessions/{session_id}")
+    async def delete_session(session_id: str):
+        mgr = _get_manager()
+        ws_mgr = _get_ws_manager()
+        await ws_mgr.disconnect_all(session_id)
+        if not mgr.remove_session(session_id):
+            raise HTTPException(404, f"Session '{session_id}' not found")
         return {"success": True}
 
     @router.get("/sessions/{session_id}")

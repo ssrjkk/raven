@@ -404,6 +404,15 @@ def test_upload_invalid_filename(client: TestClient) -> None:
     assert resp.status_code == 400
 
 
+def test_upload_too_large_413(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    import raven.core.media_api as media_api
+
+    monkeypatch.setattr(media_api, "MAX_UPLOAD_BYTES", 1024)
+    resp = client.post("/api/media/upload", files={"file": ("big.bin", b"x" * 2049, "application/octet-stream")})
+    assert resp.status_code == 413
+    assert "File too large" in resp.json()["detail"]
+
+
 def test_upload_write_error_500(client: TestClient, tmp_path: Path) -> None:
     dest_dir = tmp_path / "hello.png"
     dest_dir.mkdir()

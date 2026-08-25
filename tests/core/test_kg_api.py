@@ -47,7 +47,7 @@ def test_extract_error(client: tuple[TestClient, Path], monkeypatch: pytest.Monk
     monkeypatch.setattr(KnowledgeGraph, "extract_from_document", boom)
     resp = c.post("/api/knowledge/extract", params={"text": "x"})
     assert resp.status_code == 500
-    assert "boom" in resp.json()["detail"]
+    assert "RuntimeError" in resp.json()["detail"]
 
 
 def test_search_empty_kg(client: tuple[TestClient, Path]) -> None:
@@ -79,7 +79,7 @@ def test_search_error(client: tuple[TestClient, Path], monkeypatch: pytest.Monke
     monkeypatch.setattr(KnowledgeGraph, "search", boom)
     resp = c.post("/api/knowledge/search", params={"query": "raven"})
     assert resp.status_code == 500
-    assert "search boom" in resp.json()["detail"]
+    assert "RuntimeError" in resp.json()["detail"]
 
 
 def test_stats(client: tuple[TestClient, Path]) -> None:
@@ -150,7 +150,7 @@ def test_add_entity_error(client: tuple[TestClient, Path], monkeypatch: pytest.M
     monkeypatch.setattr(KnowledgeGraph, "add_entity", boom)
     resp = c.post("/api/knowledge/entity", params={"name": "Raven"})
     assert resp.status_code == 500
-    assert "entity boom" in resp.json()["detail"]
+    assert "RuntimeError" in resp.json()["detail"]
 
 
 def test_add_relation_success(client: tuple[TestClient, Path]) -> None:
@@ -205,4 +205,4 @@ def test_add_relation_generic_error(client: tuple[TestClient, Path], monkeypatch
     monkeypatch.setattr(KnowledgeGraph, "add_relation", boom)
     resp = c.post("/api/knowledge/relation", params={"source": "Alice", "target": "Bob"})
     assert resp.status_code == 500
-    assert "rel boom" in resp.json()["detail"]
+    assert "RuntimeError" in resp.json()["detail"]

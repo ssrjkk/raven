@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
+from raven.core.api_errors import internal_error
 from raven.unique.fine_tuning import DatasetBuilder, FineTuningPipeline
 
 _builder = DatasetBuilder()
@@ -71,7 +72,7 @@ def create_finetune_router() -> APIRouter:
             return _pipeline.get_model_info()
         except Exception as e:
             logger.error("Model load failed: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/train")
     def start_training(req: StartTrainingRequest):
@@ -83,19 +84,19 @@ def create_finetune_router() -> APIRouter:
         except RuntimeError as e:
             raise HTTPException(400, str(e)) from e
         except Exception as e:
-            raise HTTPException(500, f"Dataset build failed: {e}") from e
+            raise internal_error(e) from e
         try:
             tokenized = _builder.tokenize_dataset(dataset["train"], _pipeline._tokenizer)
             eval_tokenized = (
                 _builder.tokenize_dataset(dataset["test"], _pipeline._tokenizer) if len(dataset["test"]) > 0 else None
             )
         except Exception as e:
-            raise HTTPException(500, f"Tokenization failed: {e}") from e
+            raise internal_error(e) from e
         try:
             return _pipeline.train(tokenized, eval_tokenized)
         except Exception as e:
             logger.error("Training failed: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.get("/model/info")
     def model_info():

@@ -253,7 +253,11 @@ class MultiModalRAG:
         from PIL import Image as PILImage
 
         try:
-            image = PILImage.open(image_path).convert("RGB")
+            _raw_img = PILImage.open(image_path)
+            try:
+                image = _raw_img.convert("RGB")
+            finally:
+                _raw_img.close()
         except Exception:
             logger.warning("Failed to open image: {}", image_path)
             return []

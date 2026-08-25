@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
+from raven.core.api_errors import internal_error
 from raven.unique.voice_biometrics import VoiceBiometrics
 
 _vb: VoiceBiometrics | None = None
@@ -63,7 +64,7 @@ def create_voice_router() -> APIRouter:
             raise
         except Exception as e:
             logger.error("Voice enroll error: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/verify")
     def verify(req: VerifyRequest):
@@ -83,7 +84,7 @@ def create_voice_router() -> APIRouter:
             raise HTTPException(404, str(e)) from e
         except Exception as e:
             logger.error("Voice verify error: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/identify")
     def identify(req: IdentifyRequest):
@@ -134,7 +135,7 @@ def create_voice_router() -> APIRouter:
             raise HTTPException(404, str(e)) from e
         except Exception as e:
             logger.error("Voice continuous auth error: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/continuous_stop")
     def continuous_stop(req: RemoveRequest):

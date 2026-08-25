@@ -6,6 +6,8 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
+from raven.core.api_errors import internal_error
+
 try:
     import aiosmtplib
 
@@ -78,7 +80,7 @@ def create_email_router() -> APIRouter:
             return {"success": True, "to": req.to, "subject": req.subject}
         except Exception as e:
             logger.error("Email send API error: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.get("/inbox")
     async def inbox(limit: int = 10):
@@ -136,7 +138,7 @@ def create_email_router() -> APIRouter:
             return {"emails": emails, "total": len(msg_ids)}
         except Exception as e:
             logger.error("Email inbox API error: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.get("/config")
     async def config():

@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
+from raven.core.api_errors import internal_error
 from raven.tools.web_search import SearchProvider, WebSearchTool
 
 _tool: WebSearchTool | None = None
@@ -50,7 +51,7 @@ def create_web_search_router() -> APIRouter:
             raise HTTPException(400, str(e)) from e
         except Exception as e:
             logger.warning("[web_search] search failed: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/failover")
     async def api_web_search_failover(req: FailoverSearchRequest):
@@ -61,7 +62,7 @@ def create_web_search_router() -> APIRouter:
             return {"results": [r.model_dump() for r in results], "count": len(results), "query": req.query}
         except Exception as e:
             logger.warning("[web_search] failover failed: {}", e)
-            raise HTTPException(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.get("/providers")
     async def api_web_search_providers():

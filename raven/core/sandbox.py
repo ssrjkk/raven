@@ -312,12 +312,17 @@ class Sandbox:
     async def cleanup(self):
         import shutil
 
-        for tmpdir in self._tmpdirs:
-            try:
-                shutil.rmtree(tmpdir)
-            except (FileNotFoundError, PermissionError, OSError) as exc:
-                logger.debug("Failed to remove temp dir {}: {}", tmpdir, exc)
+        tmpdirs = list(self._tmpdirs)
         self._tmpdirs.clear()
+
+        def _remove_all() -> None:
+            for tmpdir in tmpdirs:
+                try:
+                    shutil.rmtree(tmpdir)
+                except (FileNotFoundError, PermissionError, OSError) as exc:
+                    logger.debug("Failed to remove temp dir {}: {}", tmpdir, exc)
+
+        await asyncio.to_thread(_remove_all)
 
 
 sandbox_default = Sandbox()
