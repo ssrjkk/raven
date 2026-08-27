@@ -755,7 +755,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             try:
                 keys = await store.list_keys() if hasattr(store, "list_keys") else []
                 tiers[tier_name] = len(keys)
-            except Exception:
+            except Exception as e:
+                logger.debug("Memory stats for '{}' failed: {}", tier_name, e)
                 tiers[tier_name] = 0
         return tiers
 

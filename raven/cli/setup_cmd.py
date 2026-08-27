@@ -327,7 +327,8 @@ def _ollama_serve() -> bool:
         import time
         time.sleep(3)
         return True
-    except Exception:
+    except Exception as e:
+        console.print(f"[red]Failed to start Ollama: {e}[/red]")
         return False
 
 

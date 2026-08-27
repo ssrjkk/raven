@@ -17,13 +17,16 @@ console = Console()
 
 
 def _try_api(path: str) -> dict[str, Any] | None:
+    import logging
+
     import httpx
     try:
         resp = httpx.get(f"http://localhost:{settings.web_port}{path}", timeout=5)
         if resp.is_success:
             data: dict[str, Any] = resp.json()
             return data
-    except Exception:
+    except httpx.HTTPError as e:
+        logging.getLogger("raven.cli.dream").debug("dream status API unreachable: %s", e)
         return None
     return None
 
