@@ -81,7 +81,7 @@ def create_voice_router() -> APIRouter:
                 "is_spoof": result.is_spoof,
             }
         except ValueError as e:
-            raise HTTPException(404, str(e)) from e
+            raise HTTPException(404, f"Not found: {type(e).__name__}") from e
         except Exception as e:
             logger.error("Voice verify error: {}", e)
             raise internal_error(e) from e
@@ -132,7 +132,7 @@ def create_voice_router() -> APIRouter:
             vb.start_continuous_auth(req.speaker_id, req.interval_sec)
             return {"success": True, "speaker_id": req.speaker_id, "interval_sec": req.interval_sec}
         except ValueError as e:
-            raise HTTPException(404, str(e)) from e
+            raise HTTPException(404, f"Not found: {type(e).__name__}") from e
         except Exception as e:
             logger.error("Voice continuous auth error: {}", e)
             raise internal_error(e) from e

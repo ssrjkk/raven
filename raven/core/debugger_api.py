@@ -290,7 +290,11 @@ class _DebugSession:
             safe_builtins = {
                 k: v
                 for k, v in vars(_builtins).items()
-                if k not in frozenset({"__import__", "exec", "eval", "compile", "open", "exit", "quit"})
+                if k not in frozenset({
+                    "__import__", "exec", "eval", "compile", "open", "exit", "quit",
+                    "getattr", "setattr", "delattr", "globals", "locals", "vars",
+                    "type", "object", "super", "staticmethod", "classmethod", "property",
+                })
             }
             ns: dict[str, object] = {
                 "__name__": "__main__",

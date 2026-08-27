@@ -191,28 +191,29 @@ def create_collab_router() -> APIRouter:
 
     @router.websocket("/sessions/{session_id}/ws")
     async def collab_websocket(session_id: str, websocket: WebSocket):
+        if _secure_mode() and not await _ws_authenticated(websocket):
+            await websocket.accept()
+            await websocket.close(code=1008, reason="Authentication required")
+            return
         await websocket.accept()
         user_id = "anon"
+        msg = await websocket.receive_json()
+        if msg.get("kind") == "auth" and msg.get("user_id"):
+            user_id = msg["user_id"]
+        wsm = _get_ws_manager()
+        await wsm.connect(session_id, user_id, websocket)
+        mgr = _get_manager()
+        session = mgr.get_session(session_id)
+        if session:
+            await websocket.send_json(
+                {
+                    "kind": "state",
+                    "content": session.document.content,
+                    "version": session.document.version,
+                    "users": session.get_user_list(),
+                }
+            )
         try:
-            if _secure_mode() and not await _ws_authenticated(websocket):
-                await websocket.close(code=1008, reason="Authentication required")
-                return
-            msg = await websocket.receive_json()
-            if msg.get("kind") == "auth" and msg.get("user_id"):
-                user_id = msg["user_id"]
-            wsm = _get_ws_manager()
-            await wsm.connect(session_id, user_id, websocket)
-            mgr = _get_manager()
-            session = mgr.get_session(session_id)
-            if session:
-                await websocket.send_json(
-                    {
-                        "kind": "state",
-                        "content": session.document.content,
-                        "version": session.document.version,
-                        "users": session.get_user_list(),
-                    }
-                )
             while True:
                 data = await websocket.receive_json()
                 kind = data.get("kind", "")

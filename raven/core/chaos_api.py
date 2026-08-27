@@ -153,7 +153,7 @@ def create_chaos_router() -> APIRouter:
         try:
             return ce.generate_report(experiment_id)
         except ValueError as e:
-            raise HTTPException(404, str(e)) from e
+            raise HTTPException(404, f"Not found: {type(e).__name__}") from e
 
     @router.get("/resilience/summary")
     async def resilience_summary():

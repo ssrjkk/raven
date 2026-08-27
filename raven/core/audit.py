@@ -163,15 +163,19 @@ class AuditLogger:
 
     def start(self):
         self._file = self._path.open("a", encoding="utf-8")
-        if self._use_signing:
-            self._prev_hash = self._last_entry_hash()
+        try:
+            if self._use_signing:
+                self._prev_hash = self._last_entry_hash()
 
-        if self._path.exists() and self._path.stat().st_size > 0:
-            errors = self.verify_chain()
-            if errors and not errors[0].get("valid"):
-                logger.error("Audit log chain integrity check FAILED: {} errors", len(errors))
-                for err in errors[:5]:
-                    logger.error("  [line {}] {}: {}", err.get("line"), err.get("error"), err.get("event_id"))
+            if self._path.exists() and self._path.stat().st_size > 0:
+                errors = self.verify_chain()
+                if errors and not errors[0].get("valid"):
+                    logger.error("Audit log chain integrity check FAILED: {} errors", len(errors))
+                    for err in errors[:5]:
+                        logger.error("  [line {}] {}: {}", err.get("line"), err.get("error"), err.get("event_id"))
+        except Exception:
+            self._close_file()
+            raise
 
     async def stop(self):
         async with self._lock:

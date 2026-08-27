@@ -82,7 +82,7 @@ def create_finetune_router() -> APIRouter:
         try:
             dataset = _builder.build_dataset()
         except RuntimeError as e:
-            raise HTTPException(400, str(e)) from e
+            raise HTTPException(400, f"Build failed: {type(e).__name__}") from e
         except Exception as e:
             raise internal_error(e) from e
         try:

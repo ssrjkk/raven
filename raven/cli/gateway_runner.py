@@ -64,6 +64,7 @@ from raven.core.middleware import (
     input_sanitize_middleware,
     rate_limit_middleware,
     request_id_middleware,
+    security_headers_middleware,
 )
 from raven.core.monitor.engine import MonitorEngine
 from raven.core.monitor.store import MonitorStore
@@ -188,6 +189,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     api_app.middleware("http")(auth_middleware)
     api_app.middleware("http")(error_handler_middleware)
     api_app.middleware("http")(input_sanitize_middleware)
+    api_app.middleware("http")(security_headers_middleware)
 
     api_app.state.slack_channel = slack
     api_app.state.whatsapp_channel = whatsapp

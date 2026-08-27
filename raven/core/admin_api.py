@@ -600,7 +600,7 @@ def init_auth_routes(app, db_path: str) -> None:
         try:
             await store.update_role(username, body.role)
         except ValueError as e:
-            raise HTTPException(400, str(e)) from e
+            raise HTTPException(400, f"Invalid request: {type(e).__name__}") from e
         return {"ok": True}
 
     @app.post("/api/auth/users/{username}/deactivate")  # type: ignore[untyped-decorator]

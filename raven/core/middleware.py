@@ -259,3 +259,14 @@ async def input_sanitize_middleware(request: Request, call_next):
                 except ValueError:
                     return JSONResponse(status_code=400, content={"error": "Request body is too deeply nested"})
     return await call_next(request)
+
+
+async def security_headers_middleware(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if request.url.scheme == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response

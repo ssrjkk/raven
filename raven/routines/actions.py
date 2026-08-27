@@ -40,31 +40,35 @@ def _imap_check(config: dict[str, Any]) -> str:
     import email
 
     conn = imaplib.IMAP4_SSL(config.get("server", ""), timeout=15)
-    conn.login(config.get("username", ""), config.get("password", ""))
-    conn.select("INBOX")
-    status, data = conn.search(None, "UNSEEN")
-    if status != "OK":
-        return "[error] IMAP search failed"
-    unread_ids = data[0].split() if data[0] else []
-    count = len(unread_ids)
-    previews = []
-    for mid in unread_ids[: config.get("max_emails", 5)]:
-        status, msg_data = conn.fetch(mid, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
-        if status == "OK" and msg_data and msg_data[0]:
-            raw = msg_data[0][1] if isinstance(msg_data[0], tuple) and len(msg_data[0]) > 1 else msg_data[0]
-            msg = email.message_from_bytes(raw)
-            previews.append(
-                {
-                    "from": msg.get("From", "unknown"),
-                    "subject": msg.get("Subject", "(no subject)"),
-                    "date": msg.get("Date", ""),
-                }
-            )
-    conn.logout()
-    result = f"Unread: {count} emails"
-    if previews:
-        result += "\n" + "\n".join(f"  • From: {e['from'][:60]} — Subject: {e['subject'][:80]}" for e in previews)
-    return result
+    try:
+        conn.login(config.get("username", ""), config.get("password", ""))
+        conn.select("INBOX")
+        status, data = conn.search(None, "UNSEEN")
+        if status != "OK":
+            return "[error] IMAP search failed"
+        unread_ids = data[0].split() if data[0] else []
+        count = len(unread_ids)
+        previews = []
+        for mid in unread_ids[: config.get("max_emails", 5)]:
+            status, msg_data = conn.fetch(mid, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
+            if status == "OK" and msg_data and msg_data[0]:
+                raw = msg_data[0][1] if isinstance(msg_data[0], tuple) and len(msg_data[0]) > 1 else msg_data[0]
+                msg = email.message_from_bytes(raw)
+                previews.append(
+                    {
+                        "from": msg.get("From", "unknown"),
+                        "subject": msg.get("Subject", "(no subject)"),
+                        "date": msg.get("Date", ""),
+                    }
+                )
+        result = f"Unread: {count} emails"
+        if previews:
+            result += "\n" + "\n".join(f"  • From: {e['from'][:60]} — Subject: {e['subject'][:80]}" for e in previews)
+        return result
+    finally:
+        import contextlib
+        with contextlib.suppress(Exception):
+            conn.logout()
 
 
 async def check_email(routine: Routine) -> str:

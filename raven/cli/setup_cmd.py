@@ -124,14 +124,23 @@ def _install_ollama() -> bool:
             installer.unlink(missing_ok=True)
             return _find_ollama() is not None
         if system == "Linux":
-            result = subprocess.run(  # noqa: S602
-                "curl -fsSL https://ollama.com/install.sh | sh",
-                shell=True, capture_output=True, text=True, timeout=120,
-            )
-            if result.returncode == 0:
-                return _find_ollama() is not None
-            console.print(f"[red]Install failed: {result.stderr}[/red]")
-            return False
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
+                script_path = Path(tmp.name)
+            try:
+                resp = httpx.get("https://ollama.com/install.sh", timeout=60)
+                resp.raise_for_status()
+                script_path.write_bytes(resp.content)
+                result = subprocess.run(
+                    ["sh", str(script_path)],
+                    capture_output=True, text=True, timeout=120,
+                )
+                if result.returncode == 0:
+                    return _find_ollama() is not None
+                console.print(f"[red]Install failed: {result.stderr}[/red]")
+                return False
+            finally:
+                script_path.unlink(missing_ok=True)
         if system == "Darwin":
             console.print("[yellow]macOS: install Ollama from https://ollama.com/download[/yellow]")
             console.print("  Or: brew install ollama")

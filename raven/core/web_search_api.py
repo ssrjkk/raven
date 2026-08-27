@@ -48,7 +48,7 @@ def create_web_search_router() -> APIRouter:
                 "query": req.query,
             }
         except ValueError as e:
-            raise HTTPException(400, str(e)) from e
+            raise HTTPException(400, f"Invalid request: {type(e).__name__}") from e
         except Exception as e:
             logger.warning("[web_search] search failed: {}", e)
             raise internal_error(e) from e

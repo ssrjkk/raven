@@ -41,7 +41,7 @@ def _validate_ast(code: str) -> str | None:
             return f"[denied] access to '{node.id}' is not allowed"
         if isinstance(node, ast.Attribute) and (
             (node.attr.startswith("__") and node.attr.endswith("__"))
-            or node.attr in ("format", "format_map")
+            or node.attr in ("format", "format_map", "__subclasses__")
         ):
             return f"[denied] attribute '{node.attr}' is not allowed"
         if isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -152,6 +152,12 @@ class Sandbox:
                         "vars",
                         "format",
                         "format_map",
+                        "type",
+                        "object",
+                        "super",
+                        "staticmethod",
+                        "classmethod",
+                        "property",
                     }
                 )
             }
