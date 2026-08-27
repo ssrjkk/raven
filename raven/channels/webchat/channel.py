@@ -145,13 +145,17 @@ class WebChatChannel(BaseChannel):
             ]
 
         @app.post("/api/sessions")
-        async def create_session():
+        async def create_session(request: Request):
+            if _secure_endpoints_enabled() and not await _authenticate_request(request):
+                return JSONResponse(status_code=401, content={"error": "Authentication required"})
             session_id = f"webchat:{uuid4().hex}:default"
             session = await self._db.get_or_create_session(session_id, "webchat", "web_user")
             return {"id": session.id, "channel": session.channel}
 
         @app.delete("/api/sessions/{session_id}")
-        async def delete_session(session_id: str):
+        async def delete_session(session_id: str, request: Request):
+            if _secure_endpoints_enabled() and not await _authenticate_request(request):
+                return JSONResponse(status_code=401, content={"error": "Authentication required"})
             await self._db.delete_session(session_id)
             return {"ok": True}
 

@@ -108,6 +108,18 @@ _PRIVATE_READ_PREFIXES: tuple[str, ...] = (
     "/api/email/config",
     "/api/insights",
     "/api/rag",
+    # Sensitive read endpoints that expose private/internal data. Only auth-gated
+    # in secure mode (web_secret_key set); left open in local mode. Mutating
+    # methods on these are already gated by the generic POST/DELETE rule.
+    "/api/voice",  # biometric speaker registry + session status (PII)
+    "/api/analytics",  # internal metrics / tool usage / aggregated analytics
+    "/api/metrics/project",  # workspace project metrics
+    "/api/knowledge",  # knowledge-graph stats / visualization
+    "/api/ab",  # A/B experiments + results
+    "/api/cicd",  # CI/CD workflows, status, runs
+    "/api/debug",  # debugger state
+    "/api/sse",  # session event stream
+    "/api/workflows",  # workflow templates / categories
 )
 
 _SLOW_REQUEST_THRESHOLD_S = 2.0

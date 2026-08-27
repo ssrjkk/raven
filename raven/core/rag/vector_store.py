@@ -42,6 +42,9 @@ class VectorStore:
         self._index: Any = None
         self._id_map: dict[int, str] = {}
         self._next_label: int = 0
+        self._bm25_cache: Any = None
+        self._bm25_texts: list[str] = []
+        self._bm25_ids: list[str] = []
         self._load()
         self._init_index()
 
@@ -102,6 +105,7 @@ class VectorStore:
                 return [_to_plain(x) for x in v]
             return v
 
+        self._bm25_cache = None
         serializable = {k: _to_plain(v) for k, v in self._vectors.items()}
         with self._vectors_path().open("w") as f:
             json.dump(serializable, f)
@@ -117,6 +121,7 @@ class VectorStore:
             "timestamp": time.time(),
             **(metadata or {}),
         }
+        self._bm25_cache = None
         await asyncio.to_thread(self._save)
         await asyncio.to_thread(self._rebuild_index)
 
@@ -131,6 +136,7 @@ class VectorStore:
                 "timestamp": time.time(),
                 **(meta or {}),
             }
+        self._bm25_cache = None
         await asyncio.to_thread(self._save)
         await asyncio.to_thread(self._rebuild_index)
 
@@ -159,6 +165,7 @@ class VectorStore:
     async def delete(self, doc_id: str):
         self._vectors.pop(doc_id, None)
         self._metadata.pop(doc_id, None)
+        self._bm25_cache = None
         await asyncio.to_thread(self._save)
         await asyncio.to_thread(self._rebuild_index)
 
@@ -226,26 +233,31 @@ class VectorStore:
             )
         return results
 
+    def _get_bm25(self) -> tuple[Any, list[str], list[str]]:
+        doc_ids = list(self._vectors.keys())
+        texts = [self._metadata.get(d, {}).get("text", "") for d in doc_ids]
+        if self._bm25_cache is None or self._bm25_ids != doc_ids:
+            self._bm25_cache = BM25Index().fit(texts)
+            self._bm25_ids = doc_ids
+            self._bm25_texts = texts
+        return self._bm25_cache, doc_ids, texts
+
     def _search_lexical(
         self, query: str, k: int = 5, filter_meta: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:
-        doc_ids = list(self._vectors.keys())
-        texts = [self._metadata.get(d, {}).get("text", "") for d in doc_ids]
-        bm25 = BM25Index().fit(texts)
+        bm25, doc_ids, texts = self._get_bm25()
         lex = bm25.scores(query)
         return self._rank_results(doc_ids, texts, lex, "lexical", filter_meta, k, semantic_scores=None)
 
     async def _search_hybrid(
         self, query: str, k: int = 5, filter_meta: dict[str, Any] | None = None, alpha: float = 0.7
     ) -> list[dict[str, Any]]:
-        doc_ids = list(self._vectors.keys())
-        texts = [self._metadata.get(d, {}).get("text", "") for d in doc_ids]
+        bm25, doc_ids, texts = self._get_bm25()
         query_vecs = await self.engine.embed([query])
         query_vec = self._as_np(query_vecs[0])
         mat = np.array([self._as_np(self._vectors[i]) for i in doc_ids])
         norms = np.linalg.norm(mat, axis=1) * np.linalg.norm(query_vec)
         sem = ((mat @ query_vec) / (norms + 1e-10)).tolist()
-        bm25 = BM25Index().fit(texts)
         lex = bm25.scores(query)
         sem_n = _normalize(sem)
         lex_n = _normalize(lex)

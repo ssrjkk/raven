@@ -65,6 +65,13 @@ class JobManager:
         job = Job(name, fn, *args, **kwargs)
         async with self._lock:
             self._jobs[job.id] = job
+            if len(self._jobs) > 200:
+                done_ids = [
+                    jid for jid, j in self._jobs.items()
+                    if j.status.value in ("completed", "failed", "cancelled") and j.finished_at
+                ]
+                for jid in sorted(done_ids, key=lambda jid: self._jobs[jid].finished_at or 0)[:100]:
+                    del self._jobs[jid]
         job._task = asyncio.create_task(self._run_job(job))
         return job
 

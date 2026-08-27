@@ -100,13 +100,21 @@ class TestWebChatChannel:
         assert response.status_code == 401
 
     def test_api_create_session(self, channel):
+        from raven.core.config import settings
+
+        secret = settings.web_secret_key.get_secret_value() if settings.web_secret_key else ""
         client = TestClient(channel.app)
-        response = client.post("/api/sessions")
+        headers = {"Authorization": f"Bearer {secret}"} if secret else {}
+        response = client.post("/api/sessions", headers=headers)
         assert response.status_code == 200
 
     def test_api_delete_session(self, channel):
+        from raven.core.config import settings
+
+        secret = settings.web_secret_key.get_secret_value() if settings.web_secret_key else ""
         client = TestClient(channel.app)
-        response = client.delete("/api/sessions/test_sid")
+        headers = {"Authorization": f"Bearer {secret}"} if secret else {}
+        response = client.delete("/api/sessions/test_sid", headers=headers)
         assert response.status_code == 200
         assert response.json()["ok"] is True
 

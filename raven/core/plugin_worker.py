@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import builtins as _builtins_module
 import inspect
 import json
 import sys
@@ -73,9 +72,21 @@ _BUILTINS_ALLOWLIST = frozenset(
     }
 )
 
-for _name in list(_builtins_module.__dict__):
-    if _name not in _BUILTINS_ALLOWLIST:
-        _builtins_module.__dict__[_name] = None
+# Per-plugin restricted builtins namespace. Injected into each plugin module's
+# __builtins__ (NOT the process-global builtins) so untrusted plugin code cannot
+# reach open()/__import__/exec/eval/getattr etc. while leaving the worker's own
+# runtime completely intact. Mutating the global builtins module here would
+# corrupt the worker's own lazy imports (importlib.util, pathlib, ...).
+def _restricted_builtins() -> dict[str, Any]:
+    try:
+        import builtins as _b
+    except Exception:
+        return {}
+    return {name: getattr(_b, name) for name in _BUILTINS_ALLOWLIST if hasattr(_b, name)}
+
+
+def _apply_module_sandbox(mod: Any) -> None:
+    mod.__dict__["__builtins__"] = _restricted_builtins()
 
 
 _cap_futures: dict[str, asyncio.Future[Any]] = {}
@@ -198,6 +209,7 @@ async def _do_register(cmd: dict[str, Any]) -> dict[str, Any]:
     if not spec or not spec.loader:
         return {"type": "error", "error": "cannot load spec"}
     mod = importlib.util.module_from_spec(spec)
+    _apply_module_sandbox(mod)
     spec.loader.exec_module(mod)
     if not hasattr(mod, "register"):
         return {"type": "error", "error": "no register() function"}
@@ -238,6 +250,7 @@ async def _do_call_tool(cmd: dict[str, Any]) -> dict[str, Any]:
     if not spec or not spec.loader:
         return {"type": "error", "error": "cannot load spec"}
     mod = importlib.util.module_from_spec(spec)
+    _apply_module_sandbox(mod)
     spec.loader.exec_module(mod)
     if not hasattr(mod, "register"):
         return {"type": "error", "error": "no register() function"}

@@ -65,6 +65,42 @@ def _make_full_app() -> FastAPI:
     async def collab_sessions() -> dict[str, str]:
         return {"ok": "collab"}
 
+    @app.get("/api/voice/speakers")
+    async def voice_speakers() -> dict[str, str]:
+        return {"ok": "voice"}
+
+    @app.get("/api/analytics/overview")
+    async def analytics_overview() -> dict[str, str]:
+        return {"ok": "analytics"}
+
+    @app.get("/api/metrics/project")
+    async def metrics_project() -> dict[str, str]:
+        return {"ok": "metrics"}
+
+    @app.get("/api/knowledge/stats")
+    async def knowledge_stats() -> dict[str, str]:
+        return {"ok": "knowledge"}
+
+    @app.get("/api/ab/experiments")
+    async def ab_experiments() -> dict[str, str]:
+        return {"ok": "ab"}
+
+    @app.get("/api/cicd/runs")
+    async def cicd_runs() -> dict[str, str]:
+        return {"ok": "cicd"}
+
+    @app.get("/api/debug/state")
+    async def debug_state() -> dict[str, str]:
+        return {"ok": "debug"}
+
+    @app.get("/api/sse/events/sessions")
+    async def sse_events() -> dict[str, str]:
+        return {"ok": "sse"}
+
+    @app.get("/api/workflows/templates")
+    async def workflows_templates() -> dict[str, str]:
+        return {"ok": "workflows"}
+
     return app
 
 
@@ -145,6 +181,15 @@ class TestPrivateReadGuard:
             "/api/email/config",
             "/api/insights/workspace",
             "/api/rag/stats",
+            "/api/voice/speakers",
+            "/api/analytics/overview",
+            "/api/metrics/project",
+            "/api/knowledge/stats",
+            "/api/ab/experiments",
+            "/api/cicd/runs",
+            "/api/debug/state",
+            "/api/sse/events/sessions",
+            "/api/workflows/templates",
         ):
             assert client.get(path).status_code == 401, path
 
@@ -158,6 +203,15 @@ class TestPrivateReadGuard:
             "/api/email/config",
             "/api/insights/workspace",
             "/api/rag/stats",
+            "/api/voice/speakers",
+            "/api/analytics/overview",
+            "/api/metrics/project",
+            "/api/knowledge/stats",
+            "/api/ab/experiments",
+            "/api/cicd/runs",
+            "/api/debug/state",
+            "/api/sse/events/sessions",
+            "/api/workflows/templates",
         ):
             assert client.get(path, headers={"Authorization": f"Bearer {token}"}).status_code == 200, path
 

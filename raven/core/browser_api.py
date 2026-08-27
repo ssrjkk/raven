@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
+from raven.core.api_errors import internal_error
 from raven.core.browser_agent import BrowserAgent
 
 _agent: BrowserAgent | None = None
@@ -208,16 +209,19 @@ def create_browser_router() -> APIRouter:
     @router.post("/navigate")
     async def api_browser_navigate(req: NavigateRequest):
         try:
+            from raven.core.security.ssrf import validate_url
+            validate_url(req.url)
+        except ValueError as e:
+            raise _http_err(400, f"Blocked: {type(e).__name__}") from e
+        try:
             text = await _call("navigate", req.url, wait_until=req.wait_until, timeout=req.timeout)
             agent = await _get_agent()
             return {"text": text, "title": await agent.get_title(), "url": agent.page.url}
-        except ValueError as e:
-            raise _http_err(400, str(e)) from e
         except HTTPException:
             raise
         except Exception as e:
             logger.warning("[browser] navigate failed: {}", e)
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/click")
     async def api_browser_click(req: ClickRequest):
@@ -225,7 +229,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("click", req.selector, timeout=req.timeout)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/fill")
     async def api_browser_fill(req: FillRequest):
@@ -233,7 +237,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("fill", req.selector, req.value, timeout=req.timeout)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/type")
     async def api_browser_type(req: TypeRequest):
@@ -241,7 +245,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("type_text", req.selector, req.text, delay_ms=req.delay_ms, timeout=req.timeout)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/fill-form")
     async def api_browser_fill_form(req: FillFormRequest):
@@ -249,7 +253,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("fill_form", req.fields, timeout=req.timeout)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/select")
     async def api_browser_select(req: SelectOptionRequest):
@@ -257,7 +261,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("select_option", req.selector, req.value, timeout=req.timeout)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/screenshot")
     async def api_browser_screenshot(req: ScreenshotRequest):
@@ -265,7 +269,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("screenshot", selector=req.selector, full_page=req.full_page)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/evaluate")
     async def api_browser_evaluate(req: EvaluateRequest):
@@ -273,7 +277,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("evaluate", req.script)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/text")
     async def api_browser_get_text(req: SelectorRequest):
@@ -281,7 +285,7 @@ def create_browser_router() -> APIRouter:
             text = await _call("get_text", req.selector)
             return {"text": text}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/html")
     async def api_browser_get_html(req: SelectorRequest):
@@ -289,7 +293,7 @@ def create_browser_router() -> APIRouter:
             html = await _call("get_html", req.selector)
             return {"html": html}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/wait-selector")
     async def api_browser_wait_selector(req: WaitSelectorRequest):
@@ -297,7 +301,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("wait_for_selector", req.selector, timeout=req.timeout, state=req.state)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/wait-function")
     async def api_browser_wait_function(req: WaitFunctionRequest):
@@ -305,7 +309,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("wait_for_function", req.fn, timeout=req.timeout)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/wait-navigation")
     async def api_browser_wait_navigation(req: WaitNavigationRequest):
@@ -313,7 +317,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("wait_for_navigation", timeout=req.timeout)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/scroll")
     async def api_browser_scroll(req: ScrollRequest):
@@ -321,7 +325,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("scroll", req.direction, req.amount)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.get("/cookies")
     async def api_browser_get_cookies():
@@ -329,7 +333,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("get_cookies")
             return {"cookies": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/cookies")
     async def api_browser_set_cookies(req: SetCookiesRequest):
@@ -337,7 +341,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("set_cookies", req.cookies)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.delete("/cookies")
     async def api_browser_clear_cookies():
@@ -345,7 +349,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("clear_cookies")
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/intercept")
     async def api_browser_intercept(req: InterceptRequest):
@@ -356,7 +360,7 @@ def create_browser_router() -> APIRouter:
                 result = await _call("stop_network_intercept")
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.get("/requests")
     async def api_browser_get_requests():
@@ -364,7 +368,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("get_intercepted_requests")
             return {"requests": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.get("/responses")
     async def api_browser_get_responses():
@@ -372,7 +376,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("get_intercepted_responses")
             return {"responses": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/tabs")
     async def api_browser_new_tab(req: NewTabRequest):
@@ -380,7 +384,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("new_tab", req.url)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.get("/tabs")
     async def api_browser_list_tabs():
@@ -388,7 +392,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("list_tabs")
             return {"tabs": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/tabs/switch")
     async def api_browser_switch_tab(req: SwitchTabRequest):
@@ -396,7 +400,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("switch_tab", req.index)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/tabs/close")
     async def api_browser_close_tab(req: CloseTabRequest):
@@ -404,7 +408,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("close_tab", index=req.index)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/extract-table")
     async def api_browser_extract_table(req: SelectorRequest):
@@ -412,7 +416,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("extract_table", req.selector)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/headers")
     async def api_browser_set_headers(req: SetHeadersRequest):
@@ -420,7 +424,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("set_extra_http_headers", req.headers)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/download")
     async def api_browser_download(req: DownloadRequest):
@@ -429,7 +433,7 @@ def create_browser_router() -> APIRouter:
             result = await _call("get_download", timeout=req.timeout)
             return {"result": result}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.get("/title")
     async def api_browser_get_title():
@@ -437,7 +441,7 @@ def create_browser_router() -> APIRouter:
             title = await _call("get_title")
             return {"title": title}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.get("/url")
     async def api_browser_get_url():
@@ -445,7 +449,7 @@ def create_browser_router() -> APIRouter:
             agent = await _get_agent()
             return {"url": agent.page.url}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/extract")
     async def api_browser_extract(req: ExtractContentRequest):
@@ -454,7 +458,7 @@ def create_browser_router() -> APIRouter:
             content = await agent.extract_content(url=req.url)
             return {"content": content, "url": req.url or agent.page.url}
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     @router.post("/visual-diff")
     async def api_browser_visual_diff(req: VisualDiffRequest):
@@ -473,6 +477,6 @@ def create_browser_router() -> APIRouter:
                 "screenshot_b": f"data:image/png;base64,{base64.b64encode(img_b).decode()}",
             }
         except Exception as e:
-            raise _http_err(500, str(e)) from e
+            raise internal_error(e) from e
 
     return router

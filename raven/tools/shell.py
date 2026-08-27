@@ -188,6 +188,7 @@ _RESTRICTED_BUILTINS: dict[str, Any] = {
     "oct": oct,
     "ord": ord,
     "pow": pow,
+    "print": print,
     "range": range,
     "reversed": reversed,
     "round": round,
