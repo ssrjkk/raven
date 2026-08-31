@@ -101,6 +101,38 @@ def _make_full_app() -> FastAPI:
     async def workflows_templates() -> dict[str, str]:
         return {"ok": "workflows"}
 
+    @app.get("/api/monitor/list")
+    async def monitor_list() -> dict[str, str]:
+        return {"ok": "monitor"}
+
+    @app.get("/api/monitor/slo")
+    async def monitor_slo() -> dict[str, str]:
+        return {"ok": "slo"}
+
+    @app.get("/api/routine/list")
+    async def routine_list() -> dict[str, str]:
+        return {"ok": "routine"}
+
+    @app.get("/api/task/list")
+    async def task_list() -> dict[str, str]:
+        return {"ok": "task"}
+
+    @app.get("/api/code/list")
+    async def code_list() -> dict[str, str]:
+        return {"ok": "code"}
+
+    @app.get("/api/status")
+    async def status() -> dict[str, str]:
+        return {"ok": "status"}
+
+    @app.get("/api/agents")
+    async def agents() -> dict[str, str]:
+        return {"ok": "agents"}
+
+    @app.get("/api/tools/policy")
+    async def tools_policy() -> dict[str, str]:
+        return {"ok": "policy"}
+
     return app
 
 
@@ -190,6 +222,14 @@ class TestPrivateReadGuard:
             "/api/debug/state",
             "/api/sse/events/sessions",
             "/api/workflows/templates",
+            "/api/monitor/list",
+            "/api/monitor/slo",
+            "/api/routine/list",
+            "/api/task/list",
+            "/api/code/list",
+            "/api/status",
+            "/api/agents",
+            "/api/tools/policy",
         ):
             assert client.get(path).status_code == 401, path
 
@@ -212,6 +252,14 @@ class TestPrivateReadGuard:
             "/api/debug/state",
             "/api/sse/events/sessions",
             "/api/workflows/templates",
+            "/api/monitor/list",
+            "/api/monitor/slo",
+            "/api/routine/list",
+            "/api/task/list",
+            "/api/code/list",
+            "/api/status",
+            "/api/agents",
+            "/api/tools/policy",
         ):
             assert client.get(path, headers={"Authorization": f"Bearer {token}"}).status_code == 200, path
 

@@ -44,7 +44,10 @@ class TestHttpGet:
             fake_httpx.AsyncClient.return_value = client
             result = await http_get("https://example.com/")
         assert result == "hello"
-        fake_httpx.AsyncClient.assert_called_once_with(timeout=30, follow_redirects=False)
+        _args, kwargs = fake_httpx.AsyncClient.call_args
+        assert kwargs["timeout"] == 30
+        assert kwargs["follow_redirects"] is False
+        assert "transport" in kwargs
         assert calls[0][0] == "GET"
         assert calls[0][1] == "https://example.com/"
 

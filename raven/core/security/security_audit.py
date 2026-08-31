@@ -129,7 +129,14 @@ class SecurityAudit:
 
     def _check_web_bind(self):
         c = self._add("web_bind", "Gateway binds to 127.0.0.1 by default", "medium")
-        c.ok("Gateway binds to 0.0.0.0 (configure firewall or use reverse proxy)")
+        host = (settings.web_host or "").strip().lower()
+        if host in ("127.0.0.1", "localhost", "::1"):
+            c.ok(f"Gateway binds to {settings.web_host} (loopback)")
+        else:
+            c.fail(
+                f"Gateway binds to '{settings.web_host}' (non-loopback) — configure firewall or use a reverse proxy",
+                fix_hint="Set web_host=127.0.0.1 in configuration, or firewall the port",
+            )
 
     def _check_tools_exec(self):
         c = self._add("tools_exec", "Tool exec security policy", "high")

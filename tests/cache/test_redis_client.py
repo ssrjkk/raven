@@ -4,7 +4,7 @@ import pytest
 
 from raven.core.cache.redis_client import RedisClient
 
-_NO_REDIS = "redis://localhost:16379/0?socket_connect_timeout=0.5"
+_NO_REDIS = "redis://127.0.0.1:16399/0?socket_connect_timeout=0.5"
 
 
 class TestRedisClientInit:

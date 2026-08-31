@@ -571,7 +571,20 @@ this.currentSession = id;
 this.loadMessages();
 },
 renderContent(content) {
-try { return marked.parse(content); } catch(e) { return content; }
+try {
+const raw = marked.parse(content);
+const div = document.createElement('div');
+div.innerHTML = raw;
+div.querySelectorAll('script,iframe,object,embed,link,meta,style,form,input,button').forEach(el => el.remove());
+div.querySelectorAll('*').forEach(el => {
+for (const attr of [...el.attributes]) {
+if (/^on/i.test(attr.name) || attr.name.toLowerCase() === 'href' && /^[\t\r\n ]*javascript:/i.test(attr.value)) {
+el.removeAttribute(attr.name);
+}
+}
+});
+return div.innerHTML;
+} catch(e) { return content; }
 },
 scrollDown() {
 const container = document.getElementById('messages-container');

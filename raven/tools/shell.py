@@ -233,7 +233,7 @@ _DENIED_BUILTINS = frozenset(
 )
 
 
-async def python_code(code: str, timeout: int = 15) -> str:
+async def python_code(code: str, timeout: int = 60) -> str:
     try:
         import ast
 

@@ -30,6 +30,10 @@ _VALID_HANDOFF_PROFILES = frozenset(
 
 _PATH_KEYS = ("path", "file", "directory", "source", "target")
 
+_IMPLEMENT_TOOLS = frozenset(
+    {"file_write", "file_edit", "file_append", "shell", "python", "git_commit", "git_add"}
+)
+
 
 @dataclass
 class AgentContext:
@@ -124,15 +128,23 @@ class StatusEmitter:
 
 
 _PLAN_PROMPT = """Break down the user's request into a concise, ordered list of execution steps (max 8).
-Each step must be a single sentence describing one concrete action the assistant will take.
+Each step must be a single sentence describing one concrete, verifiable action the assistant will take.
+Prioritize: understand-first (read/explore before writing), then implement, then verify (lint/tests).
+Steps should be atomic and dependency-ordered so they can be executed sequentially without rework.
 Do NOT write any code. Return ONLY a valid JSON array of strings, with no commentary.
 Example output:
 ["Explore the project structure", "Implement the auth module", "Run tests"]"""
 
 _CRITIC_PROMPT = """You are the final reviewer of an automated coding agent. Judge whether the assistant's output fully satisfies the user's goal.
-Look for: unmet requirements, unverified code, missing tests, obvious bugs, or security issues.
+Check rigorously: unmet requirements, unverified code, missing tests, obvious bugs, security issues, and whether claims match actual tool results.
+The assistant must not claim work it did not do, and must not leave TODO/FIXME or unverified code as "done".
 If the goal is fully met, reply EXACTLY with the single word: ACCEPT
-Otherwise reply with a short critique (2-4 sentences) listing the concrete issues that must be fixed before delivery."""
+Otherwise reply with a short, concrete critique (2-4 sentences) listing the specific issues that must be fixed before delivery.
+
+Rules:
+- Prefer ACCEPT only when the evidence shows the goal is genuinely complete.
+- If the last assistant turn is an unresolved question, respond with a critique asking it to complete the work.
+- Be specific (file/function names) — avoid vague "improve quality" comments."""
 
 _NEXT_AGENT_PROMPT = """You are a handoff coordinator. Based on the conversation so far, decide which agent profile should handle the NEXT step.
 
@@ -167,6 +179,160 @@ def _redact_audit_args(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+class TaskOutcomeTracker:
+    def __init__(self, max_history: int = 20) -> None:
+        self._max_history = max_history
+        self._outcomes: dict[str, list[bool]] = {}
+        self._consecutive_errors: dict[str, int] = {}
+
+    def record(self, profile: str, success: bool) -> None:
+        if profile not in self._outcomes:
+            self._outcomes[profile] = []
+        self._outcomes[profile].append(success)
+        if len(self._outcomes[profile]) > self._max_history:
+            self._outcomes[profile] = self._outcomes[profile][-self._max_history:]
+        if success:
+            self._consecutive_errors[profile] = 0
+        else:
+            self._consecutive_errors[profile] = self._consecutive_errors.get(profile, 0) + 1
+
+    def success_rate(self, profile: str) -> float:
+        history = self._outcomes.get(profile, [])
+        if not history:
+            return 0.5
+        return sum(history) / len(history)
+
+    def consecutive_errors(self, profile: str) -> int:
+        return self._consecutive_errors.get(profile, 0)
+
+    def should_escalate(self, profile: str) -> bool:
+        return self.consecutive_errors(profile) >= 2
+
+    def suggest_profile(self, failed_profile: str) -> str | None:
+        if self.success_rate(failed_profile) < 0.3:
+            best = "coder"
+            best_rate = 0.0
+            for p, history in self._outcomes.items():
+                if p != failed_profile and history:
+                    rate = sum(history) / len(history)
+                    if rate > best_rate:
+                        best_rate = rate
+                        best = p
+            if best_rate > 0.5:
+                return best
+        return None
+
+    def status(self) -> dict[str, dict[str, Any]]:
+        return {
+            p: {
+                "success_rate": round(self.success_rate(p), 2),
+                "consecutive_errors": self.consecutive_errors(p),
+                "total": len(h),
+            }
+            for p, h in self._outcomes.items()
+        }
+
+
+class ProfileMemory:
+    def __init__(self, max_files: int = 5) -> None:
+        self._max_files = max_files
+        self._recent_files: dict[str, list[str]] = {}
+        self._patterns: dict[str, list[str]] = {}
+
+    def record_file(self, profile: str, filepath: str) -> None:
+        if profile not in self._recent_files:
+            self._recent_files[profile] = []
+        files = self._recent_files[profile]
+        if filepath in files:
+            files.remove(filepath)
+        files.append(filepath)
+        if len(files) > self._max_files:
+            files.pop(0)
+
+    def record_pattern(self, profile: str, pattern: str) -> None:
+        if profile not in self._patterns:
+            self._patterns[profile] = []
+        patterns = self._patterns[profile]
+        if pattern not in patterns:
+            patterns.append(pattern)
+            if len(patterns) > 10:
+                patterns.pop(0)
+
+    def get_recent_files(self, profile: str) -> list[str]:
+        return list(self._recent_files.get(profile, []))
+
+    def get_patterns(self, profile: str) -> list[str]:
+        return list(self._patterns.get(profile, []))
+
+    def get_context_hint(self, profile: str) -> str:
+        files = self.get_recent_files(profile)
+        patterns = self.get_patterns(profile)
+        hints: list[str] = []
+        if files:
+            hints.append(f"Recently modified files: {', '.join(files[-3:])}")
+        if patterns:
+            hints.append(f"Conventions observed: {', '.join(patterns[-3:])}")
+        return "\n".join(hints) if hints else ""
+
+
+class PlanTracker:
+    def __init__(self, steps: list[str]) -> None:
+        self._steps = steps
+        self._current = 0
+        self._completed: list[int] = []
+        self._step_tool_calls: dict[int, int] = {i: 0 for i in range(len(steps))}
+
+    @property
+    def current_step(self) -> int:
+        return self._current
+
+    @property
+    def total_steps(self) -> int:
+        return len(self._steps)
+
+    @property
+    def current_description(self) -> str:
+        if self._current < len(self._steps):
+            return self._steps[self._current]
+        return ""
+
+    def advance(self) -> str | None:
+        if self._current < len(self._steps):
+            self._completed.append(self._current)
+            self._current += 1
+            if self._current < len(self._steps):
+                return self._steps[self._current]
+        return None
+
+    def record_tool_call(self) -> None:
+        if self._current < len(self._steps):
+            self._step_tool_calls[self._current] = self._step_tool_calls.get(self._current, 0) + 1
+
+    def is_step_stale(self) -> bool:
+        if self._current >= len(self._steps):
+            return False
+        return self._step_tool_calls.get(self._current, 0) >= 5
+
+    def progress_summary(self) -> str:
+        done = len(self._completed)
+        total = len(self._steps)
+        if total == 0:
+            return ""
+        current_desc = self.current_description
+        return f"Plan progress: {done}/{total} steps done. Current step: {current_desc}"
+
+    def build_status_message(self) -> str:
+        lines: list[str] = []
+        for i, step in enumerate(self._steps):
+            if i in self._completed:
+                lines.append(f"  [x] {step}")
+            elif i == self._current:
+                lines.append(f"  [>] {step}  ← current")
+            else:
+                lines.append(f"  [ ] {step}")
+        return "Execution plan:\n" + "\n".join(lines)
+
+
 class AgentOrchestrator:
     def __init__(
         self,
@@ -178,6 +344,8 @@ class AgentOrchestrator:
         planner_enabled: bool = True,
         critic_enabled: bool = True,
         max_critic_passes: int = 2,
+        reflect_enabled: bool = True,
+        max_retries: int = 1,
     ):
         self._llm = llm
         self._tool_registry = tool_registry
@@ -188,6 +356,10 @@ class AgentOrchestrator:
         self._planner_enabled = planner_enabled
         self._critic_enabled = critic_enabled
         self._max_critic_passes = max_critic_passes
+        self._reflect_enabled = reflect_enabled
+        self._max_retries = max_retries
+        self._outcome_tracker = TaskOutcomeTracker()
+        self._profile_memory = ProfileMemory()
 
     async def execute(
         self,
@@ -196,6 +368,7 @@ class AgentOrchestrator:
         profile_override: str | None = None,
         on_token: Callable[[str], Any] | None = None,
         status_emitter: StatusEmitter | None = None,
+        _retry_depth: int = 0,
     ) -> AgentResult:
         ctx = context or {}
         agent_ctx = self._build_agent_context(query, ctx)
@@ -216,15 +389,21 @@ class AgentOrchestrator:
         safe_query = redact_pii(query)
         messages.append({"role": "user", "content": safe_query})
 
-        plan_steps = await self._create_plan(safe_query, current_profile)
+        workspace_hint = ""
+        if agent_ctx.workspace is not None:
+            workspace_hint = f"Workspace root: {agent_ctx.workspace}"
+        plan_steps = await self._create_plan(safe_query, current_profile, workspace_hint)
+        plan_tracker: PlanTracker | None = None
         if plan_steps:
             agent_ctx.plan_steps = plan_steps
+            plan_tracker = PlanTracker(plan_steps)
             await st.plan_created(current_profile.name, plan_steps)
-            plan_hint = "\n".join(f"{i + 1}. {step}" for i, step in enumerate(plan_steps))
-            messages.append({"role": "assistant", "content": f"Execution plan:\n{plan_hint}\n\nProceeding step by step."})
+            messages.append({"role": "assistant", "content": plan_tracker.build_status_message()})
 
         stalled_rounds = 0
         last_tool_names: set[tuple[str, str]] = set()
+        consecutive_errors = 0
+        tool_history_empty = True
         status: AgentStatus = "max_steps"
         content = ""
 
@@ -233,12 +412,7 @@ class AgentOrchestrator:
             agent_ctx.iteration = total_iterations
 
             if len(messages) > 60:
-                system = messages[0]
-                messages = [
-                    system,
-                    {"role": "system", "content": "[earlier context truncated to save tokens]"},
-                    *messages[-20:],
-                ]
+                messages = await self._compress_context(messages, current_profile)
 
             if stalled_rounds >= 3:
                 msg = (
@@ -248,6 +422,26 @@ class AgentOrchestrator:
                 messages.append({"role": "system", "content": msg})
                 await st.thinking(current_profile.name, "Self-correction: asking user for guidance")
                 stalled_rounds = 0
+
+            if consecutive_errors >= 3:
+                msg = (
+                    "Several of your recent tool calls failed. Review the error messages, "
+                    "verify your arguments against the tool schemas, and change your approach. "
+                    "Do NOT re-run the same failing tool with identical arguments."
+                )
+                messages.append({"role": "system", "content": msg})
+                await st.thinking(current_profile.name, "Self-correction: recovering from repeated tool failures")
+                consecutive_errors = 0
+
+            if self._reflect_enabled and total_iterations > 6 and not tool_history_empty:
+                tool_history_empty = False
+                if total_iterations % 4 == 0:
+                    await self._maybe_reflect(messages, current_profile, st)
+
+            if plan_tracker and total_iterations % 5 == 0 and plan_tracker.total_steps > 0:
+                status_msg = plan_tracker.progress_summary()
+                messages.append({"role": "system", "content": status_msg})
+                await st.thinking(current_profile.name, status_msg)
 
             tool_schemas = self._build_tool_schemas(current_profile)
 
@@ -340,15 +534,81 @@ class AgentOrchestrator:
                 *(self._execute_tool_safe(tc, current_profile, agent_ctx) for tc in tool_calls),
                 return_exceptions=False,
             )
+            round_errors = 0
+            round_quality = 0.0
+            round_tool_count = len(tool_calls)
             for tc, tool_result in zip(tool_calls, tool_results, strict=True):
                 tool_status = "ok" if "error" not in tool_result else "error"
+                if tool_status == "error":
+                    round_errors += 1
+                    consecutive_errors += 1
+                else:
+                    consecutive_errors = 0
                 await st.tool_result(current_profile.name, tc.name, tool_status)
-                messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(tool_result)})
+                messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(tool_result, default=str)})
+
+                round_quality += self._score_tool_result(tool_result)
+
+                if plan_tracker:
+                    plan_tracker.record_tool_call()
+
+                if tc.name in ("file_read", "file_write", "edit", "grep", "glob") and not tool_result.get("error"):
+                    path_val = (tc.arguments or {}).get("path", "")
+                    if path_val and isinstance(path_val, str):
+                        self._profile_memory.record_file(current_profile.name, path_val)
+                    if tc.name == "grep":
+                        pattern_val = (tc.arguments or {}).get("pattern", "")
+                        if pattern_val and isinstance(pattern_val, str):
+                            self._profile_memory.record_pattern(current_profile.name, pattern_val)
+
+            if plan_tracker and (plan_tracker.is_step_stale() and round_tool_count > 0 and round_quality / round_tool_count < 0.4):
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": (
+                            "You have spent many tool calls on the current step without producing useful "
+                            "results. Reconsider your approach to this step, verify prerequisites are met, "
+                            "and take a different concrete action."
+                        ),
+                    }
+                )
+
+            if plan_tracker and round_tool_count > 0:
+                # Advance the plan ONLY when an implementation/verification tool
+                # succeeded — never on read/explore tools, so we don't mark a
+                # step "done" prematurely while still investigating.
+                implementation_succeeded = any(
+                    (tc.name in _IMPLEMENT_TOOLS) and ("error" not in tr)
+                    for tc, tr in zip(tool_calls, tool_results, strict=True)
+                )
+                if implementation_succeeded and plan_tracker.current_step < plan_tracker.total_steps:
+                    next_step = plan_tracker.advance()
+                    if next_step:
+                        messages.append({"role": "system", "content": f"Step completed. Next: {next_step}"})
+            tool_history_empty = False
 
         duration = time.monotonic() - started_at
         final_content = content if status == "success" else self._extract_final_content(messages)
         if status == "success" and not final_content:
             status = "error"
+
+        self._outcome_tracker.record(current_profile.name, status == "success")
+        self._router.record_outcome(query, current_profile.name, status == "success")
+        if status != "success":
+            suggested = self._outcome_tracker.suggest_profile(current_profile.name)
+            if suggested and self._max_retries > 0 and _retry_depth < self._max_retries:
+                logger.info("TaskOutcomeTracker: auto-retrying with profile '{}' (was '{}')", suggested, current_profile.name)
+                retry_result = await self.execute(
+                    query=query,
+                    context=context,
+                    profile_override=suggested,
+                    on_token=on_token,
+                    status_emitter=status_emitter,
+                    _retry_depth=_retry_depth + 1,
+                )
+                retry_result.profile = f"{current_profile.name}→{retry_result.profile}"
+                return retry_result
+
         return AgentResult(
             content=final_content
             or ("Task completed with partial results." if status == "success" else "[error: task failed]"),
@@ -368,6 +628,12 @@ class AgentOrchestrator:
 
     def _build_system_prompt(self, profile: AgentProfile, ctx: dict[str, Any], workspace: Path | None) -> str:
         parts: list[str] = [profile.system_prompt]
+        style_hint = self._get_style_hint(profile.name)
+        if style_hint:
+            parts.append(f"Working style: {style_hint}")
+        memory_hint = self._profile_memory.get_context_hint(profile.name)
+        if memory_hint:
+            parts.append(f"Your recent work context:\n{memory_hint}")
         workspace_info = ctx.get("workspace_context", "")
         if workspace_info:
             parts.append(f"Workspace context:\n{workspace_info}")
@@ -405,6 +671,62 @@ class AgentOrchestrator:
         if not filtered:
             return None
         return [s.to_llm_tool() for s in filtered]
+
+    def _score_tool_result(self, result: dict[str, Any]) -> float:
+        if "error" in result:
+            return 0.0
+        content = str(result.get("result", ""))
+        if not content:
+            return 0.1
+        if len(content) < 10:
+            return 0.3
+        if content.startswith("[") and content.endswith("]"):
+            return 0.4
+        if "success" in content.lower() or "done" in content.lower() or "created" in content.lower():
+            return 0.9
+        if len(content) > 100:
+            return 0.8
+        return 0.6
+
+    def _get_style_hint(self, profile_name: str) -> str:
+        hints = {
+            "debugger": "Be precise, methodical, and conservative. Test each hypothesis before acting.",
+            "reviewer": "Be thorough but concise. Focus on correctness and security.",
+            "qa": "Be systematic and exhaustive. Test edge cases and boundary conditions.",
+            "security": "Be rigorous and threat-focused. Consider all attack vectors.",
+            "architect": "Be thoughtful about trade-offs. Consider scalability and maintainability.",
+            "planner": "Be structured and dependency-aware. Order steps logically.",
+            "coder": "Be productive and follow existing patterns. Verify your work.",
+            "researcher": "Be curious and thorough. Cross-check findings from multiple sources.",
+        }
+        return hints.get(profile_name, "")
+
+    async def _compress_context(
+        self, messages: list[dict[str, Any]], profile: AgentProfile
+    ) -> list[dict[str, Any]]:
+        system = messages[0]
+        recent = messages[-15:]
+        middle = messages[1:-15]
+        if not middle:
+            return messages
+        summary_parts: list[str] = []
+        for m in middle:
+            role = m.get("role", "")
+            content = str(m.get("content", ""))[:200]
+            if role == "tool":
+                summary_parts.append(f"[tool result: {content[:100]}]")
+            elif role == "assistant":
+                summary_parts.append(f"[assistant: {content[:150]}]")
+            elif role == "user":
+                summary_parts.append(f"[user: {content[:150]}]")
+            elif role == "system":
+                summary_parts.append(f"[system: {content[:150]}]")
+        summary = "\n".join(summary_parts[-20:])
+        return [
+            system,
+            {"role": "system", "content": f"[Conversation summary]\n{summary}"},
+            *recent,
+        ]
 
     async def _execute_tool_safe(
         self, tc: ToolCall, profile: AgentProfile, agent_ctx: AgentContext
@@ -453,15 +775,18 @@ class AgentOrchestrator:
                 if resolved is None:
                     raise ValueError(f"Path '{val}' is outside workspace or invalid")
 
-    async def _create_plan(self, query: str, profile: AgentProfile) -> list[str]:
+    async def _create_plan(self, query: str, profile: AgentProfile, workspace_hint: str = "") -> list[str]:
         if not self._planner_enabled:
             return []
         try:
             from raven.core.model_tiers import select_model, tiers_configured
 
+            user_msg = f"Request: {query}\nCurrent role: {profile.display_name}"
+            if workspace_hint:
+                user_msg += f"\n{workspace_hint}"
             plan_messages = [
                 {"role": "system", "content": _PLAN_PROMPT},
-                {"role": "user", "content": f"Request: {query}\nCurrent role: {profile.display_name}"},
+                {"role": "user", "content": user_msg},
             ]
             resp = await self._llm.complete(
                 plan_messages,
@@ -498,6 +823,42 @@ class AgentOrchestrator:
         except Exception as e:
             logger.debug("Critique failed, accepting current result: {}", e)
             return None
+
+    async def _maybe_reflect(
+        self,
+        messages: list[dict[str, Any]],
+        profile: AgentProfile,
+        st: StatusEmitter,
+    ) -> None:
+        """Periodically ask the LLM to consolidate progress so long tasks don't drift.
+
+        Injects a lightweight progress-synthesis prompt every few iterations. The
+        result is appended as an assistant-style context note to keep subsequent
+        reasoning anchored without burning the whole tool budget on tool calls.
+        """
+        try:
+            tail = "\n".join(f"{m['role']}: {(m.get('content') or '')[:400]}" for m in messages[-8:])
+            resp = await self._llm.complete(
+                [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are helping a long-running agent stay on track. "
+                            "Summarize, in 1-2 short sentences, what has been accomplished "
+                            "so far and the single most important next action. Do not call tools."
+                        ),
+                    },
+                    {"role": "user", "content": f"Recent activity:\n{tail[:3000]}"},
+                ],
+                model="",
+            )
+            summary = (resp.content or "").strip()
+            if not summary:
+                return
+            messages.append({"role": "system", "content": f"[progress checkpoint]\n{summary[:500]}"})
+            await st.thinking(profile.name, f"Reflection: {summary[:200]}")
+        except Exception as e:
+            logger.debug("Reflection step failed, continuing: {}", e)
 
     async def _decide_next_agent(self, messages: list[dict[str, Any]], current_profile: str) -> str | None:
         try:

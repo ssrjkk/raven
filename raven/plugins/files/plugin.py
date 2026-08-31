@@ -1,13 +1,24 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import tempfile
 from pathlib import Path
 
 PLUGIN_NAME = "files"
 PLUGIN_DESCRIPTION = "Read, write, list, and manage files on the local filesystem"
 
-ALLOWED_ROOTS = (str(Path.home()), str(Path.cwd()), tempfile.gettempdir())
+
+def _allowed_roots() -> tuple[str, ...]:
+    workspace = os.environ.get("RAVEN_WORKSPACE")
+    roots: list[str] = []
+    if workspace:
+        roots.append(str(Path(workspace).expanduser().resolve()))
+    roots.append(tempfile.gettempdir())
+    return tuple(roots)
+
+
+ALLOWED_ROOTS = _allowed_roots()
 
 
 def _check_path(path: str) -> Path:
@@ -19,7 +30,7 @@ def _check_path(path: str) -> Path:
             allowed = True
             break
     if not allowed:
-        msg = f"Access denied: {path} (allowed: ~, cwd, /tmp)"
+        msg = f"Access denied: {path} (allowed: workspace, tmp)"
         raise PermissionError(msg)
     return p
 

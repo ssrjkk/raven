@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-import shutil
 import sys
-import tempfile
-from pathlib import Path
 
 from loguru import logger
 
@@ -14,49 +11,41 @@ PLUGIN_DESCRIPTION = "Execute, review, explain, and improve code"
 
 SANDBOX_TIMEOUT = 30
 
+_ENV_SAFELIST = frozenset({
+    "PATH", "PYTHONPATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
+    "TEMP", "TMP", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "LANG",
+    "LC_ALL", "TZ", "RAVEN_DATA_DIR", "RAVEN_WORKSPACE", "PYTHONIOENCODING",
+})
+
 
 async def run_python(code: str, timeout: int = 30) -> str:
-    """Execute Python code in a sandbox and return stdout/stderr. Args: code (str): Python code to execute, timeout (int): Max execution time in seconds"""
-    tmpdir = None
+    """Execute Python code in a restricted sandbox (limited builtins, no secrets) and return output."""
+    env = {k: v for k, v in os.environ.items() if k in _ENV_SAFELIST}
+    env["PYTHONUNBUFFERED"] = "1"
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     try:
-        tmpdir = await asyncio.to_thread(tempfile.mkdtemp, prefix="raven_sandbox_")
-        script_path = Path(tmpdir) / "script.py"
-        await asyncio.to_thread(_write_script, script_path, code)
-
-        env = os.environ.copy()
-        env.pop("OPENROUTER_API_KEY", None)
-        env.pop("ANTHROPIC_API_KEY", None)
-        env.pop("OPENAI_API_KEY", None)
-        env.pop("TELEGRAM_BOT_TOKEN", None)
-        env.pop("DISCORD_BOT_TOKEN", None)
-        env.pop("SLACK_BOT_TOKEN", None)
-        env.pop("WEB_SECRET_KEY", None)
-        env["PYTHONUNBUFFERED"] = "1"
-        env["PYTHONDONTWRITEBYTECODE"] = "1"
-        env["http_proxy"] = ""
-        env["https_proxy"] = ""
-
-        t = min(timeout, SANDBOX_TIMEOUT)
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
-            script_path,
+            "-m",
+            "raven.tools._pyrunner",
+            stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
-            cwd=tmpdir,
         )
-
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=t)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(input=code.encode("utf-8")), timeout=timeout)
         except TimeoutError:
             proc.kill()
-            return f"Execution timed out after {t}s"
+            return f"Execution timed out after {timeout}s"
 
         result = ""
         if stdout:
             result += stdout.decode("utf-8", errors="replace")
         if stderr:
-            result += "\n[stderr]\n" + stderr.decode("utf-8", errors="replace")
+            error_text = stderr.decode("utf-8", errors="replace")
+            if error_text.strip():
+                result += f"\n[stderr]\n{error_text}"
         if proc.returncode is not None and proc.returncode != 0:
             result += f"\n[exit code: {proc.returncode}]"
         return result[:3000] or "(no output)"
@@ -64,14 +53,6 @@ async def run_python(code: str, timeout: int = 30) -> str:
     except Exception as e:
         logger.error("Code execution failed: {}", e)
         return f"Error: {e}"
-    finally:
-        if tmpdir and Path(tmpdir).exists():
-            await asyncio.to_thread(shutil.rmtree, tmpdir, ignore_errors=True)
-
-
-def _write_script(path: Path, code: str) -> None:
-    with path.open("w", encoding="utf-8") as f:
-        f.write(code)
 
 
 def review_code(code: str, language: str = "auto") -> str:

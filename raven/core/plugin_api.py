@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 from loguru import logger
 
 from raven.unique.plugin_marketplace import PluginCatalog, PluginManager
@@ -76,7 +76,7 @@ def create_plugin_router() -> APIRouter:
         url_or_path = body.get("url", "") or body.get("path", "")
         source = body.get("source", "remote")
         if not url_or_path:
-            return {"error": "url or path required"}
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="url or path required")
         try:
             result = await _manager.install_plugin(url_or_path, source=source)
             return {
@@ -87,7 +87,7 @@ def create_plugin_router() -> APIRouter:
             }
         except Exception:
             logger.exception("plugin install failed")
-            return {"error": "plugin install failed"}
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="plugin install failed") from None
 
     @router.post("/uninstall/{name}")
     async def api_plugins_uninstall(name: str):
@@ -96,7 +96,7 @@ def create_plugin_router() -> APIRouter:
             return {"ok": ok}
         except Exception:
             logger.exception("plugin uninstall failed")
-            return {"error": "plugin uninstall failed"}
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="plugin uninstall failed") from None
 
     @router.post("/update/{name}")
     async def api_plugins_update(name: str):
@@ -110,7 +110,7 @@ def create_plugin_router() -> APIRouter:
             }
         except Exception:
             logger.exception("plugin update failed")
-            return {"error": "plugin update failed"}
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="plugin update failed") from None
 
     @router.get("/top")
     async def api_plugins_top(limit: int = 10):

@@ -5,6 +5,7 @@ import json
 import re
 import secrets
 import string
+import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -89,6 +90,8 @@ class Gateway:
         self._send_semaphores: dict[str, asyncio.Semaphore] = {}
         self._send_cbs: dict[str, CircuitBreaker] = {}
         self._prefs: dict[str, dict[str, str]] = {}
+        self._send_state_lock = asyncio.Lock()
+        self._prefs_lock = threading.Lock()
 
         self._ctxmgr: ContextWindowManager | None = None
         if settings.context_window_enabled and settings.context_window_max_tokens > 0:
@@ -144,10 +147,12 @@ class Gateway:
         )
 
     def set_pref(self, channel: str, user_id: str, key: str, value: str) -> None:
-        self._prefs.setdefault(f"{channel}:{user_id}", {})[key] = value
+        with self._prefs_lock:
+            self._prefs.setdefault(f"{channel}:{user_id}", {})[key] = value
 
     def get_pref(self, channel: str, user_id: str, key: str, default: str = "") -> str:
-        return self._prefs.get(f"{channel}:{user_id}", {}).get(key, default)
+        with self._prefs_lock:
+            return self._prefs.get(f"{channel}:{user_id}", {}).get(key, default)
 
     def _outbox_path(self) -> str:
         db_path: Any = getattr(self.db, "db_path", None)
@@ -710,8 +715,9 @@ class Gateway:
 
     async def _on_channel_dead(self, channel_id: str) -> None:
         channel = await self.channels.remove(channel_id)
-        self._send_semaphores.pop(channel_id, None)
-        self._send_cbs.pop(channel_id, None)
+        async with self._send_state_lock:
+            self._send_semaphores.pop(channel_id, None)
+            self._send_cbs.pop(channel_id, None)
         if channel:
             logger.error("Channel {} removed from gateway (dead)", channel_id)
             metrics.inc("channels_dead", {"channel": channel_id})
@@ -734,14 +740,15 @@ class Gateway:
         return self._rbac.has_permission(role, permission)
 
     async def _send(self, channel_id: str, session_id: str, text: str, streaming: bool = False):
-        cb = self._send_cbs.get(channel_id)
-        if cb is None:
-            cb = CircuitBreaker(
-                f"send:{channel_id}",
-                failure_threshold=settings.channel_send_failure_threshold,
-                recovery_timeout=settings.channel_send_recovery_timeout,
-            )
-            self._send_cbs[channel_id] = cb
+        async with self._send_state_lock:
+            cb = self._send_cbs.get(channel_id)
+            if cb is None:
+                cb = CircuitBreaker(
+                    f"send:{channel_id}",
+                    failure_threshold=settings.channel_send_failure_threshold,
+                    recovery_timeout=settings.channel_send_recovery_timeout,
+                )
+                self._send_cbs[channel_id] = cb
         if not await cb.try_acquire():
             metrics.inc("send_circuit_open", {"channel": channel_id})
             if streaming or self._outbox is None or not self._outbox.healthy:
@@ -777,8 +784,11 @@ class Gateway:
             span.set_attribute("streaming", str(streaming))
             sem = self._send_semaphores.get(channel_id)
             if sem is None:
-                sem = asyncio.Semaphore(settings.channel_send_concurrency)
-                self._send_semaphores[channel_id] = sem
+                async with self._send_state_lock:
+                    sem = self._send_semaphores.get(channel_id)
+                    if sem is None:
+                        sem = asyncio.Semaphore(settings.channel_send_concurrency)
+                        self._send_semaphores[channel_id] = sem
             timeout = settings.channel_send_timeout
             async with sem:
                 channel = await self.channels.get(channel_id)

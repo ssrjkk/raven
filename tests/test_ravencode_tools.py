@@ -218,6 +218,48 @@ async def test_edit_file_write_permission_error(ws: Path, monkeypatch: pytest.Mo
 
 
 @pytest.mark.asyncio
+async def test_verify_file_missing(ws: Path) -> None:
+    out = await tools.verify_file(str(ws / "nope.py"))
+    assert "file not found" in out
+
+
+@pytest.mark.asyncio
+async def test_verify_file_python_syntax_error(ws: Path) -> None:
+    (ws / "bad.py").write_text("def foo(:\n", encoding="utf-8")
+    out = await tools.verify_file(str(ws / "bad.py"))
+    assert "syntax error" in out
+    assert "line 1" in out
+
+
+@pytest.mark.asyncio
+async def test_verify_file_json_ok(ws: Path) -> None:
+    (ws / "data.json").write_text('{"a": 1}', encoding="utf-8")
+    out = await tools.verify_file(str(ws / "data.json"))
+    assert "[ok]" in out
+
+
+@pytest.mark.asyncio
+async def test_verify_file_json_invalid(ws: Path) -> None:
+    (ws / "data.json").write_text("{oops", encoding="utf-8")
+    out = await tools.verify_file(str(ws / "data.json"))
+    assert "invalid JSON" in out
+
+
+@pytest.mark.asyncio
+async def test_verify_file_missing_tools_skips_gracefully(ws: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _raise(*args: object, **kwargs: object) -> object:
+        raise FileNotFoundError("bin not found")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _raise)
+    (ws / "good.py").write_text("def ok():\n    return 1\n", encoding="utf-8")
+    out = await tools.verify_file(str(ws / "good.py"))
+    assert "[ok]" in out
+    (ws / "data.json").write_text('{"a": 1}', encoding="utf-8")
+    out = await tools.verify_file(str(ws / "data.json"))
+    assert "[ok]" in out
+
+
+@pytest.mark.asyncio
 async def test_glob_files_basic(ws: Path) -> None:
     (ws / "a.py").write_text("x", encoding="utf-8")
     (ws / "b.txt").write_text("x", encoding="utf-8")
@@ -278,6 +320,35 @@ async def test_grep_files_skips_unreadable(ws: Path, monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(asyncio, "to_thread", AsyncMock(side_effect=PermissionError("denied")))
     results = await tools.grep_files("needle")
     assert results == []
+
+
+@pytest.mark.asyncio
+async def test_grep_files_regex(ws: Path) -> None:
+    (ws / "a.py").write_text("foo\nbar123\nbaz\n", encoding="utf-8")
+    results = await tools.grep_files(r"bar\d+", use_regex=True)
+    assert len(results) == 1
+    assert results[0]["line"] == 2
+    assert results[0]["content"] == "bar123"
+
+
+@pytest.mark.asyncio
+async def test_grep_files_regex_no_match(ws: Path) -> None:
+    (ws / "a.py").write_text("foo\nbar\n", encoding="utf-8")
+    results = await tools.grep_files(r"\d+", use_regex=True)
+    assert results == []
+
+
+@pytest.mark.asyncio
+async def test_grep_files_regex_invalid(ws: Path) -> None:
+    results = await tools.grep_files("(", use_regex=True)
+    assert results[0]["error"].startswith("invalid regex")
+
+
+@pytest.mark.asyncio
+async def test_grep_files_substring_still_works(ws: Path) -> None:
+    (ws / "a.py").write_text("foo\n", encoding="utf-8")
+    results = await tools.grep_files("fo", use_regex=False)
+    assert len(results) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -583,6 +654,7 @@ async def test_task_delegate_max_depth() -> None:
 class _FakeReAct:
     def __init__(self, config: object = None, conversation: object = None) -> None:
         self.seen_prompt: str = ""
+        self.config = config
 
     async def run(self, prompt: str) -> str:
         self.seen_prompt = prompt
@@ -611,6 +683,87 @@ async def test_task_delegate_with_memory(monkeypatch: pytest.MonkeyPatch) -> Non
     finally:
         tools.set_agent_memory(None)
     assert "remember me" in fake.seen_prompt
+
+
+@pytest.mark.asyncio
+async def test_task_delegate_propagates_memory_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    from ravencode.runtime.agent_core import AgentConfig
+
+    monkeypatch.setattr("ravencode.core.prompts.get_prompt", Mock(return_value="SUB"))
+    captured: dict[str, object] = {}
+
+    def _factory(**kw: object) -> object:
+        captured.update(kw)
+        return _FakeReAct(**kw)
+
+    monkeypatch.setattr("ravencode.runtime.agent_core.ReActAgent", _factory)
+    tools.set_agent_memory({"config": {"memory_path": "/tmp/mem.json"}})
+    try:
+        await tools.task_delegate("task")
+    finally:
+        tools.set_agent_memory(None)
+    cfg = captured.get("config")
+    assert cfg is not None
+    assert isinstance(cfg, AgentConfig)
+    assert cfg.memory_path == "/tmp/mem.json"
+
+
+@pytest.mark.asyncio
+async def test_task_delegate_no_parent_memory(monkeypatch: pytest.MonkeyPatch) -> None:
+    from ravencode.runtime.agent_core import AgentConfig
+
+    monkeypatch.setattr("ravencode.core.prompts.get_prompt", Mock(return_value="SUB"))
+    captured: dict[str, object] = {}
+
+    def _factory(**kw: object) -> object:
+        captured.update(kw)
+        return _FakeReAct(**kw)
+
+    monkeypatch.setattr("ravencode.runtime.agent_core.ReActAgent", _factory)
+    tools.set_agent_memory(None)
+    await tools.task_delegate("task")
+    cfg = captured.get("config")
+    assert cfg is not None
+    assert isinstance(cfg, AgentConfig)
+    assert cfg.memory_path is None
+
+
+@pytest.mark.asyncio
+async def test_delegate_role_prompt_verify_routes_to_verifier(monkeypatch: pytest.MonkeyPatch) -> None:
+    from ravencode.core import prompts as prompt_mod
+
+    seen: list[str] = []
+
+    def fake_get(prompt_type: str, **kwargs: str) -> str:
+        seen.append(prompt_type)
+        return prompt_type
+
+    monkeypatch.setattr(prompt_mod, "get_prompt", fake_get)
+    tools._delegate_role_prompt("verify that the result is correct")
+    assert seen[-1] == "verifier"
+
+
+@pytest.mark.asyncio
+async def test_delegate_role_prompt_verify_keywords(monkeypatch: pytest.MonkeyPatch) -> None:
+    from ravencode.core import prompts as prompt_mod
+
+    seen: list[str] = []
+
+    def fake_get(prompt_type: str, **kwargs: str) -> str:
+        seen.append(prompt_type)
+        return prompt_type
+
+    monkeypatch.setattr(prompt_mod, "get_prompt", fake_get)
+    for kw in ("debug it", "plan the steps", "write a function", "review the diff", "unknown task"):
+        tools._delegate_role_prompt(kw)
+    assert seen == ["debugger", "planner", "coder", "verifier", "delegate"]
+
+
+def test_verifier_prompt_registered() -> None:
+    from ravencode.core.prompts import VERIFIER, get_prompt
+
+    assert get_prompt(VERIFIER)  # does not raise and is non-empty
+    assert "[ok]" in get_prompt(VERIFIER)
 
 
 # ---------------------------------------------------------------------------

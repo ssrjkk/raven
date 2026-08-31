@@ -74,7 +74,13 @@ async def workflow_instantiate(template_id: str, config_json: str = "{}") -> str
         task_id = await tpl_runner.instantiate(template=template, user_id="system", channel="internal", config=config)
 
         def _close_store() -> None:
-            _cleanup_tasks.add(asyncio.create_task(store.close()))
+            task = asyncio.create_task(store.close())
+
+            def _cleanup_done(_t: asyncio.Task[None]) -> None:
+                _cleanup_tasks.discard(_t)
+
+            task.add_done_callback(_cleanup_done)
+            _cleanup_tasks.add(task)
 
         runner.on_complete(task_id, _close_store)
         return f"Instantiated '{template.name}' as task `{task_id}`."

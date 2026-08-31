@@ -32,7 +32,7 @@ def _detect_vram_mb() -> int:
     try:
         result = subprocess.run(
             ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=10, check=False,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10, check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
             vrams = [int(x.strip()) for x in result.stdout.strip().splitlines() if x.strip().isdigit()]
@@ -44,7 +44,7 @@ def _detect_vram_mb() -> int:
         if platform.system() == "Windows":
             result = subprocess.run(
                 ["wmic", "path", "win32_videocontroller", "get", "adapterram"],
-                capture_output=True, text=True, timeout=10, check=False,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10, check=False,
             )
             if result.returncode == 0:
                 for line in result.stdout.splitlines():
@@ -61,7 +61,7 @@ def _detect_ram_gb() -> int:
         if platform.system() == "Windows":
             result = subprocess.run(
                 ["wmic", "OS", "get", "TotalVisibleMemorySize"],
-                capture_output=True, text=True, timeout=5, check=False,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5, check=False,
             )
             if result.returncode == 0:
                 for line in result.stdout.splitlines():
@@ -133,7 +133,7 @@ def _install_ollama() -> bool:
                 script_path.write_bytes(resp.content)
                 result = subprocess.run(
                     ["sh", str(script_path)],
-                    capture_output=True, text=True, timeout=120,
+                    capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
                 )
                 if result.returncode == 0:
                     return _find_ollama() is not None
@@ -167,7 +167,7 @@ def _pull_model(model: str) -> bool:
         task = progress.add_task(f"Downloading {model}...", total=None)
         result = subprocess.run(
             [ollama, "pull", model],
-            capture_output=True, text=True, timeout=1800,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800,
         )
         progress.update(task, completed=1)
     if result.returncode != 0:

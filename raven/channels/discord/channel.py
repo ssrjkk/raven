@@ -273,7 +273,7 @@ class DiscordChannel(BaseChannel):
                 send_target = await self._bot.fetch_user(int(dm_id))
             except Exception as e:
                 logger.debug("[discord] ask_confirmation fetch user failed: {}", e)
-                return True
+                return False
         try:
             msg = await send_target.send(f"🛡️ Allow action: {action_description[:200]}?")
             await msg.add_reaction("✅")
@@ -292,7 +292,7 @@ class DiscordChannel(BaseChannel):
             return False
         except Exception as e:
             logger.warning("Discord ask_confirmation failed: {}", e)
-            return True
+            return False
 
     async def on_message(self, handler: Callable[[IncomingMessage], Awaitable[None]]):
         self._handler = handler

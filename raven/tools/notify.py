@@ -12,11 +12,13 @@ async def notify_telegram(message: str, token: str = "", chat_id: str = "") -> s
         token = get_channel_config("telegram").get("bot_token", "")
     if not token:
         return "Telegram not configured (no bot token)"
+    if not chat_id:
+        return "Telegram not configured (no chat_id provided)"
     try:
         from telegram import Bot
 
         bot = Bot(token=token)
-        await bot.send_message(chat_id=chat_id, text=message[:4000]) if chat_id else None
+        await bot.send_message(chat_id=chat_id, text=message[:4000])
         return "Sent Telegram notification"
     except Exception as e:
         logger.error("Telegram notify failed: {}", e)

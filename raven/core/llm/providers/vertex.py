@@ -49,11 +49,11 @@ class VertexAIProvider(LLMProvider):
                 logger.warning("gcloud auth timed out after 30s")
                 raise
             if proc.returncode == 0:
-                self._token = stdout.decode().strip()
+                self._token = stdout.decode("utf-8", errors="replace").strip()
                 self._token_from_creds = False
                 self._token_expires_at = time.monotonic() + _TOKEN_TTL
                 return self._token
-            err_text = stderr.decode().strip()
+            err_text = stderr.decode("utf-8", errors="replace").strip()
             logger.warning("gcloud auth failed (rc={}): {}", proc.returncode, err_text)
         except FileNotFoundError:
             logger.debug("gcloud not found, trying credentials file")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 from datetime import UTC, datetime
@@ -20,6 +21,7 @@ class Database:
     def __init__(self, db_path: Path):
         self.db_path = db_path
         self._conn: aiosqlite.Connection | None = None
+        self._connect_lock = asyncio.Lock()
         self.migrator = Migrator(db_path)
 
     @property
@@ -29,18 +31,21 @@ class Database:
         return self._conn
 
     async def connect(self):
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = await aiosqlite.connect(str(self.db_path))
-        self.conn.row_factory = aiosqlite.Row
-        for pragma in (
-            "PRAGMA journal_mode=WAL",
-            "PRAGMA foreign_keys=ON",
-            "PRAGMA busy_timeout=5000",
-            "PRAGMA synchronous=NORMAL",
-        ):
-            async with self.conn.execute(pragma):
-                pass
-        await self._migrate()
+        async with self._connect_lock:
+            if self._conn is not None:
+                return
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self._conn = await aiosqlite.connect(str(self.db_path))
+            self.conn.row_factory = aiosqlite.Row
+            for pragma in (
+                "PRAGMA journal_mode=WAL",
+                "PRAGMA foreign_keys=ON",
+                "PRAGMA busy_timeout=5000",
+                "PRAGMA synchronous=NORMAL",
+            ):
+                async with self.conn.execute(pragma):
+                    pass
+            await self._migrate()
 
     async def _migrate(self):
         async with self.conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name") as c:
@@ -142,9 +147,10 @@ class Database:
         await self.migrator.migrate()
 
     async def disconnect(self):
-        if self._conn:
-            await self.conn.close()
-            self._conn = None
+        async with self._connect_lock:
+            if self._conn:
+                await self.conn.close()
+                self._conn = None
 
     async def get_or_create_session(
         self, session_id: str, channel: str, user_id: str, agent_id: str = "default"

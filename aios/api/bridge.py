@@ -290,6 +290,26 @@ async def aios_agent_ws(ws: WebSocket):
     await ws.accept()
     ee = EventEmitter()
 
+    async def _confirm(name: str, args: dict[str, Any]) -> bool:
+        try:
+            await ws.send_json({"type": "confirm_request", "data": {"tool": name, "arguments": args}})
+            deadline = asyncio.get_event_loop().time() + 60
+            while True:
+                remaining = deadline - asyncio.get_event_loop().time()
+                if remaining <= 0:
+                    return False
+                try:
+                    raw = await asyncio.wait_for(ws.receive_text(), timeout=remaining)
+                    reply = json.loads(raw)
+                except (TimeoutError, json.JSONDecodeError):
+                    return False
+                if reply.get("type") == "confirm":
+                    return bool(reply.get("data", {}).get("approved", False))
+                if reply.get("type") == "deny":
+                    return False
+        except Exception:
+            return False
+
     async def send_event(event: AgentEvent) -> None:
         try:
             await ws.send_json(
@@ -330,6 +350,8 @@ async def aios_agent_ws(ws: WebSocket):
                 diff_preview=msg.get("diff_preview", True),
                 proactive_scan=msg.get("proactive_scan", True),
                 max_tool_retries=msg.get("max_tool_retries", 3),
+                confirm_dangerous=True,
+                confirm_callback=_confirm,
             )
             agent = ReActAgent(config=config)
             if msg.get("truthful"):

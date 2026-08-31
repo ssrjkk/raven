@@ -633,7 +633,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             return {"response": full[:5000]}
         except Exception as e:
             logger.error("Raven API error: {}", e)
-            return {"response": f"Error: {e}"}
+            from raven.core.api_errors import internal_error
+
+            raise internal_error(e) from e
 
     @api_app.post("/api/sessions/{session_id}/agent")
     def api_set_agent(session_id: str, body: AgentAssign):

@@ -77,9 +77,10 @@ async def forget(key: str) -> str:
 
 async def search_memory(query: str, n_results: int = 5) -> str:
     collection = await _ensure_db()
+    n = max(1, min(int(n_results), 50))
     if collection:
         try:
-            results = await asyncio.to_thread(collection.query, query_texts=[query], n_results=n_results)
+            results = await asyncio.to_thread(collection.query, query_texts=[query], n_results=n)
             docs = results.get("documents", [[]])[0]
             ids = results.get("ids", [[]])[0]
             if docs:

@@ -242,7 +242,7 @@ async def github_clone_repo(owner: str, repo: str, branch: str = "main") -> dict
         )
         _stdout, stderr = await proc.communicate()
         if proc.returncode != 0:
-            err = stderr.decode()[:500]
+            err = stderr.decode("utf-8", errors="replace")[:500]
             if token:
                 err = err.replace(token, "***")
             return {"error": f"Clone failed: {err}"}

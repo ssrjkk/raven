@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from raven.core.agents.orchestrator import AgentOrchestrator, AgentResult
+from raven.core.agents.router import FeedbackLoop, get_feedback_loop
 from raven.core.features import FeatureFlags
 
 if TYPE_CHECKING:
@@ -56,7 +57,7 @@ async def delegate(
     )
 
 
-def route_to_profile(query: str) -> str:
+def route_to_profile(query: str, feedback: FeedbackLoop | None = None) -> str:
     keyword_rules: list[tuple[str, str]] = [
         (r"security|vulnerability|cve|owasp|threat|exploit|injection|xss|ssrf|hardcoded|audit", "security"),
         (r"design|architect|architecture|structure|overview|diagram|system design", "architect"),
@@ -72,6 +73,8 @@ def route_to_profile(query: str) -> str:
     for pattern, profile in keyword_rules:
         if re.search(pattern, q):
             score = 0.75
+            if feedback:
+                score = feedback.get_adjusted_confidence(profile, score, query)
             if best is None or score > best[1]:
                 best = (profile, score)
     return best[0] if best else "coder"
@@ -145,6 +148,7 @@ class DelegationOrchestrator:
     async def _run_single(self, task: DelegatedTask) -> DelegationResult:
         import time
         started = time.monotonic()
+        feedback = get_feedback_loop()
         try:
             agent = AgentOrchestrator(
                 llm=self._llm,
@@ -158,6 +162,7 @@ class DelegationOrchestrator:
                 profile_override=task.profile,
             )
             duration = time.monotonic() - started
+            feedback.record(task.description, result.profile, result.success)
             return DelegationResult(
                 index=0,
                 description=task.description,
@@ -172,6 +177,7 @@ class DelegationOrchestrator:
         except Exception as e:
             duration = time.monotonic() - started
             logger.error("[delegation] task failed: {}: {}", task.description[:80], e)
+            feedback.record(task.description, task.profile, False)
             return DelegationResult(
                 index=0,
                 description=task.description,

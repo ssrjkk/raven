@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from loguru import logger
@@ -22,26 +23,30 @@ class MetricsCollector:
         self._counters: dict[str, int] = {}
         self._latencies: dict[str, list[float]] = {}
         self._errors: dict[str, int] = {}
+        self._lock = threading.Lock()
 
     def inc(self, name: str, labels: dict[str, str] | None = None):
         key = self._key(name, labels)
-        self._counters[key] = self._counters.get(key, 0) + 1
+        with self._lock:
+            self._counters[key] = self._counters.get(key, 0) + 1
         if HAS_PROMETHEUS:
             _prom_inc(name, labels)
 
     def observe(self, name: str, duration: float, labels: dict[str, str] | None = None):
         key = self._key(name, labels)
-        if key not in self._latencies:
-            self._latencies[key] = []
-        self._latencies[key].append(duration)
-        if len(self._latencies[key]) > 1000:
-            self._latencies[key] = self._latencies[key][-1000:]
+        with self._lock:
+            if key not in self._latencies:
+                self._latencies[key] = []
+            self._latencies[key].append(duration)
+            if len(self._latencies[key]) > 1000:
+                self._latencies[key] = self._latencies[key][-1000:]
         if HAS_PROMETHEUS:
             _prom_observe(name, duration, labels)
 
     def error(self, name: str, labels: dict[str, str] | None = None):
         key = self._key(name, labels)
-        self._errors[key] = self._errors.get(key, 0) + 1
+        with self._lock:
+            self._errors[key] = self._errors.get(key, 0) + 1
         if HAS_PROMETHEUS:
             _prom_inc(f"{name}_errors", labels)
 
@@ -52,37 +57,45 @@ class MetricsCollector:
         return f"{name}{{{','.join(parts)}}}"
 
     def snapshot(self) -> dict[str, Any]:
-        out: dict[str, Any] = {}
-        for k, v in self._counters.items():
-            out[f"raven_{k}_total"] = v
-        for k, vals in self._latencies.items():
-            if vals:
-                out[f"raven_{k}_count"] = len(vals)
-                out[f"raven_{k}_sum"] = sum(vals, 0.0)
-                out[f"raven_{k}_avg"] = sum(vals) / len(vals)
-                out[f"raven_{k}_max"] = max(vals)
-                out[f"raven_{k}_p99"] = sorted(vals)[int(len(vals) * 0.99)]
-        for k, v in self._errors.items():
-            out[f"raven_{k}_errors_total"] = v
+        with self._lock:
+            out: dict[str, Any] = {}
+            for k, v in self._counters.items():
+                out[f"raven_{k}_total"] = v
+            for k, vals in self._latencies.items():
+                if vals:
+                    out[f"raven_{k}_count"] = len(vals)
+                    out[f"raven_{k}_sum"] = sum(vals, 0.0)
+                    out[f"raven_{k}_avg"] = sum(vals) / len(vals)
+                    out[f"raven_{k}_max"] = max(vals)
+                    out[f"raven_{k}_p99"] = sorted(vals)[int(len(vals) * 0.99)]
+            for k, v in self._errors.items():
+                out[f"raven_{k}_errors_total"] = v
         return out
 
     def prometheus(self) -> str:
+        with self._lock:
+            copied: dict[str, Any] = {
+                "_counters": dict(self._counters),
+                "_latencies": {k: list(v) for k, v in self._latencies.items()},
+                "_errors": dict(self._errors),
+            }
         lines = ["# HELP raven_ metrics", "# TYPE raven_ counter"]
-        for k, v in self._counters.items():
+        for k, v in copied["_counters"].items():
             lines.append(f"raven_{k}_total {v}")
-        for k, vals in self._latencies.items():
+        for k, vals in copied["_latencies"].items():
             if vals:
                 lines.append(f"# TYPE raven_{k}_summary")
                 lines.append(f"raven_{k}_count {len(vals)}")
                 lines.append(f"raven_{k}_sum {sum(vals)}")
-        for k, v in self._errors.items():
+        for k, v in copied["_errors"].items():
             lines.append(f"raven_{k}_errors_total {v}")
         return "\n".join(lines) + "\n"
 
     def clear(self):
-        self._counters.clear()
-        self._latencies.clear()
-        self._errors.clear()
+        with self._lock:
+            self._counters.clear()
+            self._latencies.clear()
+            self._errors.clear()
 
 
 metrics = MetricsCollector()

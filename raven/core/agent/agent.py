@@ -406,7 +406,7 @@ class Agent:
                             {
                                 "role": "tool",
                                 "tool_call_id": tc.id,
-                                "content": json.dumps(tool_result),
+                                "content": json.dumps(tool_result, default=str),
                             }
                         )
                         yield f"[{tc.name} → ok]\n"

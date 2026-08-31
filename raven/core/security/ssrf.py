@@ -83,7 +83,7 @@ async def _resolve_host_async(host: str) -> list[ipaddress.IPv4Address | ipaddre
 def is_private_url(url: str) -> bool:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
-        return False
+        return True
     host = parsed.hostname or ""
     if host in ("localhost", "localhost.localdomain", "127.0.0.1", "::1", "0.0.0.0"):
         return True

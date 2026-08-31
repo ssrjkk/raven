@@ -54,9 +54,11 @@ def _get_allowed_uris() -> set[str]:
     if _ALLOWED_REDIRECT_URIS is None:
         base = settings.oauth_redirect_base.rstrip("/")
         uris = {base}
-        # dev-окружение
-        uris.add("http://localhost:5173/oauth/callback")
-        uris.add("http://localhost:3000/oauth/callback")
+        # dev-окружение: localhost URIs только когда база уже локальная, иначе
+        # они становятся вектором перехвата auth-кодов в production.
+        if "://localhost" in base or "://127.0.0.1" in base:
+            uris.add("http://localhost:5173/oauth/callback")
+            uris.add("http://localhost:3000/oauth/callback")
         uris.add(base + "/oauth/callback")
         _ALLOWED_REDIRECT_URIS = uris
     return _ALLOWED_REDIRECT_URIS

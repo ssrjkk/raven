@@ -18,7 +18,12 @@ async def _request(method: str, url: str, **kwargs) -> str:
     try:
         h = kwargs.pop("headers", None)
         if h and isinstance(h, str):
-            h = json.loads(h)
+            try:
+                h = json.loads(h)
+                if not isinstance(h, dict):
+                    return f"HTTP {method.upper()} error: headers must be a JSON object"
+            except json.JSONDecodeError as e:
+                return f"HTTP {method.upper()} error: invalid headers JSON: {e}"
         if h:
             kwargs["headers"] = h
         resp = await safe_fetch_async(url, method=method, **kwargs)
@@ -30,21 +35,35 @@ async def _request(method: str, url: str, **kwargs) -> str:
 
 
 async def http_get(url: str, headers: str = "{}", timeout: int = 30) -> str:
-    return await _request("GET", url, headers=headers)
+    return await _request("GET", url, headers=headers, timeout=timeout)
 
 
 async def http_post(url: str, data: str = "{}", headers: str = "{}", timeout: int = 30) -> str:
-    body = json.loads(data) if isinstance(data, str) else data
-    return await _request("POST", url, json=body, headers=headers)
+    body = _parse_body(data)
+    if isinstance(body, str):
+        return body
+    return await _request("POST", url, json=body, headers=headers, timeout=timeout)
 
 
 async def http_put(url: str, data: str = "{}", headers: str = "{}", timeout: int = 30) -> str:
-    body = json.loads(data) if isinstance(data, str) else data
-    return await _request("PUT", url, json=body, headers=headers)
+    body = _parse_body(data)
+    if isinstance(body, str):
+        return body
+    return await _request("PUT", url, json=body, headers=headers, timeout=timeout)
 
 
 async def http_delete(url: str, headers: str = "{}", timeout: int = 30) -> str:
-    return await _request("DELETE", url, headers=headers)
+    return await _request("DELETE", url, headers=headers, timeout=timeout)
+
+
+def _parse_body(data: str | object) -> object | str:
+    if not isinstance(data, str):
+        return data
+    try:
+        parsed: object = json.loads(data)
+        return parsed
+    except json.JSONDecodeError as e:
+        return f"HTTP error: invalid JSON body: {e}"
 
 
 def _format_response(resp: httpx.Response) -> str:

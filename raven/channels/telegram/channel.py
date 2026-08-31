@@ -122,7 +122,7 @@ class TelegramChannel(BaseChannel):
             )
         except Exception as e:
             logger.warning("Telegram ask_confirmation failed: {}", e)
-            return True
+            return False
         try:
             await asyncio.wait_for(event.wait(), timeout=120)
             return self._confirm_results.pop(confirm_id, False)

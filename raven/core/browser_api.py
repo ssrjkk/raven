@@ -209,8 +209,10 @@ def create_browser_router() -> APIRouter:
     @router.post("/navigate")
     async def api_browser_navigate(req: NavigateRequest):
         try:
-            from raven.core.security.ssrf import validate_url
-            validate_url(req.url)
+            from raven.core.security.ssrf import validate_url as _ssrf_validate
+            _err = _ssrf_validate(req.url)
+            if _err:
+                raise ValueError(_err)
         except ValueError as e:
             raise _http_err(400, f"Blocked: {type(e).__name__}") from e
         try:

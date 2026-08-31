@@ -269,8 +269,11 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
     @router.get("/sessions")
     async def admin_sessions(limit: int = 50, offset: int = 0):
         gateway = get_gateway_fn()
+        limit = max(1, min(limit, 1000))
+        offset = max(0, offset)
         sessions = await gateway.db.get_sessions()
-        return [{"id": s.id, "channel": s.channel, "user_id": s.user_id} for s in sessions]
+        page = sessions[offset : offset + limit]
+        return [{"id": s.id, "channel": s.channel, "user_id": s.user_id} for s in page]
 
     @router.get("/audit")
     def admin_audit(limit: int = 50):

@@ -50,13 +50,16 @@ def _confine_fd(path: str, flags: int) -> int:
     return fd
 
 
-async def _read_file(path: str) -> str:
+_MAX_READ_BYTES = 10 * 1024 * 1024
+
+
+async def _read_file(path: str, max_size: int = _MAX_READ_BYTES) -> str:
     fd = await asyncio.to_thread(_confine_fd, path, os.O_RDONLY)
     try:
         size = await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_END)
         await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_SET)
         chunks: list[bytes] = []
-        remaining = size
+        remaining = min(size, max_size)
         while remaining > 0:
             chunk = await asyncio.to_thread(os.read, fd, remaining)
             if not chunk:

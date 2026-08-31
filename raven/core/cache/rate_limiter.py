@@ -16,6 +16,7 @@ class RateLimiterProtocol(Protocol):
 
 class InMemoryRateLimiter:
     _IDLE_TTL = 600.0
+    _MAX_KEYS = 100_000
 
     def __init__(self) -> None:
         self._windows: dict[str, list[float]] = {}
@@ -27,6 +28,7 @@ class InMemoryRateLimiter:
             now = time.monotonic()
             window_start = now - window_seconds
             self._evict_stale(window_start)
+            self._evict_newest_if_over_capacity()
             entries = self._windows.get(key)
             if entries is None:
                 self._windows[key] = [now]
@@ -60,6 +62,15 @@ class InMemoryRateLimiter:
     def clear(self) -> None:
         self._windows.clear()
         self._weighted_windows.clear()
+
+    def _evict_newest_if_over_capacity(self) -> None:
+        total = len(self._windows) + len(self._weighted_windows)
+        if total <= self._MAX_KEYS:
+            return
+        overflow = total - self._MAX_KEYS
+        keys = [k for k in self._windows if k not in self._weighted_windows][:overflow]
+        for k in keys:
+            del self._windows[k]
 
     def _evict_stale(self, cutoff: float) -> None:
         stale = [k for k, v in self._windows.items() if v and v[-1] < cutoff]

@@ -60,6 +60,11 @@ class CircuitBreaker:
                 else:
                     self._metrics["rejected"] += 1
                     raise CircuitBreakerOpenError(self.name)
+            if self._state == CircuitBreakerState.HALF_OPEN:
+                self._half_open_attempts += 1
+                if self._half_open_attempts > self._half_open_max:
+                    self._metrics["rejected"] += 1
+                    raise CircuitBreakerOpenError(self.name)
 
         try:
             result = await fn(*args, **kwargs)
@@ -79,13 +84,11 @@ class CircuitBreaker:
 
         async with self._lock:
             self._metrics["successes"] += 1
-            if self._state == CircuitBreakerState.HALF_OPEN:
-                self._half_open_attempts += 1
-                if self._half_open_attempts >= self._half_open_max:
-                    self._state = CircuitBreakerState.CLOSED
-                    self._failure_count = 0
-                    self._metrics["transitions"] += 1
-                    logger.info("[cb/{}] closed after half-open tests", self.name)
+            if self._state == CircuitBreakerState.HALF_OPEN and self._half_open_attempts >= self._half_open_max:
+                self._state = CircuitBreakerState.CLOSED
+                self._failure_count = 0
+                self._metrics["transitions"] += 1
+                logger.info("[cb/{}] closed after half-open tests", self.name)
         return result
 
     async def on_success(self):
@@ -127,6 +130,7 @@ class CircuitBreaker:
     def reset(self):
         self._state = CircuitBreakerState.CLOSED
         self._failure_count = 0
+        self._half_open_attempts = 0
         self._metrics["transitions"] += 1
 
     def stats(self) -> dict[str, Any]:

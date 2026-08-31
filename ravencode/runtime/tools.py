@@ -7,7 +7,6 @@ import fnmatch
 import functools
 import hashlib
 import json
-import os
 import shlex
 from pathlib import Path
 from typing import Any
@@ -19,33 +18,25 @@ from raven.core.security.ssrf import safe_fetch_async, validate_url
 from ravencode.core.metrics import observe_tool
 from ravencode.runtime.question import QuestionError
 from ravencode.runtime.undo import get_undo_manager
+from ravencode.runtime.workspace import (
+    _get_workspace,
+    _workspace_var,
+    set_workspace_root,
+)
+from ravencode.runtime.workspace import (
+    confine as _confine,
+)
+
+__all__ = [
+    "_confine",
+    "_get_workspace",
+    "_workspace_var",
+    "set_workspace_root",
+]
 
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
-
-_workspace_var: contextvars.ContextVar[str | None] = contextvars.ContextVar("_workspace_var", default=None)
-
-
-def _get_workspace() -> Path:
-    override = _workspace_var.get()
-    root = override if override is not None else os.environ.get("RAVEN_WORKSPACE", "workspace")
-    return Path(root).expanduser().resolve()
-
-
-def set_workspace_root(root: str | Path) -> None:
-    _workspace_var.set(str(root))
-
-
-def _confine(path: str) -> Path:
-    p = Path(path).expanduser().resolve()
-    ws = _get_workspace()
-    try:
-        p.relative_to(ws)
-    except ValueError as exc:
-        msg = f"Path {path} is outside workspace {ws}"
-        raise PermissionError(msg) from exc
-    return p
 
 
 def _compute_diff(original: str, modified: str, path: str) -> str:
@@ -121,6 +112,77 @@ async def edit_file(path: str, old_string: str, new_string: str, preview: bool =
         return f"[error] {exc}"
 
 
+async def verify_file(path: str) -> str:
+    """Syntax/type-check a source file after editing.
+
+    Supports Python (ast.parse + optional ruff/mypy when the tools are
+    installed), TypeScript/JavaScript (node --check if available), and JSON
+    (json.loads). Returns a summary of any problems found.
+    """
+    full = _confine(path)
+    if not full.is_file():
+        return f"[error] file not found: {path}"
+    try:
+        content = full.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError) as exc:
+        return f"[error] cannot read {path}: {exc}"
+
+    suffix = full.suffix.lower()
+    problems: list[str] = []
+
+    def _parse_output(out: bytes, err: bytes) -> str:
+        return (out + b"\n" + err).decode("utf-8", "replace").strip()
+
+    if suffix == ".py":
+        import ast
+
+        try:
+            ast.parse(content)
+        except SyntaxError as exc:
+            problems.append(f"syntax error (line {exc.lineno}): {exc.msg}")
+        if not problems:
+            for tool, args in (("ruff", ["check", str(full)]), ("mypy", [str(full)])):
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        tool,
+                        *args,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                except FileNotFoundError:
+                    continue
+                try:
+                    out, err = await asyncio.wait_for(proc.communicate(), timeout=60)
+                except TimeoutError:
+                    proc.kill()
+                    continue
+                text = _parse_output(out, err)
+                if text and "Success: no issues" not in text and "All checks passed" not in text:
+                    problems.append(f"{tool}: {text[:800]}")
+    elif suffix in (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"):
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "node", "--check", str(full),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError:
+            pass
+        else:
+            out, err = await asyncio.wait_for(proc.communicate(), timeout=60)
+            if proc.returncode != 0:
+                problems.append(_parse_output(out, err))
+    elif suffix == ".json":
+        try:
+            json.loads(content)
+        except json.JSONDecodeError as exc:
+            problems.append((f"invalid JSON (line {exc.lineno}, col {exc.colno}): {exc.msg}")[:500])
+
+    if not problems:
+        return f"[ok] {path} is valid"
+    return "[problems]\n" + "\n".join(problems)
+
+
 async def glob_files(pattern: str, path: str | None = None) -> list[str]:
     search_root = _get_workspace() if path is None else _confine(path)
     if not search_root.is_dir():
@@ -132,10 +194,18 @@ async def glob_files(pattern: str, path: str | None = None) -> list[str]:
     return sorted(results)[:500]
 
 
-async def grep_files(pattern: str, include: str | None = None, path: str | None = None) -> list[dict[str, Any]]:
+async def grep_files(
+    pattern: str, include: str | None = None, path: str | None = None, use_regex: bool = False
+) -> list[dict[str, Any]]:
+    import re
+
     search_root = _get_workspace() if path is None else _confine(path)
     if not search_root.is_dir():
         return [{"error": f"directory not found: {path or search_root}"}]
+    try:
+        matcher = re.compile(pattern) if use_regex else None
+    except re.error as exc:
+        return [{"error": f"invalid regex: {exc}"}]
     results = []
     for p in search_root.rglob("*"):
         if not p.is_file():
@@ -148,7 +218,7 @@ async def grep_files(pattern: str, include: str | None = None, path: str | None 
             logger.debug("Skipping unreadable file {}: {}", p, e)
             continue
         for i, line in enumerate(text.splitlines(), 1):
-            if pattern in line:
+            if (matcher is not None and matcher.search(line)) or (matcher is None and pattern in line):
                 results.append({"file": str(p.relative_to(search_root)), "line": i, "content": line[:200]})
                 if len(results) >= 200:
                     return results
@@ -327,21 +397,46 @@ async def task_delegate(description: str, context: str | None = None) -> str:
         return f"[error] max task delegation depth ({_MAX_TASK_DEPTH}) exceeded"
     token = _task_depth.set(depth + 1)
     try:
-        from ravencode.core.prompts import get_prompt
         from ravencode.runtime.agent_core import AgentConfig, ReActAgent
         from ravencode.runtime.context import Conversation
 
+        sub_prompt = _delegate_role_prompt(description)
         parent_memory = _AGENT_MEMORY.get()
-        sub_prompt = get_prompt("delegate")
+        sub_memory_path: str | None = None
+        if parent_memory:
+            cfg = parent_memory.get("config")
+            if isinstance(cfg, dict):
+                sub_memory_path = cfg.get("memory_path") or None
         if context:
             sub_prompt += f"\nContext from parent:\n{context}"
         if parent_memory:
             sub_prompt += f"\nParent session context:\n{parent_memory}"
         prompt = f"{sub_prompt}\n\nTask: {description}"
-        sub = ReActAgent(config=AgentConfig(max_steps=15), conversation=Conversation(system_prompt=sub_prompt))
+        sub = ReActAgent(
+            config=AgentConfig(max_steps=15, memory_path=sub_memory_path),
+            conversation=Conversation(system_prompt=sub_prompt),
+        )
         return await sub.run(prompt)
     finally:
         _task_depth.reset(token)
+
+
+def _delegate_role_prompt(description: str) -> str:
+    from ravencode.core.prompts import CODER, DEBUGGER, DELEGATE, PLANNER, VERIFIER, get_prompt
+
+    task_lower = description.lower()
+    if any(w in task_lower for w in ("debug", "error", "crash", "fix", "bug", "failing", "traceback", "exception")):
+        return get_prompt(DEBUGGER)
+    if any(
+        w in task_lower
+        for w in ("review", "check", "lint", "quality", "audit", "verify", "validate", "test", "confirm")
+    ):
+        return get_prompt(VERIFIER)
+    if any(w in task_lower for w in ("plan", "break down", "decompose", "roadmap", "milestone", "steps")):
+        return get_prompt(PLANNER)
+    if any(w in task_lower for w in ("write", "implement", "create", "code", "refactor", "add feature", "develop")):
+        return get_prompt(CODER)
+    return get_prompt(DELEGATE)
 
 
 # ---------------------------------------------------------------------------
@@ -873,6 +968,19 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         },
         "handler": edit_file,
     },
+    "verify": {
+        "name": "verify",
+        "dangerous": False,
+        "description": "Syntax/type check a source file after editing (Python: ast+ruff+mypy if available; TS/JS: node --check; JSON: parse). Use after write/edit to confirm validity.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Path relative to workspace"},
+            },
+            "required": ["path"],
+        },
+        "handler": verify_file,
+    },
     "glob": {
         "name": "glob",
         "dangerous": False,
@@ -890,13 +998,14 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
     "grep": {
         "name": "grep",
         "dangerous": False,
-        "description": "Search file contents for a string pattern. Confined to workspace.",
+        "description": "Search file contents for a pattern. Confined to workspace. Set use_regex=true to treat pattern as a regular expression.",
         "parameters": {
             "type": "object",
             "properties": {
-                "pattern": {"type": "string", "description": "Text to search for"},
+                "pattern": {"type": "string", "description": "Text or regex to search for"},
                 "include": {"type": "string", "description": "File glob filter (e.g. '*.py')", "default": None},
                 "path": {"type": "string", "description": "Subdirectory inside workspace", "default": None},
+                "use_regex": {"type": "boolean", "description": "Treat pattern as a regex", "default": False},
             },
             "required": ["pattern"],
         },

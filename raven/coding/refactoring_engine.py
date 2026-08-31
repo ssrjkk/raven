@@ -405,13 +405,30 @@ class RefactoringEngine:
         self._workspace = Path(workspace).resolve() if workspace else Path.cwd()
         self._dep_graph = DependencyGraph()
 
+    def _confine(self, rel: str | Path) -> Path:
+        p = (self._workspace / rel).resolve()
+        if p != self._workspace and not p.is_relative_to(self._workspace):
+            raise ValueError(f"Path escapes workspace: {rel}")
+        return p
+
     async def build_dependency_graph(self, paths: list[str] | None = None) -> DependencyGraph:
         self._dep_graph = await asyncio.to_thread(self._build_graph_sync, paths)
         return self._dep_graph
 
     def _build_graph_sync(self, paths: list[str] | None) -> DependencyGraph:
         g = DependencyGraph()
-        search_paths = [self._workspace / p for p in paths] if paths else [self._workspace]
+        try:
+            search_paths: list[Path] = []
+            if paths:
+                for p in paths:
+                    try:
+                        search_paths.append(self._confine(p))
+                    except ValueError:
+                        continue
+            else:
+                search_paths = [self._workspace]
+        except Exception:
+            search_paths = [self._workspace]
         for search_path in search_paths:
             if not search_path.is_dir() and search_path.is_file():
                 deps = self._extract_imports(str(search_path))
@@ -435,7 +452,10 @@ class RefactoringEngine:
         return parser.extract_imports(source)
 
     async def plan_refactoring(self, file_path: str, description: str) -> RefactoringPlan:
-        full_path = self._workspace / file_path
+        try:
+            full_path = self._confine(file_path)
+        except ValueError as exc:
+            return RefactoringPlan(description=description, changes=[], risks=[str(exc)], safe_to_apply=False)
         if not full_path.exists():
             return RefactoringPlan(description=description, changes=[], risks=["File not found"], safe_to_apply=False)
         await self.build_dependency_graph()
@@ -453,7 +473,11 @@ class RefactoringEngine:
     def apply_changes(self, changes: list[FileChange], backup: bool = True) -> list[str]:
         results: list[str] = []
         for change in changes:
-            full_path = self._workspace / change.path
+            try:
+                full_path = self._confine(change.path)
+            except ValueError as exc:
+                results.append(f"Failed to apply {change.change_type} to {change.path}: {exc}")
+                continue
             if backup and full_path.exists():
                 backup_path = full_path.with_suffix(full_path.suffix + ".bak")
                 try:
@@ -562,7 +586,7 @@ class RefactoringEngine:
                     stderr=asyncio.subprocess.PIPE,
                 )
                 stdout, stderr = await proc.communicate()
-                output = stdout.decode() + stderr.decode()
+                output = stdout.decode("utf-8", errors="replace") + stderr.decode("utf-8", errors="replace")
                 if proc.returncode != 0:
                     issues = self._parse_type_checker_output(output)
                     if issues:
@@ -579,7 +603,7 @@ class RefactoringEngine:
                     stderr=asyncio.subprocess.PIPE,
                 )
                 stdout, stderr = await proc.communicate()
-                output = stdout.decode() + stderr.decode()
+                output = stdout.decode("utf-8", errors="replace") + stderr.decode("utf-8", errors="replace")
                 if proc.returncode != 0:
                     issues = self._parse_type_checker_output(output)
                     if issues:

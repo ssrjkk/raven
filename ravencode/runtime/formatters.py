@@ -7,6 +7,8 @@ from pathlib import Path
 
 from loguru import logger
 
+from ravencode.runtime.workspace import confine
+
 _FORMATTERS: dict[str, list[str]] = {
     ".py": ["ruff", "check", "--fix", "--silent"],
     ".pyi": ["ruff", "check", "--fix", "--silent"],
@@ -44,6 +46,10 @@ async def _run_formatter(cmd: list[str], path: str) -> str:
 
 
 async def format_file(path: str) -> str:
+    try:
+        confine(path)
+    except PermissionError as exc:
+        return f"[error] {exc}"
     ext = Path(path).suffix.lower()
     cmd = _FORMATTERS.get(ext)
     if cmd is None:

@@ -309,11 +309,11 @@ class PerformanceProfiler:
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=duration + 10)
             if proc.returncode != 0:
-                error_msg = stderr.decode().strip() or f"py-spy exited with code {proc.returncode}"
+                error_msg = stderr.decode("utf-8", errors="replace").strip() or f"py-spy exited with code {proc.returncode}"
                 logger.warning("py-spy failed: {}", error_msg)
                 return ProcessProfileResult(pid=pid, duration=duration, output_file="", error=error_msg)
 
-            samples = stdout.decode().count("sample") if stdout else 0
+            samples = stdout.decode("utf-8", errors="replace").count("sample") if stdout else 0
             return ProcessProfileResult(
                 pid=pid,
                 duration=duration,

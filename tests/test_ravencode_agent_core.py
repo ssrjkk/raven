@@ -673,9 +673,9 @@ class TestConfirmAction:
         agent = ReActAgent(config=AgentConfig(confirm_callback=cb))
         assert await agent._confirm_action("bash", {}) is False
 
-    async def test_default_approves(self):
+    async def test_default_denies_without_callback(self):
         agent = ReActAgent(config=AgentConfig(confirm_dangerous=True))
-        assert await agent._confirm_action("bash", {}) is True
+        assert await agent._confirm_action("bash", {}) is False
 
 
 class TestDiffPreview:
@@ -853,3 +853,74 @@ class TestSerialization:
         agent = ReActAgent.load_state(state)
         assert agent.name == "restored"
         assert agent.config.max_steps == 4
+
+
+class TestReActAgentReflection:
+    @pytest.mark.asyncio
+    async def test_reflection_injected_at_step_5(self):
+        from ravencode.runtime.agent_core import ReActAgent
+
+        calls: list[object] = []
+
+        async def fake_llm(messages):
+            calls.append(messages)
+            if len(calls) <= 5:
+                return {
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": f"call_{len(calls)}",
+                            "type": "function",
+                            "function": {"name": "nodes_list", "arguments": "{}"},
+                        }
+                    ],
+                }
+            return {"content": "final answer"}
+
+        agent = ReActAgent(
+            config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, max_steps=20),
+            llm_provider=fake_llm,
+        )
+        result = await agent.run("do the thing")
+        assert result == "final answer"
+        system_msgs = [m.get("content", "") for m in agent.conversation.messages if m.get("role") == "system"]
+        assert any("Progress checkpoint" in s for s in system_msgs)
+
+
+class TestMemoryContext:
+    def test_no_memory_path_returns_empty(self):
+        assert ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))._memory_context() == ""
+
+    def test_memory_context_with_milestones(self, tmp_path):
+        store_path = str(tmp_path / "mem.json")
+        from ravencode.runtime.context import MemoryStore
+
+        store = MemoryStore(path=store_path)
+        store._data = {"milestones": ["setup", "implemented auth", "added tests"]}
+        store._write(store._data)
+        agent = ReActAgent(config=AgentConfig(memory_path=store_path), conversation=Conversation(system_prompt="s"))
+        ctx = agent._memory_context()
+        assert "Milestones" in ctx
+        assert "implemented auth" in ctx
+
+    def test_memory_context_with_recent_work(self, tmp_path):
+        store_path = str(tmp_path / "mem2.json")
+        from ravencode.runtime.context import MemoryStore
+
+        store = MemoryStore(path=store_path)
+        store._data = {"recent_work": ["refactored router", "added cache"]}
+        store._write(store._data)
+        agent = ReActAgent(config=AgentConfig(memory_path=store_path), conversation=Conversation(system_prompt="s"))
+        ctx = agent._memory_context()
+        assert "Recent work" in ctx
+        assert "refactored router" in ctx
+
+    def test_memory_context_handles_missing_keys(self, tmp_path):
+        store_path = str(tmp_path / "mem3.json")
+        from ravencode.runtime.context import MemoryStore
+
+        store = MemoryStore(path=store_path)
+        store._write({})
+        agent = ReActAgent(config=AgentConfig(memory_path=store_path), conversation=Conversation(system_prompt="s"))
+        assert agent._memory_context() == ""
+

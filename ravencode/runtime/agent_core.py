@@ -197,7 +197,38 @@ class ReActAgent:
         if extras:
             base += "\n\n" + "\n".join(extras)
         base += self._artifact_blocks()
+        memory_ctx = self._memory_context()
+        if memory_ctx:
+            base += f"\n\nPrevious session context you can build on:\n{memory_ctx}"
         return base
+
+    def _memory_context(self) -> str:
+        if not self.config.memory_path:
+            return ""
+        try:
+            from ravencode.runtime.context import MemoryStore
+
+            store = MemoryStore(path=self.config.memory_path)
+            parts: list[str] = []
+            if "milestones" in store:
+                ms = store["milestones"]
+                if isinstance(ms, list) and ms:
+                    parts.append("Milestones already achieved: " + "; ".join(str(m)[:120] for m in ms[-5:]))
+            if "tasks" in store:
+                tasks = store["tasks"]
+                if isinstance(tasks, list) and tasks:
+                    done = [t for t in tasks if isinstance(t, dict) and t.get("status") == "done"]
+                    if done:
+                        parts.append("Completed tasks: " + "; ".join(str(t.get("description", ""))[:100] for t in done[-5:]))
+            recent_key = "recent_work"
+            if recent_key in store:
+                rw = store[recent_key]
+                if isinstance(rw, list) and rw:
+                    parts.append("Recent work: " + "; ".join(str(x)[:100] for x in rw[-5:]))
+            return "\n".join(parts)
+        except Exception as exc:
+            logger.debug("Memory context unavailable: {}", exc)
+            return ""
 
     def _artifact_blocks(self) -> str:
         try:
@@ -320,6 +351,13 @@ class ReActAgent:
         if self.config.proactive_scan:
             await self._proactive_scan(user_input)
 
+        tool_fail_tally: dict[str, int] = {}
+        last_tool_sig: str | None = None
+        consecutive_identical = 0
+        successful_tool_count = 0
+        total_tool_calls = 0
+        last_reflection_sent = False
+
         while step < self.config.max_steps:
             step += 1
             if self._aborted:
@@ -384,8 +422,46 @@ class ReActAgent:
                 else:
                     result = f"[user denied] {name} was not approved"
 
+                # Self-correction: detect that we are stuck retrying the same
+                # failing tool and nudge the model to change approach.
+                if result.startswith("[error") or result.startswith("[validation_error]") or result.startswith("[denied]"):
+                    sig = json.dumps({name: args}, sort_keys=True)
+                    tool_fail_tally[sig] = tool_fail_tally.get(sig, 0) + 1
+                    if tool_fail_tally[sig] >= 3:
+                        self.conversation.add_system_message(
+                            "You keep calling the same tool with the same arguments and it keeps failing. "
+                            "Stop repeating it. Re-read the tool schema, fix the arguments, or take a "
+                            "different approach to reach your goal."
+                        )
+                        tool_fail_tally[sig] = 0
+                else:
+                    sig = json.dumps({name: args}, sort_keys=True)
+                    if sig == last_tool_sig:
+                        consecutive_identical += 1
+                        if consecutive_identical == 3:
+                            self.conversation.add_system_message(
+                                "You have performed the same tool call repeatedly without progressing. "
+                                "Change your approach — do not keep repeating this exact call."
+                            )
+                    else:
+                        consecutive_identical = 0
+                    last_tool_sig = sig
+
                 result_truncated = result[:10_000]
                 self.conversation.add_tool_result(tc.get("id", ""), result_truncated)
+
+                total_tool_calls += 1
+                if not result.startswith("[error") and not result.startswith("[validation_error]") and not result.startswith("[denied]"):
+                    successful_tool_count += 1
+
+                if total_tool_calls >= 6 and successful_tool_count == 0 and step >= 3:
+                    self.conversation.add_system_message(
+                        "You have made several tool calls but none have succeeded. "
+                        "You are not making progress. Stop and rethink your approach: "
+                        "read the file contents first, check your assumptions, and try a different strategy."
+                    )
+                    total_tool_calls = 0
+                    successful_tool_count = 0
 
                 if (
                     name == "create_artifact"
@@ -427,6 +503,16 @@ class ReActAgent:
                 if self.config.on_step:
                     await self.config.on_step(f"[tool] {name}: {result_truncated[:200]}", step)
 
+            if (step % 5 == 0) and (not last_reflection_sent) and (step >= 5):
+                self.conversation.add_system_message(
+                    "Progress checkpoint: briefly reflect on what you have accomplished and "
+                    "state the single most important next action before continuing. "
+                    "Do not repeat completed work."
+                )
+                last_reflection_sent = True
+            elif step % 5 != 0:
+                last_reflection_sent = False
+
         if ee:
             await ee.emit(AgentEvent("done", {"reason": "max_steps", "steps": step}))
         await self._auto_save("max_steps")
@@ -465,11 +551,11 @@ class ReActAgent:
             return True
         if self.config.confirm_callback is not None:
             return await self.config.confirm_callback(name, args)
-        logger.warning(
-            "Dangerous tool '{}' auto-approved: confirm_dangerous is set but no confirm_callback is wired",
+        logger.error(
+            "Blocked dangerous tool '{}': confirm_dangerous is set but no confirm_callback is wired",
             name,
         )
-        return True
+        return False
 
     # -----------------------------------------------------------------------
     # diff preview

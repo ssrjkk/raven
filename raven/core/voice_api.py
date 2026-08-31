@@ -102,8 +102,9 @@ def create_voice_router() -> APIRouter:
                     for r in results
                 ]
             }
-        except ValueError:
-            return {"results": [], "message": "Invalid voice identification request"}
+        except ValueError as exc:
+            logger.warning("Voice identify invalid request: {}", exc)
+            raise HTTPException(400, "Invalid voice identification request") from exc
         except Exception as e:
             logger.error("Voice identify error: {}", e)
             raise HTTPException(500, "Voice identification failed") from e

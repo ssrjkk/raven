@@ -286,7 +286,7 @@ def create_github_router() -> APIRouter:
             )
             _stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
-                err = stderr.decode()[:500]
+                err = stderr.decode("utf-8", errors="replace")[:500]
                 if token:
                     err = err.replace(token, "***")
                 raise HTTPException(500, f"Clone failed: {err}")

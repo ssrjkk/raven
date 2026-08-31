@@ -4,17 +4,42 @@ from typing import Any
 
 import httpx
 
-from raven.core.security.ssrf import validate_url
+from raven.core.security.ssrf import SSRFSafeTransport, validate_url
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+
+_MAX_BODY_CHARS = 20_000
+_MAX_REDIRECTS = 5
+
+
+async def _read_limited_text(resp: Any) -> str:
+    if hasattr(resp, "aiter_text"):
+        chunks: list[str] = []
+        total = 0
+        async for chunk in resp.aiter_text():
+            need = _MAX_BODY_CHARS + 1 - total
+            if need <= 0:
+                break
+            chunks.append(chunk[:need])
+            total += len(chunks[-1])
+            if total > _MAX_BODY_CHARS:
+                break
+        return "".join(chunks)[:_MAX_BODY_CHARS]
+    text = resp.text
+    assert isinstance(text, str)
+    return text[:_MAX_BODY_CHARS]
 
 
 async def _fetch(url: str, method: str = "GET", **kwargs: Any) -> str:
     blocked = validate_url(url)
     if blocked:
         return f"[blocked] {blocked}"
-    async with httpx.AsyncClient(timeout=30, follow_redirects=False) as c:
-        resp = await c.request(method, url, **kwargs)
-        for _ in range(5):
+    transport = SSRFSafeTransport()
+    async with httpx.AsyncClient(transport=transport, timeout=30, follow_redirects=False) as c:
+        try:
+            resp = await c.request(method, url, **kwargs)
+        except (httpx.ConnectError, httpx.TimeoutException, httpx.RequestError) as e:
+            return f"[blocked] {e}"
+        for _ in range(_MAX_REDIRECTS):
             if resp.is_redirect or resp.is_informational:
                 location = resp.headers.get("Location")
                 if not location:
@@ -27,12 +52,15 @@ async def _fetch(url: str, method: str = "GET", **kwargs: Any) -> str:
                 if resp.status_code in (301, 302) and method == "POST":
                     redirect_method = "GET"
                     redirect_kwargs.pop("content", None)
-                resp = await c.request(redirect_method, location, **redirect_kwargs)
+                try:
+                    resp = await c.request(redirect_method, location, **redirect_kwargs)
+                except (httpx.ConnectError, httpx.TimeoutException, httpx.RequestError) as e:
+                    return f"[blocked] redirect blocked: {e}"
             else:
                 break
         if resp.is_redirect:
             return "[blocked] too many redirects"
-        return resp.text[:20000]
+        return await _read_limited_text(resp)
 
 
 async def http_get(url: str, headers: str | None = None) -> str:

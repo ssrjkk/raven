@@ -239,6 +239,8 @@ def update(dry_run: bool):
             [sys.executable, "-m", "pip", "install", "--upgrade", "--dry-run", "raven-agent"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
             check=False,
         )
@@ -252,6 +254,8 @@ def update(dry_run: bool):
                     [sys.executable, "-m", "pip", "install", "--upgrade", "raven-agent"],
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=120,
                     check=False,
                 )

@@ -240,7 +240,7 @@ class TestApiPlugin:
         ):
             result = await p.http_get("https://example.com")
         assert "200" in result
-        mock_fetch.assert_awaited_once_with("https://example.com", method="GET")
+        mock_fetch.assert_awaited_once_with("https://example.com", method="GET", timeout=30)
 
     @pytest.mark.asyncio
     async def test_http_get_timeout(self):
@@ -290,6 +290,7 @@ class TestApiPlugin:
             "https://example.com/api",
             method="POST",
             json={"name": "test"},
+            timeout=30,
         )
 
     def test_tool_discovery(self):
@@ -424,9 +425,34 @@ class TestProcessPlugin:
     async def test_run_echo(self):
         from raven.plugins.process import plugin as p
 
-        cmd = "cmd.exe /c echo hello" if sys.platform == "win32" else "echo hello"
+        result = await p.run("whoami")
+        assert result.strip()
+        assert "Error" not in result
+
+    @pytest.mark.asyncio
+    async def test_run_rejects_shell_escape(self):
+        from raven.plugins.process import plugin as p
+
+        cmd = "cmd.exe /c echo pwned" if sys.platform == "win32" else "bash -c 'echo pwned'"
         result = await p.run(cmd)
-        assert "hello" in result
+        assert "not in the allowed commands" in result
+
+    @pytest.mark.asyncio
+    async def test_run_rejects_env_dump(self):
+        from raven.plugins.process import plugin as p
+
+        cmd = "set" if sys.platform == "win32" else "env"
+        result = await p.run(cmd)
+        assert "not in the allowed commands" in result
+
+    @pytest.mark.asyncio
+    async def test_kill_refuses_self(self):
+        import os
+
+        from raven.plugins.process import plugin as p
+
+        result = await p.kill(os.getpid())
+        assert "refusing to kill" in result
 
     @pytest.mark.asyncio
     async def test_run_python(self):

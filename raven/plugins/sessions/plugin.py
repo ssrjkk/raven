@@ -34,6 +34,7 @@ async def sessions_history(session_id: str = "", limit: int = 20) -> str:
     """View message history for a session. Shows roles and truncated content."""
     if not _db or not session_id:
         return "Usage: sessions_history(session_id='...', limit=20)"
+    limit = max(1, min(int(limit), 50))
     msgs = await _db.get_session_messages(session_id, limit=limit)
     if not msgs:
         return f"No messages in session: {session_id}"
@@ -50,6 +51,7 @@ async def sessions_send(session_id: str = "", message: str = "") -> str:
         return "Database not initialized"
     if not session_id or not message:
         return "Usage: sessions_send(session_id='...', message='...')"
+    message = message[:2000]
     await _db.save_message(Message(session_id=session_id, role="assistant", content=message))
     return f"Message sent to session {session_id}"
 

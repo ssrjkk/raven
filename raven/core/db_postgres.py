@@ -174,6 +174,18 @@ class PostgresDatabase:
                     created_at DOUBLE PRECISION NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())
                 )
                 """,
+                """
+                CREATE TABLE IF NOT EXISTS outbox (
+                    id BIGSERIAL PRIMARY KEY,
+                    channel_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    next_due DOUBLE PRECISION NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    created_at DOUBLE PRECISION NOT NULL
+                )
+                """,
             ]
             for ddl in tables:
                 await conn.execute(ddl)

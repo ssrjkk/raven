@@ -112,7 +112,13 @@ def create_workflow_router() -> APIRouter:
             )
 
             def _close_store() -> None:
-                _cleanup_tasks.add(asyncio.create_task(task_store.close()))
+                task = asyncio.create_task(task_store.close())
+
+                def _cleanup_done(_t: asyncio.Task[None]) -> None:
+                    _cleanup_tasks.discard(_t)
+
+                task.add_done_callback(_cleanup_done)
+                _cleanup_tasks.add(task)
 
             runner.on_complete(task_id, _close_store)
             return {"ok": True, "task_id": task_id}

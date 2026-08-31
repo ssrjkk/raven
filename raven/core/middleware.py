@@ -85,7 +85,7 @@ PATH_PERMISSIONS: dict[str, Permission] = {
     "/aios/agent": Permission.ADMIN_WRITE,
 }
 
-AUTH_REQUIRED_PREFIXES: tuple[str, ...] = ("/aios", "/api/tests")
+AUTH_REQUIRED_PREFIXES: tuple[str, ...] = ("/aios", "/api/tests", "/mcp")
 
 _MUTATING_METHODS: frozenset[str] = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
@@ -120,6 +120,16 @@ _PRIVATE_READ_PREFIXES: tuple[str, ...] = (
     "/api/debug",  # debugger state
     "/api/sse",  # session event stream
     "/api/workflows",  # workflow templates / categories
+    # Introspection / internal-state read endpoints. Auth-gated only in secure
+    # mode (web_secret_key set); left open in local mode. Mutating methods on
+    # these are already covered by the generic anonymous-mutation rule.
+    "/api/monitor/",  # monitor list / slo / status
+    "/api/routine/",  # routine list
+    "/api/task/",  # task list
+    "/api/code/",  # code session list
+    "/api/status",  # system status / runtime introspection
+    "/api/agents",  # agent registry introspection
+    "/api/tools/policy",  # tool security policy introspection
 )
 
 _SLOW_REQUEST_THRESHOLD_S = 2.0
@@ -154,7 +164,7 @@ async def request_id_middleware(request: Request, call_next):
 
 
 async def rate_limit_middleware(request: Request, call_next):
-    client_ip = request.client.host if request.client else request.headers.get("X-Forwarded-For", "unknown")
+    client_ip = request.client.host if request.client else "unknown"
     allowed = await rate_limiter.check(client_ip)
     if not allowed:
         metrics.inc("http_rate_limited", {"ip": client_ip})

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import difflib
 import re
-from pathlib import Path
 from typing import Any
+
+from ravencode.runtime.workspace import confine
 
 _UNIFIED_HUNK_RE = re.compile(
     r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@.*$",
@@ -32,7 +33,10 @@ def _parse_unified_diff(diff_text: str) -> list[dict[str, Any]]:
 
 
 def apply_patch(path: str, diff_text: str) -> str:
-    p = Path(path).expanduser().resolve()
+    try:
+        p = confine(path)
+    except PermissionError as exc:
+        return f"[error] {exc}"
     if not p.is_file():
         return f"[error] file not found: {path}"
     original = p.read_text(encoding="utf-8")
@@ -76,7 +80,10 @@ def smart_edit(
     insert_before: str | None = None,
     append: bool = False,
 ) -> str:
-    p = Path(path).expanduser().resolve()
+    try:
+        p = confine(path)
+    except PermissionError as exc:
+        return f"[error] {exc}"
     if not p.is_file():
         return f"[error] file not found: {path}"
     content = p.read_text(encoding="utf-8")

@@ -132,6 +132,25 @@ class Orchestrator:
             memory_path=memory_path,
         )
         result = await agent.run(task)
+
+        is_failure = (
+            result.startswith("[error]")
+            or result.startswith("[validation_error]")
+            or result.startswith("[aborted]")
+            or "I cannot" in result
+            or "I'm unable" in result
+        )
+        if is_failure and not agent_config_override:
+            logger.info("Coder failed, escalating to debugger")
+            debugger_result = await self._run_debugger(
+                task=f"Coder failed with: {result}\nOriginal task: {task}",
+                memory_path=memory_path,
+                agent_config_override=agent_config_override,
+            )
+            debugger_result.agent = "coder(+debugger)"
+            debugger_result.data = {"code_result": result, "debug_result": debugger_result.data}
+            return debugger_result
+
         return AgentResult(
             agent="coder", success=True, data={"code_result": result}, steps=agent.conversation.message_count
         )
@@ -157,15 +176,63 @@ class Orchestrator:
     ) -> AgentResult:
         agent = self._build_with_override(agent_config_override, memory_path=memory_path)
         result = await agent.run(task)
+
+        needs_verify = any(
+            marker in result
+            for marker in (
+                "[error]",
+                "[validation_error]",
+                "[aborted]",
+                "I cannot",
+                "I'm unsure",
+                "verification failed",
+            )
+        )
+        if needs_verify and not agent_config_override:
+            logger.info("Autonomous agent produced uncertain result, running self-check")
+            verify_agent = self._build_with_override(
+                agent_config_override,
+                system_prompt=get_prompt("debugger"),
+                memory_path=memory_path,
+            )
+            verification = await verify_agent.run(
+                f"Verify the following result is correct and complete. "
+                f"Report any issues found.\n\nResult:\n{result}"
+            )
+            if verification.strip().startswith("[issues]"):
+                return AgentResult(
+                    agent="autonomous",
+                    success=False,
+                    data={"result": result, "verification": verification},
+                    steps=agent.conversation.message_count,
+                )
+
         return AgentResult(
             agent="autonomous", success=True, data={"result": result}, steps=agent.conversation.message_count
         )
 
     @staticmethod
     async def delegate(task: str, context: str | None = None, memory_path: str | None = None) -> str:
-        prompt = get_prompt("delegate")
+        task_lower = task.lower()
+        if any(w in task_lower for w in ("debug", "error", "crash", "fix", "bug", "failing")):
+            role = "debugger"
+            prompt = get_prompt("debugger")
+        elif any(w in task_lower for w in ("review", "check", "lint", "quality", "audit", "verify", "validate", "test", "confirm")):
+            role = "verifier"
+            prompt = get_prompt("verifier")
+        elif any(w in task_lower for w in ("plan", "break down", "decompose", "roadmap", "steps")):
+            role = "planner"
+            prompt = get_prompt("planner")
+        elif any(w in task_lower for w in ("write", "implement", "create", "code", "refactor", "add feature")):
+            role = "coder"
+            prompt = get_prompt("coder")
+        else:
+            role = "delegate"
+            prompt = get_prompt("delegate")
+
         if context:
             prompt += f"\nContext: {context}"
+        logger.debug("Orchestrator.delegate: task → role='{}'", role)
         config = AgentConfig(memory_path=memory_path, max_steps=15)
         agent = ReActAgent(
             config=config,

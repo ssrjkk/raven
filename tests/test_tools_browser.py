@@ -119,8 +119,9 @@ class TestValidateUrl:
         with pytest.raises(ValueError, match="hostname localhost"):
             browser_mod._validate_url("http://localhost/")
 
-    def test_zero_zero_zero_zero_bypasses_guard(self) -> None:
-        browser_mod._validate_url("http://0.0.0.0/")  # must not raise
+    def test_zero_zero_zero_zero_blocked(self) -> None:
+        with pytest.raises(ValueError, match="hostname"):
+            browser_mod._validate_url("http://0.0.0.0/")
 
     def test_resolves_to_private(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: [("AF_INET", "SOCK_STREAM", 6, "", ("10.0.0.5", 0))])

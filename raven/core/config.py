@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -20,8 +21,32 @@ class SafeSecretStr(SecretStr):
 
 
 _DEFAULT_TOOLS_DENY = (
-    "group:automation",
-    "group:runtime",
+    # group:automation (workflow + CI)
+    "ci_jenkins_job",
+    "ci_jenkins_status",
+    "ci_list_runs",
+    "ci_list_workflows",
+    "ci_pipeline_status",
+    "ci_run_workflow",
+    "ci_trigger_pipeline",
+    "workflow_get_template",
+    "workflow_instantiate",
+    "workflow_list_categories",
+    "workflow_list_templates",
+    "workflow_schedule",
+    # group:runtime (system)
+    "dream_cycle",
+    "dream_status",
+    "env_get",
+    "env_list",
+    "nodes_exec",
+    "nodes_list",
+    "nodes_register",
+    "nodes_unregister",
+    "process_kill",
+    "process_list",
+    "python",
+    "shell",
     "sessions.sessions_spawn",
     "api.http_post",
     "process.kill",
@@ -178,6 +203,8 @@ class Settings(BaseSettings):
                 try:
                     key_file.parent.mkdir(parents=True, exist_ok=True)
                     key_file.write_text(self.web_secret_key.get_secret_value(), encoding="utf-8")
+                    with contextlib.suppress(OSError):
+                        key_file.chmod(0o600)
                     logger.info("Persisted WEB_SECRET_KEY to {}", key_file)
                 except OSError as exc:
                     logger.warning("Failed to persist WEB_SECRET_KEY to {}: {}", key_file, exc)

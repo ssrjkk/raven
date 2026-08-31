@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import hmac as hmac_mod
+from pathlib import Path
+
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
@@ -9,9 +13,12 @@ from raven.core.db import Database
 from raven.core.webhooks import create_webhook_router
 
 
+def _sig(body: bytes) -> str:
+    return "sha256=" + hmac_mod.new(b"test-secret-key", body, hashlib.sha256).hexdigest()
+
+
 @pytest.fixture
 def db():
-    from pathlib import Path
     return Database(Path(":memory:"))
 
 
@@ -45,10 +52,8 @@ def _patch_webhook_settings():
 @pytest.mark.asyncio
 async def test_webhook_generic(app):
     transport = ASGITransport(app=app)
-    import hashlib
-    import hmac as hmac_mod
     body_bytes = b'{"text":"hello world"}'
-    sig = "sha256=" + hmac_mod.new(b"test-secret-key", body_bytes, hashlib.sha256).hexdigest()
+    sig = _sig(body_bytes)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
             "/api/webhooks/generic",
@@ -66,12 +71,26 @@ async def test_webhook_generic(app):
 
 
 @pytest.mark.asyncio
-async def test_webhook_github_actions_skipped(app):
+async def test_webhook_generic_missing_signature_rejected(app):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
+            "/api/webhooks/generic",
+            content=b'{"text":"hello world"}',
+            headers={"Content-Type": "application/json"},
+        )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_webhook_github_actions_skipped(app):
+    transport = ASGITransport(app=app)
+    body_bytes = b'{"action": "in_progress", "workflow_run": {}}'
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
             "/api/webhooks/github-actions",
-            json={"action": "in_progress", "workflow_run": {}},
+            content=body_bytes,
+            headers={"X-Webhook-Signature": _sig(body_bytes), "Content-Type": "application/json"},
         )
     assert resp.status_code == 200
     data = resp.json()
@@ -81,19 +100,26 @@ async def test_webhook_github_actions_skipped(app):
 @pytest.mark.asyncio
 async def test_webhook_github_actions_failure(app):
     transport = ASGITransport(app=app)
+    payload = {
+        "action": "completed",
+        "workflow_run": {
+            "name": "CI Pipeline",
+            "conclusion": "failure",
+            "head_branch": "main",
+            "head_commit": {"id": "abc123"},
+        },
+        "repository": {"full_name": "test/test", "name": "test"},
+    }
+    body_bytes = (
+        b'{"action": "completed", "workflow_run": {"name": "CI Pipeline", "conclusion": "failure", '
+        b'"head_branch": "main", "head_commit": {"id": "abc123"}}, "repository": '
+        b'{"full_name": "test/test", "name": "test"}}'
+    )
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
             "/api/webhooks/github-actions",
-            json={
-                "action": "completed",
-                "workflow_run": {
-                    "name": "CI Pipeline",
-                    "conclusion": "failure",
-                    "head_branch": "main",
-                    "head_commit": {"id": "abc123"},
-                },
-                "repository": {"full_name": "test/test", "name": "test"},
-            },
+            content=body_bytes,
+            headers={"X-Webhook-Signature": _sig(body_bytes), "Content-Type": "application/json"},
         )
     assert resp.status_code == 200
     data = resp.json()
@@ -103,10 +129,12 @@ async def test_webhook_github_actions_failure(app):
 @pytest.mark.asyncio
 async def test_webhook_allure_missing_path(app):
     transport = ASGITransport(app=app)
+    body_bytes = b"{}"
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
             "/api/webhooks/allure",
-            json={},
+            content=body_bytes,
+            headers={"X-Webhook-Signature": _sig(body_bytes), "Content-Type": "application/json"},
         )
     assert resp.status_code == 400
 
@@ -119,10 +147,12 @@ async def test_webhook_allure(app, tmp_path):
         '{"name": "test_login", "status": "failed", "statusDetails": {"message": "Timeout waiting for element"},"labels": [{"name": "testMethod", "value": "test_login.py"}],"attachments": []}'
     )
     transport = ASGITransport(app=app)
+    body_bytes = ('{"results_path": "' + str(results_dir).replace("\\", "\\\\") + '"}').encode()
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
             "/api/webhooks/allure",
-            json={"results_path": str(results_dir)},
+            content=body_bytes,
+            headers={"X-Webhook-Signature": _sig(body_bytes), "Content-Type": "application/json"},
         )
     assert resp.status_code == 200
     data = resp.json()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json as json_mod
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -98,8 +99,19 @@ async def test_slack_url_verification():
     handler = AsyncMock()
     router = create_webhook_router(db, handler)  # type: ignore[arg-type]
     body = {"type": "url_verification", "challenge": "abc123"}
-    req = FakeRequest()
-    resp = await router.routes[1].endpoint(body, req)  # type: ignore[attr-defined]
+    body_bytes = json_mod.dumps(body).encode()
+    ts = str(int(time.time()))
+    import hashlib
+    import hmac as hmac_mod
+    sig_basestring = f"v0:{ts}:{body_bytes.decode('utf-8')}"
+    slack_sig = "v0=" + hmac_mod.new(b"test-secret", sig_basestring.encode(), hashlib.sha256).hexdigest()
+    req = FakeRequest(
+        headers={"X-Slack-Signature": slack_sig, "X-Slack-Request-Timestamp": ts},
+        body_bytes=body_bytes,
+    )
+    with patch("raven.core.webhooks.settings") as mock_settings:
+        mock_settings.web_secret_key = SafeSecretStr("test-secret")
+        resp = await router.routes[1].endpoint(body, req)  # type: ignore[attr-defined]
     assert resp == {"challenge": "abc123"}
 
 
@@ -109,8 +121,19 @@ async def test_slack_events_no_channel():
     handler = AsyncMock()
     router = create_webhook_router(db, handler)  # type: ignore[arg-type]
     body = {"type": "event_callback", "event": {"type": "message", "user": "U1", "text": "hi", "channel": "C1"}}
-    req = FakeRequest()
-    resp = await router.routes[1].endpoint(body, req)  # type: ignore[attr-defined]
+    body_bytes = json_mod.dumps(body).encode()
+    ts = str(int(time.time()))
+    import hashlib
+    import hmac as hmac_mod
+    sig_basestring = f"v0:{ts}:{body_bytes.decode('utf-8')}"
+    slack_sig = "v0=" + hmac_mod.new(b"test-secret", sig_basestring.encode(), hashlib.sha256).hexdigest()
+    req = FakeRequest(
+        headers={"X-Slack-Signature": slack_sig, "X-Slack-Request-Timestamp": ts},
+        body_bytes=body_bytes,
+    )
+    with patch("raven.core.webhooks.settings") as mock_settings:
+        mock_settings.web_secret_key = SafeSecretStr("test-secret")
+        resp = await router.routes[1].endpoint(body, req)  # type: ignore[attr-defined]
     assert resp["ok"] is True
 
 

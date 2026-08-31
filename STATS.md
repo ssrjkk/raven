@@ -2,10 +2,10 @@
 
 ## Overview
 
-- **Language**: Python 3.13+, Go 1.26, Rust, TypeScript
-- **Tests**: 859+ unit tests (pytest), Go table-driven tests, Vitest, Playwright E2E
-- **Channels**: 12 messaging platforms
-- **Plugins**: 10 built-in plugins
+- **Language**: Python 3.11+ (tested on 3.12), Go, Rust, TypeScript
+- **Tests**: 4593+ unit tests (pytest), Go table-driven tests, Vitest, Playwright E2E
+- **Channels**: 25+ messaging platforms
+- **Plugins**: 10 built-in plugins + user-defined plugins
 - **Services**: 6 microservices + gateway + daemon
 - **Lines of code**: ~150,000+
 

@@ -123,7 +123,6 @@ class TestMCPGatewayIntegration:
         registry = create_tool_registry(pool)
         assert registry.list(category="mcp") == []
 
-    @pytest.mark.xfail(reason="Pre-existing: gateway handle_message user lookup not wired in test fixture")
     async def test_mcp_in_gateway_mcp_command(self, gateway):
         event = IncomingMessage(
             channel="mock",

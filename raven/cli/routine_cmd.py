@@ -66,7 +66,7 @@ def routine_add(name: str, action: str, schedule: str, description: str, user: s
         from raven.core.routine.models import Routine, RoutineAction, RoutineStatus, RoutineTrigger
         from raven.core.routine.store import RoutineStore
 
-        if schedule.replace(":", "").replace("*", "").replace(" ", "").isdigit() and ":" not in schedule:
+        if schedule.isdigit():
             trigger = RoutineTrigger.INTERVAL
         else:
             trigger = RoutineTrigger.SCHEDULED

@@ -9,7 +9,7 @@ from raven.core.cache.llm_cache import LLMCache
 from raven.core.cache.redis_client import RedisClient
 from raven.core.llm.protocol import LLMResponse
 
-_NO_REDIS = "redis://localhost:16379/0?socket_connect_timeout=0.5"
+_NO_REDIS = "redis://127.0.0.1:16399/0?socket_connect_timeout=0.5"
 
 
 class TestLLMCacheInit:

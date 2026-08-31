@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hmac
 from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from raven.core.auth.tokens import token_manager
+from raven.core.config import get_settings
 from raven.core.mcp.server import MCPServer
 from raven.core.mcp.sse_transport import SSETransport
 from ravencode.runtime.tools import execute_tool, get_tool_definitions
@@ -13,11 +16,28 @@ _mcp_server = MCPServer()
 _sse_transport = SSETransport()
 
 
+def _authorized(request: Request) -> bool:
+    auth_header = request.headers.get("Authorization", "")
+    token = request.headers.get("X-Raven-Key", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    if not token:
+        return False
+    if token_manager.validate_token(token):
+        return True
+    key = get_settings().web_secret_key.get_secret_value()
+    return bool(key) and hmac.compare_digest(token, key)
+
+
 def create_mcp_router() -> APIRouter:
     router = APIRouter(prefix="/mcp", tags=["mcp"])
 
     @router.post("/rpc")
     async def mcp_rpc(request: Request) -> JSONResponse:
+        if not _authorized(request):
+            return JSONResponse(
+                {"jsonrpc": "2.0", "error": {"code": -32601, "message": "Unauthorized"}}, status_code=401
+            )
         try:
             body: Any = await request.json()
         except ValueError:
@@ -32,7 +52,9 @@ def create_mcp_router() -> APIRouter:
         return JSONResponse(result)
 
     @router.get("/tools")
-    async def list_tools() -> list[dict[str, Any]]:
+    async def list_tools(request: Request) -> JSONResponse:
+        if not _authorized(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
         defs = get_tool_definitions()
         result = []
         for d in defs:
@@ -45,10 +67,12 @@ def create_mcp_router() -> APIRouter:
                         "parameters": fn.get("parameters", {}),
                     }
                 )
-        return result
+        return JSONResponse(result)
 
     @router.post("/tools/{name}")
     async def call_tool(name: str, request: Request) -> JSONResponse:
+        if not _authorized(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
         body: Any = await request.json() or {}
         args = body.get("arguments", body) if isinstance(body, dict) else {}
         result = await execute_tool(name, args)

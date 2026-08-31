@@ -15,16 +15,14 @@ PLUGIN_DESCRIPTION = "Run, list, and manage system processes"
 _UNIX_ALLOWLIST = frozenset({
     "ls", "cat", "head", "tail", "echo", "pwd", "whoami", "date",
     "find", "grep", "wc", "sort", "uniq", "cut", "tr", "diff",
-    "df", "du", "free", "ps", "top", "uptime", "sleep", "env", "printenv",
-    "python", "python3", "node", "npm", "pip", "git", "curl", "wget",
+    "df", "du", "free", "ps", "top", "uptime", "sleep",
 })
 _WIN_ALLOWLIST = frozenset({
-    "echo", "dir", "type", "copy", "del", "ren", "cd", "cls", "ver",
+    "echo", "dir", "type", "cd", "cls", "ver",
     "date", "time", "timeout", "find", "findstr", "sort", "more", "fc",
     "where", "ping", "tracert", "pathping", "nslookup", "tasklist",
-    "taskkill", "systeminfo", "ipconfig", "netstat", "whoami", "set",
-    "attrib", "xcopy", "robocopy", "mkdir", "rmdir", "cmd",
-    "python", "python3", "node", "npm", "pip", "git",
+    "systeminfo", "ipconfig", "netstat", "whoami",
+    "attrib", "mkdir", "rmdir",
 })
 _ALLOWED = _WIN_ALLOWLIST if platform.system() == "Windows" else _UNIX_ALLOWLIST
 
@@ -66,7 +64,7 @@ async def run(command: str, timeout: int = 30) -> str:
         return f"Error: {type(e).__name__}"
 
 
-async def run_python(code: str, timeout: int = 15) -> str:
+async def run_python(code: str, timeout: int = 60) -> str:
     try:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
@@ -129,8 +127,28 @@ async def list_processes(filter: str = "") -> str:
     return result
 
 
+def _is_self_or_ancestor(pid: int) -> bool:
+    if pid <= 0 or pid == os.getpid():
+        return True
+    if sys.platform != "win32":
+        try:
+            parent = os.getppid()
+            for _ in range(32):
+                if parent <= 1:
+                    break
+                if pid == parent:
+                    return True
+                with Path(f"/proc/{parent}/stat").open(encoding="utf-8", errors="replace") as f:
+                    parent = int(f.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            pass
+    return False
+
+
 async def kill(pid: int, force: bool = False) -> str:
     try:
+        if _is_self_or_ancestor(pid):
+            return f"Error: refusing to kill process {pid} (gateway or ancestor)"
         sig = getattr(signal, "SIGKILL", signal.SIGTERM) if force else signal.SIGTERM
         await asyncio.to_thread(os.kill, pid, sig)
         return f"Process {pid} {'forcefully ' if force else ''}terminated"

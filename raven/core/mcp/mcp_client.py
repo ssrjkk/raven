@@ -102,6 +102,8 @@ class MCPClient:
             if not chunk:
                 raise MCPClientError("MCP server closed connection")
             raw += chunk
+            if len(raw) > 1024 * 1024:
+                raise MCPClientError("MCP response exceeded 1MB buffer limit")
             try:
                 response = json.loads(raw.decode("utf-8").strip())
                 break

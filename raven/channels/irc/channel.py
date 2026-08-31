@@ -49,6 +49,7 @@ class IRCChannel(EnterpriseChannel):
         writer = self._writer
         self._writer = None
         self._reader = None
+        logger.info("[irc] channel stopped")
         if writer is not None:
             with contextlib.suppress(Exception):
                 writer.close()

@@ -24,6 +24,8 @@ def _find_raven() -> str:
             ["which", "raven"] if not IS_WINDOWS else ["where", "raven"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
             check=False,
         )
@@ -242,7 +244,7 @@ def _uninstall_launchd():
 
 def _run_python(module: str, *args: str):
     cmd = [sys.executable, "-m", module, *args]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, check=False)
     if result.returncode != 0:
         console.print(f"[yellow]Command failed ({result.returncode}): {' '.join(cmd)}[/yellow]")
         if result.stderr:
@@ -254,6 +256,8 @@ def _run_systemctl(action: str):
         ["systemctl", action, "raven.service"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=30,
         check=False,
     )
@@ -266,6 +270,8 @@ def _run_launchctl(action: str, target: str = "com.raven.ai"):
         ["launchctl", action, target],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=15,
         check=False,
     )

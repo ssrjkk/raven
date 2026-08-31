@@ -142,7 +142,7 @@ class MonitorStore(BaseStore):
     async def save_monitor(self, monitor: Monitor) -> None:
         config = dict(monitor.config)
         config["target"] = monitor.target
-        config_json = json.dumps(config)
+        config_json = json.dumps(config, default=str)
         conditions_json = json.dumps(
             [{"metric": c.metric, "operator": c.operator.value, "value": c.value} for c in monitor.conditions]
         )

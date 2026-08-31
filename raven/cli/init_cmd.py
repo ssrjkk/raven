@@ -22,8 +22,7 @@ RAVEN_JSON_TEMPLATE = """\
   "version": "0.4.0",
   "llm": {
     "provider": "{provider}",
-    "default_model": "{default_model}",
-    "api_key": "{{RAVEN_{provider_upper}_API_KEY}}"
+    "default_model": "{default_model}"
   },
   "channels": {channels},
   "security": {{
@@ -182,7 +181,6 @@ def _write_raven_json(llm: dict[str, str], channels: dict[str, Any], security: d
         "llm": {
             "provider": llm["provider"],
             "default_model": llm.get("default_model", ""),
-            "api_key": llm.get("api_key", ""),
         },
         "channels": channels_json,
         "security": security,
@@ -206,19 +204,15 @@ def _write_env_example(llm: dict[str, str], channels: dict[str, Any], security: 
     api_key_lines = ""
     provider_upper = llm["provider"].upper()
     if llm["provider"] == "ollama":
-        api_key_lines = f"# RAVEN_OLLAMA_BASE_URL={llm.get('ollama_url', settings.ollama_base_url)}"
+        api_key_lines = f"# OLLAMA_BASE_URL={llm.get('ollama_url', settings.ollama_base_url)}"
     else:
-        api_key_lines = f"RAVEN_{provider_upper}_API_KEY={llm.get('api_key', '')}"
+        api_key_lines = f"{provider_upper}_API_KEY=your_llm_api_key_here"
 
     channel_lines_parts = []
     for cid, cfg in channels.items():
         if cfg["enabled"]:
-            token_var = f"RAVEN_{cid.upper()}_BOT_TOKEN"
-            token_val = cfg.get("token", "")
-            if token_val:
-                channel_lines_parts.append(f"{token_var}={token_val}")
-            else:
-                channel_lines_parts.append(f"# {token_var}=your_token_here")
+            token_var = f"{cid.upper()}_BOT_TOKEN"
+            channel_lines_parts.append(f"# {token_var}=your_bot_token_here")
     channel_lines = "\n".join(channel_lines_parts)
 
     security_lines = "\n".join(
@@ -239,6 +233,26 @@ def _write_env_example(llm: dict[str, str], channels: dict[str, Any], security: 
     )
     path.write_text(content)
     console.print(f"[green]Written {path}[/green]")
+
+
+def _write_real_env(llm: dict[str, str], channels: dict[str, Any], path: Path) -> None:
+    lines: list[str] = []
+    provider_upper = llm["provider"].upper()
+    if llm["provider"] == "ollama":
+        lines.append(f"OLLAMA_BASE_URL={llm.get('ollama_url', settings.ollama_base_url)}")
+    else:
+        api_key = llm.get("api_key", "")
+        if api_key:
+            lines.append(f"{provider_upper}_API_KEY={api_key}")
+    for cid, cfg in channels.items():
+        if cfg["enabled"]:
+            token = cfg.get("token", "")
+            if token:
+                lines.append(f"{cid.upper()}_BOT_TOKEN={token}")
+    content = "\n".join(lines) + ("\n" if lines else "")
+    if lines:
+        path.write_text(content, encoding="utf-8")
+        console.print(f"[green]Written {path} with your secrets (gitignored)[/green]")
 
 
 def init() -> None:
@@ -263,6 +277,7 @@ def init() -> None:
 
     _write_raven_json(llm, channels, security, root / "raven.json")
     _write_env_example(llm, channels, security, root / ".env.example")
+    _write_real_env(llm, channels, root / ".env")
 
     (root / "workspace").mkdir(exist_ok=True)
     (root / "workspace" / "skills").mkdir(exist_ok=True)
@@ -287,6 +302,7 @@ def init() -> None:
             "  Run [bold]raven doctor[/bold] to verify setup\n\n"
             "Files created:\n"
             f"  {root / 'raven.json'}\n"
+            f"  {root / '.env'}\n"
             f"  {root / '.env.example'}\n"
             f"  {root / 'workspace/'}\n"
             f"  {root / 'plugins/'}\n"

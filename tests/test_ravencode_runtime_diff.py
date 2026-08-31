@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Generator
+from pathlib import Path
 from unittest.mock import AsyncMock
+
+import pytest
 
 from ravencode.runtime.diff import (
     apply_patch,
@@ -9,6 +13,15 @@ from ravencode.runtime.diff import (
     smart_edit,
     smart_edit_tool,
 )
+
+
+@pytest.fixture(autouse=True)
+def _set_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
+    from ravencode.runtime import workspace as _ws
+
+    token = _ws._workspace_var.set(str(tmp_path))
+    yield
+    _ws._workspace_var.reset(token)
 
 
 class TestParseUnifiedDiff:

@@ -4,7 +4,6 @@ import asyncio
 import base64
 import inspect
 import os
-import tempfile
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -16,6 +15,7 @@ from raven.tools.file import _check_no_symlinks_in_path, _confine, _workspace
 
 _OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 _REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN", "")
+_MAX_IMAGE_ANALYZE_BYTES = 20 * 1024 * 1024
 
 
 def _confine_output(path: str) -> Path:
@@ -192,7 +192,7 @@ async def image_edit(
                 suffix = fmt.lower()
                 if suffix == "jpeg":
                     suffix = "jpg"
-                out_path = Path(filepath).parent / f"{Path(filepath).stem}_edited.{suffix}"
+                out_path = p.parent / f"{p.stem}_edited.{suffix}"
                 src.save(out_path, format=fmt, quality=quality)
 
             buf = BytesIO()
@@ -456,7 +456,9 @@ async def video_transcribe(filepath: str, model: str = "whisper-1", language: st
 
     tmp_wav = ""
     try:
-        tmp_wav = str(Path(tempfile.gettempdir()) / f"raven_audio_{os.urandom(4).hex()}.wav")
+        tmp_dir = _workspace() / ".tmp"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        tmp_wav = str(tmp_dir / f"raven_audio_{os.urandom(4).hex()}.wav")
         ffmpeg_cmd = [
             "ffmpeg",
             "-i",
@@ -604,6 +606,13 @@ async def image_analyze(filepath: str, prompt: str = "Describe this image in det
         return "[error] OPENAI_API_KEY env var required for image analysis"
     try:
         import httpx
+
+        size = (await asyncio.to_thread(path.stat)).st_size
+        if size > _MAX_IMAGE_ANALYZE_BYTES:
+            return (
+                f"[error] Image too large for analysis: {size} bytes "
+                f"(max {_MAX_IMAGE_ANALYZE_BYTES})"
+            )
 
         def _read_image() -> str:
             with Path(path).open("rb") as f:

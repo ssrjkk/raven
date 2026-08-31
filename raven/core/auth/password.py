@@ -42,3 +42,13 @@ def verify_and_rehash(password: str, hashed: str) -> tuple[str | None, bool]:
         return None, False
     except (ValueError, AttributeError):
         return None, False
+
+
+# A fixed PBKDF2 hash used to equalize login timing when a username does not
+# exist (or has no password), preventing user-enumeration via response time.
+_DUMMY_PASSWORD_HASH = hash_password("raven-timing-dummy")
+
+
+def dummy_verify(password: str) -> None:
+    """Run a PBKDF2 verification against a fixed dummy hash (timing equalizer)."""
+    verify_password(password, _DUMMY_PASSWORD_HASH)

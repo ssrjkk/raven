@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from pathlib import Path
 from typing import Any
@@ -7,7 +8,7 @@ from typing import Any
 from raven.core._json import json
 from raven.core.asyncdb import is_postgres_dsn
 from raven.core.auth.models import Role, User
-from raven.core.auth.password import hash_password, verify_and_rehash
+from raven.core.auth.password import dummy_verify, hash_password, verify_and_rehash
 from raven.core.store import BaseStore
 
 SCHEMA = """
@@ -89,10 +90,14 @@ class AuthStore(BaseStore):
     async def authenticate(self, username: str, password: str) -> User | None:
         user = await self.get_user(username)
         if not user or not user.is_active:
+            # Equalize timing with the real verification path to prevent
+            # user-enumeration via response-time differences.
+            await asyncio.to_thread(dummy_verify, password)
             return None
         if not user.password_hash:
+            await asyncio.to_thread(dummy_verify, password)
             return None
-        new_hash, is_valid = verify_and_rehash(password, user.password_hash)
+        new_hash, is_valid = await asyncio.to_thread(verify_and_rehash, password, user.password_hash)
         if not is_valid:
             return None
         if new_hash:

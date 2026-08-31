@@ -158,6 +158,11 @@ class Conversation:
         self._token_total += self._estimate_tokens(content)
         self._trim()
 
+    def add_system_message(self, content: str) -> None:
+        self.messages.append({"role": "system", "content": content})
+        self._token_total += self._estimate_tokens(content)
+        self._trim()
+
     def add_assistant_message(self, content: str) -> None:
         self.messages.append({"role": "assistant", "content": content})
         self._token_total += self._estimate_tokens(content)

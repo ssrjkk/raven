@@ -21,28 +21,34 @@ def validate_url(url: str) -> None:
         raise ValueError("URL missing hostname")
     try:
         ip = ipaddress.ip_address(host)
+    except ValueError:
+        host_is_ip = False
+    else:
+        host_is_ip = True
         for r in _PRIVATE_RANGES:
             if ip in ipaddress.ip_network(r, strict=False):
                 msg = f"SSRF blocked: private IP {host}"
                 raise ValueError(msg)
-    except ValueError:
-        if host in ("localhost", "0.0.0.0"):
-            msg = f"SSRF blocked: hostname {host}"
-            raise ValueError(msg) from None
+    if host in ("localhost", "0.0.0.0"):
+        msg = f"SSRF blocked: hostname {host}"
+        raise ValueError(msg) from None
+    if host_is_ip:
+        return
+    try:
+        addrs = socket.getaddrinfo(host, None)
+    except (socket.gaierror, OSError):
+        logger.warning("SSRF guard: DNS resolution failed for {}", host)
+        return
+    for _family, _type, _proto, _cname, sockaddr in addrs:
+        addr = sockaddr[0]
         try:
-            addrs = socket.getaddrinfo(host, None)
-            for _family, _type, _proto, _cname, sockaddr in addrs:
-                addr = sockaddr[0]
-                try:
-                    ip = ipaddress.ip_address(addr)
-                    for r in _PRIVATE_RANGES:
-                        if ip in ipaddress.ip_network(r, strict=False):
-                            msg = f"SSRF blocked: hostname {host} resolves to private IP {addr}"
-                            raise ValueError(msg)
-                except ValueError:
-                    continue
-        except (socket.gaierror, OSError):
-            logger.warning("SSRF guard: DNS resolution failed for {}", host)
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        for r in _PRIVATE_RANGES:
+            if ip in ipaddress.ip_network(r, strict=False):
+                msg = f"SSRF blocked: hostname {host} resolves to private IP {addr}"
+                raise ValueError(msg)
 
 
 @dataclass

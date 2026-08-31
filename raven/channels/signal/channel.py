@@ -20,6 +20,7 @@ class SignalChannel(EnterpriseChannel):
 
     async def _stop(self):
         self._client = None
+        logger.info("[signal] channel stopped")
 
     async def handle_webhook(self, body: dict[str, Any]) -> bool:
         if not self._handler or not self._ready:

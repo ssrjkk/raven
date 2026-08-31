@@ -23,8 +23,8 @@ async def _verify_webhook_signature(request: Request) -> None:
     if settings.web_secret_key.get_secret_value():
         body_bytes = await request.body()
         sig = request.headers.get("X-Webhook-Signature", "")
-        if sig and not _verify_hmac_sha256(body_bytes, sig, settings.web_secret_key.get_secret_value()):
-            raise HTTPException(status_code=403, detail="Invalid webhook signature")
+        if not sig or not _verify_hmac_sha256(body_bytes, sig, settings.web_secret_key.get_secret_value()):
+            raise HTTPException(status_code=403, detail="Invalid or missing webhook signature")
 
 
 def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
@@ -69,14 +69,16 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
         body_bytes = await request.body()
         slack_sig = request.headers.get("X-Slack-Signature", "")
         slack_ts = request.headers.get("X-Slack-Request-Timestamp", "")
-        if settings.web_secret_key.get_secret_value() and slack_sig:
+        if settings.web_secret_key.get_secret_value():
+            if not slack_sig:
+                raise HTTPException(status_code=403, detail="Invalid or missing Slack signature")
             try:
                 ts = int(slack_ts)
                 if abs(time.time() - ts) > 300:
                     raise HTTPException(status_code=403, detail="Slack request timestamp too old")
             except (ValueError, TypeError) as err:
                 raise HTTPException(status_code=403, detail="Invalid Slack timestamp") from err
-            sig_basestring = f"v0:{slack_ts}:{body_bytes.decode()}"
+            sig_basestring = f"v0:{slack_ts}:{body_bytes.decode('utf-8', errors='replace')}"
             expected = (
                 "v0="
                 + hmac_mod.new(
@@ -98,12 +100,10 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
     async def whatsapp_webhook(body: dict[str, Any], request: Request):
         body_bytes = await request.body()
         wa_sig = request.headers.get("X-Hub-Signature-256", "")
-        if (
-            settings.web_secret_key.get_secret_value()
-            and wa_sig
-            and not _verify_hmac_sha256(body_bytes, wa_sig, settings.web_secret_key.get_secret_value())
+        if settings.web_secret_key.get_secret_value() and (
+            not wa_sig or not _verify_hmac_sha256(body_bytes, wa_sig, settings.web_secret_key.get_secret_value())
         ):
-            raise HTTPException(status_code=403, detail="Invalid WhatsApp signature")
+            raise HTTPException(status_code=403, detail="Invalid or missing WhatsApp signature")
         wa_ch = request.app.state.whatsapp_channel if hasattr(request.app.state, "whatsapp_channel") else None
         if wa_ch:
             await wa_ch.handle_webhook(body)
@@ -119,7 +119,10 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
             and settings.web_secret_key.get_secret_value()
             and hmac_mod.compare_digest(token or "", settings.web_secret_key.get_secret_value())
         ):
-            return int(challenge)  # type: ignore[arg-type]
+            try:
+                return int(challenge)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                return {"hub.challenge": challenge or ""}
         raise HTTPException(status_code=403, detail="Verify token failed")
 
     @router.post("/googlechat")

@@ -36,8 +36,25 @@ async def browser_navigate(url: str) -> str:
     if denied:
         return denied
     try:
+        from raven.core.security.ssrf import validate_url as _ssrf_validate
+
+        ssrf_error = _ssrf_validate(url)
+        if ssrf_error:
+            return f"[denied] browser_navigate: {ssrf_error}"
+    except Exception as exc:
+        return f"[error] browser_navigate: {exc}"
+    try:
         page = await _ensure_page()
         await page.goto(url, timeout=30000)
+        final_url = getattr(page, "url", "") or url
+        try:
+            from raven.core.security.ssrf import validate_url as _ssrf_validate
+
+            ssrf_error = _ssrf_validate(final_url)
+            if ssrf_error:
+                return f"[blocked] browser_navigate: redirect to private/internal address: {ssrf_error}"
+        except Exception as exc:
+            return f"[error] browser_navigate redirect: {exc}"
         title = await page.title()
         return f"Navigated to {url} | Title: {title}"
     except Exception as exc:

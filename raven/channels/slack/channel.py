@@ -32,6 +32,7 @@ class SlackChannel(EnterpriseChannel):
 
     async def _stop(self):
         self._client = None
+        logger.info("[slack] channel stopped")
 
     def verify_signature(self, body: bytes, timestamp: str, signature: str) -> bool:
         if not self._signing_secret:

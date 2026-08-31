@@ -29,6 +29,7 @@ class MatrixChannel(EnterpriseChannel):
         if self._sync_task:
             self._sync_task.cancel()
             self._sync_task = None
+        logger.info("[matrix] channel stopped")
 
     async def _matrix_get(self, path: str):
         return await client_manager.get(

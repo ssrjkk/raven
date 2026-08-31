@@ -259,6 +259,12 @@ class UnifiedAgent:
                 self._on_message = saved_on_message
             if not task.done():
                 task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    logger.debug("Stream task cancelled")
+                except Exception as exc:
+                    logger.error("Stream task error during teardown: {}", exc)
 
     async def _run_and_signal(
         self, queue: asyncio.Queue[str | None], message: str, stream_used: list[bool] | None = None

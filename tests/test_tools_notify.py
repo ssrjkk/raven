@@ -29,7 +29,7 @@ class TestNotifyTelegram:
         fake_bot.send_message = AsyncMock(return_value=None)
         monkeypatch.setattr(telegram, "Bot", MagicMock(return_value=fake_bot))
         result = await notify_tools.notify_telegram("hi", token="token")
-        assert result == "Sent Telegram notification"
+        assert result == "Telegram not configured (no chat_id provided)"
         fake_bot.send_message.assert_not_awaited()
 
     async def test_send_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
