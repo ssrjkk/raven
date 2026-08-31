@@ -324,7 +324,7 @@ raven/
 | **Security** | Rate limiting, JWT auth, DM pairing, Fernet encryption, RBAC, plugin sandbox, ToolPolicyEvaluator (deny/allow), exec security policy (deny/ask/full), contextVisibility, workspace isolation, security audit CLI |
 | **CI/CD** | GitHub Actions — parallel lint + typecheck + test, Allure reporting, Codecov |
 | **Deploy** | Docker, docker-compose, systemd |
-| **Testing** | pytest (800+ тестов, Allure reporting), Vitest (React) |
+| **Testing** | pytest (4593+ тестов, Allure reporting), Vitest (React) |
 
 ---
 
