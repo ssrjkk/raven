@@ -224,7 +224,8 @@ def test_parse_docx(client: TestClient, tmp_path: Path) -> None:
     assert body["metadata"]["paragraphs"] == 1
 
 
-def test_parse_pptx_missing_dep(client: TestClient, tmp_path: Path) -> None:
+def test_parse_pptx_missing_dep(client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "pptx", None)
     pptx = tmp_path / "slides.pptx"
     pptx.write_bytes(b"placeholder")
     resp = client.post("/api/media/parse", params={"filepath": str(pptx)})
@@ -232,7 +233,8 @@ def test_parse_pptx_missing_dep(client: TestClient, tmp_path: Path) -> None:
     assert "Missing dependency" in resp.json()["detail"]
 
 
-def test_parse_xlsx_missing_dep(client: TestClient, tmp_path: Path) -> None:
+def test_parse_xlsx_missing_dep(client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "openpyxl", None)
     xlsx = tmp_path / "book.xlsx"
     xlsx.write_bytes(b"placeholder")
     resp = client.post("/api/media/parse", params={"filepath": str(xlsx)})
