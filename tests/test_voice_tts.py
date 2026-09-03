@@ -250,6 +250,7 @@ class TestSynthesizeGtts:
 
 
 class TestSynthesizeSystem:
+    @pytest.mark.skipif(os.name != "nt", reason="Windows branch requires a Windows platform")
     def test_windows_branch(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(os, "name", "nt")
         tts_obj = TextToSpeech(TTSConfig())
@@ -268,6 +269,7 @@ class TestSynthesizeSystem:
         out = tts_obj._synthesize_system("hello")
         assert calls == {"text": "hello", "output_path": out}
 
+    @pytest.mark.skipif(os.name != "nt", reason="Windows branch requires a Windows platform")
     def test_windows_with_custom_output(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(os, "name", "nt")
         out = tmp_path / "speech.wav"
@@ -277,6 +279,7 @@ class TestSynthesizeSystem:
 
 
 class TestSynthesizeWindowsSapi:
+    @pytest.mark.skipif(os.name != "nt", reason="Windows SAPI requires win32com/pythoncom on Windows")
     def test_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         state, instances = _make_fake_sapi(monkeypatch)
         out = tmp_path / "speech.wav"
@@ -308,6 +311,7 @@ class TestSynthesizeWindowsSapi:
             assert wf.getnchannels() == 1
             assert wf.getframerate() == 22050
 
+    @pytest.mark.skipif(os.name != "nt", reason="Windows SAPI requires win32com/pythoncom on Windows")
     def test_dispatch_error_writes_silence(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         import win32com.client
 
@@ -372,6 +376,7 @@ class TestListVoices:
         monkeypatch.setattr(tts_obj, "_list_elevenlabs_voices", lambda: [{"id": "x"}])
         assert tts_obj.list_voices() == [{"id": "x"}]
 
+    @pytest.mark.skipif(os.name != "nt", reason="Windows branch requires a Windows platform")
     def test_windows(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(os, "name", "nt")
         tts_obj = TextToSpeech(TTSConfig())

@@ -136,7 +136,11 @@ def create_pattern_checker_router(workspace: str = "") -> APIRouter:
             if resolved != base and not resolved.startswith(base + os.sep):
                 return {"error": f"Access denied: {file}", "violations": []}
             target = Path(resolved)
-            _check_no_symlinks_in_path(target, Path(base))
+            try:
+                _check_no_symlinks_in_path(target, Path(base))
+            except PermissionError as e:
+                logger.warning("[pattern_checker] symlink denied for {}: {}", file, e)
+                return {"error": f"Symlink not allowed: {file}", "violations": []}
             if not target.is_file():
                 return {"error": f"File not found: {file}", "violations": []}
             files_to_check = [target]
