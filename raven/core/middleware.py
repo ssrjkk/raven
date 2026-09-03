@@ -130,6 +130,7 @@ _PRIVATE_READ_PREFIXES: tuple[str, ...] = (
     "/api/status",  # system status / runtime introspection
     "/api/agents",  # agent registry introspection
     "/api/tools/policy",  # tool security policy introspection
+    "/api/connections",  # LLM providers (masked keys), contexts, agents
 )
 
 _SLOW_REQUEST_THRESHOLD_S = 2.0

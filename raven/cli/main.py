@@ -87,7 +87,6 @@ cli.add_command(_ravencode)
 cli.add_command(_routine)
 cli.add_command(_security)
 cli.add_command(_service)
-cli.add_command(_backup)
 cli.add_command(_setup)
 cli.add_command(_task)
 cli.add_command(_doctor)
@@ -370,9 +369,6 @@ def history(session_id: str):
 @cli.command()
 def tui():
     """Launch the Textual TUI dashboard"""
-    extra_path = Path("D:/PythonPackages")
-    if extra_path.is_dir() and str(extra_path) not in sys.path:
-        sys.path.insert(0, str(extra_path))
     try:
         from raven.tui.app import run as run_tui
     except ImportError:

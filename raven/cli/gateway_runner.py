@@ -40,6 +40,7 @@ from raven.core.collab_api import create_collab_router
 from raven.core.commands_api import create_commands_router
 from raven.core.config import settings
 from raven.core.config_watcher import ConfigWatcher
+from raven.core.connection_api import create_connection_router
 from raven.core.cost_management_api import create_cost_management_router
 from raven.core.db import DatabaseFactory
 from raven.core.debugger_api import create_debugger_router
@@ -302,6 +303,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     commands_router = create_commands_router()
     api_app.include_router(commands_router)
+
+    connection_router = create_connection_router()
+    api_app.include_router(connection_router)
 
     metrics_router = create_project_metrics_router()
     api_app.include_router(metrics_router)

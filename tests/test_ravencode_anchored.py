@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
 import ravencode.runtime.anchored as anchored_mod
 from ravencode.runtime.anchored import (
     anchored_summary,
@@ -7,6 +11,11 @@ from ravencode.runtime.anchored import (
     clear_anchored_summary,
     update_anchored_summary,
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(anchored_mod, "_ANCHORED_PATH", tmp_path / "anchored.md")
 
 
 def _setup():

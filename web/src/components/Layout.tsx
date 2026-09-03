@@ -27,6 +27,7 @@ import {
   Moon,
   MoonStar,
   Palette,
+  Plug,
   Puzzle,
   RefreshCw,
   Search,
@@ -71,6 +72,14 @@ const navSections: NavSection[] = [
       { to: "/agent", label: "Agent Console", icon: Bot },
       { to: "/chat/history", label: "History", icon: History },
       { to: "/admin", label: "Admin", icon: Shield },
+    ],
+  },
+  {
+    title: "Connection",
+    items: [
+      { to: "/providers", label: "Providers", icon: Plug },
+      { to: "/contexts", label: "Contexts", icon: FolderGit2 },
+      { to: "/agents", label: "Agents", icon: Bot },
     ],
   },
   {

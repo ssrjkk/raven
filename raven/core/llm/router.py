@@ -39,6 +39,12 @@ class LLMRouter:
         self._cache_lock = asyncio.Lock()
         self._admission = PriorityAdmissionQueue(settings.llm_max_concurrent, settings.llm_queue_timeout)
         self._llm_cache = llm_cache
+        self._failover: ModelFailover | None = None
+
+    def _get_failover(self) -> ModelFailover:
+        if self._failover is None:
+            self._failover = ModelFailover(self)
+        return self._failover
 
     async def cleanup(self):
         for p in self._providers.values():
@@ -256,7 +262,7 @@ class LLMRouter:
 
         logger.info("Trying failover models for request (primary: {})", model)
         try:
-            failover = ModelFailover(self)
+            failover = self._get_failover()
             return await failover.complete(messages, tools=tools)
         except Exception as f:
             metrics.inc("llm_request_result", {"model": model, "status": "error"})
@@ -319,7 +325,7 @@ class LLMRouter:
 
         logger.info("Stream failover for model '{}'", model)
         try:
-            failover = ModelFailover(self)
+            failover = self._get_failover()
             async for token in failover.complete_stream(messages, tools=tools):
                 yield token
             return
@@ -387,8 +393,18 @@ def _parse_retry_after(headers: Any, default: int = 5) -> int:
     return _parse(headers, default)
 
 
+_default_router: LLMRouter | None = None
+
+
+def _get_default_router() -> LLMRouter:
+    global _default_router
+    if _default_router is None:
+        _default_router = LLMRouter()
+    return _default_router
+
+
 async def default_provider_call(messages: list[dict[str, Any]]) -> dict[str, str]:
-    router = LLMRouter()
+    router = _get_default_router()
     resp = await router.complete(messages)
     return {"content": resp.content}
 

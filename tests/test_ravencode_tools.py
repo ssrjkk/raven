@@ -19,10 +19,12 @@ def _reset_state() -> Generator[None, None, None]:
     ws_token = tools._workspace_var.set(None)
     depth_token = tools._task_depth.set(0)
     tools.set_permission_checker(None)
+    tools._current_sandbox_policy = "main"
     yield
     tools._workspace_var.reset(ws_token)
     tools._task_depth.reset(depth_token)
     tools.set_permission_checker(None)
+    tools._current_sandbox_policy = "main"
 
 
 @pytest.fixture
@@ -1105,6 +1107,37 @@ async def test_sandbox_policy_get_set() -> None:
     assert tools._current_sandbox_policy == "code-exec"
     out = await tools._sandbox_policy_handler("bogus")
     assert out.startswith("[error] unknown policy: bogus")
+
+
+@pytest.mark.asyncio
+async def test_sandbox_policy_main_fully_open() -> None:
+    tools._current_sandbox_policy = "main"
+    assert tools._get_permission_for_tool("bash", {}) == (True, "")
+
+
+@pytest.mark.asyncio
+async def test_sandbox_policy_code_exec_denies_web() -> None:
+    tools._current_sandbox_policy = "code-exec"
+    assert tools._get_permission_for_tool("read", {}) == (True, "")
+    assert tools._get_permission_for_tool("web_fetch", {}) == (
+        False,
+        "Tool 'web_fetch' not allowed in code-exec sandbox policy",
+    )
+
+
+@pytest.mark.asyncio
+async def test_sandbox_policy_read_only_denies_write() -> None:
+    tools._current_sandbox_policy = "read-only"
+    ok, reason = tools._get_permission_for_tool("write", {})
+    assert not ok
+    assert "denied in read-only sandbox policy" in reason
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_denied_by_policy() -> None:
+    tools._current_sandbox_policy = "web-browsing"
+    out = await tools.execute_tool("bash", {"command": "whoami"})
+    assert out.startswith("[denied]")
 
 
 class _FakeTTSProvider:

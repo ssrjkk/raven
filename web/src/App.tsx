@@ -88,6 +88,9 @@ export default function App() {
             <Route path="plugins" element={<Plugins />} />
             <Route path="dream" element={<Dream />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="providers" element={<Providers />} />
+            <Route path="contexts" element={<Contexts />} />
+            <Route path="agents" element={<Agents />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
@@ -134,3 +137,6 @@ const Plugins = lazy(() => import("./pages/Plugins"));
 const ChatHistory = lazy(() => import("./pages/ChatHistory"));
 const Dream = lazy(() => import("./pages/Dream"));
 const Settings = lazy(() => import("./pages/Settings"));
+const Providers = lazy(() => import("./pages/Providers"));
+const Contexts = lazy(() => import("./pages/Contexts"));
+const Agents = lazy(() => import("./pages/Agents"));

@@ -12,7 +12,7 @@ DreamStatsData, DreamStatusData,
 HealthData, KnowledgeSearchEntry, MessageData, MetricsSnapshot, ModelInfoData,
 MonitorData,
 OAuthProviderInfo, PatternCheckInfo, PatternRunResponse,
-PluginInfo, RAGResultEntry, RAGStatsData,   RoutineData, Session,   StatusData, TaskData, TrainingResultData,   VoiceSpeakerInfo, VoiceStatsData, WebSearchProvider,   WebSearchResult, ThemeScheme, TruthfulResult, } from "./types";
+PluginInfo, RAGResultEntry, RAGStatsData,   RoutineData, Session,   StatusData, TaskData, TrainingResultData,   VoiceSpeakerInfo, VoiceStatsData, WebSearchProvider,   WebSearchResult, ThemeScheme, TruthfulResult, LLMProviderInfo, ConnectionContext, AgentInfo, } from "./types";
 
 export type {
 ABCreateResponse,
@@ -38,7 +38,7 @@ OAuthProviderInfo,
   PatternCheckInfo, PatternRunResponse, PatternViolation,   PluginInfo,   PricingInfo, ProjectMetrics,
 RAGResultEntry, RAGStatsData,
   RoutineData,   Session,   StatusData, TaskData, TrainingResultData,
-  VoiceSpeakerInfo, VoiceStatsData, WebSearchProvider,   WebSearchResult, WsMessage, TruthfulResult, } from "./types";
+  VoiceSpeakerInfo, VoiceStatsData, WebSearchProvider,   WebSearchResult, WsMessage, TruthfulResult, LLMProviderInfo, ConnectionContext, AgentInfo, } from "./types";
 
 const BASE = "";
 
@@ -423,6 +423,35 @@ export const api = {
   dreamStatus: () => request<DreamStatusData>("/api/dream/status"),
   dreamStats: () => request<DreamStatsData>("/api/dream/stats"),
   dreamCycle: () => request<{ ok: boolean; stats: Record<string, number> }>("/api/dream/cycle", { method: "POST" }),
+
+  // ---- Connection management ----
+  providers: () => request<{ providers: LLMProviderInfo[] }>("/api/connections/providers").then((r) => r.providers),
+  createProvider: (data: Partial<LLMProviderInfo>) =>
+    request<LLMProviderInfo>("/api/connections/providers", { method: "POST", body: JSON.stringify(data) }),
+  updateProvider: (name: string, data: Partial<LLMProviderInfo>) =>
+    request<LLMProviderInfo>(`/api/connections/providers/${name}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteProvider: (name: string) =>
+    request<{ ok: boolean }>(`/api/connections/providers/${name}`, { method: "DELETE" }),
+  testProvider: (type: string, apiKey: string, baseUrl: string, model: string) =>
+    request<{ ok: boolean; model: string; reply: string }>("/api/connections/providers/test", {
+      method: "POST", body: JSON.stringify({ type, api_key: apiKey, base_url: baseUrl, model }),
+    }),
+
+  contexts: () => request<{ contexts: ConnectionContext[] }>("/api/connections/contexts").then((r) => r.contexts),
+  createContext: (data: Partial<ConnectionContext>) =>
+    request<ConnectionContext>("/api/connections/contexts", { method: "POST", body: JSON.stringify(data) }),
+  updateContext: (id: string, data: Partial<ConnectionContext>) =>
+    request<ConnectionContext>(`/api/connections/contexts/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteContext: (id: string) =>
+    request<{ ok: boolean }>(`/api/connections/contexts/${id}`, { method: "DELETE" }),
+
+  connectionAgents: () => request<{ agents: AgentInfo[] }>("/api/connections/agents").then((r) => r.agents),
+  createAgent: (data: Partial<AgentInfo>) =>
+    request<AgentInfo>("/api/connections/agents", { method: "POST", body: JSON.stringify(data) }),
+  updateAgent: (id: string, data: Partial<AgentInfo>) =>
+    request<AgentInfo>(`/api/connections/agents/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteAgent: (id: string) =>
+    request<{ ok: boolean }>(`/api/connections/agents/${id}`, { method: "DELETE" }),
 
   ...githubApi,
   ...analyticsApi,

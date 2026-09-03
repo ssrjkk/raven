@@ -1,6 +1,16 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
+import ravencode.runtime.todo as todo_mod
 from ravencode.runtime.todo import _reset_state, todo_clear, todo_list, todo_update, todo_write
+
+
+@pytest.fixture(autouse=True)
+def _isolate_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(todo_mod, "_TODO_PATH", tmp_path / "todo.json")
 
 
 def _setup():

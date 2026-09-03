@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 
@@ -14,8 +15,9 @@ from ravencode.runtime.anchored import (
 
 
 @pytest.fixture(autouse=True)
-def reset() -> Generator[None, None, None]:
+def reset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
     anchored_mod._ANCHORED_SUMMARY = ""
+    monkeypatch.setattr(anchored_mod, "_ANCHORED_PATH", tmp_path / "anchored.md")
     yield
     anchored_mod._ANCHORED_SUMMARY = ""
 
@@ -46,3 +48,16 @@ class TestAnchoredSummary:
 
     def test_clear_empty(self) -> None:
         assert clear_anchored_summary() == "(anchored summary cleared)"
+
+
+class TestAnchoredPersistence:
+    def test_persists_across_reload(self) -> None:
+        update_anchored_summary("persisted note")
+        anchored_mod._ANCHORED_SUMMARY = None
+        assert anchored_summary() == "persisted note"
+
+    def test_clear_persists_empty(self) -> None:
+        update_anchored_summary("x")
+        clear_anchored_summary()
+        anchored_mod._ANCHORED_SUMMARY = None
+        assert anchored_summary() == ""

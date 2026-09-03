@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 
@@ -9,12 +10,15 @@ from ravencode.runtime.todo import todo_clear, todo_list, todo_update, todo_writ
 
 
 @pytest.fixture(autouse=True)
-def reset() -> Generator[None, None, None]:
+def reset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
     todo_mod._TODO_STORE.clear()
     todo_mod._ORDER.clear()
+    todo_mod._LOADED = True
+    monkeypatch.setattr(todo_mod, "_TODO_PATH", tmp_path / "todo.json")
     yield
     todo_mod._TODO_STORE.clear()
     todo_mod._ORDER.clear()
+    todo_mod._LOADED = True
 
 
 class TestTodoWrite:
@@ -74,4 +78,18 @@ class TestTodoClear:
     def test_reset_state(self) -> None:
         todo_write([{"id": "a", "content": "A"}])
         todo_mod._reset_state()
+        assert todo_list() == "(empty todo list)"
+
+
+class TestTodoPersistence:
+    def test_persists_across_reload(self) -> None:
+        todo_write([{"id": "a", "content": "persisted", "status": "completed"}])
+        todo_mod._reset_state()
+        todo_mod._LOADED = False
+        assert todo_list() == "  [completed] a: persisted\n\nProgress: 1/1 completed, 0 in progress"
+
+    def test_clear_persists_empty(self) -> None:
+        todo_write([{"id": "a", "content": "A"}])
+        todo_clear()
+        todo_mod._LOADED = False
         assert todo_list() == "(empty todo list)"

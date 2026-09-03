@@ -6,6 +6,10 @@ Set-Location $Root
 
 Write-Host "== Step 1/3: building web frontend =="
 Push-Location web
+if (-not (Test-Path "node_modules")) {
+    npm ci
+    if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
+}
 npm run build
 if ($LASTEXITCODE -ne 0) { throw "web build failed" }
 Pop-Location

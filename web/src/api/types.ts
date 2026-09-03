@@ -728,3 +728,49 @@ export interface DreamStatsData extends DreamStatusData {
   memory: DreamMemoryStats;
   skills: DreamSkillEntry[];
 }
+
+// ---- Connection management (providers, contexts, agents) ----
+
+export interface LLMProviderInfo {
+  name: string;
+  type: string;
+  api_key: string; // masked (e.g. "skor...abcd") unless empty
+  base_url: string;
+  model: string;
+  enabled: boolean;
+  extra: Record<string, unknown>;
+  created_at?: number;
+  updated_at?: number;
+}
+
+export interface ConnectionContext {
+  id: string;
+  name: string;
+  provider: string;
+  repositories: string[];
+  files: string[];
+  folders: string[];
+  filters: string;
+  description: string;
+  created_at?: number;
+  updated_at?: number;
+}
+
+export interface AgentLogEntry {
+  ts: number;
+  role: string;
+  content: string;
+}
+
+export interface AgentInfo {
+  id: string;
+  name: string;
+  provider: string;
+  context: string;
+  model: string;
+  system_prompt: string;
+  enabled: boolean;
+  history: AgentLogEntry[];
+  created_at?: number;
+  updated_at?: number;
+}

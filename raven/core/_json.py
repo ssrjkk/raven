@@ -35,8 +35,12 @@ class _Json:
         if indent:
             opts |= _INDENT_2
         default = kwargs.pop("default", None)
-        if kwargs.pop("ensure_ascii", True) is False:
-            opts |= orjson.OPT_ESCAPE_ASCII  # type: ignore[attr-defined]
+        # orjson always serialises to UTF-8 (non-ASCII-escaped). It has no
+        # ASCII-escaping option, so an explicit ensure_ascii=True is emulated
+        # via stdlib json. Default (and ensure_ascii=False) uses orjson.
+        ensure_ascii = kwargs.pop("ensure_ascii", False)
+        if ensure_ascii is True:
+            return _stdlib_json.dumps(obj, ensure_ascii=True, default=default)
         if kwargs:
             return _stdlib_json.dumps(obj, **kwargs)
         result = orjson.dumps(obj, default=default, option=opts or None)
