@@ -468,6 +468,7 @@ class TestCheckerSignatures:
             return _Resp()  # type: ignore[return-value]
 
         monkeypatch.setattr("raven.core.monitor.checkers.rss.client_manager.request", fake_request)
+        monkeypatch.setattr("raven.core.monitor.checkers.rss.validate_url", lambda _url: None)
         m = Monitor(id="m1", name="test-rss", type=MonitorType.RSS, target="https://example.com/feed.xml")
         result = await rss.check_rss(m)
         assert isinstance(result, str)
