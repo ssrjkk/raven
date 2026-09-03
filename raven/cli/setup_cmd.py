@@ -330,7 +330,8 @@ def _ollama_serve() -> bool:
     try:
         console.print("[yellow]Starting Ollama service...[/yellow]")
         if platform.system() == "Windows":
-            subprocess.Popen([ollama, "serve"], creationflags=subprocess.DETACHED_PROCESS)
+            detached = getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+            subprocess.Popen([ollama, "serve"], creationflags=detached)
         else:
             subprocess.Popen([ollama, "serve"], start_new_session=True)
         import time
