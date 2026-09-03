@@ -132,7 +132,18 @@ def _prom_observe(name: str, duration: float, labels: dict[str, str] | None = No
         hist.observe(duration)
 
 
+_BOUND_PORTS: set[int] = set()
+
+
 class MetricsServer:
+    """Prometheus HTTP metrics endpoint.
+
+    A fixed-port metrics endpoint is process-global: the first gateway in the
+    process binds the port and later instances reuse it instead of failing with
+    EADDRINUSE (which is what happens on Linux when a second gateway tries to
+    bind the same port while the first listener is still active).
+    """
+
     def __init__(self, port: int = 9090):
         self.port = port
         self._started = False
@@ -144,7 +155,12 @@ class MetricsServer:
             logger.warning("prometheus_client not installed — MetricsServer disabled")
             self._started = True
             return
+        if self.port in _BOUND_PORTS:
+            logger.info("Prometheus metrics server already running on port {}", self.port)
+            self._started = True
+            return
         start_http_server(self.port)
+        _BOUND_PORTS.add(self.port)
         self._started = True
         logger.info("Prometheus metrics server started on port {}", self.port)
 
