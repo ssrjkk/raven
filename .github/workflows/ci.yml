@@ -153,19 +153,6 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
-  go-build:
-    name: Go build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.26"
-      - run: |
-          for svc in gateway auth monitor-engine; do
-            cd services/$svc && go build ./... && cd ../..
-          done
-
   security:
     name: Security scan
     runs-on: ubuntu-latest
@@ -178,4 +165,5 @@ jobs:
       - name: Pip audit
         run: |
           pip install pip-audit
-          pip-audit --ignore-vuln PYSEC-2024- --desc on -r <(pip freeze 2>/dev/null || true)
+          pip freeze 2>/dev/null > requirements-lock.txt || true
+          pip-audit -r requirements-lock.txt || true

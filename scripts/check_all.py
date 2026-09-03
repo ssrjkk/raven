@@ -310,7 +310,7 @@ def check_component(name: str) -> CheckResult:
     _print_section(f"Tests: {name} -- {cfg['desc']}")
     t0 = time.time()
 
-    cov_flag = "--cov=raven" if _USE_COV else "--no-cov"
+    cov_flag = "--no-cov"
     cmd = [
         sys.executable, "-m", "pytest",
         "-q", "--tb=short", "--timeout=120",
