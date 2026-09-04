@@ -1,13 +1,17 @@
 """
 Script to verify migration v5 indexes exist and are used in query plans.
+Creates a temp DB, runs migrations, verifies indexes, then disconnects.
 100% local, no external dependencies beyond aiosqlite + stdlib.
 """
 from __future__ import annotations
 
 import asyncio
+import tempfile
 from pathlib import Path
 
 import aiosqlite
+
+from raven.core.db import Database
 
 
 class Colors:
@@ -29,11 +33,14 @@ EXPECTED_INDEXES = {
 }
 
 
-async def main() -> None:
-    db_path = Path("data/raven.db").resolve()
-    if not db_path.exists():
-        print(f"{Colors.YELLOW}Database not found: {db_path}. Run migrations first.{Colors.RESET}")
-        return
+async def main() -> int:
+    # Migrate a throwaway DB so index verification works even when no data/ dir
+    # exists (CI). disconnect() must be called so asyncio.run() can exit cleanly
+    # on Python 3.12 (an open aiosqlite thread otherwise blocks process exit).
+    db_path = Path(tempfile.mkdtemp()) / "raven.db"
+    db = Database(db_path)
+    await db.connect()
+    await db.disconnect()
 
     print(f"\n{Colors.BOLD}--- Index verification: {db_path} ---{Colors.RESET}\n")
 
@@ -75,11 +82,13 @@ async def main() -> None:
     print(f"\n{Colors.BOLD}--- Summary ---{Colors.RESET}")
     if all_present and plans_ok:
         print(f"  {Colors.GREEN}All indices present and query plans correct.{Colors.RESET}")
-    elif all_present:
+        return 0
+    if all_present:
         print(f"  {Colors.YELLOW}All indices present but some query plans need review.{Colors.RESET}")
-    else:
-        print(f"  {Colors.RED}Missing indices detected. Re-run migration v5.{Colors.RESET}")
+        return 1
+    print(f"  {Colors.RED}Missing indices detected. Re-run migration v5.{Colors.RESET}")
+    return 1
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    raise SystemExit(asyncio.run(main()))
