@@ -1,0 +1,30 @@
+2026-09-04 12:28:33.724 | INFO     | raven.core.migrations:migrate:430 - Applying migration 1: Add agent_skills column to sessions
+2026-09-04 12:28:33.724 | DEBUG    | raven.core.migrations:_ensure_column:55 - Migration: column already exists in sessions
+2026-09-04 12:28:33.724 | INFO     | raven.core.migrations:migrate:437 - Migration 1 applied
+2026-09-04 12:28:33.724 | INFO     | raven.core.migrations:migrate:430 - Applying migration 2: Add role column to users table
+2026-09-04 12:28:33.724 | DEBUG    | raven.core.migrations:_ensure_column:55 - Migration: column already exists in users
+2026-09-04 12:28:33.724 | INFO     | raven.core.migrations:migrate:437 - Migration 2 applied
+2026-09-04 12:28:33.725 | INFO     | raven.core.migrations:migrate:430 - Applying migration 3: Create checkpoints table
+2026-09-04 12:28:33.725 | INFO     | raven.core.migrations:migrate:437 - Migration 3 applied
+2026-09-04 12:28:33.725 | INFO     | raven.core.migrations:migrate:430 - Applying migration 4: Create routines table
+2026-09-04 12:28:33.725 | INFO     | raven.core.migrations:migrate:437 - Migration 4 applied
+2026-09-04 12:28:33.725 | INFO     | raven.core.migrations:migrate:430 - Applying migration 5: Add indexes on core tables
+2026-09-04 12:28:33.726 | INFO     | raven.core.migrations:migrate:437 - Migration 5 applied
+2026-09-04 12:28:33.726 | INFO     | raven.core.migrations:migrate:430 - Applying migration 6: Create monitors + monitor_checks tables
+2026-09-04 12:28:33.726 | INFO     | raven.core.migrations:migrate:437 - Migration 6 applied
+2026-09-04 12:28:33.726 | INFO     | raven.core.migrations:migrate:430 - Applying migration 7: Create tasks + task_steps tables
+2026-09-04 12:28:33.727 | INFO     | raven.core.migrations:migrate:437 - Migration 7 applied
+2026-09-04 12:28:33.727 | INFO     | raven.core.migrations:migrate:430 - Applying migration 8: Create coding_sessions table
+2026-09-04 12:28:33.728 | INFO     | raven.core.migrations:migrate:437 - Migration 8 applied
+2026-09-04 12:28:33.728 | INFO     | raven.core.migrations:migrate:430 - Applying migration 9: Add user_id + channel columns to monitors
+2026-09-04 12:28:33.728 | DEBUG    | raven.core.migrations:_migration_9:372 - Migration 9: column user_id already exists
+2026-09-04 12:28:33.728 | DEBUG    | raven.core.migrations:_migration_9:372 - Migration 9: column channel already exists
+2026-09-04 12:28:33.728 | INFO     | raven.core.migrations:migrate:437 - Migration 9 applied
+2026-09-04 12:28:33.728 | INFO     | raven.core.migrations:migrate:444 - DB migrated to version 9
+2026-09-04 12:28:33.730 | INFO     | raven.core.gateway.channel_manager:register:20 - Registered channel: real
+2026-09-04 12:28:33.733 | INFO     | raven.core.gateway.gateway:stop:369 - Stopping gateway...
+2026-09-04 12:28:33.733 | INFO     | raven.core.outbox:stop:89 - Outbox stopped
+2026-09-04 12:28:33.733 | INFO     | raven.core.gateway.task_orchestrator:stop:88 - TaskOrchestrator stopped
+2026-09-04 12:28:33.733 | INFO     | raven.core.gateway.channel_manager:stop_all:50 - Channel stopped: real
+2026-09-04 12:28:33.733 | DEBUG    | raven.core.store:close:54 - Connection closed for MonitorStore
+2026-09-04 12:28:33.733 | DEBUG    | raven.core.store:close:54 - Connection closed for RoutineStore

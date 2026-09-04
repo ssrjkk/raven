@@ -1,0 +1,10 @@
+2026-09-04 12:28:44.529 | DEBUG    | raven.tools.mcp_tools:handler:14 - Calling MCP tool srv.echo with {'x': 0}
+2026-09-04 12:28:44.530 | DEBUG    | raven.tools.mcp_tools:handler:14 - Calling MCP tool srv.echo with {'x': 1}
+2026-09-04 12:28:44.530 | DEBUG    | raven.tools.mcp_tools:handler:14 - Calling MCP tool srv.echo with {'x': 2}
+2026-09-04 12:28:44.530 | DEBUG    | raven.tools.mcp_tools:handler:14 - Calling MCP tool srv.echo with {'x': 3}
+2026-09-04 12:28:44.530 | DEBUG    | raven.tools.mcp_tools:handler:14 - Calling MCP tool srv.echo with {'x': 4}
+2026-09-04 12:28:44.530 | DEBUG    | raven.tools.mcp_tools:handler:14 - Calling MCP tool srv.echo with {'x': 5}
+2026-09-04 12:28:44.530 | DEBUG    | raven.tools.mcp_tools:handler:14 - Calling MCP tool srv.echo with {'x': 6}
+2026-09-04 12:28:44.530 | DEBUG    | raven.tools.mcp_tools:handler:14 - Calling MCP tool srv.echo with {'x': 7}
+2026-09-04 12:28:44.530 | DEBUG    | raven.tools.mcp_tools:handler:14 - Calling MCP tool srv.echo with {'x': 8}
+2026-09-04 12:28:44.530 | DEBUG    | raven.tools.mcp_tools:handler:14 - Calling MCP tool srv.echo with {'x': 9}

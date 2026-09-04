@@ -1,0 +1,2 @@
+2026-09-04 12:28:44.490 | DEBUG    | raven.tools.mcp_tools:handler:14 - Calling MCP tool bad.fail with {}
+2026-09-04 12:28:44.490 | ERROR    | raven.tools.mcp_tools:handler:24 - MCP tool bad.fail failed: simulated failure
