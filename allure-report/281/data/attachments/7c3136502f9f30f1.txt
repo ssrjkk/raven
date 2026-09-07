@@ -1,0 +1,115 @@
+2026-09-07 21:23:03.929 | INFO     | raven.core.gateway.channel_manager:register:20 - Registered channel: mock
+2026-09-07 21:23:03.931 | INFO     | raven.core.gateway.gateway:handle_message:512 - [eba06560] Incoming message from mock[user0]: stress test message 0
+2026-09-07 21:23:03.931 | DEBUG    | raven.core.security.context_filter:_try_init_presidio:356 - [context_filter] presidio_analyzer not available — using regex patterns only
+2026-09-07 21:23:03.931 | INFO     | raven.core.gateway.gateway:_handle_message_inner:575 - [eba06560] Processing message from mock[user0]
+2026-09-07 21:23:03.932 | INFO     | raven.core.gateway.gateway:handle_message:512 - [545fe1f6] Incoming message from mock[user1]: stress test message 1
+2026-09-07 21:23:03.932 | DEBUG    | raven.core.security.context_filter:_try_init_presidio:356 - [context_filter] presidio_analyzer not available — using regex patterns only
+2026-09-07 21:23:03.932 | INFO     | raven.core.gateway.gateway:_handle_message_inner:575 - [545fe1f6] Processing message from mock[user1]
+2026-09-07 21:23:03.932 | INFO     | raven.core.gateway.gateway:handle_message:512 - [157236d6] Incoming message from mock[user2]: stress test message 2
+2026-09-07 21:23:03.933 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.933 | INFO     | raven.core.gateway.gateway:handle_message:512 - [e3c44f87] Incoming message from mock[user3]: stress test message 3
+2026-09-07 21:23:03.933 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.933 | INFO     | raven.core.gateway.gateway:handle_message:512 - [d12ce5cd] Incoming message from mock[user4]: stress test message 4
+2026-09-07 21:23:03.933 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.933 | INFO     | raven.core.gateway.gateway:handle_message:512 - [07376eb4] Incoming message from mock[user5]: stress test message 5
+2026-09-07 21:23:03.934 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.934 | INFO     | raven.core.gateway.gateway:handle_message:512 - [77c7cd65] Incoming message from mock[user6]: stress test message 6
+2026-09-07 21:23:03.934 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.934 | INFO     | raven.core.gateway.gateway:handle_message:512 - [cbf2aa41] Incoming message from mock[user7]: stress test message 7
+2026-09-07 21:23:03.934 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.934 | INFO     | raven.core.gateway.gateway:handle_message:512 - [f66295ff] Incoming message from mock[user8]: stress test message 8
+2026-09-07 21:23:03.935 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.935 | INFO     | raven.core.gateway.gateway:handle_message:512 - [75818790] Incoming message from mock[user9]: stress test message 9
+2026-09-07 21:23:03.935 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.935 | INFO     | raven.core.gateway.gateway:handle_message:512 - [60a6954c] Incoming message from mock[user0]: stress test message 10
+2026-09-07 21:23:03.935 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.935 | INFO     | raven.core.gateway.gateway:handle_message:512 - [027b32c1] Incoming message from mock[user1]: stress test message 11
+2026-09-07 21:23:03.935 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.935 | INFO     | raven.core.gateway.gateway:handle_message:512 - [f93b5ab0] Incoming message from mock[user2]: stress test message 12
+2026-09-07 21:23:03.936 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.936 | INFO     | raven.core.gateway.gateway:handle_message:512 - [6662cf54] Incoming message from mock[user3]: stress test message 13
+2026-09-07 21:23:03.936 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.936 | INFO     | raven.core.gateway.gateway:handle_message:512 - [2d7abbc3] Incoming message from mock[user4]: stress test message 14
+2026-09-07 21:23:03.936 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.936 | INFO     | raven.core.gateway.gateway:handle_message:512 - [0aa3324f] Incoming message from mock[user5]: stress test message 15
+2026-09-07 21:23:03.936 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.937 | INFO     | raven.core.gateway.gateway:handle_message:512 - [cff6ae05] Incoming message from mock[user6]: stress test message 16
+2026-09-07 21:23:03.937 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.937 | INFO     | raven.core.gateway.gateway:handle_message:512 - [5df5dd0b] Incoming message from mock[user7]: stress test message 17
+2026-09-07 21:23:03.937 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.937 | INFO     | raven.core.gateway.gateway:handle_message:512 - [3c1bd1f6] Incoming message from mock[user8]: stress test message 18
+2026-09-07 21:23:03.937 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.937 | INFO     | raven.core.gateway.gateway:handle_message:512 - [792bf091] Incoming message from mock[user9]: stress test message 19
+2026-09-07 21:23:03.937 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 21:23:03.937 | INFO     | raven.core.gateway.gateway:handle_message:512 - [a92e1697] Incoming message from mock[user0]: stress test message 20
+2026-09-07 21:23:03.938 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.938 | INFO     | raven.core.gateway.gateway:handle_message:512 - [b5f3862d] Incoming message from mock[user1]: stress test message 21
+2026-09-07 21:23:03.938 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.938 | INFO     | raven.core.gateway.gateway:handle_message:512 - [21b87cfe] Incoming message from mock[user2]: stress test message 22
+2026-09-07 21:23:03.938 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.938 | INFO     | raven.core.gateway.gateway:handle_message:512 - [db70dace] Incoming message from mock[user3]: stress test message 23
+2026-09-07 21:23:03.938 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.939 | INFO     | raven.core.gateway.gateway:handle_message:512 - [0d8f9236] Incoming message from mock[user4]: stress test message 24
+2026-09-07 21:23:03.939 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.939 | INFO     | raven.core.gateway.gateway:handle_message:512 - [915f78d1] Incoming message from mock[user5]: stress test message 25
+2026-09-07 21:23:03.939 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.939 | INFO     | raven.core.gateway.gateway:handle_message:512 - [acf6c065] Incoming message from mock[user6]: stress test message 26
+2026-09-07 21:23:03.939 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.939 | INFO     | raven.core.gateway.gateway:handle_message:512 - [eb8303d7] Incoming message from mock[user7]: stress test message 27
+2026-09-07 21:23:03.939 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.940 | INFO     | raven.core.gateway.gateway:handle_message:512 - [a8346f9c] Incoming message from mock[user8]: stress test message 28
+2026-09-07 21:23:03.940 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.940 | INFO     | raven.core.gateway.gateway:handle_message:512 - [75c689df] Incoming message from mock[user9]: stress test message 29
+2026-09-07 21:23:03.940 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.940 | INFO     | raven.core.gateway.gateway:handle_message:512 - [74f853c3] Incoming message from mock[user0]: stress test message 30
+2026-09-07 21:23:03.940 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.940 | INFO     | raven.core.gateway.gateway:handle_message:512 - [1d5dc5a8] Incoming message from mock[user1]: stress test message 31
+2026-09-07 21:23:03.940 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.941 | INFO     | raven.core.gateway.gateway:handle_message:512 - [f415bd00] Incoming message from mock[user2]: stress test message 32
+2026-09-07 21:23:03.941 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.941 | INFO     | raven.core.gateway.gateway:handle_message:512 - [2ba4d3a0] Incoming message from mock[user3]: stress test message 33
+2026-09-07 21:23:03.941 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.941 | INFO     | raven.core.gateway.gateway:handle_message:512 - [27233a44] Incoming message from mock[user4]: stress test message 34
+2026-09-07 21:23:03.941 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.941 | INFO     | raven.core.gateway.gateway:handle_message:512 - [6ca9e4bd] Incoming message from mock[user5]: stress test message 35
+2026-09-07 21:23:03.941 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.942 | INFO     | raven.core.gateway.gateway:handle_message:512 - [33084202] Incoming message from mock[user6]: stress test message 36
+2026-09-07 21:23:03.942 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.942 | INFO     | raven.core.gateway.gateway:handle_message:512 - [c1c03de0] Incoming message from mock[user7]: stress test message 37
+2026-09-07 21:23:03.942 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.942 | INFO     | raven.core.gateway.gateway:handle_message:512 - [c00f0891] Incoming message from mock[user8]: stress test message 38
+2026-09-07 21:23:03.942 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.942 | INFO     | raven.core.gateway.gateway:handle_message:512 - [361883e9] Incoming message from mock[user9]: stress test message 39
+2026-09-07 21:23:03.942 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.942 | INFO     | raven.core.gateway.gateway:handle_message:512 - [b91cfc1e] Incoming message from mock[user0]: stress test message 40
+2026-09-07 21:23:03.943 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.943 | INFO     | raven.core.gateway.gateway:handle_message:512 - [0ec5a716] Incoming message from mock[user1]: stress test message 41
+2026-09-07 21:23:03.943 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.943 | INFO     | raven.core.gateway.gateway:handle_message:512 - [84c0844a] Incoming message from mock[user2]: stress test message 42
+2026-09-07 21:23:03.943 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.943 | INFO     | raven.core.gateway.gateway:handle_message:512 - [f8dbaeb1] Incoming message from mock[user3]: stress test message 43
+2026-09-07 21:23:03.943 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.943 | INFO     | raven.core.gateway.gateway:handle_message:512 - [5b8d2678] Incoming message from mock[user4]: stress test message 44
+2026-09-07 21:23:03.944 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.944 | INFO     | raven.core.gateway.gateway:handle_message:512 - [e9867bf7] Incoming message from mock[user5]: stress test message 45
+2026-09-07 21:23:03.944 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.944 | INFO     | raven.core.gateway.gateway:handle_message:512 - [234c5653] Incoming message from mock[user6]: stress test message 46
+2026-09-07 21:23:03.944 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.944 | INFO     | raven.core.gateway.gateway:handle_message:512 - [21fee821] Incoming message from mock[user7]: stress test message 47
+2026-09-07 21:23:03.944 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.944 | INFO     | raven.core.gateway.gateway:handle_message:512 - [65dd4921] Incoming message from mock[user8]: stress test message 48
+2026-09-07 21:23:03.945 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.945 | INFO     | raven.core.gateway.gateway:handle_message:512 - [4f5bf06d] Incoming message from mock[user9]: stress test message 49
+2026-09-07 21:23:03.945 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:119 - Rate limit exceeded for channel mock (type=mock)
+2026-09-07 21:23:03.948 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 1/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 21:23:03.948 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 1/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 21:23:04.449 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 2/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 21:23:04.450 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 2/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 21:23:05.451 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 3/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 21:23:05.451 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 3/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 21:23:05.456 | INFO     | raven.core.gateway.gateway:stop:369 - Stopping gateway...
+2026-09-07 21:23:05.456 | INFO     | raven.core.outbox:stop:89 - Outbox stopped
+2026-09-07 21:23:05.456 | INFO     | raven.core.gateway.task_orchestrator:stop:88 - TaskOrchestrator stopped
+2026-09-07 21:23:05.456 | INFO     | raven.core.gateway.channel_manager:stop_all:50 - Channel stopped: mock
+2026-09-07 21:23:05.456 | DEBUG    | raven.core.store:close:54 - Connection closed for MonitorStore
+2026-09-07 21:23:05.456 | DEBUG    | raven.core.store:close:54 - Connection closed for RoutineStore

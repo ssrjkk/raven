@@ -1,0 +1,25 @@
+2026-09-07 21:22:56.231 | INFO     | raven.core.gateway.channel_manager:register:20 - Registered channel: mock
+2026-09-07 21:22:56.233 | INFO     | raven.core.gateway.gateway:handle_message:512 - [97e0171d] Incoming message from mock[user1]: message 0
+2026-09-07 21:22:56.233 | DEBUG    | raven.core.security.context_filter:_try_init_presidio:356 - [context_filter] presidio_analyzer not available — using regex patterns only
+2026-09-07 21:22:56.233 | INFO     | raven.core.gateway.gateway:_handle_message_inner:575 - [97e0171d] Processing message from mock[user1]
+2026-09-07 21:22:56.236 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 1/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 21:22:56.737 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 2/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 21:22:57.739 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 3/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 21:22:57.741 | INFO     | raven.core.gateway.gateway:handle_message:512 - [97e0171d] Incoming message from mock[user1]: message 1
+2026-09-07 21:22:57.742 | DEBUG    | raven.core.security.context_filter:_try_init_presidio:356 - [context_filter] presidio_analyzer not available — using regex patterns only
+2026-09-07 21:22:57.742 | INFO     | raven.core.gateway.gateway:_handle_message_inner:575 - [97e0171d] Processing message from mock[user1]
+2026-09-07 21:22:57.743 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 1/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 21:22:58.243 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 2/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 21:22:59.245 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 3/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 21:22:59.246 | INFO     | raven.core.gateway.gateway:handle_message:512 - [97e0171d] Incoming message from mock[user1]: message 2
+2026-09-07 21:22:59.247 | DEBUG    | raven.core.security.context_filter:_try_init_presidio:356 - [context_filter] presidio_analyzer not available — using regex patterns only
+2026-09-07 21:22:59.247 | INFO     | raven.core.gateway.gateway:_handle_message_inner:575 - [97e0171d] Processing message from mock[user1]
+2026-09-07 21:22:59.247 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 1/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 21:22:59.748 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 2/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 21:23:00.750 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 3/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 21:23:00.752 | INFO     | raven.core.gateway.gateway:stop:369 - Stopping gateway...
+2026-09-07 21:23:00.752 | INFO     | raven.core.outbox:stop:89 - Outbox stopped
+2026-09-07 21:23:00.752 | INFO     | raven.core.gateway.task_orchestrator:stop:88 - TaskOrchestrator stopped
+2026-09-07 21:23:00.752 | INFO     | raven.core.gateway.channel_manager:stop_all:50 - Channel stopped: mock
+2026-09-07 21:23:00.752 | DEBUG    | raven.core.store:close:54 - Connection closed for MonitorStore
+2026-09-07 21:23:00.752 | DEBUG    | raven.core.store:close:54 - Connection closed for RoutineStore
