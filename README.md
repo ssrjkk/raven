@@ -1,8 +1,4 @@
-Проверил репозиторий. Вот профессиональный README без стикеров, четко по факту:
 
----
-
-```markdown
 # Raven AI
 
 Enterprise-grade self-hosted AI agent framework combining autonomous coding capabilities with multi-channel communication.
