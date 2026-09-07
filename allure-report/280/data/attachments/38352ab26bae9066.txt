@@ -1,0 +1,55 @@
+2026-09-07 01:40:13.446 | INFO     | raven.core.gateway.channel_manager:register:20 - Registered channel: mock
+2026-09-07 01:40:13.447 | INFO     | raven.core.gateway.gateway:handle_message:512 - [ad8bad22] Incoming message from mock[burst_user]: burst 0
+2026-09-07 01:40:13.449 | DEBUG    | raven.core.security.context_filter:_try_init_presidio:356 - [context_filter] presidio_analyzer not available — using regex patterns only
+2026-09-07 01:40:13.449 | INFO     | raven.core.gateway.gateway:_handle_message_inner:575 - [ad8bad22] Processing message from mock[burst_user]
+2026-09-07 01:40:13.449 | INFO     | raven.core.gateway.gateway:handle_message:512 - [3b101ec9] Incoming message from mock[burst_user]: burst 1
+2026-09-07 01:40:13.449 | DEBUG    | raven.core.security.context_filter:_try_init_presidio:356 - [context_filter] presidio_analyzer not available — using regex patterns only
+2026-09-07 01:40:13.450 | INFO     | raven.core.gateway.gateway:_handle_message_inner:575 - [3b101ec9] Processing message from mock[burst_user]
+2026-09-07 01:40:13.450 | INFO     | raven.core.gateway.gateway:handle_message:512 - [28854a51] Incoming message from mock[burst_user]: burst 2
+2026-09-07 01:40:13.450 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 01:40:13.450 | INFO     | raven.core.gateway.gateway:handle_message:512 - [d0fd2ee2] Incoming message from mock[burst_user]: burst 3
+2026-09-07 01:40:13.450 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 01:40:13.450 | INFO     | raven.core.gateway.gateway:handle_message:512 - [a4a9dc54] Incoming message from mock[burst_user]: burst 4
+2026-09-07 01:40:13.450 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 01:40:13.451 | INFO     | raven.core.gateway.gateway:handle_message:512 - [5857435c] Incoming message from mock[burst_user]: burst 5
+2026-09-07 01:40:13.451 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 01:40:13.451 | INFO     | raven.core.gateway.gateway:handle_message:512 - [22fb1e02] Incoming message from mock[burst_user]: burst 6
+2026-09-07 01:40:13.451 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 01:40:13.451 | INFO     | raven.core.gateway.gateway:handle_message:512 - [ed39f762] Incoming message from mock[burst_user]: burst 7
+2026-09-07 01:40:13.451 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 01:40:13.451 | INFO     | raven.core.gateway.gateway:handle_message:512 - [c2a3e26c] Incoming message from mock[burst_user]: burst 8
+2026-09-07 01:40:13.451 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 01:40:13.451 | INFO     | raven.core.gateway.gateway:handle_message:512 - [ba0be679] Incoming message from mock[burst_user]: burst 9
+2026-09-07 01:40:13.452 | WARNING  | raven.core.channel_guardian:check_rate_limit:85 - Rate limit exceeded for channel mock
+2026-09-07 01:40:13.452 | INFO     | raven.core.gateway.gateway:handle_message:512 - [1620ebbc] Incoming message from mock[burst_user]: burst 10
+2026-09-07 01:40:13.452 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:127 - Rate limit exceeded for user burst_user on channel mock
+2026-09-07 01:40:13.452 | INFO     | raven.core.gateway.gateway:handle_message:512 - [222d6420] Incoming message from mock[burst_user]: burst 11
+2026-09-07 01:40:13.452 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:127 - Rate limit exceeded for user burst_user on channel mock
+2026-09-07 01:40:13.452 | INFO     | raven.core.gateway.gateway:handle_message:512 - [2d993ac3] Incoming message from mock[burst_user]: burst 12
+2026-09-07 01:40:13.452 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:127 - Rate limit exceeded for user burst_user on channel mock
+2026-09-07 01:40:13.452 | INFO     | raven.core.gateway.gateway:handle_message:512 - [315c29f4] Incoming message from mock[burst_user]: burst 13
+2026-09-07 01:40:13.452 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:127 - Rate limit exceeded for user burst_user on channel mock
+2026-09-07 01:40:13.452 | INFO     | raven.core.gateway.gateway:handle_message:512 - [3c32edd8] Incoming message from mock[burst_user]: burst 14
+2026-09-07 01:40:13.453 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:127 - Rate limit exceeded for user burst_user on channel mock
+2026-09-07 01:40:13.453 | INFO     | raven.core.gateway.gateway:handle_message:512 - [f16096e6] Incoming message from mock[burst_user]: burst 15
+2026-09-07 01:40:13.453 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:127 - Rate limit exceeded for user burst_user on channel mock
+2026-09-07 01:40:13.453 | INFO     | raven.core.gateway.gateway:handle_message:512 - [2638b0f4] Incoming message from mock[burst_user]: burst 16
+2026-09-07 01:40:13.453 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:127 - Rate limit exceeded for user burst_user on channel mock
+2026-09-07 01:40:13.453 | INFO     | raven.core.gateway.gateway:handle_message:512 - [162ccb3c] Incoming message from mock[burst_user]: burst 17
+2026-09-07 01:40:13.453 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:127 - Rate limit exceeded for user burst_user on channel mock
+2026-09-07 01:40:13.453 | INFO     | raven.core.gateway.gateway:handle_message:512 - [3945b694] Incoming message from mock[burst_user]: burst 18
+2026-09-07 01:40:13.453 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:127 - Rate limit exceeded for user burst_user on channel mock
+2026-09-07 01:40:13.454 | INFO     | raven.core.gateway.gateway:handle_message:512 - [baa95f81] Incoming message from mock[burst_user]: burst 19
+2026-09-07 01:40:13.454 | WARNING  | raven.core.security.rate_limiter:check_rate_limit:127 - Rate limit exceeded for user burst_user on channel mock
+2026-09-07 01:40:13.456 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 1/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 01:40:13.457 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 1/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 01:40:13.958 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 2/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 01:40:13.958 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 2/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 01:40:14.960 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 3/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 01:40:14.960 | ERROR    | raven.core.agent.agent:run:423 - Agent: LLM call failed (round 3/10): sequence item 0: expected str instance, MagicMock found
+2026-09-07 01:40:14.964 | INFO     | raven.core.gateway.gateway:stop:369 - Stopping gateway...
+2026-09-07 01:40:14.964 | INFO     | raven.core.outbox:stop:89 - Outbox stopped
+2026-09-07 01:40:14.964 | INFO     | raven.core.gateway.task_orchestrator:stop:88 - TaskOrchestrator stopped
+2026-09-07 01:40:14.964 | INFO     | raven.core.gateway.channel_manager:stop_all:50 - Channel stopped: mock
+2026-09-07 01:40:14.964 | DEBUG    | raven.core.store:close:54 - Connection closed for MonitorStore
+2026-09-07 01:40:14.964 | DEBUG    | raven.core.store:close:54 - Connection closed for RoutineStore

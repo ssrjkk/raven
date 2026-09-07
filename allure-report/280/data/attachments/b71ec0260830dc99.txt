@@ -1,0 +1,2 @@
+
+Burst test: 20 messages, 18 rate-limited responses

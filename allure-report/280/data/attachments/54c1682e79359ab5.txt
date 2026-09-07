@@ -1,0 +1,1 @@
+2026-09-07 01:40:11.838 | DEBUG    | raven.tools.mcp_tools:handler:14 - Calling MCP tool math.echo with {'msg': 'hello'}

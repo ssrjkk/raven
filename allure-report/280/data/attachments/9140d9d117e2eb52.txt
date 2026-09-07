@@ -1,0 +1,10 @@
+2026-09-07 01:40:02.613 | INFO     | raven.core.gateway.channel_manager:register:20 - Registered channel: mock
+2026-09-07 01:40:02.614 | INFO     | raven.core.gateway.gateway:handle_message:512 - [8119e32a] Incoming message from mock[user1]: /status
+2026-09-07 01:40:02.614 | DEBUG    | raven.core.security.context_filter:_try_init_presidio:356 - [context_filter] presidio_analyzer not available — using regex patterns only
+2026-09-07 01:40:02.614 | INFO     | raven.core.gateway.gateway:_handle_message_inner:575 - [8119e32a] Processing message from mock[user1]
+2026-09-07 01:40:02.615 | INFO     | raven.core.gateway.gateway:stop:369 - Stopping gateway...
+2026-09-07 01:40:02.616 | INFO     | raven.core.outbox:stop:89 - Outbox stopped
+2026-09-07 01:40:02.616 | INFO     | raven.core.gateway.task_orchestrator:stop:88 - TaskOrchestrator stopped
+2026-09-07 01:40:02.616 | INFO     | raven.core.gateway.channel_manager:stop_all:50 - Channel stopped: mock
+2026-09-07 01:40:02.616 | DEBUG    | raven.core.store:close:54 - Connection closed for MonitorStore
+2026-09-07 01:40:02.616 | DEBUG    | raven.core.store:close:54 - Connection closed for RoutineStore
