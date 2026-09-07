@@ -490,9 +490,4 @@ MIT License - see [LICENSE](LICENSE) file.
 - **Issues:** https://github.com/ssrjkk/raven/issues
 - **Email:** ray013lefe@gmail.com
 
----
 
-**Copyright (c) 2024-2026 ssrjkk**
-```
-
----
