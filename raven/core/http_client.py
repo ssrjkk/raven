@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from loguru import logger
@@ -68,13 +68,13 @@ class ClientManager:
         client = await self._pool.get_client(timeout=timeout)
         resp = await client.post(url, json=json, headers=headers or {})
         resp.raise_for_status()
-        return resp.json() if resp.content else {}
+        return cast(dict[str, Any], resp.json()) if resp.content else {}
 
     async def get(self, url: str, headers: dict[str, Any] | None = None, timeout: float = 15.0) -> dict[str, Any]:
         client = await self._pool.get_client(timeout=timeout)
         resp = await client.get(url, headers=headers or {})
         resp.raise_for_status()
-        return resp.json() if resp.content else {}
+        return cast(dict[str, Any], resp.json()) if resp.content else {}
 
     async def close(self):
         await self._pool.close_all()

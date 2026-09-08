@@ -320,6 +320,120 @@ class TestExecuteWithStream:
         assert "".join(chunks) == "streamed answer"
 
 
+class TestToolRetryAndErrorDetection:
+    @pytest.mark.asyncio
+    async def test_transient_tool_failure_retried_until_success(self):
+        attempts = {"n": 0}
+
+        async def flaky(text: str) -> str:
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                raise RuntimeError("connection refused")
+            return "ok"
+
+        registry = make_registry({"echo": ({"text": {"type": "string", "required": True}}, flaky)})
+        llm = FakeLLM(
+            responses=[
+                LLMResponse(tool_calls=[ToolCall(id="1", name="echo", arguments={"text": "hi"})]),
+                LLMResponse(content="done"),
+            ]
+        )
+        orch = AgentOrchestrator(llm=llm, tool_registry=registry, max_total_iterations=10, tool_retry_backoff=0.01)  # type: ignore[arg-type]
+        result = await orch.execute("implement the login feature", profile_override="coder")
+
+        assert result.success is True
+        assert attempts["n"] == 3
+
+    @pytest.mark.asyncio
+    async def test_permanent_tool_error_not_retried(self):
+        attempts = {"n": 0}
+
+        async def bad(text: str) -> str:
+            attempts["n"] += 1
+            return "[error] invalid parameter: nope"
+
+        registry = make_registry({"echo": ({"text": {"type": "string"}}, bad)})
+        llm = FakeLLM(
+            responses=[
+                LLMResponse(tool_calls=[ToolCall(id="1", name="echo", arguments={"text": "hi"})]),
+                LLMResponse(content="done"),
+            ]
+        )
+        orch = AgentOrchestrator(llm=llm, tool_registry=registry, max_total_iterations=10, tool_retry_backoff=0.01)  # type: ignore[arg-type]
+        result = await orch.execute("implement the login feature", profile_override="coder")
+
+        assert result.success is True
+        assert attempts["n"] == 1
+
+    @pytest.mark.asyncio
+    async def test_error_string_result_reported_as_error(self):
+        events: list[dict[str, Any]] = []
+
+        async def send(data: str) -> None:
+            events.append(json.loads(data))
+
+        async def bad(text: str) -> str:
+            return "[error] tool exploded"
+
+        registry = make_registry({"echo": ({"text": {"type": "string"}}, bad)})
+        llm = FakeLLM(
+            responses=[
+                LLMResponse(tool_calls=[ToolCall(id="1", name="echo", arguments={"text": "hi"})]),
+                LLMResponse(content="done"),
+            ]
+        )
+        orch = AgentOrchestrator(llm=llm, tool_registry=registry, max_total_iterations=10)  # type: ignore[arg-type]
+        emitter = StatusEmitter(send)
+        await orch.execute("implement the login feature", profile_override="coder", status_emitter=emitter)
+
+        tool_results = [e for e in events if e["event"] == "tool_result"]
+        assert tool_results and all("error" in r["detail"] for r in tool_results)
+
+
+class TestContextCompression:
+    @pytest.mark.asyncio
+    async def test_llm_digest_used_when_available(self):
+        from raven.core.agents.profiles import resolve_profile
+
+        registry = make_registry({})
+        llm = FakeLLM(plan_steps=[], responses=[LLMResponse(content="digest of the conversation")])
+        orch = AgentOrchestrator(llm=llm, tool_registry=registry, max_total_iterations=10)  # type: ignore[arg-type]
+        middle = [
+            {"role": "assistant", "content": "implemented login"},
+            {"role": "tool", "content": "wrote auth.py"},
+            {"role": "user", "content": "remember the constraint"},
+        ]
+        recent = [{"role": "assistant", "content": f"turn {i}"} for i in range(15)]
+        messages = [{"role": "system", "content": "sys"}, *middle, *recent]
+        result = await orch._compress_context(messages, resolve_profile("coder"))
+        assert result[0] == messages[0]
+        assert "digest of the conversation" in str(result[1]["content"])
+        assert len(result) == 17
+
+    @pytest.mark.asyncio
+    async def test_truncation_fallback_when_llm_unavailable(self):
+        from raven.core.agents.profiles import resolve_profile
+
+        class BoomLLM:
+            async def complete(self, *args: Any, **kwargs: Any) -> LLMResponse:
+                raise RuntimeError("llm down")
+
+        registry = make_registry({})
+        orch = AgentOrchestrator(llm=BoomLLM(), tool_registry=registry, max_total_iterations=10)  # type: ignore[arg-type]
+        middle = [
+            {"role": "assistant", "content": "implemented login"},
+            {"role": "tool", "content": "wrote auth.py"},
+            {"role": "user", "content": "remember the constraint"},
+        ]
+        recent = [{"role": "assistant", "content": f"turn {i}"} for i in range(15)]
+        messages = [{"role": "system", "content": "sys"}, *middle, *recent]
+        result = await orch._compress_context(messages, resolve_profile("coder"))
+        joined = "\n".join(str(m.get("content", "")) for m in result)
+        assert "[Conversation summary]" in joined
+        assert "remember the constraint" in joined
+        assert "digest" not in joined
+
+
 class TestParsePlanSteps:
     def test_parse_json_array(self):
         from raven.core.agents.orchestrator import _parse_plan_steps

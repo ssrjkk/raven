@@ -16,6 +16,7 @@ from raven.core.agents.router import IntentRouter
 from raven.core.agents.validation import validate_tool_arguments
 from raven.core.audit import AuditEventType, audit_logger
 from raven.core.config import settings
+from raven.core.metrics import metrics
 from raven.core.security.context_filter import redact_pii
 
 if TYPE_CHECKING:
@@ -32,6 +33,36 @@ _PATH_KEYS = ("path", "file", "directory", "source", "target")
 
 _IMPLEMENT_TOOLS = frozenset(
     {"file_write", "file_edit", "file_append", "shell", "python", "git_commit", "git_add"}
+)
+
+_TRANSIENT_MARKERS = (
+    "timed out",
+    "timeout",
+    "connection",
+    "refused",
+    "temporarily",
+    "try again",
+    "rate limit",
+    "quota",
+    "429",
+    "unavailable",
+    "busy",
+    "locked",
+    "reset by peer",
+    "eof",
+)
+
+
+def _is_transient_error(error: str) -> bool:
+    low = error.lower()
+    return any(marker in low for marker in _TRANSIENT_MARKERS)
+
+
+_CONTEXT_SUMMARY_PROMPT = (
+    "You are consolidating a long agent conversation for context compression. "
+    "Summarize the messages below into a concise digest that preserves: the user's requirements and constraints, "
+    "decisions made, files touched, tool results that mattered, and any partial work. "
+    "Do not invent facts. Keep it under 250 words."
 )
 
 
@@ -346,6 +377,8 @@ class AgentOrchestrator:
         max_critic_passes: int = 2,
         reflect_enabled: bool = True,
         max_retries: int = 1,
+        max_tool_retries: int = 2,
+        tool_retry_backoff: float = 0.5,
     ):
         self._llm = llm
         self._tool_registry = tool_registry
@@ -358,6 +391,8 @@ class AgentOrchestrator:
         self._max_critic_passes = max_critic_passes
         self._reflect_enabled = reflect_enabled
         self._max_retries = max_retries
+        self._max_tool_retries = max_tool_retries
+        self._tool_retry_backoff = tool_retry_backoff
         self._outcome_tracker = TaskOutcomeTracker()
         self._profile_memory = ProfileMemory()
 
@@ -704,11 +739,24 @@ class AgentOrchestrator:
     async def _compress_context(
         self, messages: list[dict[str, Any]], profile: AgentProfile
     ) -> list[dict[str, Any]]:
+        """Compress a long conversation to fit the context window.
+
+        Prefers an LLM-generated digest of the middle messages (fast tier) so no
+        decisions or partial work are lost to blunt truncation; falls back to a
+        deterministic compaction when the LLM is unavailable.
+        """
         system = messages[0]
         recent = messages[-15:]
         middle = messages[1:-15]
         if not middle:
             return messages
+        digest = await self._summarize_context(middle, profile)
+        if digest:
+            return [
+                system,
+                {"role": "system", "content": f"[Conversation summary]\n{digest[:1500]}"},
+                *recent,
+            ]
         summary_parts: list[str] = []
         for m in middle:
             role = m.get("role", "")
@@ -728,6 +776,36 @@ class AgentOrchestrator:
             *recent,
         ]
 
+    async def _summarize_context(self, middle: list[dict[str, Any]], profile: AgentProfile) -> str:
+        try:
+            from raven.core.model_tiers import select_model, tiers_configured
+
+            transcript = "\n".join(
+                f"{m.get('role')}: {str(m.get('content', ''))[:400]}" for m in middle
+            )
+            want_model = (
+                select_model([{"role": "user", "content": transcript}], prefer_tier="fast")
+                if tiers_configured()
+                else ""
+            )
+            resp = await self._llm.complete(
+                [
+                    {"role": "system", "content": _CONTEXT_SUMMARY_PROMPT},
+                    {"role": "user", "content": transcript[:8000]},
+                ],
+                model=want_model,
+            )
+            digest = (resp.content or "").strip()
+            if digest:
+                metrics.inc("agent_context_compressions", {"profile": profile.name})
+                logger.info(
+                    "AgentOrchestrator: context compressed via LLM for profile {}", profile.name
+                )
+                return digest
+        except Exception as e:
+            logger.debug("LLM context compression failed, falling back to truncation: {}", e)
+        return ""
+
     async def _execute_tool_safe(
         self, tc: ToolCall, profile: AgentProfile, agent_ctx: AgentContext
     ) -> dict[str, Any]:
@@ -745,16 +823,48 @@ class AgentOrchestrator:
             logger.warning("AgentOrchestrator: {} — handler not invoked", validation_error)
             return {"error": validation_error}
 
-        try:
-            self._check_security_policy(tc, agent_ctx.workspace)
-            result = await self._tool_registry.call(tc.name, **args)
-            return {"result": str(result)[:5000]}
-        except ValueError as e:
-            logger.warning("Tool {} blocked by security policy: {}", tc.name, e)
-            return {"error": str(e)[:500]}
-        except Exception as e:
-            logger.error("Tool {} failed: {}", tc.name, e)
-            return {"error": str(e)[:500]}
+        retries_left = self._max_tool_retries
+        while True:
+            try:
+                self._check_security_policy(tc, agent_ctx.workspace)
+                result = await self._tool_registry.call(tc.name, **args)
+                if isinstance(result, str) and result.startswith("[error]"):
+                    payload: dict[str, Any] = {"error": result[:500]}
+                else:
+                    payload = {"result": str(result)[:5000]}
+                if _is_transient_error(str(payload.get("error", ""))) and retries_left > 0:
+                    retries_left -= 1
+                    delay = self._tool_retry_backoff * (2 ** (self._max_tool_retries - retries_left - 1))
+                    logger.warning(
+                        "Tool {} transient failure, retrying in {}s ({} left): {}",
+                        tc.name,
+                        delay,
+                        retries_left,
+                        payload.get("error"),
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                return payload
+            except ValueError as e:
+                logger.warning("Tool {} blocked by security policy: {}", tc.name, e)
+                return {"error": str(e)[:500]}
+            except Exception as e:
+                if retries_left > 0 and _is_transient_error(str(e)):
+                    retries_left -= 1
+                    delay = self._tool_retry_backoff * (
+                        2 ** (self._max_tool_retries - retries_left - 1)
+                    )
+                    logger.warning(
+                        "Tool {} raised transient error, retrying in {}s ({} left): {}",
+                        tc.name,
+                        delay,
+                        retries_left,
+                        e,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.error("Tool {} failed: {}", tc.name, e)
+                return {"error": str(e)[:500]}
 
     def _check_security_policy(self, tc: ToolCall, workspace: Path | None) -> None:
         args = tc.arguments or {}

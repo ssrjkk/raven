@@ -80,12 +80,12 @@ class GitLabLegacyNormalizer:
         return base
 
     def get_owner(self, payload: dict[str, Any]) -> str:
-        path = (payload.get("project") or {}).get("path_with_namespace", "")
+        path = str((payload.get("project") or {}).get("path_with_namespace", ""))
         parts = path.split("/", 1)
         return parts[0] if len(parts) == 2 else ""
 
     def get_repo(self, payload: dict[str, Any]) -> str:
-        path = (payload.get("project") or {}).get("path_with_namespace", "")
+        path = str((payload.get("project") or {}).get("path_with_namespace", ""))
         parts = path.split("/", 1)
         return parts[1] if len(parts) == 2 else ""
 

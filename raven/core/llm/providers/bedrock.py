@@ -16,13 +16,13 @@ from raven.core.llm.providers.base import _convert_to_bedrock_converse
 
 class BedrockProvider(LLMProvider):
     def __init__(self, **overrides):
-        self.region = overrides.get("region") or os.environ.get(
+        self.region = str(overrides.get("region") or os.environ.get(
             "AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
-        )
+        ))
         raw_key = overrides.get("api_key") or os.environ.get("AWS_ACCESS_KEY_ID", "")
-        self.access_key = SecretStr(raw_key) if isinstance(raw_key, str) else raw_key
-        self.secret_key = overrides.get("secret_key") or os.environ.get("AWS_SECRET_ACCESS_KEY", "")
-        self.session_token = overrides.get("session_token") or os.environ.get("AWS_SESSION_TOKEN", "")
+        self.access_key = raw_key if isinstance(raw_key, SecretStr) else SecretStr(str(raw_key))
+        self.secret_key = str(overrides.get("secret_key") or os.environ.get("AWS_SECRET_ACCESS_KEY", ""))
+        self.session_token = str(overrides.get("session_token") or os.environ.get("AWS_SESSION_TOKEN", ""))
         import httpx
 
         self.http = httpx.AsyncClient(

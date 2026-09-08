@@ -65,7 +65,7 @@ class OpenRouterProvider(LLMProvider):
 class OpenAIProvider(LLMProvider):
     def __init__(self, **overrides):
         raw = overrides.get("api_key") or settings.openai_api_key.get_secret_value()
-        self.api_key = SecretStr(raw) if isinstance(raw, str) else raw
+        self.api_key = raw if isinstance(raw, SecretStr) else SecretStr(str(raw))
         self.base_url = overrides.get("base_url") or "https://api.openai.com/v1"
         import httpx
 
@@ -158,7 +158,7 @@ class VLLMProvider(LLMProvider):
 class AzureProvider(LLMProvider):
     def __init__(self, **overrides):
         raw = overrides.get("api_key") or os.environ.get("AZURE_OPENAI_API_KEY", "")
-        self.api_key = SecretStr(raw) if isinstance(raw, str) else raw
+        self.api_key = raw if isinstance(raw, SecretStr) else SecretStr(str(raw))
         self.endpoint = overrides.get("base_url") or os.environ.get(
             "AZURE_OPENAI_ENDPOINT", "https://your-resource.openai.azure.com"
         )

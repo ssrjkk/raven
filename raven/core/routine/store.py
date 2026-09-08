@@ -149,7 +149,7 @@ class RoutineStore(BaseStore):
             parts.append("AND status = ?")
             params.append(status)
         row = await self._fetchone(" ".join(parts), params)
-        return row["cnt"] if row else 0
+        return int(row["cnt"]) if row else 0
 
     async def list_active(self) -> list[Routine]:
         return await self.list_routines(status="active")

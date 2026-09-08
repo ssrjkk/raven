@@ -69,12 +69,12 @@ class GitHubLegacyNormalizer:
         return self.EVENT_MAP.get(raw_event)
 
     def get_owner(self, payload: dict[str, Any]) -> str:
-        repo_full = (payload.get("repository") or {}).get("full_name", "")
+        repo_full = str((payload.get("repository") or {}).get("full_name", ""))
         parts = repo_full.split("/", 1)
         return parts[0] if len(parts) == 2 else ""
 
     def get_repo(self, payload: dict[str, Any]) -> str:
-        repo_full = (payload.get("repository") or {}).get("full_name", "")
+        repo_full = str((payload.get("repository") or {}).get("full_name", ""))
         parts = repo_full.split("/", 1)
         return parts[1] if len(parts) == 2 else ""
 

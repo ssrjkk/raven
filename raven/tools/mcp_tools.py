@@ -19,7 +19,7 @@ def _make_mcp_handler(pool_name: str, tool_name: str, mcp_pool: MCPClientPool | 
             if not client:
                 return f"[error] MCP server '{pool_name}' not connected"
             result = await client.call_tool(tool_name, params)
-            return result[0]["text"] if result and isinstance(result, list) and "text" in result[0] else str(result)
+            return str(result[0]["text"]) if result and isinstance(result, list) and "text" in result[0] else str(result)
         except Exception as exc:
             logger.error("MCP tool {}.{} failed: {}", pool_name, tool_name, exc)
             return f"[error] MCP tool call failed: {exc}"

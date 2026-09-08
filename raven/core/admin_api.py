@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -506,7 +506,7 @@ AUTH_ENABLED = False
 _auth_store = None
 
 
-def init_auth_routes(app, db_path: str) -> None:
+def init_auth_routes(app: FastAPI, db_path: str) -> None:
     global AUTH_ENABLED, _auth_store
     from raven.core.auth.store import AuthStore
     from raven.core.auth.tokens import token_manager
@@ -534,7 +534,7 @@ def init_auth_routes(app, db_path: str) -> None:
         _login_attempts[ip] = attempts
         return True
 
-    @app.post("/api/auth/login")  # type: ignore[untyped-decorator]
+    @app.post("/api/auth/login")
     async def auth_login(body: AuthLoginRequest, request: Request):
         ip = request.client.host if request.client else "unknown"
         if not _check_login_rate(ip):
@@ -557,7 +557,7 @@ def init_auth_routes(app, db_path: str) -> None:
         token = token_manager.create_token(user.id, user.role.value)
         return {"token": token, "user_id": user.id, "role": user.role.value, "username": user.username}
 
-    @app.post("/api/auth/register")  # type: ignore[untyped-decorator]
+    @app.post("/api/auth/register")
     async def auth_register(body: AuthRegisterRequest, request: Request):
         ip = request.client.host if request.client else "unknown"
         if not _check_login_rate(ip):
@@ -570,21 +570,21 @@ def init_auth_routes(app, db_path: str) -> None:
         token = token_manager.create_token(user.id, user.role.value)
         return {"token": token, "user_id": user.id, "role": user.role.value, "username": user.username}
 
-    @app.get("/api/auth/me")  # type: ignore[untyped-decorator]
+    @app.get("/api/auth/me")
     def auth_me(request: Request):
         return {
             "user_id": getattr(request.state, "user_id", "anonymous"),
             "role": getattr(request.state, "user_role", "anonymous"),
         }
 
-    @app.post("/api/auth/logout")  # type: ignore[untyped-decorator]
+    @app.post("/api/auth/logout")
     def auth_logout(request: Request):
         token = request.headers.get("Authorization", "").replace("Bearer ", "")
         if token:
             token_manager.revoke_token(token)
         return {"ok": True}
 
-    @app.get("/api/auth/users")  # type: ignore[untyped-decorator]
+    @app.get("/api/auth/users")
     async def auth_list_users(request: Request):
         users = await store.list_users()
         return [
@@ -598,7 +598,7 @@ def init_auth_routes(app, db_path: str) -> None:
             for u in users
         ]
 
-    @app.post("/api/auth/users/{username}/role")  # type: ignore[untyped-decorator]
+    @app.post("/api/auth/users/{username}/role")
     async def auth_update_role(username: str, body: AuthUpdateRoleRequest):
         try:
             await store.update_role(username, body.role)
@@ -606,13 +606,13 @@ def init_auth_routes(app, db_path: str) -> None:
             raise HTTPException(400, f"Invalid request: {type(e).__name__}") from e
         return {"ok": True}
 
-    @app.post("/api/auth/users/{username}/deactivate")  # type: ignore[untyped-decorator]
+    @app.post("/api/auth/users/{username}/deactivate")
     async def auth_deactivate_user(username: str):
         await store.set_active(username, False)
         token_manager.revoke_user_tokens(f"user:{username}")
         return {"ok": True}
 
-    @app.get("/api/stream")  # type: ignore[untyped-decorator]
+    @app.get("/api/stream")
     async def sse_stream(request: Request, session: str = "default"):
         from raven.core.sse import sse_stream
 
@@ -622,7 +622,7 @@ def init_auth_routes(app, db_path: str) -> None:
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-    @app.post("/api/stream/push")  # type: ignore[untyped-decorator]
+    @app.post("/api/stream/push")
     async def sse_push(body: SSEPushRequest):
         from raven.core.sse import sse_stream
 

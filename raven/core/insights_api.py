@@ -165,7 +165,7 @@ async def _get_git_log_async(git: Any, days: int) -> str:
             ),
             timeout=30,
         )
-        return out[0] if isinstance(out, tuple) else str(out)
+        return str(out[0]) if isinstance(out, tuple) else str(out)
     except TimeoutError:
         logger.warning("[insights] git log timed out after 30s")
         return ""

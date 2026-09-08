@@ -114,7 +114,7 @@ class CodingSessionManager(BaseStore):
             f"SELECT COUNT(*) as cnt FROM coding_sessions WHERE {where}",
             params,
         )
-        return row["cnt"] if row else 0
+        return int(row["cnt"]) if row else 0
 
     @measure_latency()
     async def update_session(self, session: CodingSession) -> None:

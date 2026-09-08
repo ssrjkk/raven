@@ -422,3 +422,133 @@ class TestTaskRunner:
         await runner._execute(t.id, asyncio.Event())
         snap = metrics.snapshot()
         assert snap.get("raven_task_failed_total") == 1
+
+    async def test_transient_step_error_retries_then_succeeds(self, store: TaskStore):
+        from raven.core.task_engine.runner import TaskRunner
+        from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+
+        attempts = {"n": 0}
+
+        async def flaky():
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                raise RuntimeError("connection refused")
+            return "recovered"
+
+        registry = ToolRegistry()
+        registry.register(ToolSpec(name="flaky", description="flaky", parameters={}, handler=flaky))
+        t = Task(
+            goal="retry",
+            steps=[TaskStep(task_id="", order=0, description="flaky step", tool="flaky", params={})],
+        )
+        for s in t.steps:
+            s.task_id = t.id
+        runner = TaskRunner(store, registry)
+        await runner.submit(t)
+        done = await runner.wait(t.id, timeout=10)
+        assert done.status == TaskStatus.COMPLETED
+        assert attempts["n"] == 3
+
+    async def test_step_exhausts_retries_marks_task_failed(self, store: TaskStore):
+        from raven.core.task_engine.runner import TaskRunner
+        from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+
+        attempts = {"n": 0}
+
+        async def always_fail():
+            attempts["n"] += 1
+            return "[error] service temporarily unavailable"
+
+        registry = ToolRegistry()
+        registry.register(
+            ToolSpec(name="flaky", description="flaky", parameters={}, handler=always_fail)
+        )
+        t = Task(
+            goal="retry fail",
+            steps=[TaskStep(task_id="", order=0, description="x", tool="flaky", params={})],
+        )
+        for s in t.steps:
+            s.task_id = t.id
+        runner = TaskRunner(store, registry)
+        await runner.submit(t)
+        done = await runner.wait(t.id, timeout=10)
+        assert done.status == TaskStatus.FAILED
+        assert attempts["n"] == 3
+        assert "temporarily unavailable" in (done.error or "")
+
+    async def test_permanent_step_error_fails_fast(self, store: TaskStore):
+        from raven.core.task_engine.runner import TaskRunner
+        from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+
+        attempts = {"n": 0}
+
+        async def bad_args():
+            attempts["n"] += 1
+            return "[error] invalid parameter: xyz"
+
+        registry = ToolRegistry()
+        registry.register(ToolSpec(name="bad", description="bad", parameters={}, handler=bad_args))
+        t = Task(
+            goal="perm",
+            steps=[TaskStep(task_id="", order=0, description="x", tool="bad", params={})],
+        )
+        for s in t.steps:
+            s.task_id = t.id
+        runner = TaskRunner(store, registry)
+        await runner.submit(t)
+        done = await runner.wait(t.id, timeout=10)
+        assert done.status == TaskStatus.FAILED
+        assert attempts["n"] == 1
+
+    async def test_reconcile_marks_stale_running_failed(self, store: TaskStore, registry: ToolRegistry):
+        from raven.core.task_engine.runner import TaskRunner
+
+        t = Task(goal="stale")
+        step = TaskStep(task_id=t.id, order=0, description="s", tool="web_search", params={})
+        step.status = TaskStatus.RUNNING
+        t.steps = [step]
+        t.status = TaskStatus.RUNNING
+        await store.save_task(t)
+
+        runner = TaskRunner(store, registry)
+        processed = await runner.reconcile()
+        assert processed == [t.id]
+        loaded = await store.load_task(t.id)
+        assert loaded is not None
+        assert loaded.status == TaskStatus.FAILED
+        assert "interrupted by process restart" in (loaded.error or "")
+
+    async def test_reconcile_resume_requeues_to_pending(self, store: TaskStore, registry: ToolRegistry):
+        from raven.core.task_engine.runner import TaskRunner
+
+        t = Task(goal="resumable")
+        step = TaskStep(task_id=t.id, order=0, description="s", tool="web_search", params={})
+        step.status = TaskStatus.RUNNING
+        step.error = "killed mid-flight"
+        step.started_at = 1.0
+        step.completed_at = 2.0
+        t.steps = [step]
+        t.status = TaskStatus.RUNNING
+        await store.save_task(t)
+
+        runner = TaskRunner(store, registry)
+        processed = await runner.reconcile(resume=True)
+        assert processed == [t.id]
+        loaded = await store.load_task(t.id)
+        assert loaded is not None
+        assert loaded.status == TaskStatus.PENDING
+        assert loaded.steps[0].status == TaskStatus.PENDING
+        assert loaded.steps[0].error is None
+        assert loaded.steps[0].started_at is None
+
+    async def test_reconcile_skips_live_tasks(self, store: TaskStore, registry: ToolRegistry, task: Task):
+        from raven.core.task_engine.runner import TaskRunner
+
+        runner = TaskRunner(store, registry)
+        await runner.submit(task)
+        task.status = TaskStatus.RUNNING
+        await store.save_task(task)
+        runner._running[task.id] = asyncio.create_task(asyncio.sleep(0))
+        await asyncio.sleep(0)
+        processed = await runner.reconcile()
+        assert processed == []

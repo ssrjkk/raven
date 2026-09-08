@@ -228,7 +228,7 @@ class MonitorStore(BaseStore):
             parts.append("AND status = ?")
             params.append(status)
         row = await self._fetchone(" ".join(parts), params)
-        return row["cnt"] if row else 0
+        return int(row["cnt"]) if row else 0
 
     async def list_active(self) -> list[Monitor]:
         return await self.list_monitors(status="active")

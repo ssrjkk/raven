@@ -101,6 +101,29 @@ class TestStartRestartRecovery:
         finally:
             await orch.stop()
 
+    async def test_fresh_running_task_resumed_step_reset(self, db_path: str, monkeypatch: pytest.MonkeyPatch):
+        store = TaskStore(db_path)
+        try:
+            t = _task_with_steps("fresh-inflight")
+            t.status = TaskStatus.RUNNING
+            t.updated_at = time.time()
+            t.steps[0].status = TaskStatus.RUNNING
+            t.steps[0].started_at = time.time() - 5
+            await store.save_task(t)
+        finally:
+            await store.close()
+
+        orch = await _make_orchestrator(db_path, monkeypatch)
+        await orch.start()
+        try:
+            assert t.id in orch._tasks
+            assert orch._store is not None
+            loaded = await orch._store.load_task(t.id)
+            assert loaded is not None
+            assert loaded.steps[0].status == TaskStatus.PENDING
+        finally:
+            await orch.stop()
+
     async def test_completed_task_left_untouched(self, db_path: str, monkeypatch: pytest.MonkeyPatch):
         store = TaskStore(db_path)
         try:
@@ -118,6 +141,34 @@ class TestStartRestartRecovery:
             loaded = await orch._store.load_task(t.id)
             assert loaded is not None
             assert loaded.status == TaskStatus.COMPLETED
+        finally:
+            await orch.stop()
+
+    async def test_all_stale_running_tasks_reconciled_beyond_first_100(
+        self, db_path: str, monkeypatch: pytest.MonkeyPatch
+    ):
+        store = TaskStore(db_path)
+        ids = []
+        try:
+            for n in range(120):
+                t = _task_with_steps(f"stale-{n}")
+                t.status = TaskStatus.RUNNING
+                t.updated_at = time.time() - 3600
+                await store.save_task(t)
+                ids.append(t.id)
+        finally:
+            await store.close()
+
+        orch = await _make_orchestrator(db_path, monkeypatch)
+        await orch.start()
+        try:
+            assert orch._store is not None
+            failed = 0
+            for tid in ids:
+                loaded = await orch._store.load_task(tid)
+                if loaded is not None and loaded.status == TaskStatus.FAILED:
+                    failed += 1
+            assert failed == 120
         finally:
             await orch.stop()
 

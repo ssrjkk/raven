@@ -719,9 +719,9 @@ class ChaosEngineering:
         after = result.metrics_after
         if not before or not after:
             return 1.0
-        deltas = []
+        deltas: list[float] = []
         for key in before:
-            delta = abs(after.get(key, before[key]) - before[key])
-            max_val = max(before[key], 1.0)
+            delta = abs(float(after.get(key, before[key])) - float(before[key]))
+            max_val = max(float(before[key]), 1.0)
             deltas.append(1.0 - min(delta / max_val, 1.0))
         return sum(deltas) / len(deltas) if deltas else 1.0

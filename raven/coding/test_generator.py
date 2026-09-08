@@ -182,7 +182,7 @@ class TestGenerator:
         if isinstance(node.slice, ast.Name):
             return f"{value}[{node.slice.id}]"
         if isinstance(node.slice, ast.Constant):
-            return f"{value}[{node.slice.value}]"  # type: ignore[str-bytes-safe]
+            return f"{value}[{node.slice.value}]"
         if isinstance(node.slice, ast.Tuple):
             elts = [
                 self._subscript_to_str(e)

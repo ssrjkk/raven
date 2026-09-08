@@ -44,30 +44,34 @@ class TaskOrchestrator:
         tools = create_tool_registry(self._mcp_pool)
         self._planner = TaskPlanner(tools)
         self._runner = TaskRunner(self._store, tools)
-        running = await self._store.list_tasks(limit=100)
+        pending = await self._store.list_tasks(status="pending", limit=1000)
+        running = await self._store.list_tasks(status="running", limit=1000)
         now = time.time()
         async with self._lock:
-            for t in running:
-                if t.status.value in ("pending", "running"):
-                    if t.updated_at and now - t.updated_at > self.STALE_TASK_TIMEOUT:
-                        logger.warning(
-                            "Task {} stale ({}) — marking failed after restart",
-                            t.id,
-                            t.status.value,
-                        )
+            for t in [*pending, *running]:
+                if t.updated_at and now - t.updated_at > self.STALE_TASK_TIMEOUT:
+                    logger.warning(
+                        "Task {} stale ({}) — marking failed after restart",
+                        t.id,
+                        t.status.value,
+                    )
+                    await self._store.update_status(
+                        t.id, TaskStatus.FAILED, error="Task interrupted by gateway restart"
+                    )
+                else:
+                    self._tasks[t.id] = t
+                    try:
+                        if t.status == TaskStatus.RUNNING:
+                            full = await self._store.load_task(t.id)
+                            if full is not None:
+                                await self._runner.reset_inflight_steps(full)
+                        await self._runner.submit(t)
+                        logger.info("Task {} resumed after restart (step {})", t.id, t.current_step_index)
+                    except Exception as e:
+                        logger.error("Task {} failed to resume after restart: {}", t.id, e)
                         await self._store.update_status(
-                            t.id, TaskStatus.FAILED, error="Task interrupted by gateway restart"
+                            t.id, TaskStatus.FAILED, error=f"Task failed to resume after restart: {e}"
                         )
-                    else:
-                        self._tasks[t.id] = t
-                        try:
-                            await self._runner.submit(t)
-                            logger.info("Task {} resumed after restart (step {})", t.id, t.current_step_index)
-                        except Exception as e:
-                            logger.error("Task {} failed to resume after restart: {}", t.id, e)
-                            await self._store.update_status(
-                                t.id, TaskStatus.FAILED, error=f"Task failed to resume after restart: {e}"
-                            )
         logger.info("TaskOrchestrator started, {} active tasks", len(self._tasks))
 
     async def stop(self) -> None:

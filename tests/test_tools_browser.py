@@ -174,7 +174,7 @@ class TestGetPlaywright:
         setattr(mod, "async_playwright", factory)  # noqa: B010
         monkeypatch.setitem(sys.modules, "playwright.async_api", mod)
         assert await browser_mod._get_playwright() is fake_browser
-        assert browser_mod._browser_instance is playwright_obj  # type: ignore[comparison-overlap]
+        assert browser_mod._browser_instance is playwright_obj
         assert browser_mod._browser_context is fake_browser
         launch.assert_awaited_once_with(headless=True)
 
@@ -220,7 +220,7 @@ class TestGetAgent:
         cached = SimpleNamespace(_started=True)
         monkeypatch.setattr(browser_mod, "BrowserAgent", object)
         browser_mod._agent = cached  # type: ignore[assignment]
-        assert await browser_mod._get_agent() is cached  # type: ignore[comparison-overlap]
+        assert await browser_mod._get_agent() is cached
 
     async def test_start_import_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         class _Agent:

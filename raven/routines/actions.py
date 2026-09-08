@@ -25,7 +25,7 @@ async def execute_briefing(routine: Routine, llm_provider: Any = None) -> str:
     )
     try:
         result = await provider([{"role": "user", "content": prompt}])
-        briefing = result.get("content", "") if isinstance(result, dict) else str(result)
+        briefing = str(result.get("content", "")) if isinstance(result, dict) else str(result)
     except Exception as exc:
         logger.error("Briefing LLM call failed: {}", exc)
         briefing = (

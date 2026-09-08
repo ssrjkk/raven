@@ -4,18 +4,47 @@ import asyncio
 import contextlib
 import time
 from collections.abc import Callable
+from typing import Any
 
 from loguru import logger
 
 from raven.core.metrics import metrics
-from raven.core.task_engine.models import Task, TaskStatus
+from raven.core.task_engine.models import Task, TaskStatus, TaskStep
 from raven.core.task_engine.store import TaskStore
-from raven.core.task_engine.tool_registry import ToolRegistry
+from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+
+_TRANSIENT_MARKERS = (
+    "timed out",
+    "timeout",
+    "connection",
+    "refused",
+    "temporarily",
+    "try again",
+    "rate limit",
+    "quota",
+    "429",
+    "unavailable",
+    "busy",
+    "locked",
+    "reset by peer",
+    "eof",
+)
+
+
+def _is_tool_error(result: Any) -> bool:
+    return isinstance(result, str) and result.startswith("[error]")
+
+
+def _is_transient_error(error: str) -> bool:
+    low = error.lower()
+    return any(marker in low for marker in _TRANSIENT_MARKERS)
 
 
 class TaskRunner:
     MAX_CONCURRENT = 10
     SUBMIT_TIMEOUT = 60.0
+    MAX_STEP_RETRIES = 2
+    STEP_RETRY_BACKOFF = 1.0
 
     def __init__(self, store: TaskStore, tools: ToolRegistry, max_concurrent: int | None = None):
         self._store = store
@@ -97,6 +126,102 @@ class TaskRunner:
     async def get_task(self, task_id: str) -> Task | None:
         return await self._store.load_task(task_id)
 
+    async def reset_inflight_steps(self, task: Task) -> None:
+        """Reset any RUNNING step of ``task`` back to PENDING.
+
+        Called before resubmitting a task recovered after a restart so the
+        persisted steps never show an in-flight (RUNNING) step under a task
+        that is no longer executing (PENDING/COMPLETED). Persists each reset.
+        """
+        for step in task.steps:
+            if step.status == TaskStatus.RUNNING:
+                step.status = TaskStatus.PENDING
+                step.error = None
+                step.started_at = None
+                step.completed_at = None
+                await self._store.update_step(step)
+
+    async def reconcile(self, resume: bool = False) -> list[str]:
+        """Reconcile tasks stuck in RUNNING after a process restart.
+
+        A RUNNING status only makes sense while a live runner task exists in
+        this process; after a restart there are none, so those statuses are
+        stale. With ``resume=False`` they are marked FAILED; with ``resume=True``
+        they are requeued to PENDING (and their in-flight steps reset) so a
+        caller can re-submit and continue from the last persisted step index.
+        Returns the ids of the tasks that were reconciled.
+        """
+        processed: list[str] = []
+        for task in await self._store.list_tasks(status=TaskStatus.RUNNING.value, limit=500):
+            if task.id in self._running:
+                continue
+            # list_tasks returns shell tasks without their steps; reload the full
+            # task so the STEP rows are present before deciding how to reconcile.
+            full = await self._store.load_task(task.id)
+            if full is None:
+                continue
+            if resume:
+                await self.reset_inflight_steps(full)
+                await self._store.update_status(task.id, TaskStatus.PENDING)
+                logger.info("Task {} requeued after restart (was RUNNING)", task.id)
+            else:
+                await self._store.update_status(
+                    task.id, TaskStatus.FAILED, error="Task interrupted by process restart"
+                )
+                logger.warning("Task {} marked FAILED: interrupted by restart", task.id)
+            processed.append(task.id)
+        if processed:
+            logger.warning("Reconciled {} stale task(s) after restart", len(processed))
+        return processed
+
+    async def _call_tool_with_retries(
+        self, task_id: str, step: TaskStep, spec: ToolSpec, cancel_ev: asyncio.Event
+    ) -> tuple[Any, str | None]:
+        """Execute one tool step with bounded retries for transient failures.
+
+        Returns ``(result, None)`` when the call succeeded or ``(None, error)``
+        once retries are exhausted. Error strings coming back from
+        :class:`ToolRegistry` (``[error] ...``) are treated as failures, not
+        successful results. Transient errors (timeouts, network, rate limits)
+        are retried with exponential backoff; permanent errors fail fast.
+        """
+        timeout = float(spec.timeout)
+        attempt = 0
+        while True:
+            attempt += 1
+            error: str | None = None
+            result: Any = None
+            try:
+                result = await asyncio.wait_for(self._tools.call(step.tool, **step.params), timeout=timeout)
+                if _is_tool_error(result):
+                    error = str(result)
+                else:
+                    return result, None
+            except TimeoutError:
+                error = f"Timeout ({timeout}s)"
+            except Exception as exc:
+                error = str(exc)
+                if not _is_transient_error(error):
+                    return None, error
+
+            if attempt > self.MAX_STEP_RETRIES or not _is_transient_error(error):
+                return None, error
+
+            delay = self.STEP_RETRY_BACKOFF * (2 ** (attempt - 1))
+            logger.warning(
+                "Task {} step {} ({}) failed (attempt {}/{}): {} — retrying in {}s",
+                task_id,
+                step.order + 1,
+                step.tool,
+                attempt,
+                self.MAX_STEP_RETRIES + 1,
+                error,
+                delay,
+            )
+            if cancel_ev.is_set():
+                return None, error
+            await asyncio.sleep(delay)
+
     async def list_tasks(self, user_id: str | None = None, limit: int = 20) -> list[Task]:
         return await self._store.list_tasks(user_id=user_id, limit=limit)
 
@@ -156,12 +281,19 @@ class TaskRunner:
                         msg = f"Unknown tool: {step.tool}"
                         raise ValueError(msg)
 
-                    timeout = spec.timeout
-
-                    result = await asyncio.wait_for(
-                        self._tools.call(step.tool, **step.params),
-                        timeout=timeout,
-                    )
+                    result, step_error = await self._call_tool_with_retries(task_id, step, spec, cancel_ev)
+                    if step_error is not None:
+                        step.status = TaskStatus.FAILED
+                        step.error = step_error
+                        step.completed_at = time.time()
+                        task.status = TaskStatus.FAILED
+                        task.error = f"Step {i + 1} failed ({step.tool}): {step_error}"
+                        task.updated_at = time.time()
+                        await self._store.update_step(step)
+                        await self._store.save_task(task)
+                        self._record_outcome(task, started_at)
+                        logger.error("Task {} step {} failed: {}", task_id, i + 1, step_error)
+                        return
 
                     step.status = TaskStatus.COMPLETED
                     step.result = result
@@ -171,19 +303,6 @@ class TaskRunner:
                     await self._store.update_step(step)
 
                     logger.info("Task {} step {} completed", task_id, i + 1)
-
-                except TimeoutError:
-                    step.status = TaskStatus.FAILED
-                    step.error = f"Timeout ({spec.timeout}s)" if spec else "Timeout"
-                    step.completed_at = time.time()
-                    task.status = TaskStatus.FAILED
-                    task.error = f"Step {i + 1} timed out: {step.description}"
-                    task.updated_at = time.time()
-                    await self._store.update_step(step)
-                    await self._store.save_task(task)
-                    self._record_outcome(task, started_at)
-                    logger.warning("Task {} step {} timed out", task_id, i + 1)
-                    return
 
                 except Exception as e:
                     step.status = TaskStatus.FAILED

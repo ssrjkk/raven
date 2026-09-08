@@ -248,7 +248,7 @@ class TaskStore(BaseStore):
             f"SELECT COUNT(*) as cnt FROM tasks WHERE {clause}",
             params,
         )
-        return row["cnt"] if row else 0
+        return int(row["cnt"]) if row else 0
 
     def _row_to_task(self, row: Any) -> Task:
         return Task(

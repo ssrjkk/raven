@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 import pytest
 from pydantic import ValidationError
 
@@ -200,7 +202,8 @@ class TestAuthRegisterRequest:
 
 class TestAuthUpdateRoleRequest:
     def test_valid_roles(self):
-        for role in ("admin", "user", "viewer", "banned"):
+        roles: tuple[Literal["admin", "user", "viewer", "banned"], ...] = ("admin", "user", "viewer", "banned")
+        for role in roles:
             req = AuthUpdateRoleRequest(role=role)
             assert req.role == role
 

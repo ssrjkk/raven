@@ -1925,7 +1925,7 @@ def _build_tool_definitions(plan_mode: bool) -> tuple[dict[str, Any], ...]:
 
 def is_dangerous(name: str) -> bool:
     t = MODULE_TOOLS.get(name)
-    return t.get("dangerous", False) if t else False
+    return bool(t.get("dangerous")) if t else False
 
 
 @observe_tool(tool_name="execute_tool")
