@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from raven.core.auth.tokens import token_manager
-from raven.core.middleware import auth_middleware, request_id_middleware
+from raven.core.middleware import _client_ip, auth_middleware, request_id_middleware, sanitize_metric_path
 
 
 def _make_app() -> FastAPI:
@@ -92,6 +92,14 @@ def _make_full_app() -> FastAPI:
     @app.get("/api/debug/state")
     async def debug_state() -> dict[str, str]:
         return {"ok": "debug"}
+
+    @app.get("/api/metrics/prometheus")
+    async def metrics_prom() -> dict[str, str]:
+        return {"ok": "metrics"}
+
+    @app.get("/api/stream")
+    async def stream() -> dict[str, str]:
+        return {"ok": "stream"}
 
     @app.get("/api/sse/events/sessions")
     async def sse_events() -> dict[str, str]:
@@ -221,6 +229,8 @@ class TestPrivateReadGuard:
             "/api/cicd/runs",
             "/api/debug/state",
             "/api/sse/events/sessions",
+            "/api/stream",
+            "/api/metrics/prometheus",
             "/api/workflows/templates",
             "/api/monitor/list",
             "/api/monitor/slo",
@@ -251,6 +261,8 @@ class TestPrivateReadGuard:
             "/api/cicd/runs",
             "/api/debug/state",
             "/api/sse/events/sessions",
+            "/api/stream",
+            "/api/metrics/prometheus",
             "/api/workflows/templates",
             "/api/monitor/list",
             "/api/monitor/slo",
@@ -271,3 +283,42 @@ class TestPrivateReadGuard:
         monkeypatch.setattr(settings, "web_secret_key", SecretStr(""))
         client = TestClient(_make_full_app())
         assert client.get("/api/chat/search").status_code == 200
+
+
+def test_sanitize_metric_path_collapses_ids() -> None:
+    assert sanitize_metric_path("/api/task/abc123def456") == "/api/task/{id}"
+    assert sanitize_metric_path("/api/sessions/42") == "/api/sessions/{id}"
+    assert sanitize_metric_path("/api/monitor/list") == "/api/monitor/list"
+    assert sanitize_metric_path("/api/code/DEADBEEF1234/steps") == "/api/code/{id}/steps"
+
+
+def test_client_ip_uses_xff_from_loopback_peer() -> None:
+    from fastapi import Request
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/",
+        "headers": [(b"x-forwarded-for", b"203.0.113.7, 10.0.0.2")],
+        "client": ("127.0.0.1", 12345),
+        "server": ("test", 80),
+        "scheme": "http",
+        "query_string": b"",
+    }
+    assert _client_ip(Request(scope)) == "203.0.113.7"
+
+
+def test_client_ip_ignores_xff_from_external_peer() -> None:
+    from fastapi import Request
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/",
+        "headers": [(b"x-forwarded-for", b"203.0.113.7")],
+        "client": ("203.0.113.9", 12345),
+        "server": ("test", 80),
+        "scheme": "http",
+        "query_string": b"",
+    }
+    assert _client_ip(Request(scope)) == "203.0.113.9"

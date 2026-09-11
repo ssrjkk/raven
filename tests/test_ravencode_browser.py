@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Generator
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -136,7 +137,9 @@ class TestScreenshot:
     async def test_success(self) -> None:
         page = _fake_page()
         browser_mod._PAGE = page
-        assert await browser_screenshot("shot.png") == "Screenshot saved to shot.png"
+        result = await browser_screenshot("shot.png")
+        assert result.startswith("Screenshot saved to ")
+        assert result.endswith(str(Path("shot.png")))
 
     async def test_error(self) -> None:
         page = _fake_page()

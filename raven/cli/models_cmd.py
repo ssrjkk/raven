@@ -33,6 +33,11 @@ def models_list():
     )
     table.add_row("OpenAI", "[OK]" if settings.openai_api_key.get_secret_value() else "[NO]", "")
     table.add_row(
+        "Groq",
+        "[OK]" if settings.groq_api_key.get_secret_value() else "[NO]",
+        "✓" if settings.default_model.startswith("groq/") else "",
+    )
+    table.add_row(
         "Ollama",
         "[OK]" if settings.ollama_base_url else "[NO]",
         "✓" if settings.default_model.startswith("ollama/") else "",

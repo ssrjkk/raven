@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import subprocess
 import sys
 from pathlib import Path
+
+if sys.platform == "win32":
+    # Windows consoles default to cp1251/cp437 which cannot encode rich's glyphs
+    # (✓, ●). Force UTF-8 so tables and status output never crash the CLI.
+    for _stream in (sys.stdout, sys.stderr):
+        with contextlib.suppress(AttributeError, ValueError):
+            _stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
 
 import click
 from loguru import logger

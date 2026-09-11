@@ -22,6 +22,15 @@ export default function WebSearch() {
   const [useFailover, setUseFailover] = useState(false);
   const [rawOutput, setRawOutput] = useState("");
 
+  const safeHref = (url: string): string | null => {
+    try {
+      const u = new URL(url, window.location.href);
+      return u.protocol === "http:" || u.protocol === "https:" ? u.href : null;
+    } catch {
+      return null;
+    }
+  };
+
   const search = useMutation({
     mutationFn: () => {
       if (!query.trim()) return Promise.reject(new Error("Query required"));
@@ -86,22 +95,31 @@ export default function WebSearch() {
           <p className="text-sm font-medium text-secondary">
             {results.length} result{results.length !== 1 ? "s" : ""}
           </p>
-          {results.map((r, i) => (
-            <div key={i} className="card p-4">
-              <a href={r.url} target="_blank" rel="noopener noreferrer"
-                className="text-sm font-semibold hover:underline" style={{ color: "var(--dt-colors-accent-default)" }}>
-                {r.title || r.url}
-              </a>
-              {r.snippet && (
-                <p className="text-sm mt-1 text-secondary">
-                  {r.snippet}
-                </p>
-              )}
-              <div className="flex gap-3 mt-1 text-xs text-tertiary">
-                <span>{r.url}</span>
+          {results.map((r, i) => {
+            const href = safeHref(r.url);
+            return (
+              <div key={i} className="card p-4">
+                {href ? (
+                  <a href={href} target="_blank" rel="noopener noreferrer"
+                    className="text-sm font-semibold hover:underline" style={{ color: "var(--dt-colors-accent-default)" }}>
+                    {r.title || r.url}
+                  </a>
+                ) : (
+                  <span className="text-sm font-semibold" style={{ color: "var(--dt-colors-accent-default)" }}>
+                    {r.title || r.url}
+                  </span>
+                )}
+                {r.snippet && (
+                  <p className="text-sm mt-1 text-secondary">
+                    {r.snippet}
+                  </p>
+                )}
+                <div className="flex gap-3 mt-1 text-xs text-tertiary">
+                  <span>{r.url}</span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

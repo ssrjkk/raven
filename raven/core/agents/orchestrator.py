@@ -7,7 +7,7 @@ import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from loguru import logger
 
@@ -17,13 +17,13 @@ from raven.core.agents.validation import validate_tool_arguments
 from raven.core.audit import AuditEventType, audit_logger
 from raven.core.config import settings
 from raven.core.metrics import metrics
-from raven.core.security.context_filter import redact_pii
+from raven.core.security.context_filter import redact_pii, sanitize_external_content
 
 if TYPE_CHECKING:
     from raven.core.llm import LLMResponse, LLMRouter, ToolCall
     from raven.core.task_engine.tool_registry import ToolRegistry
 
-AgentStatus = Literal["success", "error", "max_steps"]
+AgentStatus = Literal["success", "error", "max_steps", "max_tokens"]
 
 _VALID_HANDOFF_PROFILES = frozenset(
     {"architect", "planner", "coder", "reviewer", "debugger", "qa", "researcher", "security", "done"}
@@ -85,6 +85,7 @@ class AgentContext:
     handoff_count: int = 0
     plan_steps: list[str] = field(default_factory=list)
     critic_passes: int = 0
+    memory: str = ""
 
 
 @dataclass
@@ -205,9 +206,18 @@ _SECRET_KEYS = ("api_key", "token", "secret", "password", "authorization", "cook
 
 
 def _redact_audit_args(args: dict[str, Any]) -> dict[str, Any]:
-    return {
-        k: ("***" if any(s in k.lower() for s in _SECRET_KEYS) else v) for k, v in args.items()
-    }
+    def scrub(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                k: ("***" if any(s in str(k).lower() for s in _SECRET_KEYS) else scrub(v)) for k, v in value.items()
+            }
+        if isinstance(value, list):
+            return [scrub(v) for v in value]
+        if isinstance(value, str):
+            return redact_pii(value)
+        return value
+
+    return cast(dict[str, Any], scrub(args))
 
 
 class TaskOutcomeTracker:
@@ -379,6 +389,8 @@ class AgentOrchestrator:
         max_retries: int = 1,
         max_tool_retries: int = 2,
         tool_retry_backoff: float = 0.5,
+        max_total_tokens: int = 100_000,
+        auto_memory: bool = True,
     ):
         self._llm = llm
         self._tool_registry = tool_registry
@@ -393,6 +405,8 @@ class AgentOrchestrator:
         self._max_retries = max_retries
         self._max_tool_retries = max_tool_retries
         self._tool_retry_backoff = tool_retry_backoff
+        self._max_total_tokens = max_total_tokens
+        self._auto_memory = auto_memory
         self._outcome_tracker = TaskOutcomeTracker()
         self._profile_memory = ProfileMemory()
 
@@ -406,7 +420,14 @@ class AgentOrchestrator:
         _retry_depth: int = 0,
     ) -> AgentResult:
         ctx = context or {}
+        safe_query = redact_pii(query)
         agent_ctx = self._build_agent_context(query, ctx)
+
+        memory_text = agent_ctx.memory or ""
+        if self._auto_memory and not memory_text:
+            memory_text = await self._recall_memory(safe_query)
+        if memory_text:
+            memory_text = sanitize_external_content(memory_text, source="memory", channel="agent")
 
         total_iterations = 0
         handoffs = 0
@@ -419,9 +440,15 @@ class AgentOrchestrator:
         await st.agent_started(current_profile.name, query)
 
         messages: list[dict[str, Any]] = []
-        messages.append({"role": "system", "content": self._build_system_prompt(current_profile, ctx, agent_ctx.workspace)})
+        messages.append(
+            {
+                "role": "system",
+                "content": self._build_system_prompt(
+                    current_profile, ctx, agent_ctx.workspace, memory_hint=memory_text or None
+                ),
+            }
+        )
 
-        safe_query = redact_pii(query)
         messages.append({"role": "user", "content": safe_query})
 
         workspace_hint = ""
@@ -439,12 +466,30 @@ class AgentOrchestrator:
         last_tool_names: set[tuple[str, str]] = set()
         consecutive_errors = 0
         tool_history_empty = True
+        profile_iterations: dict[str, int] = {}
+        warned_budget: set[str] = set()
         status: AgentStatus = "max_steps"
         content = ""
 
         while total_iterations < self._max_total_iterations:
             total_iterations += 1
             agent_ctx.iteration = total_iterations
+
+            profile_iterations[current_profile.name] = profile_iterations.get(current_profile.name, 0) + 1
+            if (
+                profile_iterations[current_profile.name] >= current_profile.max_iterations
+                and current_profile.name not in warned_budget
+            ):
+                warned_budget.add(current_profile.name)
+                budget_msg = (
+                    f"Note: role {current_profile.display_name} has used its iteration budget "
+                    f"({current_profile.max_iterations} iterations). If the goal is not complete, "
+                    "wrap up with a concise summary and recommend the next best role or ask the user for clarification."
+                )
+                messages.append({"role": "system", "content": budget_msg})
+                await st.thinking(
+                    current_profile.name, f"Iteration budget reached: {current_profile.max_iterations}"
+                )
 
             if len(messages) > 60:
                 messages = await self._compress_context(messages, current_profile)
@@ -491,6 +536,15 @@ class AgentOrchestrator:
                     f"agent:{current_profile.name}",
                     detail={"iteration": total_iterations, "profile": current_profile.name, "tokens": tokens_used},
                 )
+                if self._max_total_tokens and tokens_used >= self._max_total_tokens:
+                    logger.warning(
+                        "AgentOrchestrator: token budget exhausted ({} >= {}) for query: {}",
+                        tokens_used,
+                        self._max_total_tokens,
+                        redact_pii(query)[:120],
+                    )
+                    status = "max_tokens"
+                    break
             except Exception as e:
                 logger.error("AgentOrchestrator: LLM call failed at iteration {}: {}", total_iterations, e)
                 await st.error(current_profile.name, str(e)[:200])
@@ -558,7 +612,7 @@ class AgentOrchestrator:
             last_tool_names = current_tool_names
 
             for tc in tool_calls:
-                await st.tool_call(current_profile.name, tc.name, tc.arguments)
+                await st.tool_call(current_profile.name, tc.name, _redact_audit_args(tc.arguments or {}))
                 await audit_logger.log(
                     AuditEventType.TOOL_EXEC,
                     f"agent:{current_profile.name}",
@@ -659,16 +713,46 @@ class AgentOrchestrator:
         workspace = ctx.get("workspace")
         permissions_raw = ctx.get("permissions") or []
         permissions = frozenset(str(p) for p in permissions_raw if isinstance(p, str))
-        return AgentContext(query=query, workspace=Path(workspace) if workspace else None, permissions=permissions)
+        memory = str(ctx.get("memory") or "")
+        return AgentContext(
+            query=query,
+            workspace=Path(workspace) if workspace else None,
+            permissions=permissions,
+            memory=memory,
+        )
 
-    def _build_system_prompt(self, profile: AgentProfile, ctx: dict[str, Any], workspace: Path | None) -> str:
+    async def _recall_memory(self, query: str, max_chars: int = 2000) -> str:
+        tool_name = "memory.search_memory"
+        if self._tool_registry.get(tool_name) is None:
+            tool_name = "search_memory"
+        if self._tool_registry.get(tool_name) is None:
+            return ""
+        try:
+            result = await self._tool_registry.call(tool_name, query=query)
+            text = str(result.get("result", "") if isinstance(result, dict) else result)
+            if text.strip() and "Search not available" not in text:
+                metrics.inc("agent_memory_recalls", {"tool": tool_name})
+                return text[:max_chars]
+        except Exception as e:
+            logger.debug("AgentOrchestrator: auto memory recall failed: {}", e)
+        return ""
+
+    def _build_system_prompt(
+        self,
+        profile: AgentProfile,
+        ctx: dict[str, Any],
+        workspace: Path | None,
+        memory_hint: str | None = None,
+    ) -> str:
         parts: list[str] = [profile.system_prompt]
         style_hint = self._get_style_hint(profile.name)
         if style_hint:
             parts.append(f"Working style: {style_hint}")
-        memory_hint = self._profile_memory.get_context_hint(profile.name)
+        profile_hint = self._profile_memory.get_context_hint(profile.name)
+        if profile_hint:
+            parts.append(f"Your recent work context:\n{profile_hint}")
         if memory_hint:
-            parts.append(f"Your recent work context:\n{memory_hint}")
+            parts.append(f"Relevant long-term memory:\n{memory_hint}")
         workspace_info = ctx.get("workspace_context", "")
         if workspace_info:
             parts.append(f"Workspace context:\n{workspace_info}")
@@ -916,15 +1000,18 @@ class AgentOrchestrator:
                 last_content = m["content"]
                 break
         try:
+            msgs = [
+                {"role": "system", "content": _CRITIC_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"Goal: {query}\n\nAssistant output so far:\n{last_content[:4000]}",
+                },
+            ]
+            from raven.core.model_tiers import select_model, tiers_configured
+
             resp = await self._llm.complete(
-                [
-                    {"role": "system", "content": _CRITIC_PROMPT},
-                    {
-                        "role": "user",
-                        "content": f"Goal: {query}\n\nAssistant output so far:\n{last_content[:4000]}",
-                    },
-                ],
-                model="",
+                msgs,
+                model=select_model(msgs, prefer_tier="quality") if tiers_configured() else "",
             )
             text = (resp.content or "").strip()
             if not text or re.match(r"^\s*ACCEPT(?:\s|$)", text.upper()):
@@ -948,19 +1035,22 @@ class AgentOrchestrator:
         """
         try:
             tail = "\n".join(f"{m['role']}: {(m.get('content') or '')[:400]}" for m in messages[-8:])
+            msgs = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are helping a long-running agent stay on track. "
+                        "Summarize, in 1-2 short sentences, what has been accomplished "
+                        "so far and the single most important next action. Do not call tools."
+                    ),
+                },
+                {"role": "user", "content": f"Recent activity:\n{tail[:3000]}"},
+            ]
+            from raven.core.model_tiers import select_model, tiers_configured
+
             resp = await self._llm.complete(
-                [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are helping a long-running agent stay on track. "
-                            "Summarize, in 1-2 short sentences, what has been accomplished "
-                            "so far and the single most important next action. Do not call tools."
-                        ),
-                    },
-                    {"role": "user", "content": f"Recent activity:\n{tail[:3000]}"},
-                ],
-                model="",
+                msgs,
+                model=select_model(msgs, prefer_tier="fast") if tiers_configured() else "",
             )
             summary = (resp.content or "").strip()
             if not summary:
@@ -972,19 +1062,22 @@ class AgentOrchestrator:
 
     async def _decide_next_agent(self, messages: list[dict[str, Any]], current_profile: str) -> str | None:
         try:
+            msgs = [
+                {"role": "system", "content": _NEXT_AGENT_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Current agent: {current_profile}\n"
+                        f"Conversation summary (last messages):\n"
+                        + "\n".join(f"{m['role']}: {(m.get('content') or '')[:300]}" for m in messages[-6:])
+                    ),
+                },
+            ]
+            from raven.core.model_tiers import select_model, tiers_configured
+
             resp = await self._llm.complete(
-                [
-                    {"role": "system", "content": _NEXT_AGENT_PROMPT},
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Current agent: {current_profile}\n"
-                            f"Conversation summary (last messages):\n"
-                            + "\n".join(f"{m['role']}: {(m.get('content') or '')[:300]}" for m in messages[-6:])
-                        ),
-                    },
-                ],
-                model="",
+                msgs,
+                model=select_model(msgs, prefer_tier="fast") if tiers_configured() else "",
             )
             decision = (resp.content or "").strip().lower()
             if decision in _VALID_HANDOFF_PROFILES and decision != "done":

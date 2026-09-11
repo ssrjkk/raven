@@ -118,6 +118,9 @@ class MockToolRegistry:
     def list(self):
         return []
 
+    def get(self, name: str) -> object | None:
+        return None
+
 
 class TestDelegationOrchestrator:
     @pytest.mark.asyncio
@@ -265,3 +268,149 @@ class TestDelegateFunction:
 
         result = await delegate("task", llm=llm, tool_registry=MockToolRegistry())  # type: ignore[arg-type]
         assert result.profile == "coder"
+
+
+class TestTaskDecomposition:
+    def test_needs_decomposition_complex_goal(self):
+        from raven.core.agents.router import needs_task_decomposition
+
+        assert needs_task_decomposition("implement the API and write tests and draft docs") is True
+
+    def test_needs_decomposition_simple_utterance(self):
+        from raven.core.agents.router import needs_task_decomposition
+
+        assert needs_task_decomposition("hello") is False
+        assert needs_task_decomposition("what is 2+2") is False
+
+    def test_needs_decomposition_honors_threshold(self):
+        from raven.core.agents.router import needs_task_decomposition
+
+        assert needs_task_decomposition("hello and goodbye") is False
+        assert needs_task_decomposition("hello and goodbye", threshold=1) is True
+
+
+class TestRunGoal:
+    @pytest.mark.asyncio
+    async def test_run_goal_simple_goal_runs_single_task(self):
+        from raven.core.agents.multi import DelegationOrchestrator, DelegationResult
+
+        orch = DelegationOrchestrator(llm=AsyncMock(), tool_registry=MockToolRegistry())  # type: ignore[arg-type]
+        ran: list[str] = []
+
+        async def fake_run_single(task):
+            ran.append("single")
+            return DelegationResult(
+                index=0,
+                description=task.description,
+                profile=task.profile,
+                content="ok",
+                success=True,
+                duration=0.0,
+                iterations=1,
+                tokens_used=0,
+                handoffs=0,
+            )
+
+        orch._run_single = fake_run_single  # type: ignore[method-assign]
+        results = await orch.run_goal("hello world")
+        assert len(results) == 1
+        assert results[0].description == "hello world"
+        assert ran == ["single"]
+
+    @pytest.mark.asyncio
+    async def test_run_goal_complex_decomposes_via_planner(self, monkeypatch):
+        from types import SimpleNamespace
+
+        from raven.core.agents.multi import DelegationOrchestrator, DelegationResult
+
+        class FakePlan:
+            def __init__(self) -> None:
+                self.steps = [
+                    SimpleNamespace(description="design schema", tool="file_write"),
+                    SimpleNamespace(description="implement handlers", tool="file_write"),
+                    SimpleNamespace(description="write tests", tool="file_write"),
+                ]
+
+        async def fake_plan(goal, llm, task_id: str = "", user_id: str = "", channel: str = ""):
+            return FakePlan()
+
+        monkeypatch.setattr("raven.core.task_engine.planner.TaskPlanner", lambda registry: SimpleNamespace(plan=fake_plan))
+        monkeypatch.setattr("raven.core.agents.router.needs_task_decomposition", lambda goal, threshold=2: True)
+
+        orch = DelegationOrchestrator(llm=AsyncMock(), tool_registry=MockToolRegistry())  # type: ignore[arg-type]
+        ran: list[str] = []
+
+        async def fake_run_single(task):
+            ran.append(task.description)
+            return DelegationResult(
+                index=0,
+                description=task.description,
+                profile=task.profile,
+                content="ok",
+                success=True,
+                duration=0.0,
+                iterations=1,
+                tokens_used=0,
+                handoffs=0,
+            )
+
+        orch._run_single = fake_run_single  # type: ignore[method-assign]
+        results = await orch.run_goal("implement the API and write tests and draft docs")
+        assert [r.description for r in results] == ["design schema", "implement handlers", "write tests"]
+        assert ran == ["design schema", "implement handlers", "write tests"]
+
+    @pytest.mark.asyncio
+    async def test_run_goal_planner_failure_falls_back_to_single(self, monkeypatch):
+        from types import SimpleNamespace
+
+        from raven.core.agents.multi import DelegationOrchestrator, DelegationResult
+
+        async def boom(goal, llm, task_id: str = "", user_id: str = "", channel: str = ""):
+            raise RuntimeError("planner broken")
+
+        monkeypatch.setattr("raven.core.task_engine.planner.TaskPlanner", lambda registry: SimpleNamespace(plan=boom))
+        monkeypatch.setattr("raven.core.agents.router.needs_task_decomposition", lambda goal, threshold=2: True)
+
+        orch = DelegationOrchestrator(llm=AsyncMock(), tool_registry=MockToolRegistry())  # type: ignore[arg-type]
+
+        async def fake_run_single(task):
+            return DelegationResult(
+                index=0,
+                description=task.description,
+                profile=task.profile,
+                content="ok",
+                success=True,
+                duration=0.0,
+                iterations=1,
+                tokens_used=0,
+                handoffs=0,
+            )
+
+        orch._run_single = fake_run_single  # type: ignore[method-assign]
+        results = await orch.run_goal("implement the API and write tests and draft docs")
+        assert len(results) == 1
+        assert results[0].description == "implement the API and write tests and draft docs"
+
+    @pytest.mark.asyncio
+    async def test_delegate_with_plan_module_helper(self, monkeypatch):
+        from raven.core.agents.multi import DelegationResult, delegate_with_plan
+
+        async def fake_run_goal(self, goal: str) -> list[DelegationResult]:
+            return [
+                DelegationResult(
+                    index=0,
+                    description=goal,
+                    profile="coder",
+                    content="ok",
+                    success=True,
+                    duration=0.0,
+                    iterations=1,
+                    tokens_used=0,
+                    handoffs=0,
+                )
+            ]
+
+        monkeypatch.setattr("raven.core.agents.multi.DelegationOrchestrator.run_goal", fake_run_goal)
+        results = await delegate_with_plan("hello", llm=AsyncMock(), tool_registry=MockToolRegistry())  # type: ignore[arg-type]
+        assert len(results) == 1
+        assert results[0].description == "hello"

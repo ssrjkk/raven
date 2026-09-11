@@ -8,6 +8,8 @@ from typing import Any
 
 from loguru import logger
 
+from raven.core.security.context_filter import redact_pii
+
 CLASSIFICATION_PROMPT = """You are an intent classifier for a multi-agent coding system.
 Analyze the user's request and determine the BEST agent profile to handle it.
 
@@ -150,6 +152,34 @@ _OVERRIDE_RULES: list[tuple[re.Pattern[str], str, float]] = [
     (re.compile(r"(?:hack|exploit|vuln|red\s*team|pentest|audit\s*security|owasp)"), "security", 0.95),
     (re.compile(r"(?:only\s*plan|just\s*plan|write\s*a\s*plan|create\s*a\s*plan)"), "planner", 0.9),
 ]
+
+_DECOMPOSITION_RULES: list[tuple[re.Pattern[str], int]] = [
+    (re.compile(r"\b(and|also|then|plus|additionally|moreover)\b", re.IGNORECASE), 1),
+    (
+        re.compile(
+            r"\b(implement|build|write|create|fix|refactor|test|design|review|audit|deploy|add|migrate)\b",
+            re.IGNORECASE,
+        ),
+        1,
+    ),
+    (re.compile(r"\b(steps?|parts?|modules?|components?|features?|milestones?|phases?)\b", re.IGNORECASE), 2),
+    (re.compile(r"\b(combine|both|multiple|series|sequence|batch|suite|collection)\b", re.IGNORECASE), 1),
+]
+
+
+def needs_task_decomposition(query: str, threshold: int = 2) -> bool:
+    """Heuristic: a request likely needs multi-step task decomposition into subtasks.
+
+    Scores conjunction markers, multiple imperative verbs, and structural words
+    (steps/modules/phases...). A score at or above ``threshold`` (default 2)
+    signals that delegating to a planner-style division of labor is worthwhile.
+    """
+    score = 0
+    for pattern, weight in _DECOMPOSITION_RULES:
+        if pattern.search(query):
+            score += weight
+    logger.debug("needs_task_decomposition: score={} for '{}'", score, redact_pii(query)[:80])
+    return score >= threshold
 
 
 def _keyword_classify(text: str) -> ClassificationResult | None:

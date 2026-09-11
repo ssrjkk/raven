@@ -16,44 +16,9 @@ scrape_configs:
         labels:
           service: nats
 
-  - job_name: "gateway"
+  - job_name: "raven"
+    metrics_path: /api/metrics/prometheus
     static_configs:
-      - targets: ["gateway:8000"]
+      - targets: ["raven:18888"]
         labels:
-          service: gateway
-
-  - job_name: "auth"
-    static_configs:
-      - targets: ["auth:8001"]
-        labels:
-          service: auth
-
-  - job_name: "agent-core"
-    static_configs:
-      - targets: ["agent-core:8002"]
-        labels:
-          service: agent-core
-
-  - job_name: "monitor-engine"
-    static_configs:
-      - targets: ["monitor-engine:8003"]
-        labels:
-          service: monitor-engine
-
-  - job_name: "rag-service"
-    static_configs:
-      - targets: ["rag-service:8004"]
-        labels:
-          service: rag-service
-
-  - job_name: "task-engine"
-    static_configs:
-      - targets: ["task-engine:8005"]
-        labels:
-          service: task-engine
-
-  - job_name: "code-service"
-    static_configs:
-      - targets: ["code-service:8006"]
-        labels:
-          service: code-service
+          service: raven

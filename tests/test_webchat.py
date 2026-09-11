@@ -177,12 +177,20 @@ class TestWebChatChannel:
 
 
 class TestCanvasLinkProxy:
+    @staticmethod
+    def _auth_headers() -> dict[str, str]:
+        from raven.core.config import settings
+
+        return {"Authorization": f"Bearer {settings.web_secret_key.get_secret_value()}"}
+
     def _proxied_content(self, channel, url, headers, content=b"<html>ok</html>"):
         with patch(
             "raven.core.security.ssrf.safe_fetch_async",
             AsyncMock(return_value=httpx.Response(200, headers=headers, content=content)),
         ):
-            return TestClient(channel.app).get("/api/canvas/link", params={"url": url})
+            return TestClient(channel.app).get(
+                "/api/canvas/link", params={"url": url}, headers=self._auth_headers()
+            )
 
     def test_html_content_is_sandboxed(self, channel):
         response = self._proxied_content(
@@ -202,7 +210,9 @@ class TestCanvasLinkProxy:
         assert "content-security-policy" not in response.headers
 
     def test_bad_scheme_rejected(self, channel):
-        response = TestClient(channel.app).get("/api/canvas/link", params={"url": "javascript:alert(1)"})
+        response = TestClient(channel.app).get(
+            "/api/canvas/link", params={"url": "javascript:alert(1)"}, headers=self._auth_headers()
+        )
         assert response.status_code == 400
         assert response.json()["error"] == "Invalid URL scheme"
 
@@ -211,9 +221,17 @@ class TestCanvasLinkProxy:
             "raven.core.security.ssrf.safe_fetch_async",
             AsyncMock(side_effect=RuntimeError("boom")),
         ):
-            response = TestClient(channel.app).get("/api/canvas/link", params={"url": "https://example.com/x"})
+            response = TestClient(channel.app).get(
+                "/api/canvas/link", params={"url": "https://example.com/x"}, headers=self._auth_headers()
+            )
         assert response.status_code == 502
         assert response.json()["error"] == "Proxy failed"
+
+    def test_image_proxy_requires_auth_in_secure_mode(self, channel):
+        response = TestClient(channel.app).get(
+            "/api/canvas/image", params={"url": "https://example.com/img.png"}
+        )
+        assert response.status_code == 401
 
 
 class TestWebSocketEndpoints:

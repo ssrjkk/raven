@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 import aiosqlite
@@ -9,6 +10,54 @@ from loguru import logger
 
 from raven.core.asyncdb import postgres_dsn
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+
+
+def _mask_sql_quotes(sql: str) -> str:
+    """Replace string/comment contents with spaces so delimiters inside are ignored."""
+    out: list[str] = []
+    i = 0
+    n = len(sql)
+    while i < n:
+        c = sql[i]
+        if sql.startswith("--", i):
+            end = sql.find("\n", i)
+            i = n if end == -1 else end
+            continue
+        if sql.startswith("/*", i):
+            end = sql.find("*/", i + 2)
+            if end == -1:
+                break
+            i = end + 2
+            continue
+        if c in ("'", '"', "`"):
+            quote = c
+            i += 1
+            while i < n:
+                if sql[i] == "\\":
+                    i += 2
+                    continue
+                if sql[i] == quote:
+                    if i + 1 < n and sql[i + 1] == quote:
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def _validate_select_only(query: str) -> str | None:
+    """Reject anything but a single SELECT statement (blocks stacked statements)."""
+    masked = _mask_sql_quotes(query)
+    if not re.match(r"(?is)^\s*SELECT\b", masked):
+        return "Only SELECT queries are allowed for security reasons"
+    semi = masked.find(";")
+    if semi != -1 and masked[semi + 1 :].strip():
+        return "Only a single SELECT statement is allowed"
+    return None
 
 
 def _is_allowed_path(p: Path, data_dir: Path, ws: Path) -> bool:
@@ -27,8 +76,9 @@ def _is_allowed_path(p: Path, data_dir: Path, ws: Path) -> bool:
 
 async def db_query(query: str, db_path: str = "data/raven.db") -> str:
     stripped = query.strip()
-    if not stripped.upper().startswith("SELECT"):
-        return "Only SELECT queries are allowed for security reasons"
+    validation_error = _validate_select_only(stripped)
+    if validation_error is not None:
+        return validation_error
 
     dsn = postgres_dsn()
     if dsn:

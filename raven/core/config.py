@@ -57,8 +57,25 @@ _DEFAULT_TOOLS_DENY = (
 )
 
 
+# Env-file cascade: project-local .env wins, then the user-global ~/.raven/.env,
+# then the .env next to the raven installation (editable installs). This makes
+# the CLI/agent work from any working directory, not just the repo root.
+# NOTE: pydantic-settings gives later files higher precedence, so the list is
+# ordered lowest-priority first.
+_RAVEN_ROOT = Path(__file__).resolve().parents[2]
+_ENV_FILE_CANDIDATES: list[str] = [
+    str(_RAVEN_ROOT / ".env"),
+    str(Path.home() / ".raven" / ".env"),
+    ".env",
+]
+
+
 class Settings(BaseSettings):
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+    model_config = {
+        "env_file": _ENV_FILE_CANDIDATES,
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",
+    }
 
     openrouter_api_key: SafeSecretStr = SafeSecretStr("")
     anthropic_api_key: SafeSecretStr = SafeSecretStr("")
@@ -197,6 +214,8 @@ class Settings(BaseSettings):
             if stored:
                 self.web_secret_key = SafeSecretStr(stored)
                 logger.info("Loaded WEB_SECRET_KEY from {}", key_file)
+                with contextlib.suppress(OSError):
+                    key_file.chmod(0o600)
             else:
                 self.web_secret_key = SafeSecretStr(secrets.token_hex(32))
                 logger.info("Auto-generated WEB_SECRET_KEY")

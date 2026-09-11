@@ -57,6 +57,30 @@ async def delegate(
     )
 
 
+async def delegate_with_plan(
+    goal: str,
+    llm: LLMRouter,
+    tool_registry: ToolRegistry,
+    send_fn: Callable[..., Any] | None = None,
+    max_concurrent: int = 3,
+    max_total_iterations: int = 100,
+) -> list[DelegationResult]:
+    """Delegate a possibly-complex goal to the DAG of sub-agents.
+
+    Uses :func:`DelegationOrchestrator.run_goal`: simple goals run directly,
+    complex goals are decomposed by the TaskPlanner into dependency-linked
+    subtasks that each run through the AgentOrchestrator.
+    """
+    orchestrator = DelegationOrchestrator(
+        llm=llm,
+        tool_registry=tool_registry,
+        send_fn=send_fn,
+        max_concurrent=max_concurrent,
+        max_total_iterations=max_total_iterations,
+    )
+    return await orchestrator.run_goal(goal)
+
+
 def route_to_profile(query: str, feedback: FeedbackLoop | None = None) -> str:
     keyword_rules: list[tuple[str, str]] = [
         (r"security|vulnerability|cve|owasp|threat|exploit|injection|xss|ssrf|hardcoded|audit", "security"),
@@ -189,6 +213,50 @@ class DelegationOrchestrator:
                 tokens_used=0,
                 handoffs=0,
             )
+
+    async def run_goal(self, goal: str) -> list[DelegationResult]:
+        """Decompose a complex goal into subtasks via the TaskPlanner and run them.
+
+        Simple goals short-circuit to a single delegated task. Complex goals are
+        broken into ordered, dependency-linked subtasks (each routed to the best
+        agent profile) and executed through the DAG scheduler.
+        """
+        tasks = await self._decompose_goal(goal)
+        if len(tasks) <= 1:
+            return await self.run_sequential(tasks)
+        return await self.run_dag(tasks)
+
+    async def _decompose_goal(self, goal: str) -> list[DelegatedTask]:
+        from raven.core.agents.router import needs_task_decomposition
+
+        if not needs_task_decomposition(goal):
+            return [DelegatedTask(description=goal, profile=route_to_profile(goal))]
+        logger.info("[delegation] goal detected as multi-step, running planner decomposition")
+        try:
+            from raven.core.task_engine.planner import TaskPlanner
+
+            plan = await TaskPlanner(self._tool_registry).plan(goal, self._llm)
+        except Exception as e:
+            logger.warning("[delegation] planner decomposition failed, using single task: {}", e)
+            return [DelegatedTask(description=goal, profile=route_to_profile(goal))]
+
+        steps = plan.steps
+        if not steps:
+            return [DelegatedTask(description=goal, profile=route_to_profile(goal))]
+
+        tasks: list[DelegatedTask] = []
+        for i, step in enumerate(steps):
+            description = step.description or step.tool
+            tasks.append(
+                DelegatedTask(
+                    description=description,
+                    profile=route_to_profile(description),
+                    context={"source_goal": goal, "step_index": i},
+                    depends_on=[i - 1] if i > 0 else None,
+                )
+            )
+        logger.info("[delegation] planner produced {} subtasks", len(tasks))
+        return tasks
 
 
 _orchestrator_instance: DelegationOrchestrator | None = None

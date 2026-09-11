@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -14,6 +16,8 @@ from loguru import logger
 from ravencode.runtime.agent_core import AgentConfig, ReActAgent
 from ravencode.runtime.context import Conversation
 
+_SAFE_SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+
 
 class SessionStore:
     def __init__(self, storage_dir: str = "data/sessions") -> None:
@@ -21,6 +25,8 @@ class SessionStore:
         self._storage.mkdir(parents=True, exist_ok=True)
 
     def _path(self, session_id: str) -> Path:
+        if not _SAFE_SESSION_ID.match(session_id):
+            raise ValueError(f"Invalid session id: {session_id!r}")
         return self._storage / f"{session_id}.json"
 
     def list(self) -> list[dict[str, Any]]:
@@ -52,12 +58,17 @@ class SessionStore:
         data = json.dumps(state, ensure_ascii=False, indent=2)
         tmp = p.with_suffix(".tmp")
         await asyncio.to_thread(tmp.write_text, data, encoding="utf-8")
-        tmp.rename(p)
+        await asyncio.to_thread(os.replace, tmp, p)
         logger.info("Session saved: {}", session_id)
         return session_id
 
     async def load(self, session_id: str) -> ReActAgent | None:
-        p = self._path(session_id)
+        try:
+            p = self._path(session_id)
+        except ValueError as exc:
+            logger.error("Invalid session id: {}", session_id)
+            logger.debug("{}", exc)
+            return None
         if not await asyncio.to_thread(p.is_file):
             return None
         try:
@@ -73,7 +84,12 @@ class SessionStore:
         return agent
 
     async def delete(self, session_id: str) -> bool:
-        p = self._path(session_id)
+        try:
+            p = self._path(session_id)
+        except ValueError as exc:
+            logger.error("Invalid session id: {}", session_id)
+            logger.debug("{}", exc)
+            return False
         if await asyncio.to_thread(p.is_file):
             await asyncio.to_thread(p.unlink)
             return True

@@ -206,6 +206,15 @@ class TaskRunner:
 
             if attempt > self.MAX_STEP_RETRIES or not _is_transient_error(error):
                 return None, error
+            if spec.dangerous:
+                logger.warning(
+                    "Task {} step {} ({}) failed (attempt {}) — not retrying dangerous tool",
+                    task_id,
+                    step.order + 1,
+                    step.tool,
+                    attempt,
+                )
+                return None, error
 
             delay = self.STEP_RETRY_BACKOFF * (2 ** (attempt - 1))
             logger.warning(

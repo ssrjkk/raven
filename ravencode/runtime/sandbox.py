@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 import shlex
 import tempfile
+import uuid
 from pathlib import Path
+
+from loguru import logger
 
 
 class Sandbox:
@@ -44,7 +47,8 @@ class Sandbox:
         return await self._docker_exec(parts)
 
     async def _docker_exec(self, cmd: list[str], volumes: dict[str, dict[str, str]] | None = None) -> str:
-        docker_cmd = ["docker", "run", "--rm", "-i"]
+        name = f"raven_sbx_{uuid.uuid4().hex[:12]}"
+        docker_cmd = ["docker", "run", "--rm", "--name", name, "-i"]
         if volumes:
             for host, cfg in volumes.items():
                 docker_cmd.extend(["-v", f"{host}:{cfg['bind']}:{cfg['mode']}"])
@@ -55,8 +59,27 @@ class Sandbox:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
+        except FileNotFoundError:
+            return "[error] docker executable not found"
+        try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.timeout)
         except TimeoutError:
+            try:
+                proc.kill()
+            except (ProcessLookupError, OSError):
+                logger.debug("sandbox process already exited during timeout kill")
+            try:
+                rm_proc = await asyncio.create_subprocess_exec(
+                    "docker",
+                    "rm",
+                    "-f",
+                    name,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await rm_proc.wait()
+            except (FileNotFoundError, OSError):
+                logger.debug("failed to clean up sandbox container after timeout")
             return f"[sandbox timeout after {self.timeout}s]"
         output = (stdout or b"").decode("utf-8", errors="replace")[:30_000]
         if stderr:

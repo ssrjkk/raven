@@ -243,9 +243,19 @@ class TestConversation:
 
     def test_add_tool_result(self):
         c = Conversation(system_prompt="test")
+        c.add_assistant_tool_calls(
+            [{"id": "call_1", "type": "function", "function": {"name": "read", "arguments": "{}"}}]
+        )
         c.add_tool_result("call_1", "result")
-        assert c.messages[1]["role"] == "tool"
-        assert c.messages[1]["tool_call_id"] == "call_1"
+        assert c.messages[1]["role"] == "assistant"
+        assert c.messages[2]["role"] == "tool"
+        assert c.messages[2]["tool_call_id"] == "call_1"
+
+    def test_orphan_tool_result_is_dropped(self):
+        c = Conversation(system_prompt="test")
+        c.add_tool_result("call_1", "result")
+        assert len(c.messages) == 1
+        assert c.messages[0]["role"] == "system"
 
     def test_message_count(self):
         c = Conversation(system_prompt="test")

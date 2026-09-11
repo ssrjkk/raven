@@ -36,7 +36,10 @@ export default function Admin() {
   }, [logs]);
 
   useEffect(() => {
-    const es = new EventSource("/api/admin/logs/stream");
+    const token = getToken();
+    if (!token) return;
+    const url = `/api/admin/logs/stream?token=${encodeURIComponent(token)}`;
+    const es = new EventSource(url);
     es.onmessage = (e) => {
       try {
         const entry = JSON.parse(e.data);

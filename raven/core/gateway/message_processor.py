@@ -7,7 +7,25 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from raven.core.config import settings
+from raven.core.security.context_filter import redact_pii
 from raven.core.security.sandbox_policy import get_policy_for_channel
+
+_SECRET_KEYS = ("api_key", "token", "secret", "password", "authorization", "cookie")
+
+
+def _mask_tool_args(args: dict[str, Any]) -> str:
+    def scrub(value: object) -> object:
+        if isinstance(value, dict):
+            return {
+                k: ("***" if any(s in str(k).lower() for s in _SECRET_KEYS) else scrub(v)) for k, v in value.items()
+            }
+        if isinstance(value, list):
+            return [scrub(v) for v in value]
+        if isinstance(value, str):
+            return redact_pii(value)
+        return value
+
+    return str(scrub(args))[:200]
 
 if TYPE_CHECKING:
     from raven.core.agent.registry import AgentRegistry
@@ -53,7 +71,7 @@ class MessageProcessor:
         async def confirm_fn(tool_name: str, args: dict[str, Any]) -> bool:
             if not channel_obj:
                 return True
-            action_desc = f"Execute tool '{tool_name}' with args: {str(args)[:200]}"
+            action_desc = f"Execute tool '{tool_name}' with args: {_mask_tool_args(args)}"
             result = await channel_obj.ask_confirmation(event.user_id, action_desc, event.session_id or "")
             return bool(result)
 

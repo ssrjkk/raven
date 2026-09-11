@@ -82,3 +82,36 @@ def create_tool_registry(mcp_pool: Any = None) -> ToolRegistry:
     if mcp_pool is not None:
         register_mcp_tools(registry, mcp_pool)
     return registry
+
+
+_TASK_EXEC_TOKENS: tuple[str, ...] = (
+    "shell",
+    "python",
+    "process_",
+    "browser_",
+    "mcp_",
+    "node_",
+    "chaos_",
+    "db_query",
+    "email_send",
+    "http_post",
+    "git_commit",
+    "git_push",
+    "git_pull",
+    "git_checkout",
+    "git_create_pr",
+    "git_review",
+    "plugin_",
+)
+
+
+def create_task_tool_registry(mcp_pool: Any = None) -> ToolRegistry:
+    """Registry for planner-driven task execution (web / Telegram / gateway /task).
+
+    Excludes exec-class, exfiltration-capable and destructive tools so a
+    planner-authored step cannot escalate to arbitrary command execution.
+    """
+    registry = create_tool_registry(mcp_pool)
+    for name in [t.name for t in registry.list() if any(tok in t.name for tok in _TASK_EXEC_TOKENS)]:
+        registry.unregister(name)
+    return registry

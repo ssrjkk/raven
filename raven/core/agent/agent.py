@@ -15,6 +15,7 @@ from raven.core.db import Database
 from raven.core.llm import LLMRouter, ToolCall
 from raven.core.llm.queue import PRIORITY_LOW, PRIORITY_NORMAL
 from raven.core.models import Message, PluginTool, Session
+from raven.core.security.context_filter import sanitize_external_content
 from raven.core.security.tool_policy import ToolPolicyEvaluator
 
 
@@ -327,6 +328,8 @@ class Agent:
 
         if not self.config.stateless and recall_context is None:
             recall_context = await self._get_recall_context(user_message)
+            if recall_context:
+                recall_context = sanitize_external_content(recall_context, source="memory", channel="agent")
         if recall_context:
             messages.append({"role": "system", "content": f"Relevant memories:\n{recall_context}"})
 

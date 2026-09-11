@@ -386,8 +386,10 @@ class ReActAgent:
             content = response.get("content", "") or ""
             tool_calls = response["tool_calls"]
 
-            if content:
-                self.conversation.add_assistant_message(content)
+            # The assistant turn that requested the tools must be recorded with
+            # its tool_calls, otherwise the following role:"tool" messages have
+            # no parent and OpenAI-compatible providers reject the request (400).
+            self.conversation.add_assistant_tool_calls(tool_calls, content)
 
             if ee:
                 await ee.emit(AgentEvent("step_start", {"step": step, "content": content, "tool_calls": tool_calls}))

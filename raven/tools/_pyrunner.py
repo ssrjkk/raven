@@ -4,10 +4,14 @@ import ast
 import sys
 from typing import cast
 
+from raven.core.security.code_sandbox import validate_python_code
 from raven.tools.shell import _RESTRICTED_BUILTINS
 
 
 def run(code: str) -> str:
+    denied = validate_python_code(code)
+    if denied is not None:
+        return f"[denied] {denied}"
     try:
         tree = ast.parse(code)
     except SyntaxError as e:

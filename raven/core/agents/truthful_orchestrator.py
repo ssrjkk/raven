@@ -12,6 +12,12 @@ from loguru import logger
 
 from raven.core.llm.protocol import LLMClientProtocol
 from raven.core.metrics import metrics
+from raven.core.security.context_filter import redact_pii
+
+
+def _safe_query(query: str, limit: int = 120) -> str:
+    """Log-friendly query: truncated and PII-redacted (no secrets/emails in logs)."""
+    return redact_pii(query)[:limit]
 
 _THINKING_RE = re.compile(r"<thinking>(.*?)</thinking>", re.DOTALL | re.IGNORECASE)
 _VERDICT_RE = re.compile(r"^\s*VERIFIED:\s*(TRUE|FALSE)", re.IGNORECASE | re.MULTILINE)
@@ -76,7 +82,7 @@ class TruthfulOrchestrator:
         try:
             result = await self._process_inner(query, context)
         except TimeoutError:
-            logger.error("truthful_orchestrator_timeout", query=query[:120])
+            logger.error("truthful_orchestrator_timeout", query=_safe_query(query))
             metrics.error("truthful", {"reason": "timeout"})
             raise
         except Exception:
@@ -98,7 +104,7 @@ class TruthfulOrchestrator:
             reason = "false" if outcome == "false" else "unclear"
             logger.warning(
                 "truthful_orchestrator_self_correct",
-                query=query[:120],
+                query=_safe_query(query),
                 reason=reason,
                 detail=verification[:300],
             )
@@ -108,16 +114,16 @@ class TruthfulOrchestrator:
             verification = await self._complete(self._verifier_prompt(query, thinking, clean_answer))
 
         if _is_refused(clean_answer):
-            logger.info("truthful_orchestrator_refused", query=query[:120])
+            logger.info("truthful_orchestrator_refused", query=_safe_query(query))
             return TruthfulResult(status="refused", content=clean_answer, thinking_process=thinking)
 
         if corrections > 0:
             logger.warning(
-                "truthful_orchestrator_corrected_final", query=query[:120], corrections=corrections
+                "truthful_orchestrator_corrected_final", query=_safe_query(query), corrections=corrections
             )
             return TruthfulResult(status="corrected", content=clean_answer, thinking_process=thinking)
 
-        logger.info("truthful_orchestrator_verified", query=query[:120])
+        logger.info("truthful_orchestrator_verified", query=_safe_query(query))
         return TruthfulResult(status="success", content=clean_answer, thinking_process=thinking)
 
     def _validate_input(self, query: str, context: str) -> None:

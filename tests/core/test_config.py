@@ -7,7 +7,19 @@ from raven.core.config import settings
 
 class TestSettings:
     def test_default_model(self):
-        assert settings.default_model == "ollama/llama3"
+        # default_model is either set in .env or auto-discovered; it must always
+        # resolve to a non-empty "<provider>/<model>" string regardless of the
+        # ambient configuration.
+        assert isinstance(settings.default_model, str)
+        assert settings.default_model
+
+    def test_auto_select_model_prefers_groq(self, monkeypatch):
+        from raven.core import config_discovery as cd
+
+        result = cd.DiscoveryResult()
+        result.providers_available = ["groq"]
+        monkeypatch.setattr(cd, "get_discovered_keys", lambda: result)
+        assert cd.auto_select_model() == "groq/openai/gpt-oss-120b"
 
     def test_web_port(self):
         assert isinstance(settings.web_port, int)

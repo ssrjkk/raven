@@ -81,9 +81,12 @@ async def browser_type(selector: str, text: str) -> str:
 
 async def browser_screenshot(path: str = "screenshot.png") -> str:
     try:
+        from ravencode.runtime.workspace import confine
+
+        target = confine(path)
         page = await _ensure_page()
-        await page.screenshot(path=path, full_page=True)
-        return f"Screenshot saved to {path}"
+        await page.screenshot(path=str(target), full_page=True)
+        return f"Screenshot saved to {target}"
     except Exception as exc:
         return f"[error] browser_screenshot: {exc}"
 

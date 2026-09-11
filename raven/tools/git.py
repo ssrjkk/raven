@@ -13,38 +13,60 @@ def _get_git() -> GitIntegration:
     return GitIntegration()
 
 
+def _confined_workspace(workspace: str) -> Path:
+    """Resolve a tool-supplied repo path, clamping it to the configured workspace."""
+    from raven.core.config import settings
+
+    base = settings.resolved_workspace
+    if base is None:
+        return Path(workspace).expanduser().resolve()
+    base = base.resolve()
+    target = Path(workspace).expanduser().resolve()
+    try:
+        target.relative_to(base)
+    except ValueError:
+        return base
+    current = base
+    for part in target.relative_to(base).parts:
+        current = current / part
+        if current.is_symlink():
+            msg = f"Symlink detected in path: {current}"
+            raise PermissionError(msg)
+    return target
+
+
 def git_status(workspace: str = "") -> dict[str, Any]:
     git = _get_git()
     if workspace:
-        git._repo = Path(workspace).resolve()
+        git._repo = _confined_workspace(workspace)
     return git.status()
 
 
 def git_branch(workspace: str = "") -> dict[str, Any]:
     git = _get_git()
     if workspace:
-        git._repo = Path(workspace).resolve()
+        git._repo = _confined_workspace(workspace)
     return {"branch": git.get_branch(), "is_branch": git.is_branch(), "is_repo": git.is_repo()}
 
 
 def git_log(count: int = 10, workspace: str = "") -> list[dict[str, str]]:
     git = _get_git()
     if workspace:
-        git._repo = Path(workspace).resolve()
+        git._repo = _confined_workspace(workspace)
     return git.get_log(count)
 
 
 def git_diff(staged: bool = False, workspace: str = "") -> str:
     git = _get_git()
     if workspace:
-        git._repo = Path(workspace).resolve()
+        git._repo = _confined_workspace(workspace)
     return git.get_diff(staged=staged)
 
 
 async def git_commit(message: str = "", auto: bool = False, workspace: str = "") -> dict[str, Any]:
     git = _get_git()
     if workspace:
-        git._repo = Path(workspace).resolve()
+        git._repo = _confined_workspace(workspace)
     if auto:
         result = await git.auto_commit_async()
     else:
@@ -60,7 +82,7 @@ async def git_commit(message: str = "", auto: bool = False, workspace: str = "")
 def git_push(workspace: str = "") -> str:
     git = _get_git()
     if workspace:
-        git._repo = Path(workspace).resolve()
+        git._repo = _confined_workspace(workspace)
     try:
         stdout, stderr = git._run("push")
         return stderr or stdout or "pushed"
@@ -71,7 +93,7 @@ def git_push(workspace: str = "") -> str:
 def git_pull(workspace: str = "") -> str:
     git = _get_git()
     if workspace:
-        git._repo = Path(workspace).resolve()
+        git._repo = _confined_workspace(workspace)
     try:
         stdout, stderr = git._run("pull")
         return stderr or stdout or "pulled"
@@ -82,7 +104,7 @@ def git_pull(workspace: str = "") -> str:
 def git_branches(workspace: str = "") -> list[str]:
     git = _get_git()
     if workspace:
-        git._repo = Path(workspace).resolve()
+        git._repo = _confined_workspace(workspace)
     stdout, _ = git._run("branch", "-a")
     return [b.strip() for b in stdout.split("\n") if b.strip()]
 
@@ -90,7 +112,7 @@ def git_branches(workspace: str = "") -> list[str]:
 def git_checkout(branch: str, create: bool = False, workspace: str = "") -> str:
     git = _get_git()
     if workspace:
-        git._repo = Path(workspace).resolve()
+        git._repo = _confined_workspace(workspace)
     args = ["checkout"]
     if create:
         args += ["-b"]
@@ -102,7 +124,7 @@ def git_checkout(branch: str, create: bool = False, workspace: str = "") -> str:
 async def git_create_pr(title: str = "", body: str = "", workspace: str = "") -> dict[str, Any]:
     git = _get_git()
     if workspace:
-        git._repo = Path(workspace).resolve()
+        git._repo = _confined_workspace(workspace)
     result = await git.create_pr_async(title=title, body=body)
     return {"success": result.success, "url": result.url, "error": result.error}
 
@@ -110,7 +132,7 @@ async def git_create_pr(title: str = "", body: str = "", workspace: str = "") ->
 async def git_review(file_path: str = "", workspace: str = "") -> dict[str, Any]:
     git = _get_git()
     if workspace:
-        git._repo = Path(workspace).resolve()
+        git._repo = _confined_workspace(workspace)
     result = await git.llm_review(file_path or None)
     return {
         "summary": result.summary,

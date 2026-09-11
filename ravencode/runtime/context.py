@@ -168,6 +168,19 @@ class Conversation:
         self._token_total += self._estimate_tokens(content)
         self._trim()
 
+    def add_assistant_tool_calls(self, tool_calls: list[dict[str, Any]], content: str = "") -> None:
+        """Record an assistant turn that requests tools.
+
+        Required by the OpenAI-compatible chat protocol: every ``role: tool``
+        message must be preceded by an assistant message carrying the matching
+        ``tool_calls`` (otherwise providers such as Groq/OpenAI reject the
+        request with HTTP 400).
+        """
+        self.messages.append({"role": "assistant", "content": content or "", "tool_calls": tool_calls})
+        if content:
+            self._token_total += self._estimate_tokens(content)
+        self._trim()
+
     def add_tool_result(self, tool_call_id: str, content: str) -> None:
         self.messages.append({"role": "tool", "tool_call_id": tool_call_id, "content": content})
         self._token_total += self._estimate_tokens(content)
@@ -207,6 +220,30 @@ class Conversation:
             content = popped.get("content")
             if isinstance(content, (str, list)):
                 self._token_total -= self._estimate_tokens(content)
+        self._drop_orphan_tool_messages()
+
+    def _drop_orphan_tool_messages(self) -> None:
+        """Remove ``role: tool`` messages whose requesting assistant turn was
+        trimmed away. Providers reject tool results with no matching
+        ``tool_calls`` assistant message."""
+        cleaned: list[dict[str, Any]] = []
+        pending_ids: set[str] = set()
+        for msg in self.messages:
+            role = msg.get("role")
+            if role == "assistant":
+                pending_ids = {tc.get("id") for tc in (msg.get("tool_calls") or [])}
+                cleaned.append(msg)
+            elif role == "tool":
+                tcid = msg.get("tool_call_id")
+                if tcid in pending_ids:
+                    pending_ids.discard(tcid)
+                    cleaned.append(msg)
+            else:
+                pending_ids = set()
+                cleaned.append(msg)
+        if len(cleaned) != len(self.messages):
+            self.messages = cleaned
+            self._token_total = self._total_tokens()
 
     async def summarize_oldest(self, llm: Any | None = None) -> None:
         if len(self.messages) < 4:

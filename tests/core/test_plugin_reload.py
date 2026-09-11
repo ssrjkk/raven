@@ -261,7 +261,8 @@ def register():
     return Plugin(name="myplugin", tools={"t1": {"name": "t1"}})
 """)
         plugins = discover_plugins(tmp_path)
-        assert len(plugins) >= 0
+        assert isinstance(plugins, list)
+        assert all(isinstance(p, Plugin) for p in plugins)
 
     def test_register_all_plugins(self, tmp_path):
         count = register_all_plugins(tmp_path, watch=False)

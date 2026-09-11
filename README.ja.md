@@ -1,6 +1,6 @@
 ﻿<div align="center">
   <h1>Raven AI</h1>
-  <p><i>2-in-1: <b>Ravencode</b> (opencode代替 — 自律コーディングエージェント) + <b>RavenFlow</b> (openclaw代替 — 永続ワークフローゲートウェイ). 25+チャンネル. タスク. モニター. RAG. 音声. Webダッシュボード.</i></p>
+  <p><i>2-in-1: <b>RavenCode</b> (opencode代替 — 自律コーディングエージェント) + <b>RavenFlow</b> (openclaw代替 — 永続ワークフローゲートウェイ). 25+チャンネル. タスク. モニター. RAG. 音声. Webダッシュボード.</i></p>
 
   <a href="#features">機能</a> •
   <a href="#quickstart">クイックスタート</a> •
@@ -19,7 +19,7 @@
   [![Coverage](https://img.shields.io/codecov/c/github/ssrjkk/raven?logo=codecov)]()
   [![Security](https://img.shields.io/badge/security-hardened-blueviolet)]()
   [![AI-OS-MVP](https://img.shields.io/badge/aios-mvp-purple)]()
-  [![Hybrid](https://img.shields.io/badge/2--in--1-ravencode+%2B+ravenflow-orange)]()
+  [![Hybrid](https://img.shields.io/badge/hybrid-web+api+desktop-orange)]()
 
   [English](README.md) •
   [Русский](README.ru.md) •
@@ -29,35 +29,71 @@
   [日本語](README.ja.md) •
 </div>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/status-active--development-brightgreen" alt="Status">
+  <img src="https://img.shields.io/github/stars/ssrjkk/raven?style=social" alt="Stars">
+</p>
+
+---
+
+## デモ
+
+<p align="center">
+  <i>📺 Ravenの動作を見る（30秒デモGIF — 近日公開）</i>
+</p>
+
+```text
+$ raven "このコードベースを説明して、失敗しているテストを修正して"
+🐦 Ravenがプロジェクトを分析中...
+   → LSP拡張: 3言語を検出
+   → デバッグセッションを計画中...
+   → pytest実行 — 1つの失敗を発見
+   → test_users.pyのアサーションを修正中
+   → PRをオープン: #42
+
+$ raven
+🐦 インタラクティブREPL — タスクを入力するか/help
+  >
+```
+
 ---
 
 ## Raven AIを選ぶ理由
 
 **Raven AI**は単なるボットではありません。サーバー上で24時間365日稼働する、本格的なエンタープライズ向け自動AIアシスタントです。
 
-考えます。計画します。行動します。
+考えます。計画します。行動します。話します。流れます。
 
-- **12のメッセンジャーで通信** — Telegram、Discord、Slack、WhatsApp、Matrix、Google Chat、Signal、IRC、Teams、Feishu、LINE + Webチャット
-- **タスクを実行** — 目標をステップに分解し、ツールで実行、結果を返す
+- **25+のチャンネルで通信** — Telegram、Discord、Slack、WhatsApp、Matrix、Google Chat、Signal、IRC、Teams、Feishu、LINE、Webチャット + さらに15
+- **RavenCodeエージェント** — LSP自動拡張、並列マルチセッション、plan/safe/fastモードを備えた自律コーディングエージェント（`ravencode`）、30+ツール
+- **RavenFlowゲートウェイ** — マルチエージェントルーティング、WebSocketストリーミング、セッション管理を備えた永続ワークフローデーモン（`ravenflow`）
+- **Canvasビジュアルワークスペース** — ターミナルまたはブラウザでリッチコンポーネントをレンダリング（コード、表、mermaid図、画像、アラート）
+- **Nodes分散実行** — リモートノードに登録・解除・ブロードキャスト・実行
+- **音声入出力** — ウェイクワード（"Raven"、"Hey Raven"）、STT（Whisper/Google/Azure/Vosk）、TTS（ElevenLabs/gTTS/system/Edge）
+- **タスクを実行** — ステップの計画を構築し、各ステップをツールで実行して結果を返す
 - **モニターを実行** — Webサイトのping、価格チェック、RSS、ファイル、プロセスを監視しアラート送信
-- **コードを記述** — コードベースのインデックス化、シンボル検索、ファイルレビュー、開発セッション管理
 - **スケジュールルーティン** — 朝のブリーフィング、メールチェック、ファイル整理
 - **RAGメモリ** — 文書のセマンティック検索、PDF/コードのチャンキング、会話メモリ
-- **Webダッシュボード** — モニタリング、タスク管理、モニター、ルーティン管理のReactパネル
+- **Webダッシュボード** — React 19 + Monaco IDE + Tailwind
 - **マルチユーザー + RBAC** — 管理者、ユーザー、ビューアー、ロールベースのアクセス制御
+- **セキュリティポリシー** — 5つのサンドボックスプロファイル（main、non-main、code-exec、web-browsing、read-only）、セッションごとのツール許可/拒否
 
 ---
 
 ## クイックスタート
 
-`ash
+```bash
 pip install raven-agent
 # 開発用: pip install -e .
 cp .env.example .env
 # .envを編集 — 少なくとも1つのLLM APIキーを追加
 raven onboard   # インタラクティブセットアップウィザード（LLM、Telegram、チャンネル）
-raven start
-`
+raven start     # フルプラットフォームを起動
+
+# または単独のエントリーポイントを使用:
+ravencode tui   # RavenCode — インタラクティブコーディングエージェント
+ravenflow       # RavenFlow — 永続ワークフローゲートウェイ
+```
 
 ### ポート
 
@@ -73,17 +109,58 @@ raven start
 
 ### Docker
 
-`ash
+```bash
 docker compose up
-`
+```
+
+### PostgreSQL（オプション、SQLiteを置き換え）
+
+Ravenはデフォルトで各サービスのデータをSQLiteに保存します。`DATABASE_URL`を設定するか
+（ストアの `db_path` に `postgresql://` DSNを渡す）、すべての主要ストア（タスク、モニター、
+ルーティン、認証、セッション、outbox、分析、persister）でPostgreSQLを使用できます。
+
+```bash
+pip install "raven-agent[postgres]"   # asyncpgをインストール
+
+# ローカルPostgresを起動（user/password/db = raven）
+docker compose -f docker-compose.postgres.yml up -d
+
+# .envに追加
+DATABASE_URL=postgresql://raven:raven@localhost:5432/raven
+```
+
+初回接続時にマイグレーションが自動実行されます。SQLiteからのデータ移行はありません。
 
 ### Webダッシュボード（開発）
 
-`ash
+```bash
 cd web
 npm install
 npm run dev    # http://localhost:5173（:18888へのプロキシ）
-`
+```
+
+---
+
+## 比較
+
+| 機能 | Raven AI | Open Interpreter | AutoGen | ChatGPT | Copilot |
+|------|----------|------------------|---------|---------|---------|
+| セルフホスト | ✅ 100% | ✅ | ❌ クラウド | ❌ クラウド | ❌ クラウド |
+| 25+チャンネル | ✅ | ❌ | ❌ | ✅ Webのみ | ❌ |
+| LSP対応コーディングエージェント | ✅ | ❌ | ❌ | ❌ | ✅ 基本 |
+| マルチエージェントオーケストレーション | ✅ RavenFlow | ❌ | ✅ | ❌ | ❌ |
+| 音声 + ウェイクワード | ✅ | ❌ | ❌ | ✅ Voice | ❌ |
+| モニターとアラート | ✅ | ❌ | ❌ | ❌ | ❌ |
+| スケジュールルーティン | ✅ | ❌ | ❌ | ❌ | ❌ |
+| RAG（ローカルファースト） | ✅ ChromaDB/Qdrant | ✅ | ❌ | ❌ | ❌ |
+| RBACマルチユーザー | ✅ | ❌ | ❌ | ❌ | ❌ |
+| 5つのサンドボックスプロファイル | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Canvasワークスペース | ✅ | ❌ | ❌ | ❌ | ❌ |
+| 分散実行 | ✅ | ❌ | ❌ | ❌ | ❌ |
+| オフラインモード | ✅ `--ghost` | ✅ | ❌ | ❌ | ❌ |
+| Webダッシュボード | ✅ React + Monaco | ❌ CLIのみ | ❌ | ✅ | ✅ IDE |
+| オープンソース | ✅ MIT | ✅ AGPL | ✅ Apache 2 | ❌ | ❌ |
+| 無料 | ✅ | ✅ | ✅ | ❌ $20/月 | ❌ $10/月 |
 
 ---
 
@@ -91,14 +168,23 @@ npm run dev    # http://localhost:5173（:18888へのプロキシ）
 
 | 機能 | 説明 |
 |------|------|
-| **25+チャンネル** | Telegram（Whisperによる音声→テキスト、インラインボタン）、Discord（スラッシュコマンド+埋め込み）、Slack、WhatsApp、Matrix、Google Chat、Signal、IRC、Teams、Feishu、LINE、WebChat |
+| **25+チャンネル** | Telegram（Whisperによる音声→テキスト、インラインボタン）、Discord（スラッシュコマンド+埋め込み）、Slack、WhatsApp、Matrix、Google Chat、Signal、IRC、Teams、Feishu、LINE、WebChat + さらに15（Telegram API、Discord API、Slack RTM、WhatsApp Cloud、Matrix CS、Google Chat、Signal、IRC、Teams、Feishu、LINE、WebChat、Email IMAP、SMS Twilio、Alexa、Google Home、Discord Webhook、Telegram Webhook、Custom Webhook） |
+| **RavenFlowゲートウェイ** | 永続ワークフローデーモン（`ravenflow`）— ポート18789でマルチエージェントルーティングエンジン、セッション管理、WebSocketストリーミング、チャンネル起点ディスパッチ、サンドボックスポリシー |
+| **RavenCodeエージェント** | 自律コーディングエージェント（`ravencode`）— インタラクティブREPL、ストリーミング応答、インラインツール呼び出し、LSP拡張。コマンド: `/multisession`、`/plan`、`/safe`、`/fast`、`/enrich`、`/exit` |
+| **LSP自動拡張** | `enrich_context()`がプロジェクトをスキャンし、言語を検出し、LSPサーバー（pyright、typescript-language-server、gopls、rust-analyzer）を起動してシンボルを収集 |
+| **並列マルチセッション** | `SessionManager` — 並行 `ManagedSession` タスク、abort/cleanup、シングルトンパターン |
+| **Canvasビジュアルワークスペース** | リッチコンポーネントをレンダリング: テキスト、コードブロック、表、mermaid図、リンク、画像、リスト、アラート。ターミナルまたはブラウザHTMLに出力 |
+| **Nodes分散実行** | リモートノードの登録/解除、ノード間のタスク実行、全登録エンドポイントへのブロードキャスト |
+| **音声入出力** | ウェイクワード（"Raven"、"Hey Raven"、"OK Raven"）、STT（Whisper、Google、Azure、Vosk）、TTS（ElevenLabs、gTTS、システムSAPI、Edge）、マイク録音 |
+| **サンドボックスセキュリティポリシー** | 5つのポリシー（main、non-main、code-exec、web-browsing、read-only）— ツール許可/拒否、ネットワーク制御、リソース制限。実行時に変更可能 |
+| **Cron / スケジューリング** | `cron_schedule`/`cron_list`/`cron_cancel`ツールで繰り返しタスクをスケジュール（APSchedulerベース） |
+| **統合ランチャー** | `main.py` — 全サービスを起動（Raven、RavenFlow、Web UI）+ graceful shutdown |
 | **タスクエンジン** | マルチステッププランナー — LLMが目標を分解、ツール選択、実行、結果返却 |
 | **モニターエンジン** | 5タイプ: HTTP(S)、資産価格、RSSフィード、ファイル/ディレクトリ、プロセス。トリガー条件、アラート、チェック履歴 |
-| **コーディングアシスタント** | コードインデックス（AST解析、8言語）、セマンティック検索、ファイルレビュー（LLM駆動）、開発セッション |
 | **ルーティン** | 自動スケジュール実行: send_briefing、check_email、organize_files、send_message |
 | **RAG知識ベース** | 埋め込みエンジン（OpenAI + ローカル）、ベクトルストア、ドキュメントチャンキング（PDF/TXT/コード）、セマンティック検索 |
-| **ワークスペーススキル** | workspace/skills/内のスキル: 暗号通貨、朝のブリーフィング、Web検索。SKILL.mdから自動読み込み |
-| **Webダッシュボード** | React 19 + Vite + Tailwind: ダッシュボード、チャット、タスク、モニター、ルーティン、コードセッション、設定 |
+| **ワークスペーススキル** | `workspace/skills/`内のスキル: 暗号通貨、朝のブリーフィング、Web検索。SKILL.mdから自動読み込み |
+| **Webダッシュボード + IDE** | React 19 + Vite + Tailwind + Monaco Editor: ダッシュボード、チャット、タスク、モニター、ルーティン、コードセッション、設定、IDE（エディタ+ターミナル+AIサイドバー） |
 | **認証とRBAC** | マルチユーザー認証、4ロール（admin/user/viewer/banned）、16権限、Bearerトークン |
 | **エンタープライズ基盤** | サーキットブレーカー、HTTPプール、レートリミッター、指数バックオフリトライ、監査ログ（20イベントタイプ）、Prometheusメトリクス、ヘルスチェック |
 | **プラグインシステム** | 10プラグイン — browser、code、cron、files、git、memory、api、ocr、process、sessions。ケイパビリティベースのサンドボックス制御 |
@@ -109,7 +195,7 @@ npm run dev    # http://localhost:5173（:18888へのプロキシ）
 
 ## CLI
 
-`
+```
 raven start                    ゲートウェイ起動
 raven stop                     停止
 raven status                   システム状態
@@ -129,6 +215,11 @@ raven task show <id>           タスク詳細
 raven task cancel <id>         タスクキャンセル
 raven monitor list             モニター一覧
 raven monitor add ...          モニター追加
+raven code                     インタラクティブコーディングREPL
+raven code --project <dir>     プロジェクトディレクトリでREPL起動
+raven code --plan              プランのみモード（書き込みなし）
+raven code --safe              セーフモード（書き込み前に確認）
+raven code --parallel          並列マルチセッションを有効化
 raven code index <path>        コードインデックス
 raven code search <query>      コード検索
 raven code review <file>       ファイルレビュー
@@ -137,11 +228,23 @@ raven routine add ...          ルーティン追加
 raven security audit           セキュリティ監査
 raven security audit --deep    詳細監査（ネットワーク、環境、依存関係）
 raven security audit --fix     自動修正
-`
+raven flow serve --port 18789  RavenFlowゲートウェイデーモンを起動
+raven flow ask <message>       実行中のゲートウェイにメッセージを送信
+raven flow sessions            アクティブなFlowセッションを一覧
+
+ravencode tui                  インタラクティブTUI
+ravencode serve                ヘッドレスHTTPサーバー
+ravencode web                  Webインターフェース
+ravencode session list         保存済みセッションを一覧
+ravencode auth login           APIキーを設定
+
+ravenflow --port 18789         RavenFlowゲートウェイデーモンを起動
+ravenflow serve --port 18789   RavenFlowゲートウェイデーモンを起動
+```
 
 ## チャットコマンド
 
-`
+```
 /status              ボット状態
 /new                 新規会話
 /reset               セッションリセット
@@ -155,14 +258,14 @@ raven security audit --fix     自動修正
 /routine list        ルーティン一覧
 /routine add <action> <sched>  ルーティン追加
 /help                全コマンド
-/pair <code>        ユーザーペアリング
-`
+/pair <code>         ユーザーペアリング
+```
 
 ---
 
 ## アーキテクチャ
 
-`mermaid
+```mermaid
 flowchart TB
     subgraph Clients["クライアントとチャンネル"]
         TG[Telegram]
@@ -230,9 +333,9 @@ flowchart TB
     style Observability fill:#1a1a3e,stroke:#2a2a5e
     style Storage fill:#1a3a2e,stroke:#16213e
     style LLM fill:#3a1a1a,stroke:#2a0a0a
-`
+```
 
-## Project Tree
+## プロジェクト構造
 
 ```
 raven/
@@ -274,117 +377,77 @@ raven/
 └── plugins/                    User plugins
 ```
 
-### RavenFlow Gateway
+## 技術スタック
 
-Multi-agent orchestrator daemon with WebSocket streaming:
-
-```bash
-# Start the gateway
-raven flow serve --port 18789
-
-# Send an agent message
-raven flow ask "summarize the README"
-
-# List active sessions
-raven flow sessions
-```
-
-### Canvas Visual Workspace
-
-Render rich visual components directly from the agent:
-
-```python
-await canvas_render([
-    {"type": "code", "language": "typescript", "content": "const x = 1"},
-    {"type": "table", "headers": ["Name", "Value"], "rows": [["a", "1"]]},
-    {"type": "mermaid", "content": "graph TD; A-->B"},
-])
-```
-
-### Unified Desktop App
-
-A single `main.py` launcher runs all services:
-```bash
-python main.py --web-port 5173 --flow-port 18789
-```
-
-Build everything into one EXE:
-```bash
-python scripts/build_exe.py
-# Output: dist/raven-ai.exe
-```
-
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| **Backend** | Python 3.11+, FastAPI, asyncio, SQLite |
-| **LLM** | Ollama (local) → OpenRouter → Anthropic → OpenAI (failover) |
-| **Memory** | SQLite + ChromaDB + numpy vector store |
-| **RAG** | Qdrant vector store, fallback in-memory, n-gram embedding |
-| **Auth** | bcrypt, JWT (HS256), RBAC (4 roles, 16 permissions) |
-| **Frontend** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
-| **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 25+ registry |
-| **RavenFlow** | FastAPI daemon (port 18789), routing engine, WebSocket streaming, multi-agent dispatch |
-| **RavenCode** | Interactive REPL, LSP auto-enrichment (pyright/tsserver/gopls/rust-analyzer), parallel multi-session, plan/safe/fast modes, 30+ tools |
-| **Canvas** | Rich component rendering (code, table, mermaid, image, link, list, alert), HTML + browser output |
-| **Nodes** | Distributed node registry, broadcast execution, async HTTP dispatch |
-| **Voice** | WakeWordDetector (speech_recognition), Whisper/Google/Azure/Vosk STT, ElevenLabs/gTTS/SAPI/Edge TTS |
-| **Sandbox Policy** | 5 policy profiles (main/non-main/code-exec/web-browsing/read-only), runtime tool allow/deny |
-| **Message Broker** | NATS + JetStream (optional, for distributed mode) |
-| **Resilience** | Circuit breaker, rate limiter, retry with exponential backoff, audit log (20 event types), Prometheus metrics, health checks |
-| **Observability** | OpenTelemetry (traces + metrics), health/ready probes |
-| **Security** | Rate limiting, JWT auth, DM pairing, Fernet encryption, RBAC, plugin sandbox, ToolPolicyEvaluator (deny/allow), exec security policy (deny/ask/full), contextVisibility, workspace isolation, security audit CLI |
-| **CI/CD** | GitHub Actions — parallel lint + typecheck + test, Allure reporting, Codecov |
-| **Deploy** | Docker, docker-compose, systemd |
-| **Testing** | pytest (4593+ tests, Allure reporting), Vitest (React) |
+| レイヤー | 技術 |
+|----------|------|
+| **バックエンド** | Python 3.11+, FastAPI, asyncio, SQLite（デフォルト）+ PostgreSQL（オプション） |
+| **LLM** | Ollama（ローカル）→ OpenRouter → Anthropic → OpenAI（フェイルオーバー） |
+| **メモリ** | SQLite / PostgreSQL + ChromaDB + numpyベクトルストア |
+| **RAG** | Qdrantベクトルストア、インメモリフォールバック、n-gram埋め込み |
+| **認証** | bcrypt, JWT (HS256), RBAC（4ロール、16権限） |
+| **フロントエンド** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
+| **チャンネル** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 25+ registry |
+| **RavenFlow** | FastAPIデーモン（ポート18789）、ルーティングエンジン、WebSocketストリーミング、マルチエージェントディスパッチ |
+| **RavenCode** | インタラクティブREPL、LSP自動拡張（pyright/tsserver/gopls/rust-analyzer）、並列マルチセッション、plan/safe/fastモード、30+ツール |
+| **Canvas** | リッチコンポーネントレンダリング（コード、表、mermaid、画像、リンク、リスト、アラート）、HTML + ブラウザ出力 |
+| **Nodes** | 分散ノードレジストリ、ブロードキャスト実行、非同期HTTPディスパッチ |
+| **音声** | WakeWordDetector（speech_recognition）、Whisper/Google/Azure/Vosk STT、ElevenLabs/gTTS/SAPI/Edge TTS |
+| **サンドボックスポリシー** | 5つのポリシープロファイル（main/non-main/code-exec/web-browsing/read-only）、実行時ツール許可/拒否 |
+| **メッセージブローカー** | NATS + JetStream（オプション、分散モード） |
+| **レジリエンス** | サーキットブレーカー、レートリミッター、指数バックオフリトライ、監査ログ（20イベントタイプ）、Prometheusメトリクス、ヘルスチェック |
+| **可観測性** | OpenTelemetry（トレース + メトリクス）、health/readyプローブ |
+| **セキュリティ** | レート制限、JWT認証、DMペアリング、Fernet暗号化、RBAC、プラグインサンドボックス、ToolPolicyEvaluator（deny/allow）、execセキュリティポリシー（deny/ask/full）、contextVisibility、ワークスペース分離、セキュリティ監査CLI |
+| **CI/CD** | GitHub Actions — 並列lint + typecheck + test、Allureレポート、Codecov |
+| **デプロイ** | Docker, docker-compose, systemd |
+| **テスト** | pytest（4593+テスト、Allureレポート）、Vitest（React） |
 
 ---
 
-## RavenCode — Terminal Coding Agent
+## RavenCode — ターミナルコーディングエージェント
 
-Raven AI includes `ravencode`, a full-featured autonomous coding agent:
+Raven AIは `raven code` — フル機能のインタラクティブターミナルコーディングエージェントを搭載しています:
 
 ```bash
-# Start the TUI
-ravencode tui
+# REPLを起動
+raven code --project ./my-project
 
-# Start headless HTTP server
-ravencode serve
+# REPL内:
+raven@project> FastAPIでREST APIを作成
+# ... 応答をストリーミングし、ツールを呼び出し、ファイルをインライン編集
 
-# Built-in commands:
-/help          Show available commands
-/multisession  Run subtasks in parallel
-/plan          Toggle plan-only mode (no writes)
-/safe          Toggle safe mode (confirm before writes)
-/fast          Toggle fast mode (skip enrichment)
-/enrich        Refresh LSP analysis
-/session <id>  Switch to a parallel session
-/exit          Exit
+# 組み込みコマンド:
+/help          利用可能なコマンドを表示
+/multisession  サブタスクを並列実行
+/plan          プランのみモードへ切り替え（書き込みなし）
+/safe          セーフモードへ切り替え（書き込み前に確認）
+/fast          高速モードへ切り替え（拡張をスキップ）
+/enrich        LSP分析を更新
+/session <id>  並列セッションに切り替え
+/exit          終了
 ```
 
-### RavenFlow Gateway
+### RavenFlowゲートウェイ
 
-Multi-agent orchestrator daemon with WebSocket streaming:
+WebSocketストリーミング対応のマルチエージェントオーケストレータデーモン:
 
 ```bash
-# Start the gateway (standalone command)
+# ゲートウェイを起動（単独コマンド）
 ravenflow --port 18789
 
-# Or via main CLI
+# またはメインCLI経由
 raven flow serve --port 18789
 
-# Send an agent message
-raven flow ask "summarize the README"
+# エージェントにメッセージを送信
+raven flow ask "READMEを要約して"
 
-# List active sessions
+# アクティブなセッションを一覧
 raven flow sessions
 ```
 
-### Canvas Visual Workspace
+### Canvasビジュアルワークスペース
 
-Render rich visual components directly from the agent:
+エージェントから直接リッチなビジュアルコンポーネントをレンダリング:
 
 ```python
 await canvas_render([
@@ -394,14 +457,14 @@ await canvas_render([
 ])
 ```
 
-### Unified Launcher
+### 統合ランチャー
 
-A single `main.py` launcher starts all services:
+単一の `main.py` ランチャーがすべてのサービスを起動します:
 ```bash
 python main.py --web-port 5173 --flow-port 18789
 ```
 
-
+---
 
 ## お問い合わせ
 
@@ -412,7 +475,8 @@ python main.py --web-port 5173 --flow-port 18789
   <p>
     <a href="https://github.com/ssrjkk/raven">GitHub</a> •
     <a href="https://t.me/ssrjkk">Telegram</a> •
-    <a href="mailto:ray013lefe@gmail.com">ray013lefe@gmail.com</a>
+    <a href="mailto:ray013lefe@gmail.com">ray013lefe@gmail.com</a> •
+    <a href="https://t.me/ssrjkk">@ssrjkk</a>
   </p>
   <p>
     アイデアやバグがありますか？→ <a href="https://github.com/ssrjkk/raven/issues">Issueを開く</a>
@@ -420,7 +484,7 @@ python main.py --web-port 5173 --flow-port 18789
   <p>
     貢献したいですか？→ <a href="https://github.com/ssrjkk/raven/pulls">Pull Request</a>
   </p>
-  <p><i>2-in-1: RavenCode + RavenFlow. 25+チャンネル. タスク. モニター. RAG. 音声. Webダッシュボード.</i></p>
+  <p><i>24/7のパーソナルAIを必要とする開発者のために作られました</i></p>
 </div>
 
 ## License

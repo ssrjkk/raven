@@ -14,6 +14,20 @@ from raven.tools.file import _check_no_symlinks_in_path
 MAX_UPLOAD_BYTES: int = 50 * 1024 * 1024  # 50 MB
 _UPLOAD_CHUNK = 65536
 
+_ALLOWED_UPLOAD_EXTS: frozenset[str] = frozenset(
+    {
+        # images
+        "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "avif", "tif", "tiff",
+        # documents
+        "pdf", "txt", "md", "csv", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "rtf",
+        # audio / video
+        "mp3", "wav", "flac", "ogg", "m4a", "aac",
+        "mp4", "mov", "mkv", "webm", "avi",
+        # archives
+        "zip", "tar", "gz", "7z",
+    }
+)
+
 
 def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
     router = APIRouter(prefix="/api/media", tags=["media"])
@@ -217,6 +231,9 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
         safe_name = Path(file.filename).name
         if ".." in safe_name or "/" in safe_name or "\\" in safe_name:
             raise HTTPException(400, "Invalid filename")
+        ext = safe_name.rsplit(".", 1)[-1].lower() if "." in safe_name else ""
+        if ext not in _ALLOWED_UPLOAD_EXTS:
+            raise HTTPException(400, f"File type '.{ext}' is not allowed")
         ws.mkdir(parents=True, exist_ok=True)
         dest = ws / safe_name
         try:

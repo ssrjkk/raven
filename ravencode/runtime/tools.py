@@ -187,6 +187,10 @@ async def glob_files(pattern: str, path: str | None = None) -> list[str]:
     search_root = _get_workspace() if path is None else _confine(path)
     if not search_root.is_dir():
         return [f"[error] directory not found: {path or search_root}"]
+    return await asyncio.to_thread(_glob_scan, search_root, pattern)
+
+
+def _glob_scan(search_root: Path, pattern: str) -> list[str]:
     results = []
     for p in search_root.rglob("*"):
         if p.is_file() and fnmatch.fnmatch(str(p.relative_to(search_root)), pattern):
@@ -888,7 +892,9 @@ async def _cron_cancel_handler(task_id: str) -> str:
         return "[error] cron plugin not available"
 
 
-_current_sandbox_policy: str = "main"
+_current_sandbox_policy: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "ravencode_sandbox_policy", default="main"
+)
 
 _SANDBOX_SOFT_MUTATORS: frozenset[str] = frozenset(
     {
@@ -988,28 +994,28 @@ _SANDBOX_POLICY_RULES: dict[str, dict[str, Any]] = {
 
 
 def _sandbox_deny_reason(name: str) -> str:
-    rules = _SANDBOX_POLICY_RULES.get(_current_sandbox_policy)
+    policy = _current_sandbox_policy.get()
+    rules = _SANDBOX_POLICY_RULES.get(policy)
     if not rules:
         return ""
     allow = rules.get("allow")
     if allow is not None and name not in allow:
-        return f"Tool '{name}' not allowed in {_current_sandbox_policy} sandbox policy"
+        return f"Tool '{name}' not allowed in {policy} sandbox policy"
     if name in rules.get("deny_exact", frozenset()) or any(
         name.startswith(prefix) for prefix in rules.get("deny_prefix", frozenset())
     ):
-        return f"Tool '{name}' denied in {_current_sandbox_policy} sandbox policy"
+        return f"Tool '{name}' denied in {policy} sandbox policy"
     return ""
 
 
 async def _sandbox_policy_handler(policy: str | None = None) -> str:
-    global _current_sandbox_policy
     if policy:
         valid = {"main", "non-main", "code-exec", "web-browsing", "read-only"}
         if policy not in valid:
             return f"[error] unknown policy: {policy}. Available: {', '.join(sorted(valid))}"
-        _current_sandbox_policy = policy
+        _current_sandbox_policy.set(policy)
         return f"Sandbox policy set to: {policy}"
-    return f"Current sandbox policy: {_current_sandbox_policy}"
+    return f"Current sandbox policy: {_current_sandbox_policy.get()}"
 
 
 async def _talk_handler(text: str, voice: str = "", provider: str = "") -> str:

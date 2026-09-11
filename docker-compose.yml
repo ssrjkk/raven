@@ -46,7 +46,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./deploy/prometheus:/etc/prometheus
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     profiles:
       - full

@@ -437,6 +437,42 @@ class TestRunBranches:
         assert "aborted" in events
 
 
+class TestToolCallProtocol:
+    async def test_assistant_tool_calls_recorded_before_tool_results(self, monkeypatch):
+        calls = {"n": 0}
+        conversation = Conversation(system_prompt="test")
+
+        async def fake_llm(messages):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return {
+                    "content": "",
+                    "tool_calls": [
+                        {"id": "call_1", "type": "function", "function": {"name": "read", "arguments": {"path": "x"}}}
+                    ],
+                }
+            return {"content": "done"}
+
+        async def fake_exec(name, args):
+            return "file-contents"
+
+        agent = ReActAgent(
+            config=AgentConfig(proactive_scan=False, diff_preview=False),
+            conversation=conversation,
+            llm_provider=fake_llm,
+        )
+        monkeypatch.setattr(agent, "_execute_with_retry", fake_exec)
+        _patch_save(monkeypatch)
+        result = await agent.run("do it")
+        assert result == "done"
+
+        msgs = conversation.get_messages()
+        idx = next(i for i, m in enumerate(msgs) if m.get("role") == "assistant" and m.get("tool_calls"))
+        assert msgs[idx]["tool_calls"][0]["id"] == "call_1"
+        assert msgs[idx + 1]["role"] == "tool"
+        assert msgs[idx + 1]["tool_call_id"] == "call_1"
+
+
 class TestCompleteFlow:
     async def test_final_answer_emits(self, monkeypatch):
         events: list[str] = []

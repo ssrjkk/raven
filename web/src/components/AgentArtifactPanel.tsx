@@ -17,6 +17,16 @@ function artifactIcon(type: string) {
   }
 }
 
+const ARTIFACT_CSP =
+  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
+  "img-src data: https:; font-src data:; worker-src 'none'; child-src 'none'; " +
+  "frame-src 'none'; form-action 'none'; base-uri 'none'";
+
+function sandboxedSrcDoc(html: string): string {
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${ARTIFACT_CSP}">`;
+  return `<!DOCTYPE html><html><head>${meta}</head><body>${html}</body></html>`;
+}
+
 function ArtifactBody({ artifact }: { artifact: AgentArtifact }) {
   const type = artifact.type || "code";
 
@@ -32,7 +42,7 @@ function ArtifactBody({ artifact }: { artifact: AgentArtifact }) {
     return (
       <iframe
         sandbox="allow-scripts"
-        srcDoc={artifact.content}
+        srcDoc={sandboxedSrcDoc(artifact.content)}
         title={artifact.title}
         className="h-64 w-full rounded border border-default bg-white"
       />

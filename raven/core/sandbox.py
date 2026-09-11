@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import asyncio
 import os
 import sys
@@ -8,6 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
+
+from raven.core.security.code_sandbox import DENIED_MODULES
 
 SANDBOX_IMAGE = "python:3.12-slim"
 
@@ -21,17 +24,19 @@ _AST_BLOCKED_NAMES = frozenset(
         "vars", "format", "format_map",
     }
 )
-_AST_BLOCKED_MODULES = frozenset(
-    {
-        "os", "sys", "subprocess", "shutil", "socket", "ctypes", "importlib",
-        "builtins", "operator", "inspect", "pickle", "marshal", "code", "codeop",
-    }
-)
+_AST_BLOCKED_MODULES = frozenset(DENIED_MODULES)
+
+
+def _module_root(expr: Any) -> str | None:
+    node = expr
+    while isinstance(node, ast.Attribute):
+        node = node.value
+    if isinstance(node, ast.Name):
+        return node.id
+    return None
 
 
 def _validate_ast(code: str) -> str | None:
-    import ast
-
     try:
         tree = ast.parse(code)
     except SyntaxError as e:
@@ -44,11 +49,19 @@ def _validate_ast(code: str) -> str | None:
             or node.attr in ("format", "format_map", "__subclasses__")
         ):
             return f"[denied] attribute '{node.attr}' is not allowed"
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            root = _module_root(node.func.value)
+            if root is not None and root in _AST_BLOCKED_MODULES:
+                return f"[denied] '{root}' module access is not allowed"
+        if isinstance(node, ast.Import):
             for alias in node.names:
                 mod = alias.name.split(".")[0]
                 if mod in _AST_BLOCKED_MODULES:
                     return f"[denied] import of '{alias.name}' is not allowed"
+        if isinstance(node, ast.ImportFrom):
+            mod = (node.module or "").split(".")[0]
+            if mod in _AST_BLOCKED_MODULES:
+                return f"[denied] import of '{node.module}' is not allowed"
     return None
 
 

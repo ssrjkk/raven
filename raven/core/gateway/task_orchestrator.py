@@ -14,7 +14,7 @@ from raven.core.task_engine.models import Task, TaskStatus
 from raven.core.task_engine.planner import TaskPlanner
 from raven.core.task_engine.runner import TaskRunner
 from raven.core.task_engine.store import TaskStore
-from raven.tools.register_all import create_tool_registry
+from raven.tools.register_all import create_task_tool_registry
 
 
 class TaskOrchestrator:
@@ -41,7 +41,7 @@ class TaskOrchestrator:
 
     async def start(self) -> None:
         self._store = TaskStore(self._db.db_path)
-        tools = create_tool_registry(self._mcp_pool)
+        tools = create_task_tool_registry(self._mcp_pool)
         self._planner = TaskPlanner(tools)
         self._runner = TaskRunner(self._store, tools)
         pending = await self._store.list_tasks(status="pending", limit=1000)

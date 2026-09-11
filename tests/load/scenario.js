@@ -2,9 +2,7 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { SharedArray } from 'k6/data';
 
-const AUTH_BASE = __ENV.AUTH_BASE || 'http://localhost:8001';
-const GATEWAY_BASE = __ENV.GATEWAY_BASE || 'http://localhost:8000';
-const MONITOR_BASE = __ENV.MONITOR_BASE || 'http://localhost:8003';
+const RAVEN_BASE = __ENV.RAVEN_BASE || 'http://localhost:18888';
 
 const users = new SharedArray('users', function () {
   const results = [];
@@ -28,13 +26,13 @@ export const options = {
 };
 
 function getToken(user) {
-  const regRes = http.post(`${AUTH_BASE}/api/v1/auth/register`, JSON.stringify(user), {
+  const regRes = http.post(`${RAVEN_BASE}/api/auth/register`, JSON.stringify(user), {
     headers: { 'Content-Type': 'application/json' },
   });
   if (regRes.status === 200) {
     return regRes.json().token;
   }
-  const loginRes = http.post(`${AUTH_BASE}/api/v1/auth/login`, JSON.stringify(user), {
+  const loginRes = http.post(`${RAVEN_BASE}/api/auth/login`, JSON.stringify(user), {
     headers: { 'Content-Type': 'application/json' },
   });
   return loginRes.json().token;
@@ -45,19 +43,19 @@ export default function () {
   const token = getToken(user);
   const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  const health = http.get(`${GATEWAY_BASE}/health`);
+  const health = http.get(`${RAVEN_BASE}/api/health/live`);
   check(health, { 'health ok': (r) => r.status === 200 });
 
   const monitorRes = http.post(
-    `${GATEWAY_BASE}/api/v1/monitors`,
-    JSON.stringify({ name: `mon_${__VU}_${__ITER}`, type: 'latency', threshold: 500 }),
+    `${RAVEN_BASE}/api/monitor/add`,
+    JSON.stringify({ name: `mon_${__VU}_${__ITER}`, type: 'latency', target: 'https://example.com' }),
     { headers },
   );
   check(monitorRes, { 'monitor created': (r) => r.status === 200 });
 
   if (monitorRes.status === 200) {
     const monId = monitorRes.json().id;
-    const getRes = http.get(`${GATEWAY_BASE}/api/v1/monitors/${monId}`, { headers });
+    const getRes = http.get(`${RAVEN_BASE}/api/monitor/${monId}`, { headers });
     check(getRes, { 'monitor get': (r) => r.status === 200 });
   }
 

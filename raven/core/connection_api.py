@@ -18,7 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -47,7 +47,7 @@ _PROVIDER_MODEL_HINTS: dict[str, str] = {
     "openrouter": "openrouter/openai/o3-mini",
     "ollama": "ollama/llama3",
     "vllm": "vllm/llama3",
-    "groq": "groq/llama3-70b-8192",
+    "groq": "groq/openai/gpt-oss-120b",
 }
 
 
@@ -171,6 +171,14 @@ def _validate_base_url_scheme(url: str) -> None:
         raise HTTPException(400, f"Unsupported URL scheme: {parsed.scheme!r}. Only http/https allowed.")
 
 
+def _require_admin(request: Request) -> None:
+    """Mutations change which LLM endpoint receives OTHER (admin) API keys,
+    so provider/context/agent management is restricted to admins."""
+    role = getattr(request.state, "user_role", None)
+    if role not in ("admin", "superadmin"):
+        raise HTTPException(403, "Connections management requires admin role")
+
+
 # --------------------------------------------------------------------------- #
 # Router
 # --------------------------------------------------------------------------- #
@@ -192,7 +200,7 @@ def create_connection_router(dependencies: list[Any] | None = None) -> APIRouter
                     return _public_provider(p)
         raise HTTPException(404, f"Provider '{name}' not found")
 
-    @router.post("/providers")
+    @router.post("/providers", dependencies=[Depends(_require_admin)])
     async def create_provider(body: ProviderPayload) -> dict[str, Any]:
         _validate_base_url_scheme(body.base_url)
 
@@ -212,7 +220,7 @@ def create_connection_router(dependencies: list[Any] | None = None) -> APIRouter
         logger.info("[connections] provider created: {} ({})", body.name, body.type)
         return result
 
-    @router.put("/providers/{name}")
+    @router.put("/providers/{name}", dependencies=[Depends(_require_admin)])
     async def update_provider(name: str, body: UpdateProviderPayload) -> dict[str, Any]:
         _validate_base_url_scheme(body.base_url or "")
 
@@ -249,7 +257,7 @@ def create_connection_router(dependencies: list[Any] | None = None) -> APIRouter
         logger.info("[connections] provider updated: {}", name)
         return result
 
-    @router.delete("/providers/{name}")
+    @router.delete("/providers/{name}", dependencies=[Depends(_require_admin)])
     async def delete_provider(name: str) -> dict[str, Any]:
         def _do() -> dict[str, Any]:
             providers = _store._data["providers"]
@@ -274,7 +282,7 @@ def create_connection_router(dependencies: list[Any] | None = None) -> APIRouter
         logger.info("[connections] provider deleted: {}", name)
         return result
 
-    @router.post("/providers/test")
+    @router.post("/providers/test", dependencies=[Depends(_require_admin)])
     async def test_provider(body: ProviderTestRequest) -> dict[str, Any]:
         if body.type not in PROVIDER_TYPES:
             raise HTTPException(400, f"Unknown provider type '{body.type}'")
@@ -311,7 +319,7 @@ def create_connection_router(dependencies: list[Any] | None = None) -> APIRouter
         async with _store._lock:
             return {"contexts": list(_store._data["contexts"])}
 
-    @router.post("/contexts")
+    @router.post("/contexts", dependencies=[Depends(_require_admin)])
     async def create_context(body: ContextPayload) -> dict[str, Any]:
         def _do() -> dict[str, Any]:
             ctx = body.model_dump()
@@ -325,7 +333,7 @@ def create_connection_router(dependencies: list[Any] | None = None) -> APIRouter
         logger.info("[connections] context created: {} ({})", result["name"], result["id"])
         return result
 
-    @router.put("/contexts/{ctx_id}")
+    @router.put("/contexts/{ctx_id}", dependencies=[Depends(_require_admin)])
     async def update_context(ctx_id: str, body: ContextPayload) -> dict[str, Any]:
         def _do() -> dict[str, Any]:
             contexts = _store._data["contexts"]
@@ -341,7 +349,7 @@ def create_connection_router(dependencies: list[Any] | None = None) -> APIRouter
 
         return await _store.mutate(_do)
 
-    @router.delete("/contexts/{ctx_id}")
+    @router.delete("/contexts/{ctx_id}", dependencies=[Depends(_require_admin)])
     async def delete_context(ctx_id: str) -> dict[str, Any]:
         def _do() -> dict[str, Any]:
             contexts = _store._data["contexts"]
@@ -363,7 +371,7 @@ def create_connection_router(dependencies: list[Any] | None = None) -> APIRouter
         async with _store._lock:
             return {"agents": list(_store._data["agents"])}
 
-    @router.post("/agents")
+    @router.post("/agents", dependencies=[Depends(_require_admin)])
     async def create_agent(body: AgentPayload) -> dict[str, Any]:
         def _do() -> dict[str, Any]:
             agent = body.model_dump()
@@ -378,7 +386,7 @@ def create_connection_router(dependencies: list[Any] | None = None) -> APIRouter
         logger.info("[connections] agent created: {} ({})", result["name"], result["id"])
         return result
 
-    @router.put("/agents/{agent_id}")
+    @router.put("/agents/{agent_id}", dependencies=[Depends(_require_admin)])
     async def update_agent(agent_id: str, body: AgentPayload) -> dict[str, Any]:
         def _do() -> dict[str, Any]:
             agents = _store._data["agents"]
@@ -395,7 +403,7 @@ def create_connection_router(dependencies: list[Any] | None = None) -> APIRouter
 
         return await _store.mutate(_do)
 
-    @router.delete("/agents/{agent_id}")
+    @router.delete("/agents/{agent_id}", dependencies=[Depends(_require_admin)])
     async def delete_agent(agent_id: str) -> dict[str, Any]:
         def _do() -> dict[str, Any]:
             agents = _store._data["agents"]
@@ -407,7 +415,7 @@ def create_connection_router(dependencies: list[Any] | None = None) -> APIRouter
 
         return await _store.mutate(_do)
 
-    @router.post("/agents/{agent_id}/log")
+    @router.post("/agents/{agent_id}/log", dependencies=[Depends(_require_admin)])
     async def append_agent_log(
         agent_id: str, body: dict[str, Any]
     ) -> dict[str, Any]:

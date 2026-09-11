@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
+
+import pytest
 
 from ravencode.runtime.undo import (
     UndoEntry,
@@ -11,6 +12,11 @@ from ravencode.runtime.undo import (
     redo_last,
     undo_last,
 )
+
+
+@pytest.fixture(autouse=True)
+def _ws(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
 
 
 class TestUndoEntry:
@@ -48,34 +54,26 @@ class TestUndoManager:
         m = UndoManager()
         assert m.redo() is None
 
-    def test_undo_writes_original_back(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
-            f.write("original content")
-            path = f.name
-        try:
-            m = UndoManager()
-            m.record(path, "original content", "modified content", "edit")
-            result = m.undo()
-            assert result is not None
-            assert result.startswith("[undo]")
-            assert Path(path).read_text(encoding="utf-8") == "original content"
-        finally:
-            Path(path).unlink(missing_ok=True)
+    def test_undo_writes_original_back(self, tmp_path):
+        path = tmp_path / "a.txt"
+        path.write_text("original content", encoding="utf-8")
+        m = UndoManager()
+        m.record(str(path), "original content", "modified content", "edit")
+        result = m.undo()
+        assert result is not None
+        assert result.startswith("[undo]")
+        assert path.read_text(encoding="utf-8") == "original content"
 
-    def test_undo_then_redo(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
-            f.write("original")
-            path = f.name
-        try:
-            m = UndoManager()
-            m.record(path, "original", "modified", "edit")
-            m.undo()
-            result = m.redo()
-            assert result is not None
-            assert result.startswith("[redo]")
-            assert Path(path).read_text(encoding="utf-8") == "modified"
-        finally:
-            Path(path).unlink(missing_ok=True)
+    def test_undo_then_redo(self, tmp_path):
+        path = tmp_path / "a.txt"
+        path.write_text("original", encoding="utf-8")
+        m = UndoManager()
+        m.record(str(path), "original", "modified", "edit")
+        m.undo()
+        result = m.redo()
+        assert result is not None
+        assert result.startswith("[redo]")
+        assert path.read_text(encoding="utf-8") == "modified"
 
     def test_undo_file_not_found_returns_error(self):
         m = UndoManager()
@@ -84,20 +82,16 @@ class TestUndoManager:
         assert result is not None
         assert result.startswith("[error]")
 
-    def test_redo_file_not_found_returns_error(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
-            f.write("original")
-            path = f.name
-        try:
-            m = UndoManager()
-            m.record(path, "original", "modified", "write")
-            m.undo()
-            Path(path).unlink()
-            result = m.redo()
-            assert result is not None
-            assert result.startswith("[error]")
-        finally:
-            Path(path).unlink(missing_ok=True)
+    def test_redo_file_not_found_returns_error(self, tmp_path):
+        path = tmp_path / "b.txt"
+        path.write_text("original", encoding="utf-8")
+        m = UndoManager()
+        m.record(str(path), "original", "modified", "write")
+        m.undo()
+        path.unlink()
+        result = m.redo()
+        assert result is not None
+        assert result.startswith("[error]")
 
     def test_max_entries(self):
         m = UndoManager(max_entries=3)

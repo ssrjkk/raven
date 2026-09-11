@@ -12,16 +12,12 @@ from raven.core.llm.providers.base import (
 )
 
 FREE_MODELS = [
-    "llama3-70b-8192",
-    "llama3-8b-8192",
-    "mixtral-8x7b-32768",
-    "gemma2-9b-it",
-    "gemma-7b-it",
-    "deepseek-r1-distill-qwen-32b",
-    "deepseek-r1-distill-llama-70b",
-    "qwen-2.5-32b",
-    "qwen-2.5-coder-32b",
-    "distil-whisper-large-v3-en",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.6-27b",
+    "qwen/qwen3.8-27b",
+    "groq/compound",
+    "groq/compound-mini",
 ]
 
 

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from loguru import logger
+
+from ravencode.runtime.workspace import confine
 
 
 class UndoEntry:
@@ -34,9 +34,9 @@ class UndoManager:
         return len(self._redo_stack) > 0
 
     def _apply(self, entry: UndoEntry, action: str = "undo") -> str:
-        p = Path(entry.path).expanduser().resolve()
+        p = confine(entry.path)
         p.write_text(entry.modified, encoding="utf-8")
-        logger.info("{} applied {} on {}", action, entry.tool_name, entry.path)
+        logger.info("{} applied {} on {}", action, entry.tool_name, p)
         return f"[{action}] {entry.tool_name} on {entry.path}"
 
     def undo(self) -> str | None:
@@ -55,7 +55,7 @@ class UndoManager:
             return None
         entry = self._redo_stack.pop()
         try:
-            p = Path(entry.path).expanduser().resolve()
+            p = confine(entry.path)
             current = p.read_text(encoding="utf-8")
             self._undo_stack.append(UndoEntry(entry.path, current, entry.modified, entry.tool_name))
             return self._apply(UndoEntry(entry.path, "", entry.modified, entry.tool_name), action="redo")

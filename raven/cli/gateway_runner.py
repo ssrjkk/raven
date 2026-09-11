@@ -534,14 +534,14 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             from raven.core.task_engine.planner import TaskPlanner
             from raven.core.task_engine.runner import TaskRunner
             from raven.core.task_engine.store import TaskStore
-            from raven.tools.register_all import create_tool_registry
+            from raven.tools.register_all import create_task_tool_registry
 
             goal = body.get("goal", "")
             if not goal:
                 from fastapi import HTTPException
 
                 raise HTTPException(400, "goal required")
-            tools = create_tool_registry()
+            tools = create_task_tool_registry()
             store = TaskStore(settings.resolved_db_path)
             planner = TaskPlanner(tools)
             runner = TaskRunner(store, tools)

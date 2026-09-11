@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import re
 import time
 import uuid
 from collections import defaultdict
@@ -96,7 +97,13 @@ _PUBLIC_MUTATING_PREFIXES: tuple[str, ...] = (
     "/api/webhooks/",  # external channel callbacks with their own secrets
 )
 
-_PUBLIC_PATHS: tuple[str, ...] = ("/aios/health", "/aios/metrics", "/docs", "/openapi.json", "/redoc")
+_PUBLIC_PATHS: frozenset[str] = frozenset(
+    {"/aios/health", "/aios/metrics", "/docs", "/docs/oauth2-redirect", "/openapi.json", "/redoc"}
+)
+
+_UUID_SEGMENT = re.compile(r"/[0-9a-fA-F]{8,}")
+_DIGIT_SEGMENT = re.compile(r"/\d+")
+_PRIVATE_PEER_PREFIXES: tuple[str, ...] = ("127.", "10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.")
 
 # Read-only endpoints exposing private data (chat history across channels,
 # email content, workspace/insight metadata, RAG stats). Require auth when a
@@ -108,6 +115,8 @@ _PRIVATE_READ_PREFIXES: tuple[str, ...] = (
     "/api/email/config",
     "/api/insights",
     "/api/rag",
+    "/api/stream",  # client-side event stream (agent state, tool calls, logs)
+    "/api/canvas",  # canvas image/link proxy (open HTTP proxy otherwise)
     # Sensitive read endpoints that expose private/internal data. Only auth-gated
     # in secure mode (web_secret_key set); left open in local mode. Mutating
     # methods on these are already gated by the generic POST/DELETE rule.
@@ -128,6 +137,8 @@ _PRIVATE_READ_PREFIXES: tuple[str, ...] = (
     "/api/task/",  # task list
     "/api/code/",  # code session list
     "/api/status",  # system status / runtime introspection
+    "/api/metrics",  # Prometheus metric endpoints (internal state)
+    "/api/metrics/prometheus",
     "/api/agents",  # agent registry introspection
     "/api/tools/policy",  # tool security policy introspection
     "/api/connections",  # LLM providers (masked keys), contexts, agents
@@ -141,6 +152,21 @@ def _secure_mode() -> bool:
     return bool(secret)
 
 
+def _client_ip(request: Request) -> str:
+    """Direct peer IP; falls back to the leftmost X-Forwarded-For entry only
+    when the peer is loopback/private (i.e. we sit behind a local proxy)."""
+    host = request.client.host if request.client else "unknown"
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded and (host == "127.0.0.1" or host == "::1" or host.startswith(_PRIVATE_PEER_PREFIXES)):
+        return forwarded.split(",")[0].strip() or host
+    return host
+
+
+def sanitize_metric_path(path: str) -> str:
+    """Collapse UUIDs and numeric ids so Prometheus label cardinality stays bounded."""
+    return _DIGIT_SEGMENT.sub("/{id}", _UUID_SEGMENT.sub("/{id}", path))
+
+
 async def request_id_middleware(request: Request, call_next):
     cid = request.headers.get("X-Correlation-ID") or uuid.uuid4().hex
     set_correlation_id(cid)
@@ -149,23 +175,24 @@ async def request_id_middleware(request: Request, call_next):
     duration = time.monotonic() - start
     response.headers["X-Correlation-ID"] = cid
     status_group = str(response.status_code)[0] + "xx"
-    metrics.inc("http_requests_total", {"method": request.method, "path": request.url.path, "status": status_group})
-    metrics.observe("http_request_duration", duration, {"method": request.method, "path": request.url.path})
+    metric_path = sanitize_metric_path(request.url.path)
+    metrics.inc("http_requests_total", {"method": request.method, "path": metric_path, "status": status_group})
+    metrics.observe("http_request_duration", duration, {"method": request.method, "path": metric_path})
     if duration > _SLOW_REQUEST_THRESHOLD_S:
         logger.warning(
             "[{}] Slow request: {} {} {} {}ms",
             cid,
             request.method,
-            request.url.path,
+            metric_path,
             response.status_code,
             int(duration * 1000),
         )
-    logger.info("{} {} {} {}ms", request.method, request.url.path, response.status_code, int(duration * 1000))
+    logger.info("{} {} {} {}ms", request.method, metric_path, response.status_code, int(duration * 1000))
     return response
 
 
 async def rate_limit_middleware(request: Request, call_next):
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = _client_ip(request)
     allowed = await rate_limiter.check(client_ip)
     if not allowed:
         metrics.inc("http_rate_limited", {"ip": client_ip})
@@ -197,6 +224,13 @@ async def auth_middleware(request: Request, call_next):
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
 
+    # WebSocket and EventSource/SSE clients cannot set custom headers, so the
+    # same token is accepted as a query parameter (?token=...). The gateway
+    # logs request.url.path (no query string), so the token never lands in
+    # access/rate-limit logs.
+    if not token:
+        token = request.query_params.get("token", "")
+
     if token:
         session = token_manager.validate_token(token)
         if session:
@@ -209,7 +243,7 @@ async def auth_middleware(request: Request, call_next):
             request.state.user_id = "admin"
 
     path = request.url.path
-    if path.startswith(_PUBLIC_PATHS):
+    if path in _PUBLIC_PATHS:
         return await call_next(request)
     if _secure_mode() and request.state.user_id == "anonymous":
         for prefix in _PRIVATE_READ_PREFIXES:
@@ -278,6 +312,17 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=(), payment=()"
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "img-src 'self' data: https: blob:; "
+        "connect-src 'self' ws: wss: http://localhost:18888; "
+        "font-src 'self' data: https://fonts.gstatic.com; "
+        "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+    )
     if request.url.scheme == "https":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response

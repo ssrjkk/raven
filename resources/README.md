@@ -3,9 +3,11 @@
 Place your mascot `.ico` file here as `raven.ico`.
 
 The icon is used by:
-- Windows executable (`build/raven.spec`)
-- Desktop app (`desktop/`)
-- System tray icon
+- Windows executable (`scripts/raven.spec` → `packaging/dist/Raven.exe`)
+
+If `resources/raven.ico` is absent, the build pipeline generates it automatically
+via `scripts/make_icon.py` (a violet→indigo gradient bird), so you only need to
+drop a custom file here if you want a different mascot.
 
 ## Requirements
 
@@ -20,4 +22,4 @@ Use any of these tools:
 - **icotool** (Linux): `icotool -c -o resources/raven.ico mascot.png`
 - **online-convert.com**: https://www.Online-Convert.com
 
-The existing spec will fall back to the default PyInstaller icon if this file is absent.
+The spec falls back to the auto-generated icon if this file is absent.

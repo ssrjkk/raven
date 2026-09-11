@@ -27,7 +27,7 @@ groups:
 
       - alert: ServiceDown
         expr: |
-          up{job=~"gateway|auth|agent-core|monitor-engine|rag-service|task-engine|code-service"} == 0
+          up{job="raven"} == 0
         for: 1m
         labels:
           severity: critical
@@ -59,7 +59,7 @@ groups:
 
       - alert: FailedHealthCheck
         expr: |
-          probe_success{job=~"gateway|auth|agent-core|monitor-engine|rag-service|task-engine|code-service"} == 0
+          probe_success{job="raven"} == 0
         for: 30s
         labels:
           severity: critical

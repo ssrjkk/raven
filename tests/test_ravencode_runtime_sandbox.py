@@ -100,9 +100,19 @@ class TestSandbox:
     async def test_docker_exec_timeout(self, monkeypatch) -> None:
         proc = MagicMock()
         proc.communicate = AsyncMock(side_effect=TimeoutError())
-        monkeypatch.setattr("ravencode.runtime.sandbox.asyncio.create_subprocess_exec", AsyncMock(return_value=proc))
+        rm_proc = MagicMock()
+        rm_proc.wait = AsyncMock(return_value=None)
+
+        async def fake_exec(*args, **kwargs):
+            if args[0] == "docker" and args[1] == "rm":
+                return rm_proc
+            return proc
+
+        monkeypatch.setattr("ravencode.runtime.sandbox.asyncio.create_subprocess_exec", fake_exec)
         result = await Sandbox(timeout=30).run_code("x")
         assert result == "[sandbox timeout after 30s]"
+        proc.kill.assert_called_once_with()
+        rm_proc.wait.assert_awaited_once_with()
 
     async def test_stderr_and_exit_code(self, monkeypatch) -> None:
         monkeypatch.setattr(

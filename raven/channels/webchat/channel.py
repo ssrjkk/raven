@@ -294,9 +294,11 @@ class WebChatChannel(BaseChannel):
                 canvas_manager.delete_session(session.session_id)
 
         @app.get("/api/canvas/image")
-        async def canvas_image_proxy(url: str) -> Response:
+        async def canvas_image_proxy(url: str, request: Request) -> Response:
             from raven.core.security.ssrf import safe_fetch_async
 
+            if _secure_endpoints_enabled() and not await _authenticate_request(request):
+                return JSONResponse(status_code=401, content={"error": "Authentication required"})
             if not url.startswith(("http://", "https://")):
                 return JSONResponse(status_code=400, content={"error": "Invalid URL scheme"})
             try:
@@ -310,9 +312,11 @@ class WebChatChannel(BaseChannel):
             )
 
         @app.get("/api/canvas/link")
-        async def canvas_link_proxy(url: str) -> Response:
+        async def canvas_link_proxy(url: str, request: Request) -> Response:
             from raven.core.security.ssrf import safe_fetch_async
 
+            if _secure_endpoints_enabled() and not await _authenticate_request(request):
+                return JSONResponse(status_code=401, content={"error": "Authentication required"})
             if not url.startswith(("http://", "https://")):
                 return JSONResponse(status_code=400, content={"error": "Invalid URL scheme"})
             try:
@@ -413,6 +417,8 @@ INDEX_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; img-src 'self' data: https:; connect-src 'self' ws: wss:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'">
+<meta name="referrer" content="no-referrer">
 <title>Raven AI</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>

@@ -38,7 +38,7 @@ async def _make_orchestrator(db_path: str, monkeypatch: pytest.MonkeyPatch) -> T
             handler=AsyncMock(return_value="stub result"),
         )
     )
-    monkeypatch.setattr("raven.core.gateway.task_orchestrator.create_tool_registry", lambda _mcp: registry)
+    monkeypatch.setattr("raven.core.gateway.task_orchestrator.create_task_tool_registry", lambda _mcp: registry)
     return orch
 
 
@@ -235,7 +235,7 @@ class TestFullCycle:
             )
         )
         monkeypatch.setattr(
-            "raven.core.gateway.task_orchestrator.create_tool_registry", lambda _mcp: registry
+            "raven.core.gateway.task_orchestrator.create_task_tool_registry", lambda _mcp: registry
         )
         orch = TaskOrchestrator(
             SimpleNamespace(db_path=db_path),

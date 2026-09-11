@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import shutil
 import time
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
+
+_SAFE_CID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
 class CheckpointManager:
@@ -57,6 +60,8 @@ class CheckpointManager:
         return f"[ok] checkpoint '{cid}' saved ({len(snapshot)} files)"
 
     async def restore(self, cid: str) -> str:
+        if not _SAFE_CID.match(cid):
+            return f"[error] invalid checkpoint id: {cid}"
         cp_dir = self._storage / cid
         if not await asyncio.to_thread(cp_dir.is_dir):
             return f"[error] checkpoint not found: {cid}"
@@ -69,7 +74,12 @@ class CheckpointManager:
             return f"[error] cannot read snapshot: {exc}"
         restored = 0
         for rel_path, content in snapshot.items():
-            target = self._workspace / rel_path
+            try:
+                target = (self._workspace / rel_path).resolve()
+                target.relative_to(self._workspace)
+            except ValueError:
+                logger.warning("Skipping checkpoint path outside workspace: {}", rel_path)
+                continue
             await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
             await asyncio.to_thread(target.write_text, content, encoding="utf-8")
             restored += 1
@@ -77,6 +87,8 @@ class CheckpointManager:
         return f"[ok] checkpoint '{cid}' restored ({restored} files)"
 
     async def delete(self, cid: str) -> str:
+        if not _SAFE_CID.match(cid):
+            return f"[error] invalid checkpoint id: {cid}"
         cp_dir = self._storage / cid
         if not cp_dir.is_dir():
             return f"[error] checkpoint not found: {cid}"

@@ -68,7 +68,14 @@ def _scan_env() -> dict[str, str]:
 
 def _scan_env_file() -> dict[str, str]:
     found: dict[str, str] = {}
-    candidates = [Path.cwd() / ".env", Path.cwd() / ".env.local", Path.cwd() / ".env.production"]
+    raven_root = Path(__file__).resolve().parents[2]
+    candidates = [
+        Path.cwd() / ".env",
+        Path.cwd() / ".env.local",
+        Path.cwd() / ".env.production",
+        Path.home() / ".raven" / ".env",
+        raven_root / ".env",
+    ]
     for env_path in candidates:
         if env_path.is_file():
             try:
@@ -80,7 +87,7 @@ def _scan_env_file() -> dict[str, str]:
                     key, _, val = line.partition("=")
                     key = key.strip()
                     val = val.strip().strip("\"'")
-                    if key in _KEY_PATTERNS and val:
+                    if key in _KEY_PATTERNS and val and key not in found:
                         found[key] = val
             except OSError:
                 continue
@@ -186,7 +193,7 @@ def auto_select_model() -> str:
     if "anthropic" in result.providers_available:
         return "claude-sonnet-4-20250514"
     if "groq" in result.providers_available:
-        return "groq/llama3-70b-8192"
+        return "groq/openai/gpt-oss-120b"
     if "ollama" in result.providers_available:
         return "ollama/llama3"
     return "ollama/llama3"
@@ -202,7 +209,7 @@ def auto_model_list() -> list[str]:
     if "openrouter" in result.providers_available:
         models.append("openrouter/openai/o3-mini")
     if "groq" in result.providers_available:
-        models.extend(["groq/llama3-70b-8192", "groq/deepseek-r1-distill-qwen-32b", "groq/gemma2-9b-it"])
+        models.extend(["groq/openai/gpt-oss-120b", "groq/openai/gpt-oss-20b", "groq/qwen/qwen3.8-27b"])
     if "ollama" in result.providers_available:
         models.append("ollama/llama3")
     if "vllm" in result.providers_available:

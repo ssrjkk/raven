@@ -410,9 +410,16 @@ def test_upload_too_large_413(client: TestClient, monkeypatch: pytest.MonkeyPatc
     import raven.core.media_api as media_api
 
     monkeypatch.setattr(media_api, "MAX_UPLOAD_BYTES", 1024)
-    resp = client.post("/api/media/upload", files={"file": ("big.bin", b"x" * 2049, "application/octet-stream")})
+    resp = client.post("/api/media/upload", files={"file": ("big.png", b"x" * 2049, "image/png")})
     assert resp.status_code == 413
     assert "File too large" in resp.json()["detail"]
+
+
+def test_upload_disallowed_extension(client: TestClient) -> None:
+    for name in ("evil.html", "script.js", "x.svg", "y.exe", "z.ps1", "nofile"):
+        resp = client.post("/api/media/upload", files={"file": (name, b"data", "application/octet-stream")})
+        assert resp.status_code == 400, name
+        assert "not allowed" in resp.json()["detail"]
 
 
 def test_upload_write_error_500(client: TestClient, tmp_path: Path) -> None:

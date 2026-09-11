@@ -28,6 +28,17 @@ from raven.core.secrets import secrets
 from raven.core.workflow import BUILTIN_TEMPLATES, WorkflowStore
 from raven.core.workflow.models import TemplateStep
 
+_PRIVATE_PEER_PREFIXES: tuple[str, ...] = ("127.", "10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.")
+
+
+def _client_ip(request: Request) -> str:
+    """Direct peer IP; honors X-Forwarded-For only from loopback/private peers."""
+    host = request.client.host if request.client else "unknown"
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded and (host == "127.0.0.1" or host == "::1" or host.startswith(_PRIVATE_PEER_PREFIXES)):
+        return forwarded.split(",")[0].strip() or host
+    return host
+
 _workflow_store = WorkflowStore()
 _workflow_store.register_many(BUILTIN_TEMPLATES)
 
@@ -514,30 +525,42 @@ def init_auth_routes(app: FastAPI, db_path: str) -> None:
     store = AuthStore(db_path)
 
     _login_attempts: dict[str, list[float]] = {}
+    _lockout_until: dict[str, float] = {}
     _last_cleanup: float = 0.0
 
-    def _check_login_rate(ip: str) -> bool:
+    def _check_login_rate(ip: str, username: str = "") -> bool:
         import time
 
         now = time.monotonic()
         nonlocal _last_cleanup
         if now - _last_cleanup > 300:
-            stale = [k for k, v in _login_attempts.items() if not v or now - v[-1] > 300]
-            for k in stale:
+            for k in [k for k, v in _login_attempts.items() if not v or now - v[-1] > 3600]:
                 del _login_attempts[k]
+            for k in [k for k, t in _lockout_until.items() if t <= now]:
+                del _lockout_until[k]
             _last_cleanup = now
-        attempts = _login_attempts.get(ip, [])
-        attempts[:] = [t for t in attempts if now - t < 60]
-        if len(attempts) >= 5:
-            return False
-        attempts.append(now)
-        _login_attempts[ip] = attempts
+        keys = [ip, f"user:{username}"] if username else [ip]
+        for key in keys:
+            if key.endswith(":"):
+                continue
+            if _lockout_until.get(key, 0.0) > now:
+                return False
+            attempts = _login_attempts.get(key, [])
+            attempts[:] = [t for t in attempts if now - t < 3600]
+            short_window = sum(1 for t in attempts if now - t < 60)
+            if len(attempts) >= 10 or short_window >= 5:
+                if len(attempts) >= 10:
+                    _lockout_until[key] = now + 300.0  # 10 fails/hour → 5 min lockout
+                    logger.warning("Login lockout for {} for 5 minutes", key)
+                return False
+            attempts.append(now)
+            _login_attempts[key] = attempts
         return True
 
     @app.post("/api/auth/login")
     async def auth_login(body: AuthLoginRequest, request: Request):
-        ip = request.client.host if request.client else "unknown"
-        if not _check_login_rate(ip):
+        ip = _client_ip(request)
+        if not _check_login_rate(ip, body.username):
             raise HTTPException(429, "Too many login attempts. Try again later.")
         user = await store.authenticate(body.username, body.password)
         if not user:
@@ -559,8 +582,8 @@ def init_auth_routes(app: FastAPI, db_path: str) -> None:
 
     @app.post("/api/auth/register")
     async def auth_register(body: AuthRegisterRequest, request: Request):
-        ip = request.client.host if request.client else "unknown"
-        if not _check_login_rate(ip):
+        ip = _client_ip(request)
+        if not _check_login_rate(ip, body.username):
             raise HTTPException(429, "Too many registration attempts. Try again later.")
         display = body.display_name or body.username
         existing = await store.get_user(body.username)

@@ -10,6 +10,7 @@ from typing import Any
 
 from loguru import logger
 
+from raven.core.security.code_sandbox import DENIED_BUILTINS, DENIED_MODULES, validate_python_code
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 _UNIX_COMMANDS = frozenset(
@@ -139,25 +140,8 @@ async def shell_command(command: str, timeout: int = 30) -> str:
         return f"[timeout after {timeout}s]"
 
 
-_DENIED_MODULES = frozenset(
-    {
-        "os",
-        "subprocess",
-        "sys",
-        "shutil",
-        "ctypes",
-        "socket",
-        "operator",
-        "inspect",
-        "importlib",
-        "pickle",
-        "marshal",
-        "code",
-        "codeop",
-        "builtins",
-        "typing",
-    }
-)
+_DENIED_MODULES = DENIED_MODULES
+_DENIED_BUILTINS = DENIED_BUILTINS
 
 _RESTRICTED_BUILTINS: dict[str, Any] = {
     "abs": abs,
@@ -204,66 +188,14 @@ _RESTRICTED_BUILTINS: dict[str, Any] = {
     "None": None,
 }
 
-_DENIED_BUILTINS = frozenset(
-    {
-        "eval",
-        "exec",
-        "compile",
-        "open",
-        "input",
-        "type",
-        "memoryview",
-        "breakpoint",
-        "callable",
-        "staticmethod",
-        "classmethod",
-        "property",
-        "super",
-        "getattr",
-        "setattr",
-        "delattr",
-        "vars",
-        "dir",
-        "format",
-        "format_map",
-        "__import__",
-        "globals",
-        "locals",
-    }
-)
+_DENIED_BUILTINS = DENIED_BUILTINS
 
 
 async def python_code(code: str, timeout: int = 60) -> str:
     try:
-        import ast
-
-        tree = ast.parse(code)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Name) and node.id in ("__builtins__", "__import__"):
-                return f"[denied] access to '{node.id}' is not allowed"
-            if (
-                isinstance(node, ast.Constant)
-                and isinstance(node.value, str)
-                and node.value.startswith("__")
-                and node.value.endswith("__")
-            ):
-                return f"[denied] dunder string literal '{node.value}' is not allowed"
-            if isinstance(node, ast.Call):
-                func = node.func
-                if isinstance(func, ast.Name) and func.id in _DENIED_BUILTINS:
-                    return f"[denied] use of '{func.id}' is not allowed"
-                if isinstance(func, ast.Attribute):
-                    if func.attr in _DENIED_BUILTINS:
-                        return f"[denied] '{func.attr}' called via attribute access"
-                    if isinstance(func.value, ast.Name) and func.value.id in _DENIED_MODULES:
-                        return f"[denied] '{func.value.id}' module access is not allowed"
-            if isinstance(node, ast.Attribute) and node.attr.startswith("__") and node.attr.endswith("__"):
-                return f"[denied] dunder attribute '{node.attr}' is not allowed"
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                for alias in node.names:
-                    module_name = alias.name.split(".")[0]
-                    if module_name in _DENIED_MODULES:
-                        return f"[denied] import of '{alias.name}' is not allowed"
+        denied = validate_python_code(code)
+        if denied is not None:
+            return f"[denied] {denied}"
 
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
