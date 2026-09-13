@@ -11,8 +11,12 @@ Configuration is primarily managed through a `.env` file in the project root or 
 | `OPENROUTER_API_KEY` | OpenRouter API key | — |
 | `ANTHROPIC_API_KEY` | Anthropic API key | — |
 | `OPENAI_API_KEY` | OpenAI API key | — |
+| `GROQ_API_KEY` | Groq API key | — |
 | `OLLAMA_BASE_URL` | Ollama server URL | `http://localhost:11434` |
-| `DEFAULT_MODEL` | Default LLM model | `openrouter/gpt-4o` |
+| `VLLM_BASE_URL` | vLLM / OpenAI-compatible local server URL | — |
+| `DEFAULT_MODEL` | Default LLM model (empty = auto-discovered) | `openrouter/openai/gpt-4o` |
+
+Supported providers: `openai`, `anthropic`, `openrouter`, `ollama`, `vllm`, `azure`, `groq`, `bedrock`, `vertex`, `copilot`. Failover order is automatic: the first healthy provider wins.
 
 ### Channel Tokens
 
@@ -26,6 +30,12 @@ Configuration is primarily managed through a `.env` file in the project root or 
 | `MATRIX_ACCESS_TOKEN` | Matrix access token |
 | `WHATSAPP_TOKEN` | WhatsApp access token |
 | `WHATSAPP_PHONE_ID` | WhatsApp phone number ID |
+| `SIGNAL_API_URL` | Signal (signal-cli REST API) URL |
+| `IRC_SERVER` | IRC server |
+| `GOOGLECHAT_WEBHOOK_URL` | Google Chat webhook URL |
+| `TEAMS_WEBHOOK_URL` | Microsoft Teams webhook URL |
+| `FEISHU_WEBHOOK_URL` | Feishu/Lark webhook URL |
+| `LINE_CHANNEL_TOKEN` | LINE channel token |
 
 ### Security
 
@@ -33,7 +43,7 @@ Configuration is primarily managed through a `.env` file in the project root or 
 |----------|-------------|---------|
 | `DM_POLICY` | DM access policy | `pairing` |
 | `WEB_SECRET_KEY` | Admin web secret | — |
-| `WEB_CORS_ORIGINS` | Allowed CORS origins | `*` |
+| `WEB_CORS_ORIGINS` | Allowed CORS origins | `http://localhost:5173,http://localhost:3000,http://localhost:18888` |
 | `EXEC_SECURITY` | Tool execution security | `deny` |
 | `SANDBOX_MODE` | Sandboxing mode | `non-main` |
 | `SANDBOX_BACKEND` | Sandbox backend | `subprocess` |

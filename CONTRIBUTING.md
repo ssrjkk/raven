@@ -73,18 +73,18 @@ cd web && npm install && npm run build
 
 ```
 raven/
-├── raven/             # Основной Python-пакет (agent, auth, gateway, LLM, RAG, ...)
-├── services/          # Микросервисы (Go: gateway/auth/monitor-engine; Python: agent-core/rag/task/code)
-├── channels/          # 12 каналов (Telegram, Discord, Slack, ...)
+├── raven/             # Основной Python-пакет (core, gateway, channels, tools, LLM, RAG, ...)
+│   ├── channels/      # 15 каналов (Telegram, Discord, Slack, WhatsApp, ...)
+│   ├── core/          # Движок: gateway, agents, security, task_engine, monitor, llm, rag
+│   ├── cli/           # CLI (26 групп команд), tui
+│   ├── tools/         # 30+ инструментов ассистента
+│   └── plugins/       # 10 встроенных плагинов
+├── ravencode/         # Автономный coding-агент (runtime, agents, cli)
+├── aios/              # Тонкий FastAPI bridge для AI-шлюза
 ├── web/               # React 19 + Vite + Tailwind дашборд
-├── aios/              # AI-OS-MVP bridge
-├── daemon/            # Rust-демон системных метрик
-├── ravencode/         # Python API для AI-агентов
-├── packages/          # TypeScript-пакеты
-├── plugins/           # 10 инструментов-плагинов
-├── deploy/            # Docker, K8s, observability
 ├── tests/             # Тесты (pytest)
 ├── docs/              # Документация MkDocs
+├── deploy/            # Docker, systemd, observability
 └── scripts/           # Скрипты установки и сборки
 ```
 

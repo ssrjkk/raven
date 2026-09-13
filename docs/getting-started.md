@@ -3,12 +3,6 @@
 ## Installation
 
 ```bash
-pip install raven-ai
-```
-
-Or install from source:
-
-```bash
 git clone https://github.com/ssrjkk/raven
 cd raven
 pip install -e ".[dev]"

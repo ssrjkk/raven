@@ -2,26 +2,26 @@
 
 ## Architecture Overview
 
-Raven AI uses a microservices architecture connected via NATS message broker, with a Go API gateway for auth/rate-limiting.
+Raven AI is a single-process Python monolith: a FastAPI gateway that connects messaging channels to agent cores (ReAct agent + RavenCode coding agent), with a React SPA served by the gateway itself. Optional containers (PostgreSQL, NATS, Prometheus/Grafana) can be attached via docker-compose when needed.
 
 ### Core Principles
 
-1. **Async-first**: All I/O operations use asyncio (Python) or goroutines (Go)
+1. **Async-first**: All I/O operations use asyncio
 2. **Security by design**: Every tool/plugin goes through policy evaluation
 3. **Plugin extensibility**: Capability-based sandboxed plugins
 4. **Observability**: OpenTelemetry traces + Prometheus metrics + structured logging
 
-### Service Mesh
+### Runtime Layout
 
-| Service | Language | Port | Protocol | Persistence |
-|---------|----------|------|----------|-------------|
-| Gateway | Go | 8000 | HTTP/gRPC | - |
-| Auth | Go | 8001 | gRPC | SQLite |
-| Agent Core | Python | 8002 | HTTP | - |
-| Monitor | Go | 8003 | HTTP | SQLite |
-| RAG | Python | 8004 | HTTP | Qdrant |
-| Task | Python | 8005 | HTTP | SQLite |
-| Code | Python | 8006 | HTTP | - |
+| Component | Language | Persistence |
+|-----------|----------|-------------|
+| Raven Gateway (FastAPI, port 18888) | Python | - |
+| Channels (15 adapters) | Python | - |
+| Agent core + LLM router | Python | - |
+| RavenCode (coding agent) | Python | - |
+| Task / Routine / Monitor engines | Python | SQLite/PostgreSQL |
+| RAG (embeddings + BM25 + JSON store) | Python | data/*.json |
+| Web dashboard (React SPA) | TypeScript | - |
 
 ### Data Flow
 

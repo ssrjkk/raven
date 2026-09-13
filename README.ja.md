@@ -1,6 +1,6 @@
-﻿<div align="center">
+<div align="center">
   <h1>Raven AI</h1>
-  <p><i>2-in-1: <b>RavenCode</b> (opencode代替 — 自律コーディングエージェント) + <b>RavenFlow</b> (openclaw代替 — 永続ワークフローゲートウェイ). 25+チャンネル. タスク. モニター. RAG. 音声. Webダッシュボード.</i></p>
+  <p><i>2-in-1: <b>RavenCode</b> (opencode代替 — 自律コーディングエージェント) + <b>RavenFlow</b> (openclaw代替 — 永続ワークフローゲートウェイ). 15チャンネル. タスク. モニター. RAG. 音声. Webダッシュボード.</i></p>
 
   <a href="#features">機能</a> •
   <a href="#quickstart">クイックスタート</a> •
@@ -12,10 +12,10 @@
   [![CI](https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=main&label=CI&logo=github)]()
   [![Python](https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white)]()
   [![License](https://img.shields.io/badge/license-MIT-green)]()
-  [![Channels](https://img.shields.io/badge/channels-25+-8A2BE2)]()
+  [![Channels](https://img.shields.io/badge/channels-15-8A2BE2)]()
   [![RavenFlow](https://img.shields.io/badge/ravenflow-daemon-blue)]()
   [![RavenCode](https://img.shields.io/badge/ravencode-agent-purple)]()
-  [![Tests](https://img.shields.io/badge/tests-4593%2B_passing-brightgreen)]()
+  [![Tests](https://img.shields.io/badge/tests-4677%2B_passing-brightgreen)]()
   [![Coverage](https://img.shields.io/codecov/c/github/ssrjkk/raven?logo=codecov)]()
   [![Security](https://img.shields.io/badge/security-hardened-blueviolet)]()
   [![AI-OS-MVP](https://img.shields.io/badge/aios-mvp-purple)]()
@@ -64,7 +64,7 @@ $ raven
 
 考えます。計画します。行動します。話します。流れます。
 
-- **25+のチャンネルで通信** — Telegram、Discord、Slack、WhatsApp、Matrix、Google Chat、Signal、IRC、Teams、Feishu、LINE、Webチャット + さらに15
+- **15のチャンネルで通信** — Telegram、Discord、Slack、WhatsApp、Matrix、Google Chat、Signal、IRC、Teams、Feishu、LINE、Webチャット + さらに15
 - **RavenCodeエージェント** — LSP自動拡張、並列マルチセッション、plan/safe/fastモードを備えた自律コーディングエージェント（`ravencode`）、30+ツール
 - **RavenFlowゲートウェイ** — マルチエージェントルーティング、WebSocketストリーミング、セッション管理を備えた永続ワークフローデーモン（`ravenflow`）
 - **Canvasビジュアルワークスペース** — ターミナルまたはブラウザでリッチコンポーネントをレンダリング（コード、表、mermaid図、画像、アラート）
@@ -146,13 +146,13 @@ npm run dev    # http://localhost:5173（:18888へのプロキシ）
 | 機能 | Raven AI | Open Interpreter | AutoGen | ChatGPT | Copilot |
 |------|----------|------------------|---------|---------|---------|
 | セルフホスト | ✅ 100% | ✅ | ❌ クラウド | ❌ クラウド | ❌ クラウド |
-| 25+チャンネル | ✅ | ❌ | ❌ | ✅ Webのみ | ❌ |
+| 15チャンネル | ✅ | ❌ | ❌ | ✅ Webのみ | ❌ |
 | LSP対応コーディングエージェント | ✅ | ❌ | ❌ | ❌ | ✅ 基本 |
 | マルチエージェントオーケストレーション | ✅ RavenFlow | ❌ | ✅ | ❌ | ❌ |
 | 音声 + ウェイクワード | ✅ | ❌ | ❌ | ✅ Voice | ❌ |
 | モニターとアラート | ✅ | ❌ | ❌ | ❌ | ❌ |
 | スケジュールルーティン | ✅ | ❌ | ❌ | ❌ | ❌ |
-| RAG（ローカルファースト） | ✅ ChromaDB/Qdrant | ✅ | ❌ | ❌ | ❌ |
+| RAG（ローカルファースト） | ✅ JSON+BM25 local | ✅ | ❌ | ❌ | ❌ |
 | RBACマルチユーザー | ✅ | ❌ | ❌ | ❌ | ❌ |
 | 5つのサンドボックスプロファイル | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Canvasワークスペース | ✅ | ❌ | ❌ | ❌ | ❌ |
@@ -168,7 +168,7 @@ npm run dev    # http://localhost:5173（:18888へのプロキシ）
 
 | 機能 | 説明 |
 |------|------|
-| **25+チャンネル** | Telegram（Whisperによる音声→テキスト、インラインボタン）、Discord（スラッシュコマンド+埋め込み）、Slack、WhatsApp、Matrix、Google Chat、Signal、IRC、Teams、Feishu、LINE、WebChat + さらに15（Telegram API、Discord API、Slack RTM、WhatsApp Cloud、Matrix CS、Google Chat、Signal、IRC、Teams、Feishu、LINE、WebChat、Email IMAP、SMS Twilio、Alexa、Google Home、Discord Webhook、Telegram Webhook、Custom Webhook） |
+| **15チャンネル** | Telegram（Whisperによる音声→テキスト、インラインボタン）、Discord（スラッシュコマンド+埋め込み）、Slack、WhatsApp、Matrix、Google Chat、Signal、IRC、Teams、Feishu、LINE、WebChat + さらに15（Telegram API、Discord API、Slack RTM、WhatsApp Cloud、Matrix CS、Google Chat、Signal、IRC、Teams、Feishu、LINE、WebChat、Email IMAP、SMS Twilio、Alexa、Google Home、Discord Webhook、Telegram Webhook、Custom Webhook） |
 | **RavenFlowゲートウェイ** | 永続ワークフローデーモン（`ravenflow`）— ポート18789でマルチエージェントルーティングエンジン、セッション管理、WebSocketストリーミング、チャンネル起点ディスパッチ、サンドボックスポリシー |
 | **RavenCodeエージェント** | 自律コーディングエージェント（`ravencode`）— インタラクティブREPL、ストリーミング応答、インラインツール呼び出し、LSP拡張。コマンド: `/multisession`、`/plan`、`/safe`、`/fast`、`/enrich`、`/exit` |
 | **LSP自動拡張** | `enrich_context()`がプロジェクトをスキャンし、言語を検出し、LSPサーバー（pyright、typescript-language-server、gopls、rust-analyzer）を起動してシンボルを収集 |
@@ -292,7 +292,7 @@ flowchart TB
 
     subgraph Storage["データ層"]
         SQLITE["SQLite\nAuth / Monitor / Task DBs"]
-        QDRANT["Qdrant\nVector Store"]
+        VSTORE["JSON embeddings\n+ BM25"]
         FS[(File System\nWorkspace / Data)]
     end
 
@@ -351,7 +351,7 @@ raven/
 │   │   ├── llm.py              LLM providers (OpenAI, Anthropic, Ollama, OpenRouter) + failover
 │   │   ├── config.py           Pydantic Settings + YAML config
 │   │   └── admin_api.py        Admin REST API
-│   ├── channels/               25+ channels, registry, message bus, CircuitBreakerChannel
+│   ├── channels/               15 channels, registry, message bus, CircuitBreakerChannel
 │   ├── cli/                    CLI (click + rich) — raven, ravenflow
 │   ├── tools/                  Canvas, Nodes, Plugin tools
 │   ├── tui/                    Terminal UI (textual)
@@ -370,7 +370,7 @@ raven/
 │   ├── integrations/           GitHub Actions, GitLab CI integration
 │   └── mcp/                    MCP protocol support
 ├── web/                        React 19 + Vite + Tailwind dashboard + Monaco IDE
-├── deploy/                     Docker, k8s, systemd, Observability stack
+├── deploy/                     Docker, systemd, Observability
 ├── scripts/                    Build scripts, EXE builder
 ├── aios/                       AI-OS-MVP agent framework
 ├── tests/                      pytest tests (unit + integration + e2e)
@@ -383,11 +383,11 @@ raven/
 |----------|------|
 | **バックエンド** | Python 3.11+, FastAPI, asyncio, SQLite（デフォルト）+ PostgreSQL（オプション） |
 | **LLM** | Ollama（ローカル）→ OpenRouter → Anthropic → OpenAI（フェイルオーバー） |
-| **メモリ** | SQLite / PostgreSQL + ChromaDB + numpyベクトルストア |
-| **RAG** | Qdrantベクトルストア、インメモリフォールバック、n-gram埋め込み |
+| **メモリ** | SQLite / PostgreSQL + JSON vector + numpyベクトルストア |
+| **RAG** | JSON vectorベクトルストア、インメモリフォールバック、n-gram埋め込み |
 | **認証** | bcrypt, JWT (HS256), RBAC（4ロール、16権限） |
 | **フロントエンド** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
-| **チャンネル** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 25+ registry |
+| **チャンネル** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 15 registry |
 | **RavenFlow** | FastAPIデーモン（ポート18789）、ルーティングエンジン、WebSocketストリーミング、マルチエージェントディスパッチ |
 | **RavenCode** | インタラクティブREPL、LSP自動拡張（pyright/tsserver/gopls/rust-analyzer）、並列マルチセッション、plan/safe/fastモード、30+ツール |
 | **Canvas** | リッチコンポーネントレンダリング（コード、表、mermaid、画像、リンク、リスト、アラート）、HTML + ブラウザ出力 |
@@ -400,7 +400,7 @@ raven/
 | **セキュリティ** | レート制限、JWT認証、DMペアリング、Fernet暗号化、RBAC、プラグインサンドボックス、ToolPolicyEvaluator（deny/allow）、execセキュリティポリシー（deny/ask/full）、contextVisibility、ワークスペース分離、セキュリティ監査CLI |
 | **CI/CD** | GitHub Actions — 並列lint + typecheck + test、Allureレポート、Codecov |
 | **デプロイ** | Docker, docker-compose, systemd |
-| **テスト** | pytest（4593+テスト、Allureレポート）、Vitest（React） |
+| **テスト** | pytest（4677+テスト、Allureレポート）、Vitest（React） |
 
 ---
 

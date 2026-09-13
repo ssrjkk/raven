@@ -1,6 +1,6 @@
-﻿<div align="center">
+<div align="center">
   <h1>Raven AI</h1>
-  <p><i>2-in-1: <b>RavenCode</b> (opencode 대체 — 자율 코딩 에이전트) + <b>RavenFlow</b> (openclaw 대체 — 지속적 워크플로우 게이트웨이). 25+ 채널. 태스크. 모니터. RAG. 음성. 웹 대시보드.</i></p>
+  <p><i>2-in-1: <b>RavenCode</b> (opencode 대체 — 자율 코딩 에이전트) + <b>RavenFlow</b> (openclaw 대체 — 지속적 워크플로우 게이트웨이). 15 채널. 태스크. 모니터. RAG. 음성. 웹 대시보드.</i></p>
 
   <a href="#features">기능</a> •
   <a href="#quickstart">빠른 시작</a> •
@@ -12,10 +12,10 @@
   [![CI](https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=main&label=CI&logo=github)]()
   [![Python](https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white)]()
   [![License](https://img.shields.io/badge/license-MIT-green)]()
-  [![Channels](https://img.shields.io/badge/channels-25+-8A2BE2)]()
+  [![Channels](https://img.shields.io/badge/channels-15-8A2BE2)]()
   [![RavenFlow](https://img.shields.io/badge/ravenflow-daemon-blue)]()
   [![RavenCode](https://img.shields.io/badge/ravencode-agent-purple)]()
-  [![Tests](https://img.shields.io/badge/tests-4593%2B_passing-brightgreen)]()
+  [![Tests](https://img.shields.io/badge/tests-4677%2B_passing-brightgreen)]()
   [![Coverage](https://img.shields.io/codecov/c/github/ssrjkk/raven?logo=codecov)]()
   [![Security](https://img.shields.io/badge/security-hardened-blueviolet)]()
   [![AI-OS-MVP](https://img.shields.io/badge/aios-mvp-purple)]()
@@ -64,7 +64,7 @@ $ raven
 
 생각합니다. 계획합니다. 행동합니다. 말합니다. 흐릅니다.
 
-- **25+ 채널에서 소통** — Telegram, Discord, Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, 웹 채팅 + 15개 더
+- **15 채널에서 소통** — Telegram, Discord, Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, 웹 채팅 + 15개 더
 - **RavenCode 에이전트** — LSP 자동 강화, 병렬 멀티세션, plan/safe/fast 모드를 갖춘 자율 코딩 에이전트 (`ravencode`), 30+ 도구
 - **RavenFlow 게이트웨이** — 멀티에이전트 라우팅, WebSocket 스트리밍, 세션 관리를 갖춘 지속적 워크플로우 데몬 (`ravenflow`)
 - **Canvas 시각적 작업 공간** — 터미널이나 브라우저에서 풍부한 컴포넌트 렌더링 (코드, 표, mermaid 다이어그램, 이미지, 알림)
@@ -146,13 +146,13 @@ npm run dev    # http://localhost:5173 (:18888로 프록시)
 | 기능 | Raven AI | Open Interpreter | AutoGen | ChatGPT | Copilot |
 |------|----------|------------------|---------|---------|---------|
 | 자체 호스팅 | ✅ 100% | ✅ | ❌ 클라우드 | ❌ 클라우드 | ❌ 클라우드 |
-| 25+ 채널 | ✅ | ❌ | ❌ | ✅ 웹 전용 | ❌ |
+| 15 채널 | ✅ | ❌ | ❌ | ✅ 웹 전용 | ❌ |
 | LSP 코딩 에이전트 | ✅ | ❌ | ❌ | ❌ | ✅ 기본 |
 | 멀티에이전트 오케스트레이션 | ✅ RavenFlow | ❌ | ✅ | ❌ | ❌ |
 | 음성 + 웨이크워드 | ✅ | ❌ | ❌ | ✅ Voice | ❌ |
 | 모니터 및 알림 | ✅ | ❌ | ❌ | ❌ | ❌ |
 | 예약 루틴 | ✅ | ❌ | ❌ | ❌ | ❌ |
-| RAG (로컬 우선) | ✅ ChromaDB/Qdrant | ✅ | ❌ | ❌ | ❌ |
+| RAG (로컬 우선) | ✅ JSON+BM25 local | ✅ | ❌ | ❌ | ❌ |
 | RBAC 다중 사용자 | ✅ | ❌ | ❌ | ❌ | ❌ |
 | 5개 샌드박스 프로필 | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Canvas 작업 공간 | ✅ | ❌ | ❌ | ❌ | ❌ |
@@ -168,7 +168,7 @@ npm run dev    # http://localhost:5173 (:18888로 프록시)
 
 | 기능 | 설명 |
 |------|------|
-| **25+개 채널** | Telegram (Whisper 음성→텍스트, 인라인 버튼), Discord (슬래시 명령어 + 임베드), Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat + 15개 더 (Telegram API, Discord API, Slack RTM, WhatsApp Cloud, Matrix CS, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat, Email IMAP, SMS Twilio, Alexa, Google Home, Discord Webhook, Telegram Webhook, Custom Webhook) |
+| **15개 채널** | Telegram (Whisper 음성→텍스트, 인라인 버튼), Discord (슬래시 명령어 + 임베드), Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat + 15개 더 (Telegram API, Discord API, Slack RTM, WhatsApp Cloud, Matrix CS, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat, Email IMAP, SMS Twilio, Alexa, Google Home, Discord Webhook, Telegram Webhook, Custom Webhook) |
 | **RavenFlow 게이트웨이** | 지속적 워크플로우 데몬 (`ravenflow`) — 포트 18789에서 멀티에이전트 라우팅 엔진, 세션 관리, WebSocket 스트리밍, 채널 기반 디스패치, 샌드박스 정책 |
 | **RavenCode 에이전트** | 자율 코딩 에이전트 (`ravencode`) — 인터랙티브 REPL, 스트리밍 응답, 인라인 도구 호출, LSP 강화. 명령어: `/multisession`, `/plan`, `/safe`, `/fast`, `/enrich`, `/exit` |
 | **LSP 자동 강화** | `enrich_context()` 프로젝트 스캔, 언어 감지, LSP 서버 시작 (pyright, typescript-language-server, gopls, rust-analyzer), 문서 심볼 수집 |
@@ -292,7 +292,7 @@ flowchart TB
 
     subgraph Storage["데이터 계층"]
         SQLITE["SQLite\nAuth / Monitor / Task DBs"]
-        QDRANT["Qdrant\nVector Store"]
+        VSTORE["JSON embeddings\n+ BM25"]
         FS[(File System\nWorkspace / Data)]
     end
 
@@ -351,7 +351,7 @@ raven/
 │   │   ├── llm.py              LLM providers (OpenAI, Anthropic, Ollama, OpenRouter) + failover
 │   │   ├── config.py           Pydantic Settings + YAML config
 │   │   └── admin_api.py        Admin REST API
-│   ├── channels/               25+ channels, registry, message bus, CircuitBreakerChannel
+│   ├── channels/               15 channels, registry, message bus, CircuitBreakerChannel
 │   ├── cli/                    CLI (click + rich) — raven, ravenflow
 │   ├── tools/                  Canvas, Nodes, Plugin tools
 │   ├── tui/                    Terminal UI (textual)
@@ -370,7 +370,7 @@ raven/
 │   ├── integrations/           GitHub Actions, GitLab CI integration
 │   └── mcp/                    MCP protocol support
 ├── web/                        React 19 + Vite + Tailwind dashboard + Monaco IDE
-├── deploy/                     Docker, k8s, systemd, Observability stack
+├── deploy/                     Docker, systemd, Observability
 ├── scripts/                    Build scripts, EXE builder
 ├── aios/                       AI-OS-MVP agent framework
 ├── tests/                      pytest tests (unit + integration + e2e)
@@ -383,11 +383,11 @@ raven/
 |--------|------|
 | **백엔드** | Python 3.11+, FastAPI, asyncio, SQLite (기본) + PostgreSQL (선택) |
 | **LLM** | Ollama (로컬) → OpenRouter → Anthropic → OpenAI (장애 조치) |
-| **메모리** | SQLite / PostgreSQL + ChromaDB + numpy 벡터 저장소 |
-| **RAG** | Qdrant 벡터 저장소, 인메모리 폴백, n-gram 임베딩 |
+| **메모리** | SQLite / PostgreSQL + JSON vector + numpy 벡터 저장소 |
+| **RAG** | JSON vector 벡터 저장소, 인메모리 폴백, n-gram 임베딩 |
 | **인증** | bcrypt, JWT (HS256), RBAC (4개 역할, 16개 권한) |
 | **프론트엔드** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
-| **채널** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 25+ registry |
+| **채널** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 15 registry |
 | **RavenFlow** | FastAPI 데몬 (포트 18789), 라우팅 엔진, WebSocket 스트리밍, 멀티에이전트 디스패치 |
 | **RavenCode** | 인터랙티브 REPL, LSP 자동 강화 (pyright/tsserver/gopls/rust-analyzer), 병렬 멀티세션, plan/safe/fast 모드, 30+ 도구 |
 | **Canvas** | 풍부한 컴포넌트 렌더링 (코드, 표, mermaid, 이미지, 링크, 목록, 알림), HTML + 브라우저 출력 |
@@ -400,7 +400,7 @@ raven/
 | **보안** | 속도 제한, JWT 인증, DM 페어링, Fernet 암호화, RBAC, 플러그인 샌드박스, ToolPolicyEvaluator (deny/allow), exec 보안 정책 (deny/ask/full), contextVisibility, 작업 공간 격리, 보안 감사 CLI |
 | **CI/CD** | GitHub Actions — 병렬 lint + typecheck + test, Allure 보고, Codecov |
 | **배포** | Docker, docker-compose, systemd |
-| **테스트** | pytest (4593+ 테스트, Allure 보고), Vitest (React) |
+| **테스트** | pytest (4677+ 테스트, Allure 보고), Vitest (React) |
 
 ---
 

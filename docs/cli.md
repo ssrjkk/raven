@@ -28,9 +28,21 @@ Show channel, agent, and plugin status.
 
 Interactive setup wizard.
 
+### `raven init`
+
+Generate a `raven.json` project scaffold.
+
+### `raven deploy`
+
+Generate a docker-compose file (minimal/full).
+
 ### `raven doctor`
 
 Diagnose configuration and dependencies.
+
+### `raven repl`
+
+Launch the interactive agent REPL.
 
 ### `raven agent`
 
@@ -40,13 +52,9 @@ Send a message to the AI agent.
 raven agent --message "Hello" [--agent AGENT_ID] [--channel CHANNEL]
 ```
 
-### `raven send`
+### `raven history <session_id>`
 
-Send a message to a session.
-
-```bash
-raven send --session SESSION_ID --text "Message"
-```
+View session message history.
 
 ### `raven pairing`
 
@@ -70,7 +78,7 @@ raven service install|start|stop|status|remove|restart
 Run security operations.
 
 ```bash
-raven security audit
+raven security audit [--deep]
 ```
 
 ### `raven tui`
@@ -111,7 +119,7 @@ raven routine list|add|remove|pause|resume|logs
 
 ### `raven code`
 
-Coding assistant.
+Coding assistant (RavenCode).
 
 ```bash
 raven code index|search|review|start|status|end
@@ -125,14 +133,25 @@ Database management.
 raven db migrate|backup|version
 ```
 
-### `raven update`
+### `raven message send`
 
-Check for updates.
+Send a message to a channel/user.
 
 ```bash
-raven update [--dry-run]
+raven message send --channel <id> --user <id> --text "Message"
 ```
 
-### `raven history <session_id>`
+### `raven aios`
 
-View session message history.
+AI Gateway bridge.
+
+```bash
+python -m raven aios gateway
+```
+
+## Global
+
+```bash
+raven --help                # top-level help
+raven <command> --help      # command help
+```

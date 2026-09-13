@@ -1,6 +1,6 @@
-﻿<div align="center">
+<div align="center">
   <h1>Raven AI</h1>
-  <p><i>2-en-1: <b>RavenCode</b> (alternativa a opencode — agente de codificación autónomo) + <b>RavenFlow</b> (alternativa a openclaw — gateway de flujo de trabajo persistente). 25+ canales. Tareas. Monitores. RAG. Voz. Panel web.</i></p>
+  <p><i>2-en-1: <b>RavenCode</b> (alternativa a opencode — agente de codificación autónomo) + <b>RavenFlow</b> (alternativa a openclaw — gateway de flujo de trabajo persistente). 15 canales. Tareas. Monitores. RAG. Voz. Panel web.</i></p>
 
   <a href="#features">Características</a> •
   <a href="#quickstart">Inicio rápido</a> •
@@ -12,10 +12,10 @@
   [![CI](https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=main&label=CI&logo=github)]()
   [![Python](https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white)]()
   [![License](https://img.shields.io/badge/license-MIT-green)]()
-  [![Channels](https://img.shields.io/badge/channels-25+-8A2BE2)]()
+  [![Channels](https://img.shields.io/badge/channels-15-8A2BE2)]()
   [![RavenFlow](https://img.shields.io/badge/ravenflow-daemon-blue)]()
   [![RavenCode](https://img.shields.io/badge/ravencode-agent-purple)]()
-  [![Tests](https://img.shields.io/badge/tests-4593%2B_passing-brightgreen)]()
+  [![Tests](https://img.shields.io/badge/tests-4677%2B_passing-brightgreen)]()
   [![Coverage](https://img.shields.io/codecov/c/github/ssrjkk/raven?logo=codecov)]()
   [![Security](https://img.shields.io/badge/security-hardened-blueviolet)]()
   [![AI-OS-MVP](https://img.shields.io/badge/aios-mvp-purple)]()
@@ -64,7 +64,7 @@ $ raven
 
 Piensa. Planifica. Actúa. Habla. Fluye.
 
-- **Se comunica en 25+ mensajeros** — Telegram, Discord, Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE + chat web y 15 más
+- **Se comunica en 15 mensajeros** — Telegram, Discord, Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE + chat web y 15 más
 - **Agente RavenCode** — agente de codificación autónomo (`ravencode`) con auto-enriquecimiento LSP, multi-sesión en paralelo, modos plan/safe/fast, 30+ herramientas
 - **Gateway RavenFlow** — demonio de flujo de trabajo persistente (`ravenflow`) con enrutamiento multi-agente, streaming WebSocket, gestión de sesiones
 - **Espacio de trabajo Canvas** — renderiza componentes enriquecidos (código, tablas, diagramas mermaid, imágenes, alertas) en terminal o navegador
@@ -146,13 +146,13 @@ npm run dev    # http://localhost:5173 (proxy a :18888)
 | Característica | Raven AI | Open Interpreter | AutoGen | ChatGPT | Copilot |
 |----------------|----------|------------------|---------|---------|---------|
 | Self-hosted | ✅ 100% | ✅ | ❌ nube | ❌ nube | ❌ nube |
-| 25+ canales | ✅ | ❌ | ❌ | ✅ solo web | ❌ |
+| 15 canales | ✅ | ❌ | ❌ | ✅ solo web | ❌ |
 | Agente de código con LSP | ✅ | ❌ | ❌ | ❌ | ✅ básico |
 | Orquestación multi-agente | ✅ RavenFlow | ❌ | ✅ | ❌ | ❌ |
 | Voz + palabra de activación | ✅ | ❌ | ❌ | ✅ Voice | ❌ |
 | Monitores y alertas | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Rutinas programadas | ✅ | ❌ | ❌ | ❌ | ❌ |
-| RAG (local-first) | ✅ ChromaDB/Qdrant | ✅ | ❌ | ❌ | ❌ |
+| RAG (local-first) | ✅ JSON+BM25 local | ✅ | ❌ | ❌ | ❌ |
 | RBAC multi-usuario | ✅ | ❌ | ❌ | ❌ | ❌ |
 | 5 perfiles sandbox | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Espacio Canvas | ✅ | ❌ | ❌ | ❌ | ❌ |
@@ -168,7 +168,7 @@ npm run dev    # http://localhost:5173 (proxy a :18888)
 
 | Característica | Descripción |
 |---------------|-------------|
-| **25+ canales** | Telegram (voz→texto con Whisper, botones inline), Discord (comandos / + embed), Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat + 15 más (Telegram API, Discord API, Slack RTM, WhatsApp Cloud, Matrix CS, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat, Email IMAP, SMS Twilio, Alexa, Google Home, Discord Webhook, Telegram Webhook, Custom Webhook) |
+| **15 canales** | Telegram (voz→texto con Whisper, botones inline), Discord (comandos / + embed), Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat + 15 más (Telegram API, Discord API, Slack RTM, WhatsApp Cloud, Matrix CS, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat, Email IMAP, SMS Twilio, Alexa, Google Home, Discord Webhook, Telegram Webhook, Custom Webhook) |
 | **Gateway RavenFlow** | Demonio de flujo de trabajo persistente (`ravenflow`) en el puerto 18789 con motor de enrutamiento multi-agente, gestión de sesiones, streaming WebSocket, despacho por canal y políticas sandbox |
 | **Agente RavenCode** | Agente de codificación autónomo (`ravencode`) — REPL interactivo con streaming, llamadas de herramientas inline, enriquecimiento LSP. Comandos: `/multisession`, `/plan`, `/safe`, `/fast`, `/enrich`, `/exit` |
 | **Auto-enriquecimiento LSP** | `enrich_context()` escanea el proyecto, detecta lenguajes, arranca servidores LSP (pyright, typescript-language-server, gopls, rust-analyzer) y recopila símbolos |
@@ -292,7 +292,7 @@ flowchart TB
 
     subgraph Storage["Capa de Datos"]
         SQLITE["SQLite\nAuth / Monitor / Task DBs"]
-        QDRANT["Qdrant\nVector Store"]
+        VSTORE["JSON embeddings\n+ BM25"]
         FS[(File System\nWorkspace / Data)]
     end
 
@@ -351,7 +351,7 @@ raven/
 │   │   ├── llm.py              LLM providers (OpenAI, Anthropic, Ollama, OpenRouter) + failover
 │   │   ├── config.py           Pydantic Settings + YAML config
 │   │   └── admin_api.py        Admin REST API
-│   ├── channels/               25+ channels, registry, message bus, CircuitBreakerChannel
+│   ├── channels/               15 channels, registry, message bus, CircuitBreakerChannel
 │   ├── cli/                    CLI (click + rich) — raven, ravenflow
 │   ├── tools/                  Canvas, Nodes, Plugin tools
 │   ├── tui/                    Terminal UI (textual)
@@ -370,7 +370,7 @@ raven/
 │   ├── integrations/           GitHub Actions, GitLab CI integration
 │   └── mcp/                    MCP protocol support
 ├── web/                        React 19 + Vite + Tailwind dashboard + Monaco IDE
-├── deploy/                     Docker, k8s, systemd, Observability stack
+├── deploy/                     Docker, systemd, Observability
 ├── scripts/                    Build scripts, EXE builder
 ├── aios/                       AI-OS-MVP agent framework
 ├── tests/                      pytest tests (unit + integration + e2e)
@@ -383,11 +383,11 @@ raven/
 |------|-----------|
 | **Backend** | Python 3.11+, FastAPI, asyncio, SQLite (por defecto) + PostgreSQL (opcional) |
 | **LLM** | Ollama (local) → OpenRouter → Anthropic → OpenAI (failover) |
-| **Memory** | SQLite / PostgreSQL + ChromaDB + numpy vector store |
-| **RAG** | Qdrant vector store, fallback in-memory, n-gram embedding |
+| **Memory** | SQLite / PostgreSQL + JSON vector store (embeddings + BM25) |
+| **RAG** | JSON vector store, local BM25 + embeddings |
 | **Auth** | bcrypt, JWT (HS256), RBAC (4 roles, 16 permisos) |
 | **Frontend** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
-| **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 25+ registry |
+| **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 15 registry |
 | **RavenFlow** | FastAPI daemon (puerto 18789), routing engine, streaming WebSocket, multi-agent dispatch |
 | **RavenCode** | REPL interactivo, auto-enriquecimiento LSP (pyright/tsserver/gopls/rust-analyzer), multi-sesión en paralelo, modos plan/safe/fast, 30+ herramientas |
 | **Canvas** | Render de componentes enriquecidos (código, tabla, mermaid, imagen, enlace, lista, alerta), salida HTML + navegador |
@@ -400,7 +400,7 @@ raven/
 | **Security** | Rate limiting, JWT auth, DM pairing, Fernet encryption, RBAC, plugin sandbox, ToolPolicyEvaluator (deny/allow), exec security policy (deny/ask/full), contextVisibility, workspace isolation, security audit CLI |
 | **CI/CD** | GitHub Actions — parallel lint + typecheck + test, Allure reporting, Codecov |
 | **Deploy** | Docker, docker-compose, systemd |
-| **Testing** | pytest (4593+ tests, Allure reporting), Vitest (React) |
+| **Testing** | pytest (4677+ tests, Allure reporting), Vitest (React) |
 
 ---
 

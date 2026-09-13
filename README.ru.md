@@ -1,6 +1,6 @@
-﻿<div align="center">
+<div align="center">
   <h1>Raven AI</h1>
-  <p><i>2 в 1: <b>RavenCode</b> (аналог opencode — автономный coding-агент) + <b>RavenFlow</b> (аналог openclaw — персистентный workflow gateway). 25+ каналов. Задачи. Мониторы. RAG. Голос. Веб-дашборд.</i></p>
+  <p><i>2 в 1: <b>RavenCode</b> (аналог opencode — автономный coding-агент) + <b>RavenFlow</b> (аналог openclaw — персистентный workflow gateway). 15 каналов. Задачи. Мониторы. RAG. Голос. Веб-дашборд.</i></p>
 
   <a href="#features">Возможности</a> •
   <a href="#quickstart">Быстрый старт</a> •
@@ -12,10 +12,10 @@
   [![CI](https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=main&label=CI&logo=github)]()
   [![Python](https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white)]()
   [![License](https://img.shields.io/badge/license-MIT-green)]()
-  [![Channels](https://img.shields.io/badge/channels-25+-8A2BE2)]()
+  [![Channels](https://img.shields.io/badge/channels-15-8A2BE2)]()
   [![RavenFlow](https://img.shields.io/badge/ravenflow-daemon-blue)]()
   [![RavenCode](https://img.shields.io/badge/ravencode-agent-purple)]()
-  [![Tests](https://img.shields.io/badge/tests-4593%2B_passing-brightgreen)]()
+  [![Tests](https://img.shields.io/badge/tests-4677%2B_passing-brightgreen)]()
   [![Coverage](https://img.shields.io/codecov/c/github/ssrjkk/raven?logo=codecov)]()
   [![Security](https://img.shields.io/badge/security-hardened-blueviolet)]()
   [![AI-OS-MVP](https://img.shields.io/badge/aios-mvp-purple)]()
@@ -64,7 +64,7 @@ $ raven
 
 Он думает. Он планирует. Он действует. Он говорит. Он работает как поток.
 
-- **Общается в 25+ каналах** — Telegram, Discord, Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, веб-чат + ещё 15
+- **Общается в 15 каналах** — Telegram, Discord, Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, веб-чат + ещё 15
 - **RavenCode агент** — автономный coding-агент (`ravencode`) с LSP-авто-обогащением, параллельными мультисессиями, режимами plan/safe/fast, 30+ инструментами
 - **RavenFlow gateway** — персистентный workflow-демон (`ravenflow`) с multi-agent роутингом, WebSocket-стримингом, управлением сессиями
 - **Canvas визуальное пространство** — рендер rich-компонентов (код, таблицы, mermaid-диаграммы, изображения, алерты) в терминале или браузере
@@ -147,13 +147,13 @@ npm run dev    # http://localhost:5173 (прокси на :18888)
 | Возможность | Raven AI | Open Interpreter | AutoGen | ChatGPT | Copilot |
 |-------------|----------|------------------|---------|---------|---------|
 | Self-hosted | ✅ 100% | ✅ | ❌ облако | ❌ облако | ❌ облако |
-| 25+ каналов | ✅ | ❌ | ❌ | ✅ только web | ❌ |
+| 15 каналов | ✅ | ❌ | ❌ | ✅ только web | ❌ |
 | Coding-агент с LSP | ✅ | ❌ | ❌ | ❌ | ✅ базовый |
 | Multi-agent оркестрация | ✅ RavenFlow | ❌ | ✅ | ❌ | ❌ |
 | Голос + wake word | ✅ | ❌ | ❌ | ✅ Voice | ❌ |
 | Мониторы и алерты | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Рутины по расписанию | ✅ | ❌ | ❌ | ❌ | ❌ |
-| RAG (local-first) | ✅ ChromaDB/Qdrant | ✅ | ❌ | ❌ | ❌ |
+| RAG (local-first) | ✅ JSON+BM25 local | ✅ | ❌ | ❌ | ❌ |
 | RBAC multi-user | ✅ | ❌ | ❌ | ❌ | ❌ |
 | 5 sandbox-профилей | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Canvas workspace | ✅ | ❌ | ❌ | ❌ | ❌ |
@@ -169,7 +169,7 @@ npm run dev    # http://localhost:5173 (прокси на :18888)
 
 | Возможность | Описание |
 |-------------|----------|
-| **25+ каналов** | Telegram (голос→текст через Whisper, инлайн-кнопки), Discord (слеш-команды + embed), Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat + ещё 15 (Telegram API, Discord API, Slack RTM, WhatsApp Cloud, Matrix CS, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat, Email IMAP, SMS Twilio, Alexa, Google Home, Discord Webhook, Telegram Webhook, Custom Webhook) |
+| **15 каналов** | Telegram (голос→текст через Whisper, инлайн-кнопки), Discord (слеш-команды + embed), Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat + ещё 15 (Telegram API, Discord API, Slack RTM, WhatsApp Cloud, Matrix CS, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat, Email IMAP, SMS Twilio, Alexa, Google Home, Discord Webhook, Telegram Webhook, Custom Webhook) |
 | **RavenFlow Gateway** | Персистентный workflow-демон (`ravenflow`) на порту 18789 с multi-agent роутингом, управлением сессиями, WebSocket-стримингом, dispatch по происхождению канала, sandbox-политиками |
 | **RavenCode Agent** | Автономный coding-агент (`ravencode`) — интерактивный REPL, стриминг ответов, инлайн вызовы инструментов, LSP-обогащение. Команды: `/multisession`, `/plan`, `/safe`, `/fast`, `/enrich`, `/exit` |
 | **LSP Авто-обогащение** | `enrich_context()` сканирует проект, определяет языки, запускает LSP-серверы (pyright, typescript-language-server, gopls, rust-analyzer), собирает символы документа |
@@ -293,7 +293,7 @@ flowchart TB
 
     subgraph Storage["Слой данных"]
         SQLITE["SQLite\nAuth / Monitor / Task DBs"]
-        QDRANT["Qdrant\nVector Store"]
+        VSTORE["JSON embeddings\n+ BM25"]
         FS[(File System\nWorkspace / Data)]
     end
 
@@ -352,7 +352,7 @@ raven/
 │   │   ├── llm.py              LLM providers (OpenAI, Anthropic, Ollama, OpenRouter) + failover
 │   │   ├── config.py           Pydantic Settings + YAML config
 │   │   └── admin_api.py        Admin REST API
-│   ├── channels/               25+ channels, registry, message bus, CircuitBreakerChannel
+│   ├── channels/               15 channels, registry, message bus, CircuitBreakerChannel
 │   ├── cli/                    CLI (click + rich) — raven, ravenflow
 │   ├── tools/                  Canvas, Nodes, Plugin tools
 │   ├── tui/                    Terminal UI (textual)
@@ -371,7 +371,7 @@ raven/
 │   ├── integrations/           GitHub Actions, GitLab CI integration
 │   └── mcp/                    MCP protocol support
 ├── web/                        React 19 + Vite + Tailwind dashboard + Monaco IDE
-├── deploy/                     Docker, k8s, systemd, Observability stack
+├── deploy/                     Docker, systemd, Observability
 ├── scripts/                    Build scripts, EXE builder
 ├── aios/                       AI-OS-MVP agent framework
 ├── tests/                      pytest tests (unit + integration + e2e)
@@ -384,11 +384,11 @@ raven/
 |------|-----------|
 | **Backend** | Python 3.11+, FastAPI, asyncio, SQLite (по умолчанию) + PostgreSQL (опционально) |
 | **LLM** | Ollama (local) → OpenRouter → Anthropic → OpenAI (failover) |
-| **Memory** | SQLite / PostgreSQL + ChromaDB + numpy vector store |
-| **RAG** | Qdrant vector store, fallback in-memory, n-gram embedding |
+| **Memory** | SQLite / PostgreSQL + JSON vector store (embeddings + BM25) |
+| **RAG** | JSON vector store, local BM25 + embeddings |
 | **Auth** | bcrypt, JWT (HS256), RBAC (4 роли, 16 пермишенов) |
 | **Frontend** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
-| **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 25+ registry |
+| **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 15 registry |
 | **RavenFlow** | FastAPI daemon (порт 18789), routing engine, WebSocket-стриминг, multi-agent dispatch |
 | **RavenCode** | Интерактивный REPL, LSP авто-обогащение (pyright/tsserver/gopls/rust-analyzer), параллельные сессии, режимы plan/safe/fast, 30+ инструментов |
 | **Canvas** | Рендер rich-компонентов (код, таблица, mermaid, изображение, ссылка, список, алерт), HTML + браузер |
@@ -401,7 +401,7 @@ raven/
 | **Security** | Rate limiting, JWT auth, DM pairing, Fernet encryption, RBAC, plugin sandbox, ToolPolicyEvaluator (deny/allow), exec security policy (deny/ask/full), contextVisibility, workspace isolation, security audit CLI |
 | **CI/CD** | GitHub Actions — parallel lint + typecheck + test, Allure reporting, Codecov |
 | **Deploy** | Docker, docker-compose, systemd |
-| **Testing** | pytest (4593+ тестов, Allure reporting), Vitest (React) |
+| **Testing** | pytest (4677+ тестов, Allure reporting), Vitest (React) |
 
 ---
 

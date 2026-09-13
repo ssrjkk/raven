@@ -13,41 +13,44 @@ pre-commit install
 
 ```
 raven/
-├── channels/          # Messaging channel adapters
-│   ├── telegram/
-│   ├── discord/
-│   ├── slack/
-│   ├── whatsapp/
-│   └── ...
-├── cli/               # CLI commands
-│   ├── main.py        # Click-based CLI
-│   ├── onboard.py     # Setup wizard
-│   └── service.py     # Service management
+├── channels/          # 15 messaging channel adapters
+├── cli/               # Click-based CLI (26 command groups)
+├── coding/            # Coding assistant, git integration
 ├── core/              # Core engine
 │   ├── gateway/       # Message orchestrator
-│   ├── agent/         # Agent system
-│   ├── security/      # Policy engine, audit
+│   ├── agents/        # Agent system, orchestrators, profiles
+│   ├── security/      # Policy engine, sandbox, SSRF, PII redaction
 │   ├── task_engine/   # Task planning & execution
-│   ├── llm.py         # LLM router
-│   ├── config.py      # Settings
-│   ├── sse.py         # SSE streaming
-│   ├── tracing.py     # OpenTelemetry
-│   └── self_heal.py   # Health monitoring
-├── plugins/           # Plugin tools
-├── tools/             # Built-in tool registry
+│   ├── monitor/       # HTTP, price, RSS, file, process monitors
+│   ├── rag/           # Embeddings, BM25, JSON vector store
+│   ├── llm/           # LLM providers, failover, circuit breaker
+│   ├── config.py      # Settings (env cascade)
+│   └── asyncdb.py     # SQLite/PostgreSQL abstraction
+├── gateway/           # Gateway glue, channel guardian
+├── plugins/           # 10 built-in plugin packages
+├── routines/          # Scheduled routines
+├── tools/             # 30+ assistant tool registry
 ├── tui/               # Textual TUI
 ├── voice/             # TTS/STT module
-└── routines/          # Cron routines
+└── workspace/         # Workspace manager, plugin loader
 
-web/                   # React frontend
+ravencode/             # Autonomous coding agent (runtime, agents, cli)
+aios/                  # Thin FastAPI AI-gateway bridge
+web/                   # React 19 + Vite dashboard
 tests/                 # Test suite
 docs/                  # Documentation
-deploy/                # Deployment configs
+deploy/                # Docker, systemd, observability, traefik
 ```
 
 ## Development Loop
 
 ```bash
+# Quick validation gate (ruff + mypy + imports, no tests)
+python scripts/check_all.py --quick
+
+# Full gate (lint + types + imports + all tests + frontend build)
+python scripts/check_all.py
+
 # Lint
 ruff check .
 
@@ -55,7 +58,7 @@ ruff check .
 pytest tests/ -q --tb=short
 
 # Run gateway
-raven start --verbose
+raven start
 
 # Run TUI
 raven tui

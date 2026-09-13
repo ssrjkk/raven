@@ -11,17 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Web frontend: Login page, 404 page, Toast notification system, loading skeletons
 - Auth flow: ProtectedRoute wrapper, Bearer token management, 401 auto-redirect
 - CI: web-build job for frontend build/lint
-- `.env.example`: NATS, JWT, OTEL, Qdrant, LLM API key, and 15+ new configuration variables
-- `tokens.schema.json` design token schema with `$schema` validation
-- TypeScript base config (`packages/package.json`, `web/tsconfig.json` extends)
+- `.env.example`: LLM API keys, channel tokens, OTEL, and 15+ configuration variables
 
 ### Fixed
-- All 4 Python service Dockerfiles: `python:3.14-alpine` → `python:3.13-alpine`
-- CI Python version: 3.14 → 3.13; added `pip install -e .` for lint/test jobs
-- Rust daemon: `Disks::new_with_refined_list()` → `Disks::new()` (deprecated API)
-- Rust daemon: cross-platform `stop_daemon` with Windows taskkill support
-- Go module version: `go 1.25.0` → `go 1.26` in monitor-engine
-- pyproject.toml: removed `daemon/` from wheel packages (Rust code, not Python)
+- Web frontend: handling of removed Rust desktop app and Go microservices removed from the codebase
 - Dependency version sync across `requirements.txt`, `pyproject.toml`, `monolith-requirements.txt`
 
 ### Enhanced
@@ -47,9 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Project security policy (SECURITY.md)
 - Contributing guide (CONTRIBUTING.md)
 - Docker configuration (.dockerignore)
-- PyPI publishing configuration (pypi.yml workflow)
 - MkDocs documentation site structure
-- CI matrix expansion: Python 3.11, 3.12, 3.13 across ubuntu, windows, macOS
+- CI matrix expansion: Python 3.11, 3.12 across ubuntu, windows, macOS
 - PostgreSQL backend: thin `AsyncDB` layer (`raven/core/asyncdb.py`) with `SQLiteDB` and `PostgresDB` backends — all core stores (tasks, monitors, routines, auth, sessions, outbox, analytics, persister) run against Postgres when `DATABASE_URL` (or a `postgresql://` DSN `db_path`) is set
 - `raven/core/db_postgres.py`: `PostgresDatabase` (shared pool, health, metrics) + `_PostgresMigrator` using the unified migration table
 - `docker-compose.postgres.yml` for local Postgres (postgres:16-alpine, user/password/db=raven)
@@ -58,6 +50,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - LLM request queue with ordering + batching (`raven/core/llm/queue.py` + tests)
 - Test suites for tool packages, voice (STT/TTS/wake) and session store
 - MkDocs navigation for CLI, plugins, security and sprint-1 docs
+- Project Metrics dashboard (`/api/metrics/project`) with live workspace stats
+- Command palette (Ctrl+K) with 28+ navigation commands and dynamic AI suggestions
+- Git viewer with side-by-side diff and blame (`/api/git/*`)
+- Accent color picker with theme customization
 
 ### Enhanced
 - Security audit: 23 standard + 8 deep checks with fix hints
@@ -67,6 +63,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Self-heal module: configurable health checks, exponential backoff restart
 - `PostgresDB.execute` returns rowcount (parsed from asyncpg status), `?` placeholders rewritten to `$n`
 - Postgres connection pooling with retry/backoff; `is_postgres_dsn()` guard so DSN strings are never wrapped in `Path` on Windows
+- Channel supervision: `ChannelGuardian` with heartbeats, per-channel/per-user rate limiting, auto-restart
+- Docs aligned with the single-process monolith architecture (README, CONTEXT, docs/, specs/, marketing/)
 
 ### Changed
 - All async tests migrated to `@pytest.mark.asyncio` pattern (no `asyncio.run()` in test files)
@@ -74,7 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Verification
 - ruff 0, mypy 0, `check_all.py --quick` 4/4 PASS
-- Full suite: **3594 passed, 26 skipped, 1 xpassed**; PG integration suite **9 passed** against a live server
+- Full suite: **4677 passed, 17 skipped, 1 xpassed**; PG integration suite **9 passed** against a live server
 
 ## [0.3.0] - 2026-05-18
 

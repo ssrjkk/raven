@@ -1,6 +1,6 @@
-﻿<div align="center">
+<div align="center">
   <h1>Raven AI</h1>
-  <p><i>二合一: <b>RavenCode</b> (opencode替代 — 自主编码代理) + <b>RavenFlow</b> (openclaw替代 — 持久化工作流网关). 25+渠道. 任务. 监控. RAG. 语音. Web仪表板.</i></p>
+  <p><i>二合一: <b>RavenCode</b> (opencode替代 — 自主编码代理) + <b>RavenFlow</b> (openclaw替代 — 持久化工作流网关). 15渠道. 任务. 监控. RAG. 语音. Web仪表板.</i></p>
 
   <a href="#features">功能</a> •
   <a href="#quickstart">快速开始</a> •
@@ -12,10 +12,10 @@
   [![CI](https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=main&label=CI&logo=github)]()
   [![Python](https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white)]()
   [![License](https://img.shields.io/badge/license-MIT-green)]()
-  [![Channels](https://img.shields.io/badge/channels-25+-8A2BE2)]()
+  [![Channels](https://img.shields.io/badge/channels-15-8A2BE2)]()
   [![RavenFlow](https://img.shields.io/badge/ravenflow-daemon-blue)]()
   [![RavenCode](https://img.shields.io/badge/ravencode-agent-purple)]()
-  [![Tests](https://img.shields.io/badge/tests-4593%2B_passing-brightgreen)]()
+  [![Tests](https://img.shields.io/badge/tests-4677%2B_passing-brightgreen)]()
   [![Coverage](https://img.shields.io/codecov/c/github/ssrjkk/raven?logo=codecov)]()
   [![Security](https://img.shields.io/badge/security-hardened-blueviolet)]()
   [![AI-OS-MVP](https://img.shields.io/badge/aios-mvp-purple)]()
@@ -64,7 +64,7 @@ $ raven
 
 它能思考。它能规划。它能行动。它能说话。它能流转。
 
-- **在25+渠道中通信** — Telegram, Discord, Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, 网页聊天 + 另外15个
+- **在15渠道中通信** — Telegram, Discord, Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, 网页聊天 + 另外15个
 - **RavenCode代理** — 自主编码代理 (`ravencode`)，LSP自动增强，并行多会话，plan/safe/fast模式，30+工具
 - **RavenFlow网关** — 持久化工作流守护进程 (`ravenflow`)，多代理路由，WebSocket流式传输，会话管理
 - **Canvas可视工作空间** — 在终端或浏览器中渲染丰富组件（代码、表格、mermaid图、图片、警报）
@@ -146,13 +146,13 @@ npm run dev    # http://localhost:5173（代理到 :18888）
 | 功能 | Raven AI | Open Interpreter | AutoGen | ChatGPT | Copilot |
 |------|----------|------------------|---------|---------|---------|
 | 自托管 | ✅ 100% | ✅ | ❌ 云 | ❌ 云 | ❌ 云 |
-| 25+渠道 | ✅ | ❌ | ❌ | ✅ 仅web | ❌ |
+| 15渠道 | ✅ | ❌ | ❌ | ✅ 仅web | ❌ |
 | 带LSP的编码代理 | ✅ | ❌ | ❌ | ❌ | ✅ 基础版 |
 | 多代理编排 | ✅ RavenFlow | ❌ | ✅ | ❌ | ❌ |
 | 语音 + 唤醒词 | ✅ | ❌ | ❌ | ✅ Voice | ❌ |
 | 监控与警报 | ✅ | ❌ | ❌ | ❌ | ❌ |
 | 定时任务 | ✅ | ❌ | ❌ | ❌ | ❌ |
-| RAG（本地优先） | ✅ ChromaDB/Qdrant | ✅ | ❌ | ❌ | ❌ |
+| RAG（本地优先） | ✅ JSON+BM25 local | ✅ | ❌ | ❌ | ❌ |
 | RBAC多用户 | ✅ | ❌ | ❌ | ❌ | ❌ |
 | 5个沙盒配置 | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Canvas工作区 | ✅ | ❌ | ❌ | ❌ | ❌ |
@@ -168,7 +168,7 @@ npm run dev    # http://localhost:5173（代理到 :18888）
 
 | 功能 | 描述 |
 |------|------|
-| **25+渠道** | Telegram（语音→文字通过Whisper，内联按钮）、Discord（斜杠命令+嵌入）、Slack、WhatsApp、Matrix、Google Chat、Signal、IRC、Teams、Feishu、LINE、WebChat + 另外15个（Telegram API、Discord API、Slack RTM、WhatsApp Cloud、Matrix CS、Google Chat、Signal、IRC、Teams、Feishu、LINE、WebChat、Email IMAP、SMS Twilio、Alexa、Google Home、Discord Webhook、Telegram Webhook、Custom Webhook） |
+| **15渠道** | Telegram（语音→文字通过Whisper，内联按钮）、Discord（斜杠命令+嵌入）、Slack、WhatsApp、Matrix、Google Chat、Signal、IRC、Teams、Feishu、LINE、WebChat + 另外15个（Telegram API、Discord API、Slack RTM、WhatsApp Cloud、Matrix CS、Google Chat、Signal、IRC、Teams、Feishu、LINE、WebChat、Email IMAP、SMS Twilio、Alexa、Google Home、Discord Webhook、Telegram Webhook、Custom Webhook） |
 | **RavenFlow网关** | 持久化工作流守护进程（`ravenflow`），端口18789，多代理路由引擎、会话管理、WebSocket流式传输、按渠道来源分发、沙盒策略 |
 | **RavenCode代理** | 自主编码代理（`ravencode`）— 交互式REPL，流式响应，内联工具调用，LSP增强。命令：`/multisession`、`/plan`、`/safe`、`/fast`、`/enrich`、`/exit` |
 | **LSP自动增强** | `enrich_context()` 扫描项目、检测语言、启动LSP服务器（pyright、typescript-language-server、gopls、rust-analyzer）、收集文档符号 |
@@ -292,7 +292,7 @@ flowchart TB
 
     subgraph Storage["数据层"]
         SQLITE["SQLite\nAuth / Monitor / Task DBs"]
-        QDRANT["Qdrant\nVector Store"]
+        VSTORE["JSON embeddings\n+ BM25"]
         FS[(File System\nWorkspace / Data)]
     end
 
@@ -351,7 +351,7 @@ raven/
 │   │   ├── llm.py              LLM providers (OpenAI, Anthropic, Ollama, OpenRouter) + failover
 │   │   ├── config.py           Pydantic Settings + YAML config
 │   │   └── admin_api.py        Admin REST API
-│   ├── channels/               25+ channels, registry, message bus, CircuitBreakerChannel
+│   ├── channels/               15 channels, registry, message bus, CircuitBreakerChannel
 │   ├── cli/                    CLI (click + rich) — raven, ravenflow
 │   ├── tools/                  Canvas, Nodes, Plugin tools
 │   ├── tui/                    Terminal UI (textual)
@@ -370,7 +370,7 @@ raven/
 │   ├── integrations/           GitHub Actions, GitLab CI integration
 │   └── mcp/                    MCP protocol support
 ├── web/                        React 19 + Vite + Tailwind dashboard + Monaco IDE
-├── deploy/                     Docker, k8s, systemd, Observability stack
+├── deploy/                     Docker, systemd, Observability
 ├── scripts/                    Build scripts, EXE builder
 ├── aios/                       AI-OS-MVP agent framework
 ├── tests/                      pytest tests (unit + integration + e2e)
@@ -383,11 +383,11 @@ raven/
 |----|------|
 | **后端** | Python 3.11+, FastAPI, asyncio, SQLite（默认）+ PostgreSQL（可选） |
 | **LLM** | Ollama（本地）→ OpenRouter → Anthropic → OpenAI（故障转移） |
-| **记忆** | SQLite / PostgreSQL + ChromaDB + numpy向量存储 |
-| **RAG** | Qdrant向量存储、内存回退、n-gram嵌入 |
+| **记忆** | SQLite / PostgreSQL + JSON vector + numpy向量存储 |
+| **RAG** | JSON vector向量存储、内存回退、n-gram嵌入 |
 | **认证** | bcrypt, JWT (HS256), RBAC（4角色，16权限） |
 | **前端** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
-| **渠道** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 25+ registry |
+| **渠道** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 15 registry |
 | **RavenFlow** | FastAPI守护进程（端口18789）、路由引擎、WebSocket流式传输、多代理分发 |
 | **RavenCode** | 交互式REPL、LSP自动增强（pyright/tsserver/gopls/rust-analyzer）、并行多会话、plan/safe/fast模式、30+工具 |
 | **Canvas** | 丰富组件渲染（代码、表格、mermaid、图片、链接、列表、警报）、HTML + 浏览器输出 |
@@ -400,7 +400,7 @@ raven/
 | **安全** | 速率限制、JWT认证、DM配对、Fernet加密、RBAC、插件沙盒、ToolPolicyEvaluator（deny/allow）、exec安全策略（deny/ask/full）、contextVisibility、工作区隔离、安全审计CLI |
 | **CI/CD** | GitHub Actions — 并行lint + typecheck + test、Allure报告、Codecov |
 | **部署** | Docker, docker-compose, systemd |
-| **测试** | pytest（4593+测试，Allure报告）、Vitest（React） |
+| **测试** | pytest（4677+测试，Allure报告）、Vitest（React） |
 
 ---
 

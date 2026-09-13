@@ -6,7 +6,7 @@ Raven AI is a personal AI assistant you run on your own infrastructure. It conne
 
 ## Key Features
 
-- **Multi-channel** — 15+ messaging channels supported
+- **Multi-channel** — 15 messaging channels supported
 - **Multi-agent** — Route users to purpose-specific agents
 - **Tool system** — Plugin-powered tool registry with 30+ built-in tools
 - **Security first** — DM pairing, context visibility, sandboxed execution
@@ -16,7 +16,7 @@ Raven AI is a personal AI assistant you run on your own infrastructure. It conne
 ## Quick Start
 
 ```bash
-pip install raven-ai
+pip install -e ".[dev]"
 
 raven onboard
 raven start

@@ -2,34 +2,34 @@
 
 ## Overview
 
-- **Language**: Python 3.11+ (tested on 3.12), Go, Rust, TypeScript
-- **Tests**: 4593+ unit tests (pytest), Go table-driven tests, Vitest, Playwright E2E
-- **Channels**: 25+ messaging platforms
+- **Language**: Python 3.11+ (tested on 3.12), TypeScript
+- **Tests**: 4,677+ pytest tests, Vitest frontend tests
+- **Channels**: 15 messaging platforms
 - **Plugins**: 10 built-in plugins + user-defined plugins
-- **Services**: 6 microservices + gateway + daemon
-- **Lines of code**: ~150,000+
+- **Codebase**: single Python monolith + React SPA
+- **LLM providers**: 10 (OpenAI, Anthropic, OpenRouter, Ollama, vLLM, Azure, Groq, Bedrock, Vertex AI, Copilot)
 
 ## Codebase Distribution
 
 | Directory | Language | Purpose |
 |-----------|----------|---------|
-| `raven/` | Python | Core engine, channels, CLI, tools |
-| `ravencode/` | Python | High-level AI agent API |
-| `services/` | Go, Python | Microservices (gateway, auth, monitor, RAG, task, code) |
-| `web/` | TypeScript | React 19 dashboard |
-| `desktop-tauri/` | Rust, TypeScript | Tauri desktop shell |
-| `daemon/` | Rust | System daemon (ravend) |
-| `plugins/` | Python | User-extensible plugins |
-| `deploy/` | YAML, Docker | Infrastructure as code |
+| `raven/` | Python | Core engine, 15 channels, CLI, 30+ tools |
+| `ravencode/` | Python | Autonomous coding agent (50+ tools) |
+| `aios/` | Python | Thin FastAPI AI-Gateway bridge |
+| `web/` | TypeScript | React 19 + Vite dashboard |
+| `plugins/` | Python | Built-in plugin packages (inside `raven/plugins/`) |
+| `deploy/` | YAML, Docker | Docker, systemd, observability, traefik configs |
+| `scripts/` | Python, PS1 | Build/launch tooling (incl. `check_all.py` gate) |
 
 ## CI/CD
 
-- GitHub Actions: 9 workflows
-- Docker: Multi-stage, distroless, non-root
-- Code coverage tracked via Codecov
+- GitHub Actions: 15 workflows (lint, typecheck, tests, e2e, deploy, release, security scans)
+- Docker: multi-stage builds
+- Validation gate: `python scripts/check_all.py` (ruff + mypy + imports + all tests + frontend build, 12 checks)
 
 ## Security
 
-- 30+ mypy bugs fixed in May 2026 security audit
-- Full security audit CLI: `raven security audit --deep --fix`
-- SSRF, SQL injection, XSS, path traversal guards in place
+- 0 mypy errors, 0 ruff violations project-wide
+- Full security audit CLI: `raven security audit --deep`
+- SSRF, SQL injection, XSS, path traversal guards in place and covered by tests
+- Pressure-tested: full suite 4,677 passed in ~5 min

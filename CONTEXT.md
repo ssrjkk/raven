@@ -2,46 +2,51 @@
 
 ## Overview
 
-Raven AI is an enterprise-grade personal AI assistant that operates 24/7 across 12 messaging channels. It combines a ReAct agent, task engine, monitors, coding assistant, RAG knowledge base, and web dashboard in a hybrid microservices architecture.
+Raven AI is a self-hosted personal AI assistant that operates 24/7 across 15 messaging channels. It combines a ReAct agent, task engine, monitors, coding assistant (RavenCode), RAG knowledge base, and web dashboard in a single Python monolith.
 
 ## Architecture
 
 ```
-Clients (Telegram, Discord, Slack, Web, CLI)
+Clients (Telegram, Discord, Slack, Web, CLI, …) — 15 channels
     │
     ▼
-Gateway (Go) — circuit breaker, rate limiter, JWT auth proxy
+Raven Gateway (FastAPI, single process)
+    ├── Auth (JWT + RBAC)
+    ├── Circuit breaker + rate limiter (token bucket)
+    ├── Channel guardian (heartbeat + auto-restart)
+    └── Web dashboard (React SPA, served at /)
     │
     ▼
-┌──────────────────────────────────────────────┐
-│ Agent Core (Python) — LLM router, ReAct agent│
-│ Monitor Engine (Go) — SQLite, NATS, metrics  │
-│ RAG Service (Python) — Qdrant, embeddings    │
-│ Task Engine (Python) — planner, outbox, saga │
-│ Code Service (Python) — sandboxed execution  │
-│ Auth Service (Go) — JWT, gRPC, RBAC          │
-└──────────────────────────────────────────────┘
+Agent Core
+    ├── LLM router (failover across 10 providers)
+    ├── ReAct agent / RavenCode coding agent
+    ├── Task engine (planner, executor)
+    └── Routine + monitor engines
     │
     ▼
-NATS / JetStream — message broker
-OTel / Prometheus / Grafana — observability
-SQLite / Qdrant — storage
+Tools (assistant 30+ / coding-agent 50+)
+    │
+    ▼
+Storage: SQLite/PostgreSQL, JSON vector store + BM25
+Observability: OTel / Prometheus / structured logs
 ```
 
 ## Key Decisions
 
-- **Hybrid monorepo**: Python (core), Go (high-throughput services), Rust (daemon), TypeScript (web)
-- **LLM failover**: Ollama (local) → OpenRouter → Anthropic → OpenAI
-- **Message broker**: NATS + JetStream for event-driven communication between services
-- **Security first**: ToolPolicyEvaluator, RBAC, Fernet encryption, SSRF guard, workspace isolation
-- **Plugin system**: Capability-based sandbox with manifest.json discovery
+- **Single-process monolith** (Python). Optional containers for PostgreSQL, NATS, Prometheus/Grafana via docker-compose — no hard service-mesh dependency
+- **LLM failover**: first healthy provider wins; circuit breaker + rate-limit retry/backoff
+- **Local-first storage**: JSON vector store + BM25 (no external vector DB required)
+- **Security by design**: ToolPolicyEvaluator, RBAC, Fernet encryption, SSRF guard, workspace isolation, sandbox profiles
+- **Plugin system**: capability-based sandboxed plugins (10 built-in)
 
 ## Development
 
 ```bash
 pip install -e ".[dev]"
+cd web && npm install && cd ..
 cp .env.example .env
 # Edit .env with LLM keys
+python scripts/check_all.py --quick
 raven start
 ```
 
