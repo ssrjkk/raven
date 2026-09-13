@@ -960,3 +960,206 @@ class TestMemoryContext:
         agent = ReActAgent(config=AgentConfig(memory_path=store_path), conversation=Conversation(system_prompt="s"))
         assert agent._memory_context() == ""
 
+
+class TestParallelToolExecution:
+    @staticmethod
+    def _two_safe_calls_llm() -> Any:
+        calls: list[int] = []
+
+        async def fake_llm(messages: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {
+                    "content": "",
+                    "tool_calls": [
+                        {"id": "c1", "function": {"name": "read", "arguments": {"path": "a"}}},
+                        {"id": "c2", "function": {"name": "read", "arguments": {"path": "b"}}},
+                    ],
+                }
+            return {"content": "final"}
+
+        return fake_llm
+
+    async def test_safe_tools_run_concurrently(self, monkeypatch):
+        overlap: list[str] = []
+        entered = asyncio.Event()
+
+        async def fake_exec(name: str, args: dict[str, Any]) -> str:
+            overlap.append(f"enter:{args['path']}")
+            if args["path"] == "a":
+                entered.set()
+                await asyncio.sleep(0.05)
+            else:
+                await asyncio.wait_for(entered.wait(), timeout=2)
+            overlap.append(f"exit:{args['path']}")
+            return "ok"
+
+        agent = ReActAgent(
+            config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, max_steps=5),
+            llm_provider=self._two_safe_calls_llm(),
+        )
+        monkeypatch.setattr(agent, "_execute_with_retry", fake_exec)
+        _patch_save(monkeypatch)
+        assert await agent.run("t") == "final"
+        assert overlap[0] == "enter:a"
+        assert "enter:b" in overlap[1:-1], "second tool must start before the first finishes"
+        assert overlap[-1] == "exit:a"
+
+    async def test_tool_results_preserve_order(self, monkeypatch):
+        async def fake_exec(name: str, args: dict[str, Any]) -> str:
+            if args["path"] == "a":
+                await asyncio.sleep(0.05)
+                return "result-a"
+            return "result-b"
+
+        agent = ReActAgent(
+            config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, max_steps=5),
+            llm_provider=self._two_safe_calls_llm(),
+        )
+        monkeypatch.setattr(agent, "_execute_with_retry", fake_exec)
+        _patch_save(monkeypatch)
+        await agent.run("t")
+        tool_msgs = [m for m in agent.conversation.messages if m.get("role") == "tool"]
+        assert [m["content"] for m in tool_msgs] == ["result-a", "result-b"]
+
+    async def test_dangerous_tool_breaks_batch(self, monkeypatch):
+        active = 0
+        max_active = 0
+
+        async def fake_exec(name: str, args: dict[str, Any]) -> str:
+            nonlocal active, max_active
+            active += 1
+            max_active = max(max_active, active)
+            await asyncio.sleep(0.01)
+            active -= 1
+            return "ok"
+
+        calls: list[int] = []
+
+        async def fake_llm(messages: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {
+                    "content": "",
+                    "tool_calls": [
+                        {"id": "c1", "function": {"name": "read", "arguments": {"path": "a"}}},
+                        {"id": "c2", "function": {"name": "write", "arguments": {"path": "b"}}},
+                        {"id": "c3", "function": {"name": "read", "arguments": {"path": "c"}}},
+                    ],
+                }
+            return {"content": "final"}
+
+        agent = ReActAgent(
+            config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, max_steps=5),
+            llm_provider=fake_llm,
+        )
+        monkeypatch.setattr(agent, "_execute_with_retry", fake_exec)
+        _patch_save(monkeypatch)
+        assert await agent.run("t") == "final"
+        assert max_active == 1, "write between reads must force sequential execution"
+
+
+class TestToolResultCache:
+    @staticmethod
+    def _scripted_llm(script: list[dict[str, Any]]) -> Any:
+        calls: list[int] = []
+
+        async def fake_llm(messages: Any) -> dict[str, Any]:
+            calls.append(1)
+            idx = len(calls) - 1
+            return script[idx] if idx < len(script) else {"content": "final"}
+
+        return fake_llm
+
+    async def test_cache_hit_on_repeated_read(self, monkeypatch):
+        _patch_save(monkeypatch)
+        exec_count = {"n": 0}
+
+        async def fake_execute(name: str, args: dict[str, Any]) -> str:
+            exec_count["n"] += 1
+            return "file-contents"
+
+        monkeypatch.setattr("ravencode.runtime.agent_core.execute_tool", fake_execute)
+        agent = ReActAgent(
+            config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, max_steps=5),
+            llm_provider=self._scripted_llm(
+                [
+                    {
+                        "tool_calls": [
+                            {"id": "c1", "function": {"name": "read", "arguments": {"path": "a"}}}
+                        ]
+                    },
+                    {
+                        "tool_calls": [
+                            {"id": "c2", "function": {"name": "read", "arguments": {"path": "a"}}}
+                        ]
+                    },
+                ]
+            ),
+        )
+        assert await agent.run("t") == "final"
+        assert exec_count["n"] == 1, "second identical read must be served from cache"
+
+    async def test_write_invalidates_cache(self, monkeypatch):
+        _patch_save(monkeypatch)
+        exec_count = {"n": 0}
+
+        async def fake_execute(name: str, args: dict[str, Any]) -> str:
+            exec_count["n"] += 1
+            return "ok"
+
+        monkeypatch.setattr("ravencode.runtime.agent_core.execute_tool", fake_execute)
+        agent = ReActAgent(
+            config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, max_steps=6),
+            llm_provider=self._scripted_llm(
+                [
+                    {
+                        "tool_calls": [
+                            {"id": "c1", "function": {"name": "read", "arguments": {"path": "a"}}}
+                        ]
+                    },
+                    {
+                        "tool_calls": [
+                            {"id": "c2", "function": {"name": "write", "arguments": {"path": "a"}}}
+                        ]
+                    },
+                    {
+                        "tool_calls": [
+                            {"id": "c3", "function": {"name": "read", "arguments": {"path": "a"}}}
+                        ]
+                    },
+                ]
+            ),
+        )
+        assert await agent.run("t") == "final"
+        assert exec_count["n"] == 3, "read after a write must re-execute, not hit cache"
+
+
+class TestLlmRetry:
+    async def test_retry_succeeds_on_second_attempt(self, monkeypatch):
+        _patch_save(monkeypatch)
+        attempts: list[int] = []
+
+        async def flaky(messages: Any) -> dict[str, Any]:
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise RuntimeError("transient network error")
+            return {"content": "recovered"}
+
+        monkeypatch.setattr("ravencode.runtime.agent_core.asyncio.sleep", AsyncMock())
+        agent = ReActAgent(config=AgentConfig(proactive_scan=False), llm_provider=flaky)
+        assert await agent.run("t") == "recovered"
+        assert len(attempts) == 2
+
+    async def test_retry_exhausted_returns_error_content(self, monkeypatch):
+        _patch_save(monkeypatch)
+
+        async def always_fails(messages: Any) -> dict[str, Any]:
+            raise RuntimeError("provider down")
+
+        monkeypatch.setattr("ravencode.runtime.agent_core.asyncio.sleep", AsyncMock())
+        agent = ReActAgent(config=AgentConfig(proactive_scan=False, max_steps=3), llm_provider=always_fails)
+        result = await agent.run("t")
+        assert result.startswith("[error: LLM call failed after 3 attempts")
+        assert "provider down" in result
+

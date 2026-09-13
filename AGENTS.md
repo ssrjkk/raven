@@ -541,4 +541,23 @@ npm run dev
 - **Tests**: `tests/core/test_migrations.py` rewritten on `SQLiteDB`; `tests/integration/test_postgres_stores.py` (new, 9 tests) covers Task/Monitor/Routine/Auth stores, Outbox delivery+drop, AnalyticsEngine, Persister against a live PG — auto-skip without `DATABASE_URL`, `_clean_table()` guards outbox test idempotency.
 - **Verification**: ruff 0, mypy 0 (16 migrated files + tests), full suite **3594 passed / 26 skipped / 1 xpassed**, integration PG suite **9 passed** against a real server, `check_all.py --quick` 4/4 PASS.
 
+## Fixes applied (Sep 2026, agent performance & resilience)
+### Pre-existing mypy failures + environment-dependent test
+- **`raven/core/cache/redis_client.py`**: `ping()` returned `Any` — wrapped with `bool()`.
+- **`raven/coding/test_generator.py`**: `_subscript_to_str` f-stringed a possible `bytes` constant (`b'abc'` rendered as `b'abc'`) — bytes are now decoded before formatting.
+- **`raven/cli/main.py`**: `type: ignore[attr-defined]` was unused and did not cover the real `union-attr` mypy error on `sys.stdout.reconfigure` — corrected to `[union-attr]`.
+- **`tests/test_tools_browser.py`**: 2 `comparison-overlap` errors on mocked `is` comparisons — `# type: ignore[comparison-overlap]`.
+- **`tests/test_unique_chaos_engineering.py`**: `test_collect_snapshot_without_psutil` asserted `network_latency_ms == 0.0` but `_get_network_latency()` really pings 8.8.8.8 — failed on any online machine. Now hermetic: latency probe monkeypatched to 0.0 (the test's purpose is the psutil-free CPU/memory/disk fallback).
+
+### ReAct agent core — speed + resilience upgrades (`ravencode/runtime/agent_core.py`)
+- **Parallel tool execution**: consecutive safe (non-dangerous, non-malformed) tool calls in one assistant turn now execute concurrently via `asyncio.gather` (batch cap `_MAX_PARALLEL_TOOLS=8`); mutating/dangerous calls always run alone and strictly in order. Tool results are still appended to the conversation in the original call order (protocol-safe), event order preserved (`tool_call` emitted before execution, `tool_result` after, per tool).
+- **LLM call retry**: `_llm_call` now retries transient provider failures up to `_LLM_MAX_ATTEMPTS=3` with exponential backoff (0.5s/1s); exhaustion returns `[error: LLM call failed after 3 attempts: ...]` content instead of crashing the run. Body moved to `_llm_call_once`.
+- **Tool result cache**: dead config `use_cache` is now wired — per-run dict caches successful read-only tool results keyed by name+args; any dangerous (mutating) tool execution clears the whole cache; cache resets at the start of each `run()`.
+- Loop bookkeeping (fail tallies, self-correction nudges, no-progress detection) extracted into `_ToolLoopStats` + `_parse_tool_call` / `_process_tool_item` helpers — behavior identical to the previous inline logic.
+
+### Context auto-compaction (`ravencode/runtime/context.py`)
+- **`Conversation.compact(keep_recent=12)`**: when estimated tokens exceed 70% of `max_tokens`, old `role: tool` outputs (beyond the most recent `keep_recent` messages) are replaced with their first 800 chars + a compression marker instead of waiting for hard `_trim()` to drop whole messages. Called every step of the agent loop before the LLM call. Hard trim remains as the last resort.
+- **Tests**: `TestParallelToolExecution` (concurrency overlap proof, order preservation, dangerous-call serialization), `TestLlmRetry` (recovery + exhaustion), `TestToolResultCache` (hit + write invalidation), 3 `Conversation.compact` tests. Suite for agent core/context/agents/multisession/tools/aios/webchat: **386 passed**. ruff 0, mypy 0.
+
+
 

@@ -214,6 +214,34 @@ class Conversation:
                 total += self._estimate_tokens(content)
         return total
 
+    def compact(self, keep_recent: int = 12) -> int:
+        """Compress old tool results to relieve context pressure.
+
+        Runs before hard trimming: instead of losing whole messages, older
+        tool outputs are replaced with short prefixes so the model keeps a
+        coherent recent window. Returns estimated tokens saved.
+        """
+        threshold = int(self.max_tokens * 0.7)
+        if self._token_total <= threshold:
+            return 0
+        saved = 0
+        for msg in self.messages[1:-keep_recent] if keep_recent < len(self.messages) else []:
+            if msg.get("role") != "tool":
+                continue
+            content = msg.get("content")
+            if not isinstance(content, str) or len(content) <= 800:
+                continue
+            compressed = (
+                content[:800]
+                + "\n[... older tool output compressed to save context; re-run the tool if you need it again ...]"
+            )
+            saved += self._estimate_tokens(content) - self._estimate_tokens(compressed)
+            msg["content"] = compressed
+        if saved:
+            self._token_total -= saved
+            logger.debug("Context compaction: saved ~{} tokens from old tool results", saved)
+        return saved
+
     def _trim(self) -> None:
         while len(self.messages) > 2 and self._token_total > self.max_tokens:
             popped = self.messages.pop(1)

@@ -280,6 +280,39 @@ class TestConversation:
         c.add_user_message("this is a long message that exceeds the token limit")
         assert len(c.messages) == 2
 
+    def test_compact_noop_under_threshold(self):
+        c = Conversation(system_prompt="test", max_tokens=100_000)
+        c.add_tool_result("t1", "x" * 5000)
+        assert c.compact() == 0
+
+    @staticmethod
+    def _tool_call(cid: str) -> list[dict[str, Any]]:
+        return [{"id": cid, "type": "function", "function": {"name": "read", "arguments": {}}}]
+
+    def test_compact_compresses_old_tool_results(self):
+        c = Conversation(system_prompt="test", max_tokens=25_000)
+        long_output = "a" * 10_000
+        for i in range(8):
+            c.add_assistant_tool_calls(self._tool_call(f"c{i}"))
+            c.add_tool_result(f"c{i}", long_output)
+        assert c._token_total > int(25_000 * 0.7)
+        saved = c.compact(keep_recent=2)
+        assert saved > 0
+        tools = [m["content"] for m in c.messages if m.get("role") == "tool"]
+        assert all("compressed to save context" in s for s in tools[:-1])
+        assert tools[-1] == long_output
+
+    def test_compact_preserves_non_tool_messages(self):
+        c = Conversation(system_prompt="test", max_tokens=5_000)
+        c.add_user_message("u" * 5000)
+        c.add_assistant_tool_calls(self._tool_call("c1"))
+        c.add_tool_result("c1", "b" * 5000)
+        c.add_assistant_tool_calls(self._tool_call("c2"))
+        c.add_tool_result("c2", "b" * 5000)
+        c.compact(keep_recent=1)
+        assert c.messages[1]["content"] == "u" * 5000
+        assert "compressed to save context" in c.messages[3]["content"]
+
     def test_to_dict(self):
         c = Conversation(system_prompt="You are test.", max_tokens=500)
         c.add_user_message("hi")

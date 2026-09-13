@@ -136,6 +136,20 @@ class AgentConfig:
 # ReActAgent
 # ---------------------------------------------------------------------------
 
+_MAX_PARALLEL_TOOLS = 8
+
+_LLM_MAX_ATTEMPTS = 3
+
+
+@dataclass
+class _ToolLoopStats:
+    fail_tally: dict[str, int] = field(default_factory=dict)
+    last_sig: str | None = None
+    consecutive_identical: int = 0
+    total_calls: int = 0
+    successful_calls: int = 0
+
+
 _last_agent_var: contextvars.ContextVar[ReActAgent | None] = contextvars.ContextVar("_last_agent", default=None)
 
 
@@ -165,6 +179,7 @@ class ReActAgent:
         self._lock = asyncio.Lock()
         self._aborted = False
         self._task: asyncio.Task[Any] | None = None
+        self._tool_cache: dict[str, str] = {}
 
         self._init_permissions()
 
@@ -344,6 +359,7 @@ class ReActAgent:
     async def _run_impl(self, user_input: str, content: str | list[dict[str, Any]] | None = None) -> str:
         self.conversation.add_user_message(content if content is not None else user_input)
         self._aborted = False
+        self._tool_cache.clear()
         step = 0
 
         ee = self.config.event_emitter
@@ -351,11 +367,7 @@ class ReActAgent:
         if self.config.proactive_scan:
             await self._proactive_scan(user_input)
 
-        tool_fail_tally: dict[str, int] = {}
-        last_tool_sig: str | None = None
-        consecutive_identical = 0
-        successful_tool_count = 0
-        total_tool_calls = 0
+        stats = _ToolLoopStats()
         last_reflection_sent = False
 
         while step < self.config.max_steps:
@@ -365,6 +377,8 @@ class ReActAgent:
                     await ee.emit(AgentEvent("done", {"reason": "aborted", "steps": step}))
                 await self._auto_save("aborted")
                 return "[aborted]"
+
+            self.conversation.compact()
 
             messages = self.conversation.get_messages()
             response = await self._llm_call(messages)
@@ -394,116 +408,40 @@ class ReActAgent:
             if ee:
                 await ee.emit(AgentEvent("step_start", {"step": step, "content": content, "tool_calls": tool_calls}))
 
-            for tc in tool_calls:
-                name = tc["function"]["name"]
-                raw = tc["function"]["arguments"]
-
-                malformed = ""
-                if isinstance(raw, str):
-                    try:
-                        args = json.loads(raw)
-                    except json.JSONDecodeError:
-                        args = {}
-                        malformed = (
-                            f"[error] malformed JSON in tool arguments for '{name}': {raw[:500]!r}. "
-                            "Respond with a corrected arguments object."
-                        )
-                else:
-                    args = raw
-
-                if not isinstance(args, dict):
-                    args = {"value": str(args)}
-
-                if ee:
-                    await ee.emit(AgentEvent("tool_call", {"name": name, "args": args, "step": step}))
-
-                if malformed:
-                    result = malformed
-                elif await self._confirm_action(name, args):
-                    result = await self._execute_with_retry(name, args)
-                else:
-                    result = f"[user denied] {name} was not approved"
-
-                # Self-correction: detect that we are stuck retrying the same
-                # failing tool and nudge the model to change approach.
-                if result.startswith("[error") or result.startswith("[validation_error]") or result.startswith("[denied]"):
-                    sig = json.dumps({name: args}, sort_keys=True)
-                    tool_fail_tally[sig] = tool_fail_tally.get(sig, 0) + 1
-                    if tool_fail_tally[sig] >= 3:
-                        self.conversation.add_system_message(
-                            "You keep calling the same tool with the same arguments and it keeps failing. "
-                            "Stop repeating it. Re-read the tool schema, fix the arguments, or take a "
-                            "different approach to reach your goal."
-                        )
-                        tool_fail_tally[sig] = 0
-                else:
-                    sig = json.dumps({name: args}, sort_keys=True)
-                    if sig == last_tool_sig:
-                        consecutive_identical += 1
-                        if consecutive_identical == 3:
-                            self.conversation.add_system_message(
-                                "You have performed the same tool call repeatedly without progressing. "
-                                "Change your approach — do not keep repeating this exact call."
-                            )
-                    else:
-                        consecutive_identical = 0
-                    last_tool_sig = sig
-
-                result_truncated = result[:10_000]
-                self.conversation.add_tool_result(tc.get("id", ""), result_truncated)
-
-                total_tool_calls += 1
-                if not result.startswith("[error") and not result.startswith("[validation_error]") and not result.startswith("[denied]"):
-                    successful_tool_count += 1
-
-                if total_tool_calls >= 6 and successful_tool_count == 0 and step >= 3:
-                    self.conversation.add_system_message(
-                        "You have made several tool calls but none have succeeded. "
-                        "You are not making progress. Stop and rethink your approach: "
-                        "read the file contents first, check your assumptions, and try a different strategy."
-                    )
-                    total_tool_calls = 0
-                    successful_tool_count = 0
-
-                if (
-                    name == "create_artifact"
-                    and not result.startswith("[error]")
-                    and not result.startswith("[validation_error]")
-                    and not result.startswith("[execution_error]")
+            parsed = [self._parse_tool_call(tc) for tc in tool_calls]
+            idx = 0
+            while idx < len(parsed):
+                item = parsed[idx]
+                # Mutating / dangerous / malformed calls always run alone and
+                # strictly in order; consecutive safe read-only calls are
+                # executed concurrently for speed.
+                if item["malformed"] or is_dangerous(item["name"]):
+                    await self._process_tool_item(item, step, ee, stats)
+                    idx += 1
+                    continue
+                batch = [item]
+                j = idx + 1
+                while (
+                    j < len(parsed)
+                    and len(batch) < _MAX_PARALLEL_TOOLS
+                    and not parsed[j]["malformed"]
+                    and not is_dangerous(parsed[j]["name"])
                 ):
-                    try:
-                        artifact_data = json.loads(result)
-                        if ee and "error" not in artifact_data:
-                            await ee.emit(
-                                AgentEvent(
-                                    "artifact_created",
-                                    {
-                                        "artifact_id": artifact_data.get("artifact_id"),
-                                        "title": artifact_data.get("title"),
-                                        "type": artifact_data.get("type"),
-                                        "file_path": artifact_data.get("file_path"),
-                                        "content": artifact_data.get("content"),
-                                        "step": step,
-                                    },
-                                )
-                            )
-                    except json.JSONDecodeError:
-                        pass
-
-                if ee:
-                    await ee.emit(AgentEvent("tool_result", {"name": name, "result": result_truncated, "step": step}))
-
-                if self.config.on_message:
-                    await self.config.on_message(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tc.get("id", ""),
-                            "content": result_truncated,
-                        }
-                    )
-
-                if self.config.on_step:
-                    await self.config.on_step(f"[tool] {name}: {result_truncated[:200]}", step)
+                    batch.append(parsed[j])
+                    j += 1
+                if len(batch) == 1:
+                    await self._process_tool_item(item, step, ee, stats)
+                else:
+                    for b in batch:
+                        if ee:
+                            await ee.emit(AgentEvent("tool_call", {"name": b["name"], "args": b["args"], "step": step}))
+                        b["emitted"] = True
+                    results = await asyncio.gather(*(self._execute_with_retry(b["name"], b["args"]) for b in batch))
+                    for b, res in zip(batch, results, strict=True):
+                        b["result"] = res
+                    for b in batch:
+                        await self._process_tool_item(b, step, ee, stats)
+                idx = j if len(batch) > 1 else idx + 1
 
             if (step % 5 == 0) and (not last_reflection_sent) and (step >= 5):
                 self.conversation.add_system_message(
@@ -519,6 +457,144 @@ class ReActAgent:
             await ee.emit(AgentEvent("done", {"reason": "max_steps", "steps": step}))
         await self._auto_save("max_steps")
         return "[reached max steps]"
+
+    # -----------------------------------------------------------------------
+    # tool call processing
+    # -----------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_tool_call(tc: dict[str, Any]) -> dict[str, Any]:
+        name = tc["function"]["name"]
+        raw = tc["function"]["arguments"]
+        malformed = ""
+        if isinstance(raw, str):
+            try:
+                args = json.loads(raw)
+            except json.JSONDecodeError:
+                args = {}
+                malformed = (
+                    f"[error] malformed JSON in tool arguments for '{name}': {raw[:500]!r}. "
+                    "Respond with a corrected arguments object."
+                )
+        else:
+            args = raw
+        if not isinstance(args, dict):
+            args = {"value": str(args)}
+        return {"tc": tc, "name": name, "args": args, "malformed": malformed}
+
+    async def _process_tool_item(
+        self,
+        item: dict[str, Any],
+        step: int,
+        ee: EventEmitter | None,
+        stats: _ToolLoopStats,
+    ) -> None:
+        name = item["name"]
+        args = item["args"]
+        tc = item["tc"]
+
+        if ee and not item.get("emitted"):
+            await ee.emit(AgentEvent("tool_call", {"name": name, "args": args, "step": step}))
+            item["emitted"] = True
+
+        if item.get("result") is not None:
+            result = item["result"]
+            item["result"] = None
+        elif item["malformed"]:
+            result = item["malformed"]
+        elif await self._confirm_action(name, args):
+            result = await self._execute_with_retry(name, args)
+        else:
+            result = f"[user denied] {name} was not approved"
+
+        # Any mutating tool may invalidate cached read results.
+        if is_dangerous(name):
+            self._tool_cache.clear()
+
+        # Self-correction: detect that we are stuck retrying the same
+        # failing tool and nudge the model to change approach.
+        failed = (
+            result.startswith("[error")
+            or result.startswith("[validation_error]")
+            or result.startswith("[denied]")
+        )
+        sig = json.dumps({name: args}, sort_keys=True)
+        if failed:
+            stats.fail_tally[sig] = stats.fail_tally.get(sig, 0) + 1
+            if stats.fail_tally[sig] >= 3:
+                self.conversation.add_system_message(
+                    "You keep calling the same tool with the same arguments and it keeps failing. "
+                    "Stop repeating it. Re-read the tool schema, fix the arguments, or take a "
+                    "different approach to reach your goal."
+                )
+                stats.fail_tally[sig] = 0
+        else:
+            if sig == stats.last_sig:
+                stats.consecutive_identical += 1
+                if stats.consecutive_identical == 3:
+                    self.conversation.add_system_message(
+                        "You have performed the same tool call repeatedly without progressing. "
+                        "Change your approach — do not keep repeating this exact call."
+                    )
+            else:
+                stats.consecutive_identical = 0
+            stats.last_sig = sig
+
+        result_truncated = result[:10_000]
+        self.conversation.add_tool_result(tc.get("id", ""), result_truncated)
+
+        stats.total_calls += 1
+        if not failed:
+            stats.successful_calls += 1
+
+        if stats.total_calls >= 6 and stats.successful_calls == 0 and step >= 3:
+            self.conversation.add_system_message(
+                "You have made several tool calls but none have succeeded. "
+                "You are not making progress. Stop and rethink your approach: "
+                "read the file contents first, check your assumptions, and try a different strategy."
+            )
+            stats.total_calls = 0
+            stats.successful_calls = 0
+
+        if (
+            name == "create_artifact"
+            and not result.startswith("[error]")
+            and not result.startswith("[validation_error]")
+            and not result.startswith("[execution_error]")
+        ):
+            try:
+                artifact_data = json.loads(result)
+                if ee and "error" not in artifact_data:
+                    await ee.emit(
+                        AgentEvent(
+                            "artifact_created",
+                            {
+                                "artifact_id": artifact_data.get("artifact_id"),
+                                "title": artifact_data.get("title"),
+                                "type": artifact_data.get("type"),
+                                "file_path": artifact_data.get("file_path"),
+                                "content": artifact_data.get("content"),
+                                "step": step,
+                            },
+                        )
+                    )
+            except json.JSONDecodeError:
+                pass
+
+        if ee:
+            await ee.emit(AgentEvent("tool_result", {"name": name, "result": result_truncated, "step": step}))
+
+        if self.config.on_message:
+            await self.config.on_message(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc.get("id", ""),
+                    "content": result_truncated,
+                }
+            )
+
+        if self.config.on_step:
+            await self.config.on_step(f"[tool] {name}: {result_truncated[:200]}", step)
 
     # -----------------------------------------------------------------------
     # proactive scan
@@ -577,6 +653,14 @@ class ReActAgent:
     # -----------------------------------------------------------------------
 
     async def _execute_with_retry(self, name: str, args: dict[str, Any]) -> str:
+        cacheable = self.config.use_cache and not is_dangerous(name)
+        cache_key = ""
+        if cacheable:
+            cache_key = name + "::" + json.dumps(args, sort_keys=True, ensure_ascii=False)
+            cached = self._tool_cache.get(cache_key)
+            if cached is not None:
+                logger.debug("Tool cache hit for {}", name)
+                return cached
         last_err = ""
         for attempt in range(self.config.max_tool_retries):
             try:
@@ -596,6 +680,8 @@ class ReActAgent:
                 if isinstance(result, list):
                     result = "\n".join(str(r) for r in result[:200])
                 final = str(result)
+                if cacheable and not final.startswith("[error") and not final.startswith("[validation_error]"):
+                    self._tool_cache[cache_key] = final
 
                 if self.config.auto_format and name in ("write", "edit", "smart_edit", "patch"):
                     path = args.get("path", "")
@@ -623,6 +709,26 @@ class ReActAgent:
     # -----------------------------------------------------------------------
 
     async def _llm_call(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+        last_err = ""
+        for attempt in range(1, _LLM_MAX_ATTEMPTS + 1):
+            try:
+                return await self._llm_call_once(messages)
+            except Exception as exc:  # retried below, then reported
+                last_err = str(exc)
+                if attempt >= _LLM_MAX_ATTEMPTS:
+                    break
+                delay = 0.5 * 2 ** (attempt - 1)
+                logger.warning(
+                    "LLM call attempt {}/{} failed: {} — retrying in {:.1f}s",
+                    attempt,
+                    _LLM_MAX_ATTEMPTS,
+                    exc,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+        return {"content": f"[error: LLM call failed after {_LLM_MAX_ATTEMPTS} attempts: {last_err}]", "tool_calls": []}
+
+    async def _llm_call_once(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         if self.llm_provider is not None:
             result = await self.llm_provider(messages)
             return result if isinstance(result, dict) else {"content": str(result)}
