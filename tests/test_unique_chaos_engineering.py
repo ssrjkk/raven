@@ -178,7 +178,11 @@ class TestSystemMonitor:
         self.monitor = SystemMonitor(collect_interval_sec=0.05)
 
     @pytest.mark.asyncio
-    async def test_collect_snapshot_without_psutil(self):
+    async def test_collect_snapshot_without_psutil(self, monkeypatch: pytest.MonkeyPatch):
+        async def _no_latency() -> float:
+            return 0.0
+
+        monkeypatch.setattr(self.monitor, "_get_network_latency", _no_latency)
         snapshot = await self.monitor._collect_snapshot()
         assert 0 <= snapshot.cpu_percent <= 100
         assert 0 <= snapshot.memory_percent <= 100

@@ -104,7 +104,7 @@ class RedisClient:
         if not self.is_healthy or self._client is None:
             return False
         try:
-            return await self._client.ping()
+            return bool(await self._client.ping())
         except _ConnectionError:
             self._is_healthy = False
             return False

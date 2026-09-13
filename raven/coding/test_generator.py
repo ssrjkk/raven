@@ -182,7 +182,9 @@ class TestGenerator:
         if isinstance(node.slice, ast.Name):
             return f"{value}[{node.slice.id}]"
         if isinstance(node.slice, ast.Constant):
-            return f"{value}[{node.slice.value}]"
+            raw = node.slice.value
+            text = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else str(raw)
+            return f"{value}[{text}]"
         if isinstance(node.slice, ast.Tuple):
             elts = [
                 self._subscript_to_str(e)
