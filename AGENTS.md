@@ -559,5 +559,51 @@ npm run dev
 - **`Conversation.compact(keep_recent=12)`**: when estimated tokens exceed 70% of `max_tokens`, old `role: tool` outputs (beyond the most recent `keep_recent` messages) are replaced with their first 800 chars + a compression marker instead of waiting for hard `_trim()` to drop whole messages. Called every step of the agent loop before the LLM call. Hard trim remains as the last resort.
 - **Tests**: `TestParallelToolExecution` (concurrency overlap proof, order preservation, dangerous-call serialization), `TestLlmRetry` (recovery + exhaustion), `TestToolResultCache` (hit + write invalidation), 3 `Conversation.compact` tests. Suite for agent core/context/agents/multisession/tools/aios/webchat: **386 passed**. ruff 0, mypy 0.
 
+## Fixes applied (Sep 2026, smart routing + live verification + streaming)
+### Smart delegation routing (`ravencode/agents/orchestrator.py`)
+- **`Orchestrator.delegate`** replaced first-match keyword if/elif with two-stage routing: (1) LLM classification via `AIOSClient` (`_ROUTER_SYSTEM` prompt, single-word answer, 10s timeout, skipped under pytest / when `RAVEN_SMART_ROUTING=0`) → (2) deterministic scored fallback `_route_by_keywords` (per-role keyword counts across `_ROLE_KEYWORDS`, best score wins instead of first-match order — e.g. "write a test" no longer misroutes to verifier). Router can be injected via `router_llm=` kwarg for tests; `delegate` is now a `classmethod` (both `Orchestrator.delegate(...)` and `orch.delegate(...)` still work).
+- LLM routing failures (no backend, timeout, garbage answer) always fall back to keywords — never raise.
+- **Tests**: 8-case keyword routing table + router-wins / garbage-fallback / failure-fallback. `tests/test_ravencode_agents.py`: 42 passed.
+
+### 429-aware LLM retry + permanent-error fast-fail (`ravencode/runtime/agent_core.py`)
+- `_llm_call` now reads `exc.response.status_code`: HTTP 400/401/403/404 (`_LLM_PERMANENT_STATUS`) fail immediately (no pointless retries), HTTP 429 backs off 2s/4s instead of 0.5s/1s (free-tier rate limits). Discovered during live Groq verification.
+
+### Typed streaming deltas (`raven/core/llm/`)
+- **`protocol.py`**: `LLMProvider.complete_stream_deltas()` — typed delta events (`{"type":"token","text"}` / `{"type":"tool_call","index","id","name","args_fragment"}`) with non-streaming fallback `_deltas_fallback`.
+- **`providers/base.py`**: `_openai_chunk_to_events` (OpenAI SSE chunk → typed events), `_stream_sse_deltas` (SSE → events), `collect_stream_deltas` (events → `(content, list[ToolCall])`, fragment assembly per index, synthetic ids `call_{idx}`, invalid JSON args kept as `{"_raw": ...}`).
+- **Providers**: `complete_stream_deltas` implemented on OpenRouter/OpenAI/vLLM/Azure (`openai.py`) and now **Groq** (`groq.py`).
+- **Tests**: `tests/core/test_llm_stream_deltas.py` (14 tests: token/tool-call chunks, fragment ordering, synthetic ids, raw-args fallback, malformed input). 23 passed with test_llm.py; mypy 0.
+
+### Live verification with real LLM (`scripts/live_smoke.py`, new)
+- End-to-end smoke against real Groq API: (1) plain completion, (2) SSE streaming, (3) full ReAct agent loop with real tools (write → read → report). Key supplied via `GROQ_API_KEY` env var only, never written to disk.
+- Lessons encoded in the script: full tool schema (~30 tools) can exceed free-tier TPM → smoke passes a trimmed tool set; tools resolve paths via `confine()` against workspace root (`ravencode.runtime.workspace.set_workspace_root`), not cwd; model fallback `openai/gpt-oss-120b` → `llama-3.3-70b-versatile` on 429.
+- **Result: LIVE SMOKE PASSED** on openai/gpt-oss-120b (completion + streaming + agent tool loop).
+
+### Docs reorganization
+- Root-level one-off/meta documents moved to **`docs/archive/`**: `AUDIT.md`, `AUDIT_PLAN.md`, `CONTEXT.md`, `STATS.md`, `structure.txt`. Root now holds only canonical files (README translations, CHANGELOG, CONTRIBUTING, SECURITY, LICENSE, AUTHORS, AGENTS.md). No external references existed to any moved file; mkdocs nav unaffected.
+
+## Fixes applied (Sep 2026, streaming core + non-obvious growth)
+### End-to-end typed delta streaming (provider → router → client → agent)
+- **`raven/core/llm/protocol.py`**: `LLMProvider.complete_stream_deltas()` protocol method — typed events (`{"type":"token","text"}` / `{"type":"tool_call","index","id","name","args_fragment"}`), non-streaming fallback `_deltas_fallback`.
+- **`providers/base.py`**: `_openai_chunk_to_events`, `_stream_sse_deltas`, `collect_stream_deltas` (fragment assembly per index, synthetic ids `call_{idx}`, invalid-JSON args kept as `{"_raw": ...}`); implemented on openai.py (OpenRouter/OpenAI/vLLM/Azure) and groq.py.
+- **`router.py`**: admission-controlled `complete_stream_deltas` + `_stream_model_deltas` (retry with 429 retry-after, mid-stream duplication guard, graceful degradation to `_complete_with_failover` non-streaming answer delivered as events).
+- **`ravencode/api/client.py`**: `AIOSClient.ask_messages_stream()` — yields token events, ends with `{"type":"final","content","tool_calls"}` assembled from fragments.
+- **`agent_core.py`**: `AgentConfig.stream_tokens` + `_llm_call_streaming` — emits `AgentEvent("token", {"content": ...})` during LLM streaming, same return shape as non-streaming path; timeouts honored.
+- **Tests**: `tests/core/test_llm_stream_deltas.py` (14), `tests/test_ravencode_streaming_core.py` (13: limiter, router deltas incl. 429-then-success and fallback-to-complete, client assembly, agent token events + streaming tool loop).
+
+### Adaptive process-wide 429 limiter (`agent_core.py`)
+- `_AdaptiveRateLimiter`: after any HTTP 429, **all** LLM calls in the process wait out a penalty window (escalating 2→4→8… capped 60s, reset on success) so parallel sessions stop hammering an exhausted quota. Injected clock makes it deterministic-testable. Integrated into `_llm_call` (acquire → call → reset / penalize on 429). Complements the existing per-call 429-aware retry (permanent 400/401/403/404 fail fast).
+
+### Repo map in system prompt (`ravencode/runtime/repo_map.py`, new)
+- Aider-style compact repository map: recursive scan (junk dirs excluded, ≤400 code files), top-level Python class/def signatures via stdlib `ast` (broken files listed without symbols, never crash), most-recently-modified-first ordering, hard char budget with truncation marker.
+- `AgentConfig.repo_map` (default off; enabled in `safe()`/`fast()`/`autonomous()` factories) appends `# Repository structure` block to the system prompt so the model locates files without exploratory reads. 13 tests in `tests/test_ravencode_repo_map.py`.
+
+### Sub-agent delegation timeout (`tools.py`)
+- `task_delegate` now wraps `sub.run()` in `asyncio.wait_for(_SUBTASK_TIMEOUT=600)`; a hung sub-agent returns a structured `[error] ... timed out` message instead of wedging the parent loop forever.
+
+### Verification
+- `check_all.py --quick` 4/4 PASS; full suite **4728 passed / 26 skipped / 0 failed** (29 e2e/load deselected); live Groq smoke: completion + streaming + agent tool loop PASSED (`python scripts/live_smoke.py`, key via `GROQ_API_KEY` env only).
+
+
 
 
