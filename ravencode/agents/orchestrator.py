@@ -309,7 +309,7 @@ class Orchestrator:
         if context:
             prompt += f"\nContext: {context}"
         logger.debug("Orchestrator.delegate: task → role='{}'", role)
-        config = AgentConfig(memory_path=memory_path, max_steps=15)
+        config = AgentConfig(memory_path=memory_path, max_steps=15, priority="low")
         agent = ReActAgent(
             config=config,
             conversation=Conversation(system_prompt=prompt),

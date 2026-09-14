@@ -55,6 +55,56 @@ class MemoryStore:
         async with self._lock:
             return list(self._data.keys())
 
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return " ".join(text.lower().split())
+
+    async def push(self, key: str, item: str, max_items: int = 20) -> bool:
+        """Append to a list with near-duplicate removal and a hard cap.
+
+        Case/whitespace-insensitive dedup keeps the memory meaningful over
+        long sessions: repeating "fixed the parser bug" ten times must not
+        crowd out anything else. Returns True when the item was new.
+        """
+        async with self._lock:
+            lst = self._data.get(key)
+            if isinstance(lst, str) and lst.strip():
+                lst = [lst]  # scalar → list, preserving the previous value
+            elif not isinstance(lst, list):
+                lst = []
+            norm = self._normalize(str(item))
+            if not norm:
+                return False
+            if any(isinstance(x, str) and self._normalize(x) == norm for x in lst):
+                return False
+            lst.append(str(item))
+            self._data[key] = lst[-max_items:]
+        await self._persist()
+        return True
+
+    async def compact_lists(self, max_items: int = 20) -> int:
+        """Deduplicate and cap every list stored in memory. Returns removed count."""
+        async with self._lock:
+            removed = 0
+            for key, value in list(self._data.items()):
+                if not isinstance(value, list):
+                    continue
+                seen: set[str] = set()
+                kept: list[Any] = []
+                for item in value:
+                    norm = self._normalize(str(item)) if isinstance(item, str) else json.dumps(item, sort_keys=True)
+                    if norm in seen:
+                        removed += 1
+                        continue
+                    seen.add(norm)
+                    kept.append(item)
+                if len(kept) > max_items:
+                    removed += len(kept) - max_items
+                    kept = kept[-max_items:]
+                self._data[key] = kept
+        await self._persist()
+        return removed
+
     def _write(self, snapshot: dict[str, Any]) -> None:
         p = Path(self.path).expanduser().resolve()
         p.parent.mkdir(parents=True, exist_ok=True)

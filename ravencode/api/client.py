@@ -12,6 +12,8 @@ from raven.core.config import settings
 if TYPE_CHECKING:
     from raven.core.llm import LLMRouter
 
+from raven.core.llm.queue import PRIORITY_NORMAL
+
 
 @dataclass
 class AIResponse:
@@ -108,11 +110,12 @@ class AIOSClient:
         tools: list[dict[str, Any]] | None = None,
         task: str = "code",
         model: str | None = None,
+        priority: float = PRIORITY_NORMAL,
     ) -> AIResponse:
         llm = self._require_llm()
         provider = self._pick_provider(task)
         model_name = model or settings.default_model
-        response = await llm.complete(messages=messages, tools=tools, model=model_name)
+        response = await llm.complete(messages=messages, tools=tools, model=model_name, priority=priority)
         content = response.content if hasattr(response, "content") else str(response)
         tool_calls_raw = getattr(response, "tool_calls", [])
         tool_calls = [{"id": tc.id, "name": tc.name, "arguments": tc.arguments} for tc in (tool_calls_raw or [])]
@@ -128,10 +131,11 @@ class AIOSClient:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         model: str | None = None,
+        priority: float = PRIORITY_NORMAL,
     ) -> AsyncIterator[str]:
         llm = self._require_llm()
         model_name = model or settings.default_model
-        async for token in llm.complete_stream(messages=messages, tools=tools, model=model_name):
+        async for token in llm.complete_stream(messages=messages, tools=tools, model=model_name, priority=priority):
             yield token
 
     async def ask_messages_stream(
@@ -139,6 +143,7 @@ class AIOSClient:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         model: str | None = None,
+        priority: float = PRIORITY_NORMAL,
     ) -> AsyncIterator[dict[str, Any]]:
         """Streaming variant of ask_messages: yields token events, ends with a
         ``{"type": "final", "content", "tool_calls"}`` event carrying the
@@ -147,7 +152,7 @@ class AIOSClient:
         model_name = model or settings.default_model
         content_parts: list[str] = []
         slots: dict[int, dict[str, Any]] = {}
-        async for ev in llm.complete_stream_deltas(messages=messages, model=model_name, tools=tools):
+        async for ev in llm.complete_stream_deltas(messages=messages, model=model_name, tools=tools, priority=priority):
             etype = ev.get("type")
             if etype == "token":
                 content_parts.append(ev.get("text", ""))

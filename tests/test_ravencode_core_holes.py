@@ -186,7 +186,7 @@ class TestEmptyStreamGuard:
 
         class _EmptyStreamClient:
             async def ask_messages_stream(
-                self, messages: list[dict[str, Any]], tools: Any = None
+                self, messages: list[dict[str, Any]], tools: Any = None, priority: float = 0.0
             ) -> Any:
                 yield {"type": "token", "text": "par"}
 

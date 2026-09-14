@@ -173,7 +173,7 @@ async def _run_agent_stream(messages: list[ChatMessage], model: str) -> AsyncIte
     agent = ReActAgent(
         conversation=conv,
         max_steps=20,
-        config=AgentConfig(event_emitter=emitter, stream_tokens=True),
+        config=AgentConfig(event_emitter=emitter, stream_tokens=True, priority="high"),
     )
 
     async def _run() -> str:

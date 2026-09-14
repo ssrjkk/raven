@@ -9,6 +9,7 @@ network, deterministic output.
 from __future__ import annotations
 
 import ast
+import subprocess
 import time
 from pathlib import Path
 
@@ -62,6 +63,78 @@ _CODE_SUFFIXES = {
 DEFAULT_MAX_CHARS = 6000
 _MAX_FILES = 400
 _MAX_SYMBOL_FILES = 120
+_GIT_HISTORY_COMMITS = 200
+_FOCUS_PARTNERS = 2  # co-change partners injected into the pre-read per task
+
+
+def _git_commit_files(root: str | Path) -> list[list[str]]:
+    """File lists of recent commits, newest first; [] when git unavailable."""
+    try:
+        proc = subprocess.run(
+            ["git", "log", f"-{_GIT_HISTORY_COMMITS}", "--name-only", "--format=%x01"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=5,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if proc.returncode != 0 or not proc.stdout:
+        return []
+    commits: list[list[str]] = []
+    current: list[str] = []
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if line == "\x01":
+            if current:
+                commits.append(current)
+            current = []
+        elif line:
+            current.append(line.replace("\\", "/"))
+    if current:
+        commits.append(current)
+    return commits
+
+
+def co_change_scores(root: str | Path) -> dict[str, int]:
+    """How often each file changed together with others in recent history.
+
+    Files edited in the same commit tend to belong to the same work surface.
+    Returns {} for non-git workspaces or when git is unavailable.
+    """
+    counts: dict[str, int] = {}
+    for files in _git_commit_files(root):
+        for f in files:
+            counts[f] = counts.get(f, 0) + len(files) - 1
+    return counts
+
+
+def focus_files(root: str | Path, mentioned: list[str], limit: int = _FOCUS_PARTNERS) -> list[str]:
+    """Exact co-change partners of the files a task mentions, related-first.
+
+    When a task names ``src/app.py``, the files that historically change
+    together with it are likely relevant too — even if the task does not name
+    them. Partners already mentioned are excluded.
+    """
+    if not mentioned:
+        return []
+    commits = _git_commit_files(root)
+    if not commits:
+        return []
+    mentioned_set = {m.replace("\\", "/") for m in mentioned}
+    pair_counts: dict[str, int] = {}
+    for files in commits:
+        overlap = [f for f in files if f in mentioned_set]
+        if not overlap:
+            continue
+        for f in files:
+            if f in mentioned_set:
+                continue
+            pair_counts[f] = pair_counts.get(f, 0) + len(overlap)
+    ranked = sorted(pair_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [f for f, _ in ranked[:limit] if f.endswith(tuple(_CODE_SUFFIXES))]
 
 
 def _python_symbols(path: Path) -> list[str]:
@@ -125,7 +198,7 @@ def build_repo_map(
 
     all_files.sort(key=_mtime, reverse=True)
 
-    lines: list[str] = ["Repository map (most recently modified first):"]
+    lines = ["Repository map (most recently modified first):"]
     budget = max_chars - len("\n".join(lines)) - 40
     symbols_budget_files = all_files[:_MAX_SYMBOL_FILES]
     symbol_map: dict[Path, list[str]] = {}

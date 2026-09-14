@@ -627,6 +627,26 @@ npm run dev
 ### Verification
 - Targeted suites: agent core + api stream + streaming core + agents **151 passed**; aios ws **38 passed**; ruff 0; mypy 0.
 
+## Fixes applied (Sep 2026, priorities + co-change focus + memory tools)
+### Queue priorities wired end-to-end (`AgentConfig.priority` → router)
+- The `PriorityAdmissionQueue` existed but nothing on the ravencode side passed a priority — an interactive user queued behind background sub-agents. Now: `AgentConfig.priority` (`"high"`/`"normal"`/`"low"`, default normal) → `_config_priority()` → `AIOSClient.ask_messages`/`ask_messages_stream` → router admission.
+- Consumers: TUI + OpenAI-compatible server = `high`; aios WS bridge = `high` by default (`interactive: false` in message downgrades); `Orchestrator.delegate` and `task_delegate` sub-agents = `low`.
+- **Tests**: `TestAgentPriority` (priority flows to client, mapping incl. bogus value).
+
+### Git co-change focus for pre-read (`ravencode/runtime/repo_map.py`)
+- Rejected a global "cluster boost" to map ordering (arbitrary noise without a task signal — caught by the first test round). Instead: `co_change_scores()` (per-file co-change frequency from last 200 commits, git `--format=%x01` — note: literal `@@` is an invalid pretty format) and `focus_files(root, mentioned)` — exact pair counts from commit co-occurrence; returns top-2 code-file partners of files the task mentions.
+- `_proactive_scan` now pre-reads co-change partners alongside mentioned files (inherits silent-skip on failure).
+- **Tests**: partner discovery, exclusion of mentioned files + cap + non-code filter, empty inputs, non-git returns {}, real git repo fixture.
+
+### Persistent memory tools (`MemoryStore.push`/`compact_lists`, tools `memory_remember`/`memory_recall`)
+- `push(key, item, max_items=20)`: case/whitespace-insensitive near-duplicate removal + hard cap; scalar string values are converted to lists preserving the old value. `compact_lists()`: dedupe+cap maintenance for existing stores.
+- New tools wired via `_MEMORY_STORE` contextvar (pattern matches `_AGENT_MEMORY`): `memory_remember(fact, key="notes")` reports `duplicate ignored (already known)` on repeats; `memory_recall(key)` renders lists. Both safe (non-dangerous), included in plan mode.
+- `ReActAgent.__init__` exposes the store to handlers when `memory_path` is configured (agent-created conversations only).
+- **Tests**: `tests/test_ravencode_memory.py` (14): push dedup/cap/scalar-conversion, compact, tool roundtrip/duplicate report/validation, definitions presence, agent wiring end-to-end.
+
+### Verification
+- `check_all.py --quick` 4/4 PASS; targeted suites green (memory 14, streaming core 15, repo map 18, agent core 74); mypy 0.
+
 
 
 

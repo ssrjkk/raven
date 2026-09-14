@@ -355,6 +355,7 @@ async def aios_agent_ws(ws: WebSocket):
                 confirm_callback=_confirm,
                 stream_tokens=bool(msg.get("stream", True)),
                 repo_map=bool(msg.get("repo_map", True)),
+                priority="high" if msg.get("interactive", True) else "normal",
             )
             agent = ReActAgent(config=config)
             if msg.get("truthful"):

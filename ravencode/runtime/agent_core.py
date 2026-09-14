@@ -93,6 +93,7 @@ class AgentConfig:
         auto_format: bool = True,
         stream_tokens: bool = False,
         repo_map: bool = False,
+        priority: str = "normal",
     ):
         self.max_steps = max_steps
         self.max_tool_retries = max_tool_retries
@@ -112,6 +113,7 @@ class AgentConfig:
         self.auto_format = auto_format
         self.stream_tokens = stream_tokens
         self.repo_map = repo_map
+        self.priority = priority
 
     @classmethod
     def safe(cls) -> Self:
@@ -165,6 +167,12 @@ _PREREAD_MAX_CHARS_PER_FILE = 2000
 
 # Errors that will never succeed on retry: bad request, auth, unknown model.
 _LLM_PERMANENT_STATUS = {400, 401, 403, 404}
+
+
+def _config_priority(name: str) -> float:
+    from raven.core.llm.queue import PRIORITY_HIGH, PRIORITY_LOW, PRIORITY_NORMAL
+
+    return {"high": PRIORITY_HIGH, "low": PRIORITY_LOW}.get(name, PRIORITY_NORMAL)
 
 
 class _AdaptiveRateLimiter:
@@ -253,6 +261,16 @@ class ReActAgent:
         self._aborted = False
         self._task: asyncio.Task[Any] | None = None
         self._tool_cache: dict[str, str] = {}
+
+        # Expose the memory store to tool handlers (memory_remember/recall)
+        # via contextvar so delegated sub-tasks inherit it automatically.
+        if self.config.memory_path and conversation is None:
+            try:
+                from ravencode.runtime.tools import set_agent_memory_store
+
+                set_agent_memory_store(self.conversation.memory)
+            except Exception as exc:
+                logger.debug("memory store wiring skipped: {}", exc)
 
         self._init_permissions()
 
@@ -700,6 +718,19 @@ class ReActAgent:
                 break
         if not candidates:
             return
+        # Git co-change partners of the mentioned files are likely relevant
+        # too, even though the task does not name them.
+        try:
+            from ravencode.runtime.repo_map import focus_files
+            from ravencode.runtime.workspace import get_workspace_root
+
+            ws = get_workspace_root()
+            if ws:
+                for partner in focus_files(ws, candidates):
+                    if partner not in candidates:
+                        candidates.append(partner)
+        except Exception as exc:
+            logger.debug("co-change focus unavailable: {}", exc)
         previews: list[str] = []
         for path in candidates:
             try:
@@ -864,7 +895,7 @@ class ReActAgent:
 
         try:
             async with asyncio.timeout(self.config.llm_timeout):
-                resp = await client.ask_messages(messages, tools=tool_defs)
+                resp = await client.ask_messages(messages, tools=tool_defs, priority=_config_priority(self.config.priority))
         except TimeoutError:
             return {"content": "[error: LLM call timed out]", "tool_calls": []}
 
@@ -897,7 +928,7 @@ class ReActAgent:
         raw_calls: list[dict[str, Any]] = []
         try:
             async with asyncio.timeout(self.config.llm_timeout):
-                async for ev in client.ask_messages_stream(messages, tools=tool_defs):
+                async for ev in client.ask_messages_stream(messages, tools=tool_defs, priority=_config_priority(self.config.priority)):
                     if ev["type"] == "token":
                         if ee:
                             await ee.emit(AgentEvent("token", {"content": ev.get("text", "")}))

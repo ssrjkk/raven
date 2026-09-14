@@ -394,9 +394,42 @@ _SUBTASK_TIMEOUT = 600
 
 _AGENT_MEMORY: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar("_AGENT_MEMORY", default=None)
 
+_MEMORY_STORE: contextvars.ContextVar[Any] = contextvars.ContextVar("_MEMORY_STORE", default=None)
+
 
 def set_agent_memory(memory: dict[str, Any] | None) -> None:
     _AGENT_MEMORY.set(memory)
+
+
+def set_agent_memory_store(store: Any) -> None:
+    _MEMORY_STORE.set(store)
+
+
+async def memory_remember(fact: str, key: str = "notes") -> str:
+    """Persist a durable fact for future sessions (deduplicated, capped)."""
+    store = _MEMORY_STORE.get()
+    if store is None:
+        return "[error] no memory store configured for this agent"
+    fact = str(fact).strip()
+    if not fact:
+        return "[validation_error] fact must be a non-empty string"
+    was_new = await store.push(key, fact)
+    return "remembered" if was_new else "duplicate ignored (already known)"
+
+
+async def memory_recall(key: str = "notes") -> str:
+    """Recall previously persisted facts by key."""
+    store = _MEMORY_STORE.get()
+    if store is None:
+        return "[error] no memory store configured for this agent"
+    value = await store.get(str(key))
+    if value is None:
+        return f"(nothing remembered under '{key}')"
+    if isinstance(value, list):
+        if not value:
+            return f"(nothing remembered under '{key}')"
+        return "\n".join(f"- {item}" for item in value)
+    return str(value)
 
 
 async def task_delegate(description: str, context: str | None = None) -> str:
@@ -421,7 +454,7 @@ async def task_delegate(description: str, context: str | None = None) -> str:
             sub_prompt += f"\nParent session context:\n{parent_memory}"
         prompt = f"{sub_prompt}\n\nTask: {description}"
         sub = ReActAgent(
-            config=AgentConfig(max_steps=15, memory_path=sub_memory_path),
+            config=AgentConfig(max_steps=15, memory_path=sub_memory_path, priority="low"),
             conversation=Conversation(system_prompt=sub_prompt),
         )
         try:
@@ -1894,6 +1927,36 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
             "required": ["text"],
         },
         "handler": _talk_handler,
+    },
+    "memory_remember": {
+        "name": "memory_remember",
+        "dangerous": False,
+        "description": (
+            "Persist a durable fact for future sessions (e.g. user preferences, project "
+            "conventions, completed milestones). Duplicates are ignored automatically."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "fact": {"type": "string", "description": "The fact to remember, one concise sentence"},
+                "key": {"type": "string", "description": "Category key, e.g. notes, milestones, decisions"},
+            },
+            "required": ["fact"],
+        },
+        "handler": memory_remember,
+    },
+    "memory_recall": {
+        "name": "memory_recall",
+        "dangerous": False,
+        "description": "Recall previously persisted facts by category key (default: notes).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "description": "Category key to recall"},
+            },
+            "required": [],
+        },
+        "handler": memory_recall,
     },
 }
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import Any, ClassVar
 from unittest.mock import AsyncMock
 
 import httpx
@@ -89,7 +89,7 @@ class _FakeProvider:
         self.calls = 0
 
     async def complete_stream_deltas(
-        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None, priority: float = 0.0
     ) -> Any:
         item = self.script[min(self.calls, len(self.script) - 1)]
         self.calls += 1
@@ -261,7 +261,7 @@ class TestAgentStreaming:
                 pass
 
             async def ask_messages_stream(
-                self, messages: list[dict[str, Any]], tools: Any = None
+                self, messages: list[dict[str, Any]], tools: Any = None, priority: float = 0.0
             ) -> Any:
                 item = script[min(_FakeStreamClient.calls, len(script) - 1)]
                 _FakeStreamClient.calls += 1
@@ -339,6 +339,42 @@ class TestAgentStreaming:
         assert exec_calls == ["read"]
         tool_msgs = [m for m in agent.conversation.messages if m.get("role") == "tool"]
         assert tool_msgs[0]["content"] == "file-body"
+
+
+class TestAgentPriority:
+    async def test_priority_flows_to_client(self, monkeypatch: pytest.MonkeyPatch):
+        import ravencode.runtime.agent_core as ac
+
+        _patch_save(monkeypatch)
+        seen: dict[str, Any] = {}
+
+        class _FakeClient:
+            async def ask_messages(self, messages: Any, tools: Any = None, priority: float = 0.0) -> Any:
+                seen["priority"] = priority
+
+                class _Resp:
+                    text = "done"
+                    tool_calls: ClassVar[list[Any]] = []
+
+                return _Resp()
+
+        monkeypatch.setattr(ac, "AIOSClient", _FakeClient)
+        agent = ReActAgent(
+            config=AgentConfig(
+                proactive_scan=False, diff_preview=False, confirm_dangerous=False, max_steps=2, priority="high"
+            ),
+        )
+        assert await agent.run("t") == "done"
+        assert seen["priority"] == -1.0  # PRIORITY_HIGH
+
+    async def test_priority_mapping(self):
+        from raven.core.llm.queue import PRIORITY_HIGH, PRIORITY_LOW, PRIORITY_NORMAL
+        from ravencode.runtime.agent_core import _config_priority
+
+        assert _config_priority("high") == PRIORITY_HIGH
+        assert _config_priority("low") == PRIORITY_LOW
+        assert _config_priority("normal") == PRIORITY_NORMAL
+        assert _config_priority("bogus") == PRIORITY_NORMAL
 
 
 async def _collect(tokens: list[str], ev: Any) -> None:

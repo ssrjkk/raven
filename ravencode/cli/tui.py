@@ -46,6 +46,7 @@ async def run_streaming_agent(prompt: str, config: AgentConfig) -> str:
 
     config.event_emitter = emitter
     config.stream_tokens = True
+    config.priority = "high"  # a human is watching this run
     agent = ReActAgent(config=config)
     result = await agent.run(prompt)
     if streamed:

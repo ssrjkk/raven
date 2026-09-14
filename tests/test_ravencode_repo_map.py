@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from ravencode.runtime.repo_map import build_repo_map, repo_map_block
+from ravencode.runtime.repo_map import build_repo_map, co_change_scores, focus_files, repo_map_block
 from ravencode.runtime.workspace import set_workspace_root
 
 
@@ -52,6 +52,67 @@ class TestBuildRepoMap:
         os.utime(old, (old_time, old_time))
         repo_map = build_repo_map(sample_repo)
         assert repo_map.index("app/main.py") < repo_map.index("app/util.py")
+
+    def test_focus_files_finds_co_change_partners(self, sample_repo: Path):
+        import subprocess
+
+        def _git(*args: str) -> None:
+            subprocess.run(["git", *args], cwd=sample_repo, check=True, capture_output=True)
+
+        _git("init", "-q")
+        _git("config", "user.email", "t@t")
+        _git("config", "user.name", "t")
+        # app/main.py + app/helpers.py change together repeatedly
+        helpers = sample_repo / "app" / "helpers.py"
+        helpers.write_text("def h():\n    pass\n", encoding="utf-8")
+        _git("add", "-A")
+        _git("commit", "-qm", "init")
+        for i in range(5):
+            (sample_repo / "app" / "main.py").write_text(f"x = {i}\n", encoding="utf-8")
+            helpers.write_text(f"def h{i}():\n    pass\n", encoding="utf-8")
+            _git("add", "-A")
+            _git("commit", "-qm", f"cluster {i}")
+        partners = focus_files(sample_repo, ["app/main.py"])
+        assert partners[0] == "app/helpers.py"
+        assert len(partners) <= 2
+
+    def test_focus_files_excludes_mentioned_and_caps(self, sample_repo: Path):
+        import subprocess
+
+        def _git(*args: str) -> None:
+            subprocess.run(["git", *args], cwd=sample_repo, check=True, capture_output=True)
+
+        _git("init", "-q")
+        _git("config", "user.email", "t@t")
+        _git("config", "user.name", "t")
+        trio = ["app/main.py", "app/util.py", "app/broken.py", "readme.md"]
+        _git("add", "-A")
+        _git("commit", "-qm", "init")
+        partners = focus_files(sample_repo, ["app/main.py", "app/util.py"])
+        assert all(p not in ("app/main.py", "app/util.py") for p in partners)
+        assert len(partners) <= 2
+        assert all(not p.endswith(".md") for p in partners)
+
+    def test_focus_files_empty_inputs(self, sample_repo: Path):
+        assert focus_files(sample_repo, []) == []
+
+    def test_co_change_scores_non_git_returns_empty(self, tmp_path: Path):
+        assert co_change_scores(tmp_path) == {}
+
+    def test_co_change_scores_git_repo(self, sample_repo: Path):
+        import subprocess
+
+        def _git(*args: str) -> None:
+            subprocess.run(["git", *args], cwd=sample_repo, check=True, capture_output=True)
+
+        _git("init", "-q")
+        _git("config", "user.email", "t@t")
+        _git("config", "user.name", "t")
+        _git("add", "-A")
+        _git("commit", "-qm", "init")
+        scores = co_change_scores(sample_repo)
+        # every file in the single-commit repo co-changed with all others
+        assert scores.get("app/main.py", 0) > 0
 
     def test_char_budget_truncates(self, sample_repo: Path):
         repo_map = build_repo_map(sample_repo, max_chars=80)

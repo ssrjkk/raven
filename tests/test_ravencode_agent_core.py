@@ -853,7 +853,7 @@ class TestLlmCall:
             async def __aexit__(self, *exc):
                 return False
 
-            async def ask_messages(self, messages, tools=None):
+            async def ask_messages(self, messages, tools=None, priority=0.0):
                 raise TimeoutError()
 
         monkeypatch.setattr("ravencode.runtime.agent_core.AIOSClient", lambda: _FakeClient())
@@ -875,7 +875,7 @@ class TestLlmCall:
             async def __aexit__(self, *exc):
                 return False
 
-            async def ask_messages(self, messages, tools=None):
+            async def ask_messages(self, messages, tools=None, priority=0.0):
                 return resp
 
         monkeypatch.setattr("ravencode.runtime.agent_core.AIOSClient", lambda: _FakeClient())
