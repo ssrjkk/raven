@@ -14,6 +14,7 @@ class AnthropicProvider(LLMProvider):
         raw = overrides.get("api_key") or settings.anthropic_api_key.get_secret_value()
         self.api_key = SecretStr(raw) if isinstance(raw, str) else raw
         self.base_url = overrides.get("base_url") or "https://api.anthropic.com"
+        self.prompt_caching = overrides.get("prompt_caching", True)
         import httpx
 
         self.http = httpx.AsyncClient(
@@ -28,13 +29,23 @@ class AnthropicProvider(LLMProvider):
     def _build_body(
         self, messages: list[dict[str, Any]], model: str, stream: bool, tools: list[dict[str, Any]] | None = None
     ) -> dict[str, Any]:
-        body = {
+        body: dict[str, Any] = {
             "model": model,
             "messages": [m for m in messages if m["role"] != "system"],
-            "system": "\n\n".join(m["content"] for m in messages if m["role"] == "system"),
             "max_tokens": 4096,
             "stream": stream,
         }
+        system_text = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
+        if system_text:
+            if self.prompt_caching:
+                # Ephemeral cache marker on the system prefix: tools + system
+                # prompt are stable across agent steps, so every step after
+                # the first is served from the prompt cache at ~10% cost.
+                body["system"] = [
+                    {"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}
+                ]
+            else:
+                body["system"] = system_text
         if tools:
             body["tools"] = tools
         return body

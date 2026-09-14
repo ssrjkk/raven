@@ -20,6 +20,10 @@ class EvalCase:
     min_length: int = 0
     max_length: int = 0
     category: str = "general"
+    # Optional hard verifier: callable(workspace_path, output) -> list[str]
+    # of error strings (empty list = pass). Used for task-style evals where
+    # the ground truth is a filesystem/test state, not the answer text.
+    verifier: Any = None
 
 
 @dataclass
@@ -44,6 +48,7 @@ class EvalRunner:
         self,
         case: EvalCase,
         agent_fn: Any,
+        workspace: Any = None,
     ) -> EvalResult:
         start = time.time()
         errors: list[str] = []
@@ -106,6 +111,17 @@ class EvalRunner:
                 passed_checks += 1
             else:
                 errors.append(f"Output too long: {len(output_str)} > {case.max_length}")
+
+        if callable(case.verifier):
+            checks += 1
+            try:
+                verifier_errors = list(case.verifier(workspace, output_str))
+            except Exception as exc:
+                verifier_errors = [f"verifier crashed: {exc}"]
+            if verifier_errors:
+                errors.extend(verifier_errors)
+            else:
+                passed_checks += 1
 
         score = passed_checks / checks if checks > 0 else 1.0
         passed = score >= 0.8 and len(errors) == 0

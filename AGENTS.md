@@ -647,6 +647,36 @@ npm run dev
 ### Verification
 - `check_all.py --quick` 4/4 PASS; targeted suites green (memory 14, streaming core 15, repo map 18, agent core 74); mypy 0.
 
+## Fixes applied (Sep 2026, MCP tools + prompt caching + truncation + mid-stream salvage + task evals + code search)
+### MCP tools wired into the agent (`ravencode/runtime/mcp_tools.py`)
+- `MCPClientPool` existed in `raven/core/mcp` but was unreachable from the agent. Now: `mcp_servers` specs from the project config (or explicit list) → `ensure_mcp_tools()` (idempotent, one config-load attempt per process, per-server failures logged and skipped) → tools registered into `MODULE_TOOLS` as `mcp_{server}_{tool}` (names sanitized, `dangerous=True`, server-provided JSON Schema for validation) with a 120s timeout handler flattening MCP content blocks to text. Definition cache cleared on registration.
+- Entrypoints: TUI `main_loop`, API-server FastAPI startup, aios `aios_agent_ws` — all best-effort (MCP never blocks startup).
+- **Tests**: `tests/test_ravencode_mcp_tools.py` (6) with a fake client: registration/prefixing/sanitization, dedup, handler roundtrip, bad-spec skipping, `_format_content` variants.
+
+### Prompt caching (Anthropic `cache_control`)
+- `AnthropicProvider._build_body` now emits the system prefix as a block list with `cache_control: {"type": "ephemeral"}` (system + tools are stable across agent steps → repeat steps are served from the prompt cache). Opt-out via `prompt_caching=False` override. No system message → field omitted. (OpenAI caches automatically; Groq has no prompt cache.)
+- **Tests**: `TestAnthropicPromptCaching` in `tests/core/test_llm.py` (3).
+
+### Smart tool-result truncation (`smart_truncate`, middle-out + spill)
+- Replaced the hard `result[:10_000]` cut in `_process_tool_item`: head 60% + tail 40% kept (models need both ends), middle dropped, and the full output spilled to `<workspace>/.raven/spill/tool_<ts>_<sha1>.txt` with a "use read" pointer. Spill failure is non-fatal (truncation still applies).
+- **Tests**: `tests/test_ravencode_smart_truncate.py` (4) incl. hermetic spill-failure via a file-as-workspace-root.
+
+### Mid-stream salvage in `_llm_call_streaming`
+- Token deltas are now accumulated; if the stream dies with an exception after partial text and no pending tool calls, the partial answer is returned with an "[stream interrupted — answer may be incomplete]" suffix instead of retrying (a retry would visibly duplicate the already-streamed prefix). No text → re-raise for the existing retry/failover layer; a token-only stream that *ends without exception and without final* still raises `empty LLM stream response` (previous semantics preserved).
+- **Tests**: salvage + silent-death-retries cases in `TestRunBranches`.
+
+### Task-style eval suite (`tests/eval/tasks.py`, verifier support in harness)
+- `EvalCase.verifier: callable(workspace, output) -> list[str]` (empty = pass) added to `EvalRunner.run_case(workspace=...)`; ground truth is filesystem state, not keyword matching.
+- 9 real tasks with setup/verify pairs (create file, fix median bug, JSON edit preserving keys, write slugify module, append log, CSV sum, make tests pass, cleanup junk, docs append); verifiers run scripts via `subprocess` and are pure Python. **Deterministic validation** in `tests/test_eval_tasks.py` (9): every verifier must FAIL on the untouched workspace and PASS after a reference solution applied through the real `execute_tool` layer (write/read).
+- Live runner `scripts/run_eval.py` (`--task`, `--limit`, `--model`; 429-aware model fallback, JSON report to `eval_results/`). Verified live: 3/3 PASS on openai/gpt-oss-120b. Gotcha: `pytestmark = pytest.mark.eval` in `tests/eval/test_evals.py` is unregistered (PytestUnknownMarkWarning) — pre-existing.
+
+### Code search tool (`ravencode/runtime/code_search.py`, tool `code_search`)
+- BM25 over definition-sized chunks of workspace source (reuses `raven.core.rag.bm25` + repo_map's `_EXCLUDED_DIRS`/`_CODE_SUFFIXES`; no new deps). Chunking: top-level def/class boundaries, fixed windows for huge files, size caps (5k files / 20k chunks). Index rebuilt lazily on a (file-count, newest-mtime) fingerprint change. Tool handler is async (execute_tool awaits handlers).
+- **Tests**: `tests/test_ravencode_code_search.py` (6): chunk boundaries/windows, exclusion of vendored dirs, no-match message, relevance.
+
+### Verification
+- `check_all.py --quick` 4/4 PASS; full suite **4820 passed / 0 failed**; live: run_eval 3/3 PASS on openai/gpt-oss-120b.
+
 
 
 

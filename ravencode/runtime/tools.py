@@ -8,6 +8,7 @@ import functools
 import hashlib
 import json
 import shlex
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,7 @@ from loguru import logger
 from raven.core.agents.validation import validate_tool_arguments
 from raven.core.security.ssrf import safe_fetch_async, validate_url
 from ravencode.core.metrics import observe_tool
+from ravencode.runtime.code_search import code_search as _code_search_handler
 from ravencode.runtime.question import QuestionError
 from ravencode.runtime.undo import get_undo_manager
 from ravencode.runtime.workspace import (
@@ -1958,6 +1960,27 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         },
         "handler": memory_recall,
     },
+    "code_search": {
+        "name": "code_search",
+        "dangerous": False,
+        "description": (
+            "Search workspace source code with a natural-language query (BM25 over "
+            "definition-sized chunks). Best for 'where is X handled?' questions in large "
+            "repositories; prefer grep when you know the exact identifier."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Natural-language query, e.g. 'where retry backoff delay is computed'",
+                },
+                "k": {"type": "integer", "description": "Maximum number of chunks to return (default 5)"},
+            },
+            "required": ["query"],
+        },
+        "handler": _code_search_handler,
+    },
 }
 
 
@@ -2005,6 +2028,38 @@ def _build_tool_definitions(plan_mode: bool) -> tuple[dict[str, Any], ...]:
 def is_dangerous(name: str) -> bool:
     t = MODULE_TOOLS.get(name)
     return bool(t.get("dangerous")) if t else False
+
+
+def _spill_output(text: str) -> str | None:
+    """Persist a large tool result inside the workspace; returns path or None."""
+    try:
+        d = _get_workspace() / ".raven" / "spill"
+        d.mkdir(parents=True, exist_ok=True)
+        digest = hashlib.sha1(text.encode("utf-8", errors="replace")).hexdigest()[:10]  # noqa: S324
+        path = d / f"tool_{int(time.time())}_{digest}.txt"
+        path.write_text(text, encoding="utf-8")
+        return str(path)
+    except Exception as exc:
+        logger.debug("tool output spill failed: {}", exc)
+        return None
+
+
+def smart_truncate(text: str, limit: int = 10_000) -> str:
+    """Middle-out truncation with disk spill for oversized tool results.
+
+    Models need both ends of an output: beginnings explain what happened,
+    endings carry conclusions. The middle is dropped and the full text is
+    saved inside the workspace so the agent can `read` the rest on demand.
+    """
+    if len(text) <= limit:
+        return text
+    head = int(limit * 0.6)
+    tail = limit - head
+    note = f"\n\n[... {len(text) - limit} chars truncated ...]"
+    spilled = _spill_output(text)
+    if spilled:
+        note += f"\n[full output saved to {spilled} — use read to inspect the middle part]"
+    return text[:head] + note + "\n" + text[-tail:]
 
 
 @observe_tool(tool_name="execute_tool")

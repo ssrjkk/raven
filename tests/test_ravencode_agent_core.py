@@ -406,6 +406,50 @@ class TestRunBranches:
         agent._run_impl = AsyncMock(side_effect=RuntimeError("boom"))  # type: ignore[method-assign]
         assert await agent.run("x") == "[error: boom]"
 
+    async def test_midstream_death_salvages_partial_answer(self, monkeypatch):
+        _patch_save(monkeypatch)
+
+        class _MidStreamDeathClient:
+            async def ask_messages_stream(self, messages, tools=None, priority=0.0):
+                yield {"type": "token", "text": "partial answer"}
+                raise RuntimeError("connection reset mid-stream")
+
+        monkeypatch.setattr("ravencode.runtime.agent_core.AIOSClient", _MidStreamDeathClient)
+
+        async def fake_sleep(seconds: float) -> None:
+            pass
+
+        monkeypatch.setattr("ravencode.runtime.agent_core.asyncio.sleep", fake_sleep)
+        agent = ReActAgent(
+            config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, stream_tokens=True),
+        )
+        result = await agent.run("t")
+        # partial text is salvaged instead of erroring out or re-streaming
+        assert result.startswith("partial answer")
+        assert "[stream interrupted" in result
+
+    async def test_midstream_death_without_text_still_retries(self, monkeypatch):
+        _patch_save(monkeypatch)
+
+        class _SilentDeathClient:
+            async def ask_messages_stream(self, messages, tools=None, priority=0.0):
+                raise RuntimeError("connection reset before tokens")
+                yield  # pragma: no cover — makes this an async generator
+
+        monkeypatch.setattr("ravencode.runtime.agent_core.AIOSClient", _SilentDeathClient)
+
+        async def fake_sleep(seconds: float) -> None:
+            pass
+
+        monkeypatch.setattr("ravencode.runtime.agent_core.asyncio.sleep", fake_sleep)
+        agent = ReActAgent(
+            config=AgentConfig(
+                proactive_scan=False, diff_preview=False, confirm_dangerous=False, max_steps=3, stream_tokens=True
+            ),
+        )
+        result = await agent.run("t")
+        assert result.startswith("[error: LLM call failed after 3 attempts")
+
     def test_build_message_content(self):
         assert ReActAgent._build_message_content("hi", None) == "hi"
         blocks = ReActAgent._build_message_content("hi", ["http://x.png", "data:image/png;base64,xx", "raw"])

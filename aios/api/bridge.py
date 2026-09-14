@@ -288,6 +288,12 @@ async def aios_agent_ws(ws: WebSocket):
     if await _require_ws_auth(ws) is None:
         return
     await ws.accept()
+    try:
+        from ravencode.runtime.mcp_tools import ensure_mcp_tools
+
+        await ensure_mcp_tools()  # idempotent; best-effort per connection
+    except Exception as exc:
+        logger.debug("MCP tools unavailable on WS connect: {}", exc)
     ee = EventEmitter()
 
     async def _confirm(name: str, args: dict[str, Any]) -> bool:

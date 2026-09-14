@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from ravencode.runtime.agent_core import AgentConfig, AgentEvent, EventEmitter, ReActAgent
 from ravencode.runtime.context import Conversation
+from ravencode.runtime.mcp_tools import ensure_mcp_tools
 from ravencode.runtime.tools import get_tool_definitions
 
 
@@ -76,6 +77,14 @@ def _check_auth(authorization: str = "") -> None:
 
 
 app = FastAPI(title="RavenCode API", version="0.4.0")
+
+
+@app.on_event("startup")
+async def _connect_mcp() -> None:
+    try:
+        await ensure_mcp_tools()
+    except Exception as exc:  # MCP is optional; never block the server
+        logger.warning("MCP tools unavailable: {}", exc)
 
 
 def _estimate_tokens(text: str) -> int:

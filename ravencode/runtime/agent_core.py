@@ -24,6 +24,7 @@ from ravencode.runtime.tools import (
     get_tool_definitions,
     is_dangerous,
     set_permission_checker,
+    smart_truncate,
 )
 
 # ---------------------------------------------------------------------------
@@ -639,7 +640,7 @@ class ReActAgent:
                 stats.consecutive_identical = 0
             stats.last_sig = sig
 
-        result_truncated = result[:10_000]
+        result_truncated = smart_truncate(result)
         self.conversation.add_tool_result(tc.get("id", ""), result_truncated)
 
         stats.total_calls += 1
@@ -925,22 +926,40 @@ class ReActAgent:
         then returns the same dict shape as the non-streaming path."""
         ee = self.config.event_emitter
         content = ""
+        accumulated = ""
+        saw_final = False
         raw_calls: list[dict[str, Any]] = []
         try:
             async with asyncio.timeout(self.config.llm_timeout):
                 async for ev in client.ask_messages_stream(messages, tools=tool_defs, priority=_config_priority(self.config.priority)):
                     if ev["type"] == "token":
+                        accumulated += ev.get("text", "")
                         if ee:
                             await ee.emit(AgentEvent("token", {"content": ev.get("text", "")}))
                     elif ev["type"] == "final":
+                        saw_final = True
                         content = ev.get("content", "")
                         raw_calls = ev.get("tool_calls", [])
         except TimeoutError:
             return {"content": "[error: LLM call timed out]", "tool_calls": []}
+        except Exception as exc:
+            # Mid-stream death: the token prefix is already on the user's
+            # screen, so a retry would visibly duplicate it. When a usable
+            # partial answer exists (text but no pending tool calls), salvage
+            # it; otherwise re-raise for the retry/failover layer.
+            if accumulated and not raw_calls:
+                logger.warning(
+                    "LLM stream interrupted after {} chars — salvaging partial answer: {}",
+                    len(accumulated),
+                    exc,
+                )
+                return {"content": accumulated + "\n\n[stream interrupted — answer may be incomplete]"}
+            raise
 
-        if not content and not raw_calls:
-            # A degenerate stream (zero events) would silently produce an empty
-            # answer; raise so the retry layer can recover.
+        if not saw_final and not raw_calls:
+            # A stream that ended without a final event (zero or token-only
+            # events, no exception) is degenerate; raise so the retry layer
+            # can recover.
             raise RuntimeError("empty LLM stream response")
 
         tool_calls = [

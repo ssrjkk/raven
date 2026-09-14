@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import pytest
 
@@ -120,3 +120,43 @@ class TestLLMRouter:
         router = LLMRouter()
         prov = router._get_provider("")
         assert prov is not None
+
+
+class TestAnthropicPromptCaching:
+    def _provider(self) -> Any:
+        from raven.core.llm.providers.anthropic import AnthropicProvider
+
+        return AnthropicProvider(api_key="test-key")
+
+    @pytest.mark.asyncio
+    async def test_system_block_gets_cache_control(self):
+        prov = self._provider()
+        body = prov._build_body(
+            [{"role": "system", "content": "sys"}, {"role": "user", "content": "hi"}],
+            "claude-3-haiku-20240307",
+            stream=False,
+        )
+        assert isinstance(body["system"], list)
+        assert body["system"][0]["cache_control"] == {"type": "ephemeral"}
+        assert body["messages"] == [{"role": "user", "content": "hi"}]
+        await prov.cleanup()
+
+    @pytest.mark.asyncio
+    async def test_caching_can_be_disabled(self):
+        from raven.core.llm.providers.anthropic import AnthropicProvider
+
+        prov = AnthropicProvider(api_key="test-key", prompt_caching=False)
+        body = prov._build_body(
+            [{"role": "system", "content": "sys"}, {"role": "user", "content": "hi"}],
+            "claude-3-haiku-20240307",
+            stream=False,
+        )
+        assert body["system"] == "sys"
+        await prov.cleanup()
+
+    @pytest.mark.asyncio
+    async def test_no_system_message_omits_field(self):
+        prov = self._provider()
+        body = prov._build_body([{"role": "user", "content": "hi"}], "claude-3-haiku-20240307", stream=False)
+        assert "system" not in body
+        await prov.cleanup()

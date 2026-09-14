@@ -14,6 +14,7 @@ from ravencode.agents.custom_agents import get_custom_agents
 from ravencode.agents.orchestrator import AgentResult, AgentType, Orchestrator
 from ravencode.runtime.agent_core import AgentConfig, EventEmitter, ReActAgent
 from ravencode.runtime.commands import CustomCommand, discover_commands
+from ravencode.runtime.mcp_tools import ensure_mcp_tools
 from ravencode.runtime.question import set_question_callback, stdin_question_callback
 
 console = Console()
@@ -132,6 +133,10 @@ async def run_custom_command(cmd: CustomCommand, args: str) -> None:
 
 async def main_loop() -> None:
     set_question_callback(stdin_question_callback)
+    try:
+        await ensure_mcp_tools()
+    except Exception as exc:  # MCP is optional; never block the TUI
+        console.print(f"[dim]MCP tools unavailable: {exc}[/dim]")
     custom_commands = discover_commands()
     print_header()
     print_help()

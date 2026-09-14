@@ -67,6 +67,7 @@ coverage.xml
 coverage.html
 
 data/sessions/
+eval_results/
 
 # PyInstaller build output
 packaging/
