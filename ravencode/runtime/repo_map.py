@@ -105,6 +105,8 @@ def build_repo_map(
             rel = path.relative_to(base)
             if any(part in _EXCLUDED_DIRS for part in rel.parts[:-1]):
                 continue
+            if path.is_symlink():
+                continue
             if path.is_file() and path.suffix.lower() in _CODE_SUFFIXES:
                 all_files.append(path)
     except OSError as exc:

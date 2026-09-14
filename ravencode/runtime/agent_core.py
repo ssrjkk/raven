@@ -146,6 +146,12 @@ class AgentConfig:
 
 _MAX_PARALLEL_TOOLS = 8
 
+# Per-run bound on cached read-only tool results (FIFO eviction).
+_TOOL_CACHE_MAX_ENTRIES = 64
+
+# Non-"dangerous" tools that still change state the cache reflects.
+_CACHE_INVALIDATING = frozenset({"create_artifact"})
+
 _LLM_MAX_ATTEMPTS = 3
 
 # Errors that will never succeed on retry: bad request, auth, unknown model.
@@ -573,7 +579,7 @@ class ReActAgent:
             result = f"[user denied] {name} was not approved"
 
         # Any mutating tool may invalidate cached read results.
-        if is_dangerous(name):
+        if is_dangerous(name) or name in _CACHE_INVALIDATING:
             self._tool_cache.clear()
 
         # Self-correction: detect that we are stuck retrying the same
@@ -581,7 +587,8 @@ class ReActAgent:
         failed = (
             result.startswith("[error")
             or result.startswith("[validation_error]")
-            or result.startswith("[denied]")
+            or result.startswith("[execution_error]")
+            or result.startswith("[user denied]")
         )
         sig = json.dumps({name: args}, sort_keys=True)
         if failed:
@@ -746,6 +753,8 @@ class ReActAgent:
                     result = "\n".join(str(r) for r in result[:200])
                 final = str(result)
                 if cacheable and not final.startswith("[error") and not final.startswith("[validation_error]"):
+                    if len(self._tool_cache) >= _TOOL_CACHE_MAX_ENTRIES:
+                        self._tool_cache.pop(next(iter(self._tool_cache)))
                     self._tool_cache[cache_key] = final
 
                 if self.config.auto_format and name in ("write", "edit", "smart_edit", "patch"):
@@ -808,7 +817,11 @@ class ReActAgent:
 
     async def _llm_call_once(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         if self.llm_provider is not None:
-            result = await self.llm_provider(messages)
+            try:
+                async with asyncio.timeout(self.config.llm_timeout):
+                    result = await self.llm_provider(messages)
+            except TimeoutError:
+                return {"content": "[error: LLM call timed out]", "tool_calls": []}
             return result if isinstance(result, dict) else {"content": str(result)}
 
         client = AIOSClient()
@@ -861,6 +874,11 @@ class ReActAgent:
                         raw_calls = ev.get("tool_calls", [])
         except TimeoutError:
             return {"content": "[error: LLM call timed out]", "tool_calls": []}
+
+        if not content and not raw_calls:
+            # A degenerate stream (zero events) would silently produce an empty
+            # answer; raise so the retry layer can recover.
+            raise RuntimeError("empty LLM stream response")
 
         tool_calls = [
             {

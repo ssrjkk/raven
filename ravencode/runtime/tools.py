@@ -1193,7 +1193,7 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
     },
     "task": {
         "name": "task",
-        "dangerous": False,
+        "dangerous": True,
         "description": "Delegate a sub-task to a new agent (max depth 5). Use for parallel work.",
         "parameters": {
             "type": "object",
@@ -1315,7 +1315,7 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
     },
     "undo": {
         "name": "undo",
-        "dangerous": False,
+        "dangerous": True,
         "description": "Undo the last file write or edit operation.",
         "parameters": {
             "type": "object",
@@ -1326,7 +1326,7 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
     },
     "redo": {
         "name": "redo",
-        "dangerous": False,
+        "dangerous": True,
         "description": "Redo the last undone file operation.",
         "parameters": {
             "type": "object",
@@ -1491,7 +1491,7 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
     },
     "format_file": {
         "name": "format_file",
-        "dangerous": False,
+        "dangerous": True,
         "description": "Auto-format a file using the appropriate formatter (ruff for .py, prettier for .ts/.js, etc.).",
         "parameters": {
             "type": "object",
@@ -1504,7 +1504,7 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
     },
     "format_files": {
         "name": "format_files",
-        "dangerous": False,
+        "dangerous": True,
         "description": "Auto-format multiple files.",
         "parameters": {
             "type": "object",
@@ -1531,7 +1531,7 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
     },
     "skill": {
         "name": "skill",
-        "dangerous": False,
+        "dangerous": True,
         "description": (
             "Load a SKILL.md file for reusable instructions. Skills are discovered from "
             ".opencode/skills/, ~/.config/opencode/skills/, .claude/skills/, or .agents/skills/."
@@ -1547,7 +1547,7 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
     },
     "download_skill": {
         "name": "download_skill",
-        "dangerous": False,
+        "dangerous": True,
         "description": "Download a skill from the remote skill registry (ClawHub-like). Requires set_skill_registry first.",
         "parameters": {
             "type": "object",
@@ -1560,7 +1560,7 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
     },
     "set_skill_registry": {
         "name": "set_skill_registry",
-        "dangerous": False,
+        "dangerous": True,
         "description": "Set the URL for the remote skill registry to download skills from.",
         "parameters": {
             "type": "object",
@@ -1721,7 +1721,7 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
     },
     "browser_navigate": {
         "name": "browser_navigate",
-        "dangerous": False,
+        "dangerous": True,
         "description": "Navigate a browser to a URL using Playwright.",
         "parameters": {
             "type": "object",
@@ -1734,7 +1734,7 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
     },
     "browser_click": {
         "name": "browser_click",
-        "dangerous": False,
+        "dangerous": True,
         "description": "Click an element on the page using a CSS selector.",
         "parameters": {
             "type": "object",
@@ -1747,7 +1747,7 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
     },
     "browser_type": {
         "name": "browser_type",
-        "dangerous": False,
+        "dangerous": True,
         "description": "Type text into an element on the page.",
         "parameters": {
             "type": "object",
@@ -1807,7 +1807,7 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
     },
     "canvas_render": {
         "name": "canvas_render",
-        "dangerous": False,
+        "dangerous": True,
         "description": "Render visual components (text, code, table, mermaid, link, image, list, alert) into formatted output",
         "parameters": {
             "type": "object",
@@ -1866,7 +1866,7 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
     },
     "sandbox_policy": {
         "name": "sandbox_policy",
-        "dangerous": False,
+        "dangerous": True,
         "description": (
             "Show or change the current sandbox security policy. Available: main, "
             "non-main, code-exec, web-browsing, read-only"

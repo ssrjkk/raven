@@ -95,8 +95,8 @@ class TestAgentIntegration:
             prompt = agent._build_system_prompt()
         finally:
             set_workspace_root(None)
-        assert "# Repository structure" in prompt
-        assert "class Engine" in prompt
+        assert "do not re-list directories" in prompt  # unique repo_map_block marker
+        assert "class Engine" in prompt  # content from the sample repo
 
     def test_system_prompt_excludes_repo_map_when_disabled(self, sample_repo: Path):
         from ravencode.runtime.agent_core import AgentConfig, ReActAgent
@@ -107,7 +107,8 @@ class TestAgentIntegration:
             prompt = agent._build_system_prompt()
         finally:
             set_workspace_root(None)
-        assert "# Repository structure" not in prompt
+        assert "do not re-list directories" not in prompt
+        assert "class Engine" not in prompt
 
     def test_factories_enable_repo_map(self):
         from ravencode.runtime.agent_core import AgentConfig

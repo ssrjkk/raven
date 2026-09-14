@@ -243,11 +243,17 @@ class Conversation:
         return saved
 
     def _trim(self) -> None:
+        popped_any = False
         while len(self.messages) > 2 and self._token_total > self.max_tokens:
             popped = self.messages.pop(1)
+            popped_any = True
             content = popped.get("content")
             if isinstance(content, (str, list)):
                 self._token_total -= self._estimate_tokens(content)
+        if popped_any:
+            # Popped messages may carry tokens outside ``content`` (e.g. a
+            # tool_calls-only assistant turn) — recompute to avoid drift.
+            self._token_total = self._total_tokens()
         self._drop_orphan_tool_messages()
 
     def _drop_orphan_tool_messages(self) -> None:
