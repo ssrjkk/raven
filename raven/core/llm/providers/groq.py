@@ -9,6 +9,7 @@ from raven.core.llm.protocol import LLMProvider, LLMResponse
 from raven.core.llm.providers.base import (
     _parse_openai_response,
     _stream_sse,
+    _stream_sse_deltas,
 )
 
 FREE_MODELS = [
@@ -53,6 +54,23 @@ class GroqProvider(LLMProvider):
             },
         ):
             yield token
+
+    async def complete_stream_deltas(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> Any:
+        body = {"model": model.replace("groq/", ""), "messages": messages, "stream": True}
+        if tools:
+            body["tools"] = tools
+        async for ev in _stream_sse_deltas(
+            self.http,
+            f"{self.base_url}/chat/completions",
+            body,
+            {
+                "Authorization": f"Bearer {self.api_key.get_secret_value()}",
+                "Content-Type": "application/json",
+            },
+        ):
+            yield ev
 
     async def complete(
         self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None

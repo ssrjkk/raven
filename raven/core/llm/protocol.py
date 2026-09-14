@@ -68,6 +68,27 @@ class LLMProvider(ABC):
         self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
     ) -> LLMResponse: ...
 
+    def complete_stream_deltas(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Typed delta stream (tokens + tool calls). Default: non-streaming fallback."""
+        return self._deltas_fallback(messages, model, tools)
+
+    async def _deltas_fallback(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None
+    ) -> AsyncIterator[dict[str, Any]]:
+        resp = await self.complete(messages, model, tools)
+        if resp.content:
+            yield {"type": "token", "text": resp.content}
+        for i, tc in enumerate(resp.tool_calls):
+            yield {
+                "type": "tool_call",
+                "index": i,
+                "id": tc.id,
+                "name": tc.name,
+                "args_fragment": json.dumps(tc.arguments),
+            }
+
     @abstractmethod
     async def cleanup(self): ...
 

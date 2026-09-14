@@ -195,6 +195,27 @@ class LLMRouter:
         finally:
             await self._admission.release()
 
+    async def complete_stream_deltas(
+        self,
+        messages: list[dict[str, Any]],
+        model: str | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        priority: float = PRIORITY_NORMAL,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Typed delta stream: token events plus tool-call fragments."""
+        model = self._resolve_model(messages, model)
+        try:
+            await self._admission.acquire(priority)
+        except LLMQueueTimeoutError as e:
+            logger.warning("LLM delta stream request dropped: {}", e)
+            metrics.inc("llm_queue_timeout", {"model": model})
+            raise
+        try:
+            async for ev in self._stream_model_deltas(messages, model, tools):
+                yield ev
+        finally:
+            await self._admission.release()
+
     async def complete(
         self,
         messages: list[dict[str, Any]],
@@ -377,6 +398,76 @@ class LLMRouter:
             except Exception as e:
                 raise RuntimeError(f"Primary stream '{model}' failed: {e}") from e
         raise last_exc or RuntimeError(f"Primary stream '{model}' failed")
+
+    async def _stream_model_deltas(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None
+    ) -> AsyncIterator[dict[str, Any]]:
+        last_exc: Exception | None = None
+        yielded = False
+        for attempt in range(max(1, settings.llm_retry_max)):
+            try:
+                provider = self._get_provider(model)
+                metrics.inc("llm_stream_start", {"model": model, "provider": type(provider).__name__})
+                with trace_llm_call(model=model):
+                    async for ev in provider.complete_stream_deltas(messages, model, tools):
+                        yielded = True
+                        yield ev
+                return
+            except (RuntimeError, httpx.HTTPStatusError, httpx.TimeoutException, httpx.NetworkError) as e:
+                if yielded:
+                    # deltas already delivered: retrying would duplicate the stream mid-way
+                    raise RuntimeError(
+                        f"Delta stream '{model}' failed after {attempt + 1} attempt(s) mid-stream"
+                    ) from e
+                last_exc = e
+                if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429:
+                    retry_after = _parse_retry_after(e.response.headers, 5)
+                    logger.warning("LLM rate limited (429), retrying in {}s", retry_after)
+                    await asyncio.sleep(retry_after)
+                    continue
+                if attempt < settings.llm_retry_max - 1:
+                    delay = settings.llm_retry_delay * (2**attempt)
+                    logger.warning(
+                        "LLM delta stream failed (attempt {}/{}): {}, retrying in {}s",
+                        attempt + 1,
+                        settings.llm_retry_max,
+                        e,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    logger.warning(
+                        "Primary delta stream '{}' failed after {} attempts: {}",
+                        model,
+                        settings.llm_retry_max,
+                        e,
+                    )
+                    metrics.inc("llm_stream_error", {"model": model, "error": type(e).__name__})
+            except Exception as e:
+                raise RuntimeError(f"Primary delta stream '{model}' failed: {e}") from e
+
+        # Deltas are unavailable on the primary provider: degrade gracefully to
+        # a non-streaming answer (failover chain included) delivered as events.
+        logger.info("Delta stream unavailable for '{}', falling back to non-streaming", model)
+        try:
+            key = self._cache_key(messages, model, tools)
+            resp = await self._complete_with_failover(messages, model, tools, key)
+        except Exception as f:
+            msg = str(last_exc or f)
+            raise RuntimeError(
+                f"All LLM providers exhausted for delta streaming. Primary '{model}' failed: {msg[:200]}."
+            ) from f
+        if resp.tool_calls:
+            for i, tc in enumerate(resp.tool_calls):
+                yield {
+                    "type": "tool_call",
+                    "index": i,
+                    "id": tc.id,
+                    "name": tc.name,
+                    "args_fragment": json.dumps(tc.arguments),
+                }
+        else:
+            yield {"type": "token", "text": resp.content}
 
 
 def _as_runtime_error(exc: Exception | None, fallback_msg: str) -> RuntimeError:

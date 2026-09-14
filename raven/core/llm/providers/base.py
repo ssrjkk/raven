@@ -67,6 +67,101 @@ async def _stream_sse(
                     continue
 
 
+def _openai_chunk_to_events(chunk: dict[str, Any]) -> list[dict[str, Any]]:
+    """Convert one OpenAI-style SSE chunk into typed delta events.
+
+    Event shapes:
+      {"type": "token", "text": str}
+      {"type": "tool_call", "index": int, "id": str, "name": str, "args_fragment": str}
+    (id/name/args_fragment are optional per event; fragments must be concatenated
+    in arrival order per index.)
+    """
+    events: list[dict[str, Any]] = []
+    choices = chunk.get("choices") or [{}]
+    choice = choices[0] if isinstance(choices[0], dict) else {}
+    delta = choice.get("delta") or {}
+    content = delta.get("content")
+    if content:
+        events.append({"type": "token", "text": content})
+    for tc in delta.get("tool_calls") or []:
+        if not isinstance(tc, dict):
+            continue
+        fn = tc.get("function") or {}
+        ev: dict[str, Any] = {"type": "tool_call", "index": tc.get("index", 0)}
+        if tc.get("id"):
+            ev["id"] = tc["id"]
+        if fn.get("name"):
+            ev["name"] = fn["name"]
+        if fn.get("arguments"):
+            ev["args_fragment"] = fn["arguments"]
+        if len(ev) > 2:  # beyond type+index there is actual payload
+            events.append(ev)
+    return events
+
+
+async def _stream_sse_deltas(
+    client: httpx.AsyncClient,
+    url: str,
+    body: dict[str, Any],
+    headers: dict[str, Any],
+    done_marker: str = "[DONE]",
+    data_prefix: str = "data: ",
+) -> AsyncIterator[dict[str, Any]]:
+    """Stream an OpenAI-compatible SSE endpoint as typed delta events (tokens + tool calls)."""
+    async with client.stream("POST", url, json=body, headers=headers) as resp:
+        resp.raise_for_status()
+        async for line in resp.aiter_lines():
+            if line.startswith(data_prefix):
+                data = line[len(data_prefix) :]
+                if data.strip() == done_marker:
+                    break
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                for ev in _openai_chunk_to_events(chunk):
+                    yield ev
+
+
+async def collect_stream_deltas(events: AsyncIterator[dict[str, Any]]) -> tuple[str, list[ToolCall]]:
+    """Assemble typed delta events into (content, tool_calls)."""
+    content_parts: list[str] = []
+    calls: dict[int, dict[str, Any]] = {}
+    order: list[int] = []
+    async for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        etype = ev.get("type")
+        if etype == "token":
+            content_parts.append(str(ev.get("text", "")))
+        elif etype == "tool_call":
+            idx = ev.get("index", 0)
+            entry = calls.get(idx)
+            if entry is None:
+                entry = {"id": "", "name": "", "args": []}
+                calls[idx] = entry
+                order.append(idx)
+            if ev.get("id"):
+                entry["id"] = ev["id"]
+            if ev.get("name"):
+                entry["name"] = ev["name"]
+            if ev.get("args_fragment"):
+                entry["args"].append(ev["args_fragment"])
+    content = "".join(content_parts)
+    tool_calls: list[ToolCall] = []
+    for idx in order:
+        entry = calls[idx]
+        raw_args = "".join(entry["args"]).strip() or "{}"
+        try:
+            args = json.loads(raw_args)
+        except json.JSONDecodeError:
+            args = {"_raw": raw_args}
+        if not isinstance(args, dict):
+            args = {"_raw": str(args)}
+        tool_calls.append(ToolCall(id=entry["id"] or f"call_{idx}", name=entry["name"], arguments=args))
+    return content, tool_calls
+
+
 def _parse_openai_response(data: dict[str, Any]) -> LLMResponse:
     choice = data.get("choices", [{}])[0] if data.get("choices") else {}
     msg = choice.get("message", {}) if isinstance(choice, dict) else {}

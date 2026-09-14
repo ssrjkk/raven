@@ -10,6 +10,7 @@ from raven.core.llm.protocol import LLMProvider, LLMResponse
 from raven.core.llm.providers.base import (
     _parse_openai_response,
     _stream_sse,
+    _stream_sse_deltas,
 )
 
 
@@ -49,6 +50,15 @@ class OpenRouterProvider(LLMProvider):
             body["tools"] = tools
         async for token in _stream_sse(self.http, f"{self.base_url}/chat/completions", body, await self._headers()):
             yield token
+
+    async def complete_stream_deltas(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> Any:
+        body = {"model": model.replace("openrouter/", ""), "messages": messages, "stream": True}
+        if tools:
+            body["tools"] = tools
+        async for ev in _stream_sse_deltas(self.http, f"{self.base_url}/chat/completions", body, await self._headers()):
+            yield ev
 
     async def complete(
         self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
@@ -95,6 +105,23 @@ class OpenAIProvider(LLMProvider):
         ):
             yield token
 
+    async def complete_stream_deltas(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> Any:
+        body = {"model": model, "messages": messages, "stream": True}
+        if tools:
+            body["tools"] = tools
+        async for ev in _stream_sse_deltas(
+            self.http,
+            f"{self.base_url}/chat/completions",
+            body,
+            {
+                "Authorization": f"Bearer {self.api_key.get_secret_value()}",
+                "Content-Type": "application/json",
+            },
+        ):
+            yield ev
+
     async def complete(
         self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
     ) -> LLMResponse:
@@ -140,6 +167,18 @@ class VLLMProvider(LLMProvider):
             headers["Authorization"] = f"Bearer {self.api_key.get_secret_value()}"
         async for token in _stream_sse(self.http, f"{self.base_url}/v1/chat/completions", body, headers):
             yield token
+
+    async def complete_stream_deltas(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> Any:
+        body = {"model": model.replace("vllm/", ""), "messages": messages, "stream": True}
+        if tools:
+            body["tools"] = tools
+        headers = {"Content-Type": "application/json"}
+        if self.api_key.get_secret_value():
+            headers["Authorization"] = f"Bearer {self.api_key.get_secret_value()}"
+        async for ev in _stream_sse_deltas(self.http, f"{self.base_url}/v1/chat/completions", body, headers):
+            yield ev
 
     async def complete(
         self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
@@ -192,6 +231,16 @@ class AzureProvider(LLMProvider):
             body["tools"] = tools
         async for token in _stream_sse(self.http, self._url(deployment), body, await self._headers()):
             yield token
+
+    async def complete_stream_deltas(
+        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
+    ) -> Any:
+        deployment = self._deployment(model)
+        body = {"messages": messages, "stream": True}
+        if tools:
+            body["tools"] = tools
+        async for ev in _stream_sse_deltas(self.http, self._url(deployment), body, await self._headers()):
+            yield ev
 
     async def complete(
         self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None
