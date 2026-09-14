@@ -90,6 +90,8 @@ class AgentConfig:
         permissions: PermissionManager | None = None,
         use_cache: bool = True,
         auto_format: bool = True,
+        stream_tokens: bool = False,
+        repo_map: bool = False,
     ):
         self.max_steps = max_steps
         self.max_tool_retries = max_tool_retries
@@ -107,18 +109,24 @@ class AgentConfig:
         self.permissions = permissions
         self.use_cache = use_cache
         self.auto_format = auto_format
+        self.stream_tokens = stream_tokens
+        self.repo_map = repo_map
 
     @classmethod
     def safe(cls) -> Self:
-        return cls(confirm_dangerous=True, diff_preview=True, proactive_scan=True, max_steps=30)
+        return cls(confirm_dangerous=True, diff_preview=True, proactive_scan=True, max_steps=30, repo_map=True)
 
     @classmethod
     def fast(cls) -> Self:
-        return cls(confirm_dangerous=False, diff_preview=False, proactive_scan=False, max_steps=50)
+        return cls(
+            confirm_dangerous=False, diff_preview=False, proactive_scan=False, max_steps=50, repo_map=True
+        )
 
     @classmethod
     def autonomous(cls) -> Self:
-        return cls(confirm_dangerous=False, diff_preview=True, proactive_scan=True, max_steps=100)
+        return cls(
+            confirm_dangerous=False, diff_preview=True, proactive_scan=True, max_steps=100, repo_map=True
+        )
 
     @classmethod
     def plan(cls) -> Self:
@@ -139,6 +147,56 @@ class AgentConfig:
 _MAX_PARALLEL_TOOLS = 8
 
 _LLM_MAX_ATTEMPTS = 3
+
+# Errors that will never succeed on retry: bad request, auth, unknown model.
+_LLM_PERMANENT_STATUS = {400, 401, 403, 404}
+
+
+class _AdaptiveRateLimiter:
+    """Process-wide LLM throttle that learns from HTTP 429 responses.
+
+    After a rate-limit hit every subsequent LLM call (across all sessions of
+    this process) waits out the penalty window first, so parallel agents do
+    not keep slamming an exhausted quota. Repeated 429s escalate the penalty
+    up to ``max_penalty``; a successful call resets it.
+    """
+
+    def __init__(
+        self,
+        clock: Callable[[], float] = time.monotonic,
+        max_penalty: float = 60.0,
+    ) -> None:
+        self._clock = clock
+        self._max_penalty = max_penalty
+        self._lock = asyncio.Lock()
+        self._until = 0.0
+        self._penalty = 0.0
+
+    async def acquire(self) -> None:
+        while True:
+            async with self._lock:
+                wait = self._until - self._clock()
+                if wait <= 0:
+                    return
+            await asyncio.sleep(min(wait, 0.25))
+
+    async def penalize(self, delay: float) -> None:
+        async with self._lock:
+            now = self._clock()
+            self._penalty = min(max(self._penalty * 2, delay), self._max_penalty) if self._penalty else delay
+            self._until = max(self._until, now + self._penalty)
+
+    async def reset(self) -> None:
+        async with self._lock:
+            self._penalty = 0.0
+            self._until = 0.0
+
+    @property
+    def penalty(self) -> float:
+        return self._penalty
+
+
+_llm_rate_limiter = _AdaptiveRateLimiter()
 
 
 @dataclass
@@ -212,6 +270,13 @@ class ReActAgent:
         if extras:
             base += "\n\n" + "\n".join(extras)
         base += self._artifact_blocks()
+        if self.config.repo_map:
+            try:
+                from ravencode.runtime.repo_map import repo_map_block
+
+                base += repo_map_block()
+            except Exception as exc:
+                logger.debug("repo map unavailable: {}", exc)
         memory_ctx = self._memory_context()
         if memory_ctx:
             base += f"\n\nPrevious session context you can build on:\n{memory_ctx}"
@@ -711,17 +776,30 @@ class ReActAgent:
     async def _llm_call(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         last_err = ""
         for attempt in range(1, _LLM_MAX_ATTEMPTS + 1):
+            await _llm_rate_limiter.acquire()
             try:
-                return await self._llm_call_once(messages)
+                result = await self._llm_call_once(messages)
+                await _llm_rate_limiter.reset()
+                return result
             except Exception as exc:  # retried below, then reported
                 last_err = str(exc)
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                if status in _LLM_PERMANENT_STATUS:
+                    logger.warning("LLM call failed permanently (HTTP {}): {}", status, exc)
+                    break
                 if attempt >= _LLM_MAX_ATTEMPTS:
                     break
-                delay = 0.5 * 2 ** (attempt - 1)
+                # Rate limits need a longer pause than transient network blips,
+                # and the shared limiter keeps other sessions off the quota too.
+                base = 2.0 if status == 429 else 0.5
+                delay = base * 2 ** (attempt - 1)
+                if status == 429:
+                    await _llm_rate_limiter.penalize(delay)
                 logger.warning(
-                    "LLM call attempt {}/{} failed: {} — retrying in {:.1f}s",
+                    "LLM call attempt {}/{} failed (HTTP {}): {} — retrying in {:.1f}s",
                     attempt,
                     _LLM_MAX_ATTEMPTS,
+                    status,
                     exc,
                     delay,
                 )
@@ -735,6 +813,9 @@ class ReActAgent:
 
         client = AIOSClient()
         tool_defs = get_tool_definitions(plan_mode=self.config.plan_mode)
+
+        if self.config.stream_tokens:
+            return await self._llm_call_streaming(client, messages, tool_defs)
 
         try:
             async with asyncio.timeout(self.config.llm_timeout):
@@ -754,6 +835,45 @@ class ReActAgent:
             for tc in resp.tool_calls
         ]
         output: dict[str, Any] = {"content": resp.text or ""}
+        if tool_calls:
+            output["tool_calls"] = tool_calls
+        return output
+
+    async def _llm_call_streaming(
+        self,
+        client: AIOSClient,
+        messages: list[dict[str, Any]],
+        tool_defs: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Streaming variant: emits AgentEvent("token", ...) as deltas arrive,
+        then returns the same dict shape as the non-streaming path."""
+        ee = self.config.event_emitter
+        content = ""
+        raw_calls: list[dict[str, Any]] = []
+        try:
+            async with asyncio.timeout(self.config.llm_timeout):
+                async for ev in client.ask_messages_stream(messages, tools=tool_defs):
+                    if ev["type"] == "token":
+                        if ee:
+                            await ee.emit(AgentEvent("token", {"content": ev.get("text", "")}))
+                    elif ev["type"] == "final":
+                        content = ev.get("content", "")
+                        raw_calls = ev.get("tool_calls", [])
+        except TimeoutError:
+            return {"content": "[error: LLM call timed out]", "tool_calls": []}
+
+        tool_calls = [
+            {
+                "id": tc.get("id", ""),
+                "type": "function",
+                "function": {
+                    "name": tc.get("name", ""),
+                    "arguments": json.dumps(tc.get("arguments", {})),
+                },
+            }
+            for tc in raw_calls
+        ]
+        output: dict[str, Any] = {"content": content}
         if tool_calls:
             output["tool_calls"] = tool_calls
         return output

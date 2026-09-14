@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import os
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -28,6 +30,78 @@ class AgentResult:
     data: Any = None
     error: str | None = None
     steps: int = 0
+
+
+# Priority order matters: on keyword-score ties the earlier role wins.
+_ROLE_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "debugger": (
+        "debug", "error", "crash", "fix", "bug", "failing", "traceback",
+        "exception", "broken", "regression", "stack trace", "not working",
+    ),
+    "verifier": (
+        "review", "check", "lint", "quality", "audit", "verify", "validate",
+        "confirm", "security", "vulnerability", "smoke test",
+    ),
+    "planner": (
+        "plan", "break down", "decompose", "roadmap", "architecture",
+        "design", "approach", "strategy", "milestone", "estimate",
+    ),
+    "coder": (
+        "write", "implement", "create", "code", "refactor", "add feature",
+        "build", "function", "class", "script", "migrate", "optimize",
+    ),
+}
+
+_ROUTER_SYSTEM = (
+    "You are a task router for a coding assistant. Classify the user task "
+    "into exactly one specialist role. Answer with a single word and nothing "
+    "else:\n"
+    "- debugger: fixing errors, crashes, failing tests, unexpected behavior\n"
+    "- verifier: reviewing, auditing, validating or testing existing code\n"
+    "- planner: decomposing work, designing architecture, planning steps\n"
+    "- coder: writing, implementing, refactoring or optimizing code\n"
+    "- delegate: anything else (research, questions, general assistance)"
+)
+
+
+def _route_by_keywords(task: str) -> str:
+    task_lower = task.lower()
+    best_role, best_score = "delegate", 0
+    for role, words in _ROLE_KEYWORDS.items():
+        score = sum(1 for w in words if w in task_lower)
+        if score > best_score:
+            best_role, best_score = role, score
+    return best_role
+
+
+async def _route_by_llm(task: str, router_llm: Any = None) -> str | None:
+    allowed = set(_ROLE_KEYWORDS) | {"delegate"}
+    try:
+        if router_llm is not None:
+            word = str(await router_llm(task)).strip().lower().strip(".!?\n \"'")
+            return word if word in allowed else None
+        # Skip the live routing call under pytest: unit tests must stay
+        # deterministic and offline regardless of local API keys.
+        if "PYTEST_CURRENT_TEST" in os.environ or os.environ.get("RAVEN_SMART_ROUTING", "1") != "1":
+            return None
+        from ravencode.api.client import AIOSClient
+
+        client = AIOSClient()
+        resp = await asyncio.wait_for(
+            client.ask_messages(
+                [
+                    {"role": "system", "content": _ROUTER_SYSTEM},
+                    {"role": "user", "content": task[:500]},
+                ],
+                task="router",
+            ),
+            timeout=10,
+        )
+        word = (resp.text or "").strip().lower().strip(".!?\n \"'")
+        return word if word in allowed else None
+    except Exception as exc:
+        logger.debug("LLM routing unavailable, falling back to keywords: {}", exc)
+        return None
 
 
 class Orchestrator:
@@ -211,24 +285,26 @@ class Orchestrator:
             agent="autonomous", success=True, data={"result": result}, steps=agent.conversation.message_count
         )
 
-    @staticmethod
-    async def delegate(task: str, context: str | None = None, memory_path: str | None = None) -> str:
-        task_lower = task.lower()
-        if any(w in task_lower for w in ("debug", "error", "crash", "fix", "bug", "failing")):
-            role = "debugger"
-            prompt = get_prompt("debugger")
-        elif any(w in task_lower for w in ("review", "check", "lint", "quality", "audit", "verify", "validate", "test", "confirm")):
-            role = "verifier"
-            prompt = get_prompt("verifier")
-        elif any(w in task_lower for w in ("plan", "break down", "decompose", "roadmap", "steps")):
-            role = "planner"
-            prompt = get_prompt("planner")
-        elif any(w in task_lower for w in ("write", "implement", "create", "code", "refactor", "add feature")):
-            role = "coder"
-            prompt = get_prompt("coder")
-        else:
-            role = "delegate"
-            prompt = get_prompt("delegate")
+    @classmethod
+    async def delegate(
+        cls,
+        task: str,
+        context: str | None = None,
+        memory_path: str | None = None,
+        *,
+        router_llm: Any = None,
+    ) -> str:
+        # Smart routing: an LLM classifier picks the specialist when a backend
+        # is reachable; scored keyword matching is the deterministic fallback.
+        role = await _route_by_llm(task, router_llm) or _route_by_keywords(task)
+        prompt_map = {
+            "debugger": get_prompt("debugger"),
+            "verifier": get_prompt("verifier"),
+            "planner": get_prompt("planner"),
+            "coder": get_prompt("coder"),
+            "delegate": get_prompt("delegate"),
+        }
+        prompt = prompt_map[role]
 
         if context:
             prompt += f"\nContext: {context}"

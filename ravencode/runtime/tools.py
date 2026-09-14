@@ -388,6 +388,10 @@ async def think(reasoning: str) -> str:
 
 _task_depth: contextvars.ContextVar[int] = contextvars.ContextVar("_task_depth", default=0)
 _MAX_TASK_DEPTH = 5
+
+# A hung sub-agent must not wedge the parent loop forever.
+_SUBTASK_TIMEOUT = 600
+
 _AGENT_MEMORY: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar("_AGENT_MEMORY", default=None)
 
 
@@ -420,7 +424,13 @@ async def task_delegate(description: str, context: str | None = None) -> str:
             config=AgentConfig(max_steps=15, memory_path=sub_memory_path),
             conversation=Conversation(system_prompt=sub_prompt),
         )
-        return await sub.run(prompt)
+        try:
+            return await asyncio.wait_for(sub.run(prompt), timeout=_SUBTASK_TIMEOUT)
+        except TimeoutError:
+            return (
+                f"[error] delegated task timed out after {_SUBTASK_TIMEOUT}s and was cancelled. "
+                "Narrow the task and delegate again, or do it yourself in smaller steps."
+            )
     finally:
         _task_depth.reset(token)
 

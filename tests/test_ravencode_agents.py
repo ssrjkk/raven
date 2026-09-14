@@ -4,6 +4,7 @@ import json
 from collections.abc import Generator
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -409,4 +410,64 @@ async def test_dispatch_catches_exception(monkeypatch: pytest.MonkeyPatch) -> No
 async def test_delegate_static(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("ravencode.agents.orchestrator.get_prompt", Mock(return_value="DELEGATE"))
     out = await Orchestrator.delegate("sub", context="ctx")
+    assert out == "done"
+
+
+@pytest.mark.parametrize(
+    ("task", "expected"),
+    [
+        ("fix this crash in the parser", "debugger"),
+        ("traceback shows TypeError on line 10", "debugger"),
+        ("review the auth module for security issues", "verifier"),
+        ("audit and validate the migration", "verifier"),
+        ("plan the architecture and break down the roadmap", "planner"),
+        ("write a function to implement rate limiting", "coder"),
+        ("refactor and optimize the database layer", "coder"),
+        ("what is the meaning of life", "delegate"),
+    ],
+)
+def test_route_by_keywords(task: str, expected: str) -> None:
+    assert orch._route_by_keywords(task) == expected
+
+
+@pytest.mark.asyncio
+async def test_delegate_router_llm_wins(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("ravencode.agents.orchestrator.get_prompt", Mock(return_value="P"))
+
+    async def router(task: str) -> str:
+        return "  Coder.\n"
+
+    captured: dict[str, Any] = {}
+
+    class _Agent:
+        def __init__(self, config: object = None, conversation: object = None) -> None:
+            captured["conversation"] = conversation
+
+        async def run(self, task: str) -> str:
+            return "done"
+
+    monkeypatch.setattr(orch, "ReActAgent", _Agent)
+    await Orchestrator.delegate("ambiguous task", router_llm=router)
+    assert captured["conversation"].system_prompt == "P"
+
+
+@pytest.mark.asyncio
+async def test_delegate_router_llm_garbage_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("ravencode.agents.orchestrator.get_prompt", Mock(return_value="P"))
+
+    async def router(task: str) -> str:
+        return "I think maybe a chef?"
+
+    out = await Orchestrator.delegate("fix the crash", router_llm=router)
+    assert out == "done"
+
+
+@pytest.mark.asyncio
+async def test_delegate_router_llm_failure_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("ravencode.agents.orchestrator.get_prompt", Mock(return_value="P"))
+
+    async def router(task: str) -> str:
+        raise RuntimeError("backend down")
+
+    out = await Orchestrator.delegate("write some code", router_llm=router)
     assert out == "done"

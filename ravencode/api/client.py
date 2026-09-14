@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -132,6 +133,47 @@ class AIOSClient:
         model_name = model or settings.default_model
         async for token in llm.complete_stream(messages=messages, tools=tools, model=model_name):
             yield token
+
+    async def ask_messages_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Streaming variant of ask_messages: yields token events, ends with a
+        ``{"type": "final", "content", "tool_calls"}`` event carrying the
+        assembled answer and any tool calls."""
+        llm = self._require_llm()
+        model_name = model or settings.default_model
+        content_parts: list[str] = []
+        slots: dict[int, dict[str, Any]] = {}
+        async for ev in llm.complete_stream_deltas(messages=messages, model=model_name, tools=tools):
+            etype = ev.get("type")
+            if etype == "token":
+                content_parts.append(ev.get("text", ""))
+                yield ev
+            elif etype == "tool_call":
+                idx = int(ev.get("index", 0))
+                slot = slots.setdefault(idx, {"id": "", "name": "", "args": []})
+                if ev.get("id"):
+                    slot["id"] = ev["id"]
+                if ev.get("name"):
+                    slot["name"] = ev["name"]
+                slot["args"].append(ev.get("args_fragment", ""))
+        tool_calls: list[dict[str, Any]] = []
+        for idx in sorted(slots):
+            slot = slots[idx]
+            raw = "".join(slot["args"])
+            try:
+                arguments: Any = json.loads(raw) if raw else {}
+                if not isinstance(arguments, dict):
+                    arguments = {"value": arguments}
+            except json.JSONDecodeError:
+                arguments = {"_raw": raw}
+            tool_calls.append(
+                {"id": slot["id"] or f"call_{idx}", "name": slot["name"], "arguments": arguments}
+            )
+        yield {"type": "final", "content": "".join(content_parts), "tool_calls": tool_calls}
 
 
 async def ask_stream(
