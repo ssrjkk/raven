@@ -315,3 +315,34 @@ class Orchestrator:
             conversation=Conversation(system_prompt=prompt),
         )
         return await agent.run(task)
+
+    @classmethod
+    async def delegate_parallel(
+        cls,
+        tasks: list[str],
+        context: str | None = None,
+        memory_path: str | None = None,
+        *,
+        max_concurrency: int = 4,
+        router_llm: Any = None,
+    ) -> list[str]:
+        """Fan a batch of independent sub-tasks out to concurrent sub-agents.
+
+        Each task is routed to its own specialist and runs on its own agent;
+        a semaphore caps concurrency so N sub-agents cannot exhaust the shared
+        rate-limiter queue. Results are returned in input order; a failed
+        sub-task yields an ``[error: ...]`` string instead of raising.
+        """
+        if not tasks:
+            return []
+        sem = asyncio.Semaphore(max(1, max_concurrency))
+
+        async def _one(task: str) -> str:
+            async with sem:
+                try:
+                    return await cls.delegate(task, context=context, memory_path=memory_path, router_llm=router_llm)
+                except Exception as exc:
+                    logger.warning("delegate_parallel: sub-task failed: {}", exc)
+                    return f"[error: sub-task failed: {exc}]"
+
+        return list(await asyncio.gather(*(_one(t) for t in tasks)))

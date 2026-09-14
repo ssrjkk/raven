@@ -470,6 +470,37 @@ async def task_delegate(description: str, context: str | None = None) -> str:
         _task_depth.reset(token)
 
 
+async def task_parallel(tasks: list[str], context: str | None = None) -> str:
+    """Run several independent sub-tasks on concurrent sub-agents."""
+    if not tasks or not isinstance(tasks, list):
+        return "[error] tasks must be a non-empty list of task descriptions"
+    tasks = [str(t).strip() for t in tasks if str(t).strip()][:6]
+    if not tasks:
+        return "[error] tasks must contain at least one non-empty description"
+    depth = _task_depth.get()
+    if depth >= _MAX_TASK_DEPTH:
+        return f"[error] max task delegation depth ({_MAX_TASK_DEPTH}) exceeded"
+    token = _task_depth.set(depth + 1)
+    try:
+        from ravencode.agents.orchestrator import Orchestrator
+
+        results = await asyncio.wait_for(
+            Orchestrator.delegate_parallel(tasks, context=context),
+            timeout=_SUBTASK_TIMEOUT,
+        )
+        parts = []
+        for task, result in zip(tasks, results, strict=True):
+            parts.append(f"### Sub-task: {task}\n{result}")
+        return "\n\n".join(parts)
+    except TimeoutError:
+        return (
+            f"[error] parallel delegation timed out after {_SUBTASK_TIMEOUT}s. "
+            "Delegate fewer tasks or split them further."
+        )
+    finally:
+        _task_depth.reset(token)
+
+
 def _delegate_role_prompt(description: str) -> str:
     from ravencode.core.prompts import CODER, DEBUGGER, DELEGATE, PLANNER, VERIFIER, get_prompt
 
@@ -636,6 +667,17 @@ async def checkpoint_list_tool() -> str:
     if not cps:
         return "(no checkpoints)"
     return "\n".join(f"{cp['id']}: {cp['description']} ({cp['created']})" for cp in cps)
+
+
+async def undo_changes_tool() -> str:
+    """Revert workspace files to the most recent checkpoint (one-shot undo)."""
+    from ravencode.runtime.checkpoints import get_checkpoint_manager
+
+    mgr = get_checkpoint_manager()
+    cps = await asyncio.to_thread(mgr.list)
+    if not cps:
+        return "[error] no checkpoint available — nothing to undo"
+    return await mgr.restore(cps[-1]["id"])
 
 
 # ---------------------------------------------------------------------------
@@ -955,6 +997,7 @@ _SANDBOX_SOFT_MUTATORS: frozenset[str] = frozenset(
         "undo",
         "redo",
         "checkpoint_restore",
+        "undo_changes",
     }
 )
 
@@ -994,6 +1037,7 @@ _CODE_EXEC_TOOLS: frozenset[str] = frozenset(
         "checkpoint_save",
         "checkpoint_restore",
         "checkpoint_list",
+        "undo_changes",
         "skill",
         "download_skill",
         "set_skill_registry",
@@ -1240,6 +1284,28 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
         },
         "handler": task_delegate,
     },
+    "task_parallel": {
+        "name": "task_parallel",
+        "dangerous": True,
+        "description": (
+            "Run up to 6 INDEPENDENT sub-tasks concurrently, each on its own sub-agent. "
+            "Use when sub-tasks do not depend on each other (e.g. 'analyze module A, "
+            "module B, module C'). Results come back labeled per sub-task."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "tasks": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of independent task descriptions",
+                },
+                "context": {"type": "string", "description": "Optional shared context for all sub-agents", "default": None},
+            },
+            "required": ["tasks"],
+        },
+        "handler": task_parallel,
+    },
     "git_status": {
         "name": "git_status",
         "dangerous": False,
@@ -1406,6 +1472,20 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
             "required": [],
         },
         "handler": checkpoint_list_tool,
+    },
+    "undo_changes": {
+        "name": "undo_changes",
+        "dangerous": True,
+        "description": (
+            "Revert all workspace files to the most recent checkpoint. Use when "
+            "your edits made things worse and you want a clean slate for this session."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+        "handler": undo_changes_tool,
     },
     "lsp_completion": {
         "name": "lsp_completion",
@@ -1984,7 +2064,7 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
 }
 
 
-_PLAN_MODE_DENIED = frozenset({"write", "edit", "bash", "task", "git_commit", "git_add", "checkpoint_restore", "redo"})
+_PLAN_MODE_DENIED = frozenset({"write", "edit", "bash", "task", "git_commit", "git_add", "checkpoint_restore", "undo_changes", "redo"})
 
 _plugin_tools_loaded = False
 

@@ -199,6 +199,10 @@ class Conversation:
     def message_count(self) -> int:
         return max(0, len(self.messages) - 1)
 
+    @property
+    def token_total(self) -> int:
+        return self._token_total
+
     # -------------------------------------------------------------------
     # message management
     # -------------------------------------------------------------------
@@ -291,6 +295,51 @@ class Conversation:
             self._token_total -= saved
             logger.debug("Context compaction: saved ~{} tokens from old tool results", saved)
         return saved
+
+    def compact_deep(self, keep_recent: int = 8) -> int:
+        """Second-stage compaction: replace the old tail with a rolling digest.
+
+        When tool-result compression is not enough (very long sessions), the
+        non-recent conversation is collapsed into a single deterministic
+        digest message that preserves the narrative: what the user asked,
+        what the assistant decided, which tools ran (names + arg summaries).
+        No LLM call needed, so it is safe to run mid-loop. Returns the number
+        of dropped messages.
+        """
+        if len(self.messages) <= keep_recent + 1:
+            return 0
+        dropped = self.messages[1:-keep_recent]
+        if not dropped:
+            return 0
+        digest_lines: list[str] = ["[conversation digest — older turns condensed]"]
+        for msg in dropped:
+            role = msg.get("role")
+            content = msg.get("content")
+            text = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False) if content else ""
+            text = " ".join(str(text).split())
+            tool_calls = msg.get("tool_calls") or []
+            if role == "user":
+                if text:
+                    digest_lines.append(f"user: {text[:200]}")
+            elif role == "assistant":
+                if tool_calls:
+                    names = [tc.get("function", {}).get("name", "?") for tc in tool_calls]
+                    digest_lines.append(f"assistant: called tools {', '.join(names)}")
+                elif text:
+                    digest_lines.append(f"assistant: {text[:200]}")
+            elif role == "system" and text:
+                digest_lines.append(f"note: {text[:150]}")
+            # role == "tool": represented by the assistant tool-call line above
+        digest = "\n".join(digest_lines)
+        self.messages = [
+            self.messages[0],
+            {"role": "user", "content": digest},
+            *self.messages[-keep_recent:],
+        ]
+        self._token_total = self._total_tokens()
+        self._drop_orphan_tool_messages()
+        logger.info("Deep compaction: {} messages → digest ({} chars)", len(dropped), len(digest))
+        return len(dropped)
 
     def _trim(self) -> None:
         popped_any = False

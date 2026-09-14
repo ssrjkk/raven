@@ -677,6 +677,23 @@ npm run dev
 ### Verification
 - `check_all.py --quick` 4/4 PASS; full suite **4820 passed / 0 failed**; live: run_eval 3/3 PASS on openai/gpt-oss-120b.
 
+## Fixes applied (Sep 2026, usage accounting + deep compaction + auto checkpoint/undo + parallel delegation)
+### Usage accounting (`ReActAgent.usage`)
+- `_usage` dict (prompt/completion tokens, llm_calls, tool_calls) accumulated in `_llm_call` via `_record_usage`; per-response `usage` propagated from AIOSClient (`LLMResponse.usage` via `getattr`, SimpleNamespace fakes safe) and adapter dicts. `usage` event emitted per step; included in `dump_state()`. Counter increments in `_process_tool_item`.
+
+### Deep compaction (`Conversation.compact_deep`)
+- Second-stage compaction in `_run_impl`: when `token_total > 85%` after normal tool-result compression, the non-recent tail (keep_recent=8) collapses into one deterministic digest user-message (user asks / assistant decisions / tool names — no LLM call, safe mid-loop); `_drop_orphan_tool_messages` cleans pairing. Distinct failure mode from `_trim` (which pops silently).
+
+### Auto checkpoint + `undo_changes` tool
+- `AgentConfig.auto_checkpoint=True`: `run()` takes exactly one workspace snapshot per manager lifetime (`auto: session start`, skipped when no real workspace root — keeps tests hermetic). ReActAgent binds `get_checkpoint_manager(workspace=root)`. New `undo_changes` tool (dangerous, plan-mode denied, sandbox soft-mutator) restores the latest checkpoint without the model tracking ids.
+
+### Parallel sub-agents (`Orchestrator.delegate_parallel` + `task_parallel` tool)
+- Fan-out of up to 6 independent sub-tasks to concurrent specialist agents (semaphore cap, input-order results, per-subtask `[error: ...]` containment, depth contextvar respected, `_SUBTASK_TIMEOUT` applied). `_CODE_EXEC_TOOLS` deliberately NOT extended (sandbox policy untouched).
+- **Tests**: `tests/test_ravencode_core_round6.py` (13): usage accumulation/missing-usage, digest content + no-op + tool names, undo without/with checkpoint, registration, parallel fan-out ordering/failure containment/bad input, auto-checkpoint at run start.
+
+### Verification
+- `check_all.py --quick` 4/4 PASS; full suite **4833 passed / 0 failed**.
+
 
 
 

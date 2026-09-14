@@ -95,6 +95,7 @@ class AgentConfig:
         stream_tokens: bool = False,
         repo_map: bool = False,
         priority: str = "normal",
+        auto_checkpoint: bool = True,
     ):
         self.max_steps = max_steps
         self.max_tool_retries = max_tool_retries
@@ -115,6 +116,7 @@ class AgentConfig:
         self.stream_tokens = stream_tokens
         self.repo_map = repo_map
         self.priority = priority
+        self.auto_checkpoint = auto_checkpoint
 
     @classmethod
     def safe(cls) -> Self:
@@ -262,6 +264,7 @@ class ReActAgent:
         self._aborted = False
         self._task: asyncio.Task[Any] | None = None
         self._tool_cache: dict[str, str] = {}
+        self._usage: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "llm_calls": 0, "tool_calls": 0}
 
         # Expose the memory store to tool handlers (memory_remember/recall)
         # via contextvar so delegated sub-tasks inherit it automatically.
@@ -272,6 +275,18 @@ class ReActAgent:
                 set_agent_memory_store(self.conversation.memory)
             except Exception as exc:
                 logger.debug("memory store wiring skipped: {}", exc)
+
+        # Bind the checkpoint manager to the real workspace root so
+        # checkpoint_save/undo_changes operate on the agent's files.
+        try:
+            from ravencode.runtime.checkpoints import get_checkpoint_manager
+            from ravencode.runtime.workspace import get_workspace_root
+
+            ws = get_workspace_root()
+            if ws is not None:
+                get_checkpoint_manager(workspace=str(ws))
+        except Exception as exc:
+            logger.debug("checkpoint manager wiring skipped: {}", exc)
 
         self._init_permissions()
 
@@ -386,6 +401,21 @@ class ReActAgent:
         if self._task is not None:
             self._task.cancel()
 
+    @property
+    def usage(self) -> dict[str, int]:
+        """Session accounting: LLM tokens + tool-call counters."""
+        return dict(self._usage)
+
+    def _record_usage(self, response: dict[str, Any]) -> None:
+        usage = response.get("usage")
+        if isinstance(usage, dict):
+            self._usage["prompt_tokens"] += int(usage.get("prompt_tokens", 0) or 0)
+            self._usage["completion_tokens"] += int(usage.get("completion_tokens", 0) or 0)
+        self._usage["llm_calls"] += 1
+        ee = self.config.event_emitter
+        if ee:
+            asyncio.get_running_loop().create_task(ee.emit(AgentEvent("usage", {"usage": dict(self._usage)})))
+
     async def run_truthful(
         self,
         user_input: str,
@@ -433,6 +463,7 @@ class ReActAgent:
         )
         async with self._lock:
             try:
+                await self._maybe_auto_checkpoint()
                 return await self._run_impl(user_input, content)
             except asyncio.CancelledError:
                 self._aborted = True
@@ -454,6 +485,23 @@ class ReActAgent:
                 url = f"data:image/png;base64,{img}"
             blocks.append({"type": "image_url", "image_url": {"url": url}})
         return blocks
+
+    async def _maybe_auto_checkpoint(self) -> None:
+        """Snapshot the workspace once per manager (session start), so
+        undo_changes can always revert to the pre-session state."""
+        if not self.config.auto_checkpoint:
+            return
+        try:
+            from ravencode.runtime.checkpoints import get_checkpoint_manager
+            from ravencode.runtime.workspace import get_workspace_root
+
+            if get_workspace_root() is None:
+                return  # no real workspace (tests/tools) — nothing to snapshot
+            mgr = get_checkpoint_manager()
+            if not mgr.list():
+                await mgr.save("auto: session start")
+        except Exception as exc:
+            logger.debug("auto checkpoint skipped: {}", exc)
 
     async def _run_impl(self, user_input: str, content: str | list[dict[str, Any]] | None = None) -> str:
         self.conversation.add_user_message(content if content is not None else user_input)
@@ -478,6 +526,8 @@ class ReActAgent:
                 return "[aborted]"
 
             self.conversation.compact()
+            if self.conversation.token_total > int(self.conversation.max_tokens * 0.85):
+                self.conversation.compact_deep()
 
             messages = self.conversation.get_messages()
             response = await self._llm_call(messages)
@@ -644,6 +694,7 @@ class ReActAgent:
         self.conversation.add_tool_result(tc.get("id", ""), result_truncated)
 
         stats.total_calls += 1
+        self._usage["tool_calls"] += 1
         if not failed:
             stats.successful_calls += 1
 
@@ -853,6 +904,7 @@ class ReActAgent:
             try:
                 result = await self._llm_call_once(messages)
                 await _llm_rate_limiter.reset()
+                self._record_usage(result)
                 return result
             except Exception as exc:  # retried below, then reported
                 last_err = str(exc)
@@ -914,6 +966,9 @@ class ReActAgent:
         output: dict[str, Any] = {"content": resp.text or ""}
         if tool_calls:
             output["tool_calls"] = tool_calls
+        usage = getattr(resp, "usage", None)
+        if usage:
+            output["usage"] = dict(usage)
         return output
 
     async def _llm_call_streaming(
@@ -1005,6 +1060,7 @@ class ReActAgent:
             "config": cfg,
             "conversation": self.conversation.messages,
             "memory": self.conversation.memory.to_dict() if hasattr(self.conversation, "memory") else {},
+            "usage": dict(self._usage),
         }
 
     @classmethod
