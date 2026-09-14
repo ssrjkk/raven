@@ -502,12 +502,12 @@ class TestCompleteFlow:
         assert steps == [1]
 
     async def test_proactive_scan_in_flow(self, monkeypatch):
-        calls: list[int] = []
+        async def fake_execute(name: str, args: dict[str, Any]) -> str:
+            return "readiness body"
+
+        monkeypatch.setattr("ravencode.runtime.agent_core.execute_tool", fake_execute)
 
         async def fake_llm(messages):
-            calls.append(1)
-            if len(calls) == 1:
-                return {"content": "probe files"}
             return {"content": "final"}
 
         agent = ReActAgent(
@@ -515,8 +515,8 @@ class TestCompleteFlow:
             llm_provider=fake_llm,
         )
         _patch_save(monkeypatch)
-        assert await agent.run("task") == "final"
-        assert any("[proactive scan" in m.get("content", "") for m in agent.conversation.messages)
+        assert await agent.run("inspect app.py now") == "final"
+        assert any("read in advance" in m.get("content", "") for m in agent.conversation.messages)
 
     async def test_tool_call_full_flow(self, monkeypatch):
         events: list[str] = []
@@ -670,23 +670,42 @@ class TestCompleteFlow:
 
 
 class TestProactiveScan:
-    async def test_scan_adds_message(self):
-        async def fake_llm(messages):
-            return {"content": "file1.py\nfile2.py"}
+    async def test_preread_reads_mentioned_files(self, monkeypatch):
+        reads: list[str] = []
 
-        agent = ReActAgent(
-            config=AgentConfig(proactive_scan=True, diff_preview=False, confirm_dangerous=False, max_steps=2),
-            llm_provider=fake_llm,
+        async def fake_execute(name: str, args: dict[str, Any]) -> str:
+            reads.append(str(args.get("path")))
+            return "file body here"
+
+        monkeypatch.setattr("ravencode.runtime.agent_core.execute_tool", fake_execute)
+        agent = ReActAgent(config=AgentConfig(proactive_scan=True, diff_preview=False, confirm_dangerous=False))
+        await agent._proactive_scan("fix the bug in src/app.py and utils/helpers.py")
+        assert reads == ["src/app.py", "utils/helpers.py"]
+        sys_msgs = [m["content"] for m in agent.conversation.messages if m.get("role") == "system"]
+        assert any("read in advance" in c and "src/app.py" in c for c in sys_msgs)
+
+    async def test_preread_skips_missing_and_limits_count(self, monkeypatch):
+        reads: list[str] = []
+
+        async def fake_execute(name: str, args: dict[str, Any]) -> str:
+            reads.append(str(args.get("path")))
+            if args.get("path") == "gone.py":
+                return "[error] file not found"
+            return "body"
+
+        monkeypatch.setattr("ravencode.runtime.agent_core.execute_tool", fake_execute)
+        agent = ReActAgent(config=AgentConfig())
+        await agent._proactive_scan(
+            "touch a.py b.py c.py d.py e.py and gone.py https://example.com/x.py"
         )
-        await agent._proactive_scan("task")
-        assert any("[proactive scan of task: task]" in m.get("content", "") for m in agent.conversation.messages)
+        assert len(reads) == 3  # _PREREAD_MAX_FILES cap; URL and beyond-cap skipped
+        sys_msgs = [m["content"] for m in agent.conversation.messages if m.get("role") == "system"]
+        assert all("gone.py" not in c for c in sys_msgs), "failed reads must be skipped"
 
-    async def test_scan_exception(self, monkeypatch):
-        async def fake_llm(messages):
-            raise RuntimeError("llm down")
-
-        agent = ReActAgent(config=AgentConfig(), llm_provider=fake_llm)
-        await agent._proactive_scan("task")
+    async def test_preread_noop_when_no_paths(self):
+        agent = ReActAgent(config=AgentConfig())
+        await agent._proactive_scan("just fix the thing, no files mentioned")
+        assert len(agent.conversation.messages) == 1  # system prompt only
 
 
 class TestConfirmAction:

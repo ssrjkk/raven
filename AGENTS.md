@@ -604,6 +604,29 @@ npm run dev
 ### Verification
 - `check_all.py --quick` 4/4 PASS; full suite **4728 passed / 26 skipped / 0 failed** (29 e2e/load deselected); live Groq smoke: completion + streaming + agent tool loop PASSED (`python scripts/live_smoke.py`, key via `GROQ_API_KEY` env only).
 
+## Fixes applied (Sep 2026, streaming consumers + speculative pre-read)
+### Hardening (committed first as `fix(core)`)
+- Tool result cache: FIFO cap 64 entries; `create_artifact` invalidates; failure prefixes `[execution_error]`/`[user denied]` counted as failures for self-correction stats.
+- `_llm_call_once` custom-provider path wrapped in `asyncio.timeout(llm_timeout)`; degenerate empty delta stream raises so the retry layer can recover.
+- `Conversation._trim` recomputes `_token_total` after pops (tool_calls-only assistant turns carry tokens outside `content` — drift fix).
+- Repo map skips symlinks.
+
+### Real SSE streaming in the OpenAI-compatible server (`ravencode/api/server.py`)
+- `_run_agent_stream` no longer fakes chunks from a finished answer: `EventEmitter` + `asyncio.Queue` forwards `token` events as OpenAI `chat.completion.chunk` deltas in real time (`stream_tokens=True` agent); `tool_call`/`tool_result` activity rides as SSE comment lines (`: {...}`) — invisible to OpenAI clients, visible when debugging. If nothing streamed (non-streaming backend), the final answer falls back to 100-char chunks.
+- Message-handling fixes: `_split_conversation_input` no longer duplicates the final user message into the agent context (it was added to the conversation AND replayed via `run()`); prior assistant `tool_calls`/`tool_call_id` are preserved via `model_dump(exclude_none=True)` so multi-turn tool flows stay protocol-valid; when the last message is a tool turn the full history is kept and the agent is nudged with a synthetic `"Continue."` user turn.
+- **Tests**: `tests/test_ravencode_api_stream.py` (6): realtime ordering ("He","llo" streamed as emitted, caught a real wiring regression during development), tool-comment presence, fallback chunking, `[DONE]`, no-duplication, tool-last flow.
+
+### TUI live streaming (`ravencode/cli/tui.py`)
+- New `run_streaming_agent(prompt, config)`: tokens print live (plain, soft-wrapped), tool calls as dim inline lines (`> read {"path": ...}`), fallback to a Markdown panel when the backend can't stream. Wired into the default `/ask` path (`AgentConfig.safe()`) and the `/agent <name>` runner.
+
+### Speculative pre-read instead of LLM-based proactive scan (`ravencode/runtime/agent_core.py`)
+- `_proactive_scan` no longer burns an LLM call to list files (structure discovery is covered by the repo map): it now deterministically extracts file paths from the task (`_FILE_HINT_RE`, up to `_PREREAD_MAX_FILES=3`, ≤2000 chars each), reads them via the `read` tool before the first LLM call, and injects a system block "read in advance" — saving 1-3 tool round-trips. Missing/failed reads skipped silently; no-op when no paths mentioned.
+- Aios WS bridge (`aios/api/bridge.py`) now forwards `token` events and defaults `stream_tokens=True`, `repo_map=True` (client can disable via message fields).
+- **Tests**: `TestProactiveScan` rewritten (reads mentioned files, cap=3, skips failed, noop without paths), flow test updated to the deterministic contract.
+
+### Verification
+- Targeted suites: agent core + api stream + streaming core + agents **151 passed**; aios ws **38 passed**; ruff 0; mypy 0.
+
 
 
 

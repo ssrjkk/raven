@@ -322,6 +322,7 @@ async def aios_agent_ws(ws: WebSocket):
         except Exception as exc:
             logger.debug("Failed to send WS event {}: {}", event.type, exc)
 
+    ee.on("token", send_event)
     ee.on("step_start", send_event)
     ee.on("tool_call", send_event)
     ee.on("tool_result", send_event)
@@ -352,6 +353,8 @@ async def aios_agent_ws(ws: WebSocket):
                 max_tool_retries=msg.get("max_tool_retries", 3),
                 confirm_dangerous=True,
                 confirm_callback=_confirm,
+                stream_tokens=bool(msg.get("stream", True)),
+                repo_map=bool(msg.get("repo_map", True)),
             )
             agent = ReActAgent(config=config)
             if msg.get("truthful"):

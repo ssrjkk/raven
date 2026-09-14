@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 from rich.console import Console
@@ -11,11 +12,48 @@ from rich.table import Table
 
 from ravencode.agents.custom_agents import get_custom_agents
 from ravencode.agents.orchestrator import AgentResult, AgentType, Orchestrator
-from ravencode.runtime.agent_core import AgentConfig
+from ravencode.runtime.agent_core import AgentConfig, EventEmitter, ReActAgent
 from ravencode.runtime.commands import CustomCommand, discover_commands
 from ravencode.runtime.question import set_question_callback, stdin_question_callback
 
 console = Console()
+
+
+async def run_streaming_agent(prompt: str, config: AgentConfig) -> str:
+    """Run an agent with live token streaming and tool-activity hints.
+
+    Tokens print as they arrive; tool calls appear as dim inline lines. If
+    the backend cannot stream, the final answer is shown in a panel instead.
+    Mutates ``config``: wires the emitter and enables token streaming.
+    """
+    emitter = EventEmitter()
+    streamed = 0
+
+    async def on_token(ev: object) -> None:
+        nonlocal streamed
+        data = getattr(ev, "data", {})
+        text = str(data.get("content", ""))
+        streamed += len(text)
+        console.print(text, end="", markup=False, highlight=False, soft_wrap=True)
+
+    async def on_tool_call(ev: object) -> None:
+        data = getattr(ev, "data", {})
+        args = json.dumps(data.get("args", {}), ensure_ascii=False)
+        console.print(f"\n[dim]> {data.get('name', '?')} {args[:120]}[/dim]")
+
+    emitter.on("token", on_token)
+    emitter.on("tool_call", on_tool_call)
+
+    config.event_emitter = emitter
+    config.stream_tokens = True
+    agent = ReActAgent(config=config)
+    result = await agent.run(prompt)
+    if streamed:
+        console.print()
+        console.print(f"[dim]done: {len(result)} chars[/dim]")
+        return result
+    console.print(Panel(Markdown(result), title="[bold blue]raven[/bold blue]", border_style="blue"))
+    return result
 
 
 def print_header() -> None:
@@ -88,12 +126,7 @@ async def run_custom_command(cmd: CustomCommand, args: str) -> None:
         )
         await run_agent(prompt, agent_type)
     else:
-        from ravencode.runtime.agent_core import AgentConfig, ReActAgent
-
-        agent = ReActAgent(config=AgentConfig.safe())
-        with console.status(f"[yellow]running {cmd.name}...[/yellow]"):
-            result = await agent.run(prompt)
-        console.print(Panel(Markdown(result), title=f"[bold]{cmd.name}[/bold]", border_style="blue"))
+        await run_streaming_agent(prompt, AgentConfig.safe())
 
 
 async def main_loop() -> None:
@@ -228,10 +261,7 @@ async def main_loop() -> None:
                 diff_preview=agent_def.diff_preview,
                 proactive_scan=agent_def.proactive_scan,
             )
-            agent = ReActAgent(config=cfg)
-            with console.status(f"[yellow]agent '{name}' working...[/yellow]"):
-                result = await agent.run(task or name)
-            console.print(Panel(Markdown(result), title=f"[bold]{name}[/bold]", border_style="blue"))
+            await run_streaming_agent(task or name, cfg)
             continue
 
         slash = cmd.split(maxsplit=1)[0]

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import json
+import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -153,6 +154,14 @@ _TOOL_CACHE_MAX_ENTRIES = 64
 _CACHE_INVALIDATING = frozenset({"create_artifact"})
 
 _LLM_MAX_ATTEMPTS = 3
+
+# Speculative pre-read: files mentioned in the task are read before the
+# first LLM call (see _proactive_scan).
+_FILE_HINT_RE = re.compile(
+    r"[\w@./\\-]+\.(?:py|ts|tsx|js|jsx|mjs|go|rs|java|rb|php|c|h|cpp|hpp|cs|sh|sql|md|rst|json|ya?ml|toml|ini|cfg|txt)\b"
+)
+_PREREAD_MAX_FILES = 3
+_PREREAD_MAX_CHARS_PER_FILE = 2000
 
 # Errors that will never succeed on retry: bad request, auth, unknown model.
 _LLM_PERMANENT_STATUS = {400, 401, 403, 404}
@@ -673,19 +682,42 @@ class ReActAgent:
     # -----------------------------------------------------------------------
 
     async def _proactive_scan(self, user_input: str) -> None:
-        scan_prompt = (
-            f"Given this task: {user_input}\n\n"
-            "Explore the project structure. List up to 20 relevant files clustered by concern. "
-            "Return only the file paths, one per line."
+        """Deterministic speculative pre-read (zero LLM cost).
+
+        File paths mentioned in the task are read immediately, before the
+        first LLM call, and injected as a system block — saving 1-3 tool
+        round-trips the model would otherwise spend locating them. Missing
+        or unreadable paths are skipped silently.
+        """
+        candidates: list[str] = []
+        for raw in _FILE_HINT_RE.findall(user_input):
+            path = raw.strip(".,;:'\"()[]<>")
+            if not path or path.startswith(("http", "mailto")) or len(path) > 200:
+                continue
+            if path not in candidates:
+                candidates.append(path)
+            if len(candidates) >= _PREREAD_MAX_FILES:
+                break
+        if not candidates:
+            return
+        previews: list[str] = []
+        for path in candidates:
+            try:
+                result = await execute_tool("read", {"path": path})
+            except Exception as exc:
+                logger.debug("preread: '{}' failed: {}", path, exc)
+                continue
+            text = str(result)
+            if not text.strip() or text.startswith(("[error", "[execution_error")):
+                continue
+            previews.append(f"--- {path} ---\n{text[:_PREREAD_MAX_CHARS_PER_FILE]}")
+        if not previews:
+            return
+        self.conversation.add_system_message(
+            "Files mentioned in the task, read in advance "
+            "(use these contents instead of re-reading; they may be stale if you modify them):\n"
+            + "\n".join(previews)
         )
-        messages = [{"role": "user", "content": scan_prompt}]
-        try:
-            response = await self._llm_call(messages)
-            content = response.get("content", "")
-            if content:
-                self.conversation.add_user_message(f"[proactive scan of task: {user_input}]\n{content}")
-        except Exception as exc:
-            logger.debug("Proactive scan failed: {}", exc)
 
     # -----------------------------------------------------------------------
     # confirmation
