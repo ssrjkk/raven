@@ -96,22 +96,65 @@ async def write_file(path: str, content: str) -> str:
         return f"[error] {exc}"
 
 
+def _fuzzy_find(old_string: str, content: str) -> tuple[int, int] | None:
+    """Locate old_string in content ignoring per-line trailing whitespace.
+
+    LLM edits fail constantly on invisible whitespace differences; each
+    failure costs a full round-trip. Returns the exact (start, end) span of
+    the matching region in the original content, or None when zero or
+    multiple regions match.
+    """
+    def normalize(text: str) -> list[str]:
+        return [ln.rstrip() for ln in text.splitlines()]
+
+    target = normalize(old_string)
+    if not target:
+        return None
+    lines = content.splitlines(keepends=True)
+    bare = [ln.rstrip("\r\n") for ln in lines]
+    stripped = [ln.rstrip() for ln in bare]
+    n = len(target)
+    hits: list[int] = []
+    for i in range(len(stripped) - n + 1):
+        if stripped[i : i + n] == target:
+            hits.append(i)
+    if len(hits) != 1:
+        return None
+    start = sum(len(ln) for ln in lines[: hits[0]])
+    end = sum(len(ln) for ln in lines[: hits[0] + n])
+    return start, end
+
+
 async def edit_file(path: str, old_string: str, new_string: str, preview: bool = False) -> str:
     content, err = await _safe_read(path)
     if err:
         return err
+    span: tuple[int, int] | None = None
     if old_string not in content:
-        return f"[error] old_string not found in {path}"
+        span = _fuzzy_find(old_string, content)
+        if span is None:
+            return f"[error] old_string not found in {path}"
     count = content.count(old_string)
     if count > 1:
         return f"[error] found {count} occurrences — provide more context"
-    new_content = content.replace(old_string, new_string, 1)
+    if span is not None:
+        # The matched region includes the last line's terminator; if the
+        # replacement doesn't end with one, keep the original terminator so
+        # the following line does not get glued to the edit.
+        terminator = ""
+        last_line = content[span[0] : span[1]].splitlines(keepends=True)[-1] if span[1] > span[0] else ""
+        if last_line.endswith(("\n", "\r")) and not new_string.endswith(("\n", "\r")):
+            terminator = last_line[len(last_line.rstrip("\r\n")) :]
+        new_content = content[: span[0]] + new_string + terminator + content[span[1] :]
+    else:
+        new_content = content.replace(old_string, new_string, 1)
     if preview:
         return f"[diff for {path}]\n{_compute_diff(content, new_content, path)}"
     get_undo_manager().record(str(_confine(path)), content, new_content, "edit")
     try:
         await _safe_write(path, new_content)
-        return f"[ok] applied edit to {path}"
+        note = " (whitespace-tolerant match)" if span is not None else ""
+        return f"[ok] applied edit to {path}{note}"
     except PermissionError as exc:
         return f"[error] {exc}"
 

@@ -31,6 +31,7 @@ data/token.txt
 data/session.txt
 data/*.err
 data/_*.py
+data/checkpoints/
 
 # Build artifacts
 site/
