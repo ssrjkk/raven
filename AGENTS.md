@@ -694,6 +694,23 @@ npm run dev
 ### Verification
 - `check_all.py --quick` 4/4 PASS; full suite **4833 passed / 0 failed**.
 
+## Fixes applied (Sep 2026, run_tests tool + git context injection + cost estimation)
+### `run_tests` tool (token-efficient pytest runner)
+- New non-dangerous tool in `tools.py`: runs `pytest -q --tb=short -rf --no-header` as a subprocess (600s timeout) inside the confined workspace and compresses the output via `_summarize_pytest`: PASS → one summary line; FAIL → summary + up to 10 failing test ids, bulky FAILURES/traceback sections dropped; collection crash (no summary line) → last 25 lines kept (traceback lives there). Summary detection uses `_PYTEST_SUMMARY_RE` (`\d+ (passed|failed|error)s? ... in \d`) because `-q` mode omits the `=` banner. Pre-check errors when no tests/ dir, no `test_*.py`, no `pyproject.toml`. Result is `smart_truncate`d to 4k.
+- Motivation: models drown in raw pytest logs via bash; failing test ids are what they actually need.
+- **Tests** (`tests/test_ravencode_core_round7.py`): summarize pass/fail/crash variants, real mini-suite in tmp workspace (fail → ids listed), no-tests error, registration.
+
+### Git context injection (once per session)
+- `AgentConfig.git_context=True` (default): first text run prefixes the user message with `[repo context] branch <b>, changed files: ...` (≤10 files from `git status --porcelain -b`, 5s timeout, best-effort None outside git repos) via `ReActAgent._git_context()`; `_git_ctx_done` flag prevents repeats (history replay of turn 1 is fine — the newest user turn stays clean). Disabled → no prefix. Gives the model branch + dirty state for free on turn 1 instead of burning a `git_status` tool call.
+- **Tests**: injected on first run only; disabled → absent.
+
+### Cost estimation in usage accounting
+- `AgentConfig.token_cost=(in_usd_per_1M, out_usd_per_1M)`: `_record_usage` accumulates `cost_usd` (rounded to 6 decimals) alongside tokens; `usage` property typed `dict[str, float]`. Absent rates → no `cost_usd` key (free/unknown providers unaffected).
+- **Tests**: 1M in @ $3 + 0.5M out @ $15 → $10.5; no rates → no key.
+
+### Verification
+- `check_all.py --quick` 4/4 PASS; full suite **4843 passed / 0 failed**.
+
 
 
 

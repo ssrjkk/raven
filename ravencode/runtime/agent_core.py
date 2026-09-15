@@ -96,6 +96,8 @@ class AgentConfig:
         repo_map: bool = False,
         priority: str = "normal",
         auto_checkpoint: bool = True,
+        token_cost: tuple[float, float] | None = None,
+        git_context: bool = True,
     ):
         self.max_steps = max_steps
         self.max_tool_retries = max_tool_retries
@@ -117,6 +119,9 @@ class AgentConfig:
         self.repo_map = repo_map
         self.priority = priority
         self.auto_checkpoint = auto_checkpoint
+        # Optional (input, output) USD per 1M tokens for cost estimation.
+        self.token_cost = token_cost
+        self.git_context = git_context
 
     @classmethod
     def safe(cls) -> Self:
@@ -264,7 +269,8 @@ class ReActAgent:
         self._aborted = False
         self._task: asyncio.Task[Any] | None = None
         self._tool_cache: dict[str, str] = {}
-        self._usage: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "llm_calls": 0, "tool_calls": 0}
+        self._usage: dict[str, float] = {"prompt_tokens": 0, "completion_tokens": 0, "llm_calls": 0, "tool_calls": 0}
+        self._git_ctx_done = False
 
         # Expose the memory store to tool handlers (memory_remember/recall)
         # via contextvar so delegated sub-tasks inherit it automatically.
@@ -402,15 +408,22 @@ class ReActAgent:
             self._task.cancel()
 
     @property
-    def usage(self) -> dict[str, int]:
-        """Session accounting: LLM tokens + tool-call counters."""
+    def usage(self) -> dict[str, float]:
+        """Session accounting: LLM tokens, call counters, optional cost_usd."""
         return dict(self._usage)
 
     def _record_usage(self, response: dict[str, Any]) -> None:
         usage = response.get("usage")
         if isinstance(usage, dict):
-            self._usage["prompt_tokens"] += int(usage.get("prompt_tokens", 0) or 0)
-            self._usage["completion_tokens"] += int(usage.get("completion_tokens", 0) or 0)
+            pt = int(usage.get("prompt_tokens", 0) or 0)
+            ct = int(usage.get("completion_tokens", 0) or 0)
+            self._usage["prompt_tokens"] += pt
+            self._usage["completion_tokens"] += ct
+            if self.config.token_cost:
+                in_rate, out_rate = self.config.token_cost
+                self._usage["cost_usd"] = round(
+                    self._usage.get("cost_usd", 0.0) + (pt * in_rate + ct * out_rate) / 1_000_000, 6
+                )
         self._usage["llm_calls"] += 1
         ee = self.config.event_emitter
         if ee:
@@ -503,7 +516,49 @@ class ReActAgent:
         except Exception as exc:
             logger.debug("auto checkpoint skipped: {}", exc)
 
+    async def _git_context(self) -> str | None:
+        """One-line repo state for the model: branch + dirty files (≤10).
+
+        Best-effort: returns None outside git repos or on any error, and is
+        called at most once per agent session.
+        """
+        try:
+            from ravencode.runtime.workspace import get_workspace_root
+
+            ws = get_workspace_root()
+            if ws is None:
+                return None
+            proc = await asyncio.create_subprocess_exec(
+                "git", "status", "--porcelain", "-b",
+                cwd=str(ws),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+            if proc.returncode != 0:
+                return None
+            lines = out.decode("utf-8", errors="replace").splitlines()
+            if not lines:
+                return None
+            branch = lines[0].removeprefix("## ").strip() or "detached"
+            changed = [ln for ln in lines[1:] if ln.strip()][:10]
+            if not changed:
+                return f"[repo context] branch {branch}, working tree clean"
+            files = "; ".join(ln[3:].strip() for ln in changed)
+            more = f" (+{len(lines) - 1 - len(changed)} more)" if len(lines) - 1 > len(changed) else ""
+            return f"[repo context] branch {branch}, changed files: {files}{more}"
+        except Exception as exc:
+            logger.debug("git context unavailable: {}", exc)
+            return None
+
     async def _run_impl(self, user_input: str, content: str | list[dict[str, Any]] | None = None) -> str:
+        if self.config.git_context and not self._git_ctx_done:
+            self._git_ctx_done = True
+            text = content if content is not None else user_input
+            if isinstance(text, str):
+                ctx = await self._git_context()
+                if ctx:
+                    content = f"{ctx}\n\n{text}"
         self.conversation.add_user_message(content if content is not None else user_input)
         self._aborted = False
         self._tool_cache.clear()
