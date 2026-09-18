@@ -78,6 +78,38 @@ jobs:
           path: web/dist/
           retention-days: 7
 
+  postgres-integration:
+    name: Postgres integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: raven
+          POSTGRES_PASSWORD: raven
+          POSTGRES_DB: raven_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: pyproject.toml
+      - name: Install dependencies (with postgres extras)
+        run: pip install -e ".[dev,postgres]"
+      - name: Run Postgres integration tests
+        env:
+          DATABASE_URL: postgresql://raven:raven@localhost:5432/raven_test
+        run: pytest tests/integration/ -m integration -v --tb=short
+
   e2e-tests:
     name: E2E tests (Allure)
     runs-on: ubuntu-latest
