@@ -3,19 +3,26 @@ from __future__ import annotations
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 from raven.tools.reverse_engineering.binary_analyzer import (
     analyze_binary,
+    compare_binaries,
     extract_strings,
     get_file_type,
+    hash_binary,
+    hexdump,
 )
 from raven.tools.reverse_engineering.disassembler import disassemble_bytes, disassemble_file
-from raven.tools.reverse_engineering.patterns import detect_patterns
+from raven.tools.reverse_engineering.patterns import detect_patterns, detect_toolchain
 
 __all__ = [
     "analyze_binary",
+    "compare_binaries",
     "detect_patterns",
+    "detect_toolchain",
     "disassemble_bytes",
     "disassemble_file",
     "extract_strings",
     "get_file_type",
+    "hash_binary",
+    "hexdump",
     "register_re_tools",
 ]
 
@@ -29,6 +36,65 @@ def register_re_tools(registry: ToolRegistry) -> None:
                 "path": {"type": "string", "description": "Path to binary file", "required": True},
             },
             handler=analyze_binary,
+            category="reverse_engineering",
+            timeout=60,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="hexdump",
+            description="Hex dump a section of a binary file",
+            parameters={
+                "path": {"type": "string", "description": "Path to binary file", "required": True},
+                "offset": {
+                    "type": "integer",
+                    "description": "Byte offset to start dump from (default: 0)",
+                    "required": False,
+                },
+                "length": {
+                    "type": "integer",
+                    "description": "Number of bytes to dump (default: 256)",
+                    "required": False,
+                },
+            },
+            handler=hexdump,
+            category="reverse_engineering",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="hash_binary",
+            description="Compute MD5/SHA-1/SHA-256 hashes of a binary file (fingerprinting)",
+            parameters={
+                "path": {"type": "string", "description": "Path to binary file", "required": True},
+            },
+            handler=hash_binary,
+            category="reverse_engineering",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="compare_binaries",
+            description="Compare two binary files block-by-block and report similarity",
+            parameters={
+                "path_a": {"type": "string", "description": "First file", "required": True},
+                "path_b": {"type": "string", "description": "Second file", "required": True},
+            },
+            handler=compare_binaries,
+            category="reverse_engineering",
+            timeout=60,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="detect_toolchain",
+            description="Detect compiler/runtime toolchain in a binary (Go, Rust, .NET, PyInstaller, Electron, MSVC, MinGW)",
+            parameters={
+                "path": {"type": "string", "description": "Path to binary file", "required": True},
+            },
+            handler=detect_toolchain,
             category="reverse_engineering",
             timeout=60,
         )
@@ -51,7 +117,7 @@ def register_re_tools(registry: ToolRegistry) -> None:
                 },
                 "arch": {
                     "type": "string",
-                    "description": "Architecture: auto/x86/x64/arm/arm64/mips (default: auto-detect)",
+                    "description": "Architecture: auto/x86/x64/arm/arm64/mips/riscv (default: auto-detect)",
                     "required": False,
                 },
             },

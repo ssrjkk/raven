@@ -822,6 +822,12 @@ async def lsp_hover_tool(path: str, line: int, col: int) -> str:
     return await lsp_hover(path, line, col)
 
 
+async def lsp_diagnostics_tool(path: str) -> str:
+    from ravencode.runtime.lsp import lsp_diagnostics
+
+    return await lsp_diagnostics(path)
+
+
 # ---------------------------------------------------------------------------
 # sandbox tools
 # ---------------------------------------------------------------------------
@@ -1684,6 +1690,19 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
             "required": ["path", "line", "col"],
         },
         "handler": lsp_hover_tool,
+    },
+    "lsp_diagnostics": {
+        "name": "lsp_diagnostics",
+        "dangerous": False,
+        "description": "Get compiler/type-checker diagnostics (errors and warnings) for a file via LSP.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path"},
+            },
+            "required": ["path"],
+        },
+        "handler": lsp_diagnostics_tool,
     },
     "sandbox_exec": {
         "name": "sandbox_exec",

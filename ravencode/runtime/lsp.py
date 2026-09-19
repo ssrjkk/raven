@@ -305,6 +305,26 @@ async def lsp_hover(path: str, line: int, col: int) -> str:
     return await client.hover(uri, line, col)
 
 
+async def lsp_diagnostics(path: str) -> str:
+    lang = _detect_language(path)
+    diags = await _lsp_pool.diagnostics(path, lang)
+    if not diags:
+        return "No diagnostics for this file."
+    lines = [f"=== Diagnostics: {path} ({len(diags)}) ==="]
+    sev_labels = {1: "ERROR", 2: "WARNING", 3: "INFO", 4: "HINT"}
+    for d in diags[:50]:
+        start = d.get("range", {}).get("start", {})
+        line_num = start.get("line", 0)
+        sev = sev_labels.get(d.get("severity", 1), "NOTE")
+        msg = d.get("message", "")
+        source = d.get("source", "")
+        tag = f" [{source}]" if source else ""
+        lines.append(f"  {sev} L{line_num}:{start.get('character', 0)}{tag} {msg}")
+    if len(diags) > 50:
+        lines.append(f"  ... and {len(diags) - 50} more")
+    return "\n".join(lines)
+
+
 _LANG_EXTS: dict[str, list[str]] = {
     "python": [".py", ".pyi"],
     "typescript": [".ts", ".tsx"],

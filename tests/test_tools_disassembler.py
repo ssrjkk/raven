@@ -113,11 +113,14 @@ def capstone_module(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     fake.CS_ARCH_ARM = 2
     fake.CS_ARCH_ARM64 = 3
     fake.CS_ARCH_MIPS = 4
+    fake.CS_ARCH_RISCV = 10
     fake.CS_MODE_32 = 5
     fake.CS_MODE_64 = 6
     fake.CS_MODE_ARM = 7
     fake.CS_MODE_MIPS32 = 8
     fake.CS_MODE_THUMB = 9
+    fake.CS_MODE_RISCV32 = 11
+    fake.CS_MODE_RISCV64 = 12
     fake.Cs = MagicMock(name="Cs")
     monkeypatch.setitem(sys.modules, "capstone", fake)
     return fake
@@ -192,6 +195,9 @@ class TestDisassembleBytesCapstone:
             ("aarch64", 3, 6),
             ("mips", 4, 8),
             ("thumb", 2, 9),
+            ("riscv", 10, 12),
+            ("riscv32", 10, 11),
+            ("riscv64", 10, 12),
         ],
     )
     def test_arch_mapping(
@@ -211,7 +217,10 @@ class TestDisassembleBytesCapstone:
     def test_unsupported_arch(self, capstone_module: MagicMock) -> None:
         out = disassemble_bytes(b"\x90", "mips64")
         assert out.startswith("[error] Unsupported architecture: mips64")
-        assert "Supported: x86, x64, x86-64, arm, arm64, aarch64, mips, thumb" in out
+        assert (
+            "x86, x64, x86-64, arm, arm64, aarch64, mips, thumb, riscv, riscv32, riscv64"
+            in out
+        )
         capstone_module.Cs.assert_not_called()
 
     def test_init_failure(self, capstone_module: MagicMock) -> None:

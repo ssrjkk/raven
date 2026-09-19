@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 import struct
+from collections import Counter
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -68,14 +70,23 @@ def get_file_type(path: str) -> dict[str, Any]:
             elif characteristics & 0x0002:
                 info["subsystem"] = "EXE"
 
-    elif raw[:4] == b"\xfe\xed\xfa\xce" or raw[:4] == b"\xce\xfa\xed\xfe":
+            timestamp = struct.unpack("<I", raw[pe_offset + 8 : pe_offset + 12])[0]
+            if timestamp:
+                info["timestamp"] = _pe_timestamp(timestamp)
+
+            opt_magic = struct.unpack("<H", raw[pe_offset + 24 : pe_offset + 26])[0]
+            if opt_magic in (0x10B, 0x20B):
+                entry_rva = struct.unpack("<I", raw[pe_offset + 40 : pe_offset + 44])[0]
+                if entry_rva:
+                    info["entry_point"] = hex(entry_rva)
+                image_base = struct.unpack("<I", raw[pe_offset + 52 : pe_offset + 56])[0]
+                if opt_magic == 0x20B:
+                    image_base = struct.unpack("<Q", raw[pe_offset + 48 : pe_offset + 56])[0]
+                info["image_base"] = hex(image_base)
+
+    elif raw[:4] in (b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe"):
         info["type"] = "Mach-O"
-        info["architecture"] = "32-bit big-endian"
-    elif raw[:4] == b"\xfe\xed\xfa\xcf" or raw[:4] == b"\xcf\xfa\xed\xfe":
-        info["type"] = "Mach-O"
-        info["architecture"] = "64-bit"
-        if raw[:4] == b"\xcf\xfa\xed\xfe":
-            info["endian"] = "little"
+        _parse_macho_header(raw, info)
 
     elif raw[:4] == b"\xca\xfe\xba\xbe":
         info["type"] = "Universal Mach-O (Fat Binary)"
@@ -94,6 +105,65 @@ def _format_size(n: int) -> str:
             return f"{size:.1f} {unit}"
         size /= 1024
     return f"{size:.1f} TB"
+
+
+_MACHO_CPU_TYPES: dict[int, str] = {
+    1: "VAX",
+    6: "MC680x0",
+    7: "i386",
+    10: "MC98000",
+    11: "HPPA",
+    12: "ARM",
+    13: "MC88000",
+    14: "SPARC",
+    15: "I860",
+    18: "PowerPC",
+    0x01000007: "x86-64",
+    0x0100000C: "arm64",
+    0x01000012: "PowerPC64",
+}
+
+_MACHO_FILETYPES: dict[int, str] = {
+    1: "MH_OBJECT",
+    2: "MH_EXECUTE",
+    3: "MH_FVMLIB",
+    4: "MH_CORE",
+    5: "MH_PRELOAD",
+    6: "MH_DYLIB",
+    7: "MH_DYLINKER",
+    8: "MH_BUNDLE",
+    9: "MH_DYLIB_STUB",
+    10: "MH_DSYM",
+    11: "MH_KEXT_BUNDLE",
+}
+
+
+def _parse_macho_header(raw: bytes, info: dict[str, Any]) -> None:
+    magic = raw[:4]
+    is_64 = magic in (b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe")
+    endian = "<" if magic in (b"\xce\xfa\xed\xfe", b"\xcf\xfa\xed\xfe") else ">"
+    info["bits"] = 64 if is_64 else 32
+    info["endian"] = "little" if endian == "<" else "big"
+    if len(raw) < 28:
+        return
+    cputype = struct.unpack(endian + "I", raw[4:8])[0]
+    filetype = struct.unpack(endian + "I", raw[12:16])[0]
+    ncmds = struct.unpack(endian + "I", raw[16:20])[0]
+    flags = struct.unpack(endian + "I", raw[24:28])[0]
+    info["architecture"] = _MACHO_CPU_TYPES.get(cputype, f"unknown(0x{cputype:x})")
+    info["file_type"] = _MACHO_FILETYPES.get(filetype, f"unknown({filetype})")
+    info["load_commands"] = ncmds
+    if flags & 0x200000:
+        info["pie"] = True
+    elif flags & 0x4:
+        info["dylib"] = True
+
+
+def _pe_timestamp(ts: int) -> str:
+    try:
+        return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    except (OverflowError, OSError, ValueError):
+        return f"0x{ts:x}"
 
 
 def _try_pyelftools(path: str) -> dict[str, Any] | None:
@@ -179,17 +249,18 @@ def _parse_elf_raw(raw: bytes, info: dict[str, Any]) -> dict[str, Any]:
     endian_fmt = "<" if endian == "little" else ">"
 
     if bits == 64:
-        struct.unpack(endian_fmt + "Q", raw[32:40])[0]
+        entry = struct.unpack(endian_fmt + "Q", raw[24:32])[0]
         sh_off = struct.unpack(endian_fmt + "Q", raw[40:48])[0]
         ph_num = struct.unpack(endian_fmt + "H", raw[54:56])[0]
         sh_num = struct.unpack(endian_fmt + "H", raw[60:62])[0]
-        struct.unpack(endian_fmt + "H", raw[54:56])[0] if False else 56
     else:
-        struct.unpack(endian_fmt + "I", raw[28:32])[0]
+        entry = struct.unpack(endian_fmt + "I", raw[24:28])[0]
         sh_off = struct.unpack(endian_fmt + "I", raw[32:36])[0]
         ph_num = struct.unpack(endian_fmt + "H", raw[44:46])[0]
         sh_num = struct.unpack(endian_fmt + "H", raw[48:50])[0]
 
+    if entry:
+        result["entry_point"] = hex(entry)
     result["segment_count"] = ph_num
     result["section_count"] = sh_num
 
@@ -262,6 +333,14 @@ def analyze_binary(path: str) -> str:
         lines.append(f"  Subsystem: {file_type['subsystem']}")
     if "endian" in file_type:
         lines.append(f"  Endian: {file_type['endian']}")
+    if "entry_point" in file_type:
+        lines.append(f"  Entry point: {file_type['entry_point']}")
+    if "image_base" in file_type:
+        lines.append(f"  Image base: {file_type['image_base']}")
+    if "timestamp" in file_type:
+        lines.append(f"  Compile time: {file_type['timestamp']}")
+    if "load_commands" in file_type:
+        lines.append(f"  Load commands: {file_type['load_commands']}")
 
     ft = file_type.get("type", "")
     if ft == "ELF":
@@ -280,6 +359,8 @@ def analyze_binary(path: str) -> str:
             if "segment_count" in raw_info:
                 lines.append(f"\n  Segments: {raw_info['segment_count']}")
                 lines.append(f"  Sections: {raw_info['section_count']}")
+                if "entry_point" in raw_info:
+                    lines.append(f"  Entry point: {raw_info['entry_point']}")
 
     elif ft == "PE":
         pe_info = _try_pefile(str(p))
@@ -340,7 +421,9 @@ def extract_strings(path: str, min_length: int = 4, classify: bool = False) -> s
         for s in all_strings:
             if re.match(r"https?://", s, re.IGNORECASE):
                 classified["urls"].append(s)
-            elif re.match(r"[a-zA-Z]:\\\\", s) or s.startswith(("/", "./")):
+            elif s.startswith(("HKLM", "HKCU", "HKEY")):
+                classified["registry"].append(s)
+            elif re.match(r"[a-zA-Z]:[\\/]", s) or s.startswith(("/", "./")) or "\\" in s:
                 classified["paths"].append(s)
             elif re.match(r"^[A-Fa-f0-9]{32,64}$", s):
                 classified["crypto"].append(s[:64])
@@ -348,8 +431,6 @@ def extract_strings(path: str, min_length: int = 4, classify: bool = False) -> s
                 classified["ip"].append(s)
             elif re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", s) and 2 < len(s) < 60:
                 classified["function_names"].append(s)
-            elif s.startswith(("HK", "HKEY")):
-                classified["registry"].append(s)
             else:
                 classified["other"].append(s)
 
@@ -380,13 +461,100 @@ def _calculate_entropy(data: bytes) -> float:
         return 0.0
     from math import log2
 
+    n = len(data)
     entropy = 0.0
-    for x in range(256):
-        p_x = data.count(x) / len(data)
-        if p_x > 0:
-            entropy += -p_x * log2(p_x)
+    for count in Counter(data).values():
+        p = count / n
+        entropy += -p * log2(p)
     return entropy
 
 
 def _count_strings(data: bytes) -> int:
     return len(re.findall(rb"[\x20-\x7e]{4,}", data))
+
+
+def hexdump(path: str, offset: int = 0, length: int = 256) -> str:
+    p = Path(path)
+    if not p.exists():
+        return f"[error] File not found: {path}"
+    size = p.stat().st_size
+    if offset < 0 or offset >= size:
+        return f"[error] Offset {offset} out of range (file size {size})"
+    with p.open("rb") as f:
+        if offset:
+            f.seek(offset)
+        data = f.read(length)
+
+    lines = [f"; hexdump {p.name} @0x{offset:x} ({len(data)} bytes)"]
+    for i in range(0, len(data), 16):
+        chunk = data[i : i + 16]
+        hex_part = " ".join(f"{b:02x}" for b in chunk)
+        ascii_part = "".join(chr(b) if 0x20 <= b <= 0x7E else "." for b in chunk)
+        lines.append(f"  {offset + i:#010x}  {hex_part:48s}  {ascii_part}")
+    return "\n".join(lines)
+
+
+def hash_binary(path: str) -> str:
+    import hashlib
+
+    p = Path(path)
+    if not p.exists():
+        return f"[error] File not found: {path}"
+    md5 = hashlib.md5()  # noqa: S324 - fingerprinting, not crypto
+    sha1 = hashlib.sha1()  # noqa: S324 - fingerprinting, not crypto
+    sha256 = hashlib.sha256()
+    with p.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            md5.update(chunk)
+            sha1.update(chunk)
+            sha256.update(chunk)
+    return "\n".join(
+        [
+            f"=== Hashes: {p.name} ({p.stat().st_size} bytes) ===",
+            f"  MD5:    {md5.hexdigest()}",
+            f"  SHA-1:  {sha1.hexdigest()}",
+            f"  SHA-256:{sha256.hexdigest()}",
+        ]
+    )
+
+
+def compare_binaries(path_a: str, path_b: str) -> str:
+    pa = Path(path_a)
+    pb = Path(path_b)
+    for p, name in ((pa, path_a), (pb, path_b)):
+        if not p.exists():
+            return f"[error] File not found: {name}"
+
+    def _chunks(path: Path) -> list[bytes]:
+        with path.open("rb") as f:
+            return list(iter(lambda: f.read(4096), b""))
+
+    chunks_a = _chunks(pa)
+    chunks_b = _chunks(pb)
+    size_a = sum(len(c) for c in chunks_a)
+    size_b = sum(len(c) for c in chunks_b)
+    common = min(len(chunks_a), len(chunks_b))
+    matched: float = 0.0
+    first_diff: int | None = None
+    for i in range(common):
+        if chunks_a[i] == chunks_b[i]:
+            matched += 1
+        else:
+            matched += _partial_equal(chunks_a[i], chunks_b[i]) / 4096.0
+            if first_diff is None:
+                first_diff = i * 4096
+
+    similarity = (matched / common * 100.0) if common else (100.0 if size_a == size_b else 0.0)
+    lines = [f"=== Compare: {pa.name} vs {pb.name} ==="]
+    lines.append(f"  Size A: {size_a} ({_format_size(size_a)})")
+    lines.append(f"  Size B: {size_b} ({_format_size(size_b)})")
+    lines.append(f"  Similarity: {similarity:.1f}% (by 4KB blocks)")
+    if size_a == size_b and chunks_a == chunks_b:
+        lines.append("  Result: IDENTICAL")
+    else:
+        lines.append(f"  Result: DIFFERENT (first difference at byte offset {first_diff if first_diff is not None else 0})")
+    return "\n".join(lines)
+
+
+def _partial_equal(a: bytes, b: bytes) -> int:
+    return sum(1 for x, y in zip(a, b, strict=False) if x == y)

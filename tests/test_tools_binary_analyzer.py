@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import struct
 import sys
 import types
@@ -18,8 +19,11 @@ from raven.tools.reverse_engineering.binary_analyzer import (
     _try_pefile,
     _try_pyelftools,
     analyze_binary,
+    compare_binaries,
     extract_strings,
     get_file_type,
+    hash_binary,
+    hexdump,
 )
 
 
@@ -59,6 +63,42 @@ def _pe(machine: int = 0x8664, characteristics: int = 0x0002, num_sections: int 
     struct.pack_into("<H", b, 0x84, machine)
     struct.pack_into("<H", b, 0x86, num_sections)
     struct.pack_into("<H", b, 0x92, characteristics)
+    return bytes(b)
+
+
+def _pe_full(
+    opt_magic: int = 0x20B, timestamp: int = 1600000000, entry_rva: int = 0x1000, image_base: int = 0x140000000
+) -> bytes:
+    b = bytearray(0x200)
+    b[0:2] = b"MZ"
+    struct.pack_into("<I", b, 0x3C, 0x80)
+    b[0x80 : 0x84] = b"PE\x00\x00"
+    struct.pack_into("<H", b, 0x84, 0x8664)
+    struct.pack_into("<I", b, 0x80 + 8, timestamp)
+    struct.pack_into("<H", b, 0x80 + 24, opt_magic)
+    struct.pack_into("<I", b, 0x80 + 40, entry_rva)
+    if opt_magic == 0x20B:
+        struct.pack_into("<Q", b, 0x80 + 48, image_base)
+    else:
+        struct.pack_into("<I", b, 0x80 + 52, image_base)
+    return bytes(b)
+
+
+def _macho(
+    magic: bytes = b"\xfe\xed\xfa\xce",
+    cputype: int = 7,
+    filetype: int = 2,
+    ncmds: int = 5,
+    flags: int = 0x200000,
+) -> bytes:
+    b = bytearray(32)
+    b[0:4] = magic
+    struct.pack_into(">I" if magic in (b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf") else "<I", b, 4, cputype)
+    struct.pack_into(">I" if magic in (b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf") else "<I", b, 8, 0)  # cpusubtype
+    struct.pack_into(">I" if magic in (b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf") else "<I", b, 12, filetype)
+    struct.pack_into(">I" if magic in (b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf") else "<I", b, 16, ncmds)
+    struct.pack_into(">I" if magic in (b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf") else "<I", b, 20, 0)  # sizeofcmds
+    struct.pack_into(">I" if magic in (b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf") else "<I", b, 24, flags)
     return bytes(b)
 
 
@@ -164,29 +204,61 @@ class TestGetFileType:
         assert info["type"] == "PE"
         assert "architecture" not in info
 
+    def test_pe32_plus_fields(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "full.exe", _pe_full())
+        info = get_file_type(p)
+        assert info["timestamp"] == "2020-09-13 12:26:40 UTC"
+        assert info["entry_point"] == "0x1000"
+        assert info["image_base"] == "0x140000000"
+
+    def test_pe32_fields(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "pe32.exe", _pe_full(opt_magic=0x10B, image_base=0x400000))
+        info = get_file_type(p)
+        assert info["entry_point"] == "0x1000"
+        assert info["image_base"] == "0x400000"
+
+    def test_pe_no_timestamp(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "nts.exe", _pe_full(timestamp=0))
+        info = get_file_type(p)
+        assert "timestamp" not in info
+
     def test_macho_32_be(self, tmp_path: Path) -> None:
-        p = _write(tmp_path, "m32", b"\xfe\xed\xfa\xce" + b"\x00" * 12)
+        p = _write(tmp_path, "m32", _macho())
         info = get_file_type(p)
         assert info["type"] == "Mach-O"
-        assert info["architecture"] == "32-bit big-endian"
+        assert info["bits"] == 32
+        assert info["endian"] == "big"
+        assert info["architecture"] == "i386"
+        assert info["file_type"] == "MH_EXECUTE"
+        assert info["load_commands"] == 5
 
     def test_macho_32_le(self, tmp_path: Path) -> None:
-        p = _write(tmp_path, "m32l", b"\xce\xfa\xed\xfe" + b"\x00" * 12)
+        p = _write(tmp_path, "m32l", _macho(magic=b"\xce\xfa\xed\xfe", cputype=18))
         info = get_file_type(p)
         assert info["type"] == "Mach-O"
+        assert info["endian"] == "little"
+        assert info["architecture"] == "PowerPC"
 
     def test_macho_64(self, tmp_path: Path) -> None:
-        p = _write(tmp_path, "m64", b"\xfe\xed\xfa\xcf" + b"\x00" * 12)
+        p = _write(tmp_path, "m64", _macho(magic=b"\xfe\xed\xfa\xcf", cputype=0x01000007))
         info = get_file_type(p)
         assert info["type"] == "Mach-O"
-        assert info["architecture"] == "64-bit"
-        assert "endian" not in info
+        assert info["bits"] == 64
+        assert info["architecture"] == "x86-64"
+        assert info["endian"] == "big"
 
     def test_macho_64_le(self, tmp_path: Path) -> None:
-        p = _write(tmp_path, "m64l", b"\xcf\xfa\xed\xfe" + b"\x00" * 12)
+        p = _write(tmp_path, "m64l", _macho(magic=b"\xcf\xfa\xed\xfe", cputype=0x0100000C, flags=0x4))
         info = get_file_type(p)
-        assert info["architecture"] == "64-bit"
+        assert info["architecture"] == "arm64"
         assert info["endian"] == "little"
+        assert info.get("dylib") is True
+
+    def test_macho_short_header(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "mshort", b"\xfe\xed\xfa\xcf" + b"\x00" * 12)
+        info = get_file_type(p)
+        assert info["type"] == "Mach-O"
+        assert info["bits"] == 64
 
     def test_fat_binary(self, tmp_path: Path) -> None:
         p = _write(tmp_path, "fat", b"\xca\xfe\xba\xbe" + b"\x00" * 12)
@@ -249,12 +321,26 @@ class TestParseElfRaw:
         assert result["segment_count"] == 2
         assert result["section_count"] == 3
 
+    def test_elf64_entry_point(self) -> None:
+        b = bytearray(_elf64())
+        struct.pack_into("<Q", b, 24, 0x401000)
+        info = {"bits": 64, "endian": "little"}
+        result = _parse_elf_raw(bytes(b), info)
+        assert result["entry_point"] == "0x401000"
+
     def test_elf32_be(self) -> None:
         raw = _elf32()
         info = {"bits": 32, "endian": "big"}
         result = _parse_elf_raw(raw, info)
         assert result["segment_count"] == 1
         assert result["section_count"] == 1
+
+    def test_elf32_entry_point(self) -> None:
+        b = bytearray(_elf32())
+        struct.pack_into(">I", b, 24, 0x8048000)
+        info = {"bits": 32, "endian": "big"}
+        result = _parse_elf_raw(bytes(b), info)
+        assert result["entry_point"] == "0x8048000"
 
 
 class TestFindTextSectionOffset:
@@ -396,3 +482,77 @@ class TestEntropyAndStrings:
     def test_count_strings(self) -> None:
         data = b"AAAA\x00BBBB\x00CCCC"
         assert _count_strings(data) == 3
+
+
+class TestHexdump:
+    def test_missing_file(self) -> None:
+        assert "not found" in hexdump("C:/nope.bin")
+
+    def test_offset_out_of_range(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "x.bin", b"abc")
+        assert "out of range" in hexdump(p, offset=10)
+
+    def test_negative_offset(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "y.bin", b"abc")
+        assert "out of range" in hexdump(p, offset=-1)
+
+    def test_dump(self, tmp_path: Path) -> None:
+        data = b"\x00\x01\x02\x03" + b"ABCDEFGH" + b"\xff" * 4
+        p = _write(tmp_path, "d.bin", data)
+        out = hexdump(p)
+        assert "; hexdump d.bin @0x0" in out
+        assert "00 01 02 03 41 42 43 44" in out
+        assert "ABCD" in out
+        assert "ff ff ff ff" in out
+
+    def test_offset_and_length(self, tmp_path: Path) -> None:
+        data = bytes(range(64))
+        p = _write(tmp_path, "off.bin", data)
+        out = hexdump(p, offset=16, length=16)
+        assert "; hexdump off.bin @0x10 (16 bytes)" in out
+        assert "10 11 12 13" in out
+
+
+class TestHashBinary:
+    def test_missing_file(self) -> None:
+        assert "not found" in hash_binary("C:/nope.bin")
+
+    def test_known_hashes(self, tmp_path: Path) -> None:
+        data = b"raven reverse engineering"
+        p = _write(tmp_path, "h.bin", data)
+        out = hash_binary(p)
+        assert hashlib.md5(data).hexdigest() in out  # noqa: S324 - fingerprinting test
+        assert hashlib.sha1(data).hexdigest() in out  # noqa: S324 - fingerprinting test
+        assert hashlib.sha256(data).hexdigest() in out
+
+    def test_empty(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "empty.bin", b"")
+        out = hash_binary(p)
+        assert hashlib.md5(b"").hexdigest() in out  # noqa: S324 - fingerprinting test
+
+
+class TestCompareBinaries:
+    def test_missing_file(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "a.bin", b"x")
+        assert "not found" in compare_binaries(p, str(tmp_path / "nope"))
+
+    def test_identical(self, tmp_path: Path) -> None:
+        p1 = _write(tmp_path, "a.bin", b"same bytes here")
+        p2 = _write(tmp_path, "b.bin", b"same bytes here")
+        out = compare_binaries(p1, p2)
+        assert "Result: IDENTICAL" in out
+
+    def test_different(self, tmp_path: Path) -> None:
+        p1 = _write(tmp_path, "a.bin", b"AAAABBBBCCCC")
+        p2 = _write(tmp_path, "b.bin", b"AAAAXXXXCCCC")
+        out = compare_binaries(p1, p2)
+        assert "Result: DIFFERENT" in out
+        assert "Similarity:" in out
+        assert "first difference" in out
+
+    def test_different_size(self, tmp_path: Path) -> None:
+        p1 = _write(tmp_path, "a.bin", b"AAAA")
+        p2 = _write(tmp_path, "b.bin", b"AAAA" * 4096)
+        out = compare_binaries(p1, p2)
+        assert "Result: DIFFERENT" in out
+        assert "Size A" in out

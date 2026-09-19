@@ -21,6 +21,7 @@ from ravencode.runtime.lsp import (
     get_lsp_pool,
     lsp_completion,
     lsp_definition,
+    lsp_diagnostics,
     lsp_hover,
     lsp_references,
 )
@@ -445,6 +446,39 @@ class TestLspHelpers:
         client.hover = AsyncMock(return_value="docs")
         monkeypatch.setattr(lsp_mod._lsp_pool, "get", AsyncMock(return_value=client))
         assert await lsp_hover("a.py", 0, 0) == "docs"
+
+    async def test_diagnostics_no_client(self, monkeypatch) -> None:
+        monkeypatch.setattr(lsp_mod._lsp_pool, "get", AsyncMock(return_value=None))
+        assert await lsp_diagnostics("a.py") == "No diagnostics for this file."
+
+    async def test_diagnostics_empty(self, monkeypatch) -> None:
+        client = MagicMock()
+        client.diagnostics = AsyncMock(return_value=[])
+        monkeypatch.setattr(lsp_mod._lsp_pool, "get", AsyncMock(return_value=client))
+        assert await lsp_diagnostics("a.py") == "No diagnostics for this file."
+
+    async def test_diagnostics_renders(self, monkeypatch) -> None:
+        client = MagicMock()
+        client.diagnostics = AsyncMock(
+            return_value=[
+                {
+                    "range": {"start": {"line": 2, "character": 4}},
+                    "message": "undefined name",
+                    "severity": 1,
+                    "source": "pyright",
+                },
+                {
+                    "range": {"start": {"line": 5}},
+                    "message": "unused import",
+                    "severity": 2,
+                },
+            ]
+        )
+        monkeypatch.setattr(lsp_mod._lsp_pool, "get", AsyncMock(return_value=client))
+        out = await lsp_diagnostics("a.py")
+        assert "ERROR L2:4 [pyright] undefined name" in out
+        assert "WARNING L5:0 unused import" in out
+        assert "=== Diagnostics: a.py (2) ===" in out
 
 
 class TestEnrichContext:

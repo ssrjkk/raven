@@ -17,6 +17,7 @@ from raven.tools.reverse_engineering.patterns import (
     _scan_packers,
     _scan_vulns,
     detect_patterns,
+    detect_toolchain,
 )
 
 
@@ -415,3 +416,52 @@ class TestDetectPatterns:
     def test_directory_raises_oserror(self, tmp_path: Path) -> None:
         with pytest.raises(OSError):
             detect_patterns(str(tmp_path))
+
+
+class TestDetectToolchain:
+    def test_missing_file(self, tmp_path: Path) -> None:
+        path = str(tmp_path / "nope.bin")
+        assert detect_toolchain(path) == f"[error] File not found: {path}"
+
+    def test_no_markers(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "plain.bin", b"\x00" * 64)
+        out = detect_toolchain(p)
+        assert "No recognizable toolchain markers found" in out
+        assert "Total findings: 0" in out
+
+    def test_go(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "app", b"\x7fELF\x00" + b"Go build ID: abc123" + b"runtime.main")
+        out = detect_toolchain(p)
+        assert "Go build info (Go compiler)" in out
+        assert "[RUNTIME]" in out
+
+    def test_rust(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "rsbin", b"rust_eh_personality\x00// cargo/registry")
+        out = detect_toolchain(p)
+        assert "[RUNTIME] Rust exception handling" in out
+        assert "[RUNTIME] Rust cargo registry path" in out
+
+    def test_pyinstaller(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "app.exe", b"MZ\x00\x00" + b"_MEIPASS" + b"PyInstaller")
+        out = detect_toolchain(p)
+        assert "[RUNTIME] PyInstaller" in out
+
+    def test_msvc_imports(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "win.exe", _pe_imports(["MSVCRT.dll", "KERNEL32.dll"]))
+        out = detect_toolchain(p)
+        assert "[TOOLCHAIN] Microsoft C/C++ runtime (MSVCRT/MSVCP/VCRUNTIME)" in out
+
+    def test_mingw_imports(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "mingw.exe", _pe_imports(["libgcc_s_seh-1.dll", "libstdc++-6.dll"]))
+        out = detect_toolchain(p)
+        assert "[TOOLCHAIN] MinGW/GCC runtime" in out
+
+    def test_ucrt(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "ucrt.exe", _pe_imports(["api-ms-win-crt-stdio-l1-1-0.dll"]))
+        out = detect_toolchain(p)
+        assert "[TOOLCHAIN] UCRT (Universal C Runtime)" in out
+
+    def test_electron(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "app.exe", b"MZ\x00\x00" + b"ELECTRON_RUN_AS_NODE")
+        out = detect_toolchain(p)
+        assert "[RUNTIME] Electron runtime" in out

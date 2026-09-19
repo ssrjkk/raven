@@ -12,11 +12,14 @@ def disassemble_bytes(code: bytes, arch: str = "x64", offset: int = 0) -> str:
             CS_ARCH_ARM,
             CS_ARCH_ARM64,
             CS_ARCH_MIPS,
+            CS_ARCH_RISCV,
             CS_ARCH_X86,
             CS_MODE_32,
             CS_MODE_64,
             CS_MODE_ARM,
             CS_MODE_MIPS32,
+            CS_MODE_RISCV32,
+            CS_MODE_RISCV64,
             CS_MODE_THUMB,
             Cs,
         )
@@ -32,6 +35,9 @@ def disassemble_bytes(code: bytes, arch: str = "x64", offset: int = 0) -> str:
         "aarch64": (CS_ARCH_ARM64, CS_MODE_64),
         "mips": (CS_ARCH_MIPS, CS_MODE_MIPS32),
         "thumb": (CS_ARCH_ARM, CS_MODE_THUMB),
+        "riscv": (CS_ARCH_RISCV, CS_MODE_RISCV64),
+        "riscv32": (CS_ARCH_RISCV, CS_MODE_RISCV32),
+        "riscv64": (CS_ARCH_RISCV, CS_MODE_RISCV64),
     }
     key = arch.lower().replace(" ", "-")
     if key not in arch_map:
@@ -92,6 +98,8 @@ def _guess_arch_from_binary(raw: bytes) -> str | None:
             return "arm64"
         if machine == 8:
             return "mips"
+        if machine == 243:
+            return "riscv"
         return "x64"
     if raw[:2] == b"MZ":
         pe_off = 0

@@ -119,6 +119,79 @@ _SUSPICIOUS_API_PATTERNS: dict[str, list[str]] = {
 }
 
 
+_RUNTIME_MARKERS: list[tuple[str, bytes, str]] = [
+    ("Go", b"Go build ID", "Go build info (Go compiler)"),
+    ("Go", b"runtime.main", "Go runtime symbol (Go compiler)"),
+    ("Go", b"\xff Go buildinf:", "Go build info section (Go compiler)"),
+    ("Rust", b"rust_eh_personality", "Rust exception handling (Rust compiler)"),
+    ("Rust", b"std::panicking", "Rust panicking machinery"),
+    ("Rust", b"// cargo/registry", "Rust cargo registry path"),
+    (".NET", b"mscoree", ".NET CLR loader (MSIL managed code)"),
+    (".NET", b"_CorExeMain", ".NET managed entry point"),
+    (".NET", b".NETFramework,Version=", ".NET Framework assembly"),
+    ("PyInstaller", b"MEI", "PyInstaller bootloader (MEI)"),
+    ("PyInstaller", b"PyInstaller", "PyInstaller marker"),
+    ("PyInstaller", b"_MEIPASS", "PyInstaller temp dir marker"),
+    ("Electron", b"ELECTRON_RUN_AS_NODE", "Electron runtime"),
+    ("Electron", b"app.asar", "Electron packaged app"),
+    ("Qt", b"Qt5\u0000", "Qt5 framework"),
+]
+
+_RUNTIME_STRING_SCAN_WORDS: list[tuple[str, bytes, str]] = [
+    ("Go", b"golang.org", "Go module path"),
+    ("Go", b" Go build ID: ", "Go build ID embedded"),
+    ("Rust", b".rustc", "Rust metadata section"),
+    ("Rust", b" (rust", "Rust toolchain metadata"),
+]
+
+_MSVC_IMPORTS: frozenset[str] = frozenset({
+    "MSVCRT", "MSVCP140", "VCRUNTIME140", "ucrtbase", "api-ms-win-crt-",
+})
+_MINGW_IMPORTS: frozenset[str] = frozenset({
+    "libgcc", "libmingw", "libstdc++-6", "libwinpthread",
+})
+
+
+def detect_toolchain(path: str) -> str:
+    p = Path(path)
+    if not p.exists():
+        return f"[error] File not found: {path}"
+    raw = p.read_bytes()
+
+    lines = [f"=== Toolchain Detection: {p.name} ==="]
+    findings = 0
+
+    seen_descs: set[str] = set()
+
+    def _add(kind: str, desc: str) -> None:
+        nonlocal findings
+        if desc not in seen_descs:
+            lines.append(f"  [{kind}] {desc}")
+            seen_descs.add(desc)
+            findings += 1
+
+    for _name, marker, desc in _RUNTIME_MARKERS:
+        if marker in raw:
+            _add("RUNTIME", desc)
+    for _name, word, desc in _RUNTIME_STRING_SCAN_WORDS:
+        if word in raw:
+            _add("RUNTIME", desc)
+
+    if raw[:2] == b"MZ":
+        imports = _extract_imports(raw)
+        if any(i.startswith("MSVCRT") or i.startswith("MSVCP") or i.startswith("VCRUNTIME") or i.startswith("ucrtbase") for i in imports):
+            _add("TOOLCHAIN", "Microsoft C/C++ runtime (MSVCRT/MSVCP/VCRUNTIME)")
+        if any(i.startswith("libgcc") or i.startswith("libmingw") or "libstdc++" in i for i in imports):
+            _add("TOOLCHAIN", "MinGW/GCC runtime")
+        if any(i.startswith("api-ms-win-crt") for i in imports):
+            _add("TOOLCHAIN", "UCRT (Universal C Runtime)")
+
+    if findings == 0:
+        lines.append("  No recognizable toolchain markers found (unknown or custom build)")
+    lines.append(f"\n  Total findings: {findings}")
+    return "\n".join(lines)
+
+
 def detect_patterns(path: str, patterns: str = "all") -> str:
     p = Path(path)
     if not p.exists():
