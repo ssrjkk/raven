@@ -16,6 +16,7 @@ from raven.tools.reverse_engineering.binary_analyzer import (
     _find_text_section_offset,
     _format_size,
     _parse_elf_raw,
+    _raw_pe_imports,
     _try_pefile,
     _try_pyelftools,
     analyze_binary,
@@ -133,6 +134,55 @@ def _pe_with_text() -> bytes:
     sh = 0x80 + 248
     b[sh : sh + 8] = b".text\x00\x00\x00"
     struct.pack_into("<I", b, sh + 20, 0x2000)
+    return bytes(b)
+
+
+def _pe_full_with_imports() -> bytes:
+    """Minimal PE32+ with one .idata section and one KERNEL32!CreateFileW import."""
+    pe_offset = 0x80
+    opt_size = 0xF0
+    sect_vaddr = 0x2000  # .idata virtual address
+    sect_rawptr = 0x400  # .idata file pointer
+    b = bytearray(0x1000)
+    b[0:2] = b"MZ"
+    struct.pack_into("<I", b, 0x3C, pe_offset)
+    b[pe_offset : pe_offset + 4] = b"PE\x00\x00"
+    struct.pack_into("<H", b, pe_offset + 6, 1)  # num_sections
+    struct.pack_into("<H", b, pe_offset + 20, opt_size)  # size_of_optional_header
+    struct.pack_into("<H", b, pe_offset + 24, 0x20B)  # PE32+ magic
+    # one section header just after the optional header
+    sect = pe_offset + 24 + opt_size
+    b[sect : sect + 8] = b".idata\x00\x00"
+    struct.pack_into("<I", b, sect + 8, 0x600)  # virtual size
+    struct.pack_into("<I", b, sect + 12, sect_vaddr)
+    struct.pack_into("<I", b, sect + 16, 0x600)  # raw size
+    struct.pack_into("<I", b, sect + 20, sect_rawptr)
+
+    def rva_to_off(rva: int) -> int:
+        return sect_rawptr + (rva - sect_vaddr)
+
+    # import descriptor at rva base (raw sect_rawptr); 20 bytes -> occupies 0x2000..0x2013
+    desc_off = rva_to_off(sect_vaddr)
+    offt_rva = sect_vaddr + 0x20  # OriginalFirstThunk array
+    name_rva = sect_vaddr + 0x50  # DLL name string
+    ft_rva = sect_vaddr + 0x30    # FirstThunk array
+    byname_rva = sect_vaddr + 0x40
+    struct.pack_into("<I", b, desc_off + 0, offt_rva)
+    struct.pack_into("<I", b, desc_off + 12, name_rva)
+    struct.pack_into("<I", b, desc_off + 16, ft_rva)
+    # OFT + FT arrays: one IMAGE_IMPORT_BY_NAME then terminator
+    for thunk_rva in (offt_rva, ft_rva):
+        thunk_off = rva_to_off(thunk_rva)
+        struct.pack_into("<Q", b, thunk_off, byname_rva)
+        struct.pack_into("<Q", b, thunk_off + 8, 0)
+    # IMAGE_IMPORT_BY_NAME at byname_rva: hint(2) + "CreateFileW"
+    iname_off = rva_to_off(byname_rva)
+    b[iname_off : iname_off + 2] = b"\x00\x00"
+    b[iname_off + 2 : iname_off + 2 + 11] = b"CreateFileW"
+    # DLL name at name_rva
+    struct.pack_into("<I", b, pe_offset + 24 + 0x68, sect_vaddr)
+    dll_off = rva_to_off(name_rva)
+    b[dll_off : dll_off + 9] = b"KERNEL32\x00"
     return bytes(b)
 
 
@@ -391,6 +441,27 @@ class TestFindPeTextSection:
         assert _find_pe_text_section(raw, len(raw) - 2) is None
 
 
+class TestRawPeImports:
+    def test_extracts_dll_and_function(self, tmp_path: Path) -> None:
+        raw = _pe_full_with_imports()
+        imports = _raw_pe_imports(raw, 0x80)
+        assert any(i["dll"] == "KERNEL32" and i["name"] == "CreateFileW" for i in imports)
+
+    def test_garbage_returns_empty(self) -> None:
+        assert _raw_pe_imports(b"\x00" * 64, 8) == []
+
+    def test_truncated_returns_empty(self) -> None:
+        raw = _pe_full_with_imports()
+        assert _raw_pe_imports(raw[:300], 0x80) == []
+
+    def test_ordinal_when_no_name(self, tmp_path: Path) -> None:
+        raw = _pe_full_with_imports()
+        imports = _raw_pe_imports(raw, 0x80)
+        assert isinstance(imports, list)
+        for i in imports:
+            assert "dll" in i and "name" in i
+
+
 class TestAnalyzeBinary:
     def test_missing_file(self) -> None:
         result = analyze_binary("C:/does/not/exist.bin")
@@ -403,6 +474,7 @@ class TestAnalyzeBinary:
         assert "Format: Unknown" in result
         assert "Entropy:" in result
         assert "Strings found:" in result
+        assert "Unicode strings:" in result
 
     def test_elf_file(self, tmp_path: Path) -> None:
         p = _write(tmp_path, "prog", _elf64())
@@ -417,6 +489,13 @@ class TestAnalyzeBinary:
         result = analyze_binary(p)
         assert "Format: PE" in result
         assert "Entropy:" in result
+
+    def test_pe_imports_fallback_rendered(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "imp.exe", _pe_full_with_imports())
+        with patch("raven.tools.reverse_engineering.binary_analyzer._try_pefile", return_value=None):
+            result = analyze_binary(p)
+        assert "Imports (raw fallback" in result
+        assert "KERNEL32!CreateFileW" in result
 
 
 class TestExtractStrings:
@@ -482,6 +561,12 @@ class TestEntropyAndStrings:
     def test_count_strings(self) -> None:
         data = b"AAAA\x00BBBB\x00CCCC"
         assert _count_strings(data) == 3
+
+    def test_unicode_strings_counted(self, tmp_path: Path) -> None:
+        data = b"AAAA\x00" * 10  # 4 printable + null = unicode string blocks
+        p = _write(tmp_path, "u.bin", data)
+        result = analyze_binary(p)
+        assert "Unicode strings:" in result
 
 
 class TestHexdump:

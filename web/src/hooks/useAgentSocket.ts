@@ -60,7 +60,7 @@ export function useAgentSocket(onEvent: (ev: AgentSocketEvent) => void) {
       try {
         const parsed = JSON.parse(e.data);
         if (!parsed || typeof parsed.type !== "string") return;
-        if (parsed.type === "done") setRunning(false);
+        if (parsed.type === "done" || parsed.type === "final") setRunning(false);
         handlerRef.current({
           type: parsed.type,
           data: (parsed.data ?? {}) as Record<string, unknown>,
@@ -97,5 +97,10 @@ export function useAgentSocket(onEvent: (ev: AgentSocketEvent) => void) {
     );
   }, []);
 
-  return { connected, running, send };
+  const respond = useCallback((payload: Record<string, unknown>) => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify(payload));
+  }, []);
+
+  return { connected, running, send, respond };
 }

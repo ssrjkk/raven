@@ -184,6 +184,12 @@ def _try_pyelftools(path: str) -> dict[str, Any] | None:
                 except Exception as e:
                     logger.debug("Section addr extraction failed: {}", e)
                     s["addr"] = "0x0"
+                try:
+                    data = sec.data()
+                    if data:
+                        s["entropy"] = _calculate_entropy(data)
+                except Exception as e:
+                    logger.debug("Section entropy failed: {}", e)
                 sections.append(s)
             symbols = []
             if hasattr(elf, "get_section_by_name") and elf.get_section_by_name(".symtab"):
@@ -240,6 +246,100 @@ def _try_pefile(path: str) -> dict[str, Any] | None:
         return {"imports": imports[:300], "exports": exports[:100], "sections": sections}
     except Exception as e:
         return {"error": str(e)}
+
+
+def _raw_pe_imports(raw: bytes, pe_offset: int) -> list[dict[str, Any]]:
+    """Fallback PE import parser when pefile is unavailable.
+
+    Walks the import directory table directly: DLL names + thunk-resolved
+    function names (with ordinal fallback). Returns [] when the section
+    layout cannot be mapped to a file offset (packed/bin is raw anyway).
+    """
+    try:
+        num_sections = struct.unpack("<H", raw[pe_offset + 6 : pe_offset + 8])[0]
+        opt_size = struct.unpack("<H", raw[pe_offset + 20 : pe_offset + 22])[0]
+        opt_offset = pe_offset + 24
+        magic = struct.unpack("<H", raw[opt_offset : opt_offset + 2])[0]
+        if magic not in (0x10B, 0x20B) or opt_size < 96:
+            return []
+        bits = 64 if magic == 0x20B else 32
+        import_rva = struct.unpack("<I", raw[opt_offset + 0x68 : opt_offset + 0x6C])[0]
+        if not import_rva:
+            return []
+
+        sections: list[tuple[int, int, int]] = []
+        sect_hdr_off = opt_offset + opt_size
+        for i in range(num_sections):
+            off = sect_hdr_off + i * 40
+            if off + 40 > len(raw):
+                break
+            vaddr = struct.unpack("<I", raw[off + 12 : off + 16])[0]
+            raw_size = struct.unpack("<I", raw[off + 16 : off + 20])[0]
+            raw_ptr = struct.unpack("<I", raw[off + 20 : off + 24])[0]
+            vsize = struct.unpack("<I", raw[off + 8 : off + 12])[0]
+            sections.append((vaddr, vsize if vsize else raw_size, raw_ptr))
+
+        def _rva_to_off(rva: int) -> int | None:
+            for vaddr, vsize, raw_ptr in sections:
+                if vaddr <= rva < vaddr + max(vsize, 1):
+                    return raw_ptr + (rva - vaddr)
+            return None
+
+        thunk_size = 8 if bits == 64 else 4
+
+        def _read_cstring(off: int) -> str:
+            end = raw.find(b"\x00", off)
+            if end == -1:
+                end = min(off + 128, len(raw))
+            return raw[off:end].decode("utf-8", errors="replace")
+
+        imports: list[dict[str, Any]] = []
+        desc_off = _rva_to_off(import_rva)
+        if desc_off is None:
+            return []
+        seen: set[tuple[str, str]] = set()
+        for entry_idx in range(64):
+            entry_off = desc_off + entry_idx * 20
+            if entry_off + 20 > len(raw):
+                break
+            orig_thunk = struct.unpack("<I", raw[entry_off : entry_off + 4])[0]
+            name_rva = struct.unpack("<I", raw[entry_off + 12 : entry_off + 16])[0]
+            first_thunk = struct.unpack("<I", raw[entry_off + 16 : entry_off + 20])[0]
+            if not name_rva:
+                break
+            dll_off = _rva_to_off(name_rva)
+            if dll_off is None:
+                continue
+            dll = _read_cstring(dll_off)
+            thunk_rva = orig_thunk or first_thunk
+            thunk_off = _rva_to_off(thunk_rva)
+            for _thunk_idx in range(4096):
+                if thunk_off is None or thunk_off + thunk_size > len(raw):
+                    break
+                if bits == 64:
+                    val = struct.unpack("<Q", raw[thunk_off : thunk_off + 8])[0]
+                else:
+                    val = struct.unpack("<I", raw[thunk_off : thunk_off + 4])[0]
+                if val == 0:
+                    break
+                ordinal = bool(val & (1 << (bits - 1)))
+                if ordinal:
+                    name = f"ord({val & 0xFFFF})"
+                else:
+                    iname_off = _rva_to_off(val & 0x7FFFFFFF)
+                    if iname_off is None or iname_off + 3 > len(raw):
+                        name = "ord(?)"
+                    else:
+                        name = _read_cstring(iname_off + 2)
+                key = (dll, name)
+                if key not in seen:
+                    seen.add(key)
+                    imports.append({"dll": dll, "name": name, "address": hex(val)})
+                thunk_off += thunk_size
+        return imports
+    except Exception as e:
+        logger.debug("raw PE import fallback failed: {}", e)
+        return []
 
 
 def _parse_elf_raw(raw: bytes, info: dict[str, Any]) -> dict[str, Any]:
@@ -349,7 +449,8 @@ def analyze_binary(path: str) -> str:
             if "sections" in elf_info:
                 lines.append(f"\n  Sections ({len(elf_info['sections'])}):")
                 for s in elf_info["sections"][:30]:
-                    lines.append(f"    {s['name']:20s} addr={s.get('addr', '?'):14s} size={s['size']}")
+                    entropy = f"entropy={s['entropy']:.2f}" if "entropy" in s else "entropy=?"
+                    lines.append(f"    {s['name']:20s} addr={s.get('addr', '?'):14s} size={s['size']}  {entropy}")
             if "symbols" in elf_info:
                 lines.append(f"\n  Symbols ({len(elf_info['symbols'])}):")
                 for s in elf_info["symbols"][:20]:
@@ -384,11 +485,17 @@ def analyze_binary(path: str) -> str:
             text_off = _find_pe_text_section(raw, pe_off)
             if text_off:
                 lines.append(f"\n  .text at raw offset: {hex(text_off)}")
+            fallback_imports = _raw_pe_imports(raw, pe_off)
+            if fallback_imports:
+                lines.append(f"\n  Imports (raw fallback, {len(fallback_imports)}):")
+                for imp in fallback_imports[:30]:
+                    lines.append(f"    {imp['dll']}!{imp['name']} -> {imp['address']}")
     else:
         lines.append("\n  (detailed parsing requires pyelftools or pefile)")
 
     lines.append(f"\n  Entropy: {_calculate_entropy(raw):.3f}")
     lines.append(f"  Strings found: {_count_strings(raw)}")
+    lines.append(f"  Unicode strings: {_count_unicode_strings(raw)}")
 
     return "\n".join(lines)
 
@@ -471,6 +578,10 @@ def _calculate_entropy(data: bytes) -> float:
 
 def _count_strings(data: bytes) -> int:
     return len(re.findall(rb"[\x20-\x7e]{4,}", data))
+
+
+def _count_unicode_strings(data: bytes) -> int:
+    return len(re.findall(rb"(?:[\x20-\x7e]\x00){4,}", data))
 
 
 def hexdump(path: str, offset: int = 0, length: int = 256) -> str:
