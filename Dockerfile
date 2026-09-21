@@ -1,6 +1,6 @@
 ARG RAVEN_VERSION=0.4.0
 
-FROM python:3.13-slim@sha256:e3c825ce1ff0a6cf9c8f04bed269fa2844955bcc0da8e2f29ff65c21da6046f1 AS base
+FROM python:3.13-slim AS base
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libgbm1 \
     libasound2 libxshmfence1 curl \
