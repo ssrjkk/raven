@@ -108,7 +108,7 @@ jobs:
       - name: Run Postgres integration tests
         env:
           DATABASE_URL: postgresql://raven:raven@localhost:5432/raven_test
-        run: pytest tests/integration/ -m integration -v --tb=short
+        run: pytest tests/integration/ -m integration -v --tb=short --no-cov
 
   e2e-tests:
     name: E2E tests (Allure)
