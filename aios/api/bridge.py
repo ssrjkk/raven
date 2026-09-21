@@ -22,6 +22,7 @@ from ravencode.agents.orchestrator import AgentType, Orchestrator
 from ravencode.api.client import AIOSClient
 from ravencode.runtime.agent_core import AgentConfig, AgentEvent, EventEmitter, ReActAgent
 from ravencode.runtime.session import SessionStore
+from ravencode.runtime.workspace import confine
 
 router = APIRouter(prefix="/aios", tags=["ai-os-mvp"])
 _orch = Orchestrator()
@@ -529,9 +530,9 @@ async def aios_completion(payload: dict[str, Any]) -> dict[str, Any]:
                 lines = lines[:-1]
             completion = "\n".join(lines)
         return {"completion": completion}
-    except Exception as exc:
-        logger.debug("Completion failed: {}", exc)
-        return {"completion": "", "error": str(exc)}
+    except Exception:
+        logger.debug("Completion failed")
+        return {"completion": "", "error": "Completion failed"}
 
 
 @router.post("/inline-edit")
@@ -570,16 +571,19 @@ async def aios_inline_edit(payload: dict[str, Any]) -> dict[str, Any]:
             fromfile="original", tofile="edited",
         ))
         return {"edited_code": edited, "diff": "".join(diff_lines)}
-    except Exception as exc:
-        logger.debug("Inline edit failed: {}", exc)
-        return {"edited_code": code, "diff": "", "error": str(exc)}
+    except Exception:
+        logger.debug("Inline edit failed")
+        return {"edited_code": code, "diff": "", "error": "Inline edit failed"}
 
 
 @router.get("/workspace/tree")
 async def workspace_tree(path: str = ".") -> dict[str, Any]:
     from pathlib import Path as PathLib
 
-    root = PathLib(path).resolve()
+    try:
+        root = confine(path)
+    except PermissionError:
+        return {"error": "Access denied: path outside workspace", "tree": []}
     if not root.is_dir():
         return {"error": "Path is not a directory", "tree": []}
 
@@ -616,33 +620,35 @@ async def workspace_tree(path: str = ".") -> dict[str, Any]:
 
 @router.get("/workspace/read")
 async def workspace_read(path: str) -> dict[str, Any]:
-    from pathlib import Path as PathLib
-
-    file_path = PathLib(path).resolve()
+    try:
+        file_path = confine(path)
+    except PermissionError:
+        return {"error": "Access denied: path outside workspace"}
     if not file_path.is_file():
         return {"error": "File not found"}
     try:
         content = file_path.read_text(encoding="utf-8")
         return {"path": str(file_path), "content": content, "size": len(content)}
-    except Exception as exc:
-        return {"error": str(exc)}
+    except Exception:
+        return {"error": "Failed to read file"}
 
 
 @router.post("/workspace/write")
 async def workspace_write(payload: dict[str, Any]) -> dict[str, Any]:
-    from pathlib import Path as PathLib
-
     path = payload.get("path", "")
     content = payload.get("content", "")
     if not path:
         return {"error": "Path required"}
-    file_path = PathLib(path).resolve()
+    try:
+        file_path = confine(path)
+    except PermissionError:
+        return {"error": "Access denied: path outside workspace"}
     try:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(content, encoding="utf-8")
         return {"ok": True, "path": str(file_path), "size": len(content)}
-    except Exception as exc:
-        return {"error": str(exc)}
+    except Exception:
+        return {"error": "Failed to write file"}
 
 
 @router.post("/search")
@@ -652,7 +658,10 @@ async def aios_search(payload: dict[str, Any]) -> dict[str, Any]:
     limit = min(int(payload.get("limit", 100)), 500)
     if not query:
         return {"results": [], "error": "Query required"}
-    root = Path(path).resolve()
+    try:
+        root = confine(path)
+    except PermissionError:
+        return {"results": [], "error": "Access denied: path outside workspace"}
     if not root.is_dir():
         return {"results": [], "error": "Path is not a directory"}
     results = await asyncio.to_thread(_rg_search, query, root, limit)
@@ -723,7 +732,10 @@ async def aios_search_semantic(payload: dict[str, Any]) -> dict[str, Any]:
     top_k = min(int(payload.get("top_k", 10)), 50)
     if not query:
         return {"results": [], "error": "Query required"}
-    root = Path(path).resolve()
+    try:
+        root = confine(path)
+    except PermissionError:
+        return {"results": [], "error": "Access denied: path outside workspace"}
     if not root.is_dir():
         return {"results": [], "error": "Path is not a directory"}
 

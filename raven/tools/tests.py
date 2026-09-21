@@ -60,10 +60,10 @@ def _sanitize_extra_args(extra_args: str) -> tuple[str, list[str]]:
 async def run_tests(path: str = "", marker: str = "", timeout: int = 120, extra_args: str = "") -> str:
     try:
         root = _confine(path) if path else Path.cwd()
-    except PermissionError as e:
-        return f"{e}"
+    except PermissionError:
+        return "Access denied: invalid path"
     if not root.is_dir():
-        return f"Path not found: {root}"
+        return "Path not found"
     safe_args, _dropped = _sanitize_extra_args(extra_args)
     cmd = [sys.executable, "-m", "pytest", str(root), "-q", "--tb=short", "--no-header", "-p", "no:schemathesis"]
     if marker:
@@ -80,8 +80,8 @@ async def run_tests(path: str = "", marker: str = "", timeout: int = 120, extra_
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except TimeoutError:
         return f"Tests timed out after {timeout}s"
-    except FileNotFoundError as e:
-        return f"pytest not found: {e}"
+    except FileNotFoundError:
+        return "pytest not found"
 
     out = stdout.decode("utf-8", errors="replace")
     err = stderr.decode("utf-8", errors="replace")
@@ -97,10 +97,10 @@ async def run_tests(path: str = "", marker: str = "", timeout: int = 120, extra_
 async def test_coverage(path: str = "", timeout: int = 180) -> str:
     try:
         root = _confine(path) if path else Path.cwd()
-    except PermissionError as e:
-        return f"{e}"
+    except PermissionError:
+        return "Access denied: invalid path"
     if not root.is_dir():
-        return f"Path not found: {root}"
+        return "Path not found"
     cmd = [
         sys.executable,
         "-m",
@@ -158,10 +158,10 @@ async def generate_tests(file_path: str = "") -> str:
         return "file_path required"
     try:
         fp = _confine(file_path)
-    except PermissionError as e:
-        return f"{e}"
+    except PermissionError:
+        return "Access denied: invalid path"
     if not fp.is_file():
-        return f"File not found: {fp}"
+        return "File not found"
     try:
         from raven.coding.test_generator import TestGenerator
 
@@ -171,9 +171,9 @@ async def generate_tests(file_path: str = "") -> str:
             return "No tests generated (empty or unsupported)"
         result = await gen.save_tests(str(fp), test_content)
         return f"{result}\n\n{test_content[:2000]}"
-    except Exception as e:
+    except Exception:
         logger.exception("test generation failed")
-        return f"Test generation error: {e}"
+        return "Test generation failed"
 
 
 def register_test_tools(registry: ToolRegistry) -> None:

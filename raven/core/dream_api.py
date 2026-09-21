@@ -77,11 +77,11 @@ def create_dream_router(memory_manager: MemoryManager) -> APIRouter:
         except PermissionError:
             return {"ok": False, "error": "Access denied: path outside data directory"}
         if not source.is_file():
-            return {"ok": False, "error": f"File not found: {source}"}
+            return {"ok": False, "error": "File not found"}
         try:
             counts = await import_memory(memory_manager, source)
-        except (ValueError, TypeError) as exc:
-            return {"ok": False, "error": str(exc)}
+        except (ValueError, TypeError):
+            return {"ok": False, "error": "Import failed: invalid data"}
         return {"ok": True, "restored": counts}
 
     @router.get("/api/memory/backups")
