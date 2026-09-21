@@ -155,6 +155,16 @@ def _python_symbols(path: Path) -> list[str]:
     return lines
 
 
+def _parent_is_symlink(base: Path, parts: tuple[str, ...]) -> bool:
+    """Check if any parent directory in the path is a symlink."""
+    current = base
+    for part in parts:
+        current = current / part
+        if current.is_symlink():
+            return True
+    return False
+
+
 def build_repo_map(
     root: str | Path | None = None,
     max_chars: int = DEFAULT_MAX_CHARS,
@@ -179,6 +189,8 @@ def build_repo_map(
             if any(part in _EXCLUDED_DIRS for part in rel.parts[:-1]):
                 continue
             if path.is_symlink():
+                continue
+            if _parent_is_symlink(base, rel.parts[:-1]):
                 continue
             if path.is_file() and path.suffix.lower() in _CODE_SUFFIXES:
                 all_files.append(path)
