@@ -589,8 +589,11 @@ def init_auth_routes(app: FastAPI, db_path: str) -> None:
         existing = await store.get_user(body.username)
         if existing:
             raise HTTPException(409, "Username already exists")
-        user = await store.create_user(body.username, body.password, display_name=display)
+        user = await store.create_user(body.username, body.password, display_name=display, email=body.email or "")
         token = token_manager.create_token(user.id, user.role.value)
+        if body.email:
+            verification_token = await store.create_email_verification_token(user.id)
+            logger.info("Email verification token for {}: {}", body.email, verification_token)
         return {"token": token, "user_id": user.id, "role": user.role.value, "username": user.username}
 
     @app.get("/api/auth/me")
@@ -606,6 +609,22 @@ def init_auth_routes(app: FastAPI, db_path: str) -> None:
         if token:
             token_manager.revoke_token(token)
         return {"ok": True}
+
+    @app.post("/api/auth/logout-all")
+    async def auth_logout_all(request: Request):
+        user_id = getattr(request.state, "user_id", None)
+        if not user_id or user_id == "anonymous":
+            raise HTTPException(401, "Authentication required")
+        await store.revoke_all_user_sessions(user_id)
+        token_manager.revoke_user_tokens(user_id)
+        return {"ok": True, "message": "All sessions revoked"}
+
+    @app.get("/api/auth/verify-email")
+    async def auth_verify_email(token: str):
+        success = await store.verify_email_token(token)
+        if not success:
+            raise HTTPException(400, "Invalid or expired verification token")
+        return {"ok": True, "message": "Email verified successfully"}
 
     @app.get("/api/auth/users")
     async def auth_list_users(request: Request):

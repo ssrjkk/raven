@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from loguru import logger
 
+from raven.core.channel_config import get_channel_config
 from raven.core.config import settings
 from raven.core.db import Database
 from raven.core.llm.queue import PRIORITY_LOW
@@ -17,6 +18,10 @@ from raven.core.models import IncomingMessage
 def _verify_hmac_sha256(body_bytes: bytes, signature: str, secret: str) -> bool:
     expected = hmac_mod.new(secret.encode(), body_bytes, hashlib.sha256).hexdigest()
     return hmac_mod.compare_digest(f"sha256={expected}", signature)
+
+
+def _slack_signing_secret() -> str:
+    return str(get_channel_config("slack").get("signing_secret") or settings.web_secret_key.get_secret_value() or "")
 
 
 async def _verify_webhook_signature(request: Request) -> None:
@@ -69,7 +74,8 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
         body_bytes = await request.body()
         slack_sig = request.headers.get("X-Slack-Signature", "")
         slack_ts = request.headers.get("X-Slack-Request-Timestamp", "")
-        if settings.web_secret_key.get_secret_value():
+        signing_secret = _slack_signing_secret()
+        if signing_secret:
             if not slack_sig:
                 raise HTTPException(status_code=403, detail="Invalid or missing Slack signature")
             try:
@@ -79,14 +85,11 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
             except (ValueError, TypeError) as err:
                 raise HTTPException(status_code=403, detail="Invalid Slack timestamp") from err
             sig_basestring = f"v0:{slack_ts}:{body_bytes.decode('utf-8', errors='replace')}"
-            expected = (
-                "v0="
-                + hmac_mod.new(
-                    settings.web_secret_key.get_secret_value().encode(), sig_basestring.encode(), hashlib.sha256
-                ).hexdigest()
-            )
+            expected = "v0=" + hmac_mod.new(signing_secret.encode(), sig_basestring.encode(), hashlib.sha256).hexdigest()
             if not hmac_mod.compare_digest(expected, slack_sig):
                 raise HTTPException(status_code=403, detail="Invalid Slack signature")
+        else:
+            logger.warning("Slack webhook signature NOT verified — set SLACK_SIGNING_SECRET or WEB_SECRET_KEY")
         logger.debug("Slack webhook event: {}", body.get("type", ""))
         if body.get("type") == "url_verification":
             return {"challenge": body.get("challenge", "")}

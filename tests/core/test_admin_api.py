@@ -608,17 +608,17 @@ class TestAuthRoutes:
         return TestClient(app)
 
     def test_register_and_login(self, auth_client) -> None:
-        reg = auth_client.post("/api/auth/register", json={"username": "alice", "password": "secret123"})
+        reg = auth_client.post("/api/auth/register", json={"username": "alice", "password": "Secret123!"})
         assert reg.status_code == 200
         token = reg.json()["token"]
         assert token
 
-        login = auth_client.post("/api/auth/login", json={"username": "alice", "password": "secret123"})
+        login = auth_client.post("/api/auth/login", json={"username": "alice", "password": "Secret123!"})
         assert login.status_code == 200
         assert login.json()["role"] == "user"
 
     def test_login_wrong_password(self, auth_client) -> None:
-        auth_client.post("/api/auth/register", json={"username": "bob", "password": "secret123"})
+        auth_client.post("/api/auth/register", json={"username": "bob", "password": "Secret123!"})
         resp = auth_client.post("/api/auth/login", json={"username": "bob", "password": "wrong-pw"})
         assert resp.status_code == 401
 
@@ -627,8 +627,8 @@ class TestAuthRoutes:
         assert resp.status_code == 401
 
     def test_register_duplicate(self, auth_client) -> None:
-        auth_client.post("/api/auth/register", json={"username": "carol", "password": "secret123"})
-        resp = auth_client.post("/api/auth/register", json={"username": "carol", "password": "secret456"})
+        auth_client.post("/api/auth/register", json={"username": "carol", "password": "Secret123!"})
+        resp = auth_client.post("/api/auth/register", json={"username": "carol", "password": "Secret123!"})
         assert resp.status_code == 409
 
     def test_register_short_password(self, auth_client) -> None:
@@ -637,7 +637,7 @@ class TestAuthRoutes:
 
     def test_register_with_display_name(self, auth_client) -> None:
         resp = auth_client.post(
-            "/api/auth/register", json={"username": "erin", "password": "secret123", "display_name": "Erin R."}
+            "/api/auth/register", json={"username": "erin", "password": "Secret123!", "display_name": "Erin R."}
         )
         assert resp.status_code == 200
         assert resp.json()["username"] == "erin"
@@ -669,7 +669,7 @@ class TestAuthRoutes:
         assert "data:" in first
 
     def test_users_list_and_role_update(self, auth_client) -> None:
-        auth_client.post("/api/auth/register", json={"username": "frank", "password": "secret123"})
+        auth_client.post("/api/auth/register", json={"username": "frank", "password": "Secret123!"})
         users = auth_client.get("/api/auth/users").json()
         assert any(u["username"] == "frank" for u in users)
         resp = auth_client.post("/api/auth/users/frank/role", json={"role": "admin"})
@@ -683,7 +683,7 @@ class TestAuthRoutes:
         assert resp.status_code == 200
 
     def test_deactivate_user(self, auth_client) -> None:
-        auth_client.post("/api/auth/register", json={"username": "grace", "password": "secret123"})
+        auth_client.post("/api/auth/register", json={"username": "grace", "password": "Secret123!"})
         resp = auth_client.post("/api/auth/users/grace/deactivate")
         assert resp.status_code == 200
         users = auth_client.get("/api/auth/users").json()

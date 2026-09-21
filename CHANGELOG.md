@@ -5,6 +5,34 @@ All notable changes to Raven AI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Condensed summary of 276 commits since v0.4.0 (2026-06-05 → 2026-09-20). Per-commit detail: `git log v0.4.0..HEAD`; 2026 session fix logs: `docs/archive/fixes-history.md`.
+
+### Added
+- RavenCode agent core: streaming ReAct loop, typed LLM delta streaming (providers → router → client → agent → SSE/TUI/WS), parallel tool execution, tool-result cache, LLM retry with adaptive 429 limiter, context auto-compaction + deep digest compaction, repo map in system prompt, speculative pre-read with git co-change focus, queue priorities, usage/cost accounting, persistent memory tools, MCP tool wiring, Anthropic prompt caching, smart tool-result truncation with spill files, code search (BM25), run_tests tool, task-style eval suite
+- Sub-agents: parallel delegation (`delegate_parallel`, `task_parallel`), auto checkpoint + `undo_changes`, subtask timeouts, LLM-based smart routing
+- IDE/web: live agent streaming (WS tokens, tool trace, confirm dialog), voice input (Web Speech API), Agent Console page, full theme-aware UI redesign, command palette (Cmd/Ctrl+K), skeleton screens, accent color picker, project metrics dashboard, git diff/blame views, artifact renderer
+- Reverse engineering module: binary analysis, disassembly (incl. RISC-V), strings, PE import fallback, ELF section entropy, toolchain detection, `lsp_diagnostics` tool
+- PostgreSQL backend via unified `AsyncDB` layer (SQLite/asyncpg); DB indexes + migration v5; LLM request queue
+- Packaging: PyInstaller EXE pipeline (`scripts/build_exe.ps1` → `Raven.exe`), SPA dashboard serving, landing page
+- CI: unified `check_all.py`, E2E Allure job, Postgres integration job, EXE build job, secrets/CodeQL/dependency-review scans
+- API test coverage: 30+ new test modules for core routers (email, AB testing, chaos, cost management, plugins, SSE, status, tests, voice, workflow, web search, etc.)
+
+### Fixed
+- 70+ fix commits: sandbox builtins isolation, auth on read endpoints, SSRF redirect-bypass hardening (`safe_fetch_async` per-hop validation), event-loop blocking (sync subprocess → `asyncio.to_thread`), Prometheus label conflicts, SQLite connection race, OAuth PKCE + exact redirect match, PBKDF2 600k + rehash, channel guardian restarts, Slack signature fail-open (see Security)
+
+### Security
+- `SlackChannel.verify_signature` now fails closed when `signing_secret` is not configured (previously returned `True`, accepting unsigned requests)
+
+### Removed
+- Dead `packages/` TypeScript tree (unused, untested, not in CI); broken `github/` action (dist never built); duplicate root `raven.spec`; `monolith-requirements.txt` / `requirements-dev.txt` (pyproject is the single source)
+- 6 unused community-automation workflows (stats, triage, pr-review, notify-discord, close-stale, ravencode); kept CI/release/build/security workflows
+
+### Changed
+- AGENTS.md rewritten as concise guidelines (716 → 55 lines); historical fix logs archived verbatim to `docs/archive/fixes-history.md`
+- README test count refreshed (4,900+); `docs/sprint-1.md` archived
+
 ## [0.4.0] - 2026-06-05
 
 ### Added

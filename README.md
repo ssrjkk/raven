@@ -2,7 +2,7 @@
 
 Self-hosted AI assistant framework combining an autonomous coding agent (RavenCode) with multi-channel communication and a web dashboard.
 
-**Status:** Active development | **Tests:** 4,677+ | **Python:** 3.11+ | **License:** MIT
+**Status:** Active development | **Tests:** 4,900+ | **Python:** 3.11+ | **License:** MIT
 
 ---
 
@@ -119,7 +119,7 @@ observability stack (`docker-compose.monitoring.yml`).
 | **Voice** | Whisper, Google STT, Azure STT, Vosk, ElevenLabs, gTTS |
 | **Security** | JWT (HS256), PBKDF2, Fernet encryption, RBAC |
 | **Observability** | OpenTelemetry, Prometheus |
-| **Testing** | pytest (4,677+ tests), Vitest |
+| **Testing** | pytest (4,900+ tests), Vitest |
 | **CI/CD** | GitHub Actions (15 workflows) |
 | **Deployment** | Docker, docker-compose, systemd |
 

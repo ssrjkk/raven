@@ -184,7 +184,7 @@ class TestAuthLoginRequest:
 
 class TestAuthRegisterRequest:
     def test_valid(self):
-        req = AuthRegisterRequest(username="new_user", password="password123")
+        req = AuthRegisterRequest(username="new_user", password="Password123!")
         assert req.username == "new_user"
 
     def test_short_password_rejected(self):
@@ -193,10 +193,10 @@ class TestAuthRegisterRequest:
 
     def test_invalid_username_chars(self):
         with pytest.raises(ValidationError):
-            AuthRegisterRequest(username="user name!", password="password123")
+            AuthRegisterRequest(username="user name!", password="Password123!")
 
     def test_with_display_name(self):
-        req = AuthRegisterRequest(username="user", password="password123", display_name="Full Name")
+        req = AuthRegisterRequest(username="user", password="Password123!", display_name="Full Name")
         assert req.display_name == "Full Name"
 
 

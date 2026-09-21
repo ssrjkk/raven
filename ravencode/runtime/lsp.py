@@ -36,6 +36,7 @@ class LSPClient:
         self._initialized = False
         self._init_lock = asyncio.Lock()
         self._diag_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+        self._open_files: dict[str, str] = {}
         self._cmd = _LSP_SERVERS.get(language)
 
     async def _ensure_initialized(self) -> None:
@@ -66,6 +67,45 @@ class LSPClient:
             })
             await self._send({"jsonrpc": "2.0", "method": "initialized", "params": {}})
             self._initialized = True
+
+    async def _ensure_file_open(self, uri: str) -> None:
+        if uri in self._open_files:
+            return
+        try:
+            path = uri.removeprefix("file://")
+            content = Path(path).read_text(encoding="utf-8")
+            await self._send({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": uri,
+                        "languageId": self.language,
+                        "version": 1,
+                        "text": content,
+                    }
+                },
+            })
+            self._open_files[uri] = content
+        except Exception as exc:
+            logger.debug("LSP didOpen failed for {}: {}", uri, exc)
+
+    async def _notify_change(self, uri: str, content: str) -> None:
+        if uri not in self._open_files:
+            await self._ensure_file_open(uri)
+            return
+        if self._open_files[uri] == content:
+            return
+        version = len([k for k in self._open_files if k == uri]) + 1
+        await self._send({
+            "jsonrpc": "2.0",
+            "method": "textDocument/didChange",
+            "params": {
+                "textDocument": {"uri": uri, "version": version},
+                "contentChanges": [{"text": content}],
+            },
+        })
+        self._open_files[uri] = content
 
     async def _send(self, msg: dict[str, Any]) -> None:
         if not self._process or not self._process.stdin:
@@ -121,6 +161,7 @@ class LSPClient:
             raise TimeoutError(msg) from exc
 
     async def diagnostics(self, uri: str) -> list[dict[str, Any]]:
+        await self._ensure_file_open(uri)
         cached = self._diag_cache.get(uri)
         if cached and (time.monotonic() - cached[0]) < _DIAG_CACHE_TTL:
             return cached[1]
@@ -136,6 +177,7 @@ class LSPClient:
             return prev[1] if prev else []
 
     async def completion(self, uri: str, line: int, col: int) -> list[str]:
+        await self._ensure_file_open(uri)
         result = await self._request("textDocument/completion", {
             "textDocument": {"uri": uri},
             "position": {"line": line, "character": col},
@@ -144,6 +186,7 @@ class LSPClient:
         return [i.get("label", "") for i in items[:20]]
 
     async def definition(self, uri: str, line: int, col: int) -> list[dict[str, Any]]:
+        await self._ensure_file_open(uri)
         result = await self._request("textDocument/definition", {
             "textDocument": {"uri": uri},
             "position": {"line": line, "character": col},
@@ -157,6 +200,7 @@ class LSPClient:
         ]
 
     async def references(self, uri: str, line: int, col: int) -> list[dict[str, Any]]:
+        await self._ensure_file_open(uri)
         result = await self._request("textDocument/references", {
             "textDocument": {"uri": uri},
             "position": {"line": line, "character": col},
@@ -169,6 +213,7 @@ class LSPClient:
         ]
 
     async def hover(self, uri: str, line: int, col: int) -> str:
+        await self._ensure_file_open(uri)
         result = await self._request("textDocument/hover", {
             "textDocument": {"uri": uri},
             "position": {"line": line, "character": col},
@@ -191,6 +236,7 @@ class LSPClient:
         await self._ensure_initialized()
 
     async def document_symbols(self, uri: str) -> list[dict[str, Any]]:
+        await self._ensure_file_open(uri)
         try:
             result = await self._request("textDocument/documentSymbol", {
                 "textDocument": {"uri": uri},

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -10,6 +9,7 @@ from loguru import logger
 
 from raven.core.agents.orchestrator import AgentOrchestrator, AgentResult
 from raven.core.agents.router import FeedbackLoop, get_feedback_loop
+from raven.core.agents.scheduler import TaskScheduler
 from raven.core.features import FeatureFlags
 
 if TYPE_CHECKING:
@@ -119,55 +119,29 @@ class DelegationOrchestrator:
         self._max_concurrent = max_concurrent
         self._max_total_iterations = max_total_iterations
 
-    async def run_sequential(self, tasks: list[DelegatedTask]) -> list[DelegationResult]:
-        results: list[DelegationResult] = []
-        for i, task in enumerate(tasks):
-            logger.info("[delegation] sequential task {}/{}: {} → {}", i + 1, len(tasks), task.description[:80], task.profile)
+    def _scheduler(self, tasks: list[DelegatedTask]) -> TaskScheduler[DelegatedTask, DelegationResult]:
+        total = len(tasks)
+
+        async def executor(i: int, task: DelegatedTask) -> DelegationResult:
+            logger.info("[delegation] task {}/{}: {} → {}", i + 1, total, task.description[:80], task.profile)
             result = await self._run_single(task)
             result.index = i
-            results.append(result)
-        return results
+            return result
+
+        return TaskScheduler(
+            executor,
+            max_concurrent=self._max_concurrent,
+            depends_on=lambda t: t.depends_on or [],
+        )
+
+    async def run_sequential(self, tasks: list[DelegatedTask]) -> list[DelegationResult]:
+        return await self._scheduler(tasks).run_sequential(tasks)
 
     async def run_parallel(self, tasks: list[DelegatedTask]) -> list[DelegationResult]:
-        sem = asyncio.Semaphore(self._max_concurrent)
-        results: list[DelegationResult | None] = [None] * len(tasks)
-
-        async def run_one(i: int, task: DelegatedTask) -> None:
-            async with sem:
-                logger.info("[delegation] parallel task {}/{}: {} → {}", i + 1, len(tasks), task.description[:80], task.profile)
-                result = await self._run_single(task)
-                result.index = i
-                results[i] = result
-
-        await asyncio.gather(*[run_one(i, t) for i, t in enumerate(tasks)])
-        return [r for r in results if r is not None]
+        return await self._scheduler(tasks).run_parallel(tasks)
 
     async def run_dag(self, tasks: list[DelegatedTask]) -> list[DelegationResult]:
-        sem = asyncio.Semaphore(self._max_concurrent)
-        results: dict[int, DelegationResult] = {}
-        completed: set[int] = set()
-        remaining = list(range(len(tasks)))
-
-        while remaining:
-            batch: list[int] = []
-            for i in remaining[:]:
-                deps = tasks[i].depends_on or []
-                if all(d in completed for d in deps):
-                    batch.append(i)
-                    remaining.remove(i)
-            if not batch:
-                raise RuntimeError(f"Circular dependency detected among tasks: {remaining}")
-
-            async def run_task(idx: int, task: DelegatedTask) -> DelegationResult:
-                async with sem:
-                    result = await self._run_single(task)
-                    result.index = idx
-                    return result
-
-            for r in await asyncio.gather(*[run_task(i, tasks[i]) for i in batch]):
-                results[r.index] = r
-                completed.add(r.index)
-        return [results[i] for i in range(len(tasks))]
+        return await self._scheduler(tasks).run_dag(tasks)
 
     async def _run_single(self, task: DelegatedTask) -> DelegationResult:
         import time

@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from raven.core.cost_management import _cost
+from raven.core.cost_management import _cost as _cost
 
 
 class UsageRequest(BaseModel):

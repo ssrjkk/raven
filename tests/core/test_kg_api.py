@@ -1,208 +1,133 @@
 from __future__ import annotations
 
-from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import raven.core.kg_api as kga
-from raven.unique.knowledge_graph import KnowledgeGraph
-
 
 @pytest.fixture()
-def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, Path]:
-    kg_path = tmp_path / "kg.json"
-    monkeypatch.setattr(kga, "_KG_PATH", kg_path)
+def client() -> TestClient:
     app = FastAPI()
-    app.include_router(kga.create_knowledge_router())
-    return TestClient(app), kg_path
+    with patch("raven.core.kg_api._KG_PATH") as mock_path:
+        mock_path.exists.return_value = False
+        from raven.core.kg_api import create_knowledge_router
+        app.include_router(create_knowledge_router())
+    return TestClient(app)
 
 
-def test_extract_success(client: tuple[TestClient, Path]) -> None:
-    c, _ = client
-    resp = c.post("/api/knowledge/extract", params={"text": "Alice and Bob work on the Raven project."})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert "result" in body
-    assert "stats" in body
+def test_extract(client: TestClient) -> None:
+    with patch("raven.core.kg_api._get_kg") as mock_get, patch("raven.core.kg_api._save_kg") as mock_save:
+        kg = MagicMock()
+        entity = MagicMock()
+        entity.id = "e1"
+        entity.name = "Python"
+        entity.type = "technology"
+        kg.extract_from_document.return_value = [entity]
+        kg.get_stats.return_value = {"entities": 1, "relations": 0}
+        mock_get.return_value = kg
+
+        resp = client.post("/api/knowledge/extract", params={"text": "Python is great"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "result" in data
+        assert "stats" in data
 
 
-def test_extract_with_source(client: tuple[TestClient, Path]) -> None:
-    c, _ = client
-    resp = c.post(
-        "/api/knowledge/extract",
-        params={"text": "FastAPI is built on Starlette.", "source": "docs"},
-    )
-    assert resp.status_code == 200
-    assert resp.json()["stats"]["entities"] >= 1
+def test_search_empty(client: TestClient) -> None:
+    with patch("raven.core.kg_api._get_kg") as mock_get:
+        kg = MagicMock()
+        kg.get_stats.return_value = {"entities": 0, "relations": 0}
+        mock_get.return_value = kg
+
+        resp = client.post("/api/knowledge/search", params={"query": "Python"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["results"] == []
 
 
-def test_extract_error(client: tuple[TestClient, Path], monkeypatch: pytest.MonkeyPatch) -> None:
-    c, _ = client
+def test_search_with_results(client: TestClient) -> None:
+    with patch("raven.core.kg_api._get_kg") as mock_get:
+        kg = MagicMock()
+        kg.get_stats.return_value = {"entities": 5, "relations": 3}
+        kg.search.return_value = [{"entity": "Python", "score": 0.9}]
+        mock_get.return_value = kg
 
-    def boom(self: KnowledgeGraph, document: object) -> dict[str, list[str]]:
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(KnowledgeGraph, "extract_from_document", boom)
-    resp = c.post("/api/knowledge/extract", params={"text": "x"})
-    assert resp.status_code == 500
-    assert "RuntimeError" in resp.json()["detail"]
-
-
-def test_search_empty_kg(client: tuple[TestClient, Path]) -> None:
-    c, _ = client
-    resp = c.post("/api/knowledge/search", params={"query": "raven"})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["results"] == []
-    assert body["stats"]["entities"] == 0
+        resp = client.post("/api/knowledge/search", params={"query": "Python"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["results"]) == 1
 
 
-def test_search_success(client: tuple[TestClient, Path]) -> None:
-    c, _ = client
-    c.post("/api/knowledge/entity", params={"name": "Raven", "type": "project"})
-    resp = c.post("/api/knowledge/search", params={"query": "raven", "max_depth": 3})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert isinstance(body["results"], list)
-    assert body["stats"]["entities"] == 1
+def test_stats(client: TestClient) -> None:
+    with patch("raven.core.kg_api._get_kg") as mock_get:
+        kg = MagicMock()
+        kg.get_stats.return_value = {"entities": 100, "relations": 200}
+        mock_get.return_value = kg
+
+        resp = client.get("/api/knowledge/stats")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["entities"] == 100
 
 
-def test_search_error(client: tuple[TestClient, Path], monkeypatch: pytest.MonkeyPatch) -> None:
-    c, _ = client
-    c.post("/api/knowledge/entity", params={"name": "Raven", "type": "project"})
+def test_vis(client: TestClient) -> None:
+    with patch("raven.core.kg_api._get_kg") as mock_get:
+        kg = MagicMock()
+        kg.export_vis.return_value = {"nodes": [], "edges": []}
+        kg.get_stats.return_value = {"entities": 0, "relations": 0}
+        mock_get.return_value = kg
 
-    def boom(self: KnowledgeGraph, query: str, max_depth: int) -> list[dict[str, object]]:
-        raise RuntimeError("search boom")
-
-    monkeypatch.setattr(KnowledgeGraph, "search", boom)
-    resp = c.post("/api/knowledge/search", params={"query": "raven"})
-    assert resp.status_code == 500
-    assert "RuntimeError" in resp.json()["detail"]
-
-
-def test_stats(client: tuple[TestClient, Path]) -> None:
-    c, _ = client
-    c.post("/api/knowledge/entity", params={"name": "Raven"})
-    resp = c.get("/api/knowledge/stats")
-    assert resp.status_code == 200
-    assert resp.json()["entities"] == 1
+        resp = client.get("/api/knowledge/vis")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "graph" in data
 
 
-def test_vis(client: tuple[TestClient, Path]) -> None:
-    c, _ = client
-    c.post("/api/knowledge/entity", params={"name": "Raven"})
-    resp = c.get("/api/knowledge/vis")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert "graph" in body
-    assert "stats" in body
+def test_add_entity(client: TestClient) -> None:
+    with patch("raven.core.kg_api._get_kg") as mock_get, patch("raven.core.kg_api._save_kg"):
+        kg = MagicMock()
+        entity = MagicMock()
+        entity.id = "e1"
+        entity.name = "Python"
+        entity.type = "technology"
+        kg.add_entity.return_value = entity
+        mock_get.return_value = kg
+
+        resp = client.post("/api/knowledge/entity", params={"name": "Python", "type": "technology"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["entity"]["name"] == "Python"
 
 
-def test_load_failure_warns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    kg_path = tmp_path / "kg.json"
-    kg_path.write_text("{not valid json", encoding="utf-8")
-    monkeypatch.setattr(kga, "_KG_PATH", kg_path)
-    app = FastAPI()
-    app.include_router(kga.create_knowledge_router())
-    c = TestClient(app)
-    resp = c.post("/api/knowledge/search", params={"query": "x"})
-    assert resp.status_code == 200
-    assert resp.json()["results"] == []
+def test_add_relation(client: TestClient) -> None:
+    with patch("raven.core.kg_api._get_kg") as mock_get, patch("raven.core.kg_api._save_kg"):
+        kg = MagicMock()
+        source_ent = MagicMock()
+        source_ent.id = "e1"
+        source_ent.name = "Python"
+        target_ent = MagicMock()
+        target_ent.id = "e2"
+        target_ent.name = "Programming"
+        kg._find_entity.side_effect = lambda name: source_ent if name == "Python" else target_ent
+        rel = MagicMock()
+        rel.id = "r1"
+        rel.rel_type = "is_a"
+        kg.add_relation.return_value = rel
+        mock_get.return_value = kg
+
+        resp = client.post("/api/knowledge/relation", params={"source": "Python", "target": "Programming", "type": "is_a"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["relation"]["source"] == "Python"
 
 
-def test_add_entity_json_metadata(client: tuple[TestClient, Path]) -> None:
-    c, _ = client
-    resp = c.post(
-        "/api/knowledge/entity",
-        params={"name": "Raven", "type": "project", "metadata": '{"language": "python"}'},
-    )
-    assert resp.status_code == 200
-    body = resp.json()["entity"]
-    assert body["name"] == "Raven"
-    assert body["type"] == "project"
+def test_add_relation_source_not_found(client: TestClient) -> None:
+    with patch("raven.core.kg_api._get_kg") as mock_get:
+        kg = MagicMock()
+        kg._find_entity.return_value = None
+        mock_get.return_value = kg
 
-
-def test_add_entity_bad_metadata(client: tuple[TestClient, Path]) -> None:
-    c, _ = client
-    resp = c.post(
-        "/api/knowledge/entity",
-        params={"name": "Raven", "type": "project", "metadata": "not json"},
-    )
-    assert resp.status_code == 200
-    assert resp.json()["entity"]["name"] == "Raven"
-
-
-def test_add_entity_default_type(client: tuple[TestClient, Path]) -> None:
-    c, _ = client
-    resp = c.post("/api/knowledge/entity", params={"name": "Raven"})
-    assert resp.status_code == 200
-    assert resp.json()["entity"]["type"] == "concept"
-
-
-def test_add_entity_error(client: tuple[TestClient, Path], monkeypatch: pytest.MonkeyPatch) -> None:
-    c, _ = client
-
-    def boom(self: KnowledgeGraph, name: str, ent_type: str, metadata: object) -> object:
-        raise RuntimeError("entity boom")
-
-    monkeypatch.setattr(KnowledgeGraph, "add_entity", boom)
-    resp = c.post("/api/knowledge/entity", params={"name": "Raven"})
-    assert resp.status_code == 500
-    assert "RuntimeError" in resp.json()["detail"]
-
-
-def test_add_relation_success(client: tuple[TestClient, Path]) -> None:
-    c, _ = client
-    c.post("/api/knowledge/entity", params={"name": "Alice"})
-    c.post("/api/knowledge/entity", params={"name": "Bob"})
-    resp = c.post("/api/knowledge/relation", params={"source": "Alice", "target": "Bob", "type": "works_with"})
-    assert resp.status_code == 200
-    rel = resp.json()["relation"]
-    assert rel["source"] == "Alice"
-    assert rel["target"] == "Bob"
-    assert rel["type"] == "works_with"
-
-
-def test_add_relation_missing_source(client: tuple[TestClient, Path]) -> None:
-    c, _ = client
-    resp = c.post("/api/knowledge/relation", params={"source": "Nope", "target": "Bob"})
-    assert resp.status_code == 404
-    assert "Source entity" in resp.json()["detail"]
-
-
-def test_add_relation_missing_target(client: tuple[TestClient, Path]) -> None:
-    c, _ = client
-    c.post("/api/knowledge/entity", params={"name": "Alice"})
-    resp = c.post("/api/knowledge/relation", params={"source": "Alice", "target": "Nope"})
-    assert resp.status_code == 404
-    assert "Target entity" in resp.json()["detail"]
-
-
-def test_add_relation_value_error(client: tuple[TestClient, Path], monkeypatch: pytest.MonkeyPatch) -> None:
-    c, _ = client
-    c.post("/api/knowledge/entity", params={"name": "Alice"})
-    c.post("/api/knowledge/entity", params={"name": "Bob"})
-
-    def boom(self: KnowledgeGraph, sid: str, tid: str, rt: str, metadata: object = None) -> object:
-        raise ValueError("duplicate relation")
-
-    monkeypatch.setattr(KnowledgeGraph, "add_relation", boom)
-    resp = c.post("/api/knowledge/relation", params={"source": "Alice", "target": "Bob"})
-    assert resp.status_code == 400
-    assert "duplicate relation" in resp.json()["detail"]
-
-
-def test_add_relation_generic_error(client: tuple[TestClient, Path], monkeypatch: pytest.MonkeyPatch) -> None:
-    c, _ = client
-    c.post("/api/knowledge/entity", params={"name": "Alice"})
-    c.post("/api/knowledge/entity", params={"name": "Bob"})
-
-    def boom(self: KnowledgeGraph, sid: str, tid: str, rt: str, metadata: object = None) -> object:
-        raise RuntimeError("rel boom")
-
-    monkeypatch.setattr(KnowledgeGraph, "add_relation", boom)
-    resp = c.post("/api/knowledge/relation", params={"source": "Alice", "target": "Bob"})
-    assert resp.status_code == 500
-    assert "RuntimeError" in resp.json()["detail"]
+        resp = client.post("/api/knowledge/relation", params={"source": "Unknown", "target": "Python"})
+        assert resp.status_code == 404

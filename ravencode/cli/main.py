@@ -96,6 +96,13 @@ def session_list(sessions_dir: str) -> None:
             click.echo(f"  {f.stem}  (corrupt)")
 
 
+@session.command(name="resume")
+@click.argument("session_id")
+def session_resume(session_id: str) -> None:
+    """Resume a saved session in the TUI."""
+    tui_run(session_id=session_id)
+
+
 @session.command(name="delete")
 @click.argument("session_id")
 @click.option("--dir", "sessions_dir", default="data/sessions", help="Sessions directory")

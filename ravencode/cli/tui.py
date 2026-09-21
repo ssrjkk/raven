@@ -131,7 +131,7 @@ async def run_custom_command(cmd: CustomCommand, args: str) -> None:
         await run_streaming_agent(prompt, AgentConfig.safe())
 
 
-async def main_loop() -> None:
+async def main_loop(session_id: str | None = None) -> None:
     set_question_callback(stdin_question_callback)
     try:
         await ensure_mcp_tools()
@@ -140,6 +140,16 @@ async def main_loop() -> None:
     custom_commands = discover_commands()
     print_header()
     print_help()
+
+    if session_id:
+        from ravencode.runtime.session import SessionStore
+        store = SessionStore()
+        agent = await store.load(session_id)
+        if agent is not None:
+            msg_count = agent.conversation.message_count
+            console.print(f"[green]Resumed session {session_id} ({msg_count} messages). Continue with /ask.[/green]")
+        else:
+            console.print(f"[red]Session {session_id} not found.[/red]")
 
     while True:
         try:
@@ -171,7 +181,7 @@ async def main_loop() -> None:
             continue
 
         if cmd == "/redo":
-            from ravencode.runtime.redo import redo_last
+            from ravencode.runtime.undo import redo_last
 
             result = await redo_last()
             console.print(result)
@@ -280,9 +290,9 @@ async def main_loop() -> None:
         console.print(f"[red]Unknown command: {cmd}. Type /help for available commands.[/red]")
 
 
-def tui_run() -> None:
+def tui_run(session_id: str | None = None) -> None:
     """Entry point for the ravencode TUI."""
-    asyncio.run(main_loop())
+    asyncio.run(main_loop(session_id=session_id))
 
 
 if __name__ == "__main__":

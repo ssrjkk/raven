@@ -4,7 +4,6 @@ __pycache__/
 dist/
 build/
 *.spec
-!raven.spec
 .raven/
 .env
 *.db
@@ -72,3 +71,4 @@ eval_results/
 
 # PyInstaller build output
 packaging/
+data/connections.json 

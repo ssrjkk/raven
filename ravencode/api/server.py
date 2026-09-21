@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
@@ -223,7 +223,7 @@ async def _run_agent_stream(messages: list[ChatMessage], model: str) -> AsyncIte
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(request: ChatCompletionRequest, authorization: str = "") -> Any:
+async def chat_completions(request: ChatCompletionRequest, authorization: str = Header(default="")) -> Any:
     _check_auth(authorization)
     if request.stream:
         return StreamingResponse(
@@ -235,7 +235,7 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
 
 
 @app.get("/v1/models")
-async def list_models(authorization: str = "") -> dict[str, Any]:
+async def list_models(authorization: str = Header(default="")) -> dict[str, Any]:
     _check_auth(authorization)
     return {
         "object": "list",

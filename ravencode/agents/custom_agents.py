@@ -61,6 +61,22 @@ def get_custom_agents(path: str | None = None) -> dict[str, CustomAgentDef]:
     global _custom_agents
     if _custom_agents is None:
         _custom_agents = load_agents_config(path)
+        try:
+            from ravencode.config.loader import get_config
+
+            cfg = get_config()
+            for agent_def in cfg.resolve_agents():
+                if agent_def.disabled or agent_def.hidden:
+                    continue
+                if agent_def.name not in _custom_agents:
+                    data = {
+                        "system_prompt": agent_def.prompt,
+                        "max_steps": agent_def.max_steps,
+                        "description": agent_def.description,
+                    }
+                    _custom_agents[agent_def.name] = CustomAgentDef(agent_def.name, data)
+        except Exception as exc:
+            logger.debug("Failed to load agents from config: {}", exc)
     return _custom_agents
 
 

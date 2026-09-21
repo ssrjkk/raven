@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS auth_users (
     id TEXT PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
     display_name TEXT DEFAULT '',
+    email TEXT DEFAULT '',
+    email_verified INTEGER DEFAULT 0,
     role TEXT DEFAULT 'user',
     password_hash TEXT DEFAULT '',
     api_tokens TEXT DEFAULT '[]',
@@ -27,6 +29,12 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
     token TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     role TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    expires_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS auth_email_tokens (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
     created_at REAL NOT NULL,
     expires_at REAL NOT NULL
 );
@@ -46,7 +54,7 @@ class AuthStore(BaseStore):
     def db_path(self) -> str:
         return self._path or ""
 
-    async def create_user(self, username: str, password: str = "", display_name: str = "", role: str = "user") -> User:
+    async def create_user(self, username: str, password: str = "", display_name: str = "", email: str = "", role: str = "user") -> User:
         now = time.time()
         uid = f"user:{username}"
         pwd_hash = hash_password(password) if password else ""
@@ -54,21 +62,23 @@ class AuthStore(BaseStore):
         async with db.transaction():
             rowcount = await db.execute(
                 "INSERT INTO auth_users "
-                "(id, username, display_name, role, password_hash, api_tokens, "
-                "is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (uid, username, display_name, role, pwd_hash, "[]", 1, now, now),
+                "(id, username, display_name, email, email_verified, role, password_hash, api_tokens, "
+                "is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (uid, username, display_name, email, 0, role, pwd_hash, "[]", 1, now, now),
             )
             if rowcount is not None and rowcount == 0:
                 existing = await self.get_user(username)
                 if existing:
                     return existing
-        return User(id=uid, username=username, display_name=display_name, role=Role(role))
+        return User(id=uid, username=username, display_name=display_name, email=email, email_verified=False, role=Role(role))
 
     async def _row_to_user(self, row: Any) -> User:
         return User(
             id=row["id"],
             username=row["username"],
             display_name=row["display_name"] or "",
+            email=row["email"] or None,
+            email_verified=bool(row["email_verified"]),
             role=Role(row["role"]),
             password_hash=row["password_hash"] or "",
             api_tokens=json.loads(row["api_tokens"] or "[]"),
@@ -132,3 +142,41 @@ class AuthStore(BaseStore):
             (1 if active else 0, now, username),
         )
         await self._commit()
+
+    async def create_email_verification_token(self, user_id: str) -> str:
+        import secrets
+        token = secrets.token_urlsafe(32)
+        now = time.time()
+        expires_at = now + 86400
+        await self._execute(
+            "INSERT INTO auth_email_tokens (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            (token, user_id, now, expires_at),
+        )
+        await self._commit()
+        return token
+
+    async def verify_email_token(self, token: str) -> bool:
+        row = await self._fetchone(
+            "SELECT user_id, expires_at FROM auth_email_tokens WHERE token = ?",
+            (token,),
+        )
+        if not row:
+            return False
+        if row["expires_at"] < time.time():
+            await self._execute("DELETE FROM auth_email_tokens WHERE token = ?", (token,))
+            await self._commit()
+            return False
+        user_id = row["user_id"]
+        now = time.time()
+        await self._execute(
+            "UPDATE auth_users SET email_verified = 1, updated_at = ? WHERE id = ?",
+            (now, user_id),
+        )
+        await self._execute("DELETE FROM auth_email_tokens WHERE token = ?", (token,))
+        await self._commit()
+        return True
+
+    async def revoke_all_user_sessions(self, user_id: str) -> int:
+        await self._execute("DELETE FROM auth_sessions WHERE user_id = ?", (user_id,))
+        await self._commit()
+        return 0

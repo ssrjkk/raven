@@ -4,6 +4,7 @@ import difflib
 import re
 from typing import Any
 
+from ravencode.runtime.undo import get_undo_manager
 from ravencode.runtime.workspace import confine
 
 _UNIFIED_HUNK_RE = re.compile(
@@ -87,6 +88,7 @@ def smart_edit(
     if not p.is_file():
         return f"[error] file not found: {path}"
     content = p.read_text(encoding="utf-8")
+    original = content
 
     if old_text is not None and new_text is not None:
         if old_text not in content:
@@ -95,6 +97,7 @@ def smart_edit(
         if count > 1:
             return f"[error] {count} occurrences — provide more context"
         modified = content.replace(old_text, new_text, 1)
+        get_undo_manager().record(str(p), original, modified, "smart_edit")
         p.write_text(modified, encoding="utf-8")
         return f"[ok] replaced text in {path}"
 
@@ -102,6 +105,7 @@ def smart_edit(
         if insert_after not in content:
             return f"[error] insert_after not found in {path}"
         modified = content.replace(insert_after, insert_after + new_text, 1)
+        get_undo_manager().record(str(p), original, modified, "smart_edit")
         p.write_text(modified, encoding="utf-8")
         return f"[ok] inserted after in {path}"
 
@@ -109,10 +113,13 @@ def smart_edit(
         if insert_before not in content:
             return f"[error] insert_before not found in {path}"
         modified = content.replace(insert_before, new_text + insert_before, 1)
+        get_undo_manager().record(str(p), original, modified, "smart_edit")
         p.write_text(modified, encoding="utf-8")
         return f"[ok] inserted before in {path}"
 
     if append and new_text is not None:
+        modified = content + new_text
+        get_undo_manager().record(str(p), original, modified, "smart_edit")
         with p.open("a", encoding="utf-8") as f:
             f.write(new_text)
         return f"[ok] appended to {path}"

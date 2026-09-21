@@ -124,7 +124,7 @@ async def test_safe_read_error(ws: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 async def test_safe_write_new_file(ws: Path) -> None:
     mgr = UndoManager()
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(tools, "get_undo_manager", lambda: mgr)
+    monkeypatch.setattr("ravencode.runtime.tools._common.get_undo_manager", lambda: mgr)
     target = ws / "sub" / "new.txt"
     await tools._safe_write(str(target), "hello")
     assert target.read_text(encoding="utf-8") == "hello"
@@ -137,7 +137,7 @@ async def test_safe_write_new_file(ws: Path) -> None:
 async def test_safe_write_existing(ws: Path) -> None:
     mgr = UndoManager()
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(tools, "get_undo_manager", lambda: mgr)
+    monkeypatch.setattr("ravencode.runtime.tools._common.get_undo_manager", lambda: mgr)
     target = ws / "f.txt"
     target.write_text("old", encoding="utf-8")
     await tools._safe_write(str(target), "new")
@@ -214,7 +214,7 @@ async def test_edit_file_applies(ws: Path) -> None:
 async def test_edit_file_write_permission_error(ws: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     target = ws / "f.txt"
     target.write_text("abc", encoding="utf-8")
-    monkeypatch.setattr(tools, "_safe_write", AsyncMock(side_effect=PermissionError("denied")))
+    monkeypatch.setattr("ravencode.runtime.tools.files._safe_write", AsyncMock(side_effect=PermissionError("denied")))
     out = await tools.edit_file(str(target), "a", "b")
     assert out == "[error] denied"
 
@@ -581,16 +581,15 @@ def test_urlencode() -> None:
 
 @pytest.mark.asyncio
 async def test_web_search_no_results(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(tools, "_ddg_search", AsyncMock(return_value=None))
-    monkeypatch.setattr(tools, "_httpx_search", AsyncMock(return_value=None))
+    monkeypatch.setattr("ravencode.runtime.tools.web._ddg_search", AsyncMock(return_value=None))
+    monkeypatch.setattr("ravencode.runtime.tools.web._httpx_search", AsyncMock(return_value=None))
     assert await tools.web_search("q") == "(no results)"
 
 
 @pytest.mark.asyncio
 async def test_web_search_results(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        tools,
-        "_ddg_search",
+        "ravencode.runtime.tools.web._ddg_search",
         AsyncMock(return_value=[{"title": "t", "body": "b", "href": "http://x"}]),
     )
     out = await tools.web_search("q")
@@ -606,7 +605,7 @@ async def test_web_search_results(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.asyncio
 async def test_web_fetch_denied(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(tools, "validate_url", Mock(return_value=False))
+    monkeypatch.setattr("ravencode.runtime.tools.web.validate_url", Mock(return_value=False))
     out = await tools.web_fetch("http://127.0.0.1/")
     assert out.startswith("[denied]")
 
@@ -616,24 +615,24 @@ async def test_web_fetch_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     resp = MagicMock()
     resp.text = "<html>ok</html>"
     resp.raise_for_status = Mock()
-    monkeypatch.setattr(tools, "validate_url", Mock(return_value=True))
-    monkeypatch.setattr(tools, "safe_fetch_async", AsyncMock(return_value=resp))
+    monkeypatch.setattr("ravencode.runtime.tools.web.validate_url", Mock(return_value=True))
+    monkeypatch.setattr("ravencode.runtime.tools.web.safe_fetch_async", AsyncMock(return_value=resp))
     out = await tools.web_fetch("https://example.com/")
     assert out == "<html>ok</html>"
 
 
 @pytest.mark.asyncio
 async def test_web_fetch_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(tools, "validate_url", Mock(return_value=True))
-    monkeypatch.setattr(tools, "safe_fetch_async", AsyncMock(side_effect=ValueError("blocked")))
+    monkeypatch.setattr("ravencode.runtime.tools.web.validate_url", Mock(return_value=True))
+    monkeypatch.setattr("ravencode.runtime.tools.web.safe_fetch_async", AsyncMock(side_effect=ValueError("blocked")))
     out = await tools.web_fetch("https://example.com/")
     assert "[denied]" in out
 
 
 @pytest.mark.asyncio
 async def test_web_fetch_exception(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(tools, "validate_url", Mock(return_value=True))
-    monkeypatch.setattr(tools, "safe_fetch_async", AsyncMock(side_effect=RuntimeError("boom")))
+    monkeypatch.setattr("ravencode.runtime.tools.web.validate_url", Mock(return_value=True))
+    monkeypatch.setattr("ravencode.runtime.tools.web.safe_fetch_async", AsyncMock(side_effect=RuntimeError("boom")))
     out = await tools.web_fetch("https://example.com/")
     assert out.startswith("[error]")
 
@@ -878,7 +877,7 @@ async def test_create_artifact_generic_error(ws: Path) -> None:
 @pytest.mark.asyncio
 async def test_undo_empty(ws: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     mgr = UndoManager()
-    monkeypatch.setattr(tools, "get_undo_manager", lambda: mgr)
+    monkeypatch.setattr("ravencode.runtime.tools.wrappers.get_undo_manager", lambda: mgr)
     assert await tools.undo_action() == "[undo] nothing to undo"
     assert await tools.redo_action() == "[redo] nothing to redo"
 
@@ -886,7 +885,8 @@ async def test_undo_empty(ws: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.asyncio
 async def test_undo_redo_cycle(ws: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     mgr = UndoManager()
-    monkeypatch.setattr(tools, "get_undo_manager", lambda: mgr)
+    monkeypatch.setattr("ravencode.runtime.tools.wrappers.get_undo_manager", lambda: mgr)
+    monkeypatch.setattr("ravencode.runtime.tools._common.get_undo_manager", lambda: mgr)
     target = ws / "f.txt"
     await tools.write_file(str(target), "v2")
     assert await tools.undo_action() == "[undo] write on " + str(target.resolve())
@@ -1205,21 +1205,21 @@ def test_get_tool_definitions_plan_mode() -> None:
 
 
 def test_ensure_plugin_tools_registers(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(tools, "_plugin_tools_loaded", False)
+    monkeypatch.setattr("ravencode.runtime.tools.registry._plugin_tools_loaded", False)
     reg = MagicMock()
     reg.all_tools = Mock(return_value={"extra_tool": {"name": "extra_tool", "parameters": {}}})
     monkeypatch.setattr("ravencode.runtime.plugins.get_plugin_registry", Mock(return_value=reg))
     tools.get_tool_definitions()
     assert "extra_tool" in tools.MODULE_TOOLS
-    assert tools._plugin_tools_loaded is True
+    assert tools.registry._plugin_tools_loaded is True
     tools.MODULE_TOOLS.pop("extra_tool", None)
 
 
 def test_ensure_plugin_tools_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(tools, "_plugin_tools_loaded", False)
+    monkeypatch.setattr("ravencode.runtime.tools.registry._plugin_tools_loaded", False)
     monkeypatch.setitem(sys.modules, "ravencode.runtime.plugins", None)
     assert isinstance(tools.get_tool_definitions(), list)
-    assert tools._plugin_tools_loaded is False
+    assert tools.registry._plugin_tools_loaded is False
 
 
 @pytest.mark.asyncio

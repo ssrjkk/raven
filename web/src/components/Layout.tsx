@@ -45,7 +45,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Suspense, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
-import { clearToken } from "../api/client";
+import { api, clearToken } from "../api/client";
 import { type Theme, useTheme } from "../design/ThemeContext";
 import { ErrorBoundary } from "./ErrorBoundary";
 import PWAInstallPrompt from "./PWAInstallPrompt";
@@ -174,10 +174,25 @@ export default function Layout() {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [revoking, setRevoking] = useState(false);
 
   function handleLogout() {
     clearToken();
     navigate("/login");
+  }
+
+  async function handleRevokeAll() {
+    if (revoking) return;
+    setRevoking(true);
+    try {
+      await api.logoutAll();
+      clearToken();
+      navigate("/login");
+    } catch {
+      // ignore — user stays logged in
+    } finally {
+      setRevoking(false);
+    }
   }
 
   return (
@@ -283,6 +298,14 @@ export default function Layout() {
             className="w-full text-center text-xs transition font-medium text-tertiary"
           >
             Sign Out
+          </button>
+          <button
+            onClick={handleRevokeAll}
+            disabled={revoking}
+            className="w-full text-center text-[10px] transition text-tertiary hover:text-red-400"
+            title="Revoke all sessions on all devices"
+          >
+            {revoking ? "Revoking…" : "Logout everywhere"}
           </button>
           <div className="text-[10px] text-center" style={{ color: "var(--dt-colors-border-hover)" }}>
             Raven AI v{import.meta.env.VITE_APP_VERSION || "0.2.0"}

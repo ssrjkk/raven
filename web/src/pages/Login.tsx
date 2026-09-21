@@ -8,6 +8,7 @@ import { useApiQuery } from "../hooks/useApiQuery";
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
@@ -32,12 +33,19 @@ export default function Login() {
     setLoading(true);
     try {
       const data = isRegister
-        ? await api.register(username, password)
+        ? await api.register(username, password, email || undefined)
         : await api.login(username, password);
       setToken(data.token);
       navigate("/");
     } catch (err) {
-      setError(isRegister ? "Registration failed" : "Invalid credentials");
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("Password must")) {
+        setError(msg);
+      } else if (msg.includes("Invalid email")) {
+        setError(msg);
+      } else {
+        setError(isRegister ? "Registration failed" : "Invalid credentials");
+      }
     } finally {
       setLoading(false);
     }
@@ -142,6 +150,20 @@ export default function Login() {
               autoComplete="username"
             />
           </div>
+          {isRegister && (
+          <div>
+            <label htmlFor="email" className="text-xs text-tertiary block mb-1.5">Email</label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="input-base w-full"
+              placeholder="optional"
+              autoComplete="email"
+            />
+          </div>
+          )}
           <div>
             <label htmlFor="password" className="text-xs text-tertiary block mb-1.5">Password</label>
             <input

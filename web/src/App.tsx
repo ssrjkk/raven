@@ -22,6 +22,18 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+    <ThemeProvider>
+      <BrowserRouter>
+        <AppInner />
+      </BrowserRouter>
+    </ThemeProvider>
+    </QueryClientProvider>
+  );
+}
+
+function AppInner() {
   const [isCmdKOpen, setIsCmdKOpen] = useState(false);
 
   useEffect(() => {
@@ -36,67 +48,63 @@ export default function App() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-    <ThemeProvider>
+    <>
       <CommandPalette
         isOpen={isCmdKOpen}
         onClose={() => setIsCmdKOpen(false)}
       />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Dashboard />} />
-            <Route path="agent" element={<AgentConsole />} />
-            <Route path="chat" element={<Chat />} />
-            <Route path="chat/history" element={<ChatHistory />} />
-            <Route path="admin" element={<Admin />} />
-            <Route path="tasks" element={<Tasks />} />
-            <Route path="workflows" element={<Workflows />} />
-            <Route path="monitors" element={<Monitors />} />
-            <Route path="routines" element={<Routines />} />
-            <Route path="code" element={<CodeSessions />} />
-            <Route path="ide" element={<IDEPage />} />
-            <Route path="git" element={<Git />} />
-            <Route path="github" element={<GitHub />} />
-            <Route path="cicd" element={<CICD />} />
-            <Route path="tests" element={<Tests />} />
-            <Route path="media" element={<Media />} />
-            <Route path="knowledge" element={<Knowledge />} />
-            <Route path="analytics" element={<Analytics />} />
-            <Route path="insights" element={<Insights />} />
-            <Route path="project-insights" element={<ProjectInsights />} />
-            <Route path="components" element={<ComponentLibrary />} />
-            <Route path="scaffold" element={<Scaffold />} />
-            <Route path="code-quality" element={<CodeQuality />} />
-            <Route path="abtesting" element={<ABTesting />} />
-            <Route path="cost" element={<CostManagement />} />
-            <Route path="voice" element={<Voice />} />
-            <Route path="collab" element={<Collab />} />
-            <Route path="rag" element={<RAG />} />
-            <Route path="finetune" element={<FineTune />} />
-            <Route path="chaos" element={<Chaos />} />
-            <Route path="email" element={<EmailPage />} />
-            <Route path="browser" element={<Browser />} />
-            <Route path="web-search" element={<WebSearch />} />
-            <Route path="plugins" element={<Plugins />} />
-            <Route path="dream" element={<Dream />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="providers" element={<Providers />} />
-            <Route path="contexts" element={<Contexts />} />
-            <Route path="agents" element={<Agents />} />
-            <Route path="*" element={<NotFound />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </ThemeProvider>
-    </QueryClientProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<Dashboard />} />
+          <Route path="agent" element={<AgentConsole />} />
+          <Route path="chat" element={<Chat />} />
+          <Route path="chat/history" element={<ChatHistory />} />
+          <Route path="admin" element={<Admin />} />
+          <Route path="tasks" element={<Tasks />} />
+          <Route path="workflows" element={<Workflows />} />
+          <Route path="monitors" element={<Monitors />} />
+          <Route path="routines" element={<Routines />} />
+          <Route path="code" element={<CodeSessions />} />
+          <Route path="ide" element={<IDEPage />} />
+          <Route path="git" element={<Git />} />
+          <Route path="github" element={<GitHub />} />
+          <Route path="cicd" element={<CICD />} />
+          <Route path="tests" element={<Tests />} />
+          <Route path="media" element={<Media />} />
+          <Route path="knowledge" element={<Knowledge />} />
+          <Route path="analytics" element={<Analytics />} />
+          <Route path="insights" element={<Insights />} />
+          <Route path="project-insights" element={<ProjectInsights />} />
+          <Route path="components" element={<ComponentLibrary />} />
+          <Route path="scaffold" element={<Scaffold />} />
+          <Route path="code-quality" element={<CodeQuality />} />
+          <Route path="abtesting" element={<ABTesting />} />
+          <Route path="cost" element={<CostManagement />} />
+          <Route path="voice" element={<Voice />} />
+          <Route path="collab" element={<Collab />} />
+          <Route path="rag" element={<RAG />} />
+          <Route path="finetune" element={<FineTune />} />
+          <Route path="chaos" element={<Chaos />} />
+          <Route path="email" element={<EmailPage />} />
+          <Route path="browser" element={<Browser />} />
+          <Route path="web-search" element={<WebSearch />} />
+          <Route path="plugins" element={<Plugins />} />
+          <Route path="dream" element={<Dream />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="providers" element={<Providers />} />
+          <Route path="contexts" element={<Contexts />} />
+          <Route path="agents" element={<Agents />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Routes>
+    </>
   );
 }
 

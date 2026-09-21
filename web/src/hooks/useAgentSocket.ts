@@ -102,5 +102,11 @@ export function useAgentSocket(onEvent: (ev: AgentSocketEvent) => void) {
     wsRef.current.send(JSON.stringify(payload));
   }, []);
 
-  return { connected, running, send, respond };
+  const cancel = useCallback(() => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({ type: "cancel" }));
+    setRunning(false);
+  }, []);
+
+  return { connected, running, send, respond, cancel };
 }

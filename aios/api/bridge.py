@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import difflib
 import hmac
 import json
+from pathlib import Path
 from typing import Any, cast
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -283,6 +286,55 @@ async def aios_websocket(ws: WebSocket):
         logger.debug("WebSocket disconnected")
 
 
+def _compute_confirm_diff(tool_name: str, args: dict[str, Any]) -> str | None:
+    file_path = args.get("path") or args.get("file_path") or args.get("file")
+    if not file_path:
+        return None
+    try:
+        p = Path(file_path)
+        if not p.is_absolute():
+            p = Path.cwd() / p
+        old_content = p.read_text(encoding="utf-8", errors="replace") if p.is_file() else ""
+    except Exception:
+        return None
+
+    new_content: str | None = None
+    if tool_name in ("write_file", "write"):
+        new_content = args.get("content", "")
+    elif tool_name in ("edit_file", "edit"):
+        old_str = args.get("old_string", "")
+        new_str = args.get("new_string", "")
+        if old_str and old_str in old_content:
+            new_content = old_content.replace(old_str, new_str, 1)
+        elif old_str:
+            lines_old = [ln.rstrip() for ln in old_str.splitlines()]
+            lines_content = old_content.splitlines(keepends=True)
+            stripped = [ln.rstrip() for ln in [lc.rstrip("\r\n") for lc in lines_content]]
+            n = len(lines_old)
+            for i in range(len(stripped) - n + 1):
+                if stripped[i : i + n] == lines_old:
+                    start = sum(len(ln) for ln in lines_content[:i])
+                    end = sum(len(ln) for ln in lines_content[: i + n])
+                    new_content = old_content[:start] + new_str + old_content[end:]
+                    break
+    elif tool_name == "smart_edit":
+        new_content = args.get("new_content") or args.get("content")
+    elif tool_name == "patch_file":
+        return None
+
+    if new_content is None:
+        return None
+    diff = "".join(
+        difflib.unified_diff(
+            old_content.splitlines(keepends=True),
+            new_content.splitlines(keepends=True),
+            fromfile=f"a/{file_path}",
+            tofile=f"b/{file_path}",
+        )
+    )
+    return diff if diff else None
+
+
 @router.websocket("/ws/agent")
 async def aios_agent_ws(ws: WebSocket):
     if await _require_ws_auth(ws) is None:
@@ -298,7 +350,11 @@ async def aios_agent_ws(ws: WebSocket):
 
     async def _confirm(name: str, args: dict[str, Any]) -> bool:
         try:
-            await ws.send_json({"type": "confirm_request", "data": {"tool": name, "arguments": args}})
+            diff = _compute_confirm_diff(name, args)
+            payload: dict[str, Any] = {"tool": name, "arguments": args}
+            if diff:
+                payload["diff"] = diff
+            await ws.send_json({"type": "confirm_request", "data": payload})
             deadline = asyncio.get_event_loop().time() + 60
             while True:
                 remaining = deadline - asyncio.get_event_loop().time()
@@ -337,13 +393,46 @@ async def aios_agent_ws(ws: WebSocket):
     ee.on("truthful", send_event)
     ee.on("done", send_event)
 
+    agent_task: asyncio.Task[str] | None = None
     try:
         while True:
-            data = await ws.receive_text()
+            if agent_task is None or agent_task.done():
+                if agent_task is not None and agent_task.done():
+                    try:
+                        result = agent_task.result()
+                    except asyncio.CancelledError:
+                        result = "[aborted]"
+                    if not result.startswith("[aborted"):
+                        await ws.send_json({"type": "final", "data": {"content": result}})
+                    agent_task = None
+                data = await ws.receive_text()
+            else:
+                recv_task = asyncio.create_task(ws.receive_text())
+                done, _pending = await asyncio.wait(
+                    {agent_task, recv_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if recv_task in _pending:
+                    recv_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await recv_task
+                if agent_task in done:
+                    continue
+                if recv_task in done:
+                    data = recv_task.result()
+                else:
+                    continue
+
             try:
                 msg = json.loads(data)
             except json.JSONDecodeError:
                 await ws.send_json({"type": "error", "data": {"message": "invalid JSON"}})
+                continue
+
+            if msg.get("type") == "cancel":
+                if agent_task and not agent_task.done():
+                    agent_task.cancel()
+                    await ws.send_json({"type": "done", "data": {"reason": "cancelled", "steps": 0}})
                 continue
 
             prompt = msg.get("prompt", "")
@@ -362,6 +451,7 @@ async def aios_agent_ws(ws: WebSocket):
                 stream_tokens=bool(msg.get("stream", True)),
                 repo_map=bool(msg.get("repo_map", True)),
                 priority="high" if msg.get("interactive", True) else "normal",
+                plan_mode=msg.get("mode", "") == "plan",
             )
             agent = ReActAgent(config=config)
             if msg.get("truthful"):
@@ -382,10 +472,10 @@ async def aios_agent_ws(ws: WebSocket):
                     }
                 )
                 continue
-            result = await agent.run(prompt)
-            if not result.startswith("[aborted"):
-                await ws.send_json({"type": "final", "data": {"content": result}})
+            agent_task = asyncio.create_task(agent.run(prompt))
     except WebSocketDisconnect:
+        if agent_task and not agent_task.done():
+            agent_task.cancel()
         logger.debug("[aios] agent WS disconnected")
 
 
@@ -406,3 +496,274 @@ async def aios_metrics_prometheus():
     from raven.core.metrics import metrics
 
     return metrics.prometheus()
+
+
+@router.post("/completion")
+async def aios_completion(payload: dict[str, Any]) -> dict[str, Any]:
+    prefix = payload.get("prefix", "")
+    suffix = payload.get("suffix", "")
+    language = payload.get("language", "")
+    if not prefix and not suffix:
+        return {"completion": ""}
+    try:
+        from ravencode.api.client import AIOSClient
+
+        client = AIOSClient()
+        prompt_parts = []
+        if language:
+            prompt_parts.append(f"Language: {language}")
+        prompt_parts.append("Complete the code. Reply with ONLY the completion text, no explanation, no markdown fences.")
+        if prefix:
+            prompt_parts.append(f"\nCode before cursor:\n{prefix[-2000:]}")
+        if suffix:
+            prompt_parts.append(f"\nCode after cursor:\n{suffix[:500]}")
+        prompt_parts.append("\nCompletion:")
+        prompt = "\n".join(prompt_parts)
+        resp = await client.ask(prompt, task="code")
+        completion = resp.text.strip()
+        if completion.startswith("```"):
+            lines = completion.split("\n")
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            completion = "\n".join(lines)
+        return {"completion": completion}
+    except Exception as exc:
+        logger.debug("Completion failed: {}", exc)
+        return {"completion": "", "error": str(exc)}
+
+
+@router.post("/inline-edit")
+async def aios_inline_edit(payload: dict[str, Any]) -> dict[str, Any]:
+    code = str(payload.get("code", ""))
+    instruction = str(payload.get("instruction", ""))
+    language = str(payload.get("language", ""))
+    if not code or not instruction:
+        return {"edited_code": code, "diff": ""}
+    try:
+        import difflib
+
+        from ravencode.api.client import AIOSClient
+
+        client = AIOSClient()
+        lang_hint = f" ({language})" if language else ""
+        prompt = (
+            f"You are a code editor. Apply the following instruction to the code{lang_hint}.\n"
+            f"Return ONLY the modified code — no explanation, no markdown fences.\n\n"
+            f"Instruction: {instruction}\n\n"
+            f"Code:\n{code}\n\n"
+            f"Edited code:"
+        )
+        resp = await client.ask(prompt, task="code")
+        edited = resp.text.strip()
+        if edited.startswith("```"):
+            lines = edited.split("\n")
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            edited = "\n".join(lines)
+        diff_lines = list(difflib.unified_diff(
+            code.splitlines(keepends=True),
+            edited.splitlines(keepends=True),
+            fromfile="original", tofile="edited",
+        ))
+        return {"edited_code": edited, "diff": "".join(diff_lines)}
+    except Exception as exc:
+        logger.debug("Inline edit failed: {}", exc)
+        return {"edited_code": code, "diff": "", "error": str(exc)}
+
+
+@router.get("/workspace/tree")
+async def workspace_tree(path: str = ".") -> dict[str, Any]:
+    from pathlib import Path as PathLib
+
+    root = PathLib(path).resolve()
+    if not root.is_dir():
+        return {"error": "Path is not a directory", "tree": []}
+
+    def _build_tree(dir_path: PathLib, depth: int = 0) -> dict[str, Any] | None:
+        if depth > 5:
+            return None
+        try:
+            items = []
+            for item in sorted(dir_path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+                if item.name.startswith(".") or item.name in ("node_modules", "__pycache__", "venv", ".venv"):
+                    continue
+                if item.is_dir():
+                    children = _build_tree(item, depth + 1)
+                    if children:
+                        items.append(children)
+                else:
+                    items.append({
+                        "type": "file",
+                        "name": item.name,
+                        "path": str(item.relative_to(root)),
+                    })
+            return {
+                "type": "directory",
+                "name": dir_path.name if dir_path != root else root.name,
+                "path": str(dir_path.relative_to(root)) if dir_path != root else ".",
+                "children": items,
+            }
+        except PermissionError:
+            return None
+
+    tree = _build_tree(root)
+    return {"root": str(root), "tree": tree}
+
+
+@router.get("/workspace/read")
+async def workspace_read(path: str) -> dict[str, Any]:
+    from pathlib import Path as PathLib
+
+    file_path = PathLib(path).resolve()
+    if not file_path.is_file():
+        return {"error": "File not found"}
+    try:
+        content = file_path.read_text(encoding="utf-8")
+        return {"path": str(file_path), "content": content, "size": len(content)}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@router.post("/workspace/write")
+async def workspace_write(payload: dict[str, Any]) -> dict[str, Any]:
+    from pathlib import Path as PathLib
+
+    path = payload.get("path", "")
+    content = payload.get("content", "")
+    if not path:
+        return {"error": "Path required"}
+    file_path = PathLib(path).resolve()
+    try:
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(content, encoding="utf-8")
+        return {"ok": True, "path": str(file_path), "size": len(content)}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@router.post("/search")
+async def aios_search(payload: dict[str, Any]) -> dict[str, Any]:
+    query = payload.get("query", "")
+    path = payload.get("path", ".")
+    limit = min(int(payload.get("limit", 100)), 500)
+    if not query:
+        return {"results": [], "error": "Query required"}
+    root = Path(path).resolve()
+    if not root.is_dir():
+        return {"results": [], "error": "Path is not a directory"}
+    results = await asyncio.to_thread(_rg_search, query, root, limit)
+    return {"results": results, "count": len(results)}
+
+
+def _rg_search(query: str, root: Path, limit: int) -> list[dict[str, Any]]:
+    import shutil
+    import subprocess
+
+    rg = shutil.which("rg")
+    if rg:
+        try:
+            proc = subprocess.run(
+                [rg, "--json", "--max-count", "5", "-n", query, str(root)],
+                capture_output=True, text=True, timeout=10, cwd=str(root),
+            )
+            results: list[dict[str, Any]] = []
+            for line in proc.stdout.splitlines():
+                if len(results) >= limit:
+                    break
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if obj.get("type") != "match":
+                    continue
+                data = obj.get("data", {})
+                path = data.get("path", {}).get("text", "")
+                line_num = data.get("line_number", 0)
+                text = data.get("lines", {}).get("text", "").rstrip("\n")
+                rel = str(Path(path).relative_to(root)) if Path(path).is_absolute() else path
+                results.append({"file": rel, "line": line_num, "text": text})
+            return results
+        except Exception as exc:
+            logger.debug("ripgrep search failed, falling back to Python: {}", exc)
+
+    results = []
+    try:
+        import re as _re
+        pattern = _re.compile(_re.escape(query))
+    except Exception:
+        return results
+    for fpath in root.rglob("*"):
+        if len(results) >= limit:
+            break
+        if not fpath.is_file():
+            continue
+        if any(p in str(fpath) for p in (".git", "node_modules", "__pycache__", ".venv")):
+            continue
+        try:
+            content = fpath.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for i, line in enumerate(content.splitlines(), 1):
+            if len(results) >= limit:
+                break
+            if pattern.search(line):
+                rel = str(fpath.relative_to(root))
+                results.append({"file": rel, "line": i, "text": line.rstrip()})
+    return results
+
+
+@router.post("/search/semantic")
+async def aios_search_semantic(payload: dict[str, Any]) -> dict[str, Any]:
+    query = payload.get("query", "")
+    path = payload.get("path", ".")
+    top_k = min(int(payload.get("top_k", 10)), 50)
+    if not query:
+        return {"results": [], "error": "Query required"}
+    root = Path(path).resolve()
+    if not root.is_dir():
+        return {"results": [], "error": "Path is not a directory"}
+
+    def _search() -> list[dict[str, Any]]:
+        from ravencode.runtime.code_search import RepoIndex
+        idx = RepoIndex()
+        raw = idx.search(root, query, k=top_k)
+        results: list[dict[str, Any]] = []
+        for item in raw:
+            lines = item.split("\n", 1)
+            header = lines[0]
+            text = lines[1] if len(lines) > 1 else ""
+            file_part, _, line_range = header.rpartition(":")
+            results.append({"file": file_part, "range": line_range, "text": text})
+        return results
+    results = await asyncio.to_thread(_search)
+    return {"results": results, "count": len(results)}
+
+
+@router.get("/sessions/{session_id}")
+async def aios_get_session(session_id: str):
+    data = await asyncio.to_thread(_session_read, session_id)
+    if data is None:
+        return {"error": "Session not found"}
+    return data
+
+
+def _session_read(session_id: str) -> dict[str, Any] | None:
+    import re as _re
+    if not _re.match(r"^[A-Za-z0-9_-]{1,128}$", session_id):
+        return None
+    from pathlib import Path as PathLib
+    p = PathLib("data/sessions") / f"{session_id}.json"
+    if not p.is_file():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return None
+        data["id"] = session_id
+        return data
+    except (json.JSONDecodeError, OSError):
+        return None

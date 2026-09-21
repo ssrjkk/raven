@@ -146,3 +146,48 @@ async def test_whatsapp_verify():
     req.query_params = {"hub.mode": "subscribe", "hub.verify_token": "wrong_token", "hub.challenge": "123"}
     with pytest.raises(Exception):
         await router.routes[3].endpoint(req)  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_slack_events_uses_channel_signing_secret(monkeypatch):
+    monkeypatch.setenv("SLACK_SIGNING_SECRET", "env-slack-secret")
+    db = FakeDB()
+    handler = AsyncMock()
+    router = create_webhook_router(db, handler)  # type: ignore[arg-type]
+    body = {"type": "event_callback", "event": {"type": "message", "user": "U1", "text": "hi", "channel": "C1"}}
+    body_bytes = json_mod.dumps(body).encode()
+    ts = str(int(time.time()))
+    import hashlib
+    import hmac as hmac_mod
+
+    sig_basestring = f"v0:{ts}:{body_bytes.decode('utf-8')}"
+    good_sig = "v0=" + hmac_mod.new(b"env-slack-secret", sig_basestring.encode(), hashlib.sha256).hexdigest()
+    req = FakeRequest(
+        headers={"X-Slack-Signature": good_sig, "X-Slack-Request-Timestamp": ts},
+        body_bytes=body_bytes,
+    )
+    with patch("raven.core.webhooks.settings") as mock_settings:
+        mock_settings.web_secret_key = SafeSecretStr("")
+        resp = await router.routes[1].endpoint(body, req)  # type: ignore[attr-defined]
+    assert resp["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_slack_events_rejects_bad_signature_with_env_secret(monkeypatch):
+    monkeypatch.setenv("SLACK_SIGNING_SECRET", "env-slack-secret")
+    from fastapi import HTTPException
+
+    db = FakeDB()
+    handler = AsyncMock()
+    router = create_webhook_router(db, handler)  # type: ignore[arg-type]
+    body = {"type": "event_callback", "event": {"type": "message"}}
+    ts = str(int(time.time()))
+    req = FakeRequest(
+        headers={"X-Slack-Signature": "v0=" + "0" * 64, "X-Slack-Request-Timestamp": ts},
+        body_bytes=json_mod.dumps(body).encode(),
+    )
+    with patch("raven.core.webhooks.settings") as mock_settings:
+        mock_settings.web_secret_key = SafeSecretStr("")
+        with pytest.raises(HTTPException) as exc_info:
+            await router.routes[1].endpoint(body, req)  # type: ignore[attr-defined]
+    assert exc_info.value.status_code == 403

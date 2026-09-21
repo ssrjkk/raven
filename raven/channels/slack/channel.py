@@ -22,6 +22,10 @@ except ImportError:
 class SlackChannel(EnterpriseChannel):
     channel_id = "slack"
 
+    _token: str = ""
+    _signing_secret: str = ""
+    _client: Any = None
+
     async def _start(self):
         self._token = get_channel_config("slack").get("bot_token", "")
         self._signing_secret = get_channel_config("slack").get("signing_secret", "")
@@ -36,7 +40,8 @@ class SlackChannel(EnterpriseChannel):
 
     def verify_signature(self, body: bytes, timestamp: str, signature: str) -> bool:
         if not self._signing_secret:
-            return True
+            logger.warning("[slack] signing_secret not configured — rejecting unsigned request")
+            return False
         basestring = f"v0:{timestamp}:".encode() + body
         expected = "v0=" + hmac.new(self._signing_secret.encode(), basestring, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, signature)

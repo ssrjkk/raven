@@ -11,6 +11,8 @@ from raven.core.logging import setup_logging
 
 def create_aios_app() -> FastAPI:
     """Build the AI-OS-MVP FastAPI app with security middleware."""
+    from raven.core.admin_api import init_auth_routes
+    from raven.core.config import settings
     from raven.core.gateway.aios_adapter import get_aios_adapter
     from raven.core.middleware import (
         auth_middleware,
@@ -29,6 +31,7 @@ def create_aios_app() -> FastAPI:
     app.middleware("http")(auth_middleware)
     app.middleware("http")(error_handler_middleware)
     app.include_router(get_aios_adapter().get_bridge_router())
+    init_auth_routes(app, str(settings.resolved_db_path))
     return app
 
 

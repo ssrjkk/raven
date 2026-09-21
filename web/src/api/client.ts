@@ -42,7 +42,8 @@ RAGResultEntry, RAGStatsData,
 
 const BASE = "";
 
-let _token: string | null = null;
+const TOKEN_KEY = "raven_auth_token";
+let _token: string | null = localStorage.getItem(TOKEN_KEY);
 
 export function getToken(): string | null {
   return _token;
@@ -50,10 +51,12 @@ export function getToken(): string | null {
 
 export function setToken(token: string) {
   _token = token;
+  localStorage.setItem(TOKEN_KEY, token);
 }
 
 export function clearToken() {
   _token = null;
+  localStorage.removeItem(TOKEN_KEY);
 }
 
 export function isAuthenticated(): boolean {
@@ -90,7 +93,9 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     });
     if (res.status === 401) {
       clearToken();
-      window.location.href = "/login";
+      if (!window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
+      }
       throw new Error("Unauthorized");
     }
     if (!res.ok) throw new Error(`API ${path}: ${res.status}`);
@@ -130,8 +135,10 @@ export const api = {
   shutdown: () => request<{ ok: boolean }>("/api/shutdown", { method: "POST" }),
   login: (username: string, password: string) =>
     request<AuthData>("/api/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
-  register: (username: string, password: string) =>
-    request<AuthData>("/api/auth/register", { method: "POST", body: JSON.stringify({ username, password }) }),
+  register: (username: string, password: string, email?: string) =>
+    request<AuthData>("/api/auth/register", { method: "POST", body: JSON.stringify({ username, password, email }) }),
+  logoutAll: () =>
+    request<{ ok: boolean; message: string }>("/api/auth/logout-all", { method: "POST" }),
   workflowInstantiate: (templateId: string, config?: Record<string, unknown>) =>
     request<{ ok: boolean; task_id: string }>(`/api/admin/workflows/${templateId}/instantiate`, { method: "POST", body: JSON.stringify({ config: config || {} }) }),
   workflowSchedule: (templateId: string, config?: Record<string, unknown>) =>
@@ -382,6 +389,23 @@ export const api = {
     request<{ results: { content: string; file: string; score: number }[] }>("/api/v1/context/search", { method: "POST", body: JSON.stringify({ query, top_k: topK }) }),
   ideAgentExecute: (command: string, context: string) =>
     request<{ output?: string; error?: string }>("/api/v1/agent/execute", { method: "POST", body: JSON.stringify({ command, context }) }),
+
+  workspaceTree: (path = ".") =>
+    request<{ root: string; tree: { type: "file" | "directory"; name: string; path: string; children?: unknown[] } | null }>("/aios/workspace/tree?path=" + encodeURIComponent(path)),
+  workspaceRead: (path: string) =>
+    request<{ path: string; content: string; size: number; error?: string }>("/aios/workspace/read?path=" + encodeURIComponent(path)),
+  workspaceWrite: (path: string, content: string) =>
+    request<{ ok: boolean; path: string; size: number; error?: string }>("/aios/workspace/write", { method: "POST", body: JSON.stringify({ path, content }) }),
+  completion: (prefix: string, suffix: string, language: string) =>
+    request<{ completion: string; error?: string }>("/aios/completion", { method: "POST", body: JSON.stringify({ prefix, suffix, language }) }),
+  inlineEdit: (code: string, instruction: string, language: string) =>
+    request<{ edited_code: string; diff: string; error?: string }>("/aios/inline-edit", { method: "POST", body: JSON.stringify({ code, instruction, language }) }),
+  search: (query: string, path = ".", limit = 100) =>
+    request<{ results: { file: string; line: number; text: string }[]; count: number; error?: string }>("/aios/search", { method: "POST", body: JSON.stringify({ query, path, limit }) }),
+  searchSemantic: (query: string, path = ".", topK = 10) =>
+    request<{ results: { file: string; range: string; text: string }[]; count: number; error?: string }>("/aios/search/semantic", { method: "POST", body: JSON.stringify({ query, path, top_k: topK }) }),
+  sessionGet: (id: string) =>
+    request<Record<string, unknown> & { id?: string; error?: string }>(`/aios/sessions/${encodeURIComponent(id)}`),
 
   mediaAnalyze: (filepath: string, prompt: string) =>
     request<{ result?: string }>("/api/media/analyze", { method: "POST", body: JSON.stringify({ filepath, prompt }) }),

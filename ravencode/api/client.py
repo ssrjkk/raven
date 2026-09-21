@@ -119,10 +119,20 @@ class AIOSClient:
         content = response.content if hasattr(response, "content") else str(response)
         tool_calls_raw = getattr(response, "tool_calls", [])
         tool_calls = [{"id": tc.id, "name": tc.name, "arguments": tc.arguments} for tc in (tool_calls_raw or [])]
+        usage = None
+        if hasattr(response, "usage") and response.usage:
+            usage_dict = response.usage if isinstance(response.usage, dict) else {}
+            if usage_dict:
+                usage = {
+                    "prompt_tokens": usage_dict.get("prompt_tokens", 0),
+                    "completion_tokens": usage_dict.get("completion_tokens", 0),
+                    "total_tokens": usage_dict.get("total_tokens", 0),
+                }
         return AIResponse(
             text=content,
             model=model_name,
             provider=provider,
+            usage=usage,
             tool_calls=tool_calls,
         )
 

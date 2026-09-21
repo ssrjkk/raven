@@ -376,6 +376,52 @@ async def _migration_9(db: AsyncDB):
             logger.debug("Migration 9: index already exists")
 
 
+@register(10, "Add email columns to auth_users + auth_email_tokens table")
+async def _migration_10(db: AsyncDB) -> None:
+    if db.dialect == "postgresql":
+        await _ensure_column(
+            db,
+            "auth_users",
+            "",
+            "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''",
+        )
+        await _ensure_column(
+            db,
+            "auth_users",
+            "",
+            "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS email_verified INTEGER DEFAULT 0",
+        )
+        await db.run_script(
+            """
+            CREATE TABLE IF NOT EXISTS auth_email_tokens (
+                token TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                created_at DOUBLE PRECISION NOT NULL,
+                expires_at DOUBLE PRECISION NOT NULL
+            )
+            """
+        )
+    else:
+        for col, ddl in (
+            ("email", "ALTER TABLE auth_users ADD COLUMN email TEXT DEFAULT ''"),
+            ("email_verified", "ALTER TABLE auth_users ADD COLUMN email_verified INTEGER DEFAULT 0"),
+        ):
+            try:
+                await db.execute(ddl)
+            except aiosqlite.OperationalError:
+                logger.debug("Migration 10: column {} already exists", col)
+        await db.run_script(
+            """
+            CREATE TABLE IF NOT EXISTS auth_email_tokens (
+                token TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                expires_at REAL NOT NULL
+            )
+            """
+        )
+
+
 async def apply_pending_migrations(db: AsyncDB) -> None:
     table = MIGRATIONS_TABLE_POSTGRES if db.dialect == "postgresql" else MIGRATIONS_TABLE_SQLITE
     await db.execute(table)

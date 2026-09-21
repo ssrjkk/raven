@@ -81,3 +81,29 @@ async def test_slack_send_bad_session():
     msg = Message(session_id="invalid", channel="slack", role="assistant", content="reply")
     await channel.send("invalid", msg)
     channel._client.chat_postMessage.assert_not_awaited()
+
+
+def _sign(secret: str, body: bytes, timestamp: str) -> str:
+    import hashlib
+    import hmac
+
+    basestring = f"v0:{timestamp}:".encode() + body
+    return "v0=" + hmac.new(secret.encode(), basestring, hashlib.sha256).hexdigest()
+
+
+def test_verify_signature_fails_closed_without_secret():
+    channel = SlackChannel()
+    assert channel.verify_signature(b"{}", "123", "v0=deadbeef") is False
+
+
+def test_verify_signature_valid():
+    channel = SlackChannel()
+    channel._signing_secret = "s3cret"
+    body, ts = b'{"type":"event_callback"}', "1700000000"
+    assert channel.verify_signature(body, ts, _sign("s3cret", body, ts)) is True
+
+
+def test_verify_signature_rejects_bad_signature():
+    channel = SlackChannel()
+    channel._signing_secret = "s3cret"
+    assert channel.verify_signature(b"{}", "1700000000", "v0=" + "0" * 64) is False

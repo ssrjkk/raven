@@ -5,7 +5,7 @@ import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from raven.core.ab_testing import _engine
+from raven.core.ab_testing import _engine as _engine
 
 
 class CreateRequest(BaseModel):

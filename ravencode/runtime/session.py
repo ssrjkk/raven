@@ -23,6 +23,7 @@ class SessionStore:
     def __init__(self, storage_dir: str = "data/sessions") -> None:
         self._storage = Path(storage_dir).expanduser().resolve()
         self._storage.mkdir(parents=True, exist_ok=True)
+        self._current_session_id: str | None = None
 
     def _path(self, session_id: str) -> Path:
         if not _SAFE_SESSION_ID.match(session_id):
@@ -48,7 +49,9 @@ class SessionStore:
         return sorted(sessions, key=lambda s: s["updated"], reverse=True)
 
     async def save(self, agent: ReActAgent, summary: str = "") -> str:
-        session_id = f"session_{uuid.uuid4().hex[:12]}"
+        if self._current_session_id is None:
+            self._current_session_id = f"session_{uuid.uuid4().hex[:12]}"
+        session_id = self._current_session_id
         state = agent.dump_state()
         state["summary"] = summary
         state["created"] = time.time()
@@ -63,6 +66,7 @@ class SessionStore:
         return session_id
 
     async def load(self, session_id: str) -> ReActAgent | None:
+        self._current_session_id = session_id
         try:
             p = self._path(session_id)
         except ValueError as exc:

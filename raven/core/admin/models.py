@@ -77,8 +77,32 @@ class AuthLoginRequest(BaseModel):
 
 class AuthRegisterRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=100, pattern=r"^[\w@\.\-]+$")
-    password: str = Field(..., min_length=6, max_length=256)
+    password: str = Field(..., min_length=8, max_length=256)
+    email: str | None = Field(default=None, max_length=255)
     display_name: str | None = Field(default=None, max_length=100)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not any(c.islower() for c in v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain at least one digit")
+        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in v):
+            raise ValueError("Password must contain at least one special character")
+        return v
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str | None) -> str | None:
+        if v is not None:
+            import re
+            pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(pattern, v):
+                raise ValueError("Invalid email format")
+        return v
 
 
 class AuthUpdateRoleRequest(BaseModel):

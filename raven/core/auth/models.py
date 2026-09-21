@@ -58,6 +58,8 @@ class User(BaseModel):
     id: str
     username: str
     display_name: str = ""
+    email: str | None = None
+    email_verified: bool = False
     role: Role = Role.USER
     password_hash: str = ""
     api_tokens: list[str] = []
