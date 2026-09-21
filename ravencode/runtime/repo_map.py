@@ -207,7 +207,7 @@ def build_repo_map(
             # Exclude files inside symlink target directories
             try:
                 resolved = path.resolve()
-                if any(str(resolved).startswith(str(target) + "/") or resolved == target 
+                if any(str(resolved).startswith(str(target) + "/") or resolved == target
                        for target in symlink_targets):
                     continue
             except (OSError, ValueError):
