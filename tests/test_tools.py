@@ -320,7 +320,7 @@ class TestTestsTool:
             from raven.tools.tests import run_tests
 
             result = await run_tests(path=outside)
-            assert "outside workspace" in result
+            assert "Access denied" in result
         finally:
             if old is None:
                 os.environ.pop("RAVEN_WORKSPACE", None)
