@@ -1,4 +1,4 @@
-ARG RAVEN_VERSION=0.4.0
+ARG RAVEN_VERSION=0.4.7
 
 FROM python:3.13-slim AS base
 RUN apt-get update && apt-get install -y --no-install-recommends \

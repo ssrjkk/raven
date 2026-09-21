@@ -76,7 +76,7 @@ def _check_auth(authorization: str = "") -> None:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
-app = FastAPI(title="RavenCode API", version="0.4.0")
+app = FastAPI(title="RavenCode API", version="0.4.7")
 
 
 @app.on_event("startup")

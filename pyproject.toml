@@ -1,6 +1,6 @@
 [project]
 name = "raven-agent"
-version = "0.4.0"
+version = "0.4.7"
 description = "Raven — 2-in-1 AI platform: RavenCode (autonomous coding agent) + RavenFlow (persistent workflow gateway)"
 authors = [
     { name = "ssrjkk" },

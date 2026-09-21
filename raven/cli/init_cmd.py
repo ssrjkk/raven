@@ -15,11 +15,11 @@ from raven.core.logging import setup_logging
 
 console = Console()
 
-CONFIG_STORE_VERSION = "0.4.0"
+CONFIG_STORE_VERSION = "0.4.7"
 
 RAVEN_JSON_TEMPLATE = """\
 {
-  "version": "0.4.0",
+  "version": "0.4.7",
   "llm": {
     "provider": "{provider}",
     "default_model": "{default_model}"

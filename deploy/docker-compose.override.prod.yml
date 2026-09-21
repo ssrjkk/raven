@@ -25,4 +25,4 @@ services:
       - RAVEN_ENV=production
     labels:
       - "com.raven.description=Raven AI Production Instance"
-      - "com.raven.version=${RAVEN_VERSION:-0.4.0}"
+      - "com.raven.version=${RAVEN_VERSION:-0.4.7}"
