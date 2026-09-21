@@ -7,7 +7,6 @@ node_modules
 data/
 .env
 *.env
-*.md
 mkdocs.yml
 docs/
 web/
