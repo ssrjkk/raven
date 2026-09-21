@@ -192,7 +192,7 @@ def build_repo_map(
                         symlink_targets.add(target)
                 except (OSError, ValueError):
                     pass
-        
+
         all_files: list[Path] = []
         for path in base.rglob("*"):
             if len(all_files) >= _MAX_FILES:
