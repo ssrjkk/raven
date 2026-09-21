@@ -379,6 +379,23 @@ async def _migration_9(db: AsyncDB):
 @register(10, "Add email columns to auth_users + auth_email_tokens table")
 async def _migration_10(db: AsyncDB) -> None:
     if db.dialect == "postgresql":
+        await db.run_script(
+            """
+            CREATE TABLE IF NOT EXISTS auth_users (
+                id TEXT PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                display_name TEXT DEFAULT '',
+                email TEXT DEFAULT '',
+                email_verified INTEGER DEFAULT 0,
+                role TEXT DEFAULT 'user',
+                password_hash TEXT DEFAULT '',
+                api_tokens TEXT DEFAULT '[]',
+                is_active INTEGER DEFAULT 1,
+                created_at DOUBLE PRECISION NOT NULL,
+                updated_at DOUBLE PRECISION NOT NULL
+            )
+            """
+        )
         await _ensure_column(
             db,
             "auth_users",
@@ -402,6 +419,23 @@ async def _migration_10(db: AsyncDB) -> None:
             """
         )
     else:
+        await db.run_script(
+            """
+            CREATE TABLE IF NOT EXISTS auth_users (
+                id TEXT PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                display_name TEXT DEFAULT '',
+                email TEXT DEFAULT '',
+                email_verified INTEGER DEFAULT 0,
+                role TEXT DEFAULT 'user',
+                password_hash TEXT DEFAULT '',
+                api_tokens TEXT DEFAULT '[]',
+                is_active INTEGER DEFAULT 1,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            )
+            """
+        )
         for col, ddl in (
             ("email", "ALTER TABLE auth_users ADD COLUMN email TEXT DEFAULT ''"),
             ("email_verified", "ALTER TABLE auth_users ADD COLUMN email_verified INTEGER DEFAULT 0"),
