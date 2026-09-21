@@ -181,6 +181,18 @@ def build_repo_map(
         return ""
 
     try:
+        # Find all symlink targets within the repository to exclude them
+        symlink_targets: set[Path] = set()
+        for path in base.rglob("*"):
+            if path.is_symlink():
+                try:
+                    target = path.resolve()
+                    # Only exclude if the target is within the base directory
+                    if target.is_dir() and str(target).startswith(str(base)):
+                        symlink_targets.add(target)
+                except (OSError, ValueError):
+                    pass
+        
         all_files: list[Path] = []
         for path in base.rglob("*"):
             if len(all_files) >= _MAX_FILES:
@@ -192,6 +204,14 @@ def build_repo_map(
                 continue
             if _parent_is_symlink(base, rel.parts[:-1]):
                 continue
+            # Exclude files inside symlink target directories
+            try:
+                resolved = path.resolve()
+                if any(str(resolved).startswith(str(target) + "/") or resolved == target 
+                       for target in symlink_targets):
+                    continue
+            except (OSError, ValueError):
+                pass
             if path.is_file() and path.suffix.lower() in _CODE_SUFFIXES:
                 all_files.append(path)
     except OSError as exc:
