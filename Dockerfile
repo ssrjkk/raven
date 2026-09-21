@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 RUN groupadd -r raven && useradd -r -g raven -d /app -s /sbin/nologin raven
 
-FROM python:3.13-slim@sha256:e3c825ce1ff0a6cf9c8f04bed269fa2844955bcc0da8e2f29ff65c21da6046f1 AS builder
+FROM python:3.13-slim AS builder
 ARG RAVEN_VERSION
 WORKDIR /build
 COPY pyproject.toml README.md ./
