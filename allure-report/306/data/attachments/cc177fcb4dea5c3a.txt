@@ -1,0 +1,37 @@
+2026-09-22 19:17:15.414 | INFO     | raven.core.migrations:migrate:510 - Applying migration 1: Add agent_skills column to sessions
+2026-09-22 19:17:15.414 | DEBUG    | raven.core.migrations:_ensure_column:55 - Migration: column already exists in sessions
+2026-09-22 19:17:15.414 | INFO     | raven.core.migrations:migrate:517 - Migration 1 applied
+2026-09-22 19:17:15.414 | INFO     | raven.core.migrations:migrate:510 - Applying migration 2: Add role column to users table
+2026-09-22 19:17:15.415 | DEBUG    | raven.core.migrations:_ensure_column:55 - Migration: column already exists in users
+2026-09-22 19:17:15.415 | INFO     | raven.core.migrations:migrate:517 - Migration 2 applied
+2026-09-22 19:17:15.415 | INFO     | raven.core.migrations:migrate:510 - Applying migration 3: Create checkpoints table
+2026-09-22 19:17:15.415 | INFO     | raven.core.migrations:migrate:517 - Migration 3 applied
+2026-09-22 19:17:15.415 | INFO     | raven.core.migrations:migrate:510 - Applying migration 4: Create routines table
+2026-09-22 19:17:15.416 | INFO     | raven.core.migrations:migrate:517 - Migration 4 applied
+2026-09-22 19:17:15.416 | INFO     | raven.core.migrations:migrate:510 - Applying migration 5: Add indexes on core tables
+2026-09-22 19:17:15.416 | INFO     | raven.core.migrations:migrate:517 - Migration 5 applied
+2026-09-22 19:17:15.416 | INFO     | raven.core.migrations:migrate:510 - Applying migration 6: Create monitors + monitor_checks tables
+2026-09-22 19:17:15.417 | INFO     | raven.core.migrations:migrate:517 - Migration 6 applied
+2026-09-22 19:17:15.418 | INFO     | raven.core.migrations:migrate:510 - Applying migration 7: Create tasks + task_steps tables
+2026-09-22 19:17:15.419 | INFO     | raven.core.migrations:migrate:517 - Migration 7 applied
+2026-09-22 19:17:15.419 | INFO     | raven.core.migrations:migrate:510 - Applying migration 8: Create coding_sessions table
+2026-09-22 19:17:15.420 | INFO     | raven.core.migrations:migrate:517 - Migration 8 applied
+2026-09-22 19:17:15.420 | INFO     | raven.core.migrations:migrate:510 - Applying migration 9: Add user_id + channel columns to monitors
+2026-09-22 19:17:15.420 | DEBUG    | raven.core.migrations:_migration_9:372 - Migration 9: column user_id already exists
+2026-09-22 19:17:15.420 | DEBUG    | raven.core.migrations:_migration_9:372 - Migration 9: column channel already exists
+2026-09-22 19:17:15.420 | INFO     | raven.core.migrations:migrate:517 - Migration 9 applied
+2026-09-22 19:17:15.420 | INFO     | raven.core.migrations:migrate:510 - Applying migration 10: Add email columns to auth_users + auth_email_tokens table
+2026-09-22 19:17:15.421 | DEBUG    | raven.core.migrations:_migration_10:446 - Migration 10: column email already exists
+2026-09-22 19:17:15.421 | DEBUG    | raven.core.migrations:_migration_10:446 - Migration 10: column email_verified already exists
+2026-09-22 19:17:15.421 | INFO     | raven.core.migrations:migrate:517 - Migration 10 applied
+2026-09-22 19:17:15.422 | INFO     | raven.core.migrations:migrate:524 - DB migrated to version 10
+2026-09-22 19:17:15.424 | INFO     | raven.core.gateway.channel_manager:register:20 - Registered channel: real
+2026-09-22 19:17:15.425 | INFO     | raven.core.gateway.gateway:handle_message:512 - [b45214eb] Incoming message from real[dave]: count me
+2026-09-22 19:17:15.426 | DEBUG    | raven.core.security.context_filter:_try_init_presidio:356 - [context_filter] presidio_analyzer not available — using regex patterns only
+2026-09-22 19:17:15.426 | INFO     | raven.core.gateway.gateway:_handle_message_inner:575 - [b45214eb] Processing message from real[dave]
+2026-09-22 19:17:15.431 | INFO     | raven.core.gateway.gateway:stop:369 - Stopping gateway...
+2026-09-22 19:17:15.431 | INFO     | raven.core.outbox:stop:89 - Outbox stopped
+2026-09-22 19:17:15.431 | INFO     | raven.core.gateway.task_orchestrator:stop:92 - TaskOrchestrator stopped
+2026-09-22 19:17:15.431 | INFO     | raven.core.gateway.channel_manager:stop_all:50 - Channel stopped: real
+2026-09-22 19:17:15.431 | DEBUG    | raven.core.store:close:54 - Connection closed for MonitorStore
+2026-09-22 19:17:15.431 | DEBUG    | raven.core.store:close:54 - Connection closed for RoutineStore

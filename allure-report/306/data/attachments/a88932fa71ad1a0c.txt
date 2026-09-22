@@ -1,0 +1,13 @@
+2026-09-22 19:17:15.500 | INFO     | raven.core.gateway.channel_manager:register:20 - Registered channel: mock
+2026-09-22 19:17:15.501 | INFO     | raven.core.gateway.gateway:handle_message:512 - [a961aeec] Incoming message from mock[user1]: hello
+2026-09-22 19:17:15.502 | DEBUG    | raven.core.security.context_filter:_try_init_presidio:356 - [context_filter] presidio_analyzer not available — using regex patterns only
+2026-09-22 19:17:15.502 | INFO     | raven.core.gateway.gateway:_handle_message_inner:575 - [a961aeec] Processing message from mock[user1]
+2026-09-22 19:17:15.505 | ERROR    | raven.core.agent.agent:run:426 - Agent: LLM call failed (round 1/10): sequence item 0: expected str instance, MagicMock found
+2026-09-22 19:17:16.006 | ERROR    | raven.core.agent.agent:run:426 - Agent: LLM call failed (round 2/10): sequence item 0: expected str instance, MagicMock found
+2026-09-22 19:17:17.008 | ERROR    | raven.core.agent.agent:run:426 - Agent: LLM call failed (round 3/10): sequence item 0: expected str instance, MagicMock found
+2026-09-22 19:17:17.012 | INFO     | raven.core.gateway.gateway:stop:369 - Stopping gateway...
+2026-09-22 19:17:17.012 | INFO     | raven.core.outbox:stop:89 - Outbox stopped
+2026-09-22 19:17:17.012 | INFO     | raven.core.gateway.task_orchestrator:stop:92 - TaskOrchestrator stopped
+2026-09-22 19:17:17.012 | INFO     | raven.core.gateway.channel_manager:stop_all:50 - Channel stopped: mock
+2026-09-22 19:17:17.012 | DEBUG    | raven.core.store:close:54 - Connection closed for MonitorStore
+2026-09-22 19:17:17.012 | DEBUG    | raven.core.store:close:54 - Connection closed for RoutineStore

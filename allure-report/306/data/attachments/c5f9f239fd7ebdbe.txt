@@ -1,0 +1,7 @@
+2026-09-22 19:17:26.310 | INFO     | raven.core.gateway.channel_manager:register:20 - Registered channel: mock
+2026-09-22 19:17:26.312 | INFO     | raven.core.gateway.gateway:stop:369 - Stopping gateway...
+2026-09-22 19:17:26.312 | INFO     | raven.core.outbox:stop:89 - Outbox stopped
+2026-09-22 19:17:26.312 | INFO     | raven.core.gateway.task_orchestrator:stop:92 - TaskOrchestrator stopped
+2026-09-22 19:17:26.312 | INFO     | raven.core.gateway.channel_manager:stop_all:50 - Channel stopped: mock
+2026-09-22 19:17:26.312 | DEBUG    | raven.core.store:close:54 - Connection closed for MonitorStore
+2026-09-22 19:17:26.313 | DEBUG    | raven.core.store:close:54 - Connection closed for RoutineStore
