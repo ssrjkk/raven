@@ -5,6 +5,15 @@ All notable changes to Raven AI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.8] - 2026-09-22
+
+### Changed
+- Version bump to 0.4.8 across all modules (pyproject.toml, Dockerfile, TUI, API servers, MCP clients, deploy configs)
+
+### Removed
+- All git tags — single `main` branch is the only release surface; Docker images are rebuilt on demand via manual Deploy dispatch (`ghcr.io/ssrjkk/raven:latest`)
+- Duplicate `release` job from `deploy.yml` — GitHub Releases are owned solely by `release.yml`
+
 ## [0.4.7] - 2026-09-21
 
 ### Fixed
@@ -22,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Condensed summary of 276 commits since v0.4.0 (2026-06-05 → 2026-09-20). Per-commit detail: `git log v0.4.0..HEAD`; 2026 session fix logs: `docs/archive/fixes-history.md`.
+Condensed summary of ~280 commits since the 0.4.0 baseline (2026-06-05 → 2026-09-20). 2026 session fix logs: `docs/archive/fixes-history.md`.
 
 ### Added
 - RavenCode agent core: streaming ReAct loop, typed LLM delta streaming (providers → router → client → agent → SSE/TUI/WS), parallel tool execution, tool-result cache, LLM retry with adaptive 429 limiter, context auto-compaction + deep digest compaction, repo map in system prompt, speculative pre-read with git co-change focus, queue priorities, usage/cost accounting, persistent memory tools, MCP tool wiring, Anthropic prompt caching, smart tool-result truncation with spill files, code search (BM25), run_tests tool, task-style eval suite

@@ -41,7 +41,7 @@ class MCPClient:
             {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "raven-mcp-client", "version": "0.4.7"},
+                "clientInfo": {"name": "raven-mcp-client", "version": "0.4.8"},
             },
         )
         self._server_info = result.get("serverInfo", {})

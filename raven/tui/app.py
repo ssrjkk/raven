@@ -81,7 +81,7 @@ class DashboardScreen(Screen[Any]):
 
 class RavenTUI(App[Any]):
     TITLE = "Raven AI"
-    SUB_TITLE = "v0.4.7"
+    SUB_TITLE = "v0.4.8"
 
     SCREENS: ClassVar[dict[str, Callable[[], Screen[Any]]]] = {
         "dashboard": DashboardScreen,

@@ -193,7 +193,7 @@ def _write_raven_json(model: str) -> Path:
     config_dir = Path.cwd()
     tiers = _tier_models_for(model)
     cfg = {
-        "version": "0.4.7",
+        "version": "0.4.8",
         "llm": {
             "provider": "ollama",
             "default_model": f"ollama/{model}",

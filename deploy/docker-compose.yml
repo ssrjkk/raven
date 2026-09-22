@@ -4,7 +4,7 @@ services:
       context: ..
       dockerfile: Dockerfile
       args:
-        - RAVEN_VERSION=${RAVEN_VERSION:-0.4.7}
+        - RAVEN_VERSION=${RAVEN_VERSION:-0.4.8}
     env_file:
       - ../.env
     volumes:

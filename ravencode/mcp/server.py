@@ -48,7 +48,7 @@ class MCPServer:
                 "result": {
                     "protocolVersion": "2025-03-26",
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "ravencode", "version": "0.4.7"},
+                    "serverInfo": {"name": "ravencode", "version": "0.4.8"},
                 },
             }
         if method == "tools/list":
