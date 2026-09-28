@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import click
-import requests
+import httpx
 from rich.console import Console
 
 console = Console()
@@ -16,8 +16,7 @@ def nodes_group():
 def nodes_list():
     """List paired device nodes"""
     console.print("[yellow]Node system: connect iOS/Android devices via Gateway WebSocket[/yellow]")
-    console.print("  iOS: https://docs.raven.ai/platforms/ios")
-    console.print("  Android: https://docs.raven.ai/platforms/android")
+    console.print("  Docs: https://github.com/ssrjkk/raven#readme (mobile nodes)")
     console.print("\nNo devices currently paired.")
 
 
@@ -28,10 +27,10 @@ def nodes_pair(device_id: str, url: str | None):
     """Pair a new device node"""
     node_url = url or f"http://{device_id}:18789"
     try:
-        resp = requests.post(f"{node_url.rstrip('/')}/api/v1/pair", json={"device_id": device_id}, timeout=10)
-        if resp.ok:
+        resp = httpx.post(f"{node_url.rstrip('/')}/api/v1/pair", json={"device_id": device_id}, timeout=10)
+        if resp.is_success:
             console.print(f"[green]Device {device_id} paired successfully ({node_url})[/green]")
         else:
             console.print(f"[red]Device {device_id} pairing failed: {resp.status_code} {resp.text}[/red]")
-    except requests.RequestException as e:
+    except httpx.HTTPError as e:
         console.print(f"[red]Device {device_id} pairing failed: {e}[/red]")

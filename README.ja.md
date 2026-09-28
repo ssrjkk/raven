@@ -1,5 +1,6 @@
 <div align="center">
   <h1>Raven AI</h1>
+  <p><b>by <a href="https://github.com/ssrjkk">@ssrjkk</a></b></p>
   <p><i>2-in-1: <b>RavenCode</b> (opencode代替 — 自律コーディングエージェント) + <b>RavenFlow</b> (openclaw代替 — 永続ワークフローゲートウェイ). 15チャンネル. タスク. モニター. RAG. 音声. Webダッシュボード.</i></p>
 
   <a href="#features">機能</a> •

@@ -1,5 +1,7 @@
 # Raven AI
 
+_by [@ssrjkk](https://github.com/ssrjkk)_
+
 **Personal AI Assistant — Any Channel. Any Platform.**
 
 Raven AI is a personal AI assistant you run on your own infrastructure. It connects to the messaging channels you already use — Telegram, Discord, Slack, WhatsApp, and more — and provides a unified AI-powered assistant experience.

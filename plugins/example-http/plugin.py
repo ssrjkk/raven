@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from ravencode.runtime.plugins import Plugin
 
@@ -8,7 +8,7 @@ from ravencode.runtime.plugins import Plugin
 def register(ctx: Any = None) -> Plugin:
     async def http_get(url: str, headers: dict[str, str] | None = None) -> str:
         if ctx:
-            return await ctx.safe_http("GET", url, headers=headers or {})
+            return cast("str", await ctx.safe_http("GET", url, headers=headers or {}))
         try:
             import httpx
             async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
@@ -23,7 +23,7 @@ def register(ctx: Any = None) -> Plugin:
 
     async def http_post(url: str, data: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> str:
         if ctx:
-            return await ctx.safe_http("POST", url, headers=headers or {}, body=data)
+            return cast("str", await ctx.safe_http("POST", url, headers=headers or {}, body=data))
         try:
             import httpx
             async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:

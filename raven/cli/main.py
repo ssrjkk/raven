@@ -50,6 +50,7 @@ from raven.core.db import DatabaseFactory
 from raven.core.llm import LLMRouter
 from raven.core.logging import setup_logging
 from raven.core.plugin_loader import PluginLoader
+from raven.core.version import __version__
 
 try:
     import uvloop
@@ -66,6 +67,11 @@ def _run_async(coro):
 
 
 @click.group(invoke_without_command=True)
+@click.version_option(
+    version=__version__,
+    prog_name="raven",
+    message="%(prog)s %(version)s — by ssrjkk",
+)
 @click.pass_context
 def cli(ctx: click.Context):
     """Raven AI — Personal AI Assistant 24/7"""

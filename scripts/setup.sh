@@ -1,60 +1,42 @@
 #!/usr/bin/env bash
+# Raven AI setup — by ssrjkk
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RAVEN_DIR="${RAVEN_DIR:-$HOME/.raven}"
-WEB_DIR="$(dirname "$0")/../web"
-DESKTOP_DIR="$(dirname "$0")/../desktop"
 
-echo "🐦 Raven AI — Setup"
-echo "===================="
+echo "🐦 Raven AI — Setup (by ssrjkk)"
+echo "=============================="
 
-# Python backend
 echo ""
-echo "[1/5] Installing Python backend..."
-pip install -e "$(dirname "$0")/.."
+echo "[1/5] Installing Python backend (editable + dev extras)..."
+python -m pip install -e "$ROOT[dev]"
 
-# Rust daemon
 echo ""
-echo "[2/5] Building Rust daemon..."
-DAEMON_DIR="$(dirname "$0")/../daemon"
-if [ -f "$DAEMON_DIR/Cargo.toml" ]; then
-    cd "$DAEMON_DIR"
-    cargo build --release
-    cd - > /dev/null
-    echo "  ✅ ravend built at $DAEMON_DIR/target/release/ravend"
+echo "[2/5] Building web dashboard..."
+if [ -f "$ROOT/web/package.json" ]; then
+    (cd "$ROOT/web" && npm ci && npm run build)
 else
-    echo "  ⚠️  daemon/ not found, skipping"
+    echo "  [!] web/ not found, skipping"
 fi
 
-# TypeScript web UI
 echo ""
-echo "[3/5] Installing web UI..."
-if [ -f "$WEB_DIR/package.json" ]; then
-    cd "$WEB_DIR"
-    npm install
-    npm run build
-    cd - > /dev/null
-else
-    echo "  ⚠️  web/ not found, skipping"
+echo "[3/5] Generating icons..."
+python "$ROOT/scripts/make_icon.py"
+python "$ROOT/scripts/make_extension_icons.py"
+
+echo ""
+echo "[4/5] Preparing runtime directories..."
+mkdir -p "$ROOT/data" "$ROOT/workspace" "$RAVEN_DIR"
+if [ ! -f "$ROOT/.env" ] && [ -f "$ROOT/.env.example" ]; then
+    cp "$ROOT/.env.example" "$ROOT/.env"
+    echo "  [+] Created .env from .env.example — add your API keys"
 fi
 
-# Electron desktop
 echo ""
-echo "[4/5] Building desktop app..."
-if [ -f "$DESKTOP_DIR/package.json" ]; then
-    cd "$DESKTOP_DIR"
-    npm install
-    npm run build
-    cd - > /dev/null
-else
-    echo "  ⚠️  desktop/ not found, skipping"
-fi
-
-# Config dir
-echo ""
-echo "[5/5] Creating config directory..."
-mkdir -p "$RAVEN_DIR"
+echo "[5/5] Verification gate..."
+python "$ROOT/scripts/check_all.py" --quick
 
 echo ""
-echo "✅ Setup complete!"
-echo "Run: raven start"
+echo "✅ Setup complete! Run: raven start   (or: raven onboard)"
+

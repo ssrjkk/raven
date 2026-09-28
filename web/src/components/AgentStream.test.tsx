@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { AgentStream, AgentEvent } from "./AgentStream";
+import { AgentEvent,AgentStream } from "./AgentStream";
 
 describe("AgentStream", () => {
   it("shows empty state when no events", () => {

@@ -31,7 +31,7 @@ from typing import Any, Literal
 ROOT = Path(__file__).resolve().parent.parent
 os.chdir(ROOT)
 
-CHECK_DIRS = ["raven/", "aios/", "ravencode/", "tests/", "scripts/"]
+CHECK_DIRS = ["raven/", "aios/", "ravencode/", "plugins/", "tests/", "scripts/"]
 _USE_COV = False
 
 # -- Colors ------------------------------------------------------------------

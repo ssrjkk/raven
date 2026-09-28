@@ -2,8 +2,8 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach,describe, expect, it, vi } from "vitest";
 
-import Monitors from "./Monitors";
 import { renderWithProviders } from "../test/test-utils";
+import Monitors from "./Monitors";
 
 const mockMonitorsData = [
   { id: "m1", name: "Production API", type: "http", target: "https://api.example.com/health", interval_seconds: 60, status: "active", last_check: { status: "up", checked_at: 1700000000 } },

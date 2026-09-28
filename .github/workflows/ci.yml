@@ -25,8 +25,8 @@ jobs:
         python-version: ["3.11", "3.12"]
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
@@ -68,11 +68,17 @@ jobs:
       - name: TypeScript check
         working-directory: web
         run: npx tsc --noEmit
+      - name: ESLint
+        working-directory: web
+        run: npx eslint src
+      - name: Frontend unit tests
+        working-directory: web
+        run: npm test -- --run
       - name: Build
         working-directory: web
         run: npm run build
       - name: Upload web dist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: web-dist
           path: web/dist/
@@ -97,8 +103,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
@@ -145,9 +151,9 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
@@ -166,7 +172,7 @@ jobs:
 
       - name: Generate Allure report
         if: always()
-        uses: simple-elf/allure-report-action@master
+        uses: simple-elf/allure-report-action@v1.15
         with:
           allure_results: allure-results
           allure_history: allure-history
@@ -193,7 +199,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Gitleaks scan

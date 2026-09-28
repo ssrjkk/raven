@@ -12,6 +12,8 @@ __author__ = "ssrjkk"
 import importlib
 from typing import TYPE_CHECKING
 
+from raven.core.version import __version__
+
 if TYPE_CHECKING:
     from ravencode.agents.custom_agents import CustomAgentDef
     from ravencode.agents.multi import MultiAgentOrchestrator, SubTask, TaskResult, get_multi_orchestrator
@@ -187,6 +189,7 @@ __all__ = [
     "TaskResult",
     "ThemeColors",
     "UndoManager",
+    "__version__",
     "apply_patch",
     "auto_commit",
     "cli",

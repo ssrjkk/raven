@@ -1,5 +1,6 @@
 <div align="center">
   <h1>Raven AI</h1>
+  <p><b>by <a href="https://github.com/ssrjkk">@ssrjkk</a></b></p>
   <p><i>2 в 1: <b>RavenCode</b> (аналог opencode — автономный coding-агент) + <b>RavenFlow</b> (аналог openclaw — персистентный workflow gateway). 15 каналов. Задачи. Мониторы. RAG. Голос. Веб-дашборд.</i></p>
 
   <a href="#features">Возможности</a> •

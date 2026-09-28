@@ -1,6 +1,6 @@
+import { AlertCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle } from "lucide-react";
 
 import { api, setToken } from "../api/client";
 import { useApiQuery } from "../hooks/useApiQuery";

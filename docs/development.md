@@ -85,6 +85,26 @@ pytest tests/core/test_sse.py -v
 - Async-first for I/O operations
 - Use loguru for logging
 
+## Web Dashboard Assets
+
+The gateway serves the built React SPA from `web/dist`. It is auto-discovered (repo checkout,
+installed wheel, PyInstaller bundle, or `RAVEN_WEB_DIST` override):
+
+```bash
+cd web && npm ci && npm run build   # produces web/dist
+```
+
+Wheel/sdist builds pick up the SPA when CI stages it inside the package (`raven/web/dist`) —
+see `.github/workflows/pypi.yml`; the Docker image builds it in a dedicated stage and points
+`RAVEN_WEB_DIST` at it.
+
+## Icons
+
+```bash
+python scripts/make_icon.py                 # scripts/raven.ico (skipped if present)
+python scripts/make_extension_icons.py      # extension/icons/*.png + extension/vscode/icon.png
+```
+
 ## Building
 
 ```bash

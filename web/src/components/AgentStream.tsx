@@ -165,7 +165,6 @@ function PhaseTracker({ events }: { events: AgentEvent[] }) {
       if (idx > last) last = idx;
     }
     return last;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events]);
 
   function orderIndex(phase: Phase): number {

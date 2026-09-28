@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import importlib.util as importlib_util
+import json as json_module
+import subprocess
+
 import pytest
 
+from raven.core import config as config_module
 from raven.core.security.context_filter import (
     ContextVisibility,
     filter_context_by_visibility,
@@ -98,6 +103,149 @@ class TestContextFilter:
         result = filter_context_by_visibility("secret", ContextVisibility.ALLOWLIST_QUOTE, False)
         assert "filtered" in result.lower()
         assert "quoting" in result.lower()
+
+
+class TestSecurityAuditCheckFixes:
+    """Regressions: the audit must not produce false alarms for valid configs."""
+
+    @staticmethod
+    def _last(auditor):
+        return auditor._checks[-1]
+
+    def test_api_keys_accepts_groq_default_model(self, monkeypatch):
+        from raven.core.config import SafeSecretStr
+        from raven.core.security import security_audit as sa
+
+        monkeypatch.setattr(config_module.settings, "default_model", "groq/openai/gpt-oss-120b")
+        monkeypatch.setattr(config_module.settings, "groq_api_key", SafeSecretStr("gsk-test"))
+        auditor = sa.SecurityAudit()
+        auditor._check_api_keys()
+        check = self._last(auditor)
+        assert check.passed, check.message
+        assert "groq" in check.message
+
+    def test_api_keys_fails_for_missing_provider_key(self, monkeypatch):
+        from raven.core.config import SafeSecretStr
+        from raven.core.security import security_audit as sa
+
+        monkeypatch.setattr(config_module.settings, "default_model", "openai/gpt-4o")
+        monkeypatch.setattr(config_module.settings, "openai_api_key", SafeSecretStr(""))
+        auditor = sa.SecurityAudit()
+        auditor._check_api_keys()
+        check = self._last(auditor)
+        assert not check.passed
+        assert "OPENAI_API_KEY" in check.message
+
+    def test_api_keys_validates_local_provider_base_url(self, monkeypatch):
+        from raven.core.security import security_audit as sa
+
+        monkeypatch.setattr(config_module.settings, "default_model", "vllm/mistral")
+        monkeypatch.setattr(config_module.settings, "vllm_base_url", "")
+        auditor = sa.SecurityAudit()
+        auditor._check_api_keys()
+        check = self._last(auditor)
+        assert not check.passed
+        assert "VLLM_BASE_URL" in check.message
+
+    def test_api_keys_unknown_provider_with_configured_key(self, monkeypatch):
+        from raven.core.config import SafeSecretStr
+        from raven.core.security import security_audit as sa
+
+        monkeypatch.setattr(config_module.settings, "default_model", "bedrock/anthropic.claude-v2")
+        monkeypatch.setattr(config_module.settings, "groq_api_key", SafeSecretStr("gsk-test"))
+        auditor = sa.SecurityAudit()
+        auditor._check_api_keys()
+        check = self._last(auditor)
+        assert check.passed, check.message
+
+    def test_parse_pip_audit_findings(self):
+        from raven.core.security.security_audit import _parse_pip_audit_findings
+
+        object_form = json_module.dumps(
+            {
+                "dependencies": [
+                    {"name": "urllib3", "version": "1.26.0", "vulns": [{"id": "CVE-1"}]},
+                    {"name": "ok", "version": "1.0", "vulns": []},
+                ],
+                "fixes": [],
+            }
+        )
+        list_form = '[{"name": "urllib3", "version": "1.26.0", "vulns": [{"id": "CVE-1"}]}]'
+        assert _parse_pip_audit_findings(object_form) == ["urllib3==1.26.0"]
+        assert _parse_pip_audit_findings(list_form) == ["urllib3==1.26.0"]
+        assert _parse_pip_audit_findings('{"dependencies": [{"name": "ok", "version": "1.0", "vulns": []}]}') == []
+        assert _parse_pip_audit_findings("not json") is None
+        assert _parse_pip_audit_findings('{"unexpected": "object"}') is None
+
+    def test_dependency_audit_reports_not_installed(self, monkeypatch):
+        from raven.core.security import security_audit as sa
+
+        monkeypatch.setattr(importlib_util, "find_spec", lambda name: None)
+        auditor = sa.SecurityAudit()
+        auditor._check_dependencies()
+        check = self._last(auditor)
+        assert check.passed
+        assert "pip-audit not installed" in check.message
+
+    def test_dependency_audit_reports_vulnerable_packages(self, monkeypatch):
+        from raven.core.security import security_audit as sa
+
+        payload = json_module.dumps(
+            {"dependencies": [{"name": "urllib3", "version": "1.26.0", "vulns": [{"id": "CVE-2023-1"}]}]}
+        ).encode()
+
+        class _Result:
+            returncode = 1
+            stdout = payload
+            stderr = b""
+
+        monkeypatch.setattr(importlib_util, "find_spec", lambda name: object())
+        monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _Result())
+        auditor = sa.SecurityAudit()
+        auditor._check_dependencies()
+        check = self._last(auditor)
+        assert not check.passed
+        assert "urllib3==1.26.0" in check.message
+
+    def test_dependency_audit_reports_command_failure(self, monkeypatch):
+        from raven.core.security import security_audit as sa
+
+        class _Result:
+            returncode = 2
+            stdout = b""
+            stderr = b"boom"
+
+        monkeypatch.setattr(importlib_util, "find_spec", lambda name: object())
+        monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: _Result())
+        auditor = sa.SecurityAudit()
+        auditor._check_dependencies()
+        check = self._last(auditor)
+        assert not check.passed
+        assert "boom" in check.message
+
+    def test_signing_key_accepts_key_file(self, tmp_path, monkeypatch):
+        from raven.core.security import security_audit as sa
+
+        key_file = tmp_path / "audit_signing_key.bin"
+        key_file.write_bytes(b"k" * 32)
+        monkeypatch.setattr(sa, "AUDIT_KEY_FILE", str(key_file))
+        monkeypatch.delenv("RAVEN_AUDIT_SIGNING_KEY", raising=False)
+        auditor = sa.SecurityAudit()
+        auditor._check_signing_key()
+        check = self._last(auditor)
+        assert check.passed, check.message
+        assert "Signing key present" in check.message
+
+    def test_signing_key_fails_without_env_or_file(self, tmp_path, monkeypatch):
+        from raven.core.security import security_audit as sa
+
+        monkeypatch.setattr(sa, "AUDIT_KEY_FILE", str(tmp_path / "missing.bin"))
+        monkeypatch.delenv("RAVEN_AUDIT_SIGNING_KEY", raising=False)
+        auditor = sa.SecurityAudit()
+        auditor._check_signing_key()
+        check = self._last(auditor)
+        assert not check.passed
+        assert "unsigned" in check.message
 
 
 class TestSecurityAudit:

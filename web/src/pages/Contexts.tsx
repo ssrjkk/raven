@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { FolderGit2, Pencil,Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { FolderGit2, Plus, Trash2, Pencil } from "lucide-react";
 
 import { api, type ConnectionContext, type LLMProviderInfo } from "../api/client";
 import PageHeader from "../components/PageHeader";

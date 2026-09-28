@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import { Bot, History, Pencil, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 
-import { api, type AgentInfo, type ConnectionContext, type LLMProviderInfo } from "../api/client";
+import { type AgentInfo, api, type ConnectionContext, type LLMProviderInfo } from "../api/client";
 import PageHeader from "../components/PageHeader";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";

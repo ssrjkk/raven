@@ -3,7 +3,12 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+.final*.log
+.final*.err
 *.spec
+.venv/
+.venv-*/
+venv/
 .raven/
 .env
 *.db

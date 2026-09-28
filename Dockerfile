@@ -1,5 +1,14 @@
 ARG RAVEN_VERSION=0.4.8
 
+# --- Web dashboard (React SPA) ---
+FROM node:22-alpine AS web-builder
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY tsconfig.base.json /tsconfig.base.json
+COPY web/ ./
+RUN npm run build
+
 FROM python:3.13-slim AS base
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libgbm1 \
@@ -22,6 +31,7 @@ ARG RAVEN_VERSION
 LABEL org.opencontainers.image.title="Raven AI" \
       org.opencontainers.image.description="Enterprise-grade personal AI assistant" \
       org.opencontainers.image.version=$RAVEN_VERSION \
+      org.opencontainers.image.authors="ssrjkk (https://github.com/ssrjkk)" \
       org.opencontainers.image.source="https://github.com/ssrjkk/raven" \
       org.opencontainers.image.licenses="MIT"
 
@@ -30,6 +40,7 @@ COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin/raven /usr/local/bin/raven
 COPY workspace/ workspace/
 COPY plugins/ plugins/
+COPY --from=web-builder /web/dist /app/web/dist
 
 RUN mkdir -p /app/data /app/workspace && chown -R raven:raven /app/data /app/workspace && \
     chmod 755 /app/data /app/workspace
@@ -42,6 +53,7 @@ ENV PYTHONUNBUFFERED=1 \
     DB_PATH=/app/data/raven.db \
     LOG_FILE=/app/data/raven.log \
     WORKSPACE_PATH=/app/workspace \
+    RAVEN_WEB_DIST=/app/web/dist \
     RAVEN_ENV=production
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

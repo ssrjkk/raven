@@ -1,11 +1,12 @@
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
   BarChart3,
   Blocks,
   Bomb,
   BookOpen,
-  Braces,
   Bot,
+  Braces,
   Clapperboard,
   Code2,
   Database,
@@ -41,10 +42,10 @@ import {
   Wallet,
   Workflow,
 } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
 import { Suspense, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
+import { version } from "../../package.json";
 import { api, clearToken } from "../api/client";
 import { type Theme, useTheme } from "../design/ThemeContext";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -308,7 +309,7 @@ export default function Layout() {
             {revoking ? "Revoking…" : "Logout everywhere"}
           </button>
           <div className="text-[10px] text-center" style={{ color: "var(--dt-colors-border-hover)" }}>
-            Raven AI v{import.meta.env.VITE_APP_VERSION || "0.2.0"}
+            Raven AI v{version} · by ssrjkk
           </div>
         </div>
       </aside>

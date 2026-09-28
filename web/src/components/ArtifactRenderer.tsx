@@ -1,7 +1,7 @@
+import { Check, Code2, Copy, FileText, Image } from "lucide-react";
 import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
-import { Check, Code2, Copy, FileText, Image } from "lucide-react";
 
 export interface ArtifactPayload {
   artifact_id: string;

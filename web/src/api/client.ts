@@ -4,19 +4,19 @@ import { gitApi } from "./git";
 import { githubApi } from "./github";
 import type {
 ABCreateResponse,
-ABTestData, ABTestResults, AuthData,   BrowserActionResult, ChannelInfo, ChaosExperimentResult, ChaosFaultInfo, ChaosSummaryReport,
-  ChatSearchResult,   CheckpointData, CodingSessionData, CollabSessionDetails,   CollabSessionInfo, DatasetStatsData, DebugState,
+ABTestData, ABTestResults, AgentInfo,AuthData,   BrowserActionResult, ChannelInfo, ChaosExperimentResult, ChaosFaultInfo, ChaosSummaryReport,
+  ChatSearchResult,   CheckpointData, CodingSessionData, CollabSessionDetails,   CollabSessionInfo, ConnectionContext, DatasetStatsData, DebugState,
+DreamStatsData, DreamStatusData,
 EmailConfigInfo,
 EmailThreadEntry, GraphData,
-DreamStatsData, DreamStatusData,
-HealthData, KnowledgeSearchEntry, MessageData, MetricsSnapshot, ModelInfoData,
+HealthData, KnowledgeSearchEntry, LLMProviderInfo, MessageData, MetricsSnapshot, ModelInfoData,
 MonitorData,
 OAuthProviderInfo, PatternCheckInfo, PatternRunResponse,
-PluginInfo, RAGResultEntry, RAGStatsData,   RoutineData, Session,   StatusData, TaskData, TrainingResultData,   VoiceSpeakerInfo, VoiceStatsData, WebSearchProvider,   WebSearchResult, ThemeScheme, TruthfulResult, LLMProviderInfo, ConnectionContext, AgentInfo, } from "./types";
+PluginInfo, RAGResultEntry, RAGStatsData,   RoutineData, Session,   StatusData, TaskData, ThemeScheme, TrainingResultData,   TruthfulResult, VoiceSpeakerInfo, VoiceStatsData, WebSearchProvider,   WebSearchResult,  } from "./types";
 
 export type {
 ABCreateResponse,
-ABTestData, ABTestResults,   ABTestVariant, AnalyticsAggregatedData, AnalyticsFullData, AnalyticsRangeData, AnalyticsSeriesData,
+ABTestData, ABTestResults,   ABTestVariant, AgentInfo,AnalyticsAggregatedData, AnalyticsFullData, AnalyticsRangeData, AnalyticsSeriesData,
   AnalyticsSummaryData,   AnalyticsTimePoint, AnalyticsToolBreakdownData,
 AnalyticsToolUsageData, AuthData,
   BlameLineData, BrowserActionResult, BrowserEvaluateResult,
@@ -24,7 +24,7 @@ AnalyticsToolUsageData, AuthData,
 BrowserVisualDiffResult, BudgetInfo, ChannelInfo, ChaosExperimentResult,   ChaosFaultConfigInfo, ChaosFaultInfo, ChaosSummaryReport,
 ChatSearchResult,
 CheckpointData, CodingSessionData, CollabSessionDetails,
-CollabSessionInfo, CollabUserInfo, CostBudgetCreateResult, CostCheckResult,
+CollabSessionInfo, CollabUserInfo, ConnectionContext, CostBudgetCreateResult, CostCheckResult,
 CostSummary, CostUsageRecord,   DatasetStatsData, DebugFrame,
   DebugState, DiffFileInfo, DreamMemoryStats, DreamSkillEntry, DreamStatsData, DreamStatusData,
 EmailConfigInfo, EmailThreadEntry, GitBlameResult,
@@ -33,12 +33,12 @@ GitHubFileTreeItem,   GitHubIssue, GitHubMergeResult,
 GitHubPull, GitHubRateLimit, GitHubRepo, GitHubReview,   GitHubSearchCodeResult, GitHubSearchReposResult,
 GitHubTokenStatus,   GitHubUser, GitHubWorkflowDispatch,
   GitStatusData, GraphData,
-GraphLink, GraphNode, HealthCheck, HealthData,   KnowledgeSearchEntry, MessageData, MetricsSnapshot, ModelInfoData, MonitorData,
+GraphLink, GraphNode, HealthCheck, HealthData,   KnowledgeSearchEntry, LLMProviderInfo, MessageData, MetricsSnapshot, ModelInfoData, MonitorData,
 OAuthProviderInfo,
   PatternCheckInfo, PatternRunResponse, PatternViolation,   PluginInfo,   PricingInfo, ProjectMetrics,
 RAGResultEntry, RAGStatsData,
   RoutineData,   Session,   StatusData, TaskData, TrainingResultData,
-  VoiceSpeakerInfo, VoiceStatsData, WebSearchProvider,   WebSearchResult, WsMessage, TruthfulResult, LLMProviderInfo, ConnectionContext, AgentInfo, } from "./types";
+TruthfulResult,   VoiceSpeakerInfo, VoiceStatsData, WebSearchProvider,   WebSearchResult, WsMessage,  } from "./types";
 
 const BASE = "";
 

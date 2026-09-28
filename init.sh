@@ -1,9 +1,10 @@
 #!/bin/bash
+# Raven AI initializer — by ssrjkk
 set -e
 
-echo "=== Raven AI Initialization ==="
+echo "=== Raven AI Initialization (by ssrjkk) ==="
 
-mkdir -p ./data/db ./data/logs ./workspace ./deploy/prometheus
+mkdir -p ./data ./workspace
 
 if [ ! -f .env ]; then
     if [ -f .env.example ]; then
@@ -15,4 +16,9 @@ if [ ! -f .env ]; then
     fi
 fi
 
+if [ ! -d web/dist ]; then
+    echo "[i] Web dashboard not built — run: cd web && npm ci && npm run build"
+fi
+
 echo "[+] Done. Run: docker compose --profile minimal up"
+echo "    or locally: pip install -e . && raven start"

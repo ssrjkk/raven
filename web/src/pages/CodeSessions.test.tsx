@@ -1,8 +1,8 @@
 import { screen, waitFor } from "@testing-library/react";
 import { beforeEach,describe, expect, it, vi } from "vitest";
 
-import CodeSessions from "./CodeSessions";
 import { renderWithProviders } from "../test/test-utils";
+import CodeSessions from "./CodeSessions";
 
 vi.mock("../api/client", () => ({
   api: {

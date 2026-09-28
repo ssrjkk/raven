@@ -1,8 +1,8 @@
 import { screen } from "@testing-library/react";
 import { describe, expect,it } from "vitest";
 
-import NotFound from "./NotFound";
 import { renderWithProviders } from "../test/test-utils";
+import NotFound from "./NotFound";
 
 function renderNotFound() {
   return renderWithProviders(<NotFound />);

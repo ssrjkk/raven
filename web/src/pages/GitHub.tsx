@@ -99,7 +99,6 @@ export default function GitHub() {
     api.githubTokenStatus().then(setTokenStatus).catch(() => setTokenStatus(null));
     api.githubUser().then(setUser).catch(() => setUser(null));
     loadRepos();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadRepos() {

@@ -1,5 +1,5 @@
-import { useCallback, useRef, useState } from "react";
 import { Bot, CheckCircle2, Loader2, SendHorizontal, Terminal, XCircle } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
 
 import AgentArtifactPanel from "../components/AgentArtifactPanel";
 import PageHeader from "../components/PageHeader";

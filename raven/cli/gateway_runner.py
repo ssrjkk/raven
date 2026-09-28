@@ -77,7 +77,7 @@ from raven.core.rag_api import create_rag_router
 from raven.core.routine.engine import RoutineEngine, register_routine_engine
 from raven.core.routine.store import RoutineStore
 from raven.core.scaffold_api import create_scaffold_router
-from raven.core.spa import mount_spa
+from raven.core.spa import mount_spa, resolve_web_dist
 from raven.core.status_api import create_status_router
 from raven.core.tests_api import create_tests_router
 from raven.core.voice_api import create_voice_router
@@ -210,8 +210,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     webhook_router = create_webhook_router(gateway.db, gateway.handle_message)
     api_app.include_router(webhook_router)
 
-    web_dist = Path(__file__).parent.parent.parent / "web" / "dist"
-    if web_dist.is_dir():
+    web_dist = resolve_web_dist()
+    if web_dist is not None:
         from fastapi.staticfiles import StaticFiles
 
         api_app.mount("/dashboard", StaticFiles(directory=str(web_dist), html=True), name="dashboard")

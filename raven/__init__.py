@@ -17,6 +17,7 @@ from raven.core.llm import (
 )
 from raven.core.models import IncomingMessage, Message, PluginTool, Session
 from raven.core.plugin_loader import PluginLoader
+from raven.core.version import __version__
 
 __all__ = [
     "Agent",
@@ -38,5 +39,6 @@ __all__ = [
     "Session",
     "Settings",
     "ToolCall",
+    "__version__",
     "settings",
 ]

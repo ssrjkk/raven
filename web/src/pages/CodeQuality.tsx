@@ -3,8 +3,8 @@ import { AlertTriangle, Bug, CheckCircle, ChevronDown, ChevronRight,FileCode, In
 import { useState } from "react";
 
 import { api, type PatternCheckInfo, type PatternRunResponse,type PatternViolation } from "../api/client";
-import { useApiQuery } from "../hooks/useApiQuery";
 import PageHeader from "../components/PageHeader";
+import { useApiQuery } from "../hooks/useApiQuery";
 
 export default function CodeQuality() {
   const [results, setResults] = useState<PatternRunResponse | null>(null);

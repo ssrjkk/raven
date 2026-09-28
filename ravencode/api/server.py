@@ -7,6 +7,7 @@ import json
 import os
 import time
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 from uuid import uuid4
 
@@ -76,15 +77,23 @@ def _check_auth(authorization: str = "") -> None:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
-app = FastAPI(title="RavenCode API", version="0.4.8")
-
-
-@app.on_event("startup")
-async def _connect_mcp() -> None:
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     try:
         await ensure_mcp_tools()
     except Exception as exc:  # MCP is optional; never block the server
         logger.warning("MCP tools unavailable: {}", exc)
+    yield
+
+
+app = FastAPI(
+    title="RavenCode API",
+    version="0.4.8",
+    description="OpenAI-compatible RavenCode API — by ssrjkk (https://github.com/ssrjkk).",
+    contact={"name": "ssrjkk", "url": "https://github.com/ssrjkk"},
+    license_info={"name": "MIT"},
+    lifespan=lifespan,
+)
 
 
 def _estimate_tokens(text: str) -> int:

@@ -59,6 +59,7 @@ def doctor():
     from raven.core.channel_config import configured_channels
 
     channel_list = configured_channels()
+    checks.append(("Author", "ssrjkk (https://github.com/ssrjkk)"))
     checks.append(("Channels", ", ".join(channel_list) if channel_list else "[!]️  None configured"))
     checks.append(("DM Policy", cfg.get("dm_policy", "pairing")))
     checks.append(("Web Port", str(cfg.get("web_port") or settings.web_port)))

@@ -1,8 +1,8 @@
 import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import Dashboard from "./Dashboard";
 import { renderWithProviders } from "../test/test-utils";
+import Dashboard from "./Dashboard";
 
 vi.mock("../api/client", () => ({
   api: {

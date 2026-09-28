@@ -1,37 +1,36 @@
 #!/usr/bin/env bash
+# Raven AI CLI installer — by ssrjkk
+# Installs the `raven` command from PyPI (pipx preferred, pip --user fallback).
+#
+# Usage:
+#   ./install              # latest from PyPI
+#   ./install 0.4.8        # pinned version
+#
+# Alternatives: Docker (`docker compose up -d`), Windows EXE (GitHub Actions
+# artifact `Raven.exe`), or from source (`pip install -e ".[dev]"`).
 set -euo pipefail
 
-REPO="ssrjkk/raven"
-INSTALL_DIR="${OPENCODE_INSTALL_DIR:-${XDG_BIN_DIR:-$HOME/.raven/bin}}"
-VERSION="${1:-latest}"
-
-echo "Installing Raven AI..."
-
-if [ "$VERSION" = "latest" ]; then
-  VERSION=$(curl -sL "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)
+REQ_VERSION="${1:-latest}"
+PKG="raven-agent"
+if [ "$REQ_VERSION" != "latest" ]; then
+  PKG="raven-agent==${REQ_VERSION#v}"
 fi
 
-mkdir -p "$INSTALL_DIR"
+echo "Installing Raven AI ($PKG) — by ssrjkk ..."
 
-ARCH=$(uname -m)
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+if command -v pipx >/dev/null 2>&1; then
+  pipx install --force "$PKG"
+  echo "[+] Installed with pipx. Verify: raven doctor"
+  exit 0
+fi
 
-case "$ARCH" in
-  x86_64) ARCH="amd64" ;;
-  aarch64|arm64) ARCH="arm64" ;;
-esac
-
-FILENAME="raven-${VERSION}-${OS}-${ARCH}.tar.gz"
-URL="https://github.com/$REPO/releases/download/${VERSION}/${FILENAME}"
-
-echo "Downloading $URL..."
-curl -fsSL "$URL" | tar xz -C "$INSTALL_DIR"
-
-if [ -f "$INSTALL_DIR/raven" ]; then
-  chmod +x "$INSTALL_DIR/raven"
-  echo "Raven AI $VERSION installed to $INSTALL_DIR/raven"
-  echo "Add to PATH: export PATH=\"$INSTALL_DIR:\$PATH\""
-else
-  echo "Installation failed. Please try: pip install raven-agent"
+PYTHON="${PYTHON:-python3}"
+if ! command -v "$PYTHON" >/dev/null 2>&1; then
+  echo "[!] python3 not found — install Python 3.11+ first" >&2
   exit 1
 fi
+
+"$PYTHON" -m pip install --user --upgrade "$PKG"
+echo "[+] Installed with pip --user. Verify: raven doctor"
+echo "    If 'raven' is not on PATH: export PATH=\"\$HOME/.local/bin:\$PATH\""
+

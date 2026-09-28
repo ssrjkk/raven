@@ -1,8 +1,10 @@
 # Raven AI
 
+_by [@ssrjkk](https://github.com/ssrjkk)_
+
 Self-hosted AI assistant framework combining an autonomous coding agent (RavenCode) with multi-channel communication and a web dashboard.
 
-**Status:** Active development | **Tests:** 4,900+ | **Python:** 3.11+ | **License:** MIT
+**Status:** Active development | **Tests:** 5,100+ | **Python:** 3.11+ | **License:** MIT
 
 ---
 
@@ -267,8 +269,9 @@ VLLM_BASE_URL=                 # vLLM / OpenAI-compatible local server
 DEFAULT_MODEL=openrouter/openai/gpt-4o
 
 # Critical-thinking model (Truthful Orchestrator, CoV)
-RAVEN_CRITICAL_MODEL=
-RAVEN_CRITICAL_PROVIDER=
+CRITICAL_MODEL=
+CRITICAL_PROVIDER=
+# RAVEN_CRITICAL_MODEL / RAVEN_CRITICAL_PROVIDER are accepted as aliases
 
 # Master key for secrets encryption
 RAVEN_MASTER_KEY=

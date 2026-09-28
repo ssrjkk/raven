@@ -1,16 +1,38 @@
 from __future__ import annotations
 
+import importlib.util
+import json
 import os
 import stat
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from loguru import logger
 
-from raven.core.audit import audit_logger
+from raven.core.audit import AUDIT_KEY_FILE, AUDIT_SIGNING_KEY_ENV, audit_logger
 from raven.core.config import _DEFAULT_TOOLS_DENY, settings
+
+
+def _parse_pip_audit_findings(raw: str) -> list[str] | None:
+    """Extract vulnerable ``name==version`` pairs from pip-audit JSON output (None when unparsable).
+
+    ``pip-audit --format json`` emits ``{"dependencies": [...], "fixes": [...]}``; older
+    builds emitted a bare list, so both shapes are accepted.
+    """
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    entries = payload.get("dependencies") if isinstance(payload, dict) else payload
+    if not isinstance(entries, list):
+        return None
+    findings: list[str] = []
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("vulns"):
+            findings.append(f"{entry.get('name')}=={entry.get('version')}")
+    return findings
 
 
 class AuditCheck:
@@ -276,23 +298,52 @@ class SecurityAudit:
             c.ok("No TLS certificate configured — use reverse proxy (nginx/Caddy) for production")
             c._fix_hint = "Set TLS_KEY_PATH and TLS_CERT_PATH, or front with nginx"
 
+    # Model provider prefix -> Settings attribute holding its API key
+    _PROVIDER_KEY_ATTRS: ClassVar[dict[str, str]] = {
+        "openrouter": "openrouter_api_key",
+        "anthropic": "anthropic_api_key",
+        "openai": "openai_api_key",
+        "groq": "groq_api_key",
+    }
+    # Self-hosted providers are validated by base URL instead of an API key
+    _LOCAL_PROVIDER_BASE_URLS: ClassVar[dict[str, str]] = {
+        "ollama": "ollama_base_url",
+        "vllm": "vllm_base_url",
+    }
+
     def _check_api_keys(self):
         c = self._add("api_keys", "LLM API keys are configured for default model", "high")
         model = settings.default_model
-        if "openrouter" in model and settings.openrouter_api_key.get_secret_value():
-            c.ok(f"OpenRouter key configured for {model}")
-        elif "anthropic" in model and settings.anthropic_api_key.get_secret_value():
-            c.ok(f"Anthropic key configured for {model}")
-        elif "openai" in model and settings.openai_api_key.get_secret_value():
-            c.ok(f"OpenAI key configured for {model}")
-        elif "ollama" in model:
-            if settings.ollama_base_url:
-                c.ok(f"Ollama base URL configured: {settings.ollama_base_url}")
+        provider = model.split("/", 1)[0].strip().lower()
+
+        key_attr = self._PROVIDER_KEY_ATTRS.get(provider)
+        if key_attr is not None:
+            if getattr(settings, key_attr).get_secret_value():
+                c.ok(f"{provider} API key configured for {model}")
             else:
                 c.fail(
-                    "Default model is Ollama but OLLAMA_BASE_URL is not set",
-                    fix_hint=f"Set OLLAMA_BASE_URL={settings.ollama_base_url}",
+                    f"No {provider.upper()}_API_KEY set for default model '{model}'",
+                    fix_hint=f"Set {provider.upper()}_API_KEY in .env or switch DEFAULT_MODEL",
                 )
+            return
+
+        base_url_attr = self._LOCAL_PROVIDER_BASE_URLS.get(provider)
+        if base_url_attr is not None:
+            base_url = getattr(settings, base_url_attr, "")
+            if base_url:
+                c.ok(f"{provider} base URL configured: {base_url}")
+            else:
+                c.fail(
+                    f"Default model is {provider} but {base_url_attr.upper()} is not set",
+                    fix_hint=f"Set {base_url_attr.upper()}=http://localhost:<port> in .env",
+                )
+            return
+
+        configured = sorted(
+            name for name, attr in self._PROVIDER_KEY_ATTRS.items() if getattr(settings, attr).get_secret_value()
+        )
+        if configured:
+            c.ok(f"Provider '{provider}' has no dedicated key check; configured keys: {', '.join(configured)}")
         else:
             c.fail(
                 f"No API key found for default model '{model}'",
@@ -368,18 +419,31 @@ class SecurityAudit:
 
     def _check_dependencies(self):
         c = self._add("dependency_audit", "Check for known-vulnerable packages", "low")
-        try:
-            result = subprocess.run(
-                [sys.executable, "-m", "pip", "audit"],
-                capture_output=True,
-                check=False,
+        if importlib.util.find_spec("pip_audit") is None:
+            c.ok("pip-audit not installed (recommend: pip install pip-audit && python -m pip_audit)")
+            return
+
+        result = subprocess.run(
+            [sys.executable, "-m", "pip_audit", "--progress-spinner", "off", "--format", "json"],
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            c.ok("pip-audit passed — no known vulnerabilities")
+            return
+
+        findings = _parse_pip_audit_findings(result.stdout.decode("utf-8", errors="replace"))
+        if findings is None:
+            stderr = result.stderr.decode("utf-8", errors="replace").strip()[:200]
+            c.fail(
+                f"pip-audit could not complete: {stderr or 'unknown error'}",
+                fix_hint="Run manually: python -m pip_audit",
             )
-            if result.returncode == 0:
-                c.ok("pip-audit passed")
-            else:
-                c.fail(f"Vulnerabilities found:\n{result.stdout.decode('utf-8', errors='replace')[:500]}")
-        except FileNotFoundError:
-            c.ok("pip-audit not installed (recommend: pip install pip-audit && pip-audit)")
+        else:
+            c.fail(
+                f"{len(findings)} vulnerable package(s): {', '.join(findings)}",
+                fix_hint="Upgrade the affected packages, then re-run: python -m pip_audit",
+            )
 
     def _check_log_permissions(self):
         c = self._add("log_permissions", "Log files are not world-readable", "medium")
@@ -396,13 +460,19 @@ class SecurityAudit:
 
     def _check_signing_key(self):
         c = self._add("audit_signing", "Audit log has Ed25519 signing key", "low")
-        key = os.environ.get("RAVEN_AUDIT_SIGNING_KEY")
-        if key:
-            c.ok("RAVEN_AUDIT_SIGNING_KEY is set — audit log is signed")
+        env_key = os.environ.get(AUDIT_SIGNING_KEY_ENV, "").strip()
+        key_file = Path(AUDIT_KEY_FILE)
+        if env_key:
+            c.ok(f"{AUDIT_SIGNING_KEY_ENV} is set — audit log is signed")
+        elif key_file.is_file() and key_file.stat().st_size > 0:
+            c.ok(f"Signing key present at {AUDIT_KEY_FILE} — audit log is signed")
         else:
             c.fail(
-                "RAVEN_AUDIT_SIGNING_KEY not set — audit log is unsigned",
-                fix_hint="Generate a key with: python3 -c 'import secrets; print(secrets.token_hex(32))'",
+                "No audit signing key — audit log entries are unsigned",
+                fix_hint=(
+                    "Start the gateway once to auto-generate "
+                    f"{AUDIT_KEY_FILE}, or set {AUDIT_SIGNING_KEY_ENV} to a hex key"
+                ),
             )
 
     def _check_docker_sandbox(self):

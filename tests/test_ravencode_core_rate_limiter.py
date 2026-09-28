@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -8,6 +9,11 @@ import pytest
 
 import ravencode.core.rate_limiter as rate_limiter_mod
 from ravencode.core.rate_limiter import DistributedRateLimiter, TokenBucket
+
+_SKIP_NO_REDIS = pytest.mark.skipif(
+    importlib.util.find_spec("redis") is None,
+    reason="redis extra not installed (pip install raven-agent[redis])",
+)
 
 
 class TestTokenBucket:
@@ -50,6 +56,7 @@ def _set_flag(monkeypatch, value: bool) -> None:
     monkeypatch.setattr("ravencode.core.rate_limiter.feature_flags._flags", {"redis_rate_limiter": value})
 
 
+@_SKIP_NO_REDIS
 class TestDistributedRateLimiter:
     async def test_flag_disabled_returns_true(self, monkeypatch) -> None:
         _set_flag(monkeypatch, False)

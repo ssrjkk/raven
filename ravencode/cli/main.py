@@ -19,6 +19,7 @@ import click
 
 from raven.core._json import json
 from raven.core.logging import setup_logging
+from raven.core.version import __version__
 from ravencode.cli.tui import tui_run
 from ravencode.integrations.github import (
     GitHubIntegration,
@@ -28,6 +29,11 @@ from ravencode.integrations.gitlab import GitLabIntegration, parse_gitlab_webhoo
 
 
 @click.group()
+@click.version_option(
+    version=__version__,
+    prog_name="ravencode",
+    message="%(prog)s %(version)s — by ssrjkk",
+)
 def cli() -> None:
     """RavenCode — Autonomous AI engineering framework."""
     setup_logging()

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
+import { version } from "../../package.json";
 import Layout from "./Layout";
 
 vi.mock("../design/ThemeContext", () => ({
@@ -52,7 +53,7 @@ describe("Layout", () => {
 
   it("renders version badge", () => {
     renderLayout();
-    expect(screen.getByText(/Raven AI v/)).toBeInTheDocument();
+    expect(screen.getByText(`Raven AI v${version} · by ssrjkk`)).toBeInTheDocument();
   });
 
   it("renders outlet content", () => {

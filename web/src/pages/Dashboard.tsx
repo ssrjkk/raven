@@ -1,10 +1,11 @@
+import { Bot, Cpu, GitBranch, ListTodo, MessageSquare, Puzzle, Radio, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
 import { api, type HealthData, type MetricsSnapshot, type StatusData } from "../api/client";
 import PageHeader from "../components/PageHeader";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useApiQuery } from "../hooks/useApiQuery";
 import { useSessionEvents } from "../hooks/useSessionEvents";
-import { Bot, Cpu, GitBranch, ListTodo, MessageSquare, Puzzle, Radio, Sparkles } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
   const navigate = useNavigate();

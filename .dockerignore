@@ -9,7 +9,11 @@ data/
 *.env
 mkdocs.yml
 docs/
-web/
+web/node_modules
+web/dist
+web/test-results
+web/playwright-report
+web/coverage
 desktop/
 desktop-tauri/
 extension/

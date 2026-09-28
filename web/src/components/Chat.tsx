@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronsUpDown, FileCode2, MessageSquarePlus, RefreshCw, SendHorizontal, Sparkles, Wrench } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api, MessageData, Session } from "../api/client";
 import { useWebSocket } from "../hooks/useWebSocket";
-import { AgentStream, type AgentEvent } from "./AgentStream";
+import { type AgentEvent,AgentStream } from "./AgentStream";
 import MessageBubble from "./MessageBubble";
 import PageHeader from "./PageHeader";
 import { useToast } from "./Toast";

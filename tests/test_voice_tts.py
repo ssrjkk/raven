@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -13,6 +14,12 @@ import pytest
 
 import raven.voice.tts as tts
 from raven.voice.tts import TextToSpeech, TTSConfig, TTSProvider
+
+_PYWIN32_AVAILABLE = os.name == "nt" and importlib.util.find_spec("pythoncom") is not None
+_SKIP_SAPI = pytest.mark.skipif(
+    not _PYWIN32_AVAILABLE,
+    reason="Windows SAPI requires pywin32 (pip install raven-agent[service-win])",
+)
 
 
 def _install_fake_elevenlabs(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
@@ -279,7 +286,7 @@ class TestSynthesizeSystem:
 
 
 class TestSynthesizeWindowsSapi:
-    @pytest.mark.skipif(os.name != "nt", reason="Windows SAPI requires win32com/pythoncom on Windows")
+    @_SKIP_SAPI
     def test_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         state, instances = _make_fake_sapi(monkeypatch)
         out = tmp_path / "speech.wav"
@@ -311,7 +318,7 @@ class TestSynthesizeWindowsSapi:
             assert wf.getnchannels() == 1
             assert wf.getframerate() == 22050
 
-    @pytest.mark.skipif(os.name != "nt", reason="Windows SAPI requires win32com/pythoncom on Windows")
+    @_SKIP_SAPI
     def test_dispatch_error_writes_silence(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         import win32com.client
 

@@ -1,5 +1,6 @@
 <div align="center">
   <h1>Raven AI</h1>
+  <p><b>by <a href="https://github.com/ssrjkk">@ssrjkk</a></b></p>
   <p><i>二合一: <b>RavenCode</b> (opencode替代 — 自主编码代理) + <b>RavenFlow</b> (openclaw替代 — 持久化工作流网关). 15渠道. 任务. 监控. RAG. 语音. Web仪表板.</i></p>
 
   <a href="#features">功能</a> •

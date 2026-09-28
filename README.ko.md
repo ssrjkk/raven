@@ -1,5 +1,6 @@
 <div align="center">
   <h1>Raven AI</h1>
+  <p><b>by <a href="https://github.com/ssrjkk">@ssrjkk</a></b></p>
   <p><i>2-in-1: <b>RavenCode</b> (opencode 대체 — 자율 코딩 에이전트) + <b>RavenFlow</b> (openclaw 대체 — 지속적 워크플로우 게이트웨이). 15 채널. 태스크. 모니터. RAG. 음성. 웹 대시보드.</i></p>
 
   <a href="#features">기능</a> •

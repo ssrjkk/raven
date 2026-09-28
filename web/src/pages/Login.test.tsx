@@ -2,8 +2,8 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import Login from "./Login";
 import { renderWithProviders } from "../test/test-utils";
+import Login from "./Login";
 
 // Mock api client
 vi.mock("../api/client", () => ({

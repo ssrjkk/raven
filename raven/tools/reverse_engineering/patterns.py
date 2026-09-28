@@ -134,7 +134,7 @@ _RUNTIME_MARKERS: list[tuple[str, bytes, str]] = [
     ("PyInstaller", b"_MEIPASS", "PyInstaller temp dir marker"),
     ("Electron", b"ELECTRON_RUN_AS_NODE", "Electron runtime"),
     ("Electron", b"app.asar", "Electron packaged app"),
-    ("Qt", b"Qt5\u0000", "Qt5 framework"),
+    ("Qt", b"Qt5\x00", "Qt5 framework"),
 ]
 
 _RUNTIME_STRING_SCAN_WORDS: list[tuple[str, bytes, str]] = [

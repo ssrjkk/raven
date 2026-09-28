@@ -42,9 +42,23 @@ Condensed summary of ~280 commits since the 0.4.0 baseline (2026-06-05 → 2026-
 - Packaging: PyInstaller EXE pipeline (`scripts/build_exe.ps1` → `Raven.exe`), SPA dashboard serving, landing page
 - CI: unified `check_all.py`, E2E Allure job, Postgres integration job, EXE build job, secrets/CodeQL/dependency-review scans
 - API test coverage: 30+ new test modules for core routers (email, AB testing, chaos, cost management, plugins, SSE, status, tests, voice, workflow, web search, etc.)
+- `tests/test_version_consistency.py`: guards every declared version surface (packaging/CLI/MCP/TUI/API/web/extensions), manifest asset references and PNG icon dimensions
+- `.env.example` parity guard + critical-model env-alias tests in `tests/core/test_config.py`
+- `scripts/icon_render.py` (shared icon renderer) + `scripts/make_extension_icons.py` — browser and VS Code icons generated from the same design as `scripts/raven.ico`
+- `extension/README.md` (layout, load/package instructions, icon regeneration)
+- Dashboard packaging: the React SPA is now discoverable across deployments (`raven.core.spa.resolve_web_dist` — env override, package-local, repo, PyInstaller bundle, cwd), shipped in the Docker image (dedicated Node build stage + `RAVEN_WEB_DIST`) and bundled into wheels when CI stages it at `raven/web/dist`
 
 ### Fixed
 - 70+ fix commits: sandbox builtins isolation, auth on read endpoints, SSRF redirect-bypass hardening (`safe_fetch_async` per-hop validation), event-loop blocking (sync subprocess → `asyncio.to_thread`), Prometheus label conflicts, SQLite connection race, OAuth PKCE + exact redirect match, PBKDF2 600k + rehash, channel guardian restarts, Slack signature fail-open (see Security)
+- Version surfaces synced to 0.4.8: web SPA (`package.json` + lock), Chrome manifest, VS Code extension (package + lock) and the RavenFlow gateway (`1.0.0` → `0.4.8`); the sidebar badge no longer shows a hardcoded `0.2.0` fallback
+- `RAVEN_CRITICAL_MODEL` / `RAVEN_CRITICAL_PROVIDER` / `RAVEN_CRITICAL_API_KEY` were documented but silently ignored (the fields read `CRITICAL_*`); both spellings now resolve, `CRITICAL_*` wins
+- Chrome extension: `manifest.json` referenced `icons/icon{16,48,128}.png` which did not exist (broke `Load unpacked` and the `Extension` workflow `cp -r icons`); the VS Code manifest icon was missing too
+- Web dashboard was built nowhere but the dev checkout: the Docker image and PyPI wheel served no SPA, and `pypi.yml` uploaded a `web-dist` artifact that was never consumed
+- `raven/tools/reverse_engineering/patterns.py`: invalid `\u` escape inside a bytes literal (`b"Qt5\u0000"`) — a Python `SyntaxWarning` today and a hard `SyntaxError` under `-W error::SyntaxWarning`; now `b"Qt5\x00"`
+- Undeclared runtime dependency: `raven/cli/nodes_cmd.py` imported `requests` (not in `pyproject.toml`), which broke the whole CLI on a clean install — now uses `httpx`; guarded by the new `tests/test_dependency_declarations.py`
+- Security audit false positives: `api_keys` failed for `groq/*` models even with `GROQ_API_KEY` set, `dependency_audit` invoked the non-existent `pip audit` (and mis-parsed pip-audit JSON), `audit_signing` ignored the auto-generated `data/audit_signing_key.bin`
+- DevOps hygiene: `install` script referenced release tarballs that are never published, `init.sh` created unused directories, `scripts/setup.sh` still built the removed Rust daemon/Electron app, `Makefile clean` was Windows-only, dead `.oxlintrc.json`
+- Frontend lint debt: 32 ESLint errors (import order + stale `react-hooks` disable comments) — `npx eslint src` is clean and now enforced in CI along with `npm test`
 
 ### Security
 - `SlackChannel.verify_signature` now fails closed when `signing_secret` is not configured (previously returned `True`, accepting unsigned requests)
@@ -52,10 +66,14 @@ Condensed summary of ~280 commits since the 0.4.0 baseline (2026-06-05 → 2026-
 ### Removed
 - Dead `packages/` TypeScript tree (unused, untested, not in CI); broken `github/` action (dist never built); duplicate root `raven.spec`; `monolith-requirements.txt` / `requirements-dev.txt` (pyproject is the single source)
 - 6 unused community-automation workflows (stats, triage, pr-review, notify-discord, close-stale, ravencode); kept CI/release/build/security workflows
+- `extension/extension.js` + `extension/package.json` — dead VS Code prototype superseded by `extension/vscode/` (stale API port, duplicate command manifest)
 
 ### Changed
 - AGENTS.md rewritten as concise guidelines (716 → 55 lines); historical fix logs archived verbatim to `docs/archive/fixes-history.md`
-- README test count refreshed (4,900+); `docs/sprint-1.md` archived
+- README test count refreshed; `docs/sprint-1.md` archived
+- Web sidebar version badge now reads `web/package.json` instead of a never-defined `VITE_APP_VERSION`
+- Dependency security floors bumped to patched releases: `fastapi>=0.141.1`, `starlette>=1.3.1`, `anyio>=4.14.2`, `lxml>=6.1.0`, `Pillow>=12.3.0`, `python-dotenv>=1.2.2`, `soupsieve>=2.9.0`, `typing-extensions>=4.8` (verified in a clean venv)
+- Authorship/branding by ssrjkk across packaging, CLIs (`--version`, `raven doctor`), web sidebar/offline page, extensions, docs and CI metadata
 
 ## [0.4.0] - 2026-06-05
 

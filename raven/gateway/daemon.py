@@ -100,7 +100,13 @@ async def _validate_token(token: str) -> dict[str, Any] | None:
 class RavenFlowDaemon:
     def __init__(self, port: int = 18789, data_dir: Path | None = None):
         self.port = port
-        self.app = FastAPI(title="RavenFlow Gateway", version="1.0.0")
+        self.app = FastAPI(
+            title="RavenFlow Gateway",
+            version="0.4.8",
+            description="RavenFlow gateway — persistent workflow gateway. By ssrjkk (https://github.com/ssrjkk).",
+            contact={"name": "ssrjkk", "url": "https://github.com/ssrjkk"},
+            license_info={"name": "MIT"},
+        )
         self.sessions: dict[str, FlowSession] = {}
         self.llm = LLMRouter()
         self.routing = RoutingEngine()

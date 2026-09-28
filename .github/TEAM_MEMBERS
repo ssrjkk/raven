@@ -1,11 +1,15 @@
 # Raven AI Team Members
 
-## Core Maintainers
-- @ssrjkk — Lead developer, architecture, backend, frontend, infra
+## Core Maintainer
+- @ssrjkk — author & lead developer: architecture, backend, frontend, infra, security
 
 ## Areas
-- Python backend: @ssrjkk
-- Go services: @ssrjkk
-- Rust daemon: @ssrjkk
-- React frontend: @ssrjkk
-- DevOps/Infra: @ssrjkk
+- Python backend (channels, agents, tools, RAG): @ssrjkk
+- RavenCode agent (runtime, LSP, agents): @ssrjkk
+- AIOS bridge (FastAPI gateway): @ssrjkk
+- React SPA + browser/VS Code extensions: @ssrjkk
+- DevOps / Docker / CI: @ssrjkk
+- Security & compliance: @ssrjkk
+
+<!-- Authorship: Raven AI is created and maintained by @ssrjkk (https://github.com/ssrjkk) -->
+

@@ -4,7 +4,7 @@ import { useEffect, useMemo,useRef, useState } from "react";
 
 import { useTheme } from "../design/ThemeContext";
 import { CommandItem, useCommands } from "../hooks/useCommands";
-import { FuzzyResult, fuzzyMatch } from "../lib/fuzzy";
+import { fuzzyMatch,FuzzyResult } from "../lib/fuzzy";
 
 interface Props {
   isOpen: boolean;

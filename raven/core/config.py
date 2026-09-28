@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from pydantic import SecretStr
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings
 
 from raven.core.config_discovery import auto_select_model
@@ -87,9 +87,20 @@ class Settings(BaseSettings):
     model_fast: str = ""
     model_balanced: str = ""
     model_quality: str = ""
-    critical_model: str = ""  # model used by the Truthful Orchestrator (falls back to default_model)
-    critical_provider: str = ""  # dedicated provider key for critical calls (e.g. "openrouter")
-    critical_api_key: SafeSecretStr = SafeSecretStr("")  # API key for the dedicated critical provider
+    # Truthful Orchestrator (Chain-of-Verification). The documented
+    # RAVEN_CRITICAL_* spelling is accepted as an alias of CRITICAL_*.
+    critical_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("critical_model", "RAVEN_CRITICAL_MODEL"),
+    )  # model used by the Truthful Orchestrator (falls back to default_model)
+    critical_provider: str = Field(
+        default="",
+        validation_alias=AliasChoices("critical_provider", "RAVEN_CRITICAL_PROVIDER"),
+    )  # dedicated provider key for critical calls (e.g. "openrouter")
+    critical_api_key: SafeSecretStr = Field(
+        default=SafeSecretStr(""),
+        validation_alias=AliasChoices("critical_api_key", "RAVEN_CRITICAL_API_KEY"),
+    )  # API key for the dedicated critical provider
 
     # --- Tier / rate limits ---
     tier_default: str = "free"

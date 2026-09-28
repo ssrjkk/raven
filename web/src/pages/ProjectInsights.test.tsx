@@ -1,8 +1,8 @@
 import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import ProjectInsights from "./ProjectInsights";
 import { renderWithProviders } from "../test/test-utils";
+import ProjectInsights from "./ProjectInsights";
 
 vi.mock("../api/client", () => ({
   api: {
