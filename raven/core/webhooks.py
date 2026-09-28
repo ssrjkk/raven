@@ -25,11 +25,15 @@ def _slack_signing_secret() -> str:
 
 
 async def _verify_webhook_signature(request: Request) -> None:
-    if settings.web_secret_key.get_secret_value():
-        body_bytes = await request.body()
-        sig = request.headers.get("X-Webhook-Signature", "")
-        if not sig or not _verify_hmac_sha256(body_bytes, sig, settings.web_secret_key.get_secret_value()):
-            raise HTTPException(status_code=403, detail="Invalid or missing webhook signature")
+    secret = settings.web_secret_key.get_secret_value()
+    if not secret:
+        raise HTTPException(
+            status_code=403, detail="Webhook signature not supported — WEB_SECRET_KEY not configured"
+        )
+    body_bytes = await request.body()
+    sig = request.headers.get("X-Webhook-Signature", "")
+    if not sig or not _verify_hmac_sha256(body_bytes, sig, secret):
+        raise HTTPException(status_code=403, detail="Invalid or missing webhook signature")
 
 
 def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
@@ -39,15 +43,13 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
     async def generic_webhook(body: dict[str, Any], request: Request):
         body_bytes = await request.body()
         signature = request.headers.get("X-Webhook-Signature", "")
-        if settings.web_secret_key.get_secret_value():
-            if not signature or not _verify_hmac_sha256(
-                body_bytes, signature, settings.web_secret_key.get_secret_value()
-            ):
-                raise HTTPException(status_code=403, detail="Invalid or missing webhook signature")
-        elif signature:
+        secret = settings.web_secret_key.get_secret_value()
+        if not secret:
             raise HTTPException(
                 status_code=403, detail="Webhook signature not supported — WEB_SECRET_KEY not configured"
             )
+        if not signature or not _verify_hmac_sha256(body_bytes, signature, secret):
+            raise HTTPException(status_code=403, detail="Invalid or missing webhook signature")
         source = request.headers.get("X-Webhook-Source", "unknown")
         text = body.get("text", "") or body.get("message", "") or body.get("content", "")
         user_id = body.get("user_id", "") or body.get("user", "") or f"webhook:{source}"
@@ -89,7 +91,14 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
             if not hmac_mod.compare_digest(expected, slack_sig):
                 raise HTTPException(status_code=403, detail="Invalid Slack signature")
         else:
-            logger.warning("Slack webhook signature NOT verified — set SLACK_SIGNING_SECRET or WEB_SECRET_KEY")
+            if not settings.web_secret_key.get_secret_value():
+                raise HTTPException(
+                    status_code=403,
+                    detail="Slack webhook signature not supported — set SLACK_SIGNING_SECRET or WEB_SECRET_KEY",
+                )
+            fallback = settings.web_secret_key.get_secret_value()
+            if not slack_sig or not _verify_hmac_sha256(body_bytes, slack_sig, fallback):
+                raise HTTPException(status_code=403, detail="Invalid or missing Slack signature")
         logger.debug("Slack webhook event: {}", body.get("type", ""))
         if body.get("type") == "url_verification":
             return {"challenge": body.get("challenge", "")}
@@ -103,9 +112,12 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
     async def whatsapp_webhook(body: dict[str, Any], request: Request):
         body_bytes = await request.body()
         wa_sig = request.headers.get("X-Hub-Signature-256", "")
-        if settings.web_secret_key.get_secret_value() and (
-            not wa_sig or not _verify_hmac_sha256(body_bytes, wa_sig, settings.web_secret_key.get_secret_value())
-        ):
+        secret = settings.web_secret_key.get_secret_value()
+        if not secret:
+            raise HTTPException(
+                status_code=403, detail="WhatsApp webhook signature not supported — WEB_SECRET_KEY not configured"
+            )
+        if not wa_sig or not _verify_hmac_sha256(body_bytes, wa_sig, secret):
             raise HTTPException(status_code=403, detail="Invalid or missing WhatsApp signature")
         wa_ch = request.app.state.whatsapp_channel if hasattr(request.app.state, "whatsapp_channel") else None
         if wa_ch:

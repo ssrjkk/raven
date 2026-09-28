@@ -191,3 +191,70 @@ async def test_slack_events_rejects_bad_signature_with_env_secret(monkeypatch):
         with pytest.raises(HTTPException) as exc_info:
             await router.routes[1].endpoint(body, req)  # type: ignore[attr-defined]
     assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_generic_webhook_fails_closed_without_secret():
+    db = FakeDB()
+    handler = AsyncMock()
+    router = create_webhook_router(db, handler)  # type: ignore[arg-type]
+    body = {"text": "hello"}
+    req = FakeRequest(headers={"X-Webhook-Source": "github"}, body_bytes=json_mod.dumps(body).encode())
+    from fastapi import HTTPException
+
+    with patch("raven.core.webhooks.settings") as mock_settings:
+        mock_settings.web_secret_key = SafeSecretStr("")
+        with pytest.raises(HTTPException) as exc_info:
+            await router.routes[0].endpoint(body, req)  # type: ignore[attr-defined]
+    assert exc_info.value.status_code == 403
+    handler.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_fails_closed_without_secret():
+    db = FakeDB()
+    handler = AsyncMock()
+    router = create_webhook_router(db, handler)  # type: ignore[arg-type]
+    body = {"entry": []}
+    req = FakeRequest(body_bytes=json_mod.dumps(body).encode())
+    from fastapi import HTTPException
+
+    with patch("raven.core.webhooks.settings") as mock_settings:
+        mock_settings.web_secret_key = SafeSecretStr("")
+        with pytest.raises(HTTPException) as exc_info:
+            await router.routes[2].endpoint(body, req)  # type: ignore[attr-defined]
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_googlechat_fails_closed_without_secret():
+    db = FakeDB()
+    handler = AsyncMock()
+    router = create_webhook_router(db, handler)  # type: ignore[arg-type]
+    body = {"message": "x"}
+    req = FakeRequest(body_bytes=json_mod.dumps(body).encode())
+    from fastapi import HTTPException
+
+    with patch("raven.core.webhooks.settings") as mock_settings:
+        mock_settings.web_secret_key = SafeSecretStr("")
+        with pytest.raises(HTTPException) as exc_info:
+            await router.routes[4].endpoint(body, req)  # type: ignore[attr-defined]
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_slack_events_fails_closed_when_no_secret_anywhere():
+    db = FakeDB()
+    handler = AsyncMock()
+    router = create_webhook_router(db, handler)  # type: ignore[arg-type]
+    body = {"type": "event_callback", "event": {"type": "message"}}
+    req = FakeRequest(body_bytes=json_mod.dumps(body).encode())
+    from fastapi import HTTPException
+
+    with patch("raven.core.webhooks.settings") as mock_settings, patch(
+        "raven.core.webhooks.get_channel_config", return_value={}
+    ):
+        mock_settings.web_secret_key = SafeSecretStr("")
+        with pytest.raises(HTTPException) as exc_info:
+            await router.routes[1].endpoint(body, req)  # type: ignore[attr-defined]
+    assert exc_info.value.status_code == 403

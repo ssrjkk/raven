@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 import raven.core.debugger_api as dba
 from raven.core.debugger_api import BreakpointRequest, _DebugSession
+from raven.core.security.path_guard import confine_path
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
@@ -83,6 +84,20 @@ def test_get_workspace_cached(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
 def test_confine_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(dba, "_WORKSPACE", tmp_path)
     assert dba._confine_path(str(tmp_path / "a.py")) == (tmp_path / "a.py").resolve()
+
+
+def test_confine_path_blocks_symlink_escape(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("secret", encoding="utf-8")
+    link = tmp_path / "workspace" / "link"
+    link.parent.mkdir()
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation not permitted on this platform: {exc}")
+    with pytest.raises(PermissionError):
+        confine_path(str(link / "secret.txt"), tmp_path / "workspace")
 
 
 def test_sanitize_traceback() -> None:
