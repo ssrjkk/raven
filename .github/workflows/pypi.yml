@@ -46,7 +46,7 @@ jobs:
       - name: Install build tools
         run: python -m pip install --upgrade pip build
       - name: Download web dist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: web-dist
           path: raven/web/dist
