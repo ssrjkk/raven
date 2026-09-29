@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import ravencode.runtime.browser as browser_mod
+from raven.core.security import ssrf as ssrf_mod
 from ravencode.runtime.browser import (
     _ensure_page,
     _validate_navigation_url,
@@ -44,6 +45,13 @@ def _fake_page() -> SimpleNamespace:
     page.evaluate = AsyncMock(return_value={"k": 1})
     page.close = AsyncMock(return_value=None)
     return page
+
+
+@pytest.fixture
+def public_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    # browser_navigate SSRF-checks the URL, and an unresolvable host fails closed: without
+    # this stub the assertions track the machine's resolver instead of the code under test
+    monkeypatch.setattr(ssrf_mod, "validate_url", lambda url: None)
 
 
 class TestValidateUrl:
@@ -86,13 +94,19 @@ class TestNavigate:
         result = await browser_navigate("ftp://x")
         assert result == "[denied] browser_navigate: only http/https URLs are allowed, got 'ftp://'"
 
-    async def test_success(self) -> None:
+    async def test_ssrf_blocked(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ssrf_mod, "validate_url", lambda url: "URL resolves to a private IP range")
+        assert await browser_navigate("https://127.0.0.1") == (
+            "[denied] browser_navigate: URL resolves to a private IP range"
+        )
+
+    async def test_success(self, public_url: None) -> None:
         page = _fake_page()
         browser_mod._PAGE = page
         result = await browser_navigate("https://example.com")
         assert result == "Navigated to https://example.com | Title: My Title"
 
-    async def test_error(self) -> None:
+    async def test_error(self, public_url: None) -> None:
         page = _fake_page()
         page.goto = AsyncMock(side_effect=RuntimeError("net fail"))
         browser_mod._PAGE = page

@@ -135,7 +135,7 @@ async def run_tests(path: str | None = None, extra_args: str | None = None) -> s
         Path(cwd).glob("*_test.py")
     ) and not (Path(cwd) / "tests").exists():
         return "[error] no tests found here (no tests/ dir, no test_*.py, no pyproject.toml)"
-    args = [sys.executable, "-m", "pytest", "-q", "--tb=short", "-rf", "--no-header", "-p", "no:cacheprovider"]
+    args = [sys.executable, "-m", "pytest", "--tb=short", "-rf", "--no-header", "-p", "no:cacheprovider"]
     if extra_args:
         args.extend(shlex.split(extra_args))
     try:

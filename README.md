@@ -117,12 +117,12 @@ observability stack (`docker-compose.monitoring.yml`).
 | **Database** | SQLite (default), PostgreSQL (optional) |
 | **Vector Store** | JSON embeddings + BM25 (local-first, no external deps) |
 | **LLM Providers** | OpenAI, Anthropic, OpenRouter, Ollama, vLLM, Azure, Groq, Bedrock, Vertex AI, Copilot |
-| **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio |
+| **Channels** | python-telegram-bot, discord.py, slack-sdk, Matrix (HTTP API), IRC (asyncio) |
 | **Voice** | Whisper, Google STT, Azure STT, Vosk, ElevenLabs, gTTS |
 | **Security** | JWT (HS256), PBKDF2, Fernet encryption, RBAC |
 | **Observability** | OpenTelemetry, Prometheus |
-| **Testing** | pytest (4,900+ tests), Vitest |
-| **CI/CD** | GitHub Actions (15 workflows) |
+| **Testing** | pytest (5,100+ tests), Vitest |
+| **CI/CD** | GitHub Actions (10 workflows) |
 | **Deployment** | Docker, docker-compose, systemd |
 
 ---

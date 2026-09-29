@@ -59,6 +59,8 @@ def test_summarize_pytest_collection_crash_keeps_tail() -> None:
 
 
 async def test_run_tests_on_real_mini_suite(tmp_path: Path) -> None:
+    # the inifile stops the inner pytest from climbing out of the scratch dir into an ambient config
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
     (tmp_path / "test_ok.py").write_text(
         "def test_pass():\n    assert True\n\n\ndef test_fail():\n    assert 1 == 2\n",
         encoding="utf-8",

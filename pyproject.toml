@@ -52,7 +52,7 @@ dependencies = [
 discord = ["discord.py>=2.3"]
 slack = ["slack-sdk>=3.27"]
 docker = ["docker>=7.0"]
-secrets = ["cryptography>=41.0"]
+secrets = ["cryptography>=50.0.0"]  # security floor: PYSEC-2026-3552 is only patched in 50.0.0
 service-win = ["pywin32>=306"]
 tui = ["textual>=1.0"]
 tracing = ["opentelemetry-api>=1.25", "opentelemetry-sdk>=1.25"]
@@ -83,7 +83,9 @@ dev = [
     "pytest-benchmark>=4.0,<6.0",
     "allure-pytest>=2.13,<3.0",
     "coverage>=7.5,<8.0",
-    "cryptography>=41.0,<45.0",
+    # >=50.0.0 is the first release with no open advisories (pip-audit clean); the old
+    # <45.0 cap pinned a version with 10 known vulnerabilities
+    "cryptography>=50.0.0,<51.0",
     "ruff>=0.5,<1.0",
     "mypy>=1.10,<3.0",
     "pre-commit>=3.0,<5.0",
@@ -136,6 +138,12 @@ module = [
 ]
 ignore_errors = true
 
+# Written against the pact-python 1.x API that 2.x+ removed; which names mypy can see
+# depends on the installed pact-python, so the file is skipped rather than ignored inline.
+[[tool.mypy.overrides]]
+module = 'tests.contract.test_pacts'
+ignore_errors = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = """
@@ -157,6 +165,7 @@ markers = [
     "unit: Fast unit tests with no external dependencies",
     "integration: Tests requiring DB, NATS, or external services",
     "e2e: Full end-to-end tests",
+    "eval: Evaluation / benchmark tests",
     "async: Coroutine-based async tests",
     "security: Security-oriented tests",
     "rag: RAG/embedding pipeline tests",

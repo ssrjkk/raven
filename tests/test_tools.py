@@ -351,6 +351,67 @@ class TestTestsTool:
         assert any("--some-evil" in d for d in dropped)
         assert any("--rootdir" in d for d in dropped)
 
+    def test_pytest_summary_reads_banner_and_bare_counts(self) -> None:
+        from raven.tools.tests import _pytest_summary
+
+        assert _pytest_summary("======= 1 failed, 4 passed in 0.31s =======") == "1 failed, 4 passed in 0.31s"
+        # narrow terminals and the coverage gate drop the "== ... ==" banner
+        assert _pytest_summary("F.\n1 failed, 1 passed in 3.64s\n") == "1 failed, 1 passed in 3.64s"
+        assert _pytest_summary("no counts in this output") == "unknown"
+
+    async def test_run_tests_reports_counts_for_real_suite(self, tmp_path: Path) -> None:
+        from raven.tools.tests import run_tests
+
+        # the inifile stops pytest from climbing out of the scratch dir into an ambient config
+        (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+        (tmp_path / "test_mini.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+        old = os.environ.get("RAVEN_WORKSPACE")
+        os.environ["RAVEN_WORKSPACE"] = str(tmp_path)
+        try:
+            result = await run_tests(path=str(tmp_path), timeout=60)
+            assert "Tests: unknown" not in result
+            assert "1 passed" in result
+        finally:
+            if old is None:
+                os.environ.pop("RAVEN_WORKSPACE", None)
+            else:
+                os.environ["RAVEN_WORKSPACE"] = old
+
+    async def test_coverage_reads_report_from_the_requested_path(self, tmp_path: Path, monkeypatch) -> None:
+        from raven.tools import tests as tests_module
+
+        report = tmp_path / "coverage.xml"
+        report.write_text('<coverage line-rate="0.75"><packages/></coverage>', encoding="utf-8")
+
+        class _Proc:
+            returncode = 0
+
+            async def communicate(self) -> tuple[bytes, bytes]:
+                return b"7 passed in 1.0s\n", b""
+
+        captured: list[list[str]] = []
+
+        async def fake_exec(*args: str, **kwargs: Any) -> _Proc:
+            captured.append(list(args))
+            return _Proc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        old = os.environ.get("RAVEN_WORKSPACE")
+        os.environ["RAVEN_WORKSPACE"] = str(tmp_path)
+        try:
+            result = await tests_module.test_coverage(path=str(tmp_path), timeout=30)
+        finally:
+            if old is None:
+                os.environ.pop("RAVEN_WORKSPACE", None)
+            else:
+                os.environ["RAVEN_WORKSPACE"] = old
+
+        xml_arg = next(a for a in captured[0] if a.startswith("--cov-report=xml:"))
+        assert Path(xml_arg.split("xml:", 1)[1]) == report.resolve()
+        assert "Coverage: 75.0%" in result
+        assert "7 passed" in result
+        assert not report.exists()
+
     async def test_sanitize_extra_args_allows_safe(self) -> None:
         from raven.tools.tests import _sanitize_extra_args
 

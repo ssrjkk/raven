@@ -388,7 +388,7 @@ raven/
 | **RAG** | JSON vectorベクトルストア、インメモリフォールバック、n-gram埋め込み |
 | **認証** | bcrypt, JWT (HS256), RBAC（4ロール、16権限） |
 | **フロントエンド** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
-| **チャンネル** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 15 registry |
+| **チャンネル** | python-telegram-bot, discord.py, slack-sdk, Matrix (HTTP API), IRC asyncio, 15 registry |
 | **RavenFlow** | FastAPIデーモン（ポート18789）、ルーティングエンジン、WebSocketストリーミング、マルチエージェントディスパッチ |
 | **RavenCode** | インタラクティブREPL、LSP自動拡張（pyright/tsserver/gopls/rust-analyzer）、並列マルチセッション、plan/safe/fastモード、30+ツール |
 | **Canvas** | リッチコンポーネントレンダリング（コード、表、mermaid、画像、リンク、リスト、アラート）、HTML + ブラウザ出力 |

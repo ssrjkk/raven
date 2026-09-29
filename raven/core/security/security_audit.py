@@ -14,6 +14,10 @@ from loguru import logger
 from raven.core.audit import AUDIT_KEY_FILE, AUDIT_SIGNING_KEY_ENV, audit_logger
 from raven.core.config import _DEFAULT_TOOLS_DENY, settings
 
+# pip-audit resolves the whole environment over the network; without a ceiling a slow
+# mirror blocks the audit (and the 120s per-test limit in check_all.py) indefinitely.
+_DEP_AUDIT_TIMEOUT_S = 60.0
+
 
 def _parse_pip_audit_findings(raw: str) -> list[str] | None:
     """Extract vulnerable ``name==version`` pairs from pip-audit JSON output (None when unparsable).
@@ -423,11 +427,19 @@ class SecurityAudit:
             c.ok("pip-audit not installed (recommend: pip install pip-audit && python -m pip_audit)")
             return
 
-        result = subprocess.run(
-            [sys.executable, "-m", "pip_audit", "--progress-spinner", "off", "--format", "json"],
-            capture_output=True,
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "pip_audit", "--progress-spinner", "off", "--format", "json"],
+                capture_output=True,
+                check=False,
+                timeout=_DEP_AUDIT_TIMEOUT_S,
+            )
+        except subprocess.TimeoutExpired:
+            c.fail(
+                f"pip-audit did not finish within {_DEP_AUDIT_TIMEOUT_S:.0f}s (slow or blocked network)",
+                fix_hint="Run manually where PyPI is reachable: python -m pip_audit",
+            )
+            return
         if result.returncode == 0:
             c.ok("pip-audit passed — no known vulnerabilities")
             return

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json as json_mod
 import time
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -215,7 +216,7 @@ async def test_whatsapp_fails_closed_without_secret():
     db = FakeDB()
     handler = AsyncMock()
     router = create_webhook_router(db, handler)  # type: ignore[arg-type]
-    body = {"entry": []}
+    body: dict[str, Any] = {"entry": []}
     req = FakeRequest(body_bytes=json_mod.dumps(body).encode())
     from fastapi import HTTPException
 

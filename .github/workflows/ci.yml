@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -50,6 +50,27 @@ jobs:
       - name: E2E tests (on main push, py3.11 only)
         if: github.event_name == 'push' && matrix.python-version == '3.11'
         run: python scripts/check_all.py --component e2e
+
+  windows:
+    name: Check (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Quick checks (lint + types + imports + CLI)
+        run: python scripts/check_all.py --quick
+
+      - name: Workspace isolation + security tests
+        run: pytest tests/test_tools_file.py tests/test_ravencode_core_holes.py tests/core/test_security.py -q --no-cov --timeout=120
 
   frontend:
     name: Frontend build
@@ -197,15 +218,27 @@ jobs:
   security:
     name: Security scan
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: pyproject.toml
+
       - name: Gitleaks scan
         uses: gitleaks/gitleaks-action@v2
+
+      - name: Install project dependencies
+        run: pip install -e ".[dev]"
+
+      # --exclude-editable drops the self-install, --no-deps audits exactly that pinned set
+      # rather than re-resolving it. No `|| true`: a known vulnerability fails the job.
       - name: Pip audit
         run: |
+          pip freeze --exclude-editable > requirements-lock.txt
           pip install pip-audit
-          pip freeze 2>/dev/null > requirements-lock.txt || true
-          pip-audit -r requirements-lock.txt || true
+          python -m pip_audit --strict --no-deps -r requirements-lock.txt

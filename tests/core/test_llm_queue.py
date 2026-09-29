@@ -96,7 +96,10 @@ class TestPriorityAdmissionQueue:
         await q.release()
 
     async def test_timeout_does_not_corrupt_queue(self):
-        q = PriorityAdmissionQueue(1, queue_timeout=0.05)
+        # the timeout has to be generous enough that the waiter below cannot lose the
+        # race against a busy event loop (full-suite runs under coverage) — only the
+        # three deliberate drains should expire
+        q = PriorityAdmissionQueue(1, queue_timeout=0.5)
         await q.acquire(PRIORITY_NORMAL)
         for _ in range(3):
             with pytest.raises(LLMQueueTimeoutError):
@@ -110,7 +113,10 @@ class TestPriorityAdmissionQueue:
             await q.release()
 
         task = asyncio.create_task(waiter())
-        await asyncio.sleep(0.02)
+        for _ in range(20):
+            if q.queued:
+                break
+            await asyncio.sleep(0.01)
         await q.release()
         await asyncio.wait_for(task, timeout=2.0)
         assert result == ["ok"]

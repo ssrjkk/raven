@@ -187,7 +187,7 @@ npm run dev    # http://localhost:5173 (proxy a :18888)
 | **Skills de workspace** | Skills en `workspace/skills/`: cripto, briefing, búsqueda web. Carga automática vía SKILL.md |
 | **Panel web + IDE** | React 19 + Vite + Tailwind + Monaco Editor: Dashboard, Chat, Tasks, Monitors, Routines, Code Sessions, Settings, IDE (editor + terminal + panel AI) |
 | **Auth & RBAC** | Autenticación multi-usuario, 4 roles (admin/user/viewer/banned), 16 permisos, tokens Bearer |
-| **Infraestructura enterprise** | Circuit breaker, pool HTTP, limitador de tasa, reintento con backoff exponencial, log de auditoría (20 tipos), métricas Prometheus, health checks |
+| **Fiabilidad y observabilidad** | Circuit breaker, pool HTTP, limitador de tasa, reintento con backoff exponencial, log de auditoría (20 tipos), métricas Prometheus, health checks |
 | **Sistema de plugins** | 10 plugins — browser, code, cron, files, git, memory, api, ocr, process, sessions. Sandbox con control basado en capacidades |
 | **Seguridad** | DM pairing, lista blanca de canales, cifrado Fernet, limitación de tasa, sandbox subprocess/Docker |
 | **Política de seguridad** | ToolPolicyEvaluator, exec.security (deny/ask/full), deny > allow priority, workspaceOnly FS, contextVisibility, sanitize_external_content, CLI de auditoría |
@@ -388,7 +388,7 @@ raven/
 | **RAG** | JSON vector store, local BM25 + embeddings |
 | **Auth** | bcrypt, JWT (HS256), RBAC (4 roles, 16 permisos) |
 | **Frontend** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
-| **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 15 registry |
+| **Channels** | python-telegram-bot, discord.py, slack-sdk, Matrix (HTTP API), IRC asyncio, 15 registry |
 | **RavenFlow** | FastAPI daemon (puerto 18789), routing engine, streaming WebSocket, multi-agent dispatch |
 | **RavenCode** | REPL interactivo, auto-enriquecimiento LSP (pyright/tsserver/gopls/rust-analyzer), multi-sesión en paralelo, modos plan/safe/fast, 30+ herramientas |
 | **Canvas** | Render de componentes enriquecidos (código, tabla, mermaid, imagen, enlace, lista, alerta), salida HTML + navegador |

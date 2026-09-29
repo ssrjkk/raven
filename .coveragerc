@@ -14,6 +14,7 @@ exclude_lines =
     logger.warning
     logger.debug
 
-fail_under = 60
+# measured 72% (raven only) in a clean `pip install -e ".[dev]"` env; margin covers platform skips
+fail_under = 65
 show_missing = True
 skip_covered = False

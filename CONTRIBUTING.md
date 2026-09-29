@@ -33,24 +33,28 @@ cd raven
 pip install -e ".[dev]"
 ```
 
-#### Цикл разработки
+#### Проверка перед коммитом
+
+Единая точка входа — `scripts/check_all.py`: ruff, mypy, проверка импортов, CLI, тесты и фронтенд.
 
 ```bash
-# Линтер
-ruff check .
-
-# Проверка типов
-mypy raven/ --strict --ignore-missing-imports
-
-# Тесты
-pytest tests/ -q --tb=short
-
-# Тесты с покрытием
-pytest tests/ --cov=raven --cov-report=term-missing
-
-# Сборка веб-интерфейса
-cd web && npm install && npm run build
+python scripts/check_all.py --quick               # линтер + типы + импорты + CLI, без тестов
+python scripts/check_all.py                       # то же + все тесты
+python scripts/check_all.py --cov                 # полный прогон с покрытием (как в CI на push)
+python scripts/check_all.py --component core      # один компонент
 ```
+
+Отдельные шаги, если нужен только один:
+
+```bash
+ruff check .
+mypy raven/ aios/ ravencode/ plugins/ tests/ --ignore-missing-imports   # scripts/ исключён в pyproject
+pytest tests/core/test_config.py -q --no-cov
+cd web && npx tsc --noEmit && npm test -- --run
+```
+
+В `pyproject.toml` для pytest включены coverage-порог и allure, поэтому одиночный файл
+тестов запускают с `--no-cov` — иначе отчёт о покрытии не сходится.
 
 #### Правила
 

@@ -389,7 +389,7 @@ raven/
 | **RAG** | JSON vector store, local BM25 + embeddings |
 | **Auth** | bcrypt, JWT (HS256), RBAC (4 роли, 16 пермишенов) |
 | **Frontend** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
-| **Channels** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 15 registry |
+| **Channels** | python-telegram-bot, discord.py, slack-sdk, Matrix (HTTP API), IRC asyncio, 15 registry |
 | **RavenFlow** | FastAPI daemon (порт 18789), routing engine, WebSocket-стриминг, multi-agent dispatch |
 | **RavenCode** | Интерактивный REPL, LSP авто-обогащение (pyright/tsserver/gopls/rust-analyzer), параллельные сессии, режимы plan/safe/fast, 30+ инструментов |
 | **Canvas** | Рендер rich-компонентов (код, таблица, mermaid, изображение, ссылка, список, алерт), HTML + браузер |

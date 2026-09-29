@@ -111,6 +111,26 @@ def _parse_summary_line(line: str) -> tuple[int, int, int]:
     return passed, failed, skipped
 
 
+def _print_pytest_output(output: str, returncode: int) -> None:
+    """Echo pytest output, keeping the FAILURES block on failure.
+
+    A plain tail cuts the assertion diffs off right where the diagnosis starts,
+    which is exactly the part a failing batch is read for. The totals and the
+    short summary follow the block, so printing from it to the end loses nothing.
+    """
+    lines = [line for line in output.splitlines() if line.strip()]
+    if returncode != 0:
+        for idx, line in enumerate(lines):
+            if "FAILURES" in line and line.startswith("="):
+                for block in lines[idx : idx + 180]:
+                    print(f"  {block}")
+                if len(lines) - idx > 180:
+                    print(f"  ... {len(lines) - idx - 180} more lines")
+                return
+    for line in lines[-30:]:
+        print(f"  {line}")
+
+
 def _print_result(r: CheckResult) -> None:
     icon = f"{GREEN}PASS{RESET}" if r.status == "pass" else f"{RED}FAIL{RESET}" if r.status == "fail" else f"{YELLOW}SKIP{RESET}"
     time_str = f" ({r.duration:.1f}s)" if r.duration else ""
@@ -348,10 +368,7 @@ def check_component(name: str) -> CheckResult:
 
     counts = {"passed": passed, "failed": failed, "skipped": skipped, "errors": errors}
 
-    # Print last 30 lines of output for context
-    out_lines = [line for line in output.splitlines() if line.strip()]
-    for line in out_lines[-30:]:
-        print(f"  {line}")
+    _print_pytest_output(output, r.returncode)
 
     status: Status = "pass"
     detail = summary
@@ -397,9 +414,7 @@ def check_full_tests() -> CheckResult:
 
     counts = {"passed": passed, "failed": failed, "skipped": skipped}
 
-    out_lines = [line for line in output.splitlines() if line.strip()]
-    for line in out_lines[-30:]:
-        print(f"  {line}")
+    _print_pytest_output(output, r.returncode)
 
     status: Status = "pass" if r.returncode == 0 else "fail"
     return CheckResult("tests/full", status, dt, summary, counts)

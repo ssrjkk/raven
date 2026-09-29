@@ -5,29 +5,8 @@ All notable changes to Raven AI are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.8] - 2026-09-22
-
-### Changed
-- Version bump to 0.4.8 across all modules (pyproject.toml, Dockerfile, TUI, API servers, MCP clients, deploy configs)
-
-### Removed
-- All git tags — single `main` branch is the only release surface; Docker images are rebuilt on demand via manual Deploy dispatch (`ghcr.io/ssrjkk/raven:latest`)
-- Duplicate `release` job from `deploy.yml` — GitHub Releases are owned solely by `release.yml`
-
-## [0.4.7] - 2026-09-21
-
-### Fixed
-- CI: removed pinned SHA digest from Docker base image (digest no longer exists on Docker Hub)
-- CI: disabled Docker build cache to prevent stale layer issues
-- CI: fixed `.dockerignore` to allow `README.md` in build context
-- CI: corrected action versions in PyPI workflow (v7/v6 → v4/v5)
-- CI: made `uvloop` conditional with platform marker (`sys_platform != 'win32'`) for Windows compatibility
-- CI: updated `trivy-action` from non-existent `0.29.0` to `@master`
-- CI: disabled coverage check for Postgres integration tests (expected low coverage)
-- Tests: updated `test_tools.py` assertion to match new error message ("Access denied" vs "outside workspace")
-
-### Changed
-- Version bump to 0.4.7 across all modules (pyproject.toml, Dockerfile, TUI, API servers, MCP clients, deploy configs)
+A duplicate `## [Unreleased]` block from the pre-0.4.8 era is archived verbatim in
+`docs/archive/changelog-pre-0.4.8-unreleased.md`.
 
 ## [Unreleased]
 
@@ -59,9 +38,23 @@ Condensed summary of ~280 commits since the 0.4.0 baseline (2026-06-05 → 2026-
 - Security audit false positives: `api_keys` failed for `groq/*` models even with `GROQ_API_KEY` set, `dependency_audit` invoked the non-existent `pip audit` (and mis-parsed pip-audit JSON), `audit_signing` ignored the auto-generated `data/audit_signing_key.bin`
 - DevOps hygiene: `install` script referenced release tarballs that are never published, `init.sh` created unused directories, `scripts/setup.sh` still built the removed Rust daemon/Electron app, `Makefile clean` was Windows-only, dead `.oxlintrc.json`
 - Frontend lint debt: 32 ESLint errors (import order + stale `react-hooks` disable comments) — `npx eslint src` is clean and now enforced in CI along with `npm test`
+- `run_tests` / `test_coverage` reported `Tests: unknown` whenever pytest did not wrap its counts line in a `== ... ==` banner (narrow terminals, `-q`, and the coverage-gate line all suppress it); the ravencode `run_tests` returned an empty summary in the same cases. Both tools now match the counts themselves and no longer run pytest with `-q`
+- `tests/core/test_webhooks.py`: mypy `var-annotated` on the shared `body` dict, which failed `check_all.py` — and therefore CI — on `main`
+- `security_audit._check_dependencies` ran `pip-audit` with no timeout, so a slow or blocked PyPI mirror hung the audit until pytest's per-test limit killed it (`tests/unit` failed in `test_audit_deep_includes_extra`). The check is now capped at 60 s and reports the timeout with a manual-run hint
+- `tests/contract/conftest.py` guarded on `import pact`, but pact-python 2.x+ installs without the `Consumer`/`Provider`/`Like`/`Term` API `test_pacts.py` uses — the import succeeds and then the whole `tests/unit` batch aborted on a collection error. The guard now checks those names, and mypy skips `test_pacts.py` so the result no longer depends on which pact-python version happens to be installed
+- `docs/security/overview.md` rewritten against the code: 13-layer enforcement table, the HTTP authentication/RBAC and response-header layers that were missing entirely, `exec_security` vs `exec_ask_mode` separated, all five sandbox policies listed with their real values (`code-exec` is network-allowlisted, not offline; `web-browsing`/`read-only` have no container backend), and two cited paths that no longer exist replaced
+- `tests/core/test_llm_queue.py::test_timeout_does_not_corrupt_queue` failed only in the `tests/full` check. A 50 ms admission timeout left the recovery waiter ~30 ms of slack, which loses against a busy event loop under coverage tracing (it passed in the isolated `tests/core` batch). The timeout is now 0.5 s and the test waits until the waiter is actually queued, so only the three deliberate drains expire
+- The two `run_tests` suite tests (`tests/test_tools.py`, `tests/test_ravencode_core_round7.py`) passed only on machines whose temp dir holds no pytest config. The inner run climbed out of the scratch directory, picked up an unrelated `pyproject.toml` and its `addopts`, and died on a usage error before printing any counts — `Tests: unknown` in a clean `.[dev]` env. The mini suites now carry their own `pytest.ini`, so rootdir and config stay inside the workspace the tool was given
+- `test_coverage` asked pytest for a relative `coverage.xml` (written to the caller's cwd) but read it back from the target path, so any call with `path` set reported `Coverage: 0.0%` and left the report behind. The report path is now absolute under the target, and the function has a real test for it
+- `tests/test_ravencode_browser.py::TestNavigate` reached `browser_navigate`'s SSRF check, which resolves the hostname through live DNS and fails closed when the resolver returns nothing — so both tests turned into `[denied]` assertions whenever the machine's resolver blinked (seen in a `tests/full` run; green in isolation and on the clean-env run). The navigate tests now stub `ssrf.validate_url` like the rest of the repo's navigate tests, and a new test pins the denial path itself
+- `check_all.py` echoed only the last 30 lines of a failing pytest batch, which is the part *after* the assertion diffs, so a `tests/full` failure gave no clue what broke. On a non-zero exit it now prints from the `FAILURES` block to the end (totals and short summary included); passing batches keep the 30-line tail
 
 ### Security
 - `SlackChannel.verify_signature` now fails closed when `signing_secret` is not configured (previously returned `True`, accepting unsigned requests)
+- Webhook signature verification fails closed across the board: generic, `slack/events`, WhatsApp and every `_verify_webhook_signature` consumer (Google Chat, Signal, Teams, Feishu, LINE, GitHub, GitLab, GitHub Actions, Allure) now reject unauthenticated requests when no signing secret (`WEB_SECRET_KEY` / `SLACK_SIGNING_SECRET`) is configured, instead of accepting them — previously any unauthenticated POST could reach the self-heal/QA actions
+- `confine_path` resolves symlinks with `realpath` before the workspace check, so a link inside the workspace pointing outside can no longer escape the boundary
+- `cryptography` floor raised to `>=50.0.0` (runtime `secrets` extra and `dev`). The old `dev` cap `<45.0` resolved to 44.0.3, which pip-audit reports 10 open advisories against (incl. PYSEC-2026-3552, fixed only in 50.0.0); 50.0.1 audits clean, its 70 crypto-dependent tests pass, and wheels exist for 3.11/3.12 on Windows and Linux
+- CI `security` job is now a real gate. It audited the runner's own preinstalled packages — the project was never installed — and both steps ended in `|| true`, so a known vulnerability could not fail the build. It now installs `.[dev]`, audits exactly that freeze (`pip freeze --exclude-editable` + `pip-audit --strict --no-deps`) and fails on any finding
 
 ### Removed
 - Dead `packages/` TypeScript tree (unused, untested, not in CI); broken `github/` action (dist never built); duplicate root `raven.spec`; `monolith-requirements.txt` / `requirements-dev.txt` (pyproject is the single source)
@@ -71,9 +64,39 @@ Condensed summary of ~280 commits since the 0.4.0 baseline (2026-06-05 → 2026-
 ### Changed
 - AGENTS.md rewritten as concise guidelines (716 → 55 lines); historical fix logs archived verbatim to `docs/archive/fixes-history.md`
 - README test count refreshed; `docs/sprint-1.md` archived
+- CI: added a `windows-latest` job — `check_all.py --quick` (lint, types, imports, CLI) plus the workspace-isolation, ravencode-boundary and core security test files. Windows is the primary dev and packaging target and had no CI coverage at all
+- CI: dropped the `develop` branch trigger; the repository has only `main`
+- pytest `eval` marker registered in pyproject, silencing `PytestUnknownMarkWarning` for the eval suite
+- Coverage floor raised 60% → 65%: `check_all.py --cov` measures 72% over `raven` in a clean `.[dev]` env, so the old gate tolerated a 12-point regression before failing
+- CONTRIBUTING.md development loop now points at `scripts/check_all.py` (with `--quick` / `--cov` / `--component`) instead of the bare `ruff check .` / `mypy raven/ --strict` / `pytest tests/` commands, which did not match the gate CI runs; the mypy example lists the real target set, since `scripts/` is excluded in pyproject
+- README dependency facts corrected across all six languages: `matrix-nio` replaced with Matrix over the HTTP API (no `nio` import exists in the channel), workflow count 15 → 10, test count → 5,100+
 - Web sidebar version badge now reads `web/package.json` instead of a never-defined `VITE_APP_VERSION`
 - Dependency security floors bumped to patched releases: `fastapi>=0.141.1`, `starlette>=1.3.1`, `anyio>=4.14.2`, `lxml>=6.1.0`, `Pillow>=12.3.0`, `python-dotenv>=1.2.2`, `soupsieve>=2.9.0`, `typing-extensions>=4.8` (verified in a clean venv)
 - Authorship/branding by ssrjkk across packaging, CLIs (`--version`, `raven doctor`), web sidebar/offline page, extensions, docs and CI metadata
+
+## [0.4.8] - 2026-09-22
+
+### Changed
+- Version bump to 0.4.8 across all modules (pyproject.toml, Dockerfile, TUI, API servers, MCP clients, deploy configs)
+
+### Removed
+- All git tags — single `main` branch is the only release surface; Docker images are rebuilt on demand via manual Deploy dispatch (`ghcr.io/ssrjkk/raven:latest`)
+- Duplicate `release` job from `deploy.yml` — GitHub Releases are owned solely by `release.yml`
+
+## [0.4.7] - 2026-09-21
+
+### Fixed
+- CI: removed pinned SHA digest from Docker base image (digest no longer exists on Docker Hub)
+- CI: disabled Docker build cache to prevent stale layer issues
+- CI: fixed `.dockerignore` to allow `README.md` in build context
+- CI: corrected action versions in PyPI workflow (v7/v6 → v4/v5)
+- CI: made `uvloop` conditional with platform marker (`sys_platform != 'win32'`) for Windows compatibility
+- CI: updated `trivy-action` from non-existent `0.29.0` to `@master`
+- CI: disabled coverage check for Postgres integration tests (expected low coverage)
+- Tests: updated `test_tools.py` assertion to match new error message ("Access denied" vs "outside workspace")
+
+### Changed
+- Version bump to 0.4.7 across all modules (pyproject.toml, Dockerfile, TUI, API servers, MCP clients, deploy configs)
 
 ## [0.4.0] - 2026-06-05
 
@@ -99,50 +122,6 @@ Condensed summary of ~280 commits since the 0.4.0 baseline (2026-06-05 → 2026-
 - Dead Sidebar.tsx component (unused)
 - Duplicate CSS variables from index.css (now sourced from tokens.json via ThemeContext)
 - Unused `react-syntax-highlighter` / `@types/react-syntax-highlighter` dependencies
-
-## [Unreleased]
-
-### Added
-- Voice module: TTS (ElevenLabs, gTTS, system) and STT (Whisper, speech_recognition)
-- Web admin dashboard: model config, channel management, live logs, security audit UI
-- Default workspace prompt files: AGENTS.md, SOUL.md, TOOLS.md
-- Pre-commit hooks configuration (.pre-commit-config.yaml)
-- Project security policy (SECURITY.md)
-- Contributing guide (CONTRIBUTING.md)
-- Docker configuration (.dockerignore)
-- MkDocs documentation site structure
-- CI matrix expansion: Python 3.11, 3.12 across ubuntu, windows, macOS
-- PostgreSQL backend: thin `AsyncDB` layer (`raven/core/asyncdb.py`) with `SQLiteDB` and `PostgresDB` backends — all core stores (tasks, monitors, routines, auth, sessions, outbox, analytics, persister) run against Postgres when `DATABASE_URL` (or a `postgresql://` DSN `db_path`) is set
-- `raven/core/db_postgres.py`: `PostgresDatabase` (shared pool, health, metrics) + `_PostgresMigrator` using the unified migration table
-- `docker-compose.postgres.yml` for local Postgres (postgres:16-alpine, user/password/db=raven)
-- `[postgres]` extras in `pyproject.toml` (`asyncpg>=0.29`)
-- Integration test suite `tests/integration/test_postgres_stores.py` (9 tests, auto-skip without a live Postgres)
-- LLM request queue with ordering + batching (`raven/core/llm/queue.py` + tests)
-- Test suites for tool packages, voice (STT/TTS/wake) and session store
-- MkDocs navigation for CLI, plugins, security and sprint-1 docs
-- Project Metrics dashboard (`/api/metrics/project`) with live workspace stats
-- Command palette (Ctrl+K) with 28+ navigation commands and dynamic AI suggestions
-- Git viewer with side-by-side diff and blame (`/api/git/*`)
-- Accent color picker with theme customization
-
-### Enhanced
-- Security audit: 23 standard + 8 deep checks with fix hints
-- SSE streaming: backpressure (drop/block/throttle), Last-Event-ID replay, per-session metrics
-- Rate limiter: burst multiplier, automatic IP blocking, is_blocked() API
-- Input sanitization middleware: JSON depth limit, non-string key rejection
-- Self-heal module: configurable health checks, exponential backoff restart
-- `PostgresDB.execute` returns rowcount (parsed from asyncpg status), `?` placeholders rewritten to `$n`
-- Postgres connection pooling with retry/backoff; `is_postgres_dsn()` guard so DSN strings are never wrapped in `Path` on Windows
-- Channel supervision: `ChannelGuardian` with heartbeats, per-channel/per-user rate limiting, auto-restart
-- Docs aligned with the single-process monolith architecture (README, CONTEXT, docs/, specs/, marketing/)
-
-### Changed
-- All async tests migrated to `@pytest.mark.asyncio` pattern (no `asyncio.run()` in test files)
-- `tests/core/test_migrations.py` rewritten on `SQLiteDB`
-
-### Verification
-- ruff 0, mypy 0, `check_all.py --quick` 4/4 PASS
-- Full suite: **4677 passed, 17 skipped, 1 xpassed**; PG integration suite **9 passed** against a live server
 
 ## [0.3.0] - 2026-05-18
 

@@ -71,6 +71,9 @@ web/coverage/
 coverage.xml
 coverage.html
 
+# written by the CI pip-audit step
+requirements-lock.txt
+
 data/sessions/
 eval_results/
 

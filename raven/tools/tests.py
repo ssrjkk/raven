@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -57,6 +58,19 @@ def _sanitize_extra_args(extra_args: str) -> tuple[str, list[str]]:
     return " ".join(kept), dropped
 
 
+# matches "5 passed in 0.42s" / "1 failed, 4 passed in 0.31s" / "2 errors in 1.0s".
+# pytest only wraps this in "== ... ==" when the terminal is wide enough and no
+# plugin (coverage gate, -q) truncated the line, so match the counts themselves.
+_PYTEST_SUMMARY_RE = re.compile(r"\d+ (?:passed|failed|error)s?\b.*in \d", re.IGNORECASE)
+
+
+def _pytest_summary(output: str) -> str:
+    for ln in reversed(output.splitlines()):
+        if _PYTEST_SUMMARY_RE.search(ln):
+            return ln.strip("= ").strip()
+    return "unknown"
+
+
 async def run_tests(path: str = "", marker: str = "", timeout: int = 120, extra_args: str = "") -> str:
     try:
         root = _confine(path) if path else Path.cwd()
@@ -65,7 +79,7 @@ async def run_tests(path: str = "", marker: str = "", timeout: int = 120, extra_
     if not root.is_dir():
         return "Path not found"
     safe_args, _dropped = _sanitize_extra_args(extra_args)
-    cmd = [sys.executable, "-m", "pytest", str(root), "-q", "--tb=short", "--no-header", "-p", "no:schemathesis"]
+    cmd = [sys.executable, "-m", "pytest", str(root), "--tb=short", "--no-header", "-p", "no:schemathesis"]
     if marker:
         cmd += ["-m", marker]
     if safe_args:
@@ -85,11 +99,9 @@ async def run_tests(path: str = "", marker: str = "", timeout: int = 120, extra_
 
     out = stdout.decode("utf-8", errors="replace")
     err = stderr.decode("utf-8", errors="replace")
-    lines = out.splitlines()
-    summary = [ln for ln in lines if ln.startswith("==") and ("passed" in ln or "failed" in ln or "error" in ln)]
     return (
         f"Exit code: {proc.returncode}\n"
-        f"Tests: {summary[0] if summary else 'unknown'}\n"
+        f"Tests: {_pytest_summary(out)}\n"
         f"{'Stderr: ' + err[:500] if err else ''}"
     )
 
@@ -101,18 +113,19 @@ async def test_coverage(path: str = "", timeout: int = 180) -> str:
         return "Access denied: invalid path"
     if not root.is_dir():
         return "Path not found"
+    xml_report = root / "coverage.xml"
     cmd = [
         sys.executable,
         "-m",
         "pytest",
         str(root),
-        "-q",
         "--tb=short",
         "--no-header",
         "-p",
         "no:schemathesis",
         "--cov=raven",
-        "--cov-report=xml:coverage.xml",
+        # absolute: a relative path lands in the caller's cwd while the report is read from root
+        f"--cov-report=xml:{xml_report}",
         "--cov-config=.coveragerc",
     ]
     logger.info("Running coverage: {}", " ".join(cmd))
@@ -130,7 +143,7 @@ async def test_coverage(path: str = "", timeout: int = 180) -> str:
 
     out = stdout.decode("utf-8", errors="replace")
     err = stderr.decode("utf-8", errors="replace")
-    cov_file = root / "coverage.xml"
+    cov_file = xml_report
     total = 0.0
     if cov_file.exists():
         try:
@@ -143,12 +156,10 @@ async def test_coverage(path: str = "", timeout: int = 180) -> str:
         except Exception as e:
             logger.warning("Failed to parse coverage.xml: {}", e)
 
-    lines = out.splitlines()
-    summary = [ln for ln in lines if ln.startswith("==") and ("passed" in ln or "failed" in ln or "error" in ln)]
     return (
         f"Exit code: {proc.returncode}\n"
         f"Coverage: {total:.1f}%\n"
-        f"Tests: {summary[0] if summary else 'unknown'}\n"
+        f"Tests: {_pytest_summary(out)}\n"
         f"{'Stderr: ' + err[:500] if err else ''}"
     )
 

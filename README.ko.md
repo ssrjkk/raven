@@ -388,7 +388,7 @@ raven/
 | **RAG** | JSON vector 벡터 저장소, 인메모리 폴백, n-gram 임베딩 |
 | **인증** | bcrypt, JWT (HS256), RBAC (4개 역할, 16개 권한) |
 | **프론트엔드** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
-| **채널** | python-telegram-bot, discord.py, slack-sdk, matrix-nio, IRC asyncio, 15 registry |
+| **채널** | python-telegram-bot, discord.py, slack-sdk, Matrix (HTTP API), IRC asyncio, 15 registry |
 | **RavenFlow** | FastAPI 데몬 (포트 18789), 라우팅 엔진, WebSocket 스트리밍, 멀티에이전트 디스패치 |
 | **RavenCode** | 인터랙티브 REPL, LSP 자동 강화 (pyright/tsserver/gopls/rust-analyzer), 병렬 멀티세션, plan/safe/fast 모드, 30+ 도구 |
 | **Canvas** | 풍부한 컴포넌트 렌더링 (코드, 표, mermaid, 이미지, 링크, 목록, 알림), HTML + 브라우저 출력 |

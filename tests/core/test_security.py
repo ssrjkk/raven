@@ -247,6 +247,21 @@ class TestSecurityAuditCheckFixes:
         assert not check.passed
         assert "unsigned" in check.message
 
+    def test_dependency_audit_fails_on_timeout(self, monkeypatch):
+        from raven.core.security import security_audit as sa
+
+        def expire(*args, **kwargs):
+            raise subprocess.TimeoutExpired(cmd="pip_audit", timeout=kwargs["timeout"])
+
+        monkeypatch.setattr(importlib_util, "find_spec", lambda name: object())
+        monkeypatch.setattr(subprocess, "run", expire)
+        auditor = sa.SecurityAudit()
+        auditor._check_dependencies()
+        check = self._last(auditor)
+        assert not check.passed
+        assert "did not finish within" in check.message
+        assert check.fix_hint() is not None
+
 
 class TestSecurityAudit:
     def test_audit_runs_all_checks(self):
@@ -265,10 +280,13 @@ class TestSecurityAudit:
         assert "exec_security" in names
         assert "context_visibility" in names
 
-    def test_audit_deep_includes_extra(self):
-        from raven.core.security.security_audit import SecurityAudit
+    def test_audit_deep_includes_extra(self, monkeypatch):
+        from raven.core.security import security_audit as sa
 
-        auditor = SecurityAudit()
+        # the deep dependency check shells out to pip-audit, which resolves the whole
+        # environment over the network — stubbed so CI stays deterministic and fast
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess(a[0], 0, b"[]", b""))
+        auditor = sa.SecurityAudit()
         deep_results = auditor.run_all(deep=True)
         names = [r.name for r in deep_results]
         assert "network_exposure" in names
