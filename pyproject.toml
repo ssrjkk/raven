@@ -55,7 +55,7 @@ docker = ["docker>=7.0"]
 secrets = ["cryptography>=50.0.0"]  # security floor: PYSEC-2026-3552 is only patched in 50.0.0
 service-win = ["pywin32>=306"]
 tui = ["textual>=1.0"]
-tracing = ["opentelemetry-api>=1.25", "opentelemetry-sdk>=1.25"]
+tracing = ["opentelemetry-api>=1.25", "opentelemetry-sdk>=1.45.0"]
 numba = ["numba>=0.60,<1.0"]
 voice = ["sounddevice>=0.5"]
 browser = ["playwright>=1.44,<2.0"]
