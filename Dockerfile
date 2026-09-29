@@ -1,7 +1,7 @@
 ARG RAVEN_VERSION=0.4.8
 
 # --- Web dashboard (React SPA) ---
-FROM node:22-alpine AS web-builder
+FROM node:26-alpine AS web-builder
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
