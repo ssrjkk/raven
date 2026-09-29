@@ -227,14 +227,15 @@ class TestMonitors:
         client = _make_client(gateway, registry, channels)
         resp = client.post(f"/api/admin/monitors/{mid}/check")
         assert resp.status_code == 200
-        assert resp.json()["alert"] is None
+        assert resp.json()["triggered"] is False
 
     def test_check_now_file_missing_alert(self, gateway, registry, channels, tmp_path: Path) -> None:
         mid = _create_monitor(gateway._monitor_store, target=str(tmp_path / "missing.log"))
         client = _make_client(gateway, registry, channels)
         resp = client.post(f"/api/admin/monitors/{mid}/check")
         assert resp.status_code == 200
-        assert "File not found" in resp.json()["alert"]
+        assert resp.json()["triggered"] is True
+        assert "alert" not in resp.json()
 
     def test_pause_and_resume(self, gateway, registry, channels, tmp_path: Path) -> None:
         from raven.core.monitor.engine import MonitorEngine

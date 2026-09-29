@@ -187,7 +187,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         store = gateway._monitor_store
         engine = MonitorEngine(store, send_fn=lambda cid, txt: logger.info("Alert[{}]: {}", cid, txt))
         alert_text = await engine.check_now(monitor_id)
-        return {"ok": True, "alert": alert_text}
+        return {"ok": True, "triggered": alert_text is not None}
 
     @router.post("/monitors/{monitor_id}/pause")
     async def admin_monitor_pause(monitor_id: str):

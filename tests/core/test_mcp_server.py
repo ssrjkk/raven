@@ -26,7 +26,7 @@ class TestMCPServer:
 
     async def test_handle_tools_call(self) -> None:
         server = MCPServer()
-        with patch("raven.core.mcp.server.execute_tool", new=AsyncMock(return_value="executed")):
+        with patch("raven.core.mcp.server.execute_tool_public", new=AsyncMock(return_value="executed")):
             resp = await server.handle_request({
                 "method": "tools/call", "id": 3,
                 "params": {"name": "echo", "arguments": {"msg": "hello"}},

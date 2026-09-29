@@ -7,15 +7,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from raven.core.mcp.auth import authorize_request
 from raven.core.mcp.sse_transport import SSETransport
 from ravencode.mcp.server import MCPServer
-from ravencode.runtime.tools import execute_tool, get_tool_definitions
+from ravencode.runtime.tools import execute_tool_public, get_tool_definitions
 
 _mcp_server = MCPServer()
 _sse_transport = SSETransport()
+
+
+def _require_auth(request: Request) -> None:
+    if not authorize_request(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def create_mcp_router() -> APIRouter:
@@ -23,6 +29,7 @@ def create_mcp_router() -> APIRouter:
 
     @router.post("/rpc")
     async def mcp_rpc(request: Request) -> JSONResponse:
+        _require_auth(request)
         try:
             body: Any = await request.json()
         except ValueError:
@@ -37,7 +44,8 @@ def create_mcp_router() -> APIRouter:
         return JSONResponse(result)
 
     @router.get("/tools")
-    async def list_tools() -> list[dict[str, Any]]:
+    async def list_tools(request: Request) -> list[dict[str, Any]]:
+        _require_auth(request)
         defs = get_tool_definitions()
         result = []
         for d in defs:
@@ -54,9 +62,10 @@ def create_mcp_router() -> APIRouter:
 
     @router.post("/tools/{name}")
     async def call_tool(name: str, request: Request) -> JSONResponse:
+        _require_auth(request)
         body: Any = await request.json() or {}
         args = body.get("arguments", body) if isinstance(body, dict) else {}
-        result = await execute_tool(name, args)
+        result = await execute_tool_public(name, args)
         return JSONResponse({"result": result})
 
     @router.get("/events")

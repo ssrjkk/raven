@@ -1285,6 +1285,17 @@ async def test_execute_tool_generic_exception(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.asyncio
+async def test_execute_tool_public_hides_handler_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _handler(**kwargs: object) -> str:
+        raise RuntimeError("boom")
+
+    fake = {"name": "__fake_err", "parameters": {"type": "object", "properties": {}}, "handler": _handler}
+    monkeypatch.setitem(tools.MODULE_TOOLS, "__fake_err", fake)
+    assert await tools.execute_tool_public("__fake_err", {}) == "[execution_error] tool failed"
+    assert "boom" in await tools.execute_tool("__fake_err", {})
+
+
+@pytest.mark.asyncio
 async def test_execute_tool_question_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "ravencode.runtime.question.ask_question",

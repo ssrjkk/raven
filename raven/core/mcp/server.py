@@ -5,7 +5,7 @@ import json
 import sys
 from typing import Any
 
-from ravencode.runtime.tools import execute_tool, get_tool_definitions
+from ravencode.runtime.tools import execute_tool_public, get_tool_definitions
 
 
 class MCPServer:
@@ -53,7 +53,7 @@ class MCPServer:
             args = params.get("arguments", {})
             if not name:
                 return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32602, "message": "Missing tool name"}}
-            result = await execute_tool(name, args)
+            result = await execute_tool_public(name, args)
             return {"jsonrpc": "2.0", "id": req_id, "result": {"content": [{"type": "text", "text": result}]}}
         return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32601, "message": f"Method not found: {method}"}}
 

@@ -68,10 +68,24 @@ def is_dangerous(name: str) -> bool:
     return bool(t.get("dangerous")) if t else False
 
 
+class ToolExecutionError(Exception):
+    def __init__(self, tool_name: str, detail: str) -> None:
+        super().__init__(f"{tool_name} failed: {detail}")
+        self.tool_name = tool_name
+        self.detail = detail
 
 
-@observe_tool(tool_name="execute_tool")
-async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
+def _stringify(result: Any) -> str:
+    if isinstance(result, list):
+        result_str = "\n".join(str(r) for r in result[:200])
+    else:
+        result_str = str(result)
+    if len(result_str) > 15_000:
+        return result_str[:15_000] + "\n\n[... output truncated to 15k chars ...]"
+    return result_str
+
+
+async def _invoke(name: str, arguments: dict[str, Any]) -> str:
     _ensure_plugin_tools()
     tool = MODULE_TOOLS.get(name)
     if not tool:
@@ -84,19 +98,30 @@ async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
     if not perm[0]:
         return f"[denied] {perm[1]}"
     try:
-        result = await tool["handler"](**arguments)
-        if isinstance(result, list):
-            result_str = "\n".join(str(r) for r in result[:200])
-        else:
-            result_str = str(result)
-        if len(result_str) > 15_000:
-            return result_str[:15_000] + "\n\n[... output truncated to 15k chars ...]"
-        return result_str
+        return _stringify(await tool["handler"](**arguments))
     except QuestionError:
         raise
     except Exception as exc:
         logger.exception("Tool {} failed", name)
-        return f"[execution_error] {name} failed: {exc}"
+        raise ToolExecutionError(name, str(exc)) from exc
+
+
+@observe_tool(tool_name="execute_tool")
+async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
+    try:
+        return await _invoke(name, arguments)
+    except ToolExecutionError as exc:
+        return f"[execution_error] {exc.tool_name} failed: {exc.detail}"
+
+
+@observe_tool(tool_name="execute_tool")
+async def execute_tool_public(name: str, arguments: dict[str, Any]) -> str:
+    # Handler detail must stay out of the return value: these results are written into
+    # HTTP/JSON-RPC response bodies, where an exception message is a stack-trace leak.
+    try:
+        return await _invoke(name, arguments)
+    except ToolExecutionError:
+        return "[execution_error] tool failed"
 
 
 

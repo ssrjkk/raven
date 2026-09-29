@@ -4,7 +4,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from ravencode.mcp import http_transport
 from ravencode.mcp.server import MCPServer, run_mcp_server
@@ -18,10 +18,23 @@ def find_route(router, path: str, method: str):
     return None
 
 
+def _req(**overrides: object) -> MagicMock:
+    req = MagicMock(spec=Request)
+    req.headers = {}
+    for key, val in overrides.items():
+        setattr(req, key, val)
+    return req
+
+
 class TestMCPHttpTransport:
     @pytest.fixture
     def router(self):
         return http_transport.create_mcp_router()
+
+    @pytest.fixture(autouse=True)
+    def authorized(self):
+        with patch("ravencode.mcp.http_transport.authorize_request", return_value=True) as mock_auth:
+            yield mock_auth
 
     def test_router_routes(self, router) -> None:
         routes = {r.path for r in router.routes}
@@ -35,19 +48,18 @@ class TestMCPHttpTransport:
         defs = [{"function": {"name": "shell", "description": "run", "parameters": {"type": "object"}}}]
         with patch("ravencode.mcp.http_transport.get_tool_definitions", return_value=defs):
             endpoint = find_route(router, "/mcp/tools", "GET")
-            result = await endpoint()
+            result = await endpoint(request=_req())
         assert result == [{"name": "shell", "description": "run", "parameters": {"type": "object"}}]
 
     async def test_tools_non_function_wrapper(self, router) -> None:
         defs = [{"name": "x", "description": "d", "parameters": {}}]
         with patch("ravencode.mcp.http_transport.get_tool_definitions", return_value=defs):
             endpoint = find_route(router, "/mcp/tools", "GET")
-            result = await endpoint()
+            result = await endpoint(request=_req())
         assert result[0]["name"] == "x"
 
     async def test_rpc_valid(self, router) -> None:
-        req = MagicMock(spec=Request)
-        req.json = AsyncMock(return_value={"method": "initialize", "id": 1, "params": {}})
+        req = _req(json=AsyncMock(return_value={"method": "initialize", "id": 1, "params": {}}))
         with patch(
             "ravencode.mcp.http_transport._mcp_server.handle_request",
             new_callable=AsyncMock,
@@ -58,36 +70,55 @@ class TestMCPHttpTransport:
         assert json.loads(resp.body)["result"]["ok"] is True
 
     async def test_rpc_parse_error(self, router) -> None:
-        req = MagicMock(spec=Request)
-        req.json = AsyncMock(side_effect=ValueError("bad json"))
+        req = _req(json=AsyncMock(side_effect=ValueError("bad json")))
         endpoint = find_route(router, "/mcp/rpc", "POST")
         resp = await endpoint(request=req)
         assert resp.status_code == 400
         assert json.loads(resp.body)["error"]["code"] == -32700
 
     async def test_rpc_invalid_request(self, router) -> None:
-        req = MagicMock(spec=Request)
-        req.json = AsyncMock(return_value=["not", "a", "dict"])
+        req = _req(json=AsyncMock(return_value=["not", "a", "dict"]))
         endpoint = find_route(router, "/mcp/rpc", "POST")
         resp = await endpoint(request=req)
         assert resp.status_code == 400
         assert json.loads(resp.body)["error"]["code"] == -32600
 
     async def test_call_tool(self, router) -> None:
-        req = MagicMock(spec=Request)
-        req.json = AsyncMock(return_value={"arguments": {"cmd": "echo hi"}})
-        with patch("ravencode.mcp.http_transport.execute_tool", new_callable=AsyncMock, return_value="hi"):
+        req = _req(json=AsyncMock(return_value={"arguments": {"cmd": "echo hi"}}))
+        with patch("ravencode.mcp.http_transport.execute_tool_public", new_callable=AsyncMock, return_value="hi"):
             endpoint = find_route(router, "/mcp/tools/{name}", "POST")
             resp = await endpoint("shell", request=req)
         assert json.loads(resp.body) == {"result": "hi"}
 
     async def test_call_tool_default_body(self, router) -> None:
-        req = MagicMock(spec=Request)
-        req.json = AsyncMock(return_value={})
-        with patch("ravencode.mcp.http_transport.execute_tool", new_callable=AsyncMock, return_value="ok"):
+        req = _req(json=AsyncMock(return_value={}))
+        with patch("ravencode.mcp.http_transport.execute_tool_public", new_callable=AsyncMock, return_value="ok"):
             endpoint = find_route(router, "/mcp/tools/{name}", "POST")
             resp = await endpoint("shell", request=req)
         assert json.loads(resp.body) == {"result": "ok"}
+
+    async def test_call_tool_requires_auth(self, router, authorized) -> None:
+        authorized.return_value = False
+        req = _req(json=AsyncMock(return_value={}))
+        endpoint = find_route(router, "/mcp/tools/{name}", "POST")
+        with pytest.raises(HTTPException) as exc:
+            await endpoint("shell", request=req)
+        assert exc.value.status_code == 401
+
+    async def test_rpc_requires_auth(self, router, authorized) -> None:
+        authorized.return_value = False
+        req = _req(json=AsyncMock(return_value={"method": "initialize", "id": 1, "params": {}}))
+        endpoint = find_route(router, "/mcp/rpc", "POST")
+        with pytest.raises(HTTPException) as exc:
+            await endpoint(request=req)
+        assert exc.value.status_code == 401
+
+    async def test_tools_requires_auth(self, router, authorized) -> None:
+        authorized.return_value = False
+        endpoint = find_route(router, "/mcp/tools", "GET")
+        with pytest.raises(HTTPException) as exc:
+            await endpoint(request=_req())
+        assert exc.value.status_code == 401
 
     async def test_events(self, router) -> None:
         endpoint = find_route(router, "/mcp/events", "GET")
@@ -131,7 +162,7 @@ class TestMCPServer:
 
     async def test_tools_call(self) -> None:
         server = MCPServer()
-        with patch("ravencode.mcp.server.execute_tool", new_callable=AsyncMock, return_value="out"):
+        with patch("ravencode.mcp.server.execute_tool_public", new_callable=AsyncMock, return_value="out"):
             result = await server.handle_request(
                 {"method": "tools/call", "id": 3, "params": {"name": "shell", "arguments": {"cmd": "x"}}}
             )

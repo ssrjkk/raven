@@ -19,7 +19,7 @@ def _auth_req(**overrides: object) -> MagicMock:
 
 @pytest.fixture
 def authed():
-    with patch("raven.core.mcp.http_transport.token_manager") as tm:
+    with patch("raven.core.mcp.auth.token_manager") as tm:
         tm.validate_token.return_value = {"user_id": "u1", "role": "admin"}
         yield tm
 
@@ -105,7 +105,7 @@ class TestMCPHttp:
 
     async def test_call_tool(self, router, authed) -> None:
         req = _auth_req(json=AsyncMock(return_value={"arguments": {"x": 1}}))
-        with patch("raven.core.mcp.http_transport.execute_tool", new=AsyncMock(return_value="done")):
+        with patch("raven.core.mcp.http_transport.execute_tool_public", new=AsyncMock(return_value="done")):
             for route in router.routes:
                 if getattr(route, "path", "") == "/mcp/tools/{name}" and "POST" in route.methods:
                     resp = await route.endpoint(name="echo", request=req)
@@ -115,7 +115,7 @@ class TestMCPHttp:
 
     async def test_call_tool_default_args(self, router, authed) -> None:
         req = _auth_req(json=AsyncMock(return_value={}))
-        with patch("raven.core.mcp.http_transport.execute_tool", new=AsyncMock(return_value="ok")):
+        with patch("raven.core.mcp.http_transport.execute_tool_public", new=AsyncMock(return_value="ok")):
             for route in router.routes:
                 if getattr(route, "path", "") == "/mcp/tools/{name}" and "POST" in route.methods:
                     resp = await route.endpoint(name="ping", request=req)

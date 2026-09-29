@@ -25,7 +25,7 @@ from raven.gateway.session_store import SessionStore
 from ravencode.runtime.agent_core import AgentConfig, ReActAgent
 from ravencode.runtime.context import Conversation
 from ravencode.runtime.multisession import get_session_manager
-from ravencode.runtime.tools import execute_tool, get_tool_definitions
+from ravencode.runtime.tools import execute_tool_public, get_tool_definitions
 
 _SESSION_TTL_SECONDS = 300
 _FLUSH_INTERVAL_SECONDS = 5
@@ -205,7 +205,7 @@ class RavenFlowDaemon:
 
         @app.post("/api/tools/{name}")
         async def execute_tool_endpoint(name: str, args: dict[str, Any]):
-            result = await execute_tool(name, args)
+            result = await execute_tool_public(name, args)
             return {"result": result[:5000]}
 
         @app.post("/api/sandbox")

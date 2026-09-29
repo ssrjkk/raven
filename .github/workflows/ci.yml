@@ -72,6 +72,36 @@ jobs:
       - name: Workspace isolation + security tests
         run: pytest tests/test_tools_file.py tests/test_ravencode_core_holes.py tests/core/test_security.py -q --no-cov --timeout=120
 
+  docker:
+    name: Docker image smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: raven:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # hatchling skips package directories that are absent from the build context without
+      # failing, so a Dockerfile that copies only part of them ships an image that imports
+      # fine for `raven` and crashes on the other entrypoints. Check the real artifact.
+      - name: Verify packaged modules import
+        run: |
+          docker run --rm raven:smoke python -c \
+            "import aios, ravencode, raven.gateway.daemon, raven.core.mcp.server"
+
+      - name: Verify console scripts
+        run: |
+          docker run --rm --entrypoint sh raven:smoke -c \
+            "command -v raven ravencode ravenflow"
+
   frontend:
     name: Frontend build
     runs-on: ubuntu-latest

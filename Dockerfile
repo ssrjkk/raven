@@ -9,35 +9,40 @@ COPY tsconfig.base.json /tsconfig.base.json
 COPY web/ ./
 RUN npm run build
 
-FROM python:3.13-slim AS base
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libgbm1 \
-    libasound2 libxshmfence1 curl \
-    && rm -rf /var/lib/apt/lists/*
-RUN groupadd -r raven && useradd -r -g raven -d /app -s /sbin/nologin raven
-
-FROM python:3.13-slim AS builder
+# --- Python wheel ---
+# Every directory in pyproject `[tool.hatch.build.targets.wheel] packages` must be copied:
+# hatchling silently skips missing ones, so a partial context produces a partial wheel.
+FROM python:3.13-slim AS wheel-builder
 ARG RAVEN_VERSION
 WORKDIR /build
 COPY pyproject.toml README.md ./
-RUN pip install --no-cache-dir build hatchling
 COPY raven/ raven/
-RUN python -m build --wheel
-RUN pip install --no-cache-dir dist/*.whl && \
-    playwright install chromium 2>/dev/null || true
+COPY aios/ aios/
+COPY ravencode/ ravencode/
+RUN pip install --no-cache-dir build \
+    && python -m build --wheel
+
+FROM python:3.13-slim AS base
+# curl is for the healthcheck only. Chromium's shared libraries used to be installed here for
+# the optional `browser` extra, which nothing in the image installs; add them back together
+# with `pip install "raven-agent[browser]" && playwright install chromium` if that changes.
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+RUN groupadd -r raven && useradd -r -g raven -d /app -s /sbin/nologin raven
+RUN pip install --no-cache-dir --upgrade pip setuptools
 
 FROM base
 ARG RAVEN_VERSION
 LABEL org.opencontainers.image.title="Raven AI" \
-      org.opencontainers.image.description="Enterprise-grade personal AI assistant" \
+      org.opencontainers.image.description="Personal AI assistant: coding agent, workflow gateway and web dashboard" \
       org.opencontainers.image.version=$RAVEN_VERSION \
       org.opencontainers.image.authors="ssrjkk (https://github.com/ssrjkk)" \
       org.opencontainers.image.source="https://github.com/ssrjkk/raven" \
       org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
-COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
-COPY --from=builder /usr/local/bin/raven /usr/local/bin/raven
+COPY --from=wheel-builder /build/dist/*.whl /tmp/
+RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
 COPY workspace/ workspace/
 COPY plugins/ plugins/
 COPY --from=web-builder /web/dist /app/web/dist
