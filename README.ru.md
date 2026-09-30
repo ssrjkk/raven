@@ -1,494 +1,225 @@
 <div align="center">
-  <h1>Raven AI</h1>
-  <p><b>by <a href="https://github.com/ssrjkk">@ssrjkk</a></b></p>
-  <p><i>2 в 1: <b>RavenCode</b> (аналог opencode — автономный coding-агент) + <b>RavenFlow</b> (аналог openclaw — персистентный workflow gateway). 15 каналов. Задачи. Мониторы. RAG. Голос. Веб-дашборд.</i></p>
 
-  <a href="#features">Возможности</a> •
-  <a href="#quickstart">Быстрый старт</a> •
-  <a href="#cli">CLI</a> •
-  <a href="#architecture">Архитектура</a> •
-  <a href="#tech-stack">Технологии</a> •
-  <a href="#license">Лицензия</a>
+# Raven
 
-  [![CI](https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=main&label=CI&logo=github)]()
-  [![Python](https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white)]()
-  [![License](https://img.shields.io/badge/license-MIT-green)]()
-  [![Channels](https://img.shields.io/badge/channels-15-8A2BE2)]()
-  [![RavenFlow](https://img.shields.io/badge/ravenflow-daemon-blue)]()
-  [![RavenCode](https://img.shields.io/badge/ravencode-agent-purple)]()
-  [![Tests](https://img.shields.io/badge/tests-4677%2B_passing-brightgreen)]()
-  [![Coverage](https://img.shields.io/codecov/c/github/ssrjkk/raven?logo=codecov)]()
-  [![Security](https://img.shields.io/badge/security-hardened-blueviolet)]()
-  [![AI-OS-MVP](https://img.shields.io/badge/aios-mvp-purple)]()
-  [![Hybrid](https://img.shields.io/badge/hybrid-web+api+desktop-orange)]()
+**от [@ssrjkk](https://github.com/ssrjkk)**
 
-  [English](README.md) •
-  [Русский](README.ru.md) •
-  [简体中文](README.zh.md) •
-  [한국어](README.ko.md) •
-  [Español](README.es.md) •
-  [日本語](README.ja.md) •
+Самостоятельно размещаемый AI-ассистент: 15 мессенджеров, автономный coding-агент и веб-дашборд
+в одном Python-процессе.
+
+[English](README.md) • **Русский**
+
+[![CI](https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ssrjkk/raven/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 </div>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/status-active--development-brightgreen" alt="Status">
-  <img src="https://img.shields.io/github/stars/ssrjkk/raven?style=social" alt="Stars">
-</p>
-
 ---
 
-## Demo
+## Что это
 
-<p align="center">
-  <i>📺 Посмотрите Raven в действии (30-секундное демо-GIF — скоро)</i>
-</p>
+Две программы с общим ядром:
 
-```text
-$ raven "объясни этот кодбаз и исправь падающий тест"
-🐦 Raven анализирует ваш проект...
-   → LSP-обогащение: обнаружено 3 языка
-   → Планирование сессии отладки...
-   → Запуск pytest — найдён 1 провал
-   → Исправление assert в test_users.py
-   → PR открыт: #42
+- **RavenCode** — coding-агент: читает репозиторий, правит файлы, запускает тесты, коммитит.
+  Контекст обогащается через серверы языков (pyright, tsserver, gopls, rust-analyzer),
+  сессии чекпоинтя́тся и откатываются, есть режимы plan/safe/fast.
+- **RavenFlow** — workflow-демон: соединяет агента с мессенджерами, маршрутизирует сообщения
+  между агентами, стримит ответы по WebSocket, выполняет рутины по расписанию и мониторы.
 
-$ raven
-🐦 Интерактивный REPL — введите задачу или /help
-  >
-```
+Под ними — общий шлюз: 15 каналов связи, планировщик задач, RAG-память (эмбеддинги + BM25,
+всё локально), голосовой ввод/вывод и веб-дашборд на React с редактором Monaco.
 
----
+## Требования
 
-## Почему Raven AI?
-
-**Raven AI** — это не просто бот. Это полноценный автоматизированный AI-ассистент уровня enterprise, работающий 24/7 на вашем сервере.
-
-Он думает. Он планирует. Он действует. Он говорит. Он работает как поток.
-
-- **Общается в 15 каналах** — Telegram, Discord, Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, веб-чат + ещё 15
-- **RavenCode агент** — автономный coding-агент (`ravencode`) с LSP-авто-обогащением, параллельными мультисессиями, режимами plan/safe/fast, 30+ инструментами
-- **RavenFlow gateway** — персистентный workflow-демон (`ravenflow`) с multi-agent роутингом, WebSocket-стримингом, управлением сессиями
-- **Canvas визуальное пространство** — рендер rich-компонентов (код, таблицы, mermaid-диаграммы, изображения, алерты) в терминале или браузере
-- **Nodes распределённое выполнение** — регистрация, удаление, broadcast и выполнение на удалённых нодах
-- **Voice I/O** — wake-word ("Raven", "Hey Raven"), STT (Whisper/Google/Azure/Vosk), TTS (ElevenLabs/gTTS/system/Edge)
-- **Выполняет задачи** — строит план из шагов, выполняет каждый инструментом, возвращает результат
-- **Следит за мониторами** — пингует сайты, проверяет цены, RSS, файлы, процессы и шлёт алерты
-- **Рутины по расписанию** — утренние бриффинги, проверка почты, сортировка файлов
-- **RAG-память** — семантический поиск по документам, PDF/code чанкинг, память разговоров
-- **Веб-дашборд** — React 19 + Monaco IDE + Tailwind
-- **Multi-user + RBAC** — администраторы, пользователи, вьюеры с разграничением доступа
-- **Политики безопасности** — 5 sandbox-профилей (main, non-main, code-exec, web-browsing, read-only), allow/deny инструментов для каждой сессии
-
----
+- Python 3.11+ и хотя бы один API-ключ LLM — или локальный Ollama/vLLM
+- Node.js 22+ только если пересобираете веб-дашборд из исходников
+- Docker опционален — вся система работает одним процессом
 
 ## Быстрый старт
 
 ```bash
-pip install raven-agent
-# Или для разработки: pip install -e .
-cp .env.example .env
-# Отредактируйте .env — добавьте хотя бы один API-ключ LLM
-raven onboard   # Интерактивный мастер настройки (LLM, Telegram, каналы)
-raven start     # Запуск всей платформы
+git clone https://github.com/ssrjkk/raven.git
+cd raven
+pip install -e .
 
-# Или используйте отдельные точки входа:
-ravencode tui   # RavenCode — интерактивный coding-агент
-ravenflow       # RavenFlow — персистентный workflow gateway
+cp .env.example .env        # впишите хотя бы один API-ключ LLM
+raven onboard               # интерактивный мастер настройки
+raven start                 # шлюз + веб-интерфейс на http://localhost:18888
 ```
 
-### Порты
+Три точки входа:
 
-| Порт | Сервис | Описание |
-|------|--------|----------|
-| **18888** | Web UI | Веб-чат, дашборд, Monaco IDE, настройки |
-| **18789** | RavenFlow Gateway | Демон multi-agent оркестратора с WebSocket-стримингом |
+| Команда | Что запускает |
+|---|---|
+| `raven start` | Шлюз: каналы, веб-дашборд на порту 18888 |
+| `ravencode tui` | Coding-агент в терминале |
+| `ravenflow` | Workflow-демон на порту 18789 |
 
-Откройте в браузере:
-- **http://localhost:18888** — веб-чат
-- **http://localhost:18888/dashboard** — дашборд
-- **http://localhost:18888/ide** — Monaco-редактор с AI-панелью
-
-### Docker
+Или через Docker:
 
 ```bash
-docker compose up
+docker compose up -d
 ```
 
-### PostgreSQL (опционально, заменяет SQLite)
+## Умеет
 
-Raven по умолчанию хранит данные сервисов в SQLite. Установите `DATABASE_URL`
-(или передайте `postgresql://` DSN как `db_path` хранилища), чтобы использовать
-PostgreSQL для всех ключевых хранилищ (задачи, мониторы, рутины, auth, сессии,
-outbox, аналитика, persister).
+**Общается** — Telegram (инлайн-кнопки, голосовые), Discord, Slack, WhatsApp, Matrix, Teams,
+Signal, IRC, LINE, Feishu, Google Chat, GitHub, GitLab, почта и встроенный веб-чат.
+Личные сообщения закрываются кодом сопряжения (pairing), поведение в группах настраивается
+на каждый канал.
+
+**Пишет код** — агент читает проект, подтягивает определения через LSP, правит файлы,
+прогоняет тесты, делает коммиты. Каждая сессия чекпоинтится, `undo_changes` откатывает
+изменения. Режим plan показывает, что он собирается сделать, не записывая ничего.
+
+**Помнит** — память разговора плюс база знаний по документам: чанкинг PDF/текста/кода,
+эмбеддинги (OpenAI или локальные) и BM25-поиск. Всё хранится локально.
+
+**Работает по расписанию** — рутины (утренние сводки, проверка почты) и мониторы, которые
+следят за URL, ценой, RSS-лентой, файлом или процессом и шлют алерт, когда условие сработало.
+
+**Переключает модели** — десять провайдеров (OpenAI, Anthropic, OpenRouter, Ollama, vLLM,
+Azure, Groq, Bedrock, Vertex AI, Copilot) за одним роутером: circuit breaker и бэкофф при
+рейт-лимитах. Если модель начала сбоить, диалог подхватывает следующая.
+
+**Остаётся безопасным** — JWT с ролями, политика allow/deny по каждому инструменту, пять
+sandbox-профилей для исполнения кода, изоляция workspace с защитой от symlink-побега,
+SSRF-проверка каждого исходящего запроса, шифрование секретов (Fernet), журнал аудита.
+Подробно — в [docs/security/overview.md](docs/security/overview.md).
+
+## Шпаргалка по CLI
 
 ```bash
-pip install "raven-agent[postgres]"   # установит asyncpg
-
-# Запуск локального Postgres (user/password/db = raven)
-docker compose -f docker-compose.postgres.yml up -d
-
-# В .env
-DATABASE_URL=postgresql://raven:raven@localhost:5432/raven
+raven start / stop / status    # управление шлюзом
+raven doctor                   # диагностика
+raven tui                      # терминальная панель
+raven agent --message "..."    # разовый вопрос
+raven code start --goal "..." --project ./my-project
+raven code review <file>       # AI-ревью файла
+raven task run "<цель>"        # многошаговая задача
+raven monitor add ...          # следить за URL / ценой / лентой / файлом / процессом
+raven routine add ...          # рутина по расписанию
+raven security audit --deep    # аудит окружения, сети, зависимостей
+raven db backup                # бэкап базы
+raven models list              # настроенные LLM-провайдеры
 ```
 
-Миграции выполняются автоматически при первом подключении; данные из SQLite не переносятся.
+Полный справочник — в самом CLI: `raven --help`, по группам — `<команда> --help`.
 
-### Web Dashboard (разработка)
+## Настройка
+
+Всё конфигурируется переменными окружения (`.env` ищется в директории проекта,
+`~/.raven/.env` и корне установки). Главное:
 
 ```bash
-cd web
-npm install
-npm run dev    # http://localhost:5173 (прокси на :18888)
+# LLM — хотя бы один провайдер
+OPENAI_API_KEY=sk-...
+# или локальный сервер:
+OLLAMA_BASE_URL=http://localhost:11434
+
+DEFAULT_MODEL=openrouter/openai/gpt-4o
+
+# Веб-интерфейс
+WEB_PORT=18888
+WEB_SECRET_KEY=<openssl rand -hex 32>
+
+# Предохранители
+TOOLS_PROFILE=messaging    # messaging | minimal | full — какие инструменты включены
+EXEC_SECURITY=deny         # deny | ask | full — политика шелл-команд
+DM_POLICY=pairing          # pairing | closed | open
+SANDBOX_MODE=non-main      # main | non-main | all | none
+
+# PostgreSQL вместо SQLite (опционально)
+DATABASE_URL=postgresql://user:pass@localhost:5432/raven
 ```
 
----
-
-## Сравнение
-
-| Возможность | Raven AI | Open Interpreter | AutoGen | ChatGPT | Copilot |
-|-------------|----------|------------------|---------|---------|---------|
-| Self-hosted | ✅ 100% | ✅ | ❌ облако | ❌ облако | ❌ облако |
-| 15 каналов | ✅ | ❌ | ❌ | ✅ только web | ❌ |
-| Coding-агент с LSP | ✅ | ❌ | ❌ | ❌ | ✅ базовый |
-| Multi-agent оркестрация | ✅ RavenFlow | ❌ | ✅ | ❌ | ❌ |
-| Голос + wake word | ✅ | ❌ | ❌ | ✅ Voice | ❌ |
-| Мониторы и алерты | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Рутины по расписанию | ✅ | ❌ | ❌ | ❌ | ❌ |
-| RAG (local-first) | ✅ JSON+BM25 local | ✅ | ❌ | ❌ | ❌ |
-| RBAC multi-user | ✅ | ❌ | ❌ | ❌ | ❌ |
-| 5 sandbox-профилей | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Canvas workspace | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Распределённый exec | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Офлайн-режим | ✅ `--ghost` | ✅ | ❌ | ❌ | ❌ |
-| Веб-дашборд | ✅ React + Monaco | ❌ только CLI | ❌ | ✅ | ✅ IDE |
-| Open source | ✅ MIT | ✅ AGPL | ✅ Apache 2 | ❌ | ❌ |
-| Бесплатно | ✅ | ✅ | ✅ | ❌ $20/мес | ❌ $10/мес |
-
----
-
-## Возможности
-
-| Возможность | Описание |
-|-------------|----------|
-| **15 каналов** | Telegram (голос→текст через Whisper, инлайн-кнопки), Discord (слеш-команды + embed), Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat + ещё 15 (Telegram API, Discord API, Slack RTM, WhatsApp Cloud, Matrix CS, Google Chat, Signal, IRC, Teams, Feishu, LINE, WebChat, Email IMAP, SMS Twilio, Alexa, Google Home, Discord Webhook, Telegram Webhook, Custom Webhook) |
-| **RavenFlow Gateway** | Персистентный workflow-демон (`ravenflow`) на порту 18789 с multi-agent роутингом, управлением сессиями, WebSocket-стримингом, dispatch по происхождению канала, sandbox-политиками |
-| **RavenCode Agent** | Автономный coding-агент (`ravencode`) — интерактивный REPL, стриминг ответов, инлайн вызовы инструментов, LSP-обогащение. Команды: `/multisession`, `/plan`, `/safe`, `/fast`, `/enrich`, `/exit` |
-| **LSP Авто-обогащение** | `enrich_context()` сканирует проект, определяет языки, запускает LSP-серверы (pyright, typescript-language-server, gopls, rust-analyzer), собирает символы документа |
-| **Параллельные сессии** | `SessionManager` с конкурентными `ManagedSession`-задачами, abort/cleanup, singleton-паттерн |
-| **Canvas Виртуальное пространство** | Рендер rich-компонентов: текст, код, таблицы, mermaid-диаграммы, ссылки, изображения, списки, алерты. Вывод в терминал или HTML-браузер |
-| **Nodes Распределённое выполнение** | Регистрация/удаление удалённых нод, выполнение задач, broadcast на все зарегистрированные эндпоинты |
-| **Голосовой ввод/вывод** | Wake word ("Raven", "Hey Raven", "OK Raven"), STT (Whisper, Google, Azure, Vosk), TTS (ElevenLabs, gTTS, системный SAPI, Edge), запись с микрофона |
-| **Sandbox Security Policy** | 5 политик (main, non-main, code-exec, web-browsing, read-only) с allow/deny инструментов, сетевыми ограничениями, лимитами ресурсов. Меняются на лету |
-| **Cron / Планировщик** | Планирование повторяющихся задач через `cron_schedule`/`cron_list`/`cron_cancel` (на базе APScheduler) |
-| **Unified Launcher** | `main.py` — запускает все сервисы (Raven, RavenFlow, Web UI) с graceful shutdown |
-| **Task Engine** | Многошаговый планировщик — LLM разбивает цель на шаги, выбирает инструменты, выполняет, возвращает результат |
-| **Monitor Engine** | 5 типов мониторов: HTTP(S), цена актива, RSS-лента, файл/директория, процесс. Условия срабатывания, алерты, история проверок |
-| **Routines** | Автоматические рутины по расписанию: send_briefing, check_email, organize_files, send_message |
-| **RAG Knowledge Base** | Embedding engine (OpenAI + локальный), векторное хранилище, чанкинг документов (PDF/TXT/код), семантический retrieval |
-| **Workspace Skills** | Навыки в `workspace/skills/`: криптовалюта, утренний бриффинг, веб-поиск. Авто-загрузка через SKILL.md |
-| **Web Dashboard + IDE** | React 19 + Vite + Tailwind + Monaco Editor: Dashboard, Chat, Tasks, Monitors, Routines, Code Sessions, Settings, IDE (редактор + терминал + AI-панель) |
-| **Auth & RBAC** | Мультипользовательская аутентификация, 4 роли (admin/user/viewer/banned), 16 пермишенов, Bearer-токены |
-| **Enterprise инфраструктура** | Circuit breaker, HTTP-пул, rate limiter, retry с экспоненциальной задержкой, audit-лог (20 типов событий), Prometheus-метрики, health checks |
-| **Plugin-система** | 10 плагинов — browser, code, cron, files, git, memory, api, ocr, process, sessions. Sandbox с capability-based контролем |
-| **Safety** | DM pairing, allowlist каналов, Fernet-шифрование секретов, rate limiting, subprocess/Docker sandbox |
-| **Security Policy** | ToolPolicyEvaluator, exec.security (deny/ask/full), приоритет deny > allow, workspaceOnly FS, contextVisibility, sanitize_external_content, security audit CLI |
-
----
-
-## CLI
-
-```
-raven start                    Запуск шлюза
-raven stop                     Остановка
-raven status                   Статус системы
-raven doctor                   Диагностика
-raven onboard                  Мастер настройки
-raven agent --message ...      Отправить сообщение агенту
-raven pairing list             Запросы на привязку
-raven pairing approve CODE     Подтвердить пользователя
-raven models list              Доступные модели
-raven plugins list             Загруженные плагины
-raven history SESSION_ID       История сообщений
-raven db migrate               Миграции БД
-raven db backup                Бекап БД
-raven task list                Список задач
-raven task run <goal>          Запустить задачу
-raven task show <id>           Детали задачи
-raven task cancel <id>         Отменить задачу
-raven monitor list             Список мониторов
-raven monitor add ...          Добавить монитор
-raven code                     Интерактивный REPL кодинга
-raven code --project <dir>     REPL в директории проекта
-raven code --plan              Режим только планирования (без записи)
-raven code --safe              Безопасный режим (подтверждения на запись)
-raven code --parallel          Параллельные мультисессии
-raven code index <path>        Индексация кода
-raven code search <query>      Поиск по коду
-raven code review <file>       Ревью файла
-raven routine list             Список рутин
-raven routine add ...          Добавить рутину
-raven security audit           Проверка безопасности
-raven security audit --deep    Глубокая проверка (сеть, env, зависимости)
-raven security audit --fix     Авто-исправление проблем
-raven flow serve --port 18789  Запуск RavenFlow gateway
-raven flow ask <message>       Отправить сообщение в запущенный gateway
-raven flow sessions            Список активных Flow-сессий
-
-ravencode tui                  Интерактивный TUI
-ravencode serve                Headless HTTP-сервер
-ravencode web                  Веб-интерфейс
-ravencode session list         Список сохранённых сессий
-ravencode auth login           Настроить API-ключ
-
-ravenflow --port 18789         Запуск RavenFlow gateway daemon
-ravenflow serve --port 18789   Запуск RavenFlow gateway daemon
-```
-
-## Chat Commands
-
-```
-/status               Состояние бота
-/new                  Новый диалог
-/reset                Сброс сессии
-/compact              Сжать историю
-/task <goal>          Выполнить задачу
-/monitor list         Список мониторов
-/monitor add <type> <target>  Добавить монитор
-/code index [path]    Индексация кода
-/code search <query>  Поиск по коду
-/code review <file>   Ревью файла
-/routine list         Список рутин
-/routine add <action> <sched>  Добавить рутину
-/help                 Все команды
-/pair <code>          Привязка пользователя
-```
-
----
+Полный список с описаниями — в [.env.example](.env.example).
 
 ## Архитектура
 
-```mermaid
-flowchart TB
-    subgraph Clients["Клиенты и каналы"]
-        TG[Telegram]
-        DC[Discord]
-        SL[Slack]
-        WA[WhatsApp]
-        WB[Web Dashboard\nReact 19 + Vite]
-        CLI[CLI / TUI]
-    end
-
-    subgraph Core["Ядро системы"]
-        GW["Raven Gateway\n(Python)"]
-        AGENT["ReAct Agent\nFSM States"]
-        TOOLS["Tool Registry\nPlugin System"]
-        MEM["Memory / Context"]
-        CB["Circuit Breaker"]
-        RL["Rate Limiter"]
-        AUTH["Auth Middleware\nJWT + RBAC"]
-    end
-
-    subgraph Observability["Наблюдаемость"]
-        OTEL["OpenTelemetry\nTraces + Metrics"]
-    end
-
-    subgraph Storage["Слой данных"]
-        SQLITE["SQLite\nAuth / Monitor / Task DBs"]
-        VSTORE["JSON embeddings\n+ BM25"]
-        FS[(File System\nWorkspace / Data)]
-    end
-
-    subgraph LLM["LLM Провайдеры"]
-        OLLAMA["Ollama (Local)"]
-        OR["OpenRouter"]
-        ANTH["Anthropic"]
-        OPENAI["OpenAI"]
-    end
-
-    TG --> GW
-    DC --> GW
-    SL --> GW
-    WA --> GW
-    WB --> GW
-    CLI --> GW
-
-    GW --> CB
-    CB --> RL
-    RL --> AUTH
-
-    AUTH --> AGENT
-    GW --> AGENT
-    AGENT --> TOOLS
-    AGENT --> MEM
-
-    OLLAMA -.-> OR
-    OR -.-> ANTH
-    ANTH -.-> OPENAI
-
-    GW -->|traces/metrics| OTEL
-
-    AGENT --> SQLITE
-    AGENT --> FS
-
-    style Clients fill:#1a1a2e,stroke:#16213e
-    style Core fill:#0f3460,stroke:#1a1a2e
-    style Observability fill:#1a1a3e,stroke:#2a2a5e
-    style Storage fill:#1a3a2e,stroke:#16213e
-    style LLM fill:#3a1a1a,stroke:#2a0a0a
+```
+Каналы (15)                   Telegram │ Discord │ Slack │ … │ Веб-чат
+                                  │
+Шлюз (FastAPI)                auth → rate limit → circuit breaker → маршрутизация агентов
+                                  │
+        ┌─────────────────┬──────┴────────┬──────────────────┐
+  RavenCode агент    Планировщик     Рутины и мониторы    RAG-память
+        │                 │               │                  │
+  Реестр инструментов (66) — файлы, bash, git, веб, БД, canvas, cron
+        │
+  SQLite / PostgreSQL          LLM-роутер → Ollama, OpenRouter, OpenAI, Anthropic, …
 ```
 
-## Project Tree
+Один процесс обслуживает всё. Рядом можно поднять PostgreSQL, NATS или стек
+Prometheus/Grafana — см. [docker-compose.postgres.yml](docker-compose.postgres.yml)
+и [docker-compose.monitoring.yml](docker-compose.monitoring.yml).
+
+## Структура проекта
 
 ```
-raven/
-├── raven/                      # Main Python package (shared core)
-│   ├── agent/                  ReAct agent, multi-agent registry, workspace prompts
-│   ├── gateway/                RavenFlow daemon, routing engine, WebSocket streaming
-│   ├── core/
-│   │   ├── auth/               Authentication, RBAC (4 roles, 16 permissions), API tokens
-│   │   ├── security/           ToolPolicyEvaluator, SandboxPolicy, SecurityAudit, PII redaction
-│   │   ├── task_engine/        Planner, executor, task storage
-│   │   ├── monitor/            HTTP, price, RSS, file, process monitors + conditions
-│   │   ├── rag/                Embedding engine, chunking, vector store
-│   │   ├── llm.py              LLM providers (OpenAI, Anthropic, Ollama, OpenRouter) + failover
-│   │   ├── config.py           Pydantic Settings + YAML config
-│   │   └── admin_api.py        Admin REST API
-│   ├── channels/               15 channels, registry, message bus, CircuitBreakerChannel
-│   ├── cli/                    CLI (click + rich) — raven, ravenflow
-│   ├── tools/                  Canvas, Nodes, Plugin tools
-│   ├── tui/                    Terminal UI (textual)
-│   ├── voice/                  Wake word detection, STT, TTS modules
-│   └── workspace/              Workspace manager, skills, plugin loader
-├── ravencode/                  # RavenCode — autonomous coding agent (opencode analog)
-│   ├── runtime/
-│   │   ├── agent_core.py       ReActAgent, AgentConfig, tool orchestration
-│   │   ├── lsp.py              LSP auto-enrichment (pyright, tsserver, gopls, rust-analyzer)
-│   │   ├── multisession.py     Parallel multi-session manager
-│   │   └── tools.py            Tool registry (read, write, edit, bash, canvas, nodes, cron, sandbox, talk)
-│   ├── cli/                    ravencode CLI (tui, serve, web, session, auth, integrations)
-│   ├── agents/                 Agent orchestration, planner, debugger, coder
-│   ├── api/                    OpenAI-compatible API layer
-│   ├── config/                 Provider config, model registry
-│   ├── integrations/           GitHub Actions, GitLab CI integration
-│   └── mcp/                    MCP protocol support
-├── web/                        React 19 + Vite + Tailwind dashboard + Monaco IDE
-├── deploy/                     Docker, systemd, Observability
-├── scripts/                    Build scripts, EXE builder
-├── aios/                       AI-OS-MVP agent framework
-├── tests/                      pytest tests (unit + integration + e2e)
-└── plugins/                    User plugins
+raven/        шлюз: каналы, CLI, безопасность, задачи, мониторы, RAG, рутины
+ravencode/    coding-агент: ReAct-цикл, LSP, сессии, 66 инструментов
+aios/         FastAPI-мост для веб-IDE
+web/          дашборд на React 19 + Vite (SPA)
+extension/    браузерное расширение (MV3) + расширение VS Code
+docs/         документация разработчика (архитектура, безопасность, каналы)
+tests/        pytest-набор (unit, integration, e2e)
 ```
 
-## Tech Stack
-
-| Слой | Технология |
-|------|-----------|
-| **Backend** | Python 3.11+, FastAPI, asyncio, SQLite (по умолчанию) + PostgreSQL (опционально) |
-| **LLM** | Ollama (local) → OpenRouter → Anthropic → OpenAI (failover) |
-| **Memory** | SQLite / PostgreSQL + JSON vector store (embeddings + BM25) |
-| **RAG** | JSON vector store, local BM25 + embeddings |
-| **Auth** | bcrypt, JWT (HS256), RBAC (4 роли, 16 пермишенов) |
-| **Frontend** | React 19, Vite 6, Tailwind CSS 4, react-router-dom, Monaco Editor |
-| **Channels** | python-telegram-bot, discord.py, slack-sdk, Matrix (HTTP API), IRC asyncio, 15 registry |
-| **RavenFlow** | FastAPI daemon (порт 18789), routing engine, WebSocket-стриминг, multi-agent dispatch |
-| **RavenCode** | Интерактивный REPL, LSP авто-обогащение (pyright/tsserver/gopls/rust-analyzer), параллельные сессии, режимы plan/safe/fast, 30+ инструментов |
-| **Canvas** | Рендер rich-компонентов (код, таблица, mermaid, изображение, ссылка, список, алерт), HTML + браузер |
-| **Nodes** | Распределённый реестр нод, broadcast-выполнение, async HTTP dispatch |
-| **Голос** | WakeWordDetector (speech_recognition), Whisper/Google/Azure/Vosk STT, ElevenLabs/gTTS/SAPI/Edge TTS |
-| **Sandbox Policy** | 5 профилей политик (main/non-main/code-exec/web-browsing/read-only), runtime allow/deny |
-| **Message Broker** | NATS + JetStream (опционально, для распределённого режима) |
-| **Resilience** | Circuit breaker, rate limiter, retry с экспоненциальной задержкой, audit-лог (20 типов событий), Prometheus-метрики, health checks |
-| **Observability** | OpenTelemetry (traces + metrics), health/ready probes |
-| **Security** | Rate limiting, JWT auth, DM pairing, Fernet encryption, RBAC, plugin sandbox, ToolPolicyEvaluator (deny/allow), exec security policy (deny/ask/full), contextVisibility, workspace isolation, security audit CLI |
-| **CI/CD** | GitHub Actions — parallel lint + typecheck + test, Allure reporting, Codecov |
-| **Deploy** | Docker, docker-compose, systemd |
-| **Testing** | pytest (4677+ тестов, Allure reporting), Vitest (React) |
-
----
-
-## RavenCode — Terminal Coding Agent
-
-Raven AI включает `raven code` — полнофункциональный интерактивный терминальный coding-агент:
+## Разработка
 
 ```bash
-# Запуск REPL
-raven code --project ./my-project
+pip install -e ".[dev]"
+cd web && npm install && cd ..
 
-# В REPL:
-raven@project> создай REST API на FastAPI
-# ... стримит ответ, делает вызовы инструментов, вносит правки в файлы
-
-# Встроенные команды:
-/help          Показать доступные команды
-/multisession  Запустить подзадачи параллельно
-/plan          Режим только планирования (без записи)
-/safe          Безопасный режим (подтверждение перед записью)
-/fast          Быстрый режим (без обогащения)
-/enrich        Обновить LSP-анализ
-/session <id>  Переключиться на параллельную сессию
-/exit          Выход
+python scripts/check_all.py          # ruff + mypy + импорты + все тесты
+python scripts/check_all.py --quick  # только линт + типы + импорты
 ```
 
-### RavenFlow Gateway
+CI гоняет тот же набор на каждый push: Linux (Python 3.11 и 3.12), Windows, сборка фронтенда,
+интеграция с Postgres, E2E, проверка зависимостей, поиск секретов, CodeQL и сборка Docker-образа
+с проверкой импортов внутри него.
 
-Multi-agent оркестратор-демон с WebSocket-стримингом:
+## Развёртывание
 
 ```bash
-# Запуск gateway (отдельная команда)
-ravenflow --port 18789
+# Docker
+docker compose up -d
 
-# Или через основной CLI
-raven flow serve --port 18789
+# systemd
+sudo cp deploy/raven.service /etc/systemd/system/
+sudo systemctl enable --now raven
 
-# Отправить сообщение агенту
-raven flow ask "суммаризуй README"
-
-# Список активных сессий
-raven flow sessions
+# macOS
+cp deploy/com.raven.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.raven.plist
 ```
 
-### Canvas Visual Workspace
+## Если что-то не работает
 
-Рендер rich-визуальных компонентов прямо из агента:
-
-```python
-await canvas_render([
-    {"type": "code", "language": "typescript", "content": "const x = 1"},
-    {"type": "table", "headers": ["Name", "Value"], "rows": [["a", "1"]]},
-    {"type": "mermaid", "content": "graph TD; A-->B"},
-])
-```
-
-### Unified Launcher
-
-Единый лаунчер `main.py` запускает все сервисы:
 ```bash
-python main.py --web-port 5173 --flow-port 18789
+raven doctor          # проверяет конфиг, БД, провайдеров, каналы
+tail -f data/raven.log
 ```
 
----
+- **Порт 18888 занят** — задайте `WEB_PORT=18889` в `.env`.
+- **Ошибки LLM** — `raven models list` покажет, что настроено; проверьте ключи и квоты.
+- **База данных** — проверьте `DATABASE_URL`; контейнер PostgreSQL: `docker compose -f docker-compose.postgres.yml up -d`.
+
+## Документация
+
+- [Архитектура](docs/concepts/architecture.md)
+- [English version](README.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
+- [License](LICENSE)
 
 ## Контакты
 
-<div align="center">
-  <p>
-    <b>Raven AI</b> — разрабатывается <a href="https://github.com/ssrjkk">@ssrjkk</a>
-  </p>
-  <p>
-    <a href="https://github.com/ssrjkk/raven">GitHub</a> •
-    <a href="https://t.me/ssrjkk">Telegram</a> •
-    <a href="mailto:ray013lefe@gmail.com">ray013lefe@gmail.com</a> •
-    <a href="https://t.me/ssrjkk">@ssrjkk</a>
-  </p>
-  <p>
-    Есть идея или баг? → <a href="https://github.com/ssrjkk/raven/issues">Откройте issue</a>
-  </p>
-  <p>
-    Хотите внести вклад? → <a href="https://github.com/ssrjkk/raven/pulls">Pull Request</a>
-  </p>
-  <p><i>Создан для разработчиков, которым нужен личный AI 24/7</i></p>
-</div>
+- **GitHub:** https://github.com/ssrjkk/raven
+- **Issues:** https://github.com/ssrjkk/raven/issues
 
-## License
+## Лицензия
 
-MIT © 2026 [@ssrjkk](https://github.com/ssrjkk)
+MIT — см. [LICENSE](LICENSE).
