@@ -213,7 +213,7 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]"
 
-      - name: Run E2E tests with Allure
+      - name: Run E2E tests
         env:
           RAVEN_ENV: testing
           RAVEN_LLM_PROVIDER: mock
@@ -221,21 +221,14 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
         run: pytest tests/e2e/ -v --cov-report=xml:coverage-e2e.xml --cov-fail-under=0
 
-      - name: Generate Allure report
+      # The simple-elf/allure-report-action image build is broken upstream (issue #72),
+      # and GitHub Pages is not enabled for this repo, so the report had nowhere to go.
+      - name: Upload Allure results
         if: always()
-        uses: simple-elf/allure-report-action@v1.15
+        uses: actions/upload-artifact@v5
         with:
-          allure_results: allure-results
-          allure_history: allure-history
-
-      - name: Publish Allure report to gh-pages
-        if: always()
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: allure-history
-          destination_dir: allure-report
-          keep_files: true
+          name: allure-results
+          path: allure-results
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -261,6 +254,8 @@ jobs:
 
       - name: Gitleaks scan
         uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install project dependencies
         run: pip install -e ".[dev]"
