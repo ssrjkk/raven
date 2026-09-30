@@ -26,7 +26,7 @@ FROM python:3.13-slim AS base
 # curl is for the healthcheck only. Chromium's shared libraries used to be installed here for
 # the optional `browser` extra, which nothing in the image installs; add them back together
 # with `pip install "raven-agent[browser]" && playwright install chromium` if that changes.
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+RUN apt-get update && apt-get install -y --no-install-recommends curl libpcre2-8-0 \
     && rm -rf /var/lib/apt/lists/*
 RUN groupadd -r raven && useradd -r -g raven -d /app -s /sbin/nologin raven
 RUN pip install --no-cache-dir --upgrade pip setuptools
