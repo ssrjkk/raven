@@ -53,6 +53,7 @@ The three entry points:
 | `raven start` | The gateway: channels, web dashboard on port 18888 |
 | `ravencode tui` | The coding agent in a terminal session |
 | `ravenflow` | The workflow daemon on port 18789 |
+| `raven-mcp` | MCP server (stdio) for Claude Desktop, Qoder, opencode, Cursor |
 
 Or with Docker:
 
@@ -163,6 +164,25 @@ extension/    browser extension (MV3) + VS Code extension
 docs/         developer docs (architecture, security, channels)
 tests/        pytest suite (unit, integration, e2e)
 ```
+
+## Use it from your editor
+
+Raven is also an MCP server — Claude Desktop, Qoder, opencode, Cursor, Windsurf and any other
+MCP client can call its 66 tools directly:
+
+```json
+{
+  "mcpServers": {
+    "raven": {
+      "command": "raven-mcp",
+      "args": ["--workspace", "/path/to/your/project"]
+    }
+  }
+}
+```
+
+Ready-to-paste configs for each client, the HTTP transport, and the workspace-isolation rules
+are in [docs/mcp.md](docs/mcp.md).
 
 ## Development
 

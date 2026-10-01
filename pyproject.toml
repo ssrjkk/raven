@@ -101,6 +101,8 @@ all = ["raven-agent[discord,slack,docker,secrets,service-win,tui,tracing,voice,d
 raven = "raven.cli.main:cli"
 ravencode = "ravencode.cli.main:cli"
 ravenflow = "raven.gateway.daemon:main"
+raven-mcp = "raven.core.mcp.__main__:main"
+ravencode-mcp = "ravencode.mcp.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -55,6 +55,7 @@ raven start                 # шлюз + веб-интерфейс на http://l
 | `raven start` | Шлюз: каналы, веб-дашборд на порту 18888 |
 | `ravencode tui` | Coding-агент в терминале |
 | `ravenflow` | Workflow-демон на порту 18789 |
+| `raven-mcp` | MCP-сервер (stdio) для Claude Desktop, Qoder, opencode, Cursor |
 
 Или через Docker:
 
@@ -166,6 +167,25 @@ extension/    браузерное расширение (MV3) + расширен
 docs/         документация разработчика (архитектура, безопасность, каналы)
 tests/        pytest-набор (unit, integration, e2e)
 ```
+
+## Использование из редактора
+
+Raven работает и как MCP-сервер — Claude Desktop, Qoder, opencode, Cursor, Windsurf и любой
+другой MCP-клиент могут вызывать его 66 инструментов напрямую:
+
+```json
+{
+  "mcpServers": {
+    "raven": {
+      "command": "raven-mcp",
+      "args": ["--workspace", "/путь/к/проекту"]
+    }
+  }
+}
+```
+
+Готовые конфиги для каждого клиента, HTTP-транспорт и правила изоляции workspace —
+в [docs/mcp.md](docs/mcp.md).
 
 ## Разработка
 

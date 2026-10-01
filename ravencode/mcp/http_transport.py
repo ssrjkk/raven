@@ -41,6 +41,8 @@ def create_mcp_router() -> APIRouter:
                 {"jsonrpc": "2.0", "error": {"code": -32600, "message": "Invalid Request"}}, status_code=400
             )
         result = await _mcp_server.handle_request(body)
+        if result is None:
+            return JSONResponse(None)
         return JSONResponse(result)
 
     @router.get("/tools")

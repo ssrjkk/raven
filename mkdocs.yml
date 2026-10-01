@@ -27,6 +27,7 @@ nav:
   - Core Concepts:
     - Architecture: concepts/architecture.md
   - Configuration: configuration.md
+  - MCP: mcp.md
   - CLI: cli.md
   - Plugins: plugins.md
   - Security: security/overview.md
