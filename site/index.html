@@ -15,41 +15,161 @@
             </div>
         </div>
 
-        <section class="content-section" data-scroll-start="0" data-scroll-end="0.2">
+        <section class="content-section" data-scroll-start="0" data-scroll-end="0.15">
             <div class="content-inner">
                 <h1>Raven</h1>
-                <p class="subtitle">AI Gateway for Claude, Qoder, opencode</p>
-                <p class="description">Unified MCP server that connects your editors to 66+ tools through a single protocol.</p>
+                <p class="subtitle">AI Gateway with MCP Protocol</p>
+                <p class="description">Connect Claude Desktop, Qoder, opencode, Cursor to 66+ tools through unified MCP server. One protocol, any editor, full workspace access.</p>
+                <div class="badges">
+                    <span class="badge">MCP 2025-03-26</span>
+                    <span class="badge">66+ Tools</span>
+                    <span class="badge">Stdio + HTTP</span>
+                </div>
             </div>
         </section>
 
-        <section class="content-section" data-scroll-start="0.2" data-scroll-end="0.4">
+        <section class="content-section" data-scroll-start="0.15" data-scroll-end="0.35">
             <div class="content-inner">
-                <h2>One Protocol</h2>
-                <p>MCP 2025-03-26 over stdio or HTTP. Drop-in configs for Claude Desktop, Qoder, Cursor, Windsurf, Cline.</p>
+                <h2>Quick Start</h2>
+                <div class="code-block">
+                    <div class="code-header">Install & Run</div>
+                    <pre><code>pip install -e ".[dev]"
+raven-mcp --workspace /path/to/project</code></pre>
+                </div>
+                <p>Add to Claude Desktop config (<code>claude_desktop_config.json</code>):</p>
+                <div class="code-block">
+                    <pre><code>{
+  "mcpServers": {
+    "raven": {
+      "command": "raven-mcp",
+      "args": ["--workspace", "D:\\your\\project"]
+    }
+  }
+}</code></pre>
+                </div>
             </div>
         </section>
 
-        <section class="content-section" data-scroll-start="0.4" data-scroll-end="0.6">
+        <section class="content-section" data-scroll-start="0.35" data-scroll-end="0.55">
             <div class="content-inner">
-                <h2>Workspace Isolation</h2>
-                <p>Tools operate within bounded directories. No path traversal, no accidental writes outside scope.</p>
+                <h2>What You Get</h2>
+                <div class="tools-grid">
+                    <div class="tool-category">
+                        <h3>File Operations</h3>
+                        <ul>
+                            <li>read — Read files with line numbers</li>
+                            <li>write — Create/overwrite files</li>
+                            <li>edit — Surgical string replacements</li>
+                            <li>glob — Pattern-based file search</li>
+                        </ul>
+                    </div>
+                    <div class="tool-category">
+                        <h3>Shell & Code</h3>
+                        <ul>
+                            <li>bash — Execute commands (timeout support)</li>
+                            <li>lint — Run linters (ruff, eslint)</li>
+                            <li>test — Run test suites</li>
+                            <li>format — Code formatters</li>
+                        </ul>
+                    </div>
+                    <div class="tool-category">
+                        <h3>Web & Search</h3>
+                        <ul>
+                            <li>web_search — Search the web</li>
+                            <li>web_fetch — Fetch & parse URLs</li>
+                            <li>browser — Full browser automation</li>
+                            <li>screenshot — Capture pages</li>
+                        </ul>
+                    </div>
+                    <div class="tool-category">
+                        <h3>Integrations</h3>
+                        <ul>
+                            <li>github — Issues, PRs, code search</li>
+                            <li>git — Commits, diffs, history</li>
+                            <li>mcp — Connect other MCP servers</li>
+                            <li>custom — Add your own tools</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
         </section>
 
-        <section class="content-section" data-scroll-start="0.6" data-scroll-end="0.8">
+        <section class="content-section" data-scroll-start="0.55" data-scroll-end="0.75">
             <div class="content-inner">
-                <h2>66+ Tools</h2>
-                <p>File operations, shell commands, web search, browser automation, MCP connectors — all through one interface.</p>
+                <h2>Real Example</h2>
+                <p>Ask Claude to fix a bug using Raven tools:</p>
+                <div class="code-block">
+                    <div class="code-header">User → Claude Desktop</div>
+                    <pre><code>Fix the authentication bug in src/auth.py</code></pre>
+                </div>
+                <div class="code-block">
+                    <div class="code-header">Claude uses Raven tools</div>
+                    <pre><code>1. read(path="src/auth.py")
+2. bash("grep -n 'login' src/auth.py")
+3. edit(path="src/auth.py", old="...", new="...")
+4. bash("pytest tests/test_auth.py")
+5. bash("git add src/auth.py && git commit -m 'fix: auth'")</code></pre>
+                </div>
+                <p class="highlight">Claude sees your code, runs tests, commits fixes — all through MCP.</p>
             </div>
         </section>
 
-        <section class="content-section" data-scroll-start="0.8" data-scroll-end="1.0">
+        <section class="content-section" data-scroll-start="0.75" data-scroll-end="0.9">
             <div class="content-inner">
-                <h2>Install</h2>
-                <pre><code>pip install -e ".[dev]"
-raven-mcp --workspace .</code></pre>
-                <p class="cta"><a href="https://github.com/ssrjkk/raven">GitHub →</a></p>
+                <h2>Editor Support</h2>
+                <div class="editor-list">
+                    <div class="editor-item">
+                        <strong>Claude Desktop</strong>
+                        <span>Native MCP support</span>
+                    </div>
+                    <div class="editor-item">
+                        <strong>Qoder</strong>
+                        <span>Built-in MCP client</span>
+                    </div>
+                    <div class="editor-item">
+                        <strong>Cursor</strong>
+                        <span>Settings → MCP → Add Server</span>
+                    </div>
+                    <div class="editor-item">
+                        <strong>Windsurf</strong>
+                        <span>MCP configuration</span>
+                    </div>
+                    <div class="editor-item">
+                        <strong>Cline</strong>
+                        <span>VS Code extension</span>
+                    </div>
+                    <div class="editor-item">
+                        <strong>opencode</strong>
+                        <span>Config file support</span>
+                    </div>
+                </div>
+                <p class="cta-small">Full setup guide: <a href="https://github.com/ssrjkk/raven/blob/main/docs/mcp.md">docs/mcp.md</a></p>
+            </div>
+        </section>
+
+        <section class="content-section" data-scroll-start="0.9" data-scroll-end="1.0">
+            <div class="content-inner">
+                <h2>Open Source</h2>
+                <p>Raven is MIT licensed. Self-hosted, no telemetry, full control.</p>
+                <div class="links">
+                    <a href="https://github.com/ssrjkk/raven" class="link-button">GitHub Repository</a>
+                    <a href="https://github.com/ssrjkk/raven/blob/main/README.md" class="link-button">Documentation</a>
+                    <a href="https://github.com/ssrjkk/raven/blob/main/docs/mcp.md" class="link-button">MCP Setup Guide</a>
+                </div>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-value">66+</div>
+                        <div class="stat-label">Tools</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">15</div>
+                        <div class="stat-label">Channels</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">100%</div>
+                        <div class="stat-label">Open Source</div>
+                    </div>
+                </div>
             </div>
         </section>
     </div>
