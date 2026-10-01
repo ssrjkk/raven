@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raven — AI Gateway for Editors</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="scroll-container">
+        <div class="animation-viewport">
+            <canvas id="frame-canvas"></canvas>
+            <div class="progress-bar">
+                <div class="progress-fill"></div>
+            </div>
+        </div>
+
+        <section class="content-section" data-scroll-start="0" data-scroll-end="0.2">
+            <div class="content-inner">
+                <h1>Raven</h1>
+                <p class="subtitle">AI Gateway for Claude, Qoder, opencode</p>
+                <p class="description">Unified MCP server that connects your editors to 66+ tools through a single protocol.</p>
+            </div>
+        </section>
+
+        <section class="content-section" data-scroll-start="0.2" data-scroll-end="0.4">
+            <div class="content-inner">
+                <h2>One Protocol</h2>
+                <p>MCP 2025-03-26 over stdio or HTTP. Drop-in configs for Claude Desktop, Qoder, Cursor, Windsurf, Cline.</p>
+            </div>
+        </section>
+
+        <section class="content-section" data-scroll-start="0.4" data-scroll-end="0.6">
+            <div class="content-inner">
+                <h2>Workspace Isolation</h2>
+                <p>Tools operate within bounded directories. No path traversal, no accidental writes outside scope.</p>
+            </div>
+        </section>
+
+        <section class="content-section" data-scroll-start="0.6" data-scroll-end="0.8">
+            <div class="content-inner">
+                <h2>66+ Tools</h2>
+                <p>File operations, shell commands, web search, browser automation, MCP connectors — all through one interface.</p>
+            </div>
+        </section>
+
+        <section class="content-section" data-scroll-start="0.8" data-scroll-end="1.0">
+            <div class="content-inner">
+                <h2>Install</h2>
+                <pre><code>pip install -e ".[dev]"
+raven-mcp --workspace .</code></pre>
+                <p class="cta"><a href="https://github.com/ssrjkk/raven">GitHub →</a></p>
+            </div>
+        </section>
+    </div>
+
+    <script src="scroll-animation.js"></script>
+</body>
+</html>

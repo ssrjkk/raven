@@ -1,0 +1,160 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Courier New', monospace;
+    background: #0a0a0a;
+    color: #e0e0e0;
+    overflow-x: hidden;
+}
+
+.scroll-container {
+    position: relative;
+}
+
+.animation-viewport {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    z-index: 1;
+    background: #000;
+}
+
+#frame-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+.progress-bar {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 200px;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 1px;
+}
+
+.progress-fill {
+    height: 100%;
+    width: 0%;
+    background: #00ff41;
+    border-radius: 1px;
+    transition: width 0.1s ease-out;
+}
+
+.content-section {
+    position: relative;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.content-inner {
+    max-width: 800px;
+    padding: 2rem;
+    background: rgba(10, 10, 10, 0.85);
+    border: 1px solid rgba(0, 255, 65, 0.3);
+    border-radius: 4px;
+    backdrop-filter: blur(8px);
+    opacity: 0;
+    transform: translateY(40px);
+    transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+    pointer-events: auto;
+}
+
+.content-section.active .content-inner {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+h1 {
+    font-size: 4rem;
+    color: #00ff41;
+    text-shadow: 0 0 20px rgba(0, 255, 65, 0.5);
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.1em;
+}
+
+h2 {
+    font-size: 2.5rem;
+    color: #00ff41;
+    margin-bottom: 1rem;
+    text-shadow: 0 0 15px rgba(0, 255, 65, 0.4);
+}
+
+.subtitle {
+    font-size: 1.2rem;
+    color: #888;
+    margin-bottom: 1.5rem;
+}
+
+.description {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: #ccc;
+}
+
+pre {
+    background: #000;
+    border: 1px solid rgba(0, 255, 65, 0.3);
+    border-radius: 4px;
+    padding: 1rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+}
+
+code {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    color: #00ff41;
+}
+
+.cta {
+    margin-top: 2rem;
+    text-align: center;
+}
+
+.cta a {
+    color: #00ff41;
+    text-decoration: none;
+    font-size: 1.2rem;
+    border: 1px solid #00ff41;
+    padding: 0.5rem 2rem;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    display: inline-block;
+}
+
+.cta a:hover {
+    background: #00ff41;
+    color: #000;
+    box-shadow: 0 0 20px rgba(0, 255, 65, 0.6);
+}
+
+@media (max-width: 768px) {
+    h1 {
+        font-size: 2.5rem;
+    }
+
+    h2 {
+        font-size: 1.8rem;
+    }
+
+    .content-inner {
+        margin: 1rem;
+        padding: 1.5rem;
+    }
+}
