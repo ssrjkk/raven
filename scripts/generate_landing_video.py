@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import os
 import sys
-import time
 from pathlib import Path
+
+import httpx
 
 try:
     import replicate
@@ -47,9 +48,17 @@ def generate_video(prompt: str, output_path: Path, duration: int = 20) -> None:
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        import urllib.request
+        url = str(output)
+        if not url.startswith("https://"):
+            msg = f"Refusing to download from non-HTTPS URL: {url[:80]}"
+            raise RuntimeError(msg)
+
         print(f"Downloading to {output_path}...")
-        urllib.request.urlretrieve(output, output_path)
+        with httpx.stream("GET", url, timeout=120.0, follow_redirects=True) as response:
+            response.raise_for_status()
+            with output_path.open("wb") as handle:
+                for chunk in response.iter_bytes():
+                    handle.write(chunk)
 
         print(f"✓ Video saved to {output_path}")
         print(f"  Size: {output_path.stat().st_size / 1024 / 1024:.1f} MB")

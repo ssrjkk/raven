@@ -79,4 +79,5 @@ const TOOLS_DATA = [
     { name: "talk", category: "infra", description: "Read text aloud using text-to-speech. Supports system, gtts, edge, elevenlabs.", params: { text: "string", provider: "string" } },
     { name: "skill", category: "infra", description: "Load a SKILL.md file for reusable instructions.", params: { name: "string" } },
     { name: "download_skill", category: "infra", description: "Download a skill from the remote skill registry.", params: { name: "string" } },
+    { name: "set_skill_registry", category: "infra", description: "Set the URL for the remote skill registry to download skills from.", params: { url: "string" } },
 ];

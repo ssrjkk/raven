@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Raven — AI Gateway with MCP Protocol</title>
     <link rel="stylesheet" href="styles.css">
+    <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
     <nav class="navbar">
@@ -16,7 +17,8 @@
             <a href="#tools">Tools</a>
             <a href="#demo">Live Demo</a>
             <a href="#architecture">Architecture</a>
-            <a href="#benchmarks">Benchmarks</a>
+            <a href="#overview">At a glance</a>
+            <a href="#install">Install</a>
             <a href="https://github.com/ssrjkk/raven" target="_blank">GitHub</a>
         </div>
     </nav>
@@ -31,12 +33,12 @@
                 <h1>Raven</h1>
                 <p class="hero-subtitle">AI Gateway with MCP Protocol</p>
                 <p class="hero-description">
-                    Connect Claude Desktop, Qoder, opencode, Cursor to 66+ tools through unified MCP server.
+                    Connect Claude Desktop, Qoder, opencode, Cursor to <span data-tool-count>66</span> tools through unified MCP server.
                     One protocol, any editor, full workspace access.
                 </p>
                 <div class="hero-badges">
                     <span class="badge">MCP 2025-03-26</span>
-                    <span class="badge">66+ Tools</span>
+                    <span class="badge"><span data-tool-count>66</span> Tools</span>
                     <span class="badge">Stdio + HTTP</span>
                     <span class="badge">MIT License</span>
                 </div>
@@ -45,11 +47,13 @@
                     <a href="https://github.com/ssrjkk/raven" target="_blank" class="btn-secondary">View on GitHub</a>
                 </div>
             </div>
+            <a href="#tools" class="scroll-hint" aria-label="Scroll to tools">▼</a>
         </section>
 
+        <div class="content-body">
         <section id="tools" class="section">
             <h2>Tool Explorer</h2>
-            <p class="section-desc">Browse all 66+ tools available through Raven MCP server</p>
+            <p class="section-desc">Every tool exposed by the server — names and parameters match the registry</p>
             
             <div class="tool-filters">
                 <input type="text" id="tool-search" placeholder="Search tools..." class="search-input">
@@ -107,11 +111,11 @@
 
         <section id="architecture" class="section">
             <h2>Architecture</h2>
-            <p class="section-desc">How Raven connects your editors to tools through MCP protocol</p>
+            <p class="section-desc">How an MCP client reaches Raven's tools over JSON-RPC</p>
             
             <div class="architecture-diagram">
                 <div class="arch-layer">
-                    <h3>Editors</h3>
+                    <h3>MCP clients</h3>
                     <div class="arch-items">
                         <div class="arch-item">Claude Desktop</div>
                         <div class="arch-item">Qoder</div>
@@ -141,100 +145,109 @@
                     <div class="connector-line"></div>
                 </div>
                 <div class="arch-layer">
-                    <h3>Tools (66+)</h3>
+                    <h3>Tools (<span data-tool-count>66</span>)</h3>
                     <div class="arch-items">
-                        <div class="arch-item">File Operations</div>
-                        <div class="arch-item">Shell Commands</div>
-                        <div class="arch-item">Web Search</div>
-                        <div class="arch-item">Browser Automation</div>
-                        <div class="arch-item">GitHub API</div>
-                        <div class="arch-item">MCP Connectors</div>
+                        <div class="arch-item">File read / write / edit</div>
+                        <div class="arch-item">Shell + sandbox policy</div>
+                        <div class="arch-item">Web search / fetch</div>
+                        <div class="arch-item">Browser automation</div>
+                        <div class="arch-item">Git, tests, LSP</div>
+                        <div class="arch-item">Sub-agents, todos, memory</div>
+                        <div class="arch-item">Cron, artifacts, TTS</div>
                     </div>
                 </div>
             </div>
         </section>
 
-        <section id="benchmarks" class="section">
-            <h2>Performance</h2>
-            <p class="section-desc">Real benchmarks from production usage</p>
+        <section id="overview" class="section">
+            <h2>At a glance</h2>
+            <p class="section-desc">Numbers taken from the repository, not estimated</p>
             
             <div class="metrics-grid">
                 <div class="metric-card">
-                    <div class="metric-value">66+</div>
-                    <div class="metric-label">Available Tools</div>
-                    <div class="metric-desc">File, shell, web, browser, git, github, custom</div>
+                    <div class="metric-value"><span data-tool-count>66</span></div>
+                    <div class="metric-label">Registered tools</div>
+                    <div class="metric-desc">file, shell, web, browser, git, LSP, agents, scheduling</div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-value">15</div>
-                    <div class="metric-label">Channel Adapters</div>
-                    <div class="metric-desc">Telegram, Discord, Slack, Web, WhatsApp, etc.</div>
+                    <div class="metric-label">Channel adapters</div>
+                    <div class="metric-desc">Telegram, Discord, Slack, WhatsApp, email, web, and more</div>
                 </div>
                 <div class="metric-card">
-                    <div class="metric-value">&lt;50ms</div>
-                    <div class="metric-label">Tool Latency</div>
-                    <div class="metric-desc">Average response time for local operations</div>
+                    <div class="metric-value">2</div>
+                    <div class="metric-label">Transports</div>
+                    <div class="metric-desc">stdio for local clients, HTTP for remote ones</div>
                 </div>
                 <div class="metric-card">
-                    <div class="metric-value">100%</div>
-                    <div class="metric-label">Open Source</div>
-                    <div class="metric-desc">MIT license, self-hosted, no telemetry</div>
+                    <div class="metric-value">MIT</div>
+                    <div class="metric-label">License</div>
+                    <div class="metric-desc">Self-hosted, no telemetry, no account required</div>
                 </div>
             </div>
 
             <div class="comparison-table">
-                <h3>Feature Comparison</h3>
+                <h3>Server surfaces</h3>
                 <table>
                     <thead>
                         <tr>
-                            <th>Feature</th>
-                            <th>Raven</th>
-                            <th>Standard MCP</th>
+                            <th>Surface</th>
+                            <th>Detail</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td>Tool Count</td>
-                            <td class="highlight">66+</td>
-                            <td>5-10</td>
+                            <td>stdio (gateway toolset)</td>
+                            <td class="highlight">raven-mcp --workspace /path/to/project</td>
                         </tr>
                         <tr>
-                            <td>Channel Support</td>
-                            <td class="highlight">15 channels</td>
-                            <td>1 (editor only)</td>
+                            <td>stdio (agent toolset)</td>
+                            <td class="highlight">ravencode-mcp --workspace /path/to/project</td>
                         </tr>
                         <tr>
-                            <td>HTTP Transport</td>
-                            <td class="highlight">✓</td>
-                            <td>✗</td>
+                            <td>module entry points</td>
+                            <td class="highlight">python -m raven.core.mcp / python -m ravencode.mcp</td>
                         </tr>
                         <tr>
-                            <td>Workspace Isolation</td>
-                            <td class="highlight">✓</td>
-                            <td>✗</td>
+                            <td>JSON-RPC over HTTP</td>
+                            <td class="highlight">POST /mcp/rpc</td>
                         </tr>
                         <tr>
-                            <td>Bearer Token Auth</td>
-                            <td class="highlight">✓</td>
-                            <td>✗</td>
+                            <td>plain tool list</td>
+                            <td class="highlight">GET /mcp/tools</td>
                         </tr>
                         <tr>
-                            <td>Multi-Editor</td>
-                            <td class="highlight">6 editors</td>
-                            <td>1 editor</td>
+                            <td>direct tool call</td>
+                            <td class="highlight">POST /mcp/tools/{name}</td>
+                        </tr>
+                        <tr>
+                            <td>events + liveness</td>
+                            <td class="highlight">GET /mcp/events, GET /mcp/health</td>
+                        </tr>
+                        <tr>
+                            <td>auth</td>
+                            <td class="highlight">X-Raven-Key or Authorization: Bearer</td>
+                        </tr>
+                        <tr>
+                            <td>path confinement</td>
+                            <td class="highlight">--workspace, rejects outside paths and symlink escapes</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
         </section>
 
-        <section class="section cta-section">
+        <section id="install" class="section cta-section">
             <h2>Get Started</h2>
             <div class="install-steps">
                 <div class="step">
                     <div class="step-number">1</div>
                     <div class="step-content">
                         <h3>Install</h3>
-                        <pre><code>pip install -e ".[dev]"</code></pre>
+                        <pre><code>git clone https://github.com/ssrjkk/raven
+cd raven
+pip install .</code></pre>
+                        <p class="step-note">Python 3.11+ · installs the <code>raven-mcp</code> and <code>ravencode-mcp</code> commands</p>
                     </div>
                 </div>
                 <div class="step">
@@ -265,6 +278,7 @@
                 <a href="https://github.com/ssrjkk/raven/blob/main/README.md" target="_blank" class="btn-secondary">Full Documentation</a>
             </div>
         </section>
+        </div>
     </main>
 
     <footer>

@@ -208,34 +208,6 @@ class ProceduralAnimation {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    const canvas = document.getElementById('frame-canvas');
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    const frameImages = [];
-    let framesLoaded = 0;
-    let scrollAnimStarted = false;
-
-    for (let i = 0; i < 300; i++) {
-        const img = new Image();
-        const frameNum = String(i).padStart(4, '0');
-        img.src = `frames/frame_${frameNum}.jpg`;
-        img.onload = () => {
-            framesLoaded++;
-            if (framesLoaded > 10 && !scrollAnimStarted) {
-                scrollAnimStarted = true;
-                if (typeof ScrollAnimation !== 'undefined') {
-                    new ScrollAnimation();
-                }
-            }
-        };
-        frameImages.push(img);
-    }
-
-    setTimeout(() => {
-        if (framesLoaded < 10 && !scrollAnimStarted) {
-            scrollAnimStarted = true;
-            new ProceduralAnimation();
-        }
-    }, 2000);
+    if (!document.getElementById('frame-canvas')) return;
+    new ProceduralAnimation();
 });

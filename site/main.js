@@ -1,3 +1,10 @@
+function revealNearViewport() {
+    const edge = window.innerHeight * 0.85;
+    document.querySelectorAll('.section:not(.visible)').forEach(section => {
+        if (section.getBoundingClientRect().top < edge) section.classList.add('visible');
+    });
+}
+
 class ToolExplorer {
     constructor() {
         this.grid = document.getElementById('tools-grid');
@@ -63,8 +70,13 @@ class ToolExplorer {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    new ToolExplorer();
-    new TerminalDemo();
+    document.querySelectorAll('[data-tool-count]').forEach(el => {
+        el.textContent = TOOLS_DATA.length;
+    });
+
+    window.addEventListener('scroll', revealNearViewport, { passive: true });
+    window.addEventListener('resize', revealNearViewport);
+    revealNearViewport();
 
     document.querySelectorAll('a[href^="#"]').forEach(link => {
         link.addEventListener('click', (e) => {
@@ -76,15 +88,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.classList.add('visible');
-            }
-        });
-    }, { threshold: 0.1 });
-
-    document.querySelectorAll('.section').forEach(section => {
-        observer.observe(section);
-    });
+    new ToolExplorer();
+    new TerminalDemo();
 });
