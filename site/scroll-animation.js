@@ -62,7 +62,7 @@ class ScrollAnimation {
         this.ctx.fillStyle = '#000';
         this.ctx.fillRect(0, 0, width, height);
 
-        this.ctx.strokeStyle = '#00ff41';
+        this.ctx.strokeStyle = '#a78bfa';
         this.ctx.lineWidth = 2;
         this.ctx.beginPath();
 
@@ -77,7 +77,7 @@ class ScrollAnimation {
         }
         this.ctx.stroke();
 
-        this.ctx.fillStyle = '#00ff41';
+        this.ctx.fillStyle = '#a78bfa';
         this.ctx.font = '20px Courier New';
         this.ctx.textAlign = 'center';
         this.ctx.fillText('RAVEN MCP SERVER', width / 2, height / 2 - 20);

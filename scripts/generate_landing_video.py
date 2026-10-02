@@ -69,10 +69,10 @@ def generate_video(prompt: str, output_path: Path, duration: int = 20) -> None:
 
 
 def main() -> None:
-    prompt = """Continuous first-person camera flight through cyberpunk RAG architecture. Low-poly wireframe aesthetic, PS1 retro style. Dark background with neon green (#00ff41) and cyan glowing edges.
+    prompt = """Continuous first-person camera flight through cyberpunk RAG architecture. Low-poly wireframe aesthetic, PS1 retro style. Dark background with violet (#8b5cf6) and fuchsia (#d946ef) glowing edges.
 
 Scene 1: Approach massive wireframe server rack, data streams flowing between nodes.
-Scene 2: Dive inside, thermal vision view — hot zones bright green, cool zones dark blue.
+Scene 2: Dive inside, thermal vision view — hot zones bright violet, cool zones deep indigo.
 Scene 3: Follow data packet through retrieval pipeline, ASCII text scrolling past.
 Scene 4: Enter neural chamber, low-poly brain structure with pulsing transformer layers.
 Scene 5: Response text materializes in mid-air, CRT terminal aesthetic with scanlines.

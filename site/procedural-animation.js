@@ -63,7 +63,7 @@ class ProceduralAnimation {
 
     animate() {
         this.time += 0.016;
-        this.ctx.fillStyle = 'rgba(10, 10, 10, 0.1)';
+        this.ctx.fillStyle = 'rgba(10, 8, 18, 0.1)';
         this.ctx.fillRect(0, 0, this.width, this.height);
 
         this.drawGrid();
@@ -77,7 +77,7 @@ class ProceduralAnimation {
     }
 
     drawGrid() {
-        this.ctx.strokeStyle = 'rgba(0, 255, 65, 0.1)';
+        this.ctx.strokeStyle = 'rgba(139, 92, 246, 0.055)';
         this.ctx.lineWidth = 1;
 
         const gridSize = 60;
@@ -109,16 +109,16 @@ class ProceduralAnimation {
             const radius = node.radius + pulseSize;
 
             const gradient = this.ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, radius * 3);
-            gradient.addColorStop(0, 'rgba(0, 255, 65, 0.8)');
-            gradient.addColorStop(0.5, 'rgba(0, 255, 65, 0.3)');
-            gradient.addColorStop(1, 'rgba(0, 255, 65, 0)');
+            gradient.addColorStop(0, 'rgba(167, 139, 250, 0.8)');
+            gradient.addColorStop(0.5, 'rgba(139, 92, 246, 0.3)');
+            gradient.addColorStop(1, 'rgba(139, 92, 246, 0)');
 
             this.ctx.fillStyle = gradient;
             this.ctx.beginPath();
             this.ctx.arc(node.x, node.y, radius * 3, 0, Math.PI * 2);
             this.ctx.fill();
 
-            this.ctx.fillStyle = '#00ff41';
+            this.ctx.fillStyle = '#a78bfa';
             this.ctx.beginPath();
             this.ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
             this.ctx.fill();
@@ -126,7 +126,7 @@ class ProceduralAnimation {
     }
 
     drawConnections() {
-        this.ctx.strokeStyle = 'rgba(0, 255, 65, 0.2)';
+        this.ctx.strokeStyle = 'rgba(139, 92, 246, 0.2)';
         this.ctx.lineWidth = 1;
 
         for (let i = 0; i < this.nodes.length; i++) {
@@ -137,7 +137,7 @@ class ProceduralAnimation {
 
                 if (dist < 150) {
                     const opacity = (1 - dist / 150) * 0.3;
-                    this.ctx.strokeStyle = `rgba(0, 255, 65, ${opacity})`;
+                    this.ctx.strokeStyle = `rgba(139, 92, 246, ${opacity})`;
                     this.ctx.beginPath();
                     this.ctx.moveTo(this.nodes[i].x, this.nodes[i].y);
                     this.ctx.lineTo(this.nodes[j].x, this.nodes[j].y);
@@ -163,7 +163,7 @@ class ProceduralAnimation {
             if (p.y < 0 || p.y > this.height) p.vy *= -1;
 
             const alpha = 1 - (p.life / p.maxLife);
-            this.ctx.fillStyle = `rgba(0, 255, 255, ${alpha * 0.6})`;
+            this.ctx.fillStyle = `rgba(217, 70, 239, ${alpha * 0.6})`;
             this.ctx.beginPath();
             this.ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
             this.ctx.fill();
@@ -184,9 +184,9 @@ class ProceduralAnimation {
             stream.y += stream.speed;
 
             const gradient = this.ctx.createLinearGradient(stream.x, stream.y, stream.x, stream.y + stream.length);
-            gradient.addColorStop(0, 'rgba(0, 255, 65, 0)');
-            gradient.addColorStop(0.5, 'rgba(0, 255, 65, 0.5)');
-            gradient.addColorStop(1, 'rgba(0, 255, 65, 0)');
+            gradient.addColorStop(0, 'rgba(139, 92, 246, 0)');
+            gradient.addColorStop(0.5, 'rgba(217, 70, 239, 0.5)');
+            gradient.addColorStop(1, 'rgba(139, 92, 246, 0)');
 
             this.ctx.strokeStyle = gradient;
             this.ctx.lineWidth = 2;

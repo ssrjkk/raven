@@ -31,7 +31,7 @@ class TerminalDemo {
                 id: 3,
                 result: {
                     content: [
-                        { type: "text", text: "# Raven\n\nAI Gateway with MCP Protocol\n\nConnect Claude Desktop, Qoder, opencode, Cursor to 66+ tools..." }
+                        { type: "text", text: "<div align=\"center\">\n\n# Raven\n\n**by [@ssrjkk](https://github.com/ssrjkk)**\n\nA self-hosted AI assista" }
                     ]
                 }
             },

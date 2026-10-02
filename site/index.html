@@ -33,8 +33,9 @@
                 <h1>Raven</h1>
                 <p class="hero-subtitle">AI Gateway with MCP Protocol</p>
                 <p class="hero-description">
-                    Connect Claude Desktop, Qoder, opencode, Cursor to <span data-tool-count>66</span> tools through unified MCP server.
-                    One protocol, any editor, full workspace access.
+                    Connect any MCP client to <span data-tool-count>66</span> tools through one self-hosted
+                    server. Stdio for local clients, JSON-RPC over HTTP for remote ones, workspace
+                    confinement and keyed auth on both.
                 </p>
                 <div class="hero-badges">
                     <span class="badge">MCP 2025-03-26</span>
@@ -117,12 +118,12 @@
                 <div class="arch-layer">
                     <h3>MCP clients</h3>
                     <div class="arch-items">
-                        <div class="arch-item">Claude Desktop</div>
-                        <div class="arch-item">Qoder</div>
-                        <div class="arch-item">Cursor</div>
-                        <div class="arch-item">Windsurf</div>
-                        <div class="arch-item">Cline</div>
-                        <div class="arch-item">opencode</div>
+                        <div class="arch-item">Local stdio subprocess</div>
+                        <div class="arch-item">Remote HTTP client</div>
+                        <div class="arch-item">Desktop chat app</div>
+                        <div class="arch-item">IDE extension</div>
+                        <div class="arch-item">Terminal coding agent</div>
+                        <div class="arch-item">Script or CI job</div>
                     </div>
                 </div>
                 <div class="arch-connector">
@@ -253,7 +254,7 @@ pip install .</code></pre>
                 <div class="step">
                     <div class="step-number">2</div>
                     <div class="step-content">
-                        <h3>Configure Editor</h3>
+                        <h3>Configure your client</h3>
                         <pre><code>{
   "mcpServers": {
     "raven": {
@@ -267,8 +268,8 @@ pip install .</code></pre>
                 <div class="step">
                     <div class="step-number">3</div>
                     <div class="step-content">
-                        <h3>Use in Editor</h3>
-                        <p>Ask your AI assistant to use Raven tools. It will automatically access files, run commands, search the web, and more.</p>
+                        <h3>Use the tools</h3>
+                        <p>Ask the assistant to read a file, run a command or search the web. It calls the MCP tool and Raven executes it inside the workspace you allowed.</p>
                     </div>
                 </div>
             </div>

@@ -93,6 +93,8 @@ Condensed summary of ~280 commits since the 0.4.0 baseline (2026-06-05 → 2026-
 - Web sidebar version badge now reads `web/package.json` instead of a never-defined `VITE_APP_VERSION`
 - Dependency security floors bumped to patched releases: `fastapi>=0.141.1`, `starlette>=1.3.1`, `anyio>=4.14.2`, `lxml>=6.1.0`, `Pillow>=12.3.0`, `python-dotenv>=1.2.2`, `soupsieve>=2.9.0`, `typing-extensions>=4.8` (verified in a clean venv)
 - Authorship/branding by ssrjkk across packaging, CLIs (`--version`, `raven doctor`), web sidebar/offline page, extensions, docs and CI metadata
+- Landing site palette moved to purple-black (`#0a0812` background, `#8b5cf6` accent, `#d946ef` secondary), matching the accent the web UI already ships with. The neon-green terminal palette is gone from `styles.css`, the canvas animation and the video-generation prompts
+- Landing site no longer names MCP clients: the architecture "MCP clients" layer and the hero copy describe transports and client shapes (stdio subprocess, HTTP client, desktop chat app, IDE extension, terminal agent, CI job) instead of listing products. `docs/mcp.md` keeps the per-client configs, which are the place a pastable config belongs
 
 ## [0.4.8] - 2026-09-22
 

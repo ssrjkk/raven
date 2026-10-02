@@ -5,7 +5,7 @@ Continuous camera flight through digital RAG (Retrieval-Augmented Generation) ar
 
 ## Visual Style
 - **Aesthetic**: Wireframe/PS1 low-poly, CRT terminal glow
-- **Color Palette**: Dark background (#0a0a0a), neon green (#00ff41), cyan accents (#00ffff)
+- **Color Palette**: Dark background (#0a0812), violet (#8b5cf6), fuchsia accents (#d946ef)
 - **Mood**: Cyberpunk, technical, futuristic but retro
 
 ## Scene Progression (15-30 seconds)
@@ -14,7 +14,7 @@ Continuous camera flight through digital RAG (Retrieval-Augmented Generation) ar
 Camera approaches a massive server rack made of glowing wireframe cubes. Data streams (particle effects) flow between nodes. Low-poly geometry with visible edges.
 
 ### 5-10s: Depth Map / Thermal Vision
-Camera dives into the server structure. View shifts to thermal/depth map visualization — hot zones (bright green/yellow) show active processing, cool zones (dark blue) show idle nodes. Wireframe overlay persists.
+Camera dives into the server structure. View shifts to thermal/depth map visualization — hot zones (bright violet/fuchsia) show active processing, cool zones (deep indigo) show idle nodes. Wireframe overlay persists.
 
 ### 10-15s: Data Retrieval
 Camera follows a data packet through a retrieval pipeline. ASCII-style text scrolls past (simulated RAG context). CRT scanline effect intensifies.
@@ -23,7 +23,7 @@ Camera follows a data packet through a retrieval pipeline. ASCII-style text scro
 Camera enters a "neural chamber" — low-poly brain-like structure with pulsing connections. Glowing nodes represent transformer layers. Text fragments float and recombine.
 
 ### 20-25s: Response Generation
-Camera pulls back as response text materializes in mid-air (wireframe letters assembling). CRT terminal aesthetic peaks — green text on black, scanlines, slight glow.
+Camera pulls back as response text materializes in mid-air (wireframe letters assembling). CRT terminal aesthetic peaks — violet text on black, scanlines, slight glow.
 
 ### 25-30s: Final Pullback
 Camera retreats to show the entire architecture as a unified system. All data flows converge. Fade to Raven logo (wireframe).
@@ -36,10 +36,10 @@ Camera retreats to show the entire architecture as a unified system. All data fl
 
 ## Seedance Prompt (English)
 ```
-Continuous first-person camera flight through cyberpunk RAG architecture. Low-poly wireframe aesthetic, PS1 retro style. Dark background with neon green (#00ff41) and cyan glowing edges. 
+Continuous first-person camera flight through cyberpunk RAG architecture. Low-poly wireframe aesthetic, PS1 retro style. Dark background with violet (#8b5cf6) and fuchsia (#d946ef) glowing edges. 
 
 Scene 1: Approach massive wireframe server rack, data streams flowing between nodes.
-Scene 2: Dive inside, thermal vision view — hot zones bright green, cool zones dark blue.
+Scene 2: Dive inside, thermal vision view — hot zones bright violet, cool zones deep indigo.
 Scene 3: Follow data packet through retrieval pipeline, ASCII text scrolling past.
 Scene 4: Enter neural chamber, low-poly brain structure with pulsing transformer layers.
 Scene 5: Response text materializes in mid-air, CRT terminal aesthetic with scanlines.
@@ -50,7 +50,7 @@ CRT monitor glow, scanline effect, cyberpunk atmosphere, technical visualization
 
 ## Seedance Prompt (Alternative — Shorter)
 ```
-First-person flight through wireframe RAG architecture. Low-poly PS1 style, neon green on black. Server racks → thermal depth map → ASCII data streams → neural network chamber → text materialization → system overview. CRT glow, scanlines, continuous camera, 20 seconds.
+First-person flight through wireframe RAG architecture. Low-poly PS1 style, violet on black. Server racks → thermal depth map → ASCII data streams → neural network chamber → text materialization → system overview. CRT glow, scanlines, continuous camera, 20 seconds.
 ```
 
 ## Generation Options
