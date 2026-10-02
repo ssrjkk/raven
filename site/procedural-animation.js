@@ -2,8 +2,6 @@ class ProceduralAnimation {
     constructor() {
         this.canvas = document.getElementById('frame-canvas');
         this.ctx = this.canvas.getContext('2d');
-        this.sections = document.querySelectorAll('.content-section');
-        this.progressFill = document.querySelector('.progress-fill');
 
         this.time = 0;
         this.nodes = [];
@@ -20,7 +18,6 @@ class ProceduralAnimation {
         this.generateNodes();
         this.generateParticles();
         this.animate();
-        this.setupScrollListener();
     }
 
     resizeCanvas() {
@@ -62,29 +59,6 @@ class ProceduralAnimation {
                 maxLife: Math.random() * 2 + 1,
             });
         }
-    }
-
-    setupScrollListener() {
-        window.addEventListener('scroll', () => {
-            const scrollTop = window.scrollY;
-            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-            const scrollProgress = Math.min(Math.max(scrollTop / docHeight, 0), 1);
-            this.progressFill.style.width = (scrollProgress * 100) + '%';
-            this.updateSections(scrollProgress);
-        }, { passive: true });
-    }
-
-    updateSections(scrollProgress) {
-        this.sections.forEach(section => {
-            const start = parseFloat(section.dataset.scrollStart);
-            const end = parseFloat(section.dataset.scrollEnd);
-
-            if (scrollProgress >= start && scrollProgress <= end) {
-                section.classList.add('active');
-            } else {
-                section.classList.remove('active');
-            }
-        });
     }
 
     animate() {
@@ -235,10 +209,12 @@ class ProceduralAnimation {
 
 document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('frame-canvas');
-    const ctx = canvas.getContext('2d');
+    if (!canvas) return;
 
+    const ctx = canvas.getContext('2d');
     const frameImages = [];
     let framesLoaded = 0;
+    let scrollAnimStarted = false;
 
     for (let i = 0; i < 300; i++) {
         const img = new Image();
@@ -246,16 +222,19 @@ document.addEventListener('DOMContentLoaded', () => {
         img.src = `frames/frame_${frameNum}.jpg`;
         img.onload = () => {
             framesLoaded++;
-            if (framesLoaded > 10) {
-                new ScrollAnimation();
-                return;
+            if (framesLoaded > 10 && !scrollAnimStarted) {
+                scrollAnimStarted = true;
+                if (typeof ScrollAnimation !== 'undefined') {
+                    new ScrollAnimation();
+                }
             }
         };
         frameImages.push(img);
     }
 
     setTimeout(() => {
-        if (framesLoaded < 10) {
+        if (framesLoaded < 10 && !scrollAnimStarted) {
+            scrollAnimStarted = true;
             new ProceduralAnimation();
         }
     }, 2000);
