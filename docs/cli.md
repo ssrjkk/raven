@@ -1,5 +1,7 @@
 # CLI Reference
 
+_by [@ssrjkk](https://github.com/ssrjkk)_
+
 ## Usage
 
 ```bash

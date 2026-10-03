@@ -1,5 +1,7 @@
 # Dependency Patches
 
+_by [@ssrjkk](https://github.com/ssrjkk)_
+
 This directory contains patches for third-party dependencies.
 
 ## Format

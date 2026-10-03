@@ -183,7 +183,7 @@ def test_local_assets_exist_and_nothing_in_site_is_unreferenced() -> None:
     refs = local_refs()
     for name in refs:
         assert (SITE / name).is_file(), f"{name} is referenced but missing"
-    allowed = refs | {"robots.txt", "sitemap.xml", "404.html", "README.md"}
+    allowed = refs | {"robots.txt", "sitemap.xml", "404.html", "README.md", "og-image.png"}
     present = {p.relative_to(SITE).as_posix() for p in SITE.rglob("*") if p.is_file()}
     assert sorted(present - allowed) == []
 

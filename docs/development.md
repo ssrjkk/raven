@@ -1,5 +1,7 @@
 # Development
 
+_by [@ssrjkk](https://github.com/ssrjkk)_
+
 ## Setup
 
 ```bash

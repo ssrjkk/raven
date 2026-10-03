@@ -1,5 +1,7 @@
 # Raven AI mascot icon
 
+_by [@ssrjkk](https://github.com/ssrjkk)_
+
 Place your mascot `.ico` file here as `raven.ico`.
 
 The icon is used by:

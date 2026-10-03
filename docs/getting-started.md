@@ -1,5 +1,7 @@
 # Getting Started
 
+_by [@ssrjkk](https://github.com/ssrjkk)_
+
 ## Installation
 
 ```bash

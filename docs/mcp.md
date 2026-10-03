@@ -1,5 +1,7 @@
 # MCP integration
 
+_by [@ssrjkk](https://github.com/ssrjkk)_
+
 Raven ships two MCP (Model Context Protocol) servers that any MCP client can connect to:
 Claude Desktop, Qoder, opencode, Cursor, Windsurf, Cline, and others.
 

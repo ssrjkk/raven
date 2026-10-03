@@ -1,5 +1,7 @@
 # Channels Overview
 
+_by [@ssrjkk](https://github.com/ssrjkk)_
+
 Raven AI connects to 15+ messaging platforms. Each channel is implemented as a `BaseChannel` subclass.
 
 ## Supported Channels
