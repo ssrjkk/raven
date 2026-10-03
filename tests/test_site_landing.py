@@ -221,6 +221,8 @@ def test_seo_assets_point_at_the_published_url() -> None:
     assert PUBLISHED_URL in read(SITE / "robots.txt")
     assert f"<loc>{PUBLISHED_URL}</loc>" in read(SITE / "sitemap.xml")
     assert '<meta name="robots" content="noindex">' in read(SITE / "404.html")
+    assert f'<meta property="og:image" content="{PUBLISHED_URL}og-image.png">' in read(INDEX)
+    assert (SITE / "og-image.png").is_file()
 
 
 def test_landing_page_does_not_name_mcp_clients() -> None:
