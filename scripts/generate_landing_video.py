@@ -86,10 +86,8 @@ CRT monitor glow, scanline effect, cyberpunk atmosphere, technical visualization
 
     print()
     print("Next steps:")
-    print(f"1. Extract frames: python site/scripts/extract_frames.py {output_path} site/frames 10")
-    print("2. Commit frames: git add -f site/frames/ && git commit -m 'chore: add landing video frames'")
-    print("3. Push: git push")
-    print("4. Site will auto-deploy to https://ssrjkk.github.io/raven/")
+    print("1. Keep the file out of git and add a <video> element to site/index.html that points at it")
+    print("2. Push site/** to publish")
 
 
 if __name__ == "__main__":

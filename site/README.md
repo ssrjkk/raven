@@ -1,99 +1,107 @@
-# Raven Landing Site
+# Raven landing site
 
-Scroll-animated landing site with video-driven frame animation.
+Static site for <https://ssrjkk.github.io/raven/>. No build step, no bundler, no analytics,
+no third-party request: GitHub Pages serves the files in this directory as they are.
 
-## Structure
+## Files
 
 ```
 site/
-├── index.html              # Main page with scroll sections
-├── styles.css              # CRT terminal aesthetic
-├── scroll-animation.js     # Scroll-driven frame renderer
-├── frames/                 # Video frames (frame_0000.jpg, frame_0001.jpg, ...)
-└── scripts/
-    ├── extract_frames.py   # FFmpeg frame extraction
-    └── generate_video_prompt.md  # Seedance video generation prompt
+├── index.html                # the page: hero, registry, console, architecture, spec, setup
+├── 404.html                  # served for unknown paths, styles only, no scripts
+├── styles.css                # design tokens, self-hosted @font-face rules, every rule
+├── fonts/                    # woff2 subsets used by styles.css
+├── tools-data.js             # generated: the tool registry as raven-mcp reports it
+├── mcp-frames.js             # generated: real request/response frames from raven-mcp
+├── main.js                   # registry rendering, filters, reveal, copy buttons, bootstrap
+├── terminal-demo.js          # replays the recorded frames, explains the ones missing
+├── procedural-animation.js   # static hero canvas painted from the palette
+├── favicon.svg
+├── robots.txt
+└── sitemap.xml
 ```
 
-## How It Works
+## Where the content comes from
 
-1. **Video Generation**: Use Seedance 2.0/2.5 (ByteDance) to generate a 20-30 second video of a camera flight through RAG architecture
-2. **Frame Extraction**: Run `python site/scripts/extract_frames.py <video.mp4> site/frames 10` to extract frames at 10 FPS
-3. **Scroll Animation**: JavaScript renders frames based on scroll position — scrolling through the page plays the video
+`scripts/record_site_frames.py` starts `python -m raven.core.mcp --workspace .`,
+exchanges eight frames with it and rewrites both generated files:
 
-## Current State
+- `tools-data.js` — one entry per tool: name, category, description, parameter names with
+  the types from its JSON Schema, and the required list. The registry section renders from
+  this array, so the page can only show tools the server actually exposes.
+- `mcp-frames.js` — the eight recorded `request`/`response` pairs, including the `-32602`
+  reply to a `tools/call` with no tool name and the `-32601` reply to `resources/list`.
+  The console replays these answers instead of inventing them.
 
-The site is functional but uses a **placeholder animation** (wireframe grid + text) until video frames are generated. Once you add frames to `site/frames/`, they'll automatically be used.
-
-## Generate Video Frames
-
-### Option 1: Seedance via Replicate
-```bash
-# Install replicate CLI or use Python SDK
-pip install replicate
-
-# Generate video (see scripts/generate_video_prompt.md for prompt)
-# Download the video, then extract frames:
-python site/scripts/extract_frames.py raven_intro.mp4 site/frames 10
-```
-
-### Option 2: Seedance via OpenRouter
-```bash
-# Use OpenRouter API
-# See: https://openrouter.ai/bytedance/seedance-2.5
-```
-
-### Option 3: Create Your Own
-Any continuous camera movement video works. Edit `scripts/generate_video_prompt.md` for the Raven-specific concept.
-
-## Frame Requirements
-
-- **Format**: JPEG
-- **Naming**: `frame_0000.jpg`, `frame_0001.jpg`, `frame_0002.jpg`, ...
-- **Resolution**: 1920x1080 recommended (will be scaled to fit viewport)
-- **Count**: 200-300 frames for smooth animation (10 FPS × 20-30 seconds)
-
-## Local Development
+Regenerate after any change to the tool registry or the protocol handler:
 
 ```bash
-cd site
-python -m http.server 8000
-# Open http://localhost:8000
+python scripts/record_site_frames.py
 ```
 
-## Deployment
+`tests/test_site_landing.py` fails if the committed generated files no longer match the
+registry, if a hand-written count in `index.html` (tool count, version, channel adapters,
+the hero's preview list) disagrees with the code, if a preset button has no recording
+behind it, if `styles.css` names a `url()` or an `@font-face` source that does not ship,
+if `index.html` or `404.html` loads an asset from a host other than GitHub, or if a file
+appears in this directory that the page never loads.
 
-Automatic via GitHub Actions when changes are pushed to `site/**` on main branch.
+## Fonts
 
-Site URL: `https://ssrjkk.github.io/raven/`
+Three families, latin subsets, all served from `fonts/` — the page makes no request to a
+font host and needs no `preconnect` for one.
 
-## Customization
+| family | used for | weights | file |
+| --- | --- | --- | --- |
+| IBM Plex Sans | prose, labels | 400, 500, 600 | `fonts/IBMPlexSans-latin.woff2` |
+| Space Grotesk | wordmark, headings, figures | 700 | `fonts/SpaceGrotesk-latin.woff2` |
+| IBM Plex Mono | code, tool names, JSON | 400, 500, 600 | `fonts/IBMPlexMono-latin-<weight>.woff2` |
 
-### Adjust Scroll Speed
-Edit `data-scroll-start` and `data-scroll-end` attributes in `index.html` sections.
+124 KB in five files. Plex Sans and Space Grotesk are variable files, so one file per
+family carries all the weights and each `@font-face` pins its own `font-weight`; IBM Plex
+Mono ships a static instance per weight, so it is three files. Only the weights a rule in
+`styles.css` actually asks for are declared — a declared face the browser never loads is
+dead weight. Every face sets `font-display: swap`. All three families are licensed under
+the SIL Open Font License 1.1.
 
-### Change Frame Rate
+One caveat of the latin subset: it stops before U+2190, so the `←`/`→` used in the console
+line prefixes and in the connector label render from the system fallback rather than from
+Plex. Anything else added to the page in that range needs the symbols subset.
+
+To refresh a subset after changing a weight, request the CSS with a browser UA so Google
+answers with woff2, then fetch each `url()` it returns:
+
 ```bash
-python site/scripts/extract_frames.py video.mp4 frames 15  # 15 FPS instead of 10
+curl -s -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36' \
+  'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400..600&display=swap' \
+  | grep -o 'https://[^)]*woff2'
 ```
 
-### Modify Visual Style
-Edit `styles.css` — colors, fonts, transitions are all there.
+## Behaviour
 
-## Fallback Animation
+- The registry cards are `<button>` elements: selecting one prefills a `tools/call` frame
+  for that tool with its required arguments in the console input.
+- The console accepts any frame you type. Frames matching the recording get the recorded
+  answer; anything else gets a line saying a running server answers it, and the page does
+  not pretend to be one.
+- Both console bodies are scrollable regions exposed as `role="log"`, keyboard reachable,
+  with no `aria-live` announcement per line.
+- Section reveal is progressive enhancement: `main.js` adds a `js` class to `<html>` and
+  only then does CSS hide a section before it is in view. With JavaScript off, every
+  section is visible and the registry falls back to a `<noscript>` note.
+- The hero canvas is painted once from the palette tokens (no random particles, no
+  animation loop) and is `aria-hidden`.
 
-If no frames are found, the canvas displays a wireframe grid with "RAVEN MCP SERVER" text. This is intentional — the site works even without video generation.
+## Local preview
 
-## Performance
+```bash
+python -m http.server 8000 --directory site
+# open http://localhost:8000
+```
 
-- Frames are loaded on init (all 300 images)
-- Only the current frame is rendered to canvas
-- Scroll listener is passive for smooth scrolling
-- Total size: ~15-30 MB for 300 frames (optimize with TinyPNG if needed)
+## Deploy
 
-## Browser Support
-
-- Chrome/Edge: Full support
-- Firefox: Full support
-- Safari: Full support
-- Mobile: Works, but consider reducing frame count for slower connections
+`.github/workflows/deploy-site.yml` runs on every push to `main` that touches `site/**`:
+it uploads this directory with `actions/upload-pages-artifact` and publishes it with
+`actions/deploy-pages`. The site is served under the `/raven/` path, so asset references
+here stay relative and `robots.txt` / `sitemap.xml` carry the absolute published URL.

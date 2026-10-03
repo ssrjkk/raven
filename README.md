@@ -9,12 +9,6 @@ channels, an autonomous coding agent, and a web dashboard — in one Python proc
 
 [English](README.md) · [Русский](README.ru.md)
 
-[![CI](https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ssrjkk/raven/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-5%2C100%2B-brightgreen)](https://github.com/ssrjkk/raven/actions)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![CodeQL](https://img.shields.io/badge/code%20scanning-0%20alerts-success?logo=github)](https://github.com/ssrjkk/raven/security/code-scanning)
-
 </div>
 
 ---

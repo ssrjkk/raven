@@ -268,8 +268,37 @@ async def test_glob_files_basic(ws: Path) -> None:
     (ws / "sub").mkdir()
     (ws / "sub" / "c.py").write_text("x", encoding="utf-8")
     results = await tools.glob_files("**/*.py")
-    assert results == [str(Path("sub") / "c.py")]
-    assert await tools.glob_files("*.py") == ["a.py", str(Path("sub") / "c.py")]
+    assert results == ["sub/c.py"]
+    assert await tools.glob_files("*.py") == ["a.py", "sub/c.py"]
+
+
+@pytest.mark.asyncio
+async def test_glob_files_skips_dependency_and_vcs_dirs(ws: Path) -> None:
+    (ws / "node_modules" / "pkg").mkdir(parents=True)
+    (ws / ".git").mkdir()
+    (ws / "node_modules" / "pkg" / "index.js").write_text("x", encoding="utf-8")
+    (ws / ".git" / "HEAD").write_text("x", encoding="utf-8")
+    (ws / "src").mkdir()
+    (ws / "src" / "app.js").write_text("x", encoding="utf-8")
+    assert await tools.glob_files("*.js") == ["src/app.js"]
+
+
+@pytest.mark.asyncio
+async def test_grep_files_skips_dependency_dirs(ws: Path) -> None:
+    (ws / "node_modules").mkdir()
+    (ws / "node_modules" / "a.js").write_text("needle\n", encoding="utf-8")
+    (ws / "a.js").write_text("needle\n", encoding="utf-8")
+    results = await tools.grep_files("needle")
+    assert [r["file"] for r in results] == ["a.js"]
+
+
+@pytest.mark.asyncio
+async def test_grep_files_skips_oversized_files(
+    ws: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (ws / "a.txt").write_text("needle\n", encoding="utf-8")
+    monkeypatch.setattr("ravencode.runtime.tools.files._GREP_MAX_FILE_BYTES", 0)
+    assert await tools.grep_files("needle") == []
 
 
 @pytest.mark.asyncio

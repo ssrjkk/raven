@@ -8,6 +8,7 @@ from typing import Any
 
 from loguru import logger
 
+from ravencode.runtime.fs_walk import iter_files
 from ravencode.runtime.undo import get_undo_manager
 from ravencode.runtime.workspace import (
     _get_workspace,
@@ -25,6 +26,10 @@ from ._common import (
 # ---------------------------------------------------------------------------
 # tool implementations
 # ---------------------------------------------------------------------------
+
+_GLOB_MAX_RESULTS = 500
+_GREP_MAX_RESULTS = 200
+_GREP_MAX_FILE_BYTES = 2 * 1024 * 1024
 
 
 async def read_file(path: str, max_chars: int = 50_000) -> str:
@@ -194,11 +199,12 @@ async def glob_files(pattern: str, path: str | None = None) -> list[str]:
 
 
 def _glob_scan(search_root: Path, pattern: str) -> list[str]:
-    results = []
-    for p in search_root.rglob("*"):
-        if p.is_file() and fnmatch.fnmatch(str(p.relative_to(search_root)), pattern):
-            results.append(str(p.relative_to(search_root)))
-    return sorted(results)[:500]
+    results: list[str] = []
+    for path in iter_files(search_root):
+        rel = path.relative_to(search_root).as_posix()
+        if fnmatch.fnmatch(rel, pattern):
+            results.append(rel)
+    return sorted(results)[:_GLOB_MAX_RESULTS]
 
 
 
@@ -216,19 +222,23 @@ async def grep_files(
     except re.error as exc:
         return [{"error": f"invalid regex: {exc}"}]
     results = []
-    for p in search_root.rglob("*"):
-        if not p.is_file():
-            continue
+    for p in iter_files(search_root):
         if include and not fnmatch.fnmatch(p.name, include):
             continue
         try:
+            if p.stat().st_size > _GREP_MAX_FILE_BYTES:
+                continue
             text = await asyncio.to_thread(p.read_text, encoding="utf-8", errors="replace")
         except (OSError, UnicodeDecodeError, PermissionError) as e:
             logger.debug("Skipping unreadable file {}: {}", p, e)
             continue
         for i, line in enumerate(text.splitlines(), 1):
             if (matcher is not None and matcher.search(line)) or (matcher is None and pattern in line):
-                results.append({"file": str(p.relative_to(search_root)), "line": i, "content": line[:200]})
-                if len(results) >= 200:
+                results.append({
+                    "file": p.relative_to(search_root).as_posix(),
+                    "line": i,
+                    "content": line[:200],
+                })
+                if len(results) >= _GREP_MAX_RESULTS:
                     return results
     return results

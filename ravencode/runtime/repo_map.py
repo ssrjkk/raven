@@ -15,31 +15,10 @@ from pathlib import Path
 
 from loguru import logger
 
+from ravencode.runtime.fs_walk import EXCLUDED_DIR_NAMES
 from ravencode.runtime.workspace import get_workspace_root
 
-_EXCLUDED_DIRS = {
-    ".git",
-    ".hg",
-    ".svn",
-    ".venv",
-    "venv",
-    "env",
-    "__pycache__",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".ruff_cache",
-    "node_modules",
-    "dist",
-    "build",
-    ".tox",
-    ".idea",
-    ".vscode",
-    "allure-results",
-    "allure-report",
-    ".verdent",
-    ".next",
-    "coverage",
-}
+_EXCLUDED_DIRS: frozenset[str] = EXCLUDED_DIR_NAMES
 
 _CODE_SUFFIXES = {
     ".py",

@@ -9,6 +9,8 @@ from typing import Any
 
 from loguru import logger
 
+from ravencode.runtime.fs_walk import iter_files
+
 _LSP_SERVERS: dict[str, list[str]] = {
     "python": ["pyright-langserver", "--stdio"],
     "typescript": ["typescript-language-server", "--stdio"],
@@ -394,8 +396,8 @@ def _ext_to_lang(ext: str) -> str | None:
 def _scan_extensions(root: Path) -> list[str]:
     exts: list[str] = []
     try:
-        for fp in root.rglob("*"):
-            if fp.is_file() and fp.suffix:
+        for fp in iter_files(root):
+            if fp.suffix:
                 exts.append(fp.suffix.lower())
     except PermissionError:
         pass
@@ -405,8 +407,8 @@ def _scan_extensions(root: Path) -> list[str]:
 def _find_key_files(root: Path, exts: list[str], max_files: int) -> list[Path]:
     files: list[Path] = []
     try:
-        for fp in root.rglob("*"):
-            if fp.is_file() and fp.suffix.lower() in exts:
+        for fp in iter_files(root):
+            if fp.suffix.lower() in exts:
                 files.append(fp)
                 if len(files) >= max_files:
                     break

@@ -1,213 +1,76 @@
-class ProceduralAnimation {
-    constructor() {
-        this.canvas = document.getElementById('frame-canvas');
-        this.ctx = this.canvas.getContext('2d');
+/* Hero backdrop: one static paint of the palette's grid and light.
+   No animation loop — the canvas is a surface, not a screensaver. */
 
-        this.time = 0;
-        this.nodes = [];
-        this.particles = [];
-        this.dataStreams = [];
+const HERO_BG = '#0a0812';
+const HERO_GRID = 64;
+const HERO_LINE = 'rgba(139, 92, 246, 0.055)';
 
-        this.init();
-    }
+class HeroBackdrop {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.host = canvas.parentElement || canvas;
 
-    init() {
-        this.resizeCanvas();
-        window.addEventListener('resize', () => this.resizeCanvas());
-
-        this.generateNodes();
-        this.generateParticles();
-        this.animate();
-    }
-
-    resizeCanvas() {
-        const dpr = window.devicePixelRatio || 1;
-        this.canvas.width = window.innerWidth * dpr;
-        this.canvas.height = window.innerHeight * dpr;
-        this.ctx.scale(dpr, dpr);
-        this.canvas.style.width = window.innerWidth + 'px';
-        this.canvas.style.height = window.innerHeight + 'px';
-        this.width = window.innerWidth;
-        this.height = window.innerHeight;
-    }
-
-    generateNodes() {
-        this.nodes = [];
-        const count = 30;
-        for (let i = 0; i < count; i++) {
-            this.nodes.push({
-                x: Math.random() * this.width,
-                y: Math.random() * this.height,
-                vx: (Math.random() - 0.5) * 0.5,
-                vy: (Math.random() - 0.5) * 0.5,
-                radius: Math.random() * 3 + 2,
-                pulse: Math.random() * Math.PI * 2,
-            });
+        if ('ResizeObserver' in window) {
+            this.observer = new ResizeObserver(() => this.schedule());
+            this.observer.observe(this.host);
+        } else {
+            window.addEventListener('resize', () => this.schedule());
         }
+        this.paint();
     }
 
-    generateParticles() {
-        this.particles = [];
-        const count = 50;
-        for (let i = 0; i < count; i++) {
-            this.particles.push({
-                x: Math.random() * this.width,
-                y: Math.random() * this.height,
-                vx: (Math.random() - 0.5) * 2,
-                vy: (Math.random() - 0.5) * 2,
-                life: Math.random(),
-                maxLife: Math.random() * 2 + 1,
-            });
-        }
+    schedule() {
+        if (this.pending) return;
+        this.pending = window.requestAnimationFrame(() => {
+            this.pending = 0;
+            this.paint();
+        });
     }
 
-    animate() {
-        this.time += 0.016;
-        this.ctx.fillStyle = 'rgba(10, 8, 18, 0.1)';
-        this.ctx.fillRect(0, 0, this.width, this.height);
+    paint() {
+        const box = this.host.getBoundingClientRect();
+        const width = Math.max(1, Math.round(box.width));
+        const height = Math.max(1, Math.round(box.height));
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-        this.drawGrid();
-        this.drawNodes();
-        this.drawConnections();
-        this.drawParticles();
-        this.drawDataStreams();
-        this.drawScanlines();
+        this.canvas.width = width * dpr;
+        this.canvas.height = height * dpr;
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-        requestAnimationFrame(() => this.animate());
-    }
+        this.ctx.fillStyle = HERO_BG;
+        this.ctx.fillRect(0, 0, width, height);
 
-    drawGrid() {
-        this.ctx.strokeStyle = 'rgba(139, 92, 246, 0.055)';
+        const wash = this.ctx.createRadialGradient(
+            width * 0.78, height * 0.1, 0,
+            width * 0.78, height * 0.1, Math.max(width, height) * 0.8,
+        );
+        wash.addColorStop(0, 'rgba(139, 92, 246, 0.22)');
+        wash.addColorStop(0.55, 'rgba(139, 92, 246, 0.06)');
+        wash.addColorStop(1, 'rgba(139, 92, 246, 0)');
+        this.ctx.fillStyle = wash;
+        this.ctx.fillRect(0, 0, width, height);
+
+        const edge = this.ctx.createRadialGradient(
+            width * 0.08, height * 0.94, 0,
+            width * 0.08, height * 0.94, Math.max(width, height) * 0.5,
+        );
+        edge.addColorStop(0, 'rgba(217, 70, 239, 0.12)');
+        edge.addColorStop(1, 'rgba(217, 70, 239, 0)');
+        this.ctx.fillStyle = edge;
+        this.ctx.fillRect(0, 0, width, height);
+
+        this.ctx.strokeStyle = HERO_LINE;
         this.ctx.lineWidth = 1;
-
-        const gridSize = 60;
-        const offsetX = (this.time * 10) % gridSize;
-        const offsetY = (this.time * 5) % gridSize;
-
         this.ctx.beginPath();
-        for (let x = -gridSize + offsetX; x < this.width + gridSize; x += gridSize) {
+        for (let x = 0.5; x <= width; x += HERO_GRID) {
             this.ctx.moveTo(x, 0);
-            this.ctx.lineTo(x, this.height);
+            this.ctx.lineTo(x, height);
         }
-        for (let y = -gridSize + offsetY; y < this.height + gridSize; y += gridSize) {
+        for (let y = 0.5; y <= height; y += HERO_GRID) {
             this.ctx.moveTo(0, y);
-            this.ctx.lineTo(this.width, y);
+            this.ctx.lineTo(width, y);
         }
         this.ctx.stroke();
     }
-
-    drawNodes() {
-        this.nodes.forEach(node => {
-            node.x += node.vx;
-            node.y += node.vy;
-            node.pulse += 0.05;
-
-            if (node.x < 0 || node.x > this.width) node.vx *= -1;
-            if (node.y < 0 || node.y > this.height) node.vy *= -1;
-
-            const pulseSize = Math.sin(node.pulse) * 2;
-            const radius = node.radius + pulseSize;
-
-            const gradient = this.ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, radius * 3);
-            gradient.addColorStop(0, 'rgba(167, 139, 250, 0.8)');
-            gradient.addColorStop(0.5, 'rgba(139, 92, 246, 0.3)');
-            gradient.addColorStop(1, 'rgba(139, 92, 246, 0)');
-
-            this.ctx.fillStyle = gradient;
-            this.ctx.beginPath();
-            this.ctx.arc(node.x, node.y, radius * 3, 0, Math.PI * 2);
-            this.ctx.fill();
-
-            this.ctx.fillStyle = '#a78bfa';
-            this.ctx.beginPath();
-            this.ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-            this.ctx.fill();
-        });
-    }
-
-    drawConnections() {
-        this.ctx.strokeStyle = 'rgba(139, 92, 246, 0.2)';
-        this.ctx.lineWidth = 1;
-
-        for (let i = 0; i < this.nodes.length; i++) {
-            for (let j = i + 1; j < this.nodes.length; j++) {
-                const dx = this.nodes[i].x - this.nodes[j].x;
-                const dy = this.nodes[i].y - this.nodes[j].y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-
-                if (dist < 150) {
-                    const opacity = (1 - dist / 150) * 0.3;
-                    this.ctx.strokeStyle = `rgba(139, 92, 246, ${opacity})`;
-                    this.ctx.beginPath();
-                    this.ctx.moveTo(this.nodes[i].x, this.nodes[i].y);
-                    this.ctx.lineTo(this.nodes[j].x, this.nodes[j].y);
-                    this.ctx.stroke();
-                }
-            }
-        }
-    }
-
-    drawParticles() {
-        this.particles.forEach(p => {
-            p.x += p.vx;
-            p.y += p.vy;
-            p.life += 0.016;
-
-            if (p.life > p.maxLife) {
-                p.x = Math.random() * this.width;
-                p.y = Math.random() * this.height;
-                p.life = 0;
-            }
-
-            if (p.x < 0 || p.x > this.width) p.vx *= -1;
-            if (p.y < 0 || p.y > this.height) p.vy *= -1;
-
-            const alpha = 1 - (p.life / p.maxLife);
-            this.ctx.fillStyle = `rgba(217, 70, 239, ${alpha * 0.6})`;
-            this.ctx.beginPath();
-            this.ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
-            this.ctx.fill();
-        });
-    }
-
-    drawDataStreams() {
-        if (Math.random() < 0.05) {
-            this.dataStreams.push({
-                x: Math.random() * this.width,
-                y: 0,
-                speed: Math.random() * 3 + 2,
-                length: Math.random() * 100 + 50,
-            });
-        }
-
-        this.dataStreams = this.dataStreams.filter(stream => {
-            stream.y += stream.speed;
-
-            const gradient = this.ctx.createLinearGradient(stream.x, stream.y, stream.x, stream.y + stream.length);
-            gradient.addColorStop(0, 'rgba(139, 92, 246, 0)');
-            gradient.addColorStop(0.5, 'rgba(217, 70, 239, 0.5)');
-            gradient.addColorStop(1, 'rgba(139, 92, 246, 0)');
-
-            this.ctx.strokeStyle = gradient;
-            this.ctx.lineWidth = 2;
-            this.ctx.beginPath();
-            this.ctx.moveTo(stream.x, stream.y);
-            this.ctx.lineTo(stream.x, stream.y + stream.length);
-            this.ctx.stroke();
-
-            return stream.y < this.height + stream.length;
-        });
-    }
-
-    drawScanlines() {
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.03)';
-        for (let y = 0; y < this.height; y += 4) {
-            this.ctx.fillRect(0, y, this.width, 2);
-        }
-    }
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    if (!document.getElementById('frame-canvas')) return;
-    new ProceduralAnimation();
-});

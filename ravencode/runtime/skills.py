@@ -96,7 +96,7 @@ _register_builtin(
 _register_builtin(
     "remote-registry",
     "Skill Registry",
-    "Download skills from a remote skill registry (like ClawHub).",
+    "Download skills from a remote skill registry (http/https).",
     (
         "You can download skills from a remote registry using the skill tool. "
         "Set the registry URL first with set_skill_registry, then use download_skill to fetch skills."
@@ -169,7 +169,7 @@ def get_skill_info(skill_id: str, cwd: Path | None = None) -> Skill | None:
 
 
 # ---------------------------------------------------------------------------
-# remote registry (ClawHub-like)
+# remote skill registry
 # ---------------------------------------------------------------------------
 
 _REMOTE_REGISTRY_URL: str = ""

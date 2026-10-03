@@ -12,7 +12,8 @@ import re
 from pathlib import Path
 
 from raven.core.rag.bm25 import BM25Index
-from ravencode.runtime.repo_map import _CODE_SUFFIXES, _EXCLUDED_DIRS
+from ravencode.runtime.fs_walk import iter_files
+from ravencode.runtime.repo_map import _CODE_SUFFIXES
 from ravencode.runtime.workspace import get_workspace_root
 
 _MAX_FILES = 5_000
@@ -57,8 +58,8 @@ class RepoIndex:
     def _fingerprint_of(self, root: Path) -> tuple[int, float]:
         count = 0
         newest = 0.0
-        for path in root.rglob("*"):
-            if not path.is_file() or path.suffix not in _CODE_SUFFIXES:
+        for path in iter_files(root):
+            if path.suffix not in _CODE_SUFFIXES:
                 continue
             count += 1
             try:
@@ -75,13 +76,10 @@ class RepoIndex:
         docs: list[str] = []
         entries: list[tuple[str, int, int, str]] = []
         files = 0
-        for path in sorted(root.rglob("*")):
+        for path in sorted(iter_files(root)):
             if len(entries) >= _MAX_CHUNKS or files >= _MAX_FILES:
                 break
-            if not path.is_file() or path.suffix not in _CODE_SUFFIXES:
-                continue
-            rel_parts = path.relative_to(root).parts
-            if any(part in _EXCLUDED_DIRS for part in rel_parts[:-1]):
+            if path.suffix not in _CODE_SUFFIXES:
                 continue
             try:
                 if path.stat().st_size > _MAX_FILE_BYTES:
@@ -90,7 +88,7 @@ class RepoIndex:
             except OSError:
                 continue
             files += 1
-            rel = "/".join(rel_parts)
+            rel = path.relative_to(root).as_posix()
             for start, end, chunk in chunk_source(text):
                 if len(chunk.strip()) < 20:
                     continue

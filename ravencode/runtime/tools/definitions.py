@@ -661,7 +661,7 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
     "download_skill": {
         "name": "download_skill",
         "dangerous": True,
-        "description": "Download a skill from the remote skill registry (ClawHub-like). Requires set_skill_registry first.",
+        "description": "Download a skill from the remote skill registry. Requires set_skill_registry first.",
         "parameters": {
             "type": "object",
             "properties": {
