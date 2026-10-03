@@ -7,7 +7,7 @@
 A self-hosted AI assistant that lives on your own server: a persistent gateway with 15 messaging
 channels, an autonomous coding agent, and a web dashboard — in one Python process.
 
-[English](README.md) · [Русский](README.ru.md)
+[**Landing site**](https://ssrjkk.github.io/raven/) · [English](README.md) · [Русский](README.ru.md)
 
 </div>
 
