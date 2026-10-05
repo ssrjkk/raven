@@ -225,7 +225,7 @@ jobs:
       # and GitHub Pages is not enabled for this repo, so the report had nowhere to go.
       - name: Upload Allure results
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: allure-results
           path: allure-results
