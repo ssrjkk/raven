@@ -12,7 +12,7 @@ license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.141.1,<1.0",
+    "fastapi>=0.142.2,<1.0",
     # Security floors: advisories patched in these versions (pip-audit clean-rooms)
     "starlette>=1.3.1,<2.0",
     "anyio>=4.14.2,<5.0",
