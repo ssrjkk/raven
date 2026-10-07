@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -39,25 +40,67 @@ class TestSettings:
         assert settings.log_level in ("DEBUG", "INFO", "WARNING", "ERROR")
 
 
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def _documented_env_names() -> set[str]:
+    names = {
+        line.split("=", 1)[0].strip().upper()
+        for line in (ROOT / ".env.example").read_text(encoding="utf-8").splitlines()
+        if "=" in line and not line.lstrip().startswith("#")
+    }
+    assert names, "no variables parsed from .env.example — both parity guards are vacuous"
+    return names
+
+
+def _settings_env_candidates() -> dict[str, set[str]]:
+    """Field name to every environment name pydantic accepts for it."""
+    candidates: dict[str, set[str]] = {}
+    for field_name, field in Settings.model_fields.items():
+        names = {field_name.upper()}
+        alias = field.validation_alias
+        if isinstance(alias, str):
+            names.add(alias.upper())
+        elif alias is not None and hasattr(alias, "choices"):
+            names.update(str(choice).upper() for choice in alias.choices)
+        candidates[field_name] = names
+    return candidates
+
+
 class TestEnvExampleParity:
     def test_every_setting_is_documented(self) -> None:
-        root = Path(__file__).resolve().parents[2]
-        documented = {
-            line.split("=", 1)[0].strip().upper()
-            for line in (root / ".env.example").read_text(encoding="utf-8").splitlines()
-            if "=" in line and not line.lstrip().startswith("#")
-        }
-        undocumented: list[str] = []
-        for name, field in Settings.model_fields.items():
-            candidates = {name.upper()}
-            alias = field.validation_alias
-            if isinstance(alias, str):
-                candidates.add(alias.upper())
-            elif alias is not None and hasattr(alias, "choices"):
-                candidates.update(str(choice).upper() for choice in alias.choices)
-            if not candidates & documented:
-                undocumented.append(name)
-        assert undocumented == [], f"settings missing from .env.example: {sorted(undocumented)}"
+        documented = _documented_env_names()
+        undocumented = sorted(
+            name for name, candidates in _settings_env_candidates().items() if not candidates & documented
+        )
+        assert undocumented == [], f"settings missing from .env.example: {undocumented}"
+
+    # A name must be readable from code, build files or deployment manifests. Docs and
+    # READMEs are excluded on purpose: describing a variable is not consuming it. A library
+    # that reads its own env vars (the OTel SDK's OTEL_TRACES_SAMPLER, say) is invisible to
+    # this scan, and such a name is still not Raven's to document.
+    _CONSUMERS = ("raven", "ravencode", "aios", "scripts", "deploy", "extension", "web/src", ".github")
+    _SUFFIXES: ClassVar[frozenset[str]] = frozenset(
+        {".py", ".ts", ".tsx", ".js", ".mjs", ".json", ".yml", ".yaml", ".toml", ".ps1", ""}
+    )
+
+    def test_every_documented_env_var_is_consumed(self) -> None:
+        """Guard the direction ``test_every_setting_is_documented`` does not cover.
+
+        That test proves ``.env.example`` is complete, so a variable whose feature was
+        removed can stay documented forever; this one proves every name in the file is
+        still read by something that ships — as a settings field or literally.
+        """
+        documented = _documented_env_names()
+        accepted = {name for names in _settings_env_candidates().values() for name in names}
+        haystack = [ROOT / "Dockerfile"]
+        for rel in self._CONSUMERS:
+            base = ROOT / rel
+            haystack += [p for p in base.rglob("*") if p.is_file() and p.suffix in self._SUFFIXES]
+        source = "\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in haystack)
+
+        unread = sorted(n for n in documented if n not in accepted and n not in source)
+        assert unread == [], f".env.example documents variables nothing reads: {unread}"
 
 
 def _settings_without_env_file() -> Settings:

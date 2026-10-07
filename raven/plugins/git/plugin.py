@@ -5,6 +5,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from loguru import logger
+
 PLUGIN_NAME = "git"
 PLUGIN_DESCRIPTION = "Git operations: status, log, diff, commit, branch, PR"
 
@@ -116,6 +118,8 @@ async def _run_git(args: list[str], repo_path: str) -> str:
     except FileNotFoundError:
         return "Git not found. Install git: https://git-scm.com"
     except PermissionError as e:
+        logger.debug("[git] permission error: {}", e)
         return f"Git error: {e}"
     except Exception as e:
+        logger.debug("[git] error: {}", e)
         return f"Git error: {e}"

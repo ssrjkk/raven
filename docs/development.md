@@ -1,5 +1,7 @@
 # Development
 
+_by [@ssrjkk](https://github.com/ssrjkk)_
+
 ## Setup
 
 ```bash
@@ -29,7 +31,7 @@ raven/
 ├── gateway/           # Gateway glue, channel guardian
 ├── plugins/           # 10 built-in plugin packages
 ├── routines/          # Scheduled routines
-├── tools/             # 30+ assistant tool registry
+├── tools/             # 66 assistant tool registry
 ├── tui/               # Textual TUI
 ├── voice/             # TTS/STT module
 └── workspace/         # Workspace manager, plugin loader

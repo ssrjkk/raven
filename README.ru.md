@@ -7,13 +7,13 @@
 Самостоятельно размещаемый AI-ассистент: 15 мессенджеров, автономный coding-агент и веб-дашборд
 в одном Python-процессе.
 
-[English](README.md) • **Русский**
-
-[![CI](https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ssrjkk/raven/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[**Лендинг**](https://ssrjkk.github.io/raven/) · [English](README.md) · **Русский**
 
 </div>
+
+## Скриншоты
+
+![Лендинг](docs/screenshots/hero.png)
 
 ---
 
@@ -55,6 +55,7 @@ raven start                 # шлюз + веб-интерфейс на http://l
 | `raven start` | Шлюз: каналы, веб-дашборд на порту 18888 |
 | `ravencode tui` | Coding-агент в терминале |
 | `ravenflow` | Workflow-демон на порту 18789 |
+| `raven-mcp` | MCP-сервер (stdio) для Claude Desktop, Qoder, opencode, Cursor |
 
 Или через Docker:
 
@@ -167,6 +168,25 @@ docs/         документация разработчика (архитек�
 tests/        pytest-набор (unit, integration, e2e)
 ```
 
+## Использование из редактора
+
+Raven работает и как MCP-сервер — Claude Desktop, Qoder, opencode, Cursor, Windsurf и любой
+другой MCP-клиент могут вызывать его 66 инструментов напрямую:
+
+```json
+{
+  "mcpServers": {
+    "raven": {
+      "command": "raven-mcp",
+      "args": ["--workspace", "/путь/к/проекту"]
+    }
+  }
+}
+```
+
+Готовые конфиги для каждого клиента, HTTP-транспорт и правила изоляции workspace —
+в [docs/mcp.md](docs/mcp.md).
+
 ## Разработка
 
 ```bash
@@ -217,7 +237,10 @@ tail -f data/raven.log
 
 ## Контакты
 
-- **GitHub:** https://github.com/ssrjkk/raven
+- **Автор:** [@ssrjkk](https://github.com/ssrjkk)
+- **Telegram:** [@ssrjkk](https://t.me/ssrjkk)
+- **Бот:** [@ssrjkk_bot](https://t.me/ssrjkk_bot)
+- **Репозиторий:** https://github.com/ssrjkk/raven
 - **Issues:** https://github.com/ssrjkk/raven/issues
 
 ## Лицензия

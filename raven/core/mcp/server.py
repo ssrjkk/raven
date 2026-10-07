@@ -8,7 +8,19 @@ from typing import Any
 from ravencode.runtime.tools import execute_tool_public, get_tool_definitions
 
 
+def _to_mcp_tool(defn: dict[str, Any]) -> dict[str, Any]:
+    fn = defn.get("function", defn)
+    return {
+        "name": fn.get("name", ""),
+        "description": fn.get("description", ""),
+        "inputSchema": fn.get("parameters", {"type": "object", "properties": {}}),
+    }
+
+
 class MCPServer:
+    server_name: str = "raven-mcp"
+    server_version: str = "0.4.8"
+
     def __init__(self) -> None:
         self._running = False
 
@@ -30,10 +42,14 @@ class MCPServer:
         sys.stdout.write(text + "\n")
         await asyncio.to_thread(sys.stdout.flush)
 
-    async def handle_request(self, req: dict[str, Any]) -> dict[str, Any]:
+    async def handle_request(self, req: dict[str, Any]) -> dict[str, Any] | None:
         method = req.get("method", "")
         req_id = req.get("id")
         params = req.get("params", {})
+
+        # JSON-RPC notifications carry no id and must not get a response.
+        if method.startswith("notifications/"):
+            return None
 
         if method == "initialize":
             return {
@@ -42,11 +58,15 @@ class MCPServer:
                 "result": {
                     "protocolVersion": "2025-03-26",
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "raven-mcp", "version": "0.4.8"},
+                    "serverInfo": {"name": self.server_name, "version": self.server_version},
                 },
             }
+        if method == "ping":
+            return {"jsonrpc": "2.0", "id": req_id, "result": {}}
+        if method == "logging/setLevel":
+            return {"jsonrpc": "2.0", "id": req_id, "result": {}}
         if method == "tools/list":
-            tools = get_tool_definitions()
+            tools = [_to_mcp_tool(d) for d in get_tool_definitions()]
             return {"jsonrpc": "2.0", "id": req_id, "result": {"tools": tools}}
         if method == "tools/call":
             name = params.get("name", "")
@@ -64,7 +84,8 @@ class MCPServer:
             if req is None:
                 break
             resp = await self.handle_request(req)
-            await self._send_response(resp)
+            if resp is not None:
+                await self._send_response(resp)
 
     def stop(self) -> None:
         self._running = False

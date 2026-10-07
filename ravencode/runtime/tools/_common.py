@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import difflib
 
+from loguru import logger
+
 from ravencode.runtime.undo import get_undo_manager
 from ravencode.runtime.workspace import (
     confine as _confine,
@@ -33,6 +35,7 @@ async def _safe_read(path: str, max_chars: int = 50_000) -> tuple[str, str]:
     try:
         content = await asyncio.to_thread(p.read_text, encoding="utf-8", errors="replace")
     except Exception as exc:
+        logger.debug("[files] cannot read {}: {}", path, exc)
         return "", f"[error] cannot read {path}: {exc}"
     if len(content) > max_chars:
         content = content[:max_chars] + f"\n... (truncated, {len(content)} total chars)"

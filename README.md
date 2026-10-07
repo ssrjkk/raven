@@ -7,15 +7,13 @@
 A self-hosted AI assistant that lives on your own server: a persistent gateway with 15 messaging
 channels, an autonomous coding agent, and a web dashboard — in one Python process.
 
-[English](README.md) · [Русский](README.ru.md)
-
-[![CI](https://img.shields.io/github/actions/workflow/status/ssrjkk/raven/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ssrjkk/raven/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-5%2C100%2B-brightgreen)](https://github.com/ssrjkk/raven/actions)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![CodeQL](https://img.shields.io/badge/code%20scanning-0%20alerts-success?logo=github)](https://github.com/ssrjkk/raven/security/code-scanning)
+[**Landing site**](https://ssrjkk.github.io/raven/) · [English](README.md) · [Русский](README.ru.md)
 
 </div>
+
+## Screenshots
+
+![Landing page](docs/screenshots/hero.png)
 
 ---
 
@@ -53,6 +51,7 @@ The three entry points:
 | `raven start` | The gateway: channels, web dashboard on port 18888 |
 | `ravencode tui` | The coding agent in a terminal session |
 | `ravenflow` | The workflow daemon on port 18789 |
+| `raven-mcp` | MCP server (stdio) for Claude Desktop, Qoder, opencode, Cursor |
 
 Or with Docker:
 
@@ -164,6 +163,25 @@ docs/         developer docs (architecture, security, channels)
 tests/        pytest suite (unit, integration, e2e)
 ```
 
+## Use it from your editor
+
+Raven is also an MCP server — Claude Desktop, Qoder, opencode, Cursor, Windsurf and any other
+MCP client can call its 66 tools directly:
+
+```json
+{
+  "mcpServers": {
+    "raven": {
+      "command": "raven-mcp",
+      "args": ["--workspace", "/path/to/your/project"]
+    }
+  }
+}
+```
+
+Ready-to-paste configs for each client, the HTTP transport, and the workspace-isolation rules
+are in [docs/mcp.md](docs/mcp.md).
+
 ## Development
 
 ```bash
@@ -214,7 +232,10 @@ tail -f data/raven.log
 
 ## Contact
 
-- **GitHub:** https://github.com/ssrjkk/raven
+- **Author:** [@ssrjkk](https://github.com/ssrjkk)
+- **Telegram:** [@ssrjkk](https://t.me/ssrjkk)
+- **Bot:** [@ssrjkk_bot](https://t.me/ssrjkk_bot)
+- **Repository:** https://github.com/ssrjkk/raven
 - **Issues:** https://github.com/ssrjkk/raven/issues
 
 ## License

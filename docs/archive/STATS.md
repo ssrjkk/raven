@@ -13,7 +13,7 @@
 
 | Directory | Language | Purpose |
 |-----------|----------|---------|
-| `raven/` | Python | Core engine, 15 channels, CLI, 30+ tools |
+| `raven/` | Python | Core engine, 15 channels, CLI, 66 tools |
 | `ravencode/` | Python | Autonomous coding agent (50+ tools) |
 | `aios/` | Python | Thin FastAPI AI-Gateway bridge |
 | `web/` | TypeScript | React 19 + Vite dashboard |

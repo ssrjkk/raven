@@ -42,6 +42,7 @@ async def browser_navigate(url: str) -> str:
         if ssrf_error:
             return f"[denied] browser_navigate: {ssrf_error}"
     except Exception as exc:
+        logger.debug("[browser] ssrf check failed: {}", exc)
         return f"[error] browser_navigate: {exc}"
     try:
         page = await _ensure_page()
@@ -54,10 +55,12 @@ async def browser_navigate(url: str) -> str:
             if ssrf_error:
                 return f"[blocked] browser_navigate: redirect to private/internal address: {ssrf_error}"
         except Exception as exc:
+            logger.debug("[browser] redirect ssrf check failed: {}", exc)
             return f"[error] browser_navigate redirect: {exc}"
         title = await page.title()
         return f"Navigated to {url} | Title: {title}"
     except Exception as exc:
+        logger.debug("[browser] navigate failed: {}", exc)
         return f"[error] browser_navigate: {exc}"
 
 
@@ -67,6 +70,7 @@ async def browser_click(selector: str) -> str:
         await page.click(selector, timeout=10000)
         return f"Clicked: {selector}"
     except Exception as exc:
+        logger.debug("[browser] click failed for {}: {}", selector, exc)
         return f"[error] browser_click: {exc}"
 
 
@@ -76,6 +80,7 @@ async def browser_type(selector: str, text: str) -> str:
         await page.fill(selector, text, timeout=10000)
         return f"Typed '{text[:50]}' into {selector}"
     except Exception as exc:
+        logger.debug("[browser] type failed for {}: {}", selector, exc)
         return f"[error] browser_type: {exc}"
 
 
@@ -88,6 +93,7 @@ async def browser_screenshot(path: str = "screenshot.png") -> str:
         await page.screenshot(path=str(target), full_page=True)
         return f"Screenshot saved to {target}"
     except Exception as exc:
+        logger.debug("[browser] screenshot failed: {}", exc)
         return f"[error] browser_screenshot: {exc}"
 
 
@@ -100,6 +106,7 @@ async def browser_get_html(selector: str = "body") -> str:
         html = await el.inner_html()
         return html[:10000]  # type: ignore[no-any-return]
     except Exception as exc:
+        logger.debug("[browser] get_html failed: {}", exc)
         return f"[error] browser_get_html: {exc}"
 
 
@@ -109,6 +116,7 @@ async def browser_evaluate(script: str) -> str:
         result = await page.evaluate(script)
         return str(result)[:5000]
     except Exception as exc:
+        logger.debug("[browser] evaluate failed: {}", exc)
         return f"[error] browser_evaluate: {exc}"
 
 

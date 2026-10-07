@@ -1,5 +1,7 @@
 # Architecture
 
+_by [@ssrjkk](https://github.com/ssrjkk)_
+
 ## Overview
 
 Raven AI uses a **Gateway** architecture pattern:

@@ -18,13 +18,6 @@
       "envFile": "${workspaceFolder}/.env"
     },
     {
-      "name": "Go Auth Service",
-      "type": "go",
-      "request": "launch",
-      "program": "${workspaceFolder}/services/auth",
-      "envFile": "${workspaceFolder}/.env"
-    },
-    {
       "name": "Python Tests",
       "type": "python",
       "request": "launch",

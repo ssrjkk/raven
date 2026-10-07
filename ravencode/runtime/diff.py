@@ -4,6 +4,8 @@ import difflib
 import re
 from typing import Any
 
+from loguru import logger
+
 from ravencode.runtime.undo import get_undo_manager
 from ravencode.runtime.workspace import confine
 
@@ -37,6 +39,7 @@ def apply_patch(path: str, diff_text: str) -> str:
     try:
         p = confine(path)
     except PermissionError as exc:
+        logger.debug("[diff] access denied for {}: {}", path, exc)
         return f"[error] {exc}"
     if not p.is_file():
         return f"[error] file not found: {path}"
@@ -84,6 +87,7 @@ def smart_edit(
     try:
         p = confine(path)
     except PermissionError as exc:
+        logger.debug("[diff] access denied for {}: {}", path, exc)
         return f"[error] {exc}"
     if not p.is_file():
         return f"[error] file not found: {path}"

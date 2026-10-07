@@ -60,7 +60,8 @@ async def _authenticate_ws(websocket: WebSocket) -> dict[str, Any] | None:
     await websocket.accept()
     try:
         raw = await asyncio.wait_for(websocket.receive_text(), timeout=10)
-    except Exception:
+    except Exception as e:
+        logger.debug("[webchat] WS receive timeout/error: {}", e)
         await websocket.close(code=1008, reason="Authentication required")
         return None
     try:
@@ -102,7 +103,8 @@ async def _authenticate_request(request: Request) -> bool:
         return True
     try:
         payload = await auth_handler.decode_token(token)
-    except Exception:
+    except Exception as e:
+        logger.debug("[webchat] token decode failed: {}", e)
         return False
     return payload is not None
 

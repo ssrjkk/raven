@@ -1,0 +1,71 @@
+name: Deploy Site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'docs/**'
+      - 'mkdocs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install MkDocs
+        # Pinned: an unpinned install lets a theme release change the published documentation
+        # without a commit, so the artifact would not be the one reviewed here.
+        run: pip install "mkdocs-material==9.7.7" "mkdocstrings[python]==1.0.6"
+
+      - name: Build documentation
+        run: mkdocs build
+
+      - name: Check the documentation loads nothing off-site
+        run: |
+          fetched=$(grep -ERoh '<(link|script)[^>]+(href|src)="https?://[^"]+"' build/docs \
+            --include='*.html' | grep -Eo 'https?://[^"]+' \
+            | grep -v '^https://ssrjkk\.github\.io' | sort -u || true)
+          if [ -n "$fetched" ]; then
+            echo "::error::Built documentation fetches assets from another host: $fetched"
+            exit 1
+          fi
+
+      - name: Assemble Pages artifact
+        run: |
+          rm -rf build/pages
+          mkdir -p build/pages
+          cp -r site/. build/pages/
+          cp -r build/docs build/pages/docs
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/pages
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

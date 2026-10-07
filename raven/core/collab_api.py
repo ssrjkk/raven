@@ -29,7 +29,8 @@ async def _ws_authenticated(websocket: WebSocket) -> bool:
         return True
     try:
         payload = await auth_handler.decode_token(token)
-    except Exception:
+    except Exception as e:
+        logger.debug("[collab] token decode failed: {}", e)
         return False
     return payload is not None
 

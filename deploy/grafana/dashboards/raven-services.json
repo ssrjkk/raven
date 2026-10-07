@@ -1,12 +1,11 @@
 {
   "__inputs": [],
   "__requires": [],
-  "title": "Raven Services Overview",
+  "title": "Raven Overview",
   "version": 3,
   "editable": true,
   "tags": [
-    "raven",
-    "microservices"
+    "raven"
   ],
   "schemaVersion": 38,
   "timezone": "browser",
@@ -23,7 +22,7 @@
       },
       "targets": [
         {
-          "expr": "up{job=~\"gateway|auth|agent-core|monitor-engine|rag-service|task-engine|code-service\"}",
+          "expr": "up{job=\"raven\"}",
           "legendFormat": "{{ job }}",
           "refId": "A"
         }
@@ -84,23 +83,6 @@
       ]
     },
     {
-      "title": "gRPC Request Rate",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 4
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(grpc_requests_total[5m])) by (method, code)",
-          "legendFormat": "{{ method }} ({{ code }})",
-          "refId": "A"
-        }
-      ]
-    },
-    {
       "title": "Error Rate (%)",
       "type": "timeseries",
       "gridPos": {
@@ -128,7 +110,7 @@
       },
       "targets": [
         {
-          "expr": "process_resident_memory_bytes{job=~\"gateway|auth|agent-core|monitor-engine|rag-service|task-engine|code-service\"} / 1024 / 1024",
+          "expr": "process_resident_memory_bytes{job=\"raven\"} / 1024 / 1024",
           "legendFormat": "{{ job }}",
           "refId": "A"
         }

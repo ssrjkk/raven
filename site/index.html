@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raven — self-hosted MCP server with 66 tools</title>
+    <meta name="description" content="Raven is a self-hosted MCP server: 66 tools over stdio and JSON-RPC over HTTP, with workspace confinement and keyed auth. Works with any MCP client.">
+    <link rel="canonical" href="https://ssrjkk.github.io/raven/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Raven">
+    <meta property="og:title" content="Raven — self-hosted MCP server with 66 tools">
+    <meta property="og:description" content="66 tools over stdio and JSON-RPC over HTTP. Workspace confinement, keyed auth, MIT licensed.">
+    <meta property="og:image" content="https://ssrjkk.github.io/raven/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://ssrjkk.github.io/raven/">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Raven — self-hosted MCP server with 66 tools">
+    <meta name="twitter:description" content="66 tools over stdio and JSON-RPC over HTTP. Workspace confinement, keyed auth, MIT licensed.">
+    <meta name="twitter:image" content="https://ssrjkk.github.io/raven/og-image.png">
+    <meta name="theme-color" content="#0a0812">
+    <link rel="preload" href="fonts/SpaceGrotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Raven",
+      "applicationCategory": "DeveloperApplication",
+      "url": "https://ssrjkk.github.io/raven/",
+      "codeRepository": "https://github.com/ssrjkk/raven",
+      "softwareVersion": "0.4.8",
+      "license": "https://opensource.org/licenses/MIT",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+    }
+    </script>
+</head>
+<body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="navbar">
+        <a class="nav-brand" href="#top">
+            <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 2 3 12l9 10 4-4.6V13h5v-2h-5V6.6z" fill="#8b5cf6"></path>
+                <path d="M12 7.5 7.5 12 12 16.5l1.9-2.2V13H16v-2h-2.1v-1.3z" fill="#d946ef"></path>
+            </svg>
+            <span>Raven</span>
+        </a>
+        <nav aria-label="Primary" id="primary-nav">
+            <ul class="nav-links">
+                <li><a href="#features">Features</a></li>
+                <li><a href="#registry">Registry</a></li>
+                <li><a href="#console">Console</a></li>
+                <li><a href="#architecture">Architecture</a></li>
+                <li><a href="#overview">Spec</a></li>
+                <li><a href="#setup">Setup</a></li>
+                <li><a href="https://github.com/ssrjkk/raven" rel="noopener">GitHub</a></li>
+            </ul>
+        </nav>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-nav" aria-label="Menu">
+            <span class="nav-toggle-bar" aria-hidden="true"></span>
+            <span class="nav-toggle-bar" aria-hidden="true"></span>
+            <span class="nav-toggle-bar" aria-hidden="true"></span>
+        </button>
+    </header>
+
+    <main id="main">
+        <section class="hero" id="top">
+            <canvas id="hero-canvas" aria-hidden="true"></canvas>
+            <div class="hero-shell">
+                <div>
+                    <p class="eyebrow">self-hosted mcp server · v0.4.8</p>
+                    <h1>Raven<span class="caret" aria-hidden="true"></span></h1>
+                    <p class="hero-tagline">66 tools. One server. Two transports.</p>
+                    <p class="hero-description">
+                        Point any MCP client at <strong>one process you host yourself</strong>.
+                        <code>raven-mcp</code> speaks stdio for local clients and JSON-RPC over HTTP
+                        for remote ones, with workspace confinement and keyed auth on both.
+                    </p>
+                    <div class="hero-actions">
+                        <a href="#console" class="btn-primary">Send a request</a>
+                        <a href="https://github.com/ssrjkk/raven" rel="noopener" class="btn-secondary">Read the source</a>
+                    </div>
+                    <p class="hero-facts">
+                        <span>MCP 2025-03-26</span>
+                        <span>Python 3.11+</span>
+                        <span>MIT License</span>
+                        <span>no telemetry</span>
+                    </p>
+                </div>
+                <div class="console" aria-labelledby="handshake-title">
+                    <div class="console-header">
+                        <span id="handshake-title">raven-mcp — stdio</span>
+                        <span class="console-meta">handshake</span>
+                    </div>
+                    <div class="console-body" id="handshake-body" role="log" aria-live="polite" tabindex="0"
+                         aria-label="Recorded initialize and tools/list exchange">
+                        <div class="console-line line-request">{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"any-mcp-client","version":"*"}}}</div>
+                        <div class="console-line line-response">{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{}},"serverInfo":{"name":"raven-mcp","version":"0.4.8"}}}</div>
+                        <div class="console-line line-request">{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}</div>
+                        <div class="console-line line-response">{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"read"},{"name":"write"},{"name":"edit"},{"name":"verify"},{"name":"glob"},{"name":"grep"},{"name":"bash"},"… 59 more"]}}</div>
+                        <div class="console-line line-system">66 tools registered · workspace confined</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="content-body">
+        <section id="features" class="section">
+            <div class="section-inner">
+                <div class="section-head">
+                    <p class="eyebrow">Why Raven</p>
+                    <h2>Built for control</h2>
+                    <p class="section-desc">
+                        Your code, your keys, your infrastructure. No cloud dependency, no telemetry, no vendor lock-in.
+                    </p>
+                </div>
+
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <h3>Self-hosted</h3>
+                        <p>One Python process on your own server. No SaaS, no external API calls except the LLM you choose.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>66 tools</h3>
+                        <p>Files, shell, git, web search, code analysis, testing, memory, routines, monitors — all over MCP.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>Two transports</h3>
+                        <p>stdio for local clients that spawn the server as a subprocess, JSON-RPC over HTTP for remote access.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>Workspace confinement</h3>
+                        <p>Every file operation is bounded to your project. Symlinks resolved, escape attempts blocked.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>Keyed auth</h3>
+                        <p>HTTP transport requires a secret token. Fail-closed: unconfigured means rejected, not accepted.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>MIT licensed</h3>
+                        <p>Use it, modify it, distribute it. No copyleft, no strings attached.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="registry" class="section">
+            <div class="section-inner">
+                <div class="section-head">
+                    <p class="eyebrow">Registry</p>
+                    <h2>Tool registry</h2>
+                    <p class="section-desc">
+                        Every tool the server exposes, with the parameters it accepts.
+                        Select one to build its request frame in the console.
+                    </p>
+                </div>
+
+                <div class="tool-toolbar">
+                    <div>
+                        <label class="sr-only" for="tool-search">Search tools by name or description</label>
+                        <input type="search" id="tool-search" class="search-input"
+                               placeholder="Search 66 tools" autocomplete="off">
+                    </div>
+                    <div class="filter-buttons" role="group" aria-label="Filter tools by category">
+                        <button class="filter-btn" type="button" data-category="all" aria-pressed="true">All</button>
+                        <button class="filter-btn" type="button" data-category="file" aria-pressed="false">File</button>
+                        <button class="filter-btn" type="button" data-category="shell" aria-pressed="false">Shell</button>
+                        <button class="filter-btn" type="button" data-category="web" aria-pressed="false">Web</button>
+                        <button class="filter-btn" type="button" data-category="git" aria-pressed="false">Git</button>
+                        <button class="filter-btn" type="button" data-category="code" aria-pressed="false">Code</button>
+                        <button class="filter-btn" type="button" data-category="agent" aria-pressed="false">Agent</button>
+                        <button class="filter-btn" type="button" data-category="workflow" aria-pressed="false">Workflow</button>
+                        <button class="filter-btn" type="button" data-category="infra" aria-pressed="false">Infra</button>
+                    </div>
+                </div>
+
+                <p class="registry-status" id="registry-status" role="status">Loading registry…</p>
+                <div id="tools-grid" class="tools-grid" aria-label="Available tools"></div>
+                <noscript>
+                    <p class="no-results">
+                        The registry is rendered from <code>tools-data.js</code>.
+                        Enable JavaScript, or read the tool list in
+                        <a href="https://github.com/ssrjkk/raven/blob/main/docs/mcp.md">the MCP docs</a>.
+                    </p>
+                </noscript>
+            </div>
+        </section>
+
+        <section id="console" class="section">
+            <div class="section-inner">
+                <div class="section-head">
+                    <p class="eyebrow">Protocol</p>
+                    <h2>Send a request</h2>
+                    <p class="section-desc">
+                        Build a real JSON-RPC 2.0 frame in your browser: start from an example,
+                        edit it, or select a tool in the registry and the frame comes pre-filled.
+                    </p>
+                </div>
+
+                <div class="console" aria-labelledby="console-title">
+                    <div class="console-header">
+                        <span id="console-title">raven-mcp — request builder</span>
+                        <span class="console-meta"><span data-tool-count>66</span> tools reachable</span>
+                    </div>
+                    <div class="console-body" id="terminal-output" role="log" aria-live="polite" tabindex="0"
+                         aria-label="Frame console: requests you send and the recorded answers"></div>
+                    <form class="console-input" id="request-form">
+                        <label class="prompt" for="terminal-command">$</label>
+                        <textarea id="terminal-command" name="frame" rows="2" spellcheck="false"
+                                  autocomplete="off" aria-describedby="console-hint"
+                                  placeholder='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'></textarea>
+                        <button class="sr-only" type="submit">Send request</button>
+                    </form>
+                </div>
+
+                <div class="console-actions">
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"raven-landing","version":"1.0"}}}'>initialize</button>
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","method":"notifications/initialized"}'>notification</button>
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'>tools/list</button>
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read","arguments":{"path":"README.md","max_chars":100}}}'>tools/call read</button>
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"glob","arguments":{"pattern":"docs/*.md","path":"."}}}'>tools/call glob</button>
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{}}'>missing tool name</button>
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","id":6,"method":"ping","params":{}}'>ping</button>
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","id":7,"method":"resources/list","params":{}}'>resources/list</button>
+                    <button class="ghost-btn" type="button" id="clear-console">Clear</button>
+                </div>
+                <p class="console-note" id="console-hint">
+                    Enter sends the frame, Shift+Enter adds a line. The eight exchanges behind these buttons
+                    were captured from a live <code>raven-mcp</code> process, including its
+                    <code>-32602</code> and <code>-32601</code> replies. Anything outside that recording is
+                    answered by a running server, not by this page.
+                </p>
+            </div>
+        </section>
+
+        <section id="architecture" class="section">
+            <div class="section-inner">
+                <div class="section-head">
+                    <p class="eyebrow">Path</p>
+                    <h2>How a request reaches a tool</h2>
+                    <p class="section-desc">One protocol, three stages: a client frame, a confined server, a registered tool.</p>
+                </div>
+
+                <div class="arch-stack">
+                    <div class="arch-layer">
+                        <h3>Clients</h3>
+                        <div class="arch-items">
+                            <div class="arch-item">Local stdio subprocess</div>
+                            <div class="arch-item">Remote HTTP client</div>
+                            <div class="arch-item">Desktop chat app</div>
+                            <div class="arch-item">IDE extension</div>
+                            <div class="arch-item">Terminal coding agent</div>
+                            <div class="arch-item">Script or CI job</div>
+                        </div>
+                    </div>
+                    <div class="arch-connector">
+                        <span class="connector-label">JSON-RPC 2.0 · initialize → tools/list → tools/call</span>
+                    </div>
+                    <div class="arch-layer">
+                        <h3>raven-mcp</h3>
+                        <div class="arch-items">
+                            <div class="arch-item">Protocol handler</div>
+                            <div class="arch-item">Tool registry</div>
+                            <div class="arch-item">Workspace confinement</div>
+                            <div class="arch-item">Auth: X-Raven-Key or Bearer</div>
+                        </div>
+                    </div>
+                    <div class="arch-connector">
+                        <span class="connector-label">Tool execution, inside the allowed path</span>
+                    </div>
+                    <div class="arch-layer">
+                        <h3>Tools (<span data-tool-count>66</span>)</h3>
+                        <div class="arch-items">
+                            <div class="arch-item">File read / write / edit</div>
+                            <div class="arch-item">Shell + sandbox policy</div>
+                            <div class="arch-item">Web search / fetch</div>
+                            <div class="arch-item">Browser automation</div>
+                            <div class="arch-item">Git, tests, LSP</div>
+                            <div class="arch-item">Sub-agents, todos, memory</div>
+                            <div class="arch-item">Cron, artifacts, TTS</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="overview" class="section">
+            <div class="section-inner">
+                <div class="section-head">
+                    <p class="eyebrow">Repository</p>
+                    <h2>Numbers from the repository</h2>
+                    <p class="section-desc">Counted in the code on this branch, not estimated.</p>
+                </div>
+
+                <dl class="spec-sheet">
+                    <div class="spec-item">
+                        <dt class="spec-term">Registered tools</dt>
+                        <dd class="spec-value"><span data-tool-count>66</span></dd>
+                    </div>
+                    <div class="spec-item">
+                        <dt class="spec-term">Channel adapters</dt>
+                        <dd class="spec-value">15</dd>
+                    </div>
+                    <div class="spec-item">
+                        <dt class="spec-term">Transports</dt>
+                        <dd class="spec-value spec-value-small">stdio · HTTP</dd>
+                    </div>
+                    <div class="spec-item">
+                        <dt class="spec-term">Protocol version</dt>
+                        <dd class="spec-value spec-value-small">2025-03-26</dd>
+                    </div>
+                    <div class="spec-item">
+                        <dt class="spec-term">Runtime</dt>
+                        <dd class="spec-value spec-value-small">Python 3.11+</dd>
+                    </div>
+                    <div class="spec-item">
+                        <dt class="spec-term">License</dt>
+                        <dd class="spec-value spec-value-small">MIT</dd>
+                    </div>
+                </dl>
+
+                <p class="spec-note">
+                    Each tool carries its own JSON Schema, so <code>tools/list</code> returns the
+                    parameter names and types a client needs before it calls anything.
+                </p>
+
+                <div class="surfaces">
+                    <div class="table-wrap">
+                        <table>
+                            <caption>Where the server answers</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col">Surface</th>
+                                    <th scope="col">Detail</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <th scope="row">stdio, gateway toolset</th>
+                                    <td>raven-mcp --workspace /path/to/project</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">stdio, agent toolset</th>
+                                    <td>ravencode-mcp --workspace /path/to/project</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">module entry points</th>
+                                    <td>python -m raven.core.mcp / python -m ravencode.mcp</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">JSON-RPC over HTTP</th>
+                                    <td>POST /mcp/rpc</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">plain tool list</th>
+                                    <td>GET /mcp/tools</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">direct tool call</th>
+                                    <td>POST /mcp/tools/{name}</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">events and liveness</th>
+                                    <td>GET /mcp/events, GET /mcp/health</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">auth</th>
+                                    <td>X-Raven-Key or Authorization: Bearer</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">path confinement</th>
+                                    <td>--workspace, rejects outside paths and symlink escapes</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="setup" class="section">
+            <div class="section-inner">
+                <div class="section-head">
+                    <p class="eyebrow">Setup</p>
+                    <h2>Install and configure</h2>
+                    <p class="section-desc">Three steps from a clone to a client calling tools.</p>
+                </div>
+
+                <div class="install-steps">
+                    <div class="step">
+                        <div class="step-number" aria-hidden="true">1</div>
+                        <div class="step-content">
+                            <h3>Install the server</h3>
+                            <div class="codeblock">
+                                <button class="copy-btn" type="button" aria-label="Copy the install commands">Copy</button>
+                                <pre><code>git clone https://github.com/ssrjkk/raven
+cd raven
+pip install .</code></pre>
+                            </div>
+                            <p class="step-note">Python 3.11+ · installs the <code>raven-mcp</code> and <code>ravencode-mcp</code> commands</p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number" aria-hidden="true">2</div>
+                        <div class="step-content">
+                            <h3>Add it to your client</h3>
+                            <div class="codeblock">
+                                <button class="copy-btn" type="button" aria-label="Copy the client configuration">Copy</button>
+                                <pre><code>{
+  "mcpServers": {
+    "raven": {
+      "command": "raven-mcp",
+      "args": ["--workspace", "/path/to/project"]
+    }
+  }
+}</code></pre>
+                            </div>
+                            <p class="step-note">Same shape for every MCP client that starts a stdio server</p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number" aria-hidden="true">3</div>
+                        <div class="step-content">
+                            <h3>Call the tools</h3>
+                            <p>
+                                Ask the assistant to read a file, run a command or search the web. It calls the
+                                MCP tool and Raven runs it inside the workspace you allowed. Over HTTP, the same
+                                tools answer <code>POST /mcp/rpc</code> with a bearer key.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cta-links">
+                    <a href="https://github.com/ssrjkk/raven/blob/main/docs/mcp.md" rel="noopener" class="btn-primary">Open the MCP setup guide</a>
+                    <a href="https://github.com/ssrjkk/raven/blob/main/README.md" rel="noopener" class="btn-secondary">Read the full documentation</a>
+                </div>
+            </div>
+        </section>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-shell">
+            <p>Raven v0.4.8 — MIT · self-hosted · no telemetry</p>
+            <ul class="footer-links">
+                <li><a href="https://github.com/ssrjkk/raven" rel="noopener">GitHub</a></li>
+                <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/mcp.md" rel="noopener">MCP docs</a></li>
+                <li><a href="https://github.com/ssrjkk/raven/blob/main/CHANGELOG.md" rel="noopener">Changelog</a></li>
+                <li><a href="https://t.me/ssrjkk" rel="noopener">Telegram</a></li>
+                <li><a href="https://t.me/ssrjkk_bot" rel="noopener">Bot</a></li>
+                <li><a href="https://github.com/ssrjkk" rel="noopener">Author</a></li>
+            </ul>
+        </div>
+    </footer>
+
+    <script src="tools-data.js" defer></script>
+    <script src="mcp-frames.js" defer></script>
+    <script src="procedural-animation.js" defer></script>
+    <script src="terminal-demo.js" defer></script>
+    <script src="main.js" defer></script>
+</body>
+</html>

@@ -59,6 +59,7 @@ async def ocr_image(image_path: str, language: str = "eng+rus") -> str:
             stderr=asyncio.subprocess.PIPE,
         )
     except PermissionError as e:
+        logger.debug("[ocr] access denied: {}", e)
         return f"Error: {e}"
     except FileNotFoundError:
         return (
@@ -95,6 +96,7 @@ async def ocr_url(url: str, language: str = "eng+rus") -> str:
             tmp_path = tmp.name
         return await ocr_image(tmp_path, language)
     except Exception as e:
+        logger.debug("[ocr] URL error: {}", e)
         return f"OCR URL error: {e}"
     finally:
         if tmp and Path(tmp_path).exists():

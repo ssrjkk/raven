@@ -180,6 +180,7 @@ async def browser_click(selector: str, url: str = "", timeout: int = 10) -> str:
             await asyncio.sleep(1)
             return f"Clicked {selector}"
         except Exception as e:
+            logger.debug("[browser] click failed for {}: {}", selector, e)
             return f"Click failed: {e}"
 
 
@@ -192,6 +193,7 @@ async def browser_fill(selector: str, value: str, url: str = "", timeout: int = 
             await page.fill(selector, value)
             return f"Filled {selector} with '{value[:50]}'"
         except Exception as e:
+            logger.debug("[browser] fill failed for {}: {}", selector, e)
             return f"Fill failed: {e}"
 
 
@@ -204,6 +206,7 @@ async def browser_type(selector: str, text: str, delay_ms: int = 50, url: str = 
             await page.type(selector, text, delay=delay_ms)
             return f"Typed '{text[:50]}' into {selector}"
         except Exception as e:
+            logger.debug("[browser] type failed for {}: {}", selector, e)
             return f"Type failed: {e}"
 
 
@@ -216,6 +219,7 @@ async def browser_select(selector: str, value: str, url: str = "", timeout: int 
             await page.select_option(selector, value)
             return f"Selected '{value}' in {selector}"
         except Exception as e:
+            logger.debug("[browser] select failed for {}: {}", selector, e)
             return f"Select failed: {e}"
 
 
@@ -239,6 +243,7 @@ async def browser_screenshot(url: str, selector: str = "", timeout: int = 15) ->
             b64 = base64.b64encode(screenshot_bytes).decode()
             return f"![Screenshot](data:image/png;base64,{b64})"
         except Exception as e:
+            logger.debug("[browser] screenshot failed: {}", e)
             return f"Screenshot failed: {e}"
 
 
@@ -250,6 +255,7 @@ async def browser_evaluate(script: str, url: str = "", timeout: int = 10) -> str
             result = await page.evaluate(script)
             return str(result)[:4000]
         except Exception as e:
+            logger.debug("[browser] script execution failed: {}", e)
             return f"Script execution failed: {e}"
 
 
@@ -262,6 +268,7 @@ async def browser_get_text(selector: str = "body", url: str = "", timeout: int =
             text = str(await page.inner_text(selector))
             return text[:6000]
         except Exception as e:
+            logger.debug("[browser] get text failed for {}: {}", selector, e)
             return f"Get text failed: {e}"
 
 
@@ -274,6 +281,7 @@ async def browser_get_html(selector: str = "body", url: str = "", timeout: int =
             html = str(await page.inner_html(selector))
             return html[:6000]
         except Exception as e:
+            logger.debug("[browser] get HTML failed for {}: {}", selector, e)
             return f"Get HTML failed: {e}"
 
 
@@ -299,6 +307,7 @@ async def browser_get_attributes(selector: str, url: str = "", timeout: int = 10
         )
         return f"Attributes of {selector}: {attrs}"
     except Exception as e:
+        logger.debug("[browser] get attributes failed for {}: {}", selector, e)
         return f"Get attributes failed: {e}"
     finally:
         await page.close()
@@ -316,6 +325,7 @@ async def browser_wait(selector: str, timeout: int = 10, state: str = "visible",
         await page.wait_for_selector(selector, timeout=timeout * 1000, state=state)
         return f"Selector {selector} is {state}"
     except Exception as e:
+        logger.debug("[browser] wait failed for {}: {}", selector, e)
         return f"Wait failed: {e}"
     finally:
         await page.close()
@@ -331,6 +341,7 @@ async def browser_scroll(direction: str = "down", amount: int = 500, url: str = 
             await asyncio.sleep(0.5)
             return f"Scrolled {direction} {amount}px"
         except Exception as e:
+            logger.debug("[browser] scroll failed: {}", e)
             return f"Scroll failed: {e}"
 
 
@@ -345,6 +356,7 @@ async def browser_get_cookies(url: str = "", timeout: int = 10) -> str:
             summary = "\n".join(f"  {c['name']}={c['value'][:40]}" for c in cookies[:20])
             return f"Cookies ({len(cookies)}):\n{summary}"
         except Exception as e:
+            logger.debug("[browser] get cookies failed: {}", e)
             return f"Get cookies failed: {e}"
 
 
@@ -355,6 +367,7 @@ async def browser_fill_form(fields: str, timeout: int = 30) -> str:
     try:
         fd = json.loads(fields) if isinstance(fields, str) else fields
     except Exception as e:
+        logger.debug("[browser] invalid fields JSON: {}", e)
         return f"Invalid fields JSON: {e}"
     return await agent.fill_form(fd, timeout=timeout)
 
@@ -432,6 +445,7 @@ async def browser_set_headers(headers: str) -> str:
     try:
         hd = json.loads(headers) if isinstance(headers, str) else headers
     except Exception as e:
+        logger.debug("[browser] invalid headers JSON: {}", e)
         return f"Invalid headers JSON: {e}"
     return await agent.set_extra_http_headers(hd)
 
@@ -471,6 +485,7 @@ async def browser_set_cookies(cookies: str) -> str:
     try:
         ck = json.loads(cookies) if isinstance(cookies, str) else cookies
     except Exception as e:
+        logger.debug("[browser] invalid cookies JSON: {}", e)
         return f"Invalid cookies JSON: {e}"
     return await agent.set_cookies(ck)
 

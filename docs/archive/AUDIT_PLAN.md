@@ -31,7 +31,7 @@
 - [x] All 166 tests passing
 
 ## Stats
-- 12 channels: Telegram, Discord, WebChat, Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE
+- 15 channels: Telegram, Discord, WebChat, Slack, WhatsApp, Matrix, Google Chat, Signal, IRC, Teams, Feishu, LINE, GitHub, GitLab, Email
 - 13 plugins: api, browser, code, cron, files, git, memory, ocr, process, sessions
 - 166 tests, all passing
 - GitHub Actions CI (Python 3.11-3.13)

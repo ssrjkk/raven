@@ -1,6 +1,8 @@
 # Channels Overview
 
-Raven AI connects to 15+ messaging platforms. Each channel is implemented as a `BaseChannel` subclass.
+_by [@ssrjkk](https://github.com/ssrjkk)_
+
+Raven AI connects to 15 messaging platforms. Each channel is implemented as a `BaseChannel` subclass.
 
 ## Supported Channels
 
@@ -17,6 +19,9 @@ Raven AI connects to 15+ messaging platforms. Each channel is implemented as a `
 | Feishu | Webhook + API | Stateless | Stable |
 | LINE | Webhook | Stateless | Stable |
 | Microsoft Teams | Webhook | Stateless | Stable |
+| GitHub | Webhook | Stateless | Stable |
+| GitLab | Webhook | Stateless | Stable |
+| Email | IMAP/SMTP | Polling | Stable |
 | WebChat | WebSocket | Client reconnect | Stable |
 
 ## Architecture

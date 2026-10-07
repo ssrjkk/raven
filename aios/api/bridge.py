@@ -705,12 +705,11 @@ def _rg_search(query: str, root: Path, limit: int) -> list[dict[str, Any]]:
         pattern = _re.compile(_re.escape(query))
     except Exception:
         return results
-    for fpath in root.rglob("*"):
+    from ravencode.runtime.fs_walk import iter_files
+    for fpath in iter_files(root):
         if len(results) >= limit:
             break
         if not fpath.is_file():
-            continue
-        if any(p in str(fpath) for p in (".git", "node_modules", "__pycache__", ".venv")):
             continue
         try:
             content = fpath.read_text(encoding="utf-8", errors="replace")

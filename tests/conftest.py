@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,7 @@ from raven.core.gateway.gateway import Gateway
 from raven.core.llm import LLMProvider, LLMResponse
 from raven.core.models import IncomingMessage, Message
 from raven.core.plugin_loader import PluginLoader
+from ravencode.runtime.plugins import get_plugin_registry
 
 
 class MockLLMProvider(LLMProvider):
@@ -69,6 +70,20 @@ class MockChannel(BaseChannel):
 
     async def health_check(self) -> bool:
         return True
+
+
+@pytest.fixture(autouse=True)
+def _isolate_plugin_registry() -> Iterator[None]:
+    """Undo plugin registrations made during a test.
+
+    ``get_plugin_registry()`` is process-wide and its tools are appended to MCP
+    ``tools/list``, so a leaked plugin changes the tool count for every later test.
+    """
+    registry = get_plugin_registry()
+    before = set(registry.plugins)
+    yield
+    for name in set(registry.plugins) - before:
+        registry.unregister(name)
 
 
 @pytest.fixture

@@ -54,6 +54,7 @@ from raven.core.github_api import create_github_router
 from raven.core.http_client import client_manager
 from raven.core.insights_api import create_insights_router
 from raven.core.kg_api import create_knowledge_router
+from raven.core.mcp.http_transport import create_mcp_router
 from raven.core.media_api import create_media_router
 from raven.core.memory.manager import MemoryManager as _MemoryManager
 from raven.core.middleware import (
@@ -330,7 +331,14 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     api_app.include_router(create_sse_router())
 
     tests_router = create_tests_router()
+    tests_router = create_tests_router()
     api_app.include_router(tests_router)
+
+    api_app.include_router(create_mcp_router())
+
+    from ravencode.runtime.workspace import set_workspace_root
+
+    set_workspace_root(settings.resolved_workspace or Path.cwd())
 
     status_router = create_status_router(gateway, plugin_loader, stop_event)
     api_app.include_router(status_router)

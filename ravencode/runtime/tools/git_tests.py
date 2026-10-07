@@ -130,6 +130,7 @@ async def run_tests(path: str | None = None, extra_args: str | None = None) -> s
     try:
         cwd = _confine(path) if path else _confine(".")
     except PermissionError as exc:
+        logger.debug("[tests] access denied: {}", exc)
         return f"[error] {exc}"
     if not (Path(cwd) / "pyproject.toml").exists() and not any(Path(cwd).glob("test_*.py")) and not any(
         Path(cwd).glob("*_test.py")
@@ -149,5 +150,6 @@ async def run_tests(path: str | None = None, extra_args: str | None = None) -> s
     except TimeoutError:
         return f"[error] test run timed out after {int(_RUN_TESTS_TIMEOUT)}s"
     except OSError as exc:
+        logger.debug("[tests] failed to launch pytest: {}", exc)
         return f"[error] failed to launch pytest: {exc}"
     return _summarize_pytest(out.decode("utf-8", errors="replace"), proc.returncode or 0)

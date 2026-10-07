@@ -1,0 +1,17 @@
+/* The repository's purple-black brand palette. Material's public build accepts only its own
+   named colors in mkdocs.yml's theme.palette, so the scheme is overridden here — its default
+   indigo header is the one surface in the project that still shows a color no design decision
+   ever picked.
+
+   Body links and the accent take --violet-deep (#7c3aed), not the landing page's --violet
+   (#8b5cf6): Material paints links with these on a white page, where #8b5cf6 measures 4.2:1
+   and 4.5:1 is what body text has to clear. */
+
+:root > * {
+    --md-primary-fg-color: #0a0812;
+    --md-primary-fg-color--light: #1a1226;
+    --md-primary-fg-color--dark: #050309;
+    --md-accent-fg-color: #7c3aed;
+    --md-accent-fg-color--transparent: rgba(124, 58, 237, 0.12);
+    --md-typeset-a-color: #7c3aed;
+}

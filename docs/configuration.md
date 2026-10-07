@@ -1,5 +1,7 @@
 # Configuration
 
+_by [@ssrjkk](https://github.com/ssrjkk)_
+
 ## Environment Variables
 
 Configuration is primarily managed through a `.env` file in the project root or system environment variables.

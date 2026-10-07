@@ -49,6 +49,7 @@ async def format_file(path: str) -> str:
     try:
         confine(path)
     except PermissionError as exc:
+        logger.debug("[formatter] access denied for {}: {}", path, exc)
         return f"[error] {exc}"
     ext = Path(path).suffix.lower()
     cmd = _FORMATTERS.get(ext)

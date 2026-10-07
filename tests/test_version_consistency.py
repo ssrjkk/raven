@@ -29,17 +29,15 @@ VERSION_SURFACES: tuple[tuple[str, str], ...] = (
     ("raven/cli/init_cmd.py", rf'"version": "{_VERSION}"'),
     ("raven/cli/setup_cmd.py", rf'"version": "{_VERSION}"'),
     ("raven/core/mcp/mcp_client.py", rf'"name": "raven-mcp-client", "version": "{_VERSION}"'),
-    ("raven/core/mcp/server.py", rf'"name": "raven-mcp", "version": "{_VERSION}"'),
+    ("raven/core/mcp/server.py", rf'server_version: str = "{_VERSION}"'),
     ("raven/tui/app.py", rf'SUB_TITLE = "v{_VERSION}'),
     ("raven/gateway/daemon.py", rf'title="RavenFlow Gateway",\s*version="{_VERSION}"'),
     ("ravencode/api/server.py", rf'title="RavenCode API",\s*version="{_VERSION}"'),
-    ("ravencode/mcp/server.py", rf'"name": "ravencode", "version": "{_VERSION}"'),
     ("web/package.json", rf'"version": "{_VERSION}"'),
     ("web/package-lock.json", rf'"name": "raven-web",\s*"version": "{_VERSION}"'),
     ("extension/manifest.json", rf'"version": "{_VERSION}"'),
     ("extension/vscode/package.json", rf'"version": "{_VERSION}"'),
     ("extension/vscode/package-lock.json", rf'"name": "raven-vscode",\s*"version": "{_VERSION}"'),
-    (".env.example", rf"SERVICE_VERSION={_VERSION}"),
 )
 
 

@@ -150,27 +150,42 @@ class TestMCPServer:
     async def test_initialize(self) -> None:
         server = MCPServer()
         result = await server.handle_request({"method": "initialize", "id": 1, "params": {}})
+        assert result is not None
         assert result["result"]["serverInfo"]["name"] == "ravencode"
         assert "tools" in result["result"]["capabilities"]
 
     async def test_tools_list(self) -> None:
         server = MCPServer()
-        defs = [{"function": {"name": "a"}}]
-        with patch("ravencode.mcp.server.get_tool_definitions", return_value=defs):
+        defs = [{"function": {"name": "a", "description": "d", "parameters": {"type": "object"}}}]
+        with patch("raven.core.mcp.server.get_tool_definitions", return_value=defs):
             result = await server.handle_request({"method": "tools/list", "id": 2, "params": {}})
-        assert result["result"]["tools"] == defs
+        assert result is not None
+        assert result["result"]["tools"] == [
+            {"name": "a", "description": "d", "inputSchema": {"type": "object"}}
+        ]
+
+    async def test_notification_yields_no_response(self) -> None:
+        server = MCPServer()
+        assert await server.handle_request({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
+
+    async def test_ping(self) -> None:
+        server = MCPServer()
+        result = await server.handle_request({"jsonrpc": "2.0", "id": 9, "method": "ping"})
+        assert result == {"jsonrpc": "2.0", "id": 9, "result": {}}
 
     async def test_tools_call(self) -> None:
         server = MCPServer()
-        with patch("ravencode.mcp.server.execute_tool_public", new_callable=AsyncMock, return_value="out"):
+        with patch("raven.core.mcp.server.execute_tool_public", new_callable=AsyncMock, return_value="out"):
             result = await server.handle_request(
                 {"method": "tools/call", "id": 3, "params": {"name": "shell", "arguments": {"cmd": "x"}}}
             )
+        assert result is not None
         assert result["result"]["content"] == [{"type": "text", "text": "out"}]
 
     async def test_unknown_method(self) -> None:
         server = MCPServer()
         result = await server.handle_request({"method": "nope", "id": 4, "params": {}})
+        assert result is not None and "error" in result
         assert result["error"]["code"] == -32601
         assert "nope" in result["error"]["message"]
 

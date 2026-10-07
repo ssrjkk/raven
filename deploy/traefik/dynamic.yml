@@ -5,7 +5,7 @@
 # Raven is a monolith serving both the API and the SPA on :18888, so a single
 # router/backend is enough. Security middlewares (rate-limit, CORS,
 # security-headers, correlation-id, compression, retry, circuit-breaker) are
-# preserved from the microservices era.
+# retained for defense-in-depth.
 
 http:
   middlewares:

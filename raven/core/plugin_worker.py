@@ -6,6 +6,8 @@ import json
 import sys
 from typing import Any
 
+from loguru import logger
+
 _BUILTINS_ALLOWLIST = frozenset(
     {
         "None",
@@ -81,6 +83,7 @@ def _restricted_builtins() -> dict[str, Any]:
     try:
         import builtins as _b
     except Exception:
+        logger.debug("[plugin_worker] failed to import builtins")
         return {}
     return {name: getattr(_b, name) for name in _BUILTINS_ALLOWLIST if hasattr(_b, name)}
 
@@ -188,6 +191,7 @@ async def _handle_command(cmd: dict[str, Any]) -> None:
         else:
             resp = {"type": "error", "error": f"unknown command: {ctype}"}
     except Exception as e:
+        logger.debug("[plugin_worker] command handler error: {}", e)
         resp = {"type": "error", "error": str(e)}
     sys.stdout.write(json.dumps(resp) + "\n")
     sys.stdout.flush()
@@ -227,6 +231,7 @@ async def _do_register(cmd: dict[str, Any]) -> dict[str, Any]:
     except TimeoutError:
         return {"type": "error", "error": "register() timed out"}
     except Exception as e:
+        logger.debug("[plugin_worker] register failed: {}", e)
         return {"type": "error", "error": str(e)}
     tools_meta = []
     for tname, tdef in (plugin.tools or {}).items():
@@ -258,6 +263,7 @@ async def _do_call_tool(cmd: dict[str, Any]) -> dict[str, Any]:
     try:
         plugin = _call_register(mod, ctx)
     except Exception as e:
+        logger.debug("[plugin_worker] tool call register() failed: {}", e)
         return {"type": "error", "error": str(e)}
     tool_name = cmd["tool"]
     tdef = (plugin.tools or {}).get(tool_name)
@@ -274,6 +280,7 @@ async def _do_call_tool(cmd: dict[str, Any]) -> dict[str, Any]:
     except TimeoutError:
         return {"type": "error", "error": f"tool {tool_name} timed out after {tool_timeout}s"}
     except Exception as e:
+        logger.debug("[plugin_worker] tool {} failed: {}", cmd.get("tool", "?"), e)
         return {"type": "error", "error": str(e)}
 
 

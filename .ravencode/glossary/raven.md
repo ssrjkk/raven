@@ -2,7 +2,7 @@
 
 ## Core Concepts
 
-- **Raven AI**: Enterprise-grade personal AI assistant
+- **Raven AI**: Self-hosted personal AI assistant
 - **Agent**: AI-powered autonomous worker (ReAct agent)
 - **Channel**: Communication platform (Telegram, Discord, etc.)
 - **Task Engine**: Multi-step planner and executor
@@ -15,14 +15,14 @@
 
 ## Architecture
 
-- **Gateway (Go)**: API gateway, auth proxy, rate limiter
-- **Agent Core (Python)**: LLM router, ReAct agent
-- **Monitor Engine (Go)**: Health checks, price monitors
-- **RAG Service (Python)**: Semantic search with Qdrant
-- **Task Engine (Python)**: Planner with outbox/saga patterns
-- **Code Service (Python)**: Sandboxed code execution
-- **Auth Service (Go)**: JWT, gRPC, RBAC
-- **Daemon (Rust)**: System metrics, process management
+- **Gateway**: FastAPI HTTP server, auth, rate limiting, SSE streaming
+- **Agent Core**: LLM router, ReAct agent loop, multi-model orchestration
+- **MCP Server**: Model Context Protocol over stdio and HTTP (66 tools)
+- **RavenCode**: Autonomous coding agent with workspace confinement
+- **Channels**: 15 messaging adapters (Telegram, Discord, Slack, etc.)
+- **Tools**: File, shell, git, web, code analysis, testing, memory, routines
+- **Task Engine**: Planner with outbox/saga patterns
+- **Monitor**: Health checks and condition watchers
 
 ## Security
 

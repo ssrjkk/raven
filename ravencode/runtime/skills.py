@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 
 @dataclass
 class Skill:
@@ -96,7 +98,7 @@ _register_builtin(
 _register_builtin(
     "remote-registry",
     "Skill Registry",
-    "Download skills from a remote skill registry (like ClawHub).",
+    "Download skills from a remote skill registry (http/https).",
     (
         "You can download skills from a remote registry using the skill tool. "
         "Set the registry URL first with set_skill_registry, then use download_skill to fetch skills."
@@ -169,7 +171,7 @@ def get_skill_info(skill_id: str, cwd: Path | None = None) -> Skill | None:
 
 
 # ---------------------------------------------------------------------------
-# remote registry (ClawHub-like)
+# remote skill registry
 # ---------------------------------------------------------------------------
 
 _REMOTE_REGISTRY_URL: str = ""
@@ -226,4 +228,5 @@ async def download_skill(skill_id: str) -> str:
             return f"[error] skill '{skill_id}' not found in registry"
         return f"[error] registry request failed: {exc}"
     except Exception as exc:
+        logger.debug("[skills] download failed for {}: {}", skill_id, exc)
         return f"[error] cannot download skill: {exc}"

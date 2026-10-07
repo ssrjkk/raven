@@ -1,5 +1,7 @@
 # Plugin Development Guide
 
+_by [@ssrjkk](https://github.com/ssrjkk)_
+
 Raven AI supports a plugin system that allows you to extend the agent's capabilities with custom tools.
 
 ## Quick Start

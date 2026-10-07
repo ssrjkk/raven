@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from ravencode.runtime.undo import get_undo_manager
 from ravencode.runtime.workspace import (
     _get_workspace,
@@ -23,6 +25,7 @@ async def read_image(path: str) -> str:
     try:
         p = _confine(path)
     except PermissionError as exc:
+        logger.debug("[wrappers] read_image access denied: {}", exc)
         return f"[error] {exc}"
     if not p.is_file():
         return f"[error] file not found: {path}"
@@ -54,6 +57,7 @@ async def create_artifact(title: str, artifact_type: str, content: str, path: st
                 target = Path(path).expanduser() if Path(path).is_absolute() else ws / path
                 safe_path = _confine(str(target))
             except PermissionError as exc:
+                logger.debug("[wrappers] artifact path confinement failed: {}", exc)
                 return json.dumps({"error": f"Path confinement failed: {exc}"}, ensure_ascii=False)
             safe_path.parent.mkdir(parents=True, exist_ok=True)
             await asyncio.to_thread(safe_path.write_text, content, encoding="utf-8")
@@ -71,6 +75,7 @@ async def create_artifact(title: str, artifact_type: str, content: str, path: st
             ensure_ascii=False,
         )
     except Exception as exc:
+        logger.debug("[wrappers] create_artifact failed: {}", exc)
         return json.dumps({"error": f"create_artifact failed: {exc}"}, ensure_ascii=False)
 
 

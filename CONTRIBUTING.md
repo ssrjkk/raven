@@ -83,7 +83,7 @@ raven/
 │   ├── channels/      # 15 каналов (Telegram, Discord, Slack, WhatsApp, ...)
 │   ├── core/          # Движок: gateway, agents, security, task_engine, monitor, llm, rag
 │   ├── cli/           # CLI (26 групп команд), tui
-│   ├── tools/         # 30+ инструментов ассистента
+│   ├── tools/         # 66 инструментов ассистента
 │   └── plugins/       # 10 встроенных плагинов
 ├── ravencode/         # Автономный coding-агент (runtime, agents, cli)
 ├── aios/              # Тонкий FastAPI bridge для AI-шлюза

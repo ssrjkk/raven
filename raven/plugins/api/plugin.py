@@ -29,8 +29,10 @@ async def _request(method: str, url: str, **kwargs) -> str:
         resp = await safe_fetch_async(url, method=method, **kwargs)
         return _format_response(resp)
     except ValueError as e:
+        logger.debug("[api] HTTP {} blocked: {}", method, e)
         return f"HTTP {method.upper()} blocked: {e}"
     except Exception as e:
+        logger.debug("[api] HTTP {} error: {}", method, e)
         return f"HTTP {method.upper()} error: {e}"
 
 

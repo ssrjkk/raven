@@ -1,5 +1,7 @@
 # Security Overview
 
+_by [@ssrjkk](https://github.com/ssrjkk)_
+
 Raven runs as a single-process monolith that talks to messaging channels, an LLM
 provider, a web dashboard and a filesystem workspace. The controls below are
 layered so that a failure in one layer does not expose the others, and the

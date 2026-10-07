@@ -19,7 +19,8 @@ class ToolPolicyStore:
                 from raven.core.config import settings
 
                 path = settings.resolved_data_dir / "tool_policy.json"
-            except Exception:
+            except Exception as e:
+                logger.warning("[tools_rbac] failed to resolve policy path, using fallback: {}", e)
                 path = Path("data/tool_policy.json")
         self._path = Path(path)
         self._policy: dict[str, list[str]] = {}

@@ -24,7 +24,7 @@ Agent Core
     └── Routine + monitor engines
     │
     ▼
-Tools (assistant 30+ / coding-agent 50+)
+Tools (66 total, shared across assistant and coding-agent)
     │
     ▼
 Storage: SQLite/PostgreSQL, JSON vector store + BM25
@@ -50,4 +50,4 @@ python scripts/check_all.py --quick
 raven start
 ```
 
-See [AGENTS.md](AGENTS.md) for detailed agent guidelines and [CONTRIBUTING.md](CONTRIBUTING.md) for contribution workflow.
+See [AGENTS.md](https://github.com/ssrjkk/raven/blob/main/AGENTS.md) for detailed agent guidelines and [CONTRIBUTING.md](https://github.com/ssrjkk/raven/blob/main/CONTRIBUTING.md) for contribution workflow.

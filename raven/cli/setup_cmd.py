@@ -271,11 +271,6 @@ RAVEN_MODEL_BALANCED=ollama/{tiers['balanced']}
 RAVEN_MODEL_QUALITY=ollama/{tiers['quality']}
 OLLAMA_BASE_URL=http://localhost:11434
 
-# Feature flags
-RAVEN_FEATURE_DREAMING=true
-RAVEN_FEATURE_DELEGATION=true
-RAVEN_FEATURE_PLANNER=true
-
 # Security
 WEB_SECRET_KEY={__import__('secrets').token_urlsafe(32)}
 """

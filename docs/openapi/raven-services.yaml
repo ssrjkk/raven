@@ -1,21 +1,18 @@
 openapi: "3.1.0"
 info:
-  title: Raven AI — Microservice API
+  title: Raven AI — API
   version: "1.0.0"
   description: |
-    Enterprise-grade personal AI assistant.
-    Monolith API at :18888, microservices behind gateway at :8000.
+    Personal AI assistant. Single-process gateway at :18888.
 servers:
   - url: http://localhost:18888/api
-    description: Monolith API
-  - url: http://localhost:8000/api/v1
-    description: Gateway (microservice mode)
+    description: Gateway API
 paths:
-  # ── Monolith ──────────────────────────────────────────
+  # ── Status ──────────────────────────────────────────────
   /status:
     get:
       summary: System status
-      tags: [Monolith]
+      tags: [Status]
       responses:
         "200":
           description: Status payload
@@ -280,7 +277,7 @@ paths:
       responses:
         "200": { description: Cancelled }
 
-  # ── Code Service ──────────────────────────────────────
+  # ── Code Execution ──────────────────────────────────────
   /code/execute:
     post:
       summary: Execute code in sandbox

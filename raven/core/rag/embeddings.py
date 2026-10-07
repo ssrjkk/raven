@@ -30,7 +30,8 @@ class EmbeddingEngine:
                 from raven.core.config import settings
 
                 self._cache_path = settings.resolved_data_dir / "cache" / "embeddings_cache.json"
-            except Exception:
+            except Exception as e:
+                logger.warning("[embeddings] failed to resolve cache path: {}", e)
                 self._cache_path = None
         self._load_disk_cache()
 

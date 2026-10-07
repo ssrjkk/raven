@@ -10,6 +10,7 @@ from types import FrameType
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from loguru import logger
 from pydantic import BaseModel
 
 from raven.core.security.path_guard import confine_path
@@ -312,6 +313,7 @@ class _DebugSession:
             with self._lock:
                 self._status = "stopped"
         except Exception:
+            logger.warning("[debugger] execution error: {}", traceback.format_exc())
             tb = _sanitize_traceback(traceback.format_exc())
             frames = _capture_frames(exception=True)
             with self._lock:
