@@ -1,0 +1,11 @@
+title = "raven gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures and example files contain intentionally fake secrets"
+paths = [
+  '''(^|/)tests/''',
+  '''(^|/).*\.env\.example$'''
+]
