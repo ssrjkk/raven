@@ -51,7 +51,7 @@ dependencies = [
 [project.optional-dependencies]
 discord = ["discord.py>=2.3"]
 slack = ["slack-sdk>=3.27"]
-docker = ["docker>=7.0"]
+docker = ["docker>=7.2.0"]
 secrets = ["cryptography>=50.0.0"]  # security floor: PYSEC-2026-3552 is only patched in 50.0.0
 service-win = ["pywin32>=306"]
 tui = ["textual>=1.0"]
