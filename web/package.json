@@ -25,17 +25,23 @@
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/auto-instrumentations-web": "^0.45.0",
-    "@opentelemetry/context-zone": "^2.7.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.220.0",
-    "@opentelemetry/sdk-trace-web": "^2.7.0",
+    "@opentelemetry/context-zone": "^2.12.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.223.0",
+    "@opentelemetry/instrumentation": "^0.223.0",
+    "@opentelemetry/instrumentation-document-load": "^0.68.0",
+    "@opentelemetry/instrumentation-fetch": "^0.223.0",
+    "@opentelemetry/instrumentation-xml-http-request": "^0.223.0",
+    "@opentelemetry/resources": "^2.12.0",
+    "@opentelemetry/sdk-trace-base": "^2.12.0",
+    "@opentelemetry/sdk-trace-web": "^2.12.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
     "@tanstack/react-query": "^5.101.4",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.25.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^9.0.0",
-    "react-router-dom": "^6.28.0",
+    "react-router-dom": "^7.18.4",
     "recharts": "^3.9.2",
     "rehype-sanitize": "^6.0.0"
   },
@@ -56,5 +62,10 @@
     "typescript": "^5.6.0",
     "vite": "^6.0.0",
     "vitest": "^5.0.4"
+  },
+  "overrides": {
+    "monaco-editor": {
+      "dompurify": "^3.4.17"
+    }
   }
 }
