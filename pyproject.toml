@@ -64,7 +64,7 @@ rag = ["sentence-transformers>=3.0,<4.0"]
 ml = [
     "torch>=2.0,<3.0",
     "transformers>=4.40,<5.0",
-    "peft>=0.10,<1.0",
+    "peft>=0.21.2,<1.0",
     "datasets>=2.20,<3.0",
 ]
 ner = ["spacy>=3.7,<4.0"]
