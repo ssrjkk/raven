@@ -247,18 +247,3 @@ tail -f data/raven.log
 ## License
 
 MIT — see [LICENSE](LICENSE).
-
-
-## Installation
-
-```bash
-git clone https://github.com/ssrjkk/raven.git
-cd raven
-pip install -r requirements.txt
-```
-
-## Usage
-
-```bash
-python main.py
-```

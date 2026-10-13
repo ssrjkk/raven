@@ -657,6 +657,214 @@ class TestGitLabProvider:
         provider = GitLabProvider(token="t")
         assert provider._token == "t"
 
+    def _resp(self, payload: object) -> MagicMock:
+        resp = MagicMock()
+        resp.json.return_value = payload
+        return resp
+
+    def _error(self) -> object:
+        import httpx
+
+        return httpx.HTTPStatusError("boom", request=MagicMock(), response=MagicMock())
+
+    async def test_api_url_normalization(self) -> None:
+        assert GitLabProvider(api_url="https://gl.example.com/")._api_url == "https://gl.example.com/api/v4"
+        assert GitLabProvider(api_url="https://gl.example.com/api/v4")._api_url == "https://gl.example.com/api/v4"
+        assert GitLabProvider()._api_url == "https://gitlab.com/api/v4"
+
+    async def test_headers_carry_token_only_when_set(self) -> None:
+        assert GitLabProvider(token="t")._headers["PRIVATE-TOKEN"] == "t"
+        assert "PRIVATE-TOKEN" not in GitLabProvider(token="")._headers
+
+    async def test_resolve_project_id_and_cache(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(return_value=self._resp({"id": 42}))  # type: ignore[method-assign]
+        assert await provider._ensure_id("acme/app") == "42"
+        assert await provider._resolve_project_id("acme", "app") == "42"
+        assert provider._request.await_count == 1
+
+    async def test_resolve_project_id_falls_back_to_encoded_path(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(side_effect=self._error())  # type: ignore[method-assign]
+        assert await provider._ensure_id("acme/app") == "acme%2Fapp"
+
+    async def test_ensure_id_passes_numeric_through(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock()  # type: ignore[method-assign]
+        assert await provider._ensure_id("7") == "7"
+        provider._request.assert_not_awaited()
+
+    async def test_get_repository(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(  # type: ignore[method-assign]
+            return_value=self._resp(
+                {
+                    "name": "app",
+                    "path_with_namespace": "acme/app",
+                    "default_branch": "trunk",
+                    "visibility": "private",
+                }
+            )
+        )
+        repo = await provider.get_repository("7")
+        assert repo.name == "app"
+        assert repo.full_name == "acme/app"
+        assert repo.default_branch == "trunk"
+        assert repo.private is True
+
+    async def test_get_repository_defaults(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(return_value=self._resp({"name": "app", "path_with_namespace": "acme/app"}))  # type: ignore[method-assign]
+        repo = await provider.get_repository("7")
+        assert repo.default_branch == "main"
+        assert repo.private is False
+
+    async def test_list_branches(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(  # type: ignore[method-assign]
+            return_value=self._resp(
+                [{"name": "main", "commit": {"id": "abc"}, "protected": True},
+                 {"name": "dev", "commit": {"id": "def"}, "protected": False}]
+            )
+        )
+        branches = await provider.list_branches("7")
+        assert [(b.name, b.commit_sha, b.protected) for b in branches] == [("main", "abc", True), ("dev", "def", False)]
+
+    async def test_create_pull_request(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(  # type: ignore[method-assign]
+            return_value=self._resp(
+                {"iid": 9, "title": "T", "source_branch": "a", "target_branch": "b", "web_url": "https://gl/mr/9"}
+            )
+        )
+        pr = await provider.create_pull_request("7", "T", "a", "b", body="desc")
+        assert (pr.id, pr.title, pr.source_branch, pr.target_branch, pr.url) == (9, "T", "a", "b", "https://gl/mr/9")
+        call = provider._request.await_args_list[0]
+        assert (call.args[0], call.args[1]) == ("POST", "/projects/7/merge_requests")
+        assert call.kwargs["json"] == {
+            "title": "T", "description": "desc", "source_branch": "a", "target_branch": "b",
+        }
+
+    async def test_get_file_decodes_base64_and_passes_ref(self) -> None:
+        import base64
+
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(return_value=self._resp({"content": base64.b64encode(b"hello").decode()}))  # type: ignore[method-assign]
+        assert await provider.get_file("7", "README.md", ref="dev") == "hello"
+        assert provider._request.await_args_list[0].kwargs["params"] == {"ref": "dev"}
+
+    async def test_get_file_returns_none_on_error(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(side_effect=self._error())  # type: ignore[method-assign]
+        assert await provider.get_file("7", "missing.md") is None
+
+    async def test_create_branch(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(return_value=self._resp({}))  # type: ignore[method-assign]
+        assert await provider.create_branch("7", "feature", "main") is True
+        assert provider._request.await_args_list[0].kwargs["json"] == {"branch": "feature", "ref": "main"}
+
+    async def test_create_branch_failure(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(side_effect=self._error())  # type: ignore[method-assign]
+        assert await provider.create_branch("7", "feature", "main") is False
+
+    async def test_create_comment_issue_and_mr_endpoints(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(return_value=self._resp({}))  # type: ignore[method-assign]
+        assert await provider.create_comment("7", 3, "note") is True
+        assert provider._request.await_args_list[0].args[1] == "/projects/7/issues/3/notes"
+        assert await provider.create_comment("7", 4, "note", resource_type="mr") is True
+        assert provider._request.await_args_list[1].args[1] == "/projects/7/merge_requests/4/notes"
+
+    async def test_create_comment_failure(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(side_effect=self._error())  # type: ignore[method-assign]
+        assert await provider.create_comment("7", 3, "note") is False
+
+    async def test_get_pull_request_diff(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(  # type: ignore[method-assign]
+            return_value=self._resp(
+                {"changes": [{"old_path": "a.py", "new_path": "b.py", "diff": "+x"}, {"old_path": "c", "new_path": "c", "diff": "-y"}]}
+            )
+        )
+        diff = await provider.get_pull_request_diff("7", 9)
+        assert diff is not None
+        assert "--- a/a.py" in diff and "+++ b/b.py" in diff and "+x" in diff and "-y" in diff
+
+    async def test_get_pull_request_diff_empty_and_error(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(return_value=self._resp({}))  # type: ignore[method-assign]
+        assert await provider.get_pull_request_diff("7", 9) == ""
+        provider._request = AsyncMock(side_effect=self._error())  # type: ignore[method-assign]
+        assert await provider.get_pull_request_diff("7", 9) is None
+
+    async def test_set_commit_status(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(return_value=self._resp({}))  # type: ignore[method-assign]
+        assert await provider.set_commit_status("7", "abc", "success", "all good") is True
+        call = provider._request.await_args_list[0]
+        assert (call.args[0], call.args[1]) == ("POST", "/projects/7/statuses/abc")
+        assert call.kwargs["json"]["context"] == "ravencode/ci"
+
+    async def test_set_commit_status_failure(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(side_effect=self._error())  # type: ignore[method-assign]
+        assert await provider.set_commit_status("7", "abc", "failed", "x") is False
+
+    async def test_get_issue(self) -> None:
+        provider = GitLabProvider(token="t")
+        provider._request = AsyncMock(return_value=self._resp({"iid": 5, "title": "bug"}))  # type: ignore[method-assign]
+        assert await provider.get_issue("7", 5) == {"iid": 5, "title": "bug"}
+
+
+class TestGitLabIntegrationDelegation:
+    def _ctx(self) -> EventContext:
+        return EventContext(
+            event_type=EventType.ISSUE_COMMENT, platform="gitlab", owner="acme", repo="app", issue_number=3, pr_number=None
+        )
+
+    async def test_without_token_all_methods_short_circuit(self) -> None:
+        integration = GitLabIntegration(token=None)
+        integration._provider = None
+        ctx = self._ctx()
+        assert await integration.post_comment(ctx, "body") is False
+        assert await integration.get_file_content(ctx, "a.py") is None
+        assert await integration.create_branch(ctx, "main", "head") is False
+        assert await integration.create_pr(ctx, "t", "b", "head", "main") is None
+        assert await integration.get_pr_diff(ctx, 1) is None
+        assert await integration.set_commit_status(ctx, "sha", "success", "d") is False
+
+    async def test_delegates_to_provider(self) -> None:
+        integration = GitLabIntegration(token="t")
+        provider = MagicMock()
+        provider.create_comment = AsyncMock(return_value=True)
+        provider.get_file = AsyncMock(return_value="src")
+        provider.create_branch = AsyncMock(return_value=True)
+        provider.create_pull_request = AsyncMock(return_value=MagicMock(id=11))
+        provider.get_pull_request_diff = AsyncMock(return_value="diff")
+        provider.set_commit_status = AsyncMock(return_value=True)
+        integration._provider = provider
+        ctx = self._ctx()
+        assert await integration.post_comment(ctx, "body") is True
+        provider.create_comment.assert_awaited_once_with("acme/app", 3, "body")
+        assert await integration.get_file_content(ctx, "a.py", "dev") == "src"
+        provider.get_file.assert_awaited_once_with("acme/app", "a.py", "dev")
+        assert await integration.create_branch(ctx, "main", "head") is True
+        provider.create_branch.assert_awaited_once_with("acme/app", "head", "main")
+        assert await integration.create_pr(ctx, "t", "b", "head", "main") == 11
+        assert await integration.get_pr_diff(ctx, 4) == "diff"
+        assert await integration.set_commit_status(ctx, "sha", "success", "d") is True
+
+    async def test_post_comment_without_number(self) -> None:
+        integration = GitLabIntegration(token="t")
+        integration._provider = MagicMock()
+        ctx = EventContext(
+            event_type=EventType.ISSUE_COMMENT, platform="gitlab", owner="", repo="app", issue_number=None, pr_number=None
+        )
+        assert await integration.post_comment(ctx, "body") is False
+
 
 class TestGitHubWebhookApp:
     @pytest.fixture

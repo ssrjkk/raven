@@ -234,9 +234,6 @@ def test_rule_dot_path_resolution():
     assert not rule.evaluate({"args": {"path": "/tmp/file.txt"}})
 
 
-
-
-
 # ─── RuleSet ─────────────────────────────────────────────────────────
 
 
@@ -292,9 +289,6 @@ def test_ruleset_add_rule():
     rs.add_rule(Rule("allow-all", {}, "allow", 0))
     assert rs.rules[0].name == "deny-exec"
     assert rs.rules[1].name == "allow-all"
-
-
-
 
 
 # ─── PolicyEngine ────────────────────────────────────────────────────
@@ -368,10 +362,12 @@ def test_policy_engine_load_yaml():
 
 def test_policy_engine_check():
     engine = PolicyEngine()
-    rs = RuleSet([
-        Rule("deny-exec", {"tool": "exec"}, "deny", 100),
-        Rule("allow-ping", {"tool": "ping"}, "allow", 50),
-    ])
+    rs = RuleSet(
+        [
+            Rule("deny-exec", {"tool": "exec"}, "deny", 100),
+            Rule("allow-ping", {"tool": "ping"}, "allow", 50),
+        ]
+    )
     engine._rulesets["tools"] = rs
     assert not engine.check("tools", {"tool": "exec"})
     assert engine.check("tools", {"tool": "ping"})
@@ -382,9 +378,6 @@ def test_policy_engine_missing_ruleset():
     engine = PolicyEngine()
     result = engine.get_ruleset("nonexistent")
     assert result is None
-
-
-
 
 
 def test_policy_engine_to_dict():
@@ -613,7 +606,9 @@ class TestAdversarialIntegrationSpy:
         from raven.core.security.policy_engine import policy_engine
         from raven.core.security.tool_policy import ToolPolicyEvaluator
 
-        policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+        policy_engine.load_ruleset(
+            "tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json")
+        )
         rs = policy_engine.get_ruleset("tools")
         assert rs is not None and len(rs.rules) > 0
 
@@ -640,7 +635,9 @@ class TestAdversarialIntegrationSpy:
         from raven.core.security.policy_engine import policy_engine
         from raven.core.security.tool_policy import ToolPolicyEvaluator
 
-        policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+        policy_engine.load_ruleset(
+            "tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json")
+        )
 
         eval_calls: list[dict[str, Any]] = []
         original_eval = policy_engine.__class__.evaluate
@@ -665,7 +662,9 @@ class TestAdversarialIntegrationSpy:
         from raven.core.security.policy_engine import policy_engine
         from raven.core.security.tool_policy import ToolPolicyEvaluator
 
-        policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+        policy_engine.load_ruleset(
+            "tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json")
+        )
 
         eval_calls: list[dict[str, Any]] = []
         original_eval = policy_engine.__class__.evaluate
@@ -690,7 +689,9 @@ class TestAdversarialIntegrationSpy:
         from raven.core.security.policy_engine import policy_engine
         from raven.core.security.tool_policy import ToolPolicyEvaluator
 
-        policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+        policy_engine.load_ruleset(
+            "tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json")
+        )
 
         eval_calls: list[dict[str, Any]] = []
         original_eval = policy_engine.__class__.evaluate
@@ -715,7 +716,9 @@ class TestAdversarialIntegrationSpy:
         from raven.core.security.policy_engine import policy_engine
         from raven.core.security.tool_policy import ToolPolicyEvaluator
 
-        policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+        policy_engine.load_ruleset(
+            "tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json")
+        )
 
         eval_calls: list[dict[str, Any]] = []
         original_eval = policy_engine.__class__.evaluate
@@ -740,7 +743,9 @@ class TestAdversarialIntegrationSpy:
         from raven.core.security.policy_engine import policy_engine
         from raven.core.security.tool_policy import ToolPolicyEvaluator
 
-        policy_engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
+        policy_engine.load_ruleset(
+            "tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json")
+        )
 
         eval_calls: list[dict[str, Any]] = []
         original_eval = policy_engine.__class__.evaluate
@@ -758,3 +763,51 @@ class TestAdversarialIntegrationSpy:
             assert len(tool_calls) >= 1
             effect, _ = tool_calls[-1]["result"]
             assert effect == "deny"
+
+
+# ─── _resolve non-dict traversal ─────────────────────────────────────
+
+
+def test_resolve_through_scalar_returns_none():
+    node = ConditionNode.from_dict({"a.b": 1})
+    assert node.evaluate({"a": "scalar"}) is False
+
+
+# ─── REGEX guard branches ────────────────────────────────────────────
+
+
+def test_regex_none_actual_returns_false():
+    node = ConditionNode(Op.REGEX, path="missing", value="abc")
+    assert node.evaluate({}) is False
+
+
+def test_regex_invalid_pattern_returns_false():
+    node = ConditionNode(Op.REGEX, path="x", value="[")
+    assert node.evaluate({"x": "y"}) is False
+
+
+# ─── from_dict operator mapping fallbacks ────────────────────────────
+
+
+def test_from_dict_unmapped_op_falls_back_to_eq():
+    node = ConditionNode.from_dict({"n": {"$gt": 1, "$weird": 2}})
+    assert node.op == Op.AND
+    assert [c.op for c in node.children] == [Op.GT, Op.EQ]
+
+
+# ─── load_ruleset / evaluate file resolution ─────────────────────────
+
+
+def test_load_ruleset_falls_back_to_json(tmp_path):
+    (tmp_path / "myset.json").write_text(
+        json.dumps({"rules": [{"name": "r", "condition": {"tool": "x"}, "effect": "deny"}]}),
+        encoding="utf-8",
+    )
+    rs = PolicyEngine(rules_dir=str(tmp_path)).load_ruleset("myset")
+    assert len(rs.rules) == 1
+
+
+def test_evaluate_missing_ruleset_returns_none(tmp_path):
+    engine = PolicyEngine(rules_dir=str(tmp_path))
+    effect, name = engine.evaluate("ghost", {"a": 1})
+    assert effect is None and name is None

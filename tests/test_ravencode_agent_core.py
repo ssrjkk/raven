@@ -1226,3 +1226,368 @@ class TestLlmRetry:
         assert result.startswith("[error: LLM call failed after 3 attempts")
         assert "provider down" in result
 
+
+# ---------------------------------------------------------------------------
+# Flagship core-loop hardening: cover the distinguishing "intelligence"
+# branches that shipped untested (self-correction, git context, LLM
+# rate-limit failover, usage accounting, memory/repo-map prompt assembly,
+# speculative pre-read, parallel-batch eventing, init wiring).
+# ---------------------------------------------------------------------------
+
+
+class _FakeLLMLimiter:
+    def __init__(self) -> None:
+        self.penalized: list[float] = []
+
+    async def acquire(self) -> None:
+        return None
+
+    async def penalize(self, delay: float) -> None:
+        self.penalized.append(delay)
+
+    async def reset(self) -> None:
+        return None
+
+    @property
+    def penalty(self) -> float:
+        return 0.0
+
+
+class _HttpError(RuntimeError):
+    def __init__(self, status: int) -> None:
+        super().__init__("http boom")
+        self.response = SimpleNamespace(status_code=status)
+
+
+def _http_err(status: int) -> _HttpError:
+    return _HttpError(status)
+
+
+class _FakeGitProc:
+    def __init__(self, out: bytes, rc: int = 0) -> None:
+        self._out = out
+        self.returncode = rc
+
+    async def communicate(self) -> tuple[bytes, bytes]:
+        return self._out, b""
+
+
+class TestCoreLoopHardening:
+    async def test_no_progress_nudge_fires_after_six_failures(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        n = 0
+
+        async def failing_llm(messages: Any) -> dict[str, Any]:
+            nonlocal n
+            n += 1
+            if n <= 6:
+                return {
+                    "content": "",
+                    "tool_calls": [
+                        {"id": f"c{n}", "function": {"name": "read", "arguments": {"path": f"f{n}.py"}}}
+                    ],
+                }
+            return {"content": "gave up"}
+
+        async def always_fail(name: str, args: dict[str, Any]) -> str:
+            return "[error] boom"
+
+        agent = ReActAgent(
+            config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, max_steps=10),
+            llm_provider=failing_llm,
+        )
+        monkeypatch.setattr(agent, "_execute_with_retry", always_fail)
+        _patch_save(monkeypatch)
+        assert await agent.run("t") == "gave up"
+        sys_msgs = [m["content"] for m in agent.conversation.messages if m.get("role") == "system"]
+        assert any("none have succeeded" in c for c in sys_msgs)
+
+    async def test_git_context_clean_tree(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+        monkeypatch.setattr("ravencode.runtime.workspace.get_workspace_root", lambda: str(tmp_path))
+
+        async def fake_exec(*a: Any, **k: Any) -> _FakeGitProc:
+            return _FakeGitProc(b"## main\n")
+
+        monkeypatch.setattr(agent_mod.asyncio, "create_subprocess_exec", fake_exec)
+        agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
+        assert await agent._git_context() == "[repo context] branch main, working tree clean"
+
+    async def test_git_context_empty_output_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        monkeypatch.setattr("ravencode.runtime.workspace.get_workspace_root", lambda: str(tmp_path))
+
+        async def fake_exec(*a: Any, **k: Any) -> _FakeGitProc:
+            return _FakeGitProc(b"")
+
+        monkeypatch.setattr(agent_mod.asyncio, "create_subprocess_exec", fake_exec)
+        agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
+        assert await agent._git_context() is None
+
+    async def test_git_context_error_returns_none(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+        monkeypatch.setattr("ravencode.runtime.workspace.get_workspace_root", lambda: str(tmp_path))
+
+        async def fake_exec(*a: Any, **k: Any) -> _FakeGitProc:
+            msg = "no git"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(agent_mod.asyncio, "create_subprocess_exec", fake_exec)
+        agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
+        assert await agent._git_context() is None
+
+    async def test_llm_permanent_status_stops_retrying(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(agent_mod, "_llm_rate_limiter", _FakeLLMLimiter())
+        agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
+        attempts: list[int] = []
+
+        async def boom(messages: Any) -> dict[str, Any]:
+            attempts.append(1)
+            raise _http_err(400)
+
+        monkeypatch.setattr(agent, "_llm_call_once", boom)
+        result = await agent._llm_call([])
+        assert result["content"].startswith("[error: LLM call failed")
+        assert len(attempts) == 1
+
+    async def test_llm_429_penalizes_and_retries(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        limiter = _FakeLLMLimiter()
+        monkeypatch.setattr(agent_mod, "_llm_rate_limiter", limiter)
+        monkeypatch.setattr(agent_mod.asyncio, "sleep", AsyncMock())
+        agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
+        seen: list[int] = []
+
+        async def flaky(messages: Any) -> dict[str, Any]:
+            seen.append(1)
+            if len(seen) == 1:
+                raise _http_err(429)
+            return {"content": "ok"}
+
+        monkeypatch.setattr(agent, "_llm_call_once", flaky)
+        result = await agent._llm_call([])
+        assert result == {"content": "ok"}
+        assert limiter.penalized == [2.0]
+
+    async def test_llm_call_once_records_usage(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        resp = SimpleNamespace(text="a", tool_calls=[], usage={"prompt_tokens": 5, "completion_tokens": 3})
+
+        class _FakeClient:
+            async def ask_messages(self, messages: Any, tools: Any = None, priority: Any = 0.0) -> Any:
+                return resp
+
+        monkeypatch.setattr("ravencode.runtime.agent_core.AIOSClient", lambda: _FakeClient())
+        monkeypatch.setattr("ravencode.runtime.agent_core.get_tool_definitions", lambda **kw: [])
+        agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
+        out = await agent._llm_call_once([])
+        assert out["usage"] == {"prompt_tokens": 5, "completion_tokens": 3}
+
+    def test_memory_context_completed_tasks(self, tmp_path: Any) -> None:
+        from ravencode.runtime.context import MemoryStore
+
+        store_path = str(tmp_path / "tasks.json")
+        store = MemoryStore(path=store_path)
+        store._data = {
+            "tasks": [
+                {"description": "shipped auth", "status": "done"},
+                {"description": "wip", "status": "open"},
+            ]
+        }
+        store._write(store._data)
+        agent = ReActAgent(config=AgentConfig(memory_path=store_path), conversation=Conversation(system_prompt="s"))
+        ctx = agent._memory_context()
+        assert "Completed tasks" in ctx
+        assert "shipped auth" in ctx
+
+    def test_memory_context_swallows_errors(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+        agent = ReActAgent(
+            config=AgentConfig(memory_path=str(tmp_path / "x.json")), conversation=Conversation(system_prompt="s")
+        )
+
+        def boom(*a: Any, **k: Any) -> None:
+            msg = "unavailable"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr("ravencode.runtime.context.MemoryStore", boom)
+        assert agent._memory_context() == ""
+
+    def test_build_system_prompt_adds_repo_map_and_memory(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+        monkeypatch.setattr("ravencode.runtime.repo_map.repo_map_block", lambda *a, **k: "\n[repo map here]")
+        from ravencode.runtime.context import MemoryStore
+
+        store_path = str(tmp_path / "mem.json")
+        store = MemoryStore(path=store_path)
+        store._data = {"milestones": ["m1"]}
+        store._write(store._data)
+        agent = ReActAgent(
+            config=AgentConfig(repo_map=True, memory_path=store_path), conversation=Conversation(system_prompt="s")
+        )
+        prompt = agent._build_system_prompt()
+        assert "repo map here" in prompt
+        assert "Previous session context" in prompt
+
+    async def test_preread_cochange_skip_and_errors(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+        calls: list[str] = []
+
+        async def fake_exec(name: str, args: dict[str, Any]) -> str:
+            p = str(args.get("path"))
+            calls.append(p)
+            if p == "boom.py":
+                msg = "io error"
+                raise RuntimeError(msg)
+            if p == "partner.py":
+                return "[error] not found"
+            return "BODY " + p
+
+        monkeypatch.setattr(agent_mod, "execute_tool", fake_exec)
+        monkeypatch.setattr("ravencode.runtime.workspace.get_workspace_root", lambda: str(tmp_path))
+        monkeypatch.setattr(
+            "ravencode.runtime.repo_map.focus_files",
+            lambda root, mentioned, limit=2: ["partner.py"],
+        )
+        agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
+        await agent._proactive_scan("edit boom.py, ok.py and http.py")
+        assert "boom.py" in calls
+        assert "ok.py" in calls
+        assert "partner.py" in calls
+        assert "http.py" not in calls
+        sys_msgs = [m["content"] for m in agent.conversation.messages if m.get("role") == "system"]
+        assert any("ok.py" in c and "read in advance" in c for c in sys_msgs)
+
+    async def test_parallel_batch_emits_tool_call_events(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        ee = EventEmitter()
+        events: list[AgentEvent] = []
+
+        async def handler(event: AgentEvent) -> None:
+            events.append(event)
+
+        ee.on("tool_call", handler)
+
+        async def fake_exec(name: str, args: dict[str, Any]) -> str:
+            return "ok"
+
+        agent = ReActAgent(
+            config=AgentConfig(
+                proactive_scan=False, diff_preview=False, confirm_dangerous=False, max_steps=5, event_emitter=ee
+            ),
+            llm_provider=TestParallelToolExecution._two_safe_calls_llm(),
+        )
+        monkeypatch.setattr(agent, "_execute_with_retry", fake_exec)
+        _patch_save(monkeypatch)
+        assert await agent.run("t") == "final"
+        names = sorted(e.data["name"] for e in events if e.type == "tool_call")
+        assert names == ["read", "read"]
+
+    def test_init_wires_agent_memory_store(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+        seen: dict[str, Any] = {}
+        monkeypatch.setattr(
+            "ravencode.runtime.tools.set_agent_memory_store",
+            lambda store: seen.__setitem__("store", store),
+        )
+        from ravencode.runtime.context import MemoryStore
+
+        mp = str(tmp_path / "memwire.json")
+        MemoryStore(path=mp)._write({"milestones": ["x"]})
+        agent = ReActAgent(config=AgentConfig(memory_path=mp))
+        assert "store" in seen
+        assert agent.conversation.memory is not None
+
+    def test_init_checkpoint_wiring_error_is_swallowed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def boom() -> None:
+            msg = "no workspace"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr("ravencode.runtime.workspace.get_workspace_root", boom)
+        agent = ReActAgent(config=AgentConfig())
+        assert agent is not None
+
+    def test_init_memory_wiring_error_is_swallowed(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+        from ravencode.runtime.context import MemoryStore
+
+        mp = str(tmp_path / "memerr.json")
+        MemoryStore(path=mp)._write({"milestones": ["x"]})
+
+        def boom(store: Any) -> None:
+            msg = "wiring failed"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr("ravencode.runtime.tools.set_agent_memory_store", boom)
+        agent = ReActAgent(config=AgentConfig(memory_path=mp))
+        assert agent.conversation.memory is not None
+
+    def test_build_system_prompt_repo_map_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def boom(*a: Any, **k: Any) -> None:
+            msg = "no map"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr("ravencode.runtime.repo_map.repo_map_block", boom)
+        agent = ReActAgent(config=AgentConfig(repo_map=True))
+        assert agent._build_system_prompt()
+
+    async def test_auto_checkpoint_error_is_swallowed(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        monkeypatch.setattr("ravencode.runtime.workspace.get_workspace_root", lambda: str(tmp_path))
+
+        def boom(*a: Any, **k: Any) -> None:
+            msg = "cp fail"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr("ravencode.runtime.checkpoints.get_checkpoint_manager", boom)
+        agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
+        await agent._maybe_auto_checkpoint()
+
+    async def test_deep_compaction_triggers_near_context_limit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        deep_calls: list[int] = []
+        conv = Conversation(system_prompt="s", max_tokens=100_000)
+        conv._token_total = 200_000
+        monkeypatch.setattr(conv, "compact", lambda keep_recent=12: 0)
+        monkeypatch.setattr(conv, "compact_deep", lambda keep_recent=8: deep_calls.append(1))
+        agent = ReActAgent(
+            config=AgentConfig(
+                proactive_scan=False, diff_preview=False, confirm_dangerous=False, git_context=False,
+                auto_checkpoint=False, max_steps=2,
+            ),
+            conversation=conv,
+            llm_provider=AsyncMock(return_value={"content": "done"}),
+        )
+        _patch_save(monkeypatch)
+        assert await agent.run("t") == "done"
+        assert deep_calls == [1]
+
+    async def test_preread_focus_error_is_swallowed(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+        async def fe(name: str, args: dict[str, Any]) -> str:
+            return "body"
+
+        monkeypatch.setattr(agent_mod, "execute_tool", fe)
+        monkeypatch.setattr("ravencode.runtime.workspace.get_workspace_root", lambda: str(tmp_path))
+
+        def boom(*a: Any, **k: Any) -> None:
+            msg = "no focus"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr("ravencode.runtime.repo_map.focus_files", boom)
+        agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
+        await agent._proactive_scan("edit a.py")
+        sys_msgs = [m["content"] for m in agent.conversation.messages if m.get("role") == "system"]
+        assert any("a.py" in c for c in sys_msgs)
+
+    async def test_preread_all_unreadable_appends_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def fe(name: str, args: dict[str, Any]) -> str:
+            return "   "
+
+        monkeypatch.setattr(agent_mod, "execute_tool", fe)
+        monkeypatch.setattr("ravencode.runtime.workspace.get_workspace_root", lambda: None)
+        agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
+        before = len(agent.conversation.messages)
+        await agent._proactive_scan("edit a.py")
+        assert len(agent.conversation.messages) == before
+
+    async def test_llm_call_streaming_timeout(self) -> None:
+        class _Client:
+            async def ask_messages_stream(self, messages: Any, tools: Any = None, priority: Any = 0.0) -> Any:
+                msg = "timeout"
+                raise TimeoutError(msg)
+                yield {}  # pragma: no cover — makes this an async generator
+
+        agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
+        result = await agent._llm_call_streaming(_Client(), [], [])
+        assert result == {"content": "[error: LLM call timed out]", "tool_calls": []}
+

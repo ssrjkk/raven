@@ -1,6 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
+import subprocess
+import sys
+import types
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -14,7 +20,50 @@ from raven.unique.chaos_engineering import (
     FaultInjector,
     FaultType,
     SystemMonitor,
+    SystemSnapshot,
 )
+
+
+def _fake_proc_factory() -> tuple[Any, list[int]]:
+    killed: list[int] = []
+
+    class _FakeProc:
+        def __init__(self, pid: int, name: str) -> None:
+            self.info: dict[str, Any] = {"pid": pid, "name": name}
+
+        def kill(self) -> None:
+            killed.append(self.info["pid"])
+
+    return _FakeProc, killed
+
+
+def _install_fake_psutil(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    cpu: float = 12.5,
+    mem: float = 40.0,
+    disk: float = 60.0,
+    pids: list[int] | None = None,
+    procs: list[tuple[int, str]] | None = None,
+) -> list[int]:
+    _FakeProc, killed = _fake_proc_factory()
+    mod: Any = types.ModuleType("psutil")
+    mod.cpu_percent = lambda interval: cpu
+
+    class _VM:
+        percent = mem
+
+    class _DU:
+        percent = disk
+
+    mod.virtual_memory = lambda: _VM()
+    mod.disk_usage = lambda path: _DU()
+    mod.pids = lambda: pids or [1, 2, 3]
+    mod.process_iter = lambda attrs=None: [
+        _FakeProc(pid, name) for pid, name in (procs or [])
+    ]
+    monkeypatch.setitem(sys.modules, "psutil", mod)
+    return killed
 
 
 class TestEnums:
@@ -290,3 +339,421 @@ class TestChaosEngineering:
             status=ExperimentStatus.COMPLETED,
         )
         assert self.ce._validate_hypothesis(result) is True
+
+
+class TestSystemMonitorStartStop:
+    async def test_start_collects_then_stop(self, monkeypatch: pytest.MonkeyPatch):
+        m = SystemMonitor(collect_interval_sec=0.01)
+
+        async def _fast_latency() -> float:
+            return 3.0
+
+        monkeypatch.setattr(m, "_get_network_latency", _fast_latency)
+        await m.start()
+        await m.start()  # second start hits the already-running early return
+        await asyncio.sleep(0.05)
+        snaps = await m.stop()
+        assert len(snaps) >= 1
+        assert m._task is None
+
+    def test_get_snapshots_filters_by_since(self):
+        m = SystemMonitor()
+        m._snapshots = [SystemSnapshot(timestamp=10.0), SystemSnapshot(timestamp=20.0)]
+        assert len(m.get_snapshots()) == 2
+        assert len(m.get_snapshots(15.0)) == 1
+
+    def test_psutil_sample_paths(self, monkeypatch: pytest.MonkeyPatch):
+        _install_fake_psutil(monkeypatch, cpu=33.0, mem=44.0, disk=55.0, pids=[1, 2, 3, 4])
+        m = SystemMonitor()
+        assert m._get_cpu() == 33.0
+        assert m._get_memory() == 44.0
+        assert m._get_disk() == 55.0
+        assert m._get_process_count() == 4
+
+    async def test_network_latency_parses_ping_output(self, monkeypatch: pytest.MonkeyPatch):
+        class _Proc:
+            async def communicate(self) -> tuple[bytes, bytes]:
+                return (b"PING: bytes=32 time=17.3 ms TTL=55\n", b"")
+
+        async def _fake_exec(*args: object, **kwargs: object) -> _Proc:
+            return _Proc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_exec)
+        m = SystemMonitor()
+        assert await m._get_network_latency() == 17.3
+
+    async def test_network_latency_subprocess_error(self, monkeypatch: pytest.MonkeyPatch):
+        async def _boom(*args: object, **kwargs: object) -> None:
+            raise FileNotFoundError("no ping")
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _boom)
+        m = SystemMonitor()
+        assert await m._get_network_latency() == 0.0
+
+
+class TestFaultInjectorBranches:
+    async def test_service_kill_no_target(self):
+        inj = FaultInjector()
+        res = await inj.inject(FaultConfig(fault_type=FaultType.SERVICE_KILL, duration_sec=0.01))
+        assert res["error"] == "No service target specified"
+
+    async def test_service_kill_psutil_found(self, monkeypatch: pytest.MonkeyPatch):
+        killed = _install_fake_psutil(monkeypatch, procs=[(101, "nginx"), (202, "other")])
+        inj = FaultInjector()
+        res = await inj.inject(FaultConfig(fault_type=FaultType.SERVICE_KILL, target="nginx", duration_sec=0.01))
+        assert res["details"]["killed_pid"] == 101
+        assert killed == [101]
+
+    async def test_service_kill_psutil_not_found(self, monkeypatch: pytest.MonkeyPatch):
+        _install_fake_psutil(monkeypatch, procs=[(1, "system")])
+        inj = FaultInjector()
+        res = await inj.inject(FaultConfig(fault_type=FaultType.SERVICE_KILL, target="ghostd", duration_sec=0.01))
+        assert res["details"]["simulated"] is True
+
+    async def test_process_kill_no_target(self):
+        inj = FaultInjector()
+        res = await inj.inject(FaultConfig(fault_type=FaultType.PROCESS_KILL, duration_sec=0.01))
+        assert res["error"] == "No process target specified"
+
+    async def test_process_kill_psutil_found(self, monkeypatch: pytest.MonkeyPatch):
+        _install_fake_psutil(monkeypatch, procs=[(303, "firefox.exe")])
+        inj = FaultInjector()
+        res = await inj.inject(FaultConfig(fault_type=FaultType.PROCESS_KILL, target="firefox", duration_sec=0.01))
+        assert res["details"]["killed_pid"] == 303
+
+    async def test_process_kill_psutil_not_found(self, monkeypatch: pytest.MonkeyPatch):
+        _install_fake_psutil(monkeypatch, procs=[(1, "notepad")])
+        inj = FaultInjector()
+        res = await inj.inject(FaultConfig(fault_type=FaultType.PROCESS_KILL, target="zzz", duration_sec=0.01))
+        assert res["details"]["simulated"] is True
+
+    async def test_process_kill_without_psutil(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delitem(sys.modules, "psutil", raising=False)
+        inj = FaultInjector()
+        res = await inj.inject(FaultConfig(fault_type=FaultType.PROCESS_KILL, target="anything", duration_sec=0.01))
+        assert res["details"]["simulated"] is True
+
+    async def test_disk_fill_no_free_space(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delitem(sys.modules, "psutil", raising=False)
+        inj = FaultInjector()
+        res = await inj.inject(
+            FaultConfig(fault_type=FaultType.DISK_FILL, target=str(tmp_path), intensity=1.0, duration_sec=0.01)
+        )
+        assert res["details"]["error"] == "no free space"
+
+    async def test_disk_fill_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        def _boom(path: object) -> None:
+            raise OSError("disk err")
+
+        monkeypatch.setattr(shutil, "disk_usage", _boom)
+        inj = FaultInjector()
+        res = await inj.inject(FaultConfig(fault_type=FaultType.DISK_FILL, target=str(tmp_path), duration_sec=0.01))
+        assert "disk err" in res["details"]["error"]
+
+    async def test_inject_dispatch_error_recorded(self, monkeypatch: pytest.MonkeyPatch):
+        inj = FaultInjector()
+
+        def _raise(fault: dict[str, Any]) -> None:
+            msg = "boom"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(inj, "_inject_service_kill", _raise)
+        res = await inj.inject(FaultConfig(fault_type=FaultType.SERVICE_KILL, target="nginx", duration_sec=0.01))
+        assert "boom" in res["error"]
+
+    async def test_cpu_burn_completes(self):
+        inj = FaultInjector()
+        await inj._cpu_burn(1, 0.01, "f1")
+
+    async def test_recover_already_recovered(self):
+        inj = FaultInjector()
+        res = await inj.inject(FaultConfig(fault_type=FaultType.NETWORK_LATENCY, duration_sec=0.01))
+        await inj.recover(res["id"])
+        again = await inj.recover(res["id"])
+        assert again is not None
+        assert again["recovered"] is True
+
+    async def test_recover_failure(self, monkeypatch: pytest.MonkeyPatch):
+        inj = FaultInjector()
+        res = await inj.inject(FaultConfig(fault_type=FaultType.NETWORK_LATENCY, duration_sec=0.01))
+
+        def _boom(fault: dict[str, Any]) -> None:
+            msg = "rec boom"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(inj, "_recover_fault", _boom)
+        r = await inj.recover(res["id"])
+        assert r is not None
+        assert "Recovery failed" in r["error"]
+
+    def test_recover_fault_cpu_and_memory(self):
+        inj = FaultInjector()
+        inj._recover_fault({"config": {"fault_type": "cpu_storm"}, "id": "c"})
+        inj._recover_fault({"config": {"fault_type": "memory_leak"}, "id": "m"})
+
+    def test_recover_fault_process_and_service(self):
+        inj = FaultInjector()
+        inj._recover_fault({"config": {"fault_type": "process_kill", "target": "p"}, "id": "x"})
+        inj._recover_fault({"config": {"fault_type": "service_kill", "target": "s"}, "id": "y"})
+
+    def test_recover_fault_disk_fill_removes(self, tmp_path: Path):
+        inj = FaultInjector()
+        fill = tmp_path / ".chaos_disk_fill_d1.tmp"
+        fill.write_bytes(b"x")
+        inj._recover_fault({"config": {"fault_type": "disk_fill", "target": str(tmp_path)}, "id": "d1"})
+        assert not fill.exists()
+
+
+class TestFaultInjectorTcBranch:
+    def _fake_linux_tc(self, monkeypatch: pytest.MonkeyPatch, run: Any) -> None:
+        monkeypatch.setattr("platform.system", lambda: "Linux")
+        monkeypatch.setattr(shutil, "which", lambda name: "/sbin/tc" if name == "tc" else None)
+        monkeypatch.setattr(subprocess, "run", run)
+
+    async def test_tc_latency_real_applied(self, monkeypatch: pytest.MonkeyPatch):
+        calls: list[Any] = []
+        self._fake_linux_tc(monkeypatch, lambda *a, **k: calls.append(a))
+        inj = FaultInjector()
+        res = await inj.inject(
+            FaultConfig(fault_type=FaultType.NETWORK_LATENCY, target="eth0", intensity=0.2, duration_sec=0.01)
+        )
+        assert res["details"]["method"] == "tc"
+        assert calls
+
+    async def test_tc_latency_invalid_interface_raises(self, monkeypatch: pytest.MonkeyPatch):
+        self._fake_linux_tc(monkeypatch, lambda *a, **k: None)
+        inj = FaultInjector()
+        res = await inj.inject(FaultConfig(fault_type=FaultType.NETWORK_LATENCY, target="bad iface", duration_sec=0.01))
+        assert "Invalid network interface" in res["error"]
+
+    async def test_tc_latency_run_fails_simulates(self, monkeypatch: pytest.MonkeyPatch):
+        def _boom(*a: object, **k: object) -> None:
+            msg = "tc error"
+            raise RuntimeError(msg)
+
+        self._fake_linux_tc(monkeypatch, _boom)
+        inj = FaultInjector()
+        res = await inj.inject(FaultConfig(fault_type=FaultType.NETWORK_LATENCY, target="lo", duration_sec=0.01))
+        assert res["details"]["simulated"] is True
+
+    def test_recover_fault_tc_applied(self, monkeypatch: pytest.MonkeyPatch):
+        calls: list[Any] = []
+        self._fake_linux_tc(monkeypatch, lambda *a, **k: calls.append(a))
+        inj = FaultInjector()
+        inj._recover_fault(
+            {"config": {"fault_type": "network_latency", "target": "lo"}, "id": "n", "details": {"method": "tc", "target": "lo"}}
+        )
+        assert calls
+
+    def test_recover_fault_tc_invalid(self, monkeypatch: pytest.MonkeyPatch):
+        self._fake_linux_tc(monkeypatch, lambda *a, **k: None)
+        inj = FaultInjector()
+        with pytest.raises(ValueError, match="Invalid network interface"):
+            inj._recover_fault(
+                {
+                    "config": {"fault_type": "network_latency", "target": "x"},
+                    "id": "n",
+                    "details": {"method": "tc", "target": "bad iface"},
+                }
+            )
+
+
+class TestChaosEngineeringExperiment:
+    def _patch_monitor(self, ce: ChaosEngineering, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def _fast_latency() -> float:
+            return 5.0
+
+        monkeypatch.setattr(ce._monitor, "_get_network_latency", _fast_latency)
+
+    async def test_run_experiment_full_loop(self, monkeypatch: pytest.MonkeyPatch):
+        ce = ChaosEngineering()
+        self._patch_monitor(ce, monkeypatch)
+        cfg = ExperimentConfig(
+            name="full",
+            hypothesis=ExperimentHypothesis(description="d", success_criteria=["all faults recover"]),
+            faults=[
+                FaultConfig(fault_type=FaultType.NETWORK_LATENCY, duration_sec=0.01),
+                FaultConfig(fault_type=FaultType.PROCESS_KILL, target="ghostproc", duration_sec=0.01),
+            ],
+            interval_between_faults_sec=0.01,
+            recovery_timeout_sec=0.1,
+        )
+        res = await ce.run_experiment(cfg)
+        assert res.status == ExperimentStatus.COMPLETED
+        assert len(res.faults_injected) == 2
+        assert len(res.faults_recovered) == 2
+        assert len(res.metrics_during) == 2
+        assert res.hypothesis_validated is True
+
+    async def test_run_experiment_cancelled(self, monkeypatch: pytest.MonkeyPatch):
+        ce = ChaosEngineering()
+
+        async def _cancel() -> None:
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr(ce._monitor, "start", _cancel)
+        cfg = ExperimentConfig(name="c", hypothesis=ExperimentHypothesis(description="d"), faults=[])
+        res = await ce.run_experiment(cfg)
+        assert res.status == ExperimentStatus.ABORTED
+
+    async def test_run_experiment_failure_rollback(self, monkeypatch: pytest.MonkeyPatch):
+        ce = ChaosEngineering()
+
+        async def _boom(config: FaultConfig) -> dict[str, Any]:
+            msg = "inject boom"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(ce._injector, "inject", _boom)
+        cfg = ExperimentConfig(
+            name="fail",
+            hypothesis=ExperimentHypothesis(description="d"),
+            faults=[FaultConfig(fault_type=FaultType.NETWORK_LATENCY, duration_sec=0.01)],
+            rollback_on_failure=True,
+        )
+        res = await ce.run_experiment(cfg)
+        assert res.status == ExperimentStatus.FAILED
+        assert "inject boom" in res.errors[0]
+
+    async def test_run_experiment_monitor_stop_fails(self, monkeypatch: pytest.MonkeyPatch):
+        ce = ChaosEngineering()
+
+        async def _boom(config: FaultConfig) -> dict[str, Any]:
+            msg = "x"
+            raise RuntimeError(msg)
+
+        async def _stop_boom() -> list[SystemSnapshot]:
+            msg = "stop boom"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(ce._injector, "inject", _boom)
+        monkeypatch.setattr(ce._monitor, "stop", _stop_boom)
+        cfg = ExperimentConfig(
+            name="f2",
+            hypothesis=ExperimentHypothesis(description="d"),
+            faults=[FaultConfig(fault_type=FaultType.NETWORK_LATENCY, duration_sec=0.01)],
+            rollback_on_failure=True,
+        )
+        res = await ce.run_experiment(cfg)
+        assert res.status == ExperimentStatus.FAILED
+
+    async def test_abort_experiment_running(self):
+        ce = ChaosEngineering()
+        cfg = ExperimentConfig(name="a", hypothesis=ExperimentHypothesis(description="d"))
+        res = ExperimentResult(experiment_id="a1", config=cfg, status=ExperimentStatus.RUNNING)
+        ce._experiments["a1"] = res
+        assert await ce.abort_experiment("a1") is True
+        assert res.status == ExperimentStatus.ABORTED
+
+    async def test_abort_experiment_monitor_stop_fails(self, monkeypatch: pytest.MonkeyPatch):
+        ce = ChaosEngineering()
+
+        async def _stop_boom() -> list[SystemSnapshot]:
+            msg = "stop"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(ce._monitor, "stop", _stop_boom)
+        cfg = ExperimentConfig(name="a", hypothesis=ExperimentHypothesis(description="d"))
+        res = ExperimentResult(experiment_id="a2", config=cfg, status=ExperimentStatus.RUNNING)
+        ce._experiments["a2"] = res
+        assert await ce.abort_experiment("a2") is True
+
+    def _completed_result(self, experiment_id: str = "exp") -> ExperimentResult:
+        cfg = ExperimentConfig(
+            name="done",
+            hypothesis=ExperimentHypothesis(description="d"),
+            faults=[FaultConfig(fault_type=FaultType.NETWORK_LATENCY)],
+        )
+        return ExperimentResult(
+            experiment_id=experiment_id,
+            config=cfg,
+            status=ExperimentStatus.COMPLETED,
+            start_time=100.0,
+            end_time=200.0,
+            metrics_before={"cpu": 30.0},
+            metrics_after={"cpu": 33.0},
+            faults_injected=[{"id": "f1"}],
+            faults_recovered=[{"id": "f1"}],
+            hypothesis_validated=True,
+            resilience_score=0.9,
+        )
+
+    def test_export_report(self, tmp_path: Path):
+        ce = ChaosEngineering()
+        ce._experiments["exp"] = self._completed_result("exp")
+        out = tmp_path / "nested" / "report.json"
+        ce.export_report("exp", out)
+        assert out.exists()
+        assert '"experiment_id"' in out.read_text(encoding="utf-8")
+
+    def test_resilience_summary_with_experiment(self):
+        ce = ChaosEngineering()
+        ce._experiments["exp"] = self._completed_result("exp")
+        s = ce.get_resilience_summary()
+        assert s["experiments_run"] == 1
+        assert s["hypotheses_validated"] == 1
+        assert s["total_faults_injected"] == 1
+        assert s["avg_resilience"] == 0.9
+
+
+class TestHypothesisAndScores:
+    def _result(
+        self,
+        criteria: list[str],
+        before: dict[str, float],
+        after: dict[str, float],
+        injected: int,
+        recovered: int,
+    ) -> ExperimentResult:
+        cfg = ExperimentConfig(
+            name="h",
+            hypothesis=ExperimentHypothesis(description="d", success_criteria=criteria),
+        )
+        return ExperimentResult(
+            experiment_id="h",
+            config=cfg,
+            status=ExperimentStatus.COMPLETED,
+            metrics_before=before,
+            metrics_after=after,
+            faults_injected=[{"id": str(i)} for i in range(injected)],
+            faults_recovered=[{"id": str(i)} for i in range(recovered)],
+        )
+
+    def test_cpu_over_threshold_fails(self):
+        ce = ChaosEngineering()
+        r = self._result(["cpu below 80"], {}, {"cpu": 90.0}, 0, 0)
+        assert ce._validate_hypothesis(r) is False
+
+    def test_cpu_under_threshold_passes(self):
+        ce = ChaosEngineering()
+        r = self._result(["cpu below 80"], {}, {"cpu": 70.0}, 0, 0)
+        assert ce._validate_hypothesis(r) is True
+
+    def test_memory_over_threshold_fails(self):
+        ce = ChaosEngineering()
+        r = self._result(["memory below 80"], {}, {"memory": 95.0}, 0, 0)
+        assert ce._validate_hypothesis(r) is False
+
+    def test_recover_incomplete_fails(self):
+        ce = ChaosEngineering()
+        r = self._result(["all faults recover"], {}, {}, 2, 1)
+        assert ce._validate_hypothesis(r) is False
+
+    def test_unparseable_threshold_skipped(self):
+        ce = ChaosEngineering()
+        r = self._result(["cpu below high"], {}, {"cpu": 99.0}, 0, 0)
+        assert ce._validate_hypothesis(r) is True
+
+    def test_unparseable_memory_threshold_skipped(self):
+        ce = ChaosEngineering()
+        r = self._result(["memory below high"], {}, {"memory": 99.0}, 0, 0)
+        assert ce._validate_hypothesis(r) is True
+
+    def test_resilience_score_with_faults(self):
+        ce = ChaosEngineering()
+        r = self._result([], {}, {}, 2, 1)
+        assert ce._compute_resilience_score(r) == 0.7
+
+    def test_steadiness_no_metrics(self):
+        ce = ChaosEngineering()
+        r = self._result([], {}, {}, 0, 0)
+        assert ce._compute_steadiness(r) == 1.0

@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import asyncio
+import shutil
 import sys
 from collections.abc import Generator
 from pathlib import Path
@@ -210,6 +211,36 @@ async def test_edit_file_applies(ws: Path) -> None:
     assert target.read_text(encoding="utf-8") == "new text"
 
 
+def test_fuzzy_find_empty_needle() -> None:
+    from ravencode.runtime.tools.files import _fuzzy_find
+
+    assert _fuzzy_find("", "anything\n") is None
+
+
+def test_fuzzy_find_ambiguous_returns_none() -> None:
+    from ravencode.runtime.tools.files import _fuzzy_find
+
+    assert _fuzzy_find("x\nx", "x\nx\nx\nx\n") is None
+
+
+@pytest.mark.asyncio
+async def test_edit_file_whitespace_tolerant(ws: Path) -> None:
+    target = ws / "e.py"
+    target.write_text("alpha  \nbeta\n", encoding="utf-8")
+    out = await tools.edit_file(str(target), "alpha\nbeta", "ALPHA\nBETA")
+    assert "whitespace-tolerant match" in out
+    assert target.read_text(encoding="utf-8") == "ALPHA\nBETA\n"
+
+
+@pytest.mark.asyncio
+async def test_edit_file_whitespace_tolerant_keeps_terminator(ws: Path) -> None:
+    target = ws / "e.py"
+    target.write_text("one\n\ntwo   \nthree\n", encoding="utf-8")
+    out = await tools.edit_file(str(target), "two\nthree", "TWO")
+    assert "whitespace-tolerant match" in out
+    assert target.read_text(encoding="utf-8") == "one\n\nTWO\n"
+
+
 @pytest.mark.asyncio
 async def test_edit_file_write_permission_error(ws: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     target = ws / "f.txt"
@@ -245,6 +276,59 @@ async def test_verify_file_json_invalid(ws: Path) -> None:
     (ws / "data.json").write_text("{oops", encoding="utf-8")
     out = await tools.verify_file(str(ws / "data.json"))
     assert "invalid JSON" in out
+
+
+@pytest.mark.asyncio
+async def test_verify_file_undecodable(ws: Path) -> None:
+    (ws / "bin.py").write_bytes(b"\xff\xfe\x00\x00\x00def")
+    out = await tools.verify_file(str(ws / "bin.py"))
+    assert "cannot read" in out
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(shutil.which("ruff") is None, reason="ruff not installed")
+async def test_verify_file_python_lint_problem(ws: Path) -> None:
+    # the dev env has ruff installed, so the real subprocess path runs
+    (ws / "unused.py").write_text("import sys\n", encoding="utf-8")
+    out = await tools.verify_file(str(ws / "unused.py"))
+    assert out.startswith("[problems]")
+    assert "ruff:" in out
+
+
+@pytest.mark.asyncio
+async def test_verify_file_lint_timeout_skips(ws: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    proc = _FakeProc(out=b"partial")
+
+    async def _spawn(*args: object, **kwargs: object) -> _FakeProc:
+        return proc
+
+    async def _timeout(coro: object, timeout: object = None) -> None:
+        if hasattr(coro, "__await__"):
+            await coro
+        raise TimeoutError
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _spawn)
+    monkeypatch.setattr(asyncio, "wait_for", _timeout)
+    (ws / "ok.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+    out = await tools.verify_file(str(ws / "ok.py"))
+    assert "[ok]" in out
+    assert proc.killed is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+async def test_verify_file_javascript_ok(ws: Path) -> None:
+    (ws / "a.js").write_text("const x = 1;\n", encoding="utf-8")
+    out = await tools.verify_file(str(ws / "a.js"))
+    assert "[ok]" in out
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+async def test_verify_file_javascript_syntax_error(ws: Path) -> None:
+    (ws / "b.js").write_text("function ( {\n", encoding="utf-8")
+    out = await tools.verify_file(str(ws / "b.js"))
+    assert out.startswith("[problems]")
 
 
 @pytest.mark.asyncio

@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ravencode.runtime.code_search import chunk_source, code_search, reset_index
+import pytest
+
+from ravencode.runtime.code_search import RepoIndex, chunk_source, code_search, reset_index
 from ravencode.runtime.workspace import set_workspace_root
 
 
@@ -94,3 +96,53 @@ async def test_code_search_ranks_relevant_file_first(tmp_path: Path) -> None:
     result = await code_search("render button screen draw label", k=5)
     # ui.py is the only relevant file for this query
     assert "app/ui.py" in result
+
+
+def test_chunk_source_empty_text() -> None:
+    assert chunk_source("") == []
+
+
+def test_chunk_source_windows_large_gap_between_definitions() -> None:
+    text = "def a():\n" + "".join(f"x{i} = {i}\n" for i in range(450)) + "def b():\n    pass\n"
+    chunks = chunk_source(text)
+    assert max(end - start for start, end, _ in chunks) <= 200
+    assert sum(end - start + 1 for start, end, _ in chunks) >= 452
+
+
+def test_build_skips_short_huge_noncode_and_unreadable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import ravencode.runtime.code_search as cs
+    from ravencode.runtime.fs_walk import iter_files as real_iter
+
+    (tmp_path / "good.py").write_text("def f():\n    return 'searchable chunk content'\n", encoding="utf-8")
+    (tmp_path / "short.py").write_text("x=1", encoding="utf-8")
+    (tmp_path / "huge.py").write_text("def big():\n" + "z = 1\n" * 70_000, encoding="utf-8")
+    (tmp_path / "notes.md").write_text("def not_code():\n", encoding="utf-8")
+    ghost = tmp_path / "ghost.py"  # walked but never created: stat and read raise OSError
+
+    def fake_iter(root: Path):
+        yield from real_iter(root)
+        yield ghost
+
+    monkeypatch.setattr(cs, "iter_files", fake_iter)
+    index = cs.RepoIndex()
+    index.build(tmp_path)
+    rels = [e[0] for e in index._entries]
+    assert "good.py" in rels
+    assert not {"short.py", "huge.py", "notes.md", "ghost.py"} & set(rels)
+
+    entries = index._entries
+    index.build(tmp_path)  # unchanged fingerprint: no rebuild
+    assert index._entries is entries
+
+
+def test_build_respects_max_chunks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    for i in range(5):
+        (tmp_path / f"f{i}.py").write_text(f"def d{i}():\n    return 'chunk number {i} here'\n", encoding="utf-8")
+    monkeypatch.setattr("ravencode.runtime.code_search._MAX_CHUNKS", 2)
+    index = RepoIndex()
+    index.build(tmp_path)
+    assert len(index._entries) <= 2
+
+
+def test_search_without_entries_returns_empty(tmp_path: Path) -> None:
+    assert RepoIndex().search(tmp_path, "anything") == []

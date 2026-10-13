@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import sys
+import types
+from typing import Any
+
+import pytest
+
 from raven.core.security.context_filter import (
     ContextVisibility,
     PIIEngine,
@@ -269,3 +275,107 @@ def test_pii_detection_has_score():
     finds = analyze_pii("user@test.com")
     assert len(finds) >= 1
     assert 0 < finds[0].score <= 1.0
+
+
+# ─── Presidio-backed analysis (simulated) ───────────────────────────
+
+
+class _FakeResult:
+    def __init__(self, start: int, end: int, entity_type: str, score: float) -> None:
+        self.start = start
+        self.end = end
+        self.entity_type = entity_type
+        self.score = score
+
+
+class _FakeAnalyzer:
+    def __init__(self, results: list[_FakeResult] | Exception) -> None:
+        self._results = results
+
+    def analyze(self, *, text: str, language: str) -> list[_FakeResult]:
+        if isinstance(self._results, Exception):
+            raise self._results
+        return self._results
+
+
+def test_try_init_presidio_returns_early_when_present():
+    engine = PIIEngine()
+    sentinel = _FakeAnalyzer([])
+    engine._presidio_analyzer = sentinel
+    engine._try_init_presidio()
+    assert engine._presidio_analyzer is sentinel
+
+
+def test_try_init_presidio_instantiates_when_importable(monkeypatch: pytest.MonkeyPatch):
+    marker = object()
+
+    class _Engine:
+        def __new__(cls):
+            return marker
+
+    mod: Any = types.ModuleType("presidio_analyzer")
+    mod.AnalyzerEngine = _Engine
+    monkeypatch.setitem(sys.modules, "presidio_analyzer", mod)
+    engine = PIIEngine()
+    engine._try_init_presidio()
+    assert engine._presidio_analyzer is marker
+
+
+def test_analyze_merges_presidio_results():
+    engine = PIIEngine()
+    # "hello world" is 11 chars; span 0-5 and 6-11 are non-overlapping, plus a
+    # duplicate 0-5 that must be dropped by the overlap guard.
+    engine._presidio_analyzer = _FakeAnalyzer(
+        [
+            _FakeResult(0, 5, "PERSON", 0.9),
+            _FakeResult(0, 5, "PERSON", 0.9),
+            _FakeResult(6, 11, "ORG", 0.8),
+        ]
+    )
+    finds = engine.analyze("hello world")
+    presidio = [f for f in finds if f.entity_type.startswith("presidio_")]
+    assert len(presidio) == 2
+    assert {f.entity_type for f in presidio} == {"presidio_PERSON", "presidio_ORG"}
+
+
+def test_analyze_presidio_failure_is_swallowed():
+    engine = PIIEngine()
+    engine._presidio_analyzer = _FakeAnalyzer(RuntimeError("boom"))
+    finds = engine.analyze("hello world")
+    assert all(not f.entity_type.startswith("presidio_") for f in finds)
+
+
+# ─── Mask operator and non-asterisk masking ─────────────────────────
+
+
+def test_redact_with_mask_operator():
+    engine = PIIEngine()
+    result = engine.redact("Email: user@example.com", operators={"mask": "*"})
+    assert "user@example.com" not in result
+    assert "[EMAIL]" not in result
+
+
+def test_mask_non_asterisk_char():
+    engine = PIIEngine()
+    result = engine.mask("Email: user@example.com", char="#")
+    assert "user@example.com" not in result
+    assert "#" in result
+
+
+# ─── _category_for lookup ───────────────────────────────────────────
+
+
+def test_category_for_known_pattern():
+    assert PIIEngine._category_for("email") == "personal"
+
+
+def test_category_for_unknown_returns_generic():
+    assert PIIEngine._category_for("does_not_exist") == "generic"
+
+
+# ─── Visibility pass-through ────────────────────────────────────────
+
+
+def test_context_visibility_allowlist_quote_passes():
+    result = filter_context_by_visibility("secret info", ContextVisibility.ALLOWLIST_QUOTE, True)
+    assert result == "secret info"

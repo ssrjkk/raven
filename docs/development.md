@@ -16,7 +16,7 @@ pre-commit install
 ```
 raven/
 ├── channels/          # 15 messaging channel adapters
-├── cli/               # Click-based CLI (26 command groups)
+├── cli/               # Click-based CLI (35 command groups)
 ├── coding/            # Coding assistant, git integration
 ├── core/              # Core engine
 │   ├── gateway/       # Message orchestrator

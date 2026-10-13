@@ -45,6 +45,10 @@ class TestValidatePythonCode:
     def test_syntax_error_returns_message(self) -> None:
         assert "Syntax" in (validate_python_code("def broken(") or "")
 
+    def test_bare_dunder_name_reference_blocked(self) -> None:
+        assert "__import__" in (validate_python_code("x = __import__") or "")
+        assert "__builtins__" in (validate_python_code("print(__builtins__)") or "")
+
 
 class TestPyrunner:
     def test_safe_code_executes(self) -> None:

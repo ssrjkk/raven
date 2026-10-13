@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+from raven.tools import shell as shell_mod
 from raven.tools.db import db_query
 from raven.tools.file import file_append, file_delete, file_list, file_read, file_write, register_file_tools
 from raven.tools.register_all import create_tool_registry, register_all_tools
@@ -419,3 +420,342 @@ class TestTestsTool:
         assert "-x" in kept.split()
         assert "-k" in kept.split()
         assert any("test_foo" in d for d in dropped)
+
+
+# ---------------------------------------------------------------------------
+# Shell / python sandbox branches driven with mocked subprocess
+# ---------------------------------------------------------------------------
+
+class TestShellValidation:
+    async def test_empty_command_denied(self) -> None:
+        assert await shell_command("") == "[denied] empty command"
+
+    async def test_find_exec_flag_denied(self) -> None:
+        result = await shell_command("find . -exec rm {} ;")
+        assert result == "[denied] find flag '-exec' is not allowed"
+
+    async def test_find_without_forbidden_flag_runs(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class _Proc:
+            returncode = 0
+
+            async def communicate(self) -> tuple[bytes, bytes]:
+                return b"./a.txt\n", b""
+
+        async def fake_exec(*_a: object, **_k: object) -> _Proc:
+            return _Proc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        result = await shell_command("find . -name a.txt")
+        assert "./a.txt" in result
+
+
+class TestShellOutputBranches:
+    async def test_captures_stderr_and_nonzero_exit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class _Proc:
+            returncode = 2
+
+            async def communicate(self) -> tuple[bytes, bytes]:
+                return b"STDOUT-OUT\n", b"somthing failed\n"
+
+        async def fake_exec(*_a: object, **_k: object) -> _Proc:
+            return _Proc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        result = await shell_command("echo hi")
+        assert "STDOUT-OUT" in result
+        assert "[stderr]" in result
+        assert "somthing failed" in result
+        assert "exit code: 2" in result
+
+
+class TestPythonCodeBranches:
+    async def test_no_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(shell_mod, "validate_python_code", lambda _code: None)
+
+        class _Proc:
+            async def communicate(self, _data: object = None) -> tuple[bytes, bytes]:
+                return b"", b""
+
+        async def fake_exec(*_a: object, **_k: object) -> _Proc:
+            return _Proc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        assert await python_code("x = 1") == "(no output)"
+
+    async def test_timeout_kills_and_waits(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(shell_mod, "validate_python_code", lambda _code: None)
+
+        class _Proc:
+            def __init__(self) -> None:
+                self.killed = False
+
+            def communicate(self, _data: object = None) -> None:
+                return None
+
+            def kill(self) -> None:
+                self.killed = True
+
+            async def wait(self) -> int:
+                return -9
+
+        procs: list[_Proc] = []
+
+        async def fake_exec(*_a: object, **_k: object) -> _Proc:
+            proc = _Proc()
+            procs.append(proc)
+            return proc
+
+        async def fake_wait_for(_awaitable: object, timeout: object = None) -> None:
+            raise TimeoutError
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        monkeypatch.setattr(asyncio, "wait_for", fake_wait_for)
+        assert await python_code("import time; time.sleep(100)", timeout=1) == "[timeout after 1s]"
+        assert procs[0].killed is True
+
+    async def test_timeout_kill_process_already_gone(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(shell_mod, "validate_python_code", lambda _code: None)
+
+        class _Proc:
+            def communicate(self, _data: object = None) -> None:
+                return None
+
+            def kill(self) -> None:
+                raise ProcessLookupError
+
+            async def wait(self) -> int:
+                return 0
+
+        async def fake_exec(*_a: object, **_k: object) -> _Proc:
+            return _Proc()
+
+        async def fake_wait_for(_awaitable: object, timeout: object = None) -> None:
+            raise TimeoutError
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        monkeypatch.setattr(asyncio, "wait_for", fake_wait_for)
+        assert await python_code("x", timeout=2) == "[timeout after 2s]"
+
+    async def test_syntax_error_reported(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def _boom(_code: str) -> None:
+            raise SyntaxError("invalid syntax")
+
+        monkeypatch.setattr(shell_mod, "validate_python_code", _boom)
+        assert await python_code("def f(:") == "Syntax Error: invalid syntax"
+
+    async def test_unexpected_exception_reported(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def _boom(_code: str) -> None:
+            raise RuntimeError("kaboom")
+
+        monkeypatch.setattr(shell_mod, "validate_python_code", _boom)
+        assert await python_code("x") == "Error: kaboom"
+
+
+# ---------------------------------------------------------------------------
+# tests.py tool: marker/args, subprocess failure modes, generate_tests
+# ---------------------------------------------------------------------------
+
+class _OkProc:
+    returncode = 0
+
+    def __init__(self, out: bytes = b"5 passed in 0.10s\n", err: bytes = b"") -> None:
+        self._out = out
+        self._err = err
+
+    async def communicate(self) -> tuple[bytes, bytes]:
+        return self._out, self._err
+
+
+class TestRunTestsBranches:
+    async def test_marker_and_safe_args_added(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.tools.tests import run_tests
+
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+        captured: list[list[str]] = []
+
+        async def fake_exec(*args: str, **_k: object) -> _OkProc:
+            captured.append(list(args))
+            return _OkProc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        result = await run_tests(path=str(tmp_path), marker="slow", extra_args="--tb=long -x")
+        cmd = captured[0]
+        assert "-m" in cmd and "slow" in cmd
+        assert "--tb=long" in cmd and "-x" in cmd
+        assert "5 passed" in result
+
+    async def test_timeout(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.tools.tests import run_tests
+
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+
+        class _HangProc:
+            returncode = None
+
+            def communicate(self) -> None:
+                return None
+
+        async def fake_exec(*_a: str, **_k: object) -> _HangProc:
+            return _HangProc()
+
+        async def fake_wait_for(_aw: object, timeout: object = None) -> None:
+            raise TimeoutError
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        monkeypatch.setattr(asyncio, "wait_for", fake_wait_for)
+        assert await run_tests(path=str(tmp_path), timeout=3) == "Tests timed out after 3s"
+
+    async def test_pytest_not_found(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.tools.tests import run_tests
+
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+
+        async def fake_exec(*_a: str, **_k: object) -> None:
+            raise FileNotFoundError("no pytest")
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        assert await run_tests(path=str(tmp_path)) == "pytest not found"
+
+
+class TestCoverageBranches:
+    async def test_access_denied_outside_workspace(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.tools.tests import test_coverage
+
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+        result = await test_coverage(path=str(tmp_path.parent))
+        assert result == "Access denied: invalid path"
+
+    async def test_path_not_found(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.tools.tests import test_coverage
+
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+        assert await test_coverage(path=str(tmp_path / "missing")) == "Path not found"
+
+    async def test_timeout(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.tools.tests import test_coverage
+
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+
+        class _HangProc:
+            returncode = None
+
+            def communicate(self) -> None:
+                return None
+
+        async def fake_exec(*_a: str, **_k: object) -> _HangProc:
+            return _HangProc()
+
+        async def fake_wait_for(_aw: object, timeout: object = None) -> None:
+            raise TimeoutError
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        monkeypatch.setattr(asyncio, "wait_for", fake_wait_for)
+        assert await test_coverage(path=str(tmp_path), timeout=2) == "Coverage run timed out after 2s"
+
+    async def test_pytest_not_found(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.tools.tests import test_coverage
+
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+
+        async def fake_exec(*_a: str, **_k: object) -> None:
+            raise FileNotFoundError("boom")
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        result = await test_coverage(path=str(tmp_path))
+        assert result.startswith("pytest not found:")
+
+    async def test_malformed_coverage_xml_reports_zero(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.tools.tests import test_coverage
+
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+        (tmp_path / "coverage.xml").write_text("<<< not xml >>>", encoding="utf-8")
+
+        async def fake_exec(*_a: str, **_k: object) -> _OkProc:
+            return _OkProc(out=b"3 passed in 0.20s\n")
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        result = await test_coverage(path=str(tmp_path), timeout=30)
+        assert "Coverage: 0.0%" in result
+        assert "3 passed" in result
+
+
+class TestGenerateTests:
+    async def test_no_file_path(self) -> None:
+        from raven.tools.tests import generate_tests
+
+        assert await generate_tests("") == "file_path required"
+
+    async def test_access_denied_outside_workspace(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.tools.tests import generate_tests
+
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+        result = await generate_tests(str(tmp_path.parent / "evil.py"))
+        assert result == "Access denied: invalid path"
+
+    async def test_file_not_found(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.tools.tests import generate_tests
+
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+        assert await generate_tests(str(tmp_path / "missing.py")) == "File not found"
+
+    async def test_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import sys
+        import types
+
+        from raven.tools.tests import generate_tests
+
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+        src = tmp_path / "mod.py"
+        src.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
+
+        class _Gen:
+            async def generate_tests(self, _fp: str) -> str:
+                return "def test_add():\n    assert add(1, 2) == 3\n"
+
+            async def save_tests(self, _fp: str, _content: str) -> str:
+                return "Saved 1 test"
+
+        ns: Any = types.ModuleType("raven.coding.test_generator")
+        ns.TestGenerator = _Gen
+        monkeypatch.setitem(sys.modules, "raven.coding.test_generator", ns)
+        result = await generate_tests(str(src))
+        assert "Saved 1 test" in result
+        assert "def test_add" in result
+
+    async def test_empty_content(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import sys
+        import types
+
+        from raven.tools.tests import generate_tests
+
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+        src = tmp_path / "mod.py"
+        src.write_text("x = 1\n", encoding="utf-8")
+
+        class _Gen:
+            async def generate_tests(self, _fp: str) -> str:
+                return "   \n"
+
+        ns: Any = types.ModuleType("raven.coding.test_generator")
+        ns.TestGenerator = _Gen
+        monkeypatch.setitem(sys.modules, "raven.coding.test_generator", ns)
+        assert await generate_tests(str(src)) == "No tests generated (empty or unsupported)"
+
+    async def test_generation_exception(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import sys
+        import types
+
+        from raven.tools.tests import generate_tests
+
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+        src = tmp_path / "mod.py"
+        src.write_text("x = 1\n", encoding="utf-8")
+
+        class _Gen:
+            async def generate_tests(self, _fp: str) -> str:
+                raise RuntimeError("llm down")
+
+        ns: Any = types.ModuleType("raven.coding.test_generator")
+        ns.TestGenerator = _Gen
+        monkeypatch.setitem(sys.modules, "raven.coding.test_generator", ns)
+        assert await generate_tests(str(src)) == "Test generation failed"

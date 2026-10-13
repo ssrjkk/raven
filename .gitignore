@@ -12,7 +12,6 @@ venv/
 .raven/
 .env
 *.db
-chroma/
 node_modules/
 .vscode/settings.json
 .vscode/launch.json
@@ -38,20 +37,11 @@ data/_*.py
 data/checkpoints/
 
 # Build artifacts
-site/frames/
-desktop/dist/
-desktop/node_modules/
 extension/dist/
 extension/node_modules/
 web/node_modules/
 web/dist/
-desktop-tauri/node_modules/
-desktop-tauri/dist/
-desktop-tauri/src-tauri/target/
-packages/*/node_modules/
 
-# Go build artifacts
-services/*/bin/
 *.exe
 
 # Test artifacts
@@ -83,3 +73,5 @@ data/connections.json
 
 # pytest-benchmark
 .benchmarks/
+Python/
+htmlcov/

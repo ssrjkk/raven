@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 from unittest.mock import patch
 
 import httpx
@@ -48,6 +49,12 @@ def test_is_private_url_detects_localhost():
 def test_is_private_url_detects_private_networks():
     assert is_private_url("http://192.168.1.1") is True
     assert is_private_url("http://172.16.0.1") is True
+
+
+def test_is_private_url_blocks_literal_host_when_dns_resolves_public():
+    # Literal host is private even though DNS (stubbed) reports only public IPs.
+    with patch("raven.core.security.ssrf._resolve_host", return_value=[ipaddress.ip_address("8.8.8.8")]):
+        assert is_private_url("http://10.0.0.1/admin") is True
 
 
 def test_validate_url_ghost_mode_blocks_external():

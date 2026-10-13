@@ -1,8 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 import pytest
 
-from raven.tools.canvas import _sanitize, _sanitize_url, canvas_render
+from raven.tools.canvas import (
+    _sanitize,
+    _sanitize_url,
+    canvas_render,
+    canvas_save,
+    canvas_show,
+    register_canvas_tools,
+)
 
 
 class TestCanvas:
@@ -99,3 +109,69 @@ class TestSanitize:
 
     def test_sanitize_url_mailto(self):
         assert _sanitize_url("mailto:test@test.com") == "mailto:test@test.com"
+
+
+class TestCanvasSave:
+    async def test_save_md(self, tmp_path):
+        target = tmp_path / "out" / "canvas.md"
+        result = await canvas_save("# Title", str(target))
+        assert result.startswith(f"Canvas saved to {target}")
+        assert "(7 bytes)" in result
+        assert target.read_text(encoding="utf-8") == "# Title"
+
+    async def test_save_html_wraps_doc(self, tmp_path):
+        target = tmp_path / "page.html"
+        await canvas_save("<p>hi</p>", str(target), fmt="html")
+        assert target.read_text(encoding="utf-8") == "<!DOCTYPE html><html><body><p>hi</p></body></html>"
+
+    async def test_save_error(self, tmp_path):
+        blocker = tmp_path / "afile"
+        blocker.write_text("x", encoding="utf-8")
+        bad = str(blocker / "nested" / "out.md")
+        result = await canvas_save("content", bad)
+        assert result.startswith("[error] canvas_save:")
+
+
+class TestCanvasShow:
+    async def test_show_opens_browser(self, tmp_path, monkeypatch) -> None:
+        html_file = tmp_path / "in.html"
+        html_file.write_text("<h1>canvas</h1>", encoding="utf-8")
+        out_dir = tmp_path / "served"
+        opened: list[str] = []
+
+        def _mkdtemp() -> str:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            return str(out_dir)
+
+        def _open(uri: str, *a: object, **k: object) -> bool:
+            opened.append(uri)
+            return True
+
+        monkeypatch.setattr("tempfile.mkdtemp", _mkdtemp)
+        monkeypatch.setattr("webbrowser.open", _open)
+        result = await canvas_show(str(html_file))
+        assert result.startswith("Canvas opened in browser:")
+        assert (out_dir / "canvas.html").read_text(encoding="utf-8") == "<h1>canvas</h1>"
+        assert opened and opened[0].startswith("file:")
+
+    async def test_show_error_on_missing_file(self, tmp_path) -> None:
+        result = await canvas_show(str(tmp_path / "nope.html"))
+        assert result.startswith("[error] canvas_show:")
+
+
+class _FakeRegistry:
+    def __init__(self) -> None:
+        self.specs: list[Any] = []
+
+    def register(self, spec: Any) -> None:
+        self.specs.append(spec)
+
+
+class TestRegisterCanvasTools:
+    def test_registers_three_visual_tools(self) -> None:
+        reg = _FakeRegistry()
+        register_canvas_tools(reg)  # type: ignore[arg-type]
+        names = {s.name for s in reg.specs}
+        assert names == {"canvas_render", "canvas_show", "canvas_save"}
+        assert all(s.category == "visual" for s in reg.specs)
+        assert all(callable(s.handler) for s in reg.specs)

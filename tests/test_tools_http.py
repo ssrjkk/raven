@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
+import httpx
+
 from raven.core.task_engine.tool_registry import ToolRegistry
 from raven.tools.http import http_get, http_post, register_http_tools
 
@@ -167,6 +169,73 @@ class TestHttpPost:
             result = await http_post("https://example.com/start")
         assert result == "done"
         assert len(calls) == 2
+
+
+class _StreamResponse:
+    def __init__(self, chunks: list[str]) -> None:
+        self._chunks = chunks
+        self.is_redirect = False
+        self.is_informational = False
+        self.headers: dict[str, str] = {}
+
+    async def aiter_text(self):
+        for chunk in self._chunks:
+            yield chunk
+
+
+def _client_with_request(request: AsyncMock) -> AsyncMock:
+    client = AsyncMock()
+    client.__aenter__.return_value = client
+    client.request = request
+    return client
+
+
+class TestHttpStreamingAndErrors:
+    async def test_aiter_text_joins_small_body(self) -> None:
+        client = _client_with_request(AsyncMock(return_value=_StreamResponse(["hello ", "world"])))
+        with (
+            patch("raven.tools.http.validate_url", return_value=None),
+            patch("raven.tools.http.httpx.AsyncClient", return_value=client),
+        ):
+            result = await http_get("https://example.com/")
+        assert result == "hello world"
+
+    async def test_aiter_text_truncates_over_limit(self) -> None:
+        client = _client_with_request(AsyncMock(return_value=_StreamResponse(["y" * 30000])))
+        with (
+            patch("raven.tools.http.validate_url", return_value=None),
+            patch("raven.tools.http.httpx.AsyncClient", return_value=client),
+        ):
+            result = await http_get("https://example.com/")
+        assert result == "y" * 20000
+
+    async def test_initial_connect_error_blocked(self) -> None:
+        client = _client_with_request(AsyncMock(side_effect=httpx.ConnectError("no route")))
+        with (
+            patch("raven.tools.http.validate_url", return_value=None),
+            patch("raven.tools.http.httpx.AsyncClient", return_value=client),
+        ):
+            result = await http_get("https://example.com/")
+        assert result == "[blocked] no route"
+
+    async def test_initial_timeout_blocked(self) -> None:
+        client = _client_with_request(AsyncMock(side_effect=httpx.TimeoutException("too slow")))
+        with (
+            patch("raven.tools.http.validate_url", return_value=None),
+            patch("raven.tools.http.httpx.AsyncClient", return_value=client),
+        ):
+            result = await http_get("https://example.com/")
+        assert result == "[blocked] too slow"
+
+    async def test_redirect_connect_error_blocked(self) -> None:
+        seq = [FakeResponse(302, redirect=True, location="https://example.com/next"), httpx.ConnectError("boom")]
+        client = _client_with_request(AsyncMock(side_effect=seq))
+        with (
+            patch("raven.tools.http.validate_url", return_value=None),
+            patch("raven.tools.http.httpx.AsyncClient", return_value=client),
+        ):
+            result = await http_get("https://example.com/start")
+        assert result == "[blocked] redirect blocked: boom"
 
 
 class TestRegisterHttpTools:

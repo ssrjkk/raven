@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -260,3 +261,359 @@ class TestPluginManager:
         assert self.manager._name_from_url("https://evil.com/..").startswith("plugin_")
         assert self.manager._name_from_url("https://x.com/..\\..\\etc") == "etc"
         assert self.manager._name_from_url("https://x.com/...") != ""
+
+
+# ---------------------------------------------------------------------------
+# Fakes for network / subprocess / catalog interactions
+# ---------------------------------------------------------------------------
+
+class _Resp:
+    def __init__(self, payload: Any = None, status: int = 200) -> None:
+        self._payload = payload
+        self.status_code = status
+
+    def raise_for_status(self) -> None:
+        if self._payload is None:
+            raise RuntimeError("boom")
+
+    def json(self) -> Any:
+        return self._payload
+
+
+def _fake_httpx(monkeypatch: pytest.MonkeyPatch, response: Any = None, raises: BaseException | None = None) -> None:
+    import httpx
+
+    class _Client:
+        def __init__(self, *_a: object, **_k: object) -> None:
+            pass
+
+        async def __aenter__(self) -> _Client:
+            return self
+
+        async def __aexit__(self, *_a: object) -> bool:
+            return False
+
+        async def get(self, _url: str) -> Any:
+            if raises is not None:
+                raise raises
+            return response
+
+    monkeypatch.setattr(httpx, "AsyncClient", _Client)
+
+
+class _StubCatalog:
+    def __init__(self, releases: list[PluginRelease] | None = None) -> None:
+        self._releases = releases or []
+        self.sync_calls = 0
+
+    async def sync(self) -> bool:
+        self.sync_calls += 1
+        return True
+
+    def get_releases(self, _pid: str) -> list[PluginRelease]:
+        return self._releases
+
+
+class TestPluginCatalogSync:
+    def _catalog(self, tmp_path: Path, url: str = "") -> PluginCatalog:
+        return PluginCatalog(catalog_url=url, cache_dir=tmp_path / "cache")
+
+    async def test_sync_no_url_uses_local_cache(self, tmp_path: Path) -> None:
+        catalog = self._catalog(tmp_path)
+        assert await catalog.sync() is False
+
+    async def test_sync_success_parses_and_caches(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("raven.core.security.ssrf.validate_url", lambda _u: None)
+        payload = {"plugins": [{"id": "p1", "name": "alpha", "version": "1.0.0", "category": "coding"}]}
+        _fake_httpx(monkeypatch, response=_Resp(payload))
+        catalog = self._catalog(tmp_path, url="https://example.com/catalog.json")
+        assert await catalog.sync() is True
+        assert "p1" in catalog._plugins
+        assert (tmp_path / "cache" / "catalog.json").exists()
+
+    async def test_sync_blocked_by_ssrf(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("raven.core.security.ssrf.validate_url", lambda _u: "private")
+        catalog = self._catalog(tmp_path, url="http://169.254.1.1/catalog.json")
+        assert await catalog.sync() is False
+
+    async def test_sync_exception_falls_back_to_cache(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("raven.core.security.ssrf.validate_url", lambda _u: None)
+        _fake_httpx(monkeypatch, raises=RuntimeError("network down"))
+        catalog = self._catalog(tmp_path, url="https://example.com/catalog.json")
+        assert await catalog.sync() is False
+
+    async def test_load_local_cache_success(self, tmp_path: Path) -> None:
+        cache = tmp_path / "cache"
+        cache.mkdir(parents=True, exist_ok=True)
+        (cache / "catalog.json").write_text(
+            json.dumps({"plugins": [{"id": "p9", "name": "cached", "version": "1.0.0"}]})
+        )
+        catalog = self._catalog(tmp_path)
+        assert await catalog.sync() is True
+        assert "p9" in catalog._plugins
+
+    async def test_load_local_cache_malformed(self, tmp_path: Path) -> None:
+        cache = tmp_path / "cache"
+        cache.mkdir(parents=True, exist_ok=True)
+        (cache / "catalog.json").write_text("not json {")
+        catalog = self._catalog(tmp_path)
+        assert await catalog.sync() is False
+
+    def test_save_local_cache_serialization_error(self, tmp_path: Path) -> None:
+        catalog = self._catalog(tmp_path)
+        catalog._save_local_cache({"bad": object()})  # unserializable -> swallowed
+        assert not (tmp_path / "cache" / "catalog.json").exists()
+
+
+class TestCatalogSearchDescription:
+    def test_search_matches_description(self, tmp_path: Path) -> None:
+        catalog = PluginCatalog(cache_dir=tmp_path)
+        catalog._plugins = {
+            "x": PluginMetadata(id="x", name="zzz", version="1.0", description="a scraper tool"),
+        }
+        assert catalog.search("scraper") == [catalog._plugins["x"]]
+
+
+class TestPluginManagerPaths:
+    @pytest.fixture
+    def manager(self, tmp_path: Path) -> PluginManager:
+        return PluginManager(plugins_dir=tmp_path / "plugins")
+
+    def test_catalog_property(self, manager: PluginManager) -> None:
+        assert isinstance(manager.catalog, PluginCatalog)
+
+    def test_get_installation_status_installed(self, manager: PluginManager) -> None:
+        meta = PluginMetadata(id="m", name="m", version="1.0.0")
+        manager._installed["m"] = InstalledPlugin(metadata=meta, install_path=manager._plugins_dir / "m")
+        assert manager.get_installation_status("m") == InstallationStatus.INSTALLED
+
+    async def test_install_rejects_escaping_name(self, manager: PluginManager, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(manager, "_name_from_url", lambda _u: "../escape")
+        with pytest.raises(ValueError, match="Invalid plugin name"):
+            await manager.install_plugin("https://x/y", source="local")
+
+    async def test_install_remote_source(self, manager: PluginManager, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr(manager, "_fetch_remote_metadata", AsyncMock(return_value=None))
+        installed = await manager.install_plugin("https://x.com/rem", source="remote")
+        assert installed.metadata.name == "rem"
+
+    async def test_install_real_when_allowed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import AsyncMock
+
+        manager = PluginManager(plugins_dir=tmp_path / "plugins", allow_real_install=True)
+        monkeypatch.setattr(manager, "_real_install", AsyncMock())
+        installed = await manager.install_plugin("https://x.com/real", source="local")
+        assert installed.metadata.name == "real"
+
+    async def test_install_wraps_and_raises_errors(self, manager: PluginManager, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import AsyncMock
+
+        monkeypatch.setattr(manager, "_simulated_install", AsyncMock(side_effect=OSError("disk full")))
+        with pytest.raises(OSError):
+            await manager.install_plugin("https://x.com/fail", source="local")
+
+    async def test_uninstall_swallows_rmtree_error(self, manager: PluginManager) -> None:
+        # install_path is a FILE -> shutil.rmtree raises, uninstall still returns True
+        target = manager._plugins_dir / "as-file"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("x")
+        meta = PluginMetadata(id="f", name="f", version="1.0.0")
+        manager._installed["f"] = InstalledPlugin(metadata=meta, install_path=target)
+        assert manager.uninstall_plugin("f") is True
+
+    def test_load_registry_malformed(self, tmp_path: Path) -> None:
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+        (plugins_dir / "registry.json").write_text("{ broken")
+        manager = PluginManager(plugins_dir=plugins_dir)  # must not raise
+        assert manager._installed == {}
+
+    def test_save_registry_swallows_error(self, manager: PluginManager, tmp_path: Path) -> None:
+        # point registry at a directory so write_text fails
+        manager._registry_file = tmp_path
+        meta = PluginMetadata(id="m", name="m", version="1.0.0")
+        manager._installed["m"] = InstalledPlugin(metadata=meta, install_path=manager._plugins_dir / "m")
+        manager._save_registry()  # must not raise
+
+
+class TestUpdatePlugin:
+    @pytest.fixture
+    def manager(self, tmp_path: Path) -> PluginManager:
+        return PluginManager(plugins_dir=tmp_path / "plugins")
+
+    def _install(self, manager: PluginManager, name: str, version: str) -> InstalledPlugin:
+        meta = PluginMetadata(id=name, name=name, version=version)
+        inst = InstalledPlugin(
+            metadata=meta,
+            install_path=manager._plugins_dir / name,
+            status=InstallationStatus.INSTALLED,
+        )
+        manager._installed[name] = inst
+        return inst
+
+    async def test_update_no_releases(self, manager: PluginManager) -> None:
+        manager._catalog = cast(PluginCatalog, _StubCatalog([]))
+        self._install(manager, "up", "1.0.0")
+        result = await manager.update_plugin("up")
+        assert result.metadata.version == "1.0.0"
+
+    async def test_update_already_latest(self, manager: PluginManager) -> None:
+        manager._catalog = cast(PluginCatalog, _StubCatalog([PluginRelease(version="1.0.0")]))
+        self._install(manager, "up", "1.0.0")
+        result = await manager.update_plugin("up")
+        assert result.metadata.version == "1.0.0"
+
+    async def test_update_success(self, manager: PluginManager) -> None:
+        manager._catalog = cast(PluginCatalog, _StubCatalog([PluginRelease(version="2.0.0")]))
+        self._install(manager, "up", "1.0.0")
+        result = await manager.update_plugin("up")
+        assert result.metadata.version == "2.0.0"
+        assert result.status == InstallationStatus.INSTALLED
+
+    async def test_update_real_install_when_allowed(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import AsyncMock
+
+        manager = PluginManager(plugins_dir=tmp_path / "plugins", allow_real_install=True)
+        manager._catalog = cast(PluginCatalog, _StubCatalog([PluginRelease(version="2.0.0", download_url="https://x/p")]))
+        self._install(manager, "up", "1.0.0")
+        monkeypatch.setattr(manager, "_real_install", AsyncMock())
+        result = await manager.update_plugin("up")
+        assert result.metadata.version == "2.0.0"
+
+    async def test_update_failure_marks_failed(self, manager: PluginManager, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import AsyncMock
+
+        manager._catalog = cast(PluginCatalog, _StubCatalog([PluginRelease(version="2.0.0")]))
+        inst = self._install(manager, "up", "1.0.0")
+        monkeypatch.setattr(manager, "_simulated_install", AsyncMock(side_effect=OSError("nope")))
+        with pytest.raises(OSError):
+            await manager.update_plugin("up")
+        assert inst.status == InstallationStatus.FAILED
+
+
+class TestRealInstall:
+    @pytest.fixture
+    def manager(self, tmp_path: Path) -> PluginManager:
+        return PluginManager(plugins_dir=tmp_path / "plugins", allow_real_install=True)
+
+    async def test_real_install_no_deps(self, manager: PluginManager) -> None:
+        meta = PluginMetadata(id="d", name="d", version="1.0.0")
+        await manager._real_install("https://x/d", manager._plugins_dir / "d", meta)
+        assert (manager._plugins_dir / "d" / "plugin.json").exists()
+
+    async def test_real_install_deps_ok(self, manager: PluginManager, monkeypatch: pytest.MonkeyPatch) -> None:
+        import asyncio
+
+        class _Proc:
+            returncode = 0
+
+            async def wait(self) -> int:
+                return 0
+
+        async def fake_exec(*_a: object, **_k: object) -> _Proc:
+            return _Proc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        meta = PluginMetadata(id="d", name="d", version="1.0", dependencies=["requests"])
+        await manager._real_install("https://x/d", manager._plugins_dir / "d", meta)
+        assert (manager._plugins_dir / "d" / "plugin.json").exists()
+
+    async def test_real_install_deps_nonzero(self, manager: PluginManager, monkeypatch: pytest.MonkeyPatch) -> None:
+        import asyncio
+
+        class _Proc:
+            returncode = 1
+
+            async def wait(self) -> int:
+                return 1
+
+        async def fake_exec(*_a: object, **_k: object) -> _Proc:
+            return _Proc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        meta = PluginMetadata(id="d", name="d", version="1.0", dependencies=["nope"])
+        await manager._real_install("https://x/d", manager._plugins_dir / "d", meta)
+
+    async def test_real_install_pip_missing(self, manager: PluginManager, monkeypatch: pytest.MonkeyPatch) -> None:
+        import asyncio
+
+        async def fake_exec(*_a: object, **_k: object) -> None:
+            raise FileNotFoundError("pip")
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        meta = PluginMetadata(id="d", name="d", version="1.0", dependencies=["x"])
+        await manager._real_install("https://x/d", manager._plugins_dir / "d", meta)
+
+    async def test_real_install_deps_generic_error(
+        self, manager: PluginManager, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import asyncio
+
+        async def fake_exec(*_a: object, **_k: object) -> None:
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        meta = PluginMetadata(id="d", name="d", version="1.0", dependencies=["x"])
+        await manager._real_install("https://x/d", manager._plugins_dir / "d", meta)
+
+
+class TestFetchRemoteMetadata:
+    @pytest.fixture
+    def manager(self, tmp_path: Path) -> PluginManager:
+        return PluginManager(plugins_dir=tmp_path / "plugins")
+
+    async def test_blocked_by_ssrf(self, manager: PluginManager, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("raven.core.security.ssrf.validate_url", lambda _u: "private")
+        assert await manager._fetch_remote_metadata("http://10.0.0.1/p") is None
+
+    async def test_success_200(self, manager: PluginManager, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("raven.core.security.ssrf.validate_url", lambda _u: None)
+        payload = {"id": "rm", "name": "remote-meta", "version": "3.1.0", "category": "voice"}
+        _fake_httpx(monkeypatch, response=_Resp(payload))
+        meta = await manager._fetch_remote_metadata("https://x.com/plugin")
+        assert meta is not None
+        assert meta.name == "remote-meta"
+        assert meta.category == Category.VOICE
+
+    async def test_non_200_returns_none(self, manager: PluginManager, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("raven.core.security.ssrf.validate_url", lambda _u: None)
+        _fake_httpx(monkeypatch, response=_Resp(None, status=404))
+        assert await manager._fetch_remote_metadata("https://x.com/plugin") is None
+
+    async def test_exception_returns_none(self, manager: PluginManager, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("raven.core.security.ssrf.validate_url", lambda _u: None)
+        _fake_httpx(monkeypatch, raises=RuntimeError("down"))
+        assert await manager._fetch_remote_metadata("https://x.com/plugin") is None
+
+
+class TestReadLocalMetadata:
+    @pytest.fixture
+    def manager(self, tmp_path: Path) -> PluginManager:
+        return PluginManager(plugins_dir=tmp_path / "plugins")
+
+    def test_reads_plugin_json_in_dir(self, manager: PluginManager) -> None:
+        plugin_dir = manager._plugins_dir / "loc"
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        (plugin_dir / "plugin.json").write_text(json.dumps({"name": "local-meta", "version": "2.0.0"}))
+        meta = manager._read_local_metadata(str(plugin_dir))
+        assert meta is not None
+        assert meta.name == "local-meta"
+
+    def test_missing_plugin_json_returns_none(self, manager: PluginManager) -> None:
+        plugin_dir = manager._plugins_dir / "empty"
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        assert manager._read_local_metadata(str(plugin_dir)) is None
+
+    def test_malformed_plugin_json_returns_none(self, manager: PluginManager) -> None:
+        plugin_dir = manager._plugins_dir / "bad"
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        (plugin_dir / "plugin.json").write_text("nonsense {{")
+        assert manager._read_local_metadata(str(plugin_dir)) is None
+
+    def test_sibling_prefix_rejected(self, manager: PluginManager) -> None:
+        sibling = Path(str(manager._plugins_dir) + "_evil")
+        assert manager._read_local_metadata(str(sibling)) is None

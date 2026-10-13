@@ -7,5 +7,6 @@ useDefault = true
 description = "Test fixtures and example files contain intentionally fake secrets"
 paths = [
   '''(^|/)tests/''',
+  '''(^|/)services/''',
   '''(^|/).*\.env\.example$'''
 ]

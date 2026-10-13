@@ -250,6 +250,119 @@ class TestAIOSClientMessageStream:
             monkey.undo()
         assert got[-1]["tool_calls"] == [{"id": "c1", "name": "write", "arguments": {"_raw": "{oops"}}]
 
+    async def test_scalar_json_args_wrapped_as_value(self):
+        provider = _FakeProvider(
+            [[{"type": "tool_call", "index": 0, "id": "c1", "name": "ask", "args_fragment": "42"}]]
+        )
+        client, monkey = self._client_with(provider)
+        try:
+            got = [ev async for ev in client.ask_messages_stream([{"role": "user", "content": "x"}])]
+        finally:
+            monkey.undo()
+        assert got[-1]["tool_calls"] == [{"id": "c1", "name": "ask", "arguments": {"value": 42}}]
+
+
+class _FakePlainLlm:
+    def __init__(self, tokens: list[str], response: Any = None) -> None:
+        self._tokens = tokens
+        self._response = response
+        self.complete_kwargs: dict[str, Any] = {}
+
+    async def complete_stream(self, messages: Any, tools: Any = None, model: Any = None, priority: Any = None) -> Any:
+        for token in self._tokens:
+            yield token
+
+    async def complete(self, messages: Any, tools: Any = None, model: Any = None, priority: Any = None) -> Any:
+        self.complete_kwargs = {"model": model, "priority": priority}
+        return self._response
+
+
+class TestAIOSClientPlainPaths:
+    @staticmethod
+    def _client_with(llm: Any) -> Any:
+        from ravencode.api.client import AIOSClient
+
+        client = AIOSClient()
+        monkey = pytest.MonkeyPatch()
+        monkey.setattr(client, "_require_llm", lambda: llm)
+        return client, monkey
+
+    async def test_ask_stream_yields_tokens(self) -> None:
+        llm = _FakePlainLlm(["a", "b"])
+        client, monkey = self._client_with(llm)
+        try:
+            got = [token async for token in client.ask_stream([{"role": "user", "content": "x"}])]
+        finally:
+            monkey.undo()
+        assert got == ["a", "b"]
+
+    async def test_module_level_ask_stream_delegates(self) -> None:
+        import ravencode.api.client as mod
+
+        llm = _FakePlainLlm(["z"])
+        real_client = mod.AIOSClient()
+        _client, monkey = self._client_with(llm)
+
+        def _fake_cls() -> Any:
+            return real_client
+
+        monkey.setattr(mod, "AIOSClient", _fake_cls)
+        monkey.setattr(real_client, "_require_llm", lambda: llm)
+        try:
+            got = [token async for token in mod.ask_stream([{"role": "user", "content": "x"}])]
+        finally:
+            monkey.undo()
+        assert got == ["z"]
+
+    async def test_ask_messages_maps_usage_dict(self) -> None:
+        from types import SimpleNamespace
+
+        response = SimpleNamespace(
+            content="hi",
+            tool_calls=[SimpleNamespace(id="t1", name="n", arguments={"a": 1})],
+            usage={"prompt_tokens": 5, "completion_tokens": 6, "total_tokens": 11},
+        )
+        llm = _FakePlainLlm([], response=response)
+        client, monkey = self._client_with(llm)
+        try:
+            out = await client.ask_messages([{"role": "user", "content": "x"}], model="m1")
+        finally:
+            monkey.undo()
+        assert out.text == "hi"
+        assert out.usage == {"prompt_tokens": 5, "completion_tokens": 6, "total_tokens": 11}
+        assert out.tool_calls == [{"id": "t1", "name": "n", "arguments": {"a": 1}}]
+        assert llm.complete_kwargs["model"] == "m1"
+
+    async def test_get_llm_builds_provider_overrides(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from types import SimpleNamespace
+
+        import raven.core.llm as llm_pkg
+        import ravencode.api.client as mod
+
+        captured: dict[str, Any] = {}
+
+        class _FakeRouter:
+            def __init__(self, providers_config: dict[str, Any]) -> None:
+                captured.update(providers_config)
+
+        cfg = SimpleNamespace(
+            resolve_providers=lambda: [
+                SimpleNamespace(id="openai", api_key="k", base_url="u", options={"o": "v"}),
+                SimpleNamespace(id="anthropic", api_key=None, base_url=None, options=None),
+            ]
+        )
+        monkeypatch.setattr("ravencode.config.loader.get_config", lambda: cfg)
+        monkeypatch.setattr(llm_pkg, "LLMRouter", _FakeRouter)
+        saved = mod._shared_llm
+        mod._shared_llm = None
+        try:
+            router = mod.AIOSClient()._get_llm()
+        finally:
+            mod._shared_llm = saved
+        assert isinstance(router, _FakeRouter)
+        assert captured["openai"] == {"api_key": "k", "base_url": "u", "o": "v"}
+        assert "anthropic" not in captured
+
 
 class TestAgentStreaming:
     @staticmethod
