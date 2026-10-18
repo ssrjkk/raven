@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -39,7 +40,7 @@ class _FakeProc:
 
 
 def _exec(proc: _FakeProc):
-    return patch.object(process_mod.asyncio, "create_subprocess_exec", AsyncMock(return_value=proc))
+    return patch.object(asyncio, "create_subprocess_exec", AsyncMock(return_value=proc))
 
 
 class TestRunSubprocess:
@@ -73,7 +74,7 @@ class TestRunSubprocess:
 class TestProcessList:
     @pytest.mark.asyncio
     async def test_nt_strips_quotes(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(process_mod.os, "name", "nt")
+        monkeypatch.setattr(process_mod, "os", SimpleNamespace(name="nt"))
         proc = _FakeProc(stdout=b'"chrome.exe","123"\n"svchost.exe","456"')
         with _exec(proc):
             result = await process_mod.process_list()
@@ -81,7 +82,7 @@ class TestProcessList:
 
     @pytest.mark.asyncio
     async def test_posix_truncates_to_50_lines(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(process_mod.os, "name", "posix")
+        monkeypatch.setattr(process_mod, "os", SimpleNamespace(name="posix"))
         body = "\n".join(f"line{i}" for i in range(80))
         proc = _FakeProc(stdout=body.encode())
         with _exec(proc):

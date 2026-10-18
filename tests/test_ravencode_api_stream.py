@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any, ClassVar
 
@@ -7,6 +8,7 @@ import httpx
 import pytest
 
 from ravencode.api import server as srv
+from ravencode.runtime.agent_core import AgentEvent
 
 
 class _FakeAgent:
@@ -171,3 +173,90 @@ async def test_nonstream_no_user_duplication(fake_agent: type[_FakeAgent]):
     roles = [m["role"] for m in conv.messages]
     assert roles == ["system"], "the final user message must not be duplicated in context"
     assert fake_agent.last_content == "hi"
+
+
+async def _post(payload: dict[str, Any]) -> httpx.Response:
+    transport = httpx.ASGITransport(app=srv.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        return await client.post(
+            "/v1/chat/completions", json={"model": "ravencode", "messages": [{"role": "user", "content": "hi"}], **payload}
+        )
+
+
+@pytest.mark.asyncio
+class TestMaxTokensBudget:
+    async def test_nonstream_trims_completion_and_reports_length(self, fake_agent: type[_FakeAgent]):
+        fake_agent.script = []
+        fake_agent.result = "z" * 400
+        resp = await _post({"max_tokens": 10})
+        body = resp.json()
+        assert body["choices"][0]["message"]["content"] == "z" * 40
+        assert body["choices"][0]["finish_reason"] == "length"
+        assert body["usage"]["completion_tokens"] == srv._estimate_tokens("z" * 40)
+
+    async def test_stream_caps_emitted_tokens(self, fake_agent: type[_FakeAgent]):
+        fake_agent.script = [
+            {"type": "token", "data": {"content": "AAAA"}},
+            {"type": "token", "data": {"content": "BBBB"}},
+            {"type": "token", "data": {"content": "CCCC"}},
+        ]
+        fake_agent.result = "AAAABBBBCCCC"
+        resp = await _post({"stream": True, "max_tokens": 2})
+        chunks, _comments, done = _parse_sse(resp.text)
+        assert done == ["[DONE]"]
+        assert "".join(c["choices"][0]["delta"].get("content", "") for c in chunks) == "AAAABBBB"
+        assert chunks[-1]["choices"][0]["finish_reason"] == "length"
+
+    @pytest.mark.parametrize("payload", [{"max_tokens": 0}, {"max_tokens": 200_001}, {"temperature": 3.0}])
+    async def test_out_of_range_generation_params_are_rejected(self, payload: dict[str, Any]):
+        assert (await _post(payload)).status_code == 422
+
+
+class _EndlessAgent:
+    """Agent stand-in that keeps streaming tokens until it is cancelled."""
+
+    chunk: ClassVar[str] = "AAAA"
+    cancelled: ClassVar[list[str]] = []
+
+    def __init__(self, conversation: Any = None, event_emitter: Any = None, **kwargs: Any) -> None:
+        cfg = kwargs.get("config")
+        self.emitter: Any = event_emitter or getattr(cfg, "event_emitter", None)
+
+    async def run(self, content: str) -> str:
+        try:
+            while True:
+                await self.emitter.emit(AgentEvent("token", {"content": _EndlessAgent.chunk}))
+                await asyncio.sleep(0)
+        except asyncio.CancelledError:
+            _EndlessAgent.cancelled.append("cancelled")
+            raise
+        return "never reached"
+
+
+@pytest.mark.asyncio
+class TestStreamCancellation:
+    async def test_client_disconnect_cancels_the_agent_run(self, monkeypatch: pytest.MonkeyPatch):
+        _EndlessAgent.chunk = "hi"
+        _EndlessAgent.cancelled = []
+        monkeypatch.setattr(srv, "ReActAgent", _EndlessAgent)
+        agen = srv._run_agent_stream([_msg("user", "hi")], "ravencode", 4096)
+        assert '"role": "assistant"' in await agen.__anext__()
+        assert "hi" in await agen.__anext__()
+
+        await agen.aclose()
+        await asyncio.sleep(0.01)
+        assert _EndlessAgent.cancelled == ["cancelled"]
+
+    async def test_truncated_stream_stops_the_agent_instead_of_burning_tokens(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        _EndlessAgent.chunk = "AAAA"
+        _EndlessAgent.cancelled = []
+        monkeypatch.setattr(srv, "ReActAgent", _EndlessAgent)
+        resp = await _post({"stream": True, "max_tokens": 2})
+        chunks, _comments, done = _parse_sse(resp.text)
+        assert "".join(c["choices"][0]["delta"].get("content", "") for c in chunks) == "AAAAAAAA"
+        assert chunks[-1]["choices"][0]["finish_reason"] == "length"
+        assert done == ["[DONE]"]
+        await asyncio.sleep(0.02)
+        assert _EndlessAgent.cancelled == ["cancelled"]

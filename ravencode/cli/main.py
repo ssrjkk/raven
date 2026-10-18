@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -18,6 +20,7 @@ except ImportError:
 import click
 
 from raven.core._json import json
+from raven.core.config import data_path
 from raven.core.logging import setup_logging
 from raven.core.version import __version__
 from ravencode.cli.tui import tui_run
@@ -26,6 +29,7 @@ from ravencode.integrations.github import (
     parse_github_webhook,
 )
 from ravencode.integrations.gitlab import GitLabIntegration, parse_gitlab_webhook
+from ravencode.runtime.session import validate_session_id
 
 
 @click.group()
@@ -43,7 +47,11 @@ def cli() -> None:
 @click.argument("project", required=False, default=".")
 def tui(project: str) -> None:
     """Start the interactive TUI."""
-    os.chdir(project)
+    try:
+        os.chdir(project)
+    except OSError:
+        click.echo(f"No such directory: {project}")
+        sys.exit(1)
     tui_run()
 
 
@@ -58,20 +66,7 @@ def serve(host: str, port: int, password: str | None, username: str) -> None:
 
     password = password or os.getenv("RAVENCODE_SERVER_PASSWORD", "")
     click.echo(f"Starting server on {host}:{port}")
-    run_openai_server(host=host, port=port)
-
-
-@cli.command()
-@click.option("--host", default="127.0.0.1", help="Web server host")
-@click.option("--port", default=0, help="Web server port (0 = random)")
-@click.option("--password", help="Basic auth password (env: RAVENCODE_SERVER_PASSWORD)")
-def web(host: str, port: int, password: str | None) -> None:
-    """Start server with web interface."""
-    from ravencode.api.server import run_openai_server
-
-    password = password or os.getenv("RAVENCODE_SERVER_PASSWORD", "")
-    click.echo(f"Starting web server on {host}:{port or 'random'}")
-    run_openai_server(host=host, port=port or 8081)
+    run_openai_server(host=host, port=port, username=username, password=password)
 
 
 @cli.group()
@@ -79,11 +74,24 @@ def session() -> None:
     """Manage sessions."""
 
 
+def _safe_session_id(session_id: str) -> str:
+    """Session ids become filenames; reject anything that could escape the sessions dir."""
+    try:
+        return validate_session_id(session_id)
+    except ValueError:
+        click.echo(f"Invalid session id: {session_id!r}")
+        sys.exit(1)
+
+
+def _sessions_dir(sessions_dir: str) -> Path:
+    return Path(sessions_dir) if sessions_dir else data_path("sessions")
+
+
 @session.command(name="list")
-@click.option("--dir", "sessions_dir", default="data/sessions", help="Sessions directory")
+@click.option("--dir", "sessions_dir", default="", help="Sessions directory (default: sessions under the data dir)")
 def session_list(sessions_dir: str) -> None:
     """List all saved sessions."""
-    p = Path(sessions_dir)
+    p = _sessions_dir(sessions_dir)
     if not p.is_dir():
         click.echo("No sessions directory found")
         return
@@ -111,10 +119,10 @@ def session_resume(session_id: str) -> None:
 
 @session.command(name="delete")
 @click.argument("session_id")
-@click.option("--dir", "sessions_dir", default="data/sessions", help="Sessions directory")
+@click.option("--dir", "sessions_dir", default="", help="Sessions directory (default: sessions under the data dir)")
 def session_delete(session_id: str, sessions_dir: str) -> None:
     """Delete a saved session."""
-    p = Path(sessions_dir) / f"{session_id}.json"
+    p = _sessions_dir(sessions_dir) / f"{_safe_session_id(session_id)}.json"
     if p.exists():
         p.unlink()
         click.echo(f"Deleted session {session_id}")
@@ -125,7 +133,7 @@ def session_delete(session_id: str, sessions_dir: str) -> None:
 
 @session.command(name="export")
 @click.argument("session_id")
-@click.option("--dir", "sessions_dir", default="data/sessions", help="Sessions directory")
+@click.option("--dir", "sessions_dir", default="", help="Sessions directory (default: sessions under the data dir)")
 @click.option("--sanitize", is_flag=True, help="Strip API keys and secrets")
 @click.option("--output", "-o", help="Output file path")
 def session_export_cmd(session_id: str, sessions_dir: str, sanitize: bool, output: str | None) -> None:
@@ -135,14 +143,15 @@ def session_export_cmd(session_id: str, sessions_dir: str, sanitize: bool, outpu
 
 @session.command(name="import")
 @click.argument("source")
-@click.option("--dir", "sessions_dir", default="data/sessions", help="Sessions directory")
+@click.option("--dir", "sessions_dir", default="", help="Sessions directory (default: sessions under the data dir)")
 def session_import_cmd(source: str, sessions_dir: str) -> None:
     """Import a session from JSON file or URL."""
     session_import_func(source, sessions_dir)
 
 
 def session_export_func(session_id: str, sessions_dir: str, sanitize: bool, output: str | None) -> None:
-    p = Path(sessions_dir) / f"{session_id}.json"
+    session_id = _safe_session_id(session_id)
+    p = _sessions_dir(sessions_dir) / f"{session_id}.json"
     if not p.exists():
         click.echo(f"Session {session_id} not found")
         sys.exit(1)
@@ -156,10 +165,10 @@ def session_export_func(session_id: str, sessions_dir: str, sanitize: bool, outp
 
 def session_import_func(source: str, sessions_dir: str) -> None:
     if source.startswith(("http://", "https://")):
-        import httpx
+        from raven.core.security.ssrf import safe_fetch_async
 
         try:
-            resp = httpx.get(source, timeout=30)
+            resp = asyncio.run(safe_fetch_async(source))
             resp.raise_for_status()
             data = resp.json()
         except Exception as e:
@@ -172,31 +181,65 @@ def session_import_func(source: str, sessions_dir: str) -> None:
             sys.exit(1)
         data = json.loads(p.read_text(encoding="utf-8"))
 
-    sid = data.get("id", data.get("session_id", "imported"))
-    out_dir = Path(sessions_dir)
+    sid = _safe_session_id(str(data.get("id") or data.get("session_id") or "imported"))
+    out_dir = _sessions_dir(sessions_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{sid}.json"
     out_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     click.echo(f"Imported session {sid}")
 
 
-def _sanitize_session(data: dict[str, Any]) -> None:
-    sensitive_keys = {"api_key", "token", "secret", "password", "key"}
+_MASK = "***"
+
+# Key names that always carry a credential; the separators keep "monkey"/"tokenizer"/"keyboard" out.
+_SECRET_KEY_RE = re.compile(
+    r"(?:^|[^a-zA-Z])(?:api[_-]?keys?|access[_-]?keys?|secrets?|tokens?|passwords?|passwd|"
+    r"credentials?|authorization|private[_-]?keys?|keys?)(?:$|[^a-zA-Z])",
+    re.IGNORECASE,
+)
+
+# Secret shapes that leak through message text, header lists and env dicts where no key name hints at them.
+_SECRET_VALUE_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?:sk-ant-[A-Za-z0-9-]{6,}|sk-[A-Za-z0-9_-]{6,}|gh[pousr]_[A-Za-z0-9]{16,}|"
+    r"github_pat_[A-Za-z0-9_]{16,}|AIza[0-9A-Za-z_-]{20,}|xox[baprs]-[A-Za-z0-9-]{6,}|"
+    r"AKIA[0-9A-Z]{16}|npm_[A-Za-z0-9]{20,})"
+    r"|Bearer\s+[A-Za-z0-9._~+/=-]{8,}"
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----",
+    re.IGNORECASE,
+)
+
+
+def _sanitize_session(data: Any) -> None:
     if isinstance(data, dict):
         for k, v in list(data.items()):
-            if k.lower() in sensitive_keys and isinstance(v, str):
-                data[k] = "***"
-            elif isinstance(v, dict):
+            if isinstance(k, str) and _SECRET_KEY_RE.search(k):
+                data[k] = _MASK
+            elif isinstance(v, str):
+                masked = _SECRET_VALUE_RE.sub(_MASK, v)
+                if masked != v:
+                    data[k] = masked
+            else:
                 _sanitize_session(v)
-            elif isinstance(v, list):
-                for item in v:
-                    if isinstance(item, dict):
-                        _sanitize_session(item)
+    elif isinstance(data, list):
+        for i, item in enumerate(data):
+            if isinstance(item, str):
+                masked = _SECRET_VALUE_RE.sub(_MASK, item)
+                if masked != item:
+                    data[i] = masked
+            else:
+                _sanitize_session(item)
 
 
 @cli.group()
 def auth() -> None:
     """Manage credentials and API keys."""
+
+
+def _save_creds(creds_file: Path, creds: dict[str, Any]) -> None:
+    creds_file.write_text(json.dumps(creds, indent=2), encoding="utf-8")
+    # Same convention as raven.core.config: provider keys are never world-readable.
+    with contextlib.suppress(OSError):
+        creds_file.chmod(0o600)
 
 
 @auth.command(name="login")
@@ -223,7 +266,7 @@ def auth_login(provider: str, key: str | None, base_url: str | None) -> None:
     if base_url:
         creds[provider]["base_url"] = base_url
 
-    creds_file.write_text(json.dumps(creds, indent=2), encoding="utf-8")
+    _save_creds(creds_file, creds)
     click.echo(f"Saved credentials for {provider}")
 
 
@@ -257,7 +300,7 @@ def auth_logout(provider: str | None) -> None:
     else:
         creds = {}
         click.echo("Removed all credentials")
-    creds_file.write_text(json.dumps(creds, indent=2), encoding="utf-8")
+    _save_creds(creds_file, creds)
 
 
 @cli.command(name="models")
@@ -294,9 +337,9 @@ def upgrade(version: str | None) -> None:
     try:
         pip_cmd = [sys.executable, "-m", "pip", "install", "--upgrade"]
         if version:
-            pip_cmd.append(f"ravencode=={version}")
+            pip_cmd.append(f"raven-agent=={version}")
         else:
-            pip_cmd.append("ravencode")
+            pip_cmd.append("raven-agent")
         result = subprocess.run(pip_cmd, capture_output=True, text=True, check=False)
         if result.returncode == 0:
             click.echo("Upgrade successful!")
@@ -310,7 +353,7 @@ def upgrade(version: str | None) -> None:
 
 @cli.command(name="export")
 @click.option("--session", "session_id", help="Session ID to export")
-@click.option("--dir", "sessions_dir", default="data/sessions", help="Sessions directory")
+@click.option("--dir", "sessions_dir", default="", help="Sessions directory (default: sessions under the data dir)")
 @click.option("--sanitize", is_flag=True, help="Strip sensitive data")
 @click.option("--output", "-o", help="Output file")
 def export_cmd(session_id: str | None, sessions_dir: str, sanitize: bool, output: str | None) -> None:
@@ -323,7 +366,7 @@ def export_cmd(session_id: str | None, sessions_dir: str, sanitize: bool, output
 
 @cli.command(name="import")
 @click.argument("source")
-@click.option("--dir", "sessions_dir", default="data/sessions", help="Sessions directory")
+@click.option("--dir", "sessions_dir", default="", help="Sessions directory (default: sessions under the data dir)")
 def import_cmd(source: str, sessions_dir: str) -> None:
     """Import a session from JSON file or share URL."""
     session_import_func(source, sessions_dir)
@@ -340,22 +383,18 @@ def github() -> None:
 
 
 @github.command(name="install")
-@click.option("--repo", help="Repository to install (owner/repo)")
-@click.option("--token", help="GitHub token (default: GITHUB_TOKEN env)")
-def github_install(repo: str | None, token: str | None) -> None:
-    """Install ravencode GitHub Actions workflow."""
-    token = token or os.getenv("GITHUB_TOKEN", "")
-    if not token:
-        click.echo("Error: GITHUB_TOKEN required. Set --token or GITHUB_TOKEN env var.")
+@click.option("--force", is_flag=True, help="Overwrite an existing workflow file")
+def github_install(force: bool) -> None:
+    """Install the RavenCode GitHub Actions workflow into this repository."""
+    template = Path(__file__).resolve().parent.parent / "integrations" / "github_workflow.yml"
+    target = Path.cwd() / ".github" / "workflows" / "ravencode.yml"
+    if target.exists() and not force:
+        click.echo(f"{target} already exists. Use --force to overwrite.")
         sys.exit(1)
 
-    if repo:
-        parts = repo.split("/", 1)
-        if len(parts) != 2:
-            click.echo("Error: repo must be in owner/repo format")
-            sys.exit(1)
-
-    click.echo("RavenCode GitHub integration configured.")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
+    click.echo(f"Wrote {target}")
     click.echo()
     click.echo("Next steps:")
     click.echo("  1. Commit and push .github/workflows/ravencode.yml")
@@ -386,16 +425,19 @@ def github_webhook(port: int, host: str, token: str | None, secret: str | None) 
 def github_run(event_name: str, payload: str, token: str | None) -> None:
     """Run ravencode in GitHub Actions CI context."""
     import base64
+    import binascii
 
     token = token or os.getenv("GITHUB_TOKEN", "")
 
-    payload_str = payload
-    if not payload_str:
-        payload_b64 = os.getenv("RAVENCODE_GITHUB_EVENT")
-        if payload_b64:
-            payload_str = base64.b64decode(payload_b64).decode("utf-8")
-        else:
-            payload_str = os.getenv("RAVENCODE_GITHUB_EVENT", "{}")
+    raw = payload or os.getenv("RAVENCODE_GITHUB_EVENT", "")
+    if raw:
+        try:
+            payload_str = base64.b64decode(raw, validate=True).decode("utf-8")
+        except (binascii.Error, UnicodeDecodeError, ValueError):
+            click.echo("Error: payload must be base64-encoded JSON")
+            sys.exit(1)
+    else:
+        payload_str = "{}"
 
     event_name = event_name or os.getenv("RAVENCODE_GITHUB_EVENT_NAME", "")
     try:
@@ -423,21 +465,22 @@ def gitlab() -> None:
 
 
 @gitlab.command(name="install")
-@click.option("--project", help="GitLab project path")
-@click.option("--token", help="GitLab token (default: GITLAB_TOKEN env)")
-def gitlab_install(project: str | None, token: str | None) -> None:
-    """Install ravencode GitLab CI template."""
-    token = token or os.getenv("GITLAB_TOKEN", "")
-    if not token:
-        click.echo("Error: GITLAB_TOKEN required.")
+@click.option("--force", is_flag=True, help="Overwrite an existing CI file")
+def gitlab_install(force: bool) -> None:
+    """Install the RavenCode GitLab CI template into this repository."""
+    template = Path(__file__).resolve().parent.parent / "integrations" / "gitlab_ci.yml"
+    target = Path.cwd() / ".gitlab-ci-ravencode.yml"
+    if target.exists() and not force:
+        click.echo(f"{target} already exists. Use --force to overwrite.")
         sys.exit(1)
 
-    click.echo("RavenCode GitLab integration configured.")
+    target.write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
+    click.echo(f"Wrote {target}")
     click.echo()
     click.echo("Next steps:")
     click.echo("  1. Add to your .gitlab-ci.yml:")
     click.echo("       include:")
-    click.echo("         - local: ravencode/integrations/gitlab_ci.yml")
+    click.echo('         - local: ".gitlab-ci-ravencode.yml"')
     click.echo("  2. Set CI/CD variables:")
     click.echo("     - ANTHROPIC_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY")
     click.echo("     - GITLAB_TOKEN (with api scope)")

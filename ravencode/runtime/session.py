@@ -13,22 +13,27 @@ from typing import Any
 
 from loguru import logger
 
-from ravencode.runtime.agent_core import AgentConfig, ReActAgent
-from ravencode.runtime.context import Conversation
+from raven.core.config import data_path
+from ravencode.runtime.agent_core import ReActAgent
 
 _SAFE_SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
+def validate_session_id(session_id: str) -> str:
+    if not _SAFE_SESSION_ID.match(session_id):
+        raise ValueError(f"Invalid session id: {session_id!r}")
+    return session_id
+
+
 class SessionStore:
-    def __init__(self, storage_dir: str = "data/sessions") -> None:
-        self._storage = Path(storage_dir).expanduser().resolve()
+    def __init__(self, storage_dir: str | Path | None = None) -> None:
+        root = Path(storage_dir) if storage_dir else data_path("sessions")
+        self._storage = root.expanduser().resolve()
         self._storage.mkdir(parents=True, exist_ok=True)
         self._current_session_id: str | None = None
 
     def _path(self, session_id: str) -> Path:
-        if not _SAFE_SESSION_ID.match(session_id):
-            raise ValueError(f"Invalid session id: {session_id!r}")
-        return self._storage / f"{session_id}.json"
+        return self._storage / f"{validate_session_id(session_id)}.json"
 
     def list(self) -> list[dict[str, Any]]:
         sessions = []
@@ -80,9 +85,7 @@ class SessionStore:
         except (json.JSONDecodeError, OSError) as exc:
             logger.error("Failed to load session {}: {}", session_id, exc)
             return None
-        cfg = AgentConfig(**data.get("config", {}))
-        conv = Conversation(messages=data.get("conversation", []))
-        agent = ReActAgent(config=cfg, conversation=conv, name=data.get("name", "raven"))
+        agent = ReActAgent.load_state(data)
         data["updated"] = time.time()
         await asyncio.to_thread(p.write_text, json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         return agent
@@ -103,7 +106,7 @@ class SessionStore:
 _session_store: SessionStore | None = None
 
 
-def get_session_store(storage_dir: str = "data/sessions") -> SessionStore:
+def get_session_store(storage_dir: str | Path | None = None) -> SessionStore:
     global _session_store
     if _session_store is None:
         _session_store = SessionStore(storage_dir=storage_dir)

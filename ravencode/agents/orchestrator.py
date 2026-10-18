@@ -106,7 +106,6 @@ async def _route_by_llm(task: str, router_llm: Any = None) -> str | None:
 
 class Orchestrator:
     def __init__(self) -> None:
-        self._agent_cache: dict[str, Any] = {}
         logger.debug("Orchestrator initialized")
 
     @staticmethod
@@ -149,12 +148,17 @@ class Orchestrator:
             raven_config=raven_config,
         )
 
+    def new_agent(self, memory_path: str | None = None) -> ReActAgent:
+        """Build a session agent the caller keeps and reuses across turns."""
+        return self._build_agent(memory_path=memory_path)
+
     async def dispatch(
         self,
         task: str,
         agent_type: AgentType,
         memory_path: str | None = None,
         agent_config_override: AgentConfig | None = None,
+        agent: ReActAgent | None = None,
     ) -> AgentResult:
         try:
             dispatch_map = {
@@ -167,6 +171,12 @@ class Orchestrator:
             handler = dispatch_map.get(agent_type)
             if handler is None:
                 return AgentResult(agent=str(agent_type), success=False, error=f"Unknown agent: {agent_type}")
+            # A live agent (resumed session, or the previous TUI turn) keeps its
+            # conversation; specialists always run on their own system prompt.
+            if agent is not None and agent_type is AgentType.AUTONOMOUS:
+                return await self._run_autonomous_loop(
+                    task, memory_path=memory_path, agent_config_override=agent_config_override, agent=agent
+                )
             return await handler(task, memory_path=memory_path, agent_config_override=agent_config_override)
         except Exception as exc:
             logger.exception("Agent dispatch failed")
@@ -246,9 +256,13 @@ class Orchestrator:
         return AgentResult(agent="debugger", success=True, data={"debug_result": result})
 
     async def _run_autonomous_loop(
-        self, task: str, memory_path: str | None = None, agent_config_override: AgentConfig | None = None
+        self,
+        task: str,
+        memory_path: str | None = None,
+        agent_config_override: AgentConfig | None = None,
+        agent: ReActAgent | None = None,
     ) -> AgentResult:
-        agent = self._build_with_override(agent_config_override, memory_path=memory_path)
+        agent = agent or self._build_with_override(agent_config_override, memory_path=memory_path)
         result = await agent.run(task)
 
         needs_verify = any(

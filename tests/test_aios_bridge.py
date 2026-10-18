@@ -14,6 +14,7 @@ import aios.api.bridge as bridge
 from aios.agents.orchestrator import Orchestrator
 from raven.cli.aios_cmd import create_aios_app
 from raven.core.auth.tokens import token_manager
+from raven.core.config import settings
 from ravencode.agents.orchestrator import AgentType
 from ravencode.api.client import AIResponse
 
@@ -142,29 +143,29 @@ def _mk_session(tmp_path: Path, sid: str, content: str) -> Path:
 
 
 class TestSessionRead:
+    @pytest.fixture(autouse=True)
+    def _data_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(settings, "db_path", str(tmp_path / "data" / "raven.db"))
+
     def test_invalid_id_returns_none(self) -> None:
         assert bridge._session_read("bad id with spaces") is None
 
-    def test_missing_file_returns_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.chdir(tmp_path)
+    def test_missing_file_returns_none(self) -> None:
         assert bridge._session_read("nope") is None
 
-    def test_valid_session_populates_id(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_valid_session_populates_id(self, tmp_path: Path) -> None:
         _mk_session(tmp_path, "abc", json.dumps({"messages": ["hi"]}))
-        monkeypatch.chdir(tmp_path)
         data = bridge._session_read("abc")
         assert data is not None
         assert data["id"] == "abc"
         assert data["messages"] == ["hi"]
 
-    def test_non_dict_json_returns_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_non_dict_json_returns_none(self, tmp_path: Path) -> None:
         _mk_session(tmp_path, "abc", "[1, 2, 3]")
-        monkeypatch.chdir(tmp_path)
         assert bridge._session_read("abc") is None
 
-    def test_bad_json_returns_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_bad_json_returns_none(self, tmp_path: Path) -> None:
         _mk_session(tmp_path, "abc", "{not json")
-        monkeypatch.chdir(tmp_path)
         assert bridge._session_read("abc") is None
 
 
@@ -658,7 +659,7 @@ class TestSessionsRoutes:
     def test_get_session_not_found(
         self, client: TestClient, admin_h: dict[str, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(settings, "db_path", str(tmp_path / "data" / "raven.db"))
         resp = client.get("/aios/sessions/ghost", headers=admin_h)
         assert resp.json() == {"error": "Session not found"}
 
@@ -668,7 +669,7 @@ class TestSessionsRoutes:
         d = tmp_path / "data" / "sessions"
         d.mkdir(parents=True)
         (d / "abc.json").write_text(json.dumps({"messages": ["hi"]}), encoding="utf-8")
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(settings, "db_path", str(tmp_path / "data" / "raven.db"))
         resp = client.get("/aios/sessions/abc", headers=admin_h)
         data = resp.json()
         assert data["id"] == "abc"

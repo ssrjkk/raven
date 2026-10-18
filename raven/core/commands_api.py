@@ -11,6 +11,8 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
+from raven.core.config import data_path
+
 
 class CommandResponse(BaseModel):
     id: str
@@ -48,7 +50,8 @@ _DATA_DIR_OVERRIDE: str | None = None
 def _data_dir() -> Path:
     if _DATA_DIR_OVERRIDE is not None:
         return Path(_DATA_DIR_OVERRIDE)
-    return Path(os.getenv("RAVEN_DATA_DIR", "data"))
+    override = os.environ.get("RAVEN_DATA_DIR")
+    return Path(override) if override else data_path()
 
 
 def _theme_prefs_path() -> Path:

@@ -61,18 +61,20 @@ class TestGetRag:
         idx.write_text("{}", encoding="utf-8")
         monkeypatch.setattr(rag_mod, "_rag", None)
         monkeypatch.setattr(rag_mod, "_RAG_PATH", idx)
-        fake = _FakeRag()
+        fake: Any = _FakeRag()
         monkeypatch.setattr(rag_mod, "MultiModalRAG", lambda: fake)
-        assert rag_mod._get_rag() is fake
+        rag = rag_mod._get_rag()
         assert fake.loaded == 1
+        assert rag is fake
 
     def test_skips_load_when_no_index(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(rag_mod, "_rag", None)
         monkeypatch.setattr(rag_mod, "_RAG_PATH", Path("Z:/definitely/missing/rag.json"))
-        fake = _FakeRag()
+        fake: Any = _FakeRag()
         monkeypatch.setattr(rag_mod, "MultiModalRAG", lambda: fake)
-        assert rag_mod._get_rag() is fake
+        rag = rag_mod._get_rag()
         assert fake.loaded == 0
+        assert rag is fake
 
     def test_load_error_is_swallowed(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         idx = tmp_path / "rag.json"
@@ -84,7 +86,7 @@ class TestGetRag:
             def load_index(self) -> None:
                 raise RuntimeError("corrupt")
 
-        fake = _BoomRag()
+        fake: Any = _BoomRag()
         monkeypatch.setattr(rag_mod, "MultiModalRAG", lambda: fake)
         assert rag_mod._get_rag() is fake
 
@@ -178,7 +180,7 @@ class TestRagStatsAndRemove:
 
     def test_remove_not_found(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(rag_mod, "_get_rag", lambda: _FakeRag(removed=False))
-        assert "[error] Document 'x' not found." == rag_mod.rag_remove_document("x")
+        assert rag_mod.rag_remove_document("x") == "[error] Document 'x' not found."
 
 
 class TestRegistration:

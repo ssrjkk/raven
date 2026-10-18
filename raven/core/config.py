@@ -318,6 +318,11 @@ def get_settings() -> Settings:
     return settings
 
 
+def data_path(*parts: str) -> Path:
+    """Runtime artifacts live under the configured data dir, never the cwd."""
+    return settings.resolved_data_dir.joinpath(*parts)
+
+
 def apply_ghost_mode(overrides: dict[str, Any] | None = None) -> None:
     s = get_settings()
     s.ghost_mode = True

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from contextlib import suppress
+
 from loguru import logger
 
+from raven.core.email_config import email_config
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 try:
@@ -19,49 +22,27 @@ except ImportError:
     _AIOIMAP_AVAILABLE = False
 
 
-def _get_config() -> dict[str, str]:
-    try:
-        from raven.core.config import settings
-
-        return {
-            "smtp_host": getattr(settings, "EMAIL_SMTP_HOST", ""),
-            "smtp_port": str(getattr(settings, "EMAIL_SMTP_PORT", "587")),
-            "smtp_user": getattr(settings, "EMAIL_SMTP_USER", ""),
-            "smtp_pass": getattr(settings, "EMAIL_SMTP_PASS", ""),
-            "imap_host": getattr(settings, "EMAIL_IMAP_HOST", ""),
-            "imap_port": str(getattr(settings, "EMAIL_IMAP_PORT", "993")),
-            "imap_user": getattr(settings, "EMAIL_IMAP_USER", ""),
-            "imap_pass": getattr(settings, "EMAIL_IMAP_PASS", ""),
-        }
-    except Exception as e:
-        logger.debug("Email config read failed: {}", e)
-        return {}
-
-
 async def email_send(to: str, subject: str, body: str) -> str:
     if not _AIOSMTP_AVAILABLE:
-        return "[error] aiosmtplib is required. Install with: pip install aiosmtplib"
-    config = _get_config()
-    smtp_host = config.get("smtp_host", "")
-    smtp_user = config.get("smtp_user", "")
-    smtp_pass = config.get("smtp_pass", "")
-    smtp_port = int(config.get("smtp_port", "587"))
-    if not smtp_host or not smtp_user:
+        return "[error] aiosmtplib is required. Install with: pip install 'raven-agent[email]'"
+    config = email_config()
+    if not config.smtp_ready:
         return "[error] SMTP not configured. Set EMAIL_SMTP_HOST and EMAIL_SMTP_USER env vars."
     try:
         from email.mime.text import MIMEText
 
         msg = MIMEText(body)
-        msg["From"] = smtp_user
+        msg["From"] = config.smtp_user
         msg["To"] = to
         msg["Subject"] = subject
         await aiosmtplib.send(
             msg,
-            hostname=smtp_host,
-            port=smtp_port,
-            username=smtp_user,
-            password=smtp_pass,
-            start_tls=True,
+            hostname=config.smtp_host,
+            port=config.smtp_port,
+            username=config.smtp_user,
+            password=config.smtp_pass,
+            use_tls=config.smtp_over_tls,
+            start_tls=not config.smtp_over_tls,
         )
         return f"Email sent to {to}: '{subject}'"
     except Exception as e:
@@ -71,21 +52,19 @@ async def email_send(to: str, subject: str, body: str) -> str:
 
 async def email_inbox(limit: int = 10) -> str:
     if not _AIOIMAP_AVAILABLE:
-        return "[error] aioimaplib is required. Install with: pip install aioimaplib"
-    config = _get_config()
-    imap_host = config.get("imap_host", "")
-    imap_user = config.get("imap_user", "")
-    imap_pass = config.get("imap_pass", "")
-    imap_port = int(config.get("imap_port", "993"))
-    if not imap_host or not imap_user:
+        return "[error] aioimaplib is required. Install with: pip install 'raven-agent[email]'"
+    config = email_config()
+    if not config.imap_ready:
         return "[error] IMAP not configured. Set EMAIL_IMAP_HOST and EMAIL_IMAP_USER env vars."
     import email
 
-    client = aioimaplib.IMAP4_SSL(imap_host, imap_port)
+    # A zero or negative slice bound would fetch the whole mailbox: msg_ids[-0:] is msg_ids[:].
+    limit = max(1, min(int(limit), 50))
+    client = aioimaplib.IMAP4_SSL(config.imap_host, config.imap_port)
     try:
         await client.wait_hello_from_server()
-        await client.login(imap_user, imap_pass)
-        await client.select("INBOX")
+        await client.login(config.imap_user, config.imap_pass)
+        await client.select(config.inbox_folder)
         status, data = await client.search("ALL")
         if status != "OK":
             return "[error] Failed to search inbox."
@@ -110,18 +89,16 @@ async def email_inbox(limit: int = 10) -> str:
         logger.error("Email inbox failed: {}", e)
         return f"[error] Failed to read inbox: {e}"
     finally:
-        from contextlib import suppress
-
         with suppress(Exception):
             await client.logout()
 
 
 def email_config_status() -> str:
-    config = _get_config()
+    config = email_config()
     parts = [
         "Email Configuration:",
-        f"  SMTP: {'configured' if config.get('smtp_host') else 'not configured'} ({config.get('smtp_host', '—')})",
-        f"  IMAP: {'configured' if config.get('imap_host') else 'not configured'} ({config.get('imap_host', '—')})",
+        f"  SMTP: {'configured' if config.smtp_ready else 'not configured'} ({config.smtp_host or '—'})",
+        f"  IMAP: {'configured' if config.imap_ready else 'not configured'} ({config.imap_host or '—'})",
         f"  SMTP lib: {'available' if _AIOSMTP_AVAILABLE else 'not installed'}",
         f"  IMAP lib: {'available' if _AIOIMAP_AVAILABLE else 'not installed'}",
     ]

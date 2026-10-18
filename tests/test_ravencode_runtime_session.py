@@ -8,7 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import ravencode.runtime.session as session_mod
-from ravencode.runtime.session import SessionStore, get_session_store, session_load, session_save
+from ravencode.runtime.agent_core import ReActAgent, _last_agent_var
+from ravencode.runtime.session import SessionStore, get_session_store, session_load, session_save, validate_session_id
 
 
 def _fake_agent() -> Any:
@@ -21,8 +22,10 @@ def _fake_agent() -> Any:
 @pytest.fixture(autouse=True)
 def reset() -> Generator[None, None, None]:
     session_mod._session_store = None
+    token = _last_agent_var.set(None)
     yield
     session_mod._session_store = None
+    _last_agent_var.reset(token)
 
 
 class TestSessionStoreInit:
@@ -52,21 +55,21 @@ class TestSaveLoadDelete:
         (tmp_path / "bad.json").write_text("not json", encoding="utf-8")
         assert await store.load("bad") is None
 
-    async def test_load_valid(self, tmp_path, monkeypatch) -> None:
+    async def test_load_valid(self, tmp_path) -> None:
         store = SessionStore(str(tmp_path))
         data = {
             "config": {"max_steps": 5},
-            "conversation": [{"role": "user", "content": "hi"}],
+            "conversation": [{"role": "system", "content": "sys"}, {"role": "user", "content": "hi"}],
             "name": "custom",
         }
         (tmp_path / "sid1.json").write_text(json.dumps(data), encoding="utf-8")
-        fake_agent = MagicMock()
-        monkeypatch.setattr("ravencode.runtime.session.ReActAgent", lambda config, conversation, name: fake_agent)
-        monkeypatch.setattr(
-            "ravencode.runtime.session.Conversation", lambda messages: MagicMock(messages=messages)
-        )
         agent = await store.load("sid1")
-        assert agent is fake_agent
+        assert agent is not None
+        assert agent.name == "custom"
+        assert agent.config.max_steps == 5
+        assert agent.conversation.messages[-1] == {"role": "user", "content": "hi"}
+        # loading a session must make it the live agent, or /ask starts blank
+        assert ReActAgent.last_agent() is agent
 
     async def test_delete_exists(self, tmp_path) -> None:
         store = SessionStore(str(tmp_path))
@@ -119,3 +122,25 @@ class TestGlobals:
         fake_store.load = AsyncMock(return_value=None)
         monkeypatch.setattr(session_mod, "get_session_store", lambda: fake_store)
         assert await session_load("x") is None
+
+
+class TestValidateSessionId:
+    @pytest.mark.parametrize(
+        "session_id",
+        ["abc123", "session_deadbeef12", "A-b_9", "x" * 128],
+    )
+    def test_accepts_safe_ids(self, session_id: str) -> None:
+        assert validate_session_id(session_id) == session_id
+
+    @pytest.mark.parametrize(
+        "session_id",
+        ["", ".", "..", "../escape", "a/b", "a\\b", "/abs/path", "x" * 129, "has space", "nul\x00", "séssion"],
+    )
+    def test_rejects_unsafe_ids(self, session_id: str) -> None:
+        with pytest.raises(ValueError, match="Invalid session id"):
+            validate_session_id(session_id)
+
+    def test_store_path_uses_the_validator(self, tmp_path) -> None:
+        store = SessionStore(str(tmp_path))
+        with pytest.raises(ValueError):
+            store._path("../../outside")

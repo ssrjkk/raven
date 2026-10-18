@@ -39,6 +39,9 @@ class _FakePath:
     def __str__(self) -> str:
         return "<fake-path>"
 
+    def __truediv__(self, other: object) -> _FakePath:
+        return self
+
 
 def _last(auditor: sa.SecurityAudit) -> sa.AuditCheck:
     return auditor._checks[-1]
@@ -48,6 +51,10 @@ def _run(method_name: str) -> sa.AuditCheck:
     auditor = sa.SecurityAudit()
     getattr(auditor, method_name)()
     return _last(auditor)
+
+
+def _patch_data_dir(monkeypatch: pytest.MonkeyPatch, fake: _FakePath) -> None:
+    monkeypatch.setattr(type(config_module.settings), "resolved_data_dir", property(lambda self: fake))
 
 
 class TestSimpleSettingsBranches:
@@ -207,15 +214,22 @@ class TestFilePermissionBranches:
 
     def test_secret_file_world_readable_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._linux(monkeypatch)
-        monkeypatch.setattr(sa, "Path", lambda _p: _FakePath(mode=stat.S_IROTH))
+        _patch_data_dir(monkeypatch, _FakePath(mode=stat.S_IROTH))
         assert not _run("_check_secret_file_perms").passed
 
     def test_secret_file_restricted_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._linux(monkeypatch)
-        monkeypatch.setattr(sa, "Path", lambda _p: _FakePath(mode=0))
+        _patch_data_dir(monkeypatch, _FakePath(mode=0))
         check = _run("_check_secret_file_perms")
         assert check.passed
         assert "permissions OK" in check.message
+
+    def test_secret_file_missing_is_na(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._linux(monkeypatch)
+        _patch_data_dir(monkeypatch, _FakePath(exists=False))
+        check = _run("_check_secret_file_perms")
+        assert check.passed
+        assert "N/A" in check.message
 
     def test_env_file_world_readable_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._linux(monkeypatch)
@@ -499,7 +513,7 @@ class TestWindowsNaBranches:
 
     def test_secret_file_na(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._win(monkeypatch)
-        monkeypatch.setattr(sa, "Path", lambda _p: _FakePath(exists=True))
+        _patch_data_dir(monkeypatch, _FakePath(exists=True))
         check = _run("_check_secret_file_perms")
         assert check.passed
         assert "N/A" in check.message
@@ -509,7 +523,7 @@ class TestWindowsNaBranches:
         monkeypatch.setattr(sa, "Path", lambda _p: _FakePath(exists=True))
         check = _run("_check_env_file_perms")
         assert check.passed
-        assert "manually" in check.message
+        assert "N/A" in check.message
 
     def test_log_na(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._win(monkeypatch)

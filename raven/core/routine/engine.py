@@ -282,18 +282,18 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
 
     async def _execute_email_check(self, routine: Routine) -> str:
         try:
-            from raven.core.email_api import _get_config
+            from raven.core.email_config import email_config
 
-            config = _get_config()
-            if not config.get("imap_host"):
+            config = email_config()
+            if not config.imap_ready:
                 return "Email check skipped: no IMAP configured"
 
             def _sync_check() -> int:
                 import imaplib
 
-                mail = imaplib.IMAP4_SSL(config["imap_host"], int(config.get("imap_port", "993")))
-                mail.login(config["imap_user"], config["imap_pass"])
-                mail.select("INBOX")
+                mail = imaplib.IMAP4_SSL(config.imap_host, config.imap_port)
+                mail.login(config.imap_user, config.imap_pass)
+                mail.select(config.inbox_folder)
                 try:
                     status, messages = mail.search(None, "UNSEEN")
                     if status != "OK":

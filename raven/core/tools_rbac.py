@@ -5,24 +5,18 @@ from pathlib import Path
 
 from loguru import logger
 
+from raven.core.config import data_path
+
 
 class ToolPolicyStore:
-    """Persistent role→tool overrides stored in data/tool_policy.json.
+    """Persistent role→tool overrides stored in `tool_policy.json` under the data dir.
 
     Schema: {"<tool_name>": ["role1", "role2"]}. An entry overrides the tool's
     default `allowed_roles` (and the dangerous→admin fallback) without a restart.
     """
 
     def __init__(self, path: str | Path | None = None) -> None:
-        if path is None:
-            try:
-                from raven.core.config import settings
-
-                path = settings.resolved_data_dir / "tool_policy.json"
-            except Exception as e:
-                logger.warning("[tools_rbac] failed to resolve policy path, using fallback: {}", e)
-                path = Path("data/tool_policy.json")
-        self._path = Path(path)
+        self._path = Path(path) if path is not None else data_path("tool_policy.json")
         self._policy: dict[str, list[str]] = {}
         self._load()
 

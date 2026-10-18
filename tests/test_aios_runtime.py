@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-import aios.runtime.adapter as adapter_mod
 from aios.runtime.adapter import RuntimeAdapter
 
 
@@ -119,9 +118,6 @@ class TestAiosRuntimeAdapter:
 
     @pytest.mark.asyncio
     async def test_search_codebase(self, monkeypatch):
-        monkeypatch.setattr(
-            adapter_mod, "settings", SimpleNamespace(resolved_db_path="data/test.db")
-        )
         fake_retriever = SimpleNamespace(
             retrieve=AsyncMock(
                 return_value=[{"text": "hello world"}, {"no_text": 1}]
@@ -130,11 +126,3 @@ class TestAiosRuntimeAdapter:
         monkeypatch.setattr("aios.runtime.adapter.Retriever", Mock(return_value=fake_retriever))
         results = await RuntimeAdapter.search_codebase("query")
         assert results == ["hello world", str({"no_text": 1})]
-
-    @pytest.mark.asyncio
-    async def test_search_codebase_fallback_db_path(self, monkeypatch):
-        monkeypatch.setattr(adapter_mod, "settings", SimpleNamespace())
-        fake_retriever = SimpleNamespace(retrieve=AsyncMock(return_value=[]))
-        monkeypatch.setattr("aios.runtime.adapter.Retriever", Mock(return_value=fake_retriever))
-        results = await RuntimeAdapter.search_codebase("query")
-        assert results == []

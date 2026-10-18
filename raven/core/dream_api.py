@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from fastapi import APIRouter, Request
 from loguru import logger
 
+from raven.core.config import settings
 from raven.core.dreaming.engine import DreamEngine
 
 if TYPE_CHECKING:
@@ -70,7 +71,7 @@ def create_dream_router(memory_manager: MemoryManager) -> APIRouter:
         from raven.core.backup import import_memory
         from raven.core.security.path_guard import confine_path
 
-        data_dir = Path("data").resolve()
+        data_dir = settings.resolved_data_dir
         raw = Path(body.get("path", ""))
         try:
             source = confine_path(str(raw), data_dir)

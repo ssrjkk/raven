@@ -179,8 +179,9 @@ a bare `httpx.get`:
   Legacy 100 000-iteration hashes still verify and are rehashed on successful login.
 - Configuration secrets use `SafeSecretStr`, so API keys and webhook secrets do not appear
   in `repr()`, logs or exception traces.
-- The audit trail is HMAC-signed with a key auto-generated at `data/audit_signing_key.bin`,
-  making tampering with recorded events detectable.
+- The audit trail is signed with Ed25519 using a private key auto-generated as
+  `audit_signing_key.bin` under the data dir, so tampering with recorded events is detectable.
+  The key never leaves that file; `RAVEN_AUDIT_SIGNING_KEY` supplies it explicitly instead.
 
 ## 12. Untrusted XML
 

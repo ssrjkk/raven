@@ -7,8 +7,8 @@ import pytest
 
 from raven.unique import multi_modal_rag as mmr
 from raven.unique.multi_modal_rag import (
-    Citation,
     Chunk,
+    Citation,
     Document,
     MultiModalRAG,
     SearchResult,
@@ -465,7 +465,7 @@ class TestSyncHelpers:
         chunk = Chunk(id="c1", text="t", document_id="d1", embedding=[0.1])
         rag._sync_to_chroma_text(chunk)
 
-    def test_remove_from_chroma_delete_errors(self):
+    def test_remove_from_chroma_delete_errors(self, monkeypatch: pytest.MonkeyPatch):
         rag = MultiModalRAG(dimension=32)
 
         def _raise(*args: object, **kwargs: object) -> None:
@@ -476,7 +476,7 @@ class TestSyncHelpers:
         clip_coll = _FakeCollection({})
         text_coll.delete = _raise  # type: ignore[method-assign]
         clip_coll.delete = _raise  # type: ignore[method-assign]
-        rag._ensure_chroma = lambda: None
+        monkeypatch.setattr(rag, "_ensure_chroma", lambda: None)
         rag._chroma_text_collection = text_coll
         rag._chroma_clip_collection = clip_coll
         rag._remove_from_chroma(["c1"])
@@ -510,7 +510,7 @@ class TestInMemoryFallback:
 class TestCrossModalSearch:
     def test_search_in_memory_clip_fallback(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         rag = _make_rag_with_clip(monkeypatch)
-        rag._ensure_chroma = lambda: None
+        monkeypatch.setattr(rag, "_ensure_chroma", lambda: None)
         rag._chroma_text_collection = None
         rag._chroma_clip_collection = None
         png = tmp_path / "img.png"

@@ -8,6 +8,8 @@ import click
 from loguru import logger
 from rich.console import Console
 
+from raven.core.config import settings
+
 console = Console()
 
 
@@ -18,18 +20,9 @@ console = Console()
 def logs(lines: int, level: str, follow: bool):
     """View Raven AI logs"""
     env_path = os.environ.get("RAVEN_LOG_FILE")
-    log_path: Path | None
-    if env_path:
-        log_path = Path(env_path)
-    else:
-        candidates = [
-            Path("data/logs/raven.log"),
-            Path("raven.log"),
-            Path.home() / ".raven" / "logs" / "raven.log",
-        ]
-        log_path = next((p for p in candidates if p.exists()), None)
-    if log_path is None or not log_path.exists():
-        console.print("[red]No log file found. Set RAVEN_LOG_FILE env var or run 'raven start' first.[/red]")
+    log_path = Path(env_path) if env_path else settings.resolved_log_file
+    if not log_path.exists():
+        console.print("[red]No log file found. Set LOG_FILE or run 'raven start' first.[/red]")
         raise SystemExit(1)
     levels = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
     min_level = levels.get(level.upper(), 0)

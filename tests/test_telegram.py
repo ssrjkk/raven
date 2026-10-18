@@ -109,8 +109,29 @@ async def test_channel_id(channel):
 
 @pytest.mark.asyncio
 async def test_connect_disconnect(channel):
-    await channel.connect()
-    await channel.disconnect()
+    """`connect` reaches `start`, so unmocked it calls api.telegram.org with whatever token the
+    environment carries — it passed here only because the runner had none."""
+    mock_app = MagicMock()
+    mock_app.initialize = AsyncMock()
+    mock_app.start = AsyncMock()
+    mock_app.stop = AsyncMock()
+    mock_app.shutdown = AsyncMock()
+    mock_app.updater = MagicMock()
+    mock_app.updater.start_polling = AsyncMock()
+    builder = MagicMock()
+    builder.token.return_value = builder
+    builder.build.return_value = mock_app
+    channel._token = "fake:token"
+    with patch("raven.channels.telegram.channel.Application.builder", return_value=builder):
+        await channel.connect()
+        assert channel._ready
+        mock_app.updater.start_polling.assert_awaited_once()
+        await channel.connect()
+        mock_app.updater.start_polling.assert_awaited_once()
+        assert builder.build.call_count == 1
+        await channel.disconnect()
+    mock_app.stop.assert_awaited_once()
+    mock_app.shutdown.assert_awaited_once()
 
 
 @pytest.mark.asyncio

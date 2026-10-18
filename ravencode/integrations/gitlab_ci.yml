@@ -1,7 +1,8 @@
 # RavenCode GitLab CI template
-# Include in your .gitlab-ci.yml:
+# Written into your repo by: ravencode integrations gitlab install
+# Then include it from your .gitlab-ci.yml:
 #   include:
-#     - local: ravencode/integrations/gitlab_ci.yml
+#     - local: ".gitlab-ci-ravencode.yml"
 #
 # Required CI/CD variables:
 #   ANTHROPIC_API_KEY / OPENAI_API_KEY / OPENROUTER_API_KEY

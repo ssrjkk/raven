@@ -8,6 +8,7 @@ from typing import Any
 
 from loguru import logger
 
+from raven.core.config import data_path
 from ravencode.core.prompts import get_prompt
 
 # ---------------------------------------------------------------------------
@@ -17,18 +18,20 @@ from ravencode.core.prompts import get_prompt
 
 @dataclass
 class MemoryStore:
-    path: str = "data/ravencode_memory.json"
+    path: str | Path | None = None
     _data: dict[str, Any] = field(default_factory=dict)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     _bg_tasks: set[asyncio.Task[None]] = field(default_factory=set)
     _flush_task: asyncio.Task[None] | None = field(default=None)
     _flush_pending: bool = field(default=False)
+    _target: Path = field(default_factory=lambda: data_path("ravencode_memory.json"))
 
-    def __post_init__(self):
-        p = Path(self.path).expanduser().resolve()
-        if p.exists():
+    def __post_init__(self) -> None:
+        if self.path:
+            self._target = Path(self.path).expanduser().resolve()
+        if self._target.exists():
             try:
-                self._data = json.loads(p.read_text(encoding="utf-8"))
+                self._data = json.loads(self._target.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 self._data = {}
 
@@ -106,7 +109,7 @@ class MemoryStore:
         return removed
 
     def _write(self, snapshot: dict[str, Any]) -> None:
-        p = Path(self.path).expanduser().resolve()
+        p = self._target
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(snapshot, indent=2, ensure_ascii=False), encoding="utf-8")
 

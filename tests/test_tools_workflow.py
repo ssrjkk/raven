@@ -88,7 +88,7 @@ class TestWorkflowInstantiate:
         assert runner is not None
         # fire the completion callback that closes the store
         cast_fn = runner.fn  # type: ignore[attr-defined]
-        cast_fn()  # type: ignore[operator]
+        cast_fn()
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         assert runner.store.closed >= 1  # type: ignore[attr-defined]

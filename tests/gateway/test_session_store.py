@@ -3,9 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
+from raven.core.auth.auth_handler import auth_handler
 from raven.gateway.daemon import FlowSession, RavenFlowDaemon
 from raven.gateway.session_store import SessionStore
+
+UNSAFE_IDS = ("../../outside", "a/b", "a\\b", "", "x" * 129, "..", ".")
 
 
 def make_session(session_id: str = "abc123", message_count: int = 3) -> FlowSession:
@@ -178,3 +182,68 @@ class TestDaemonRestore:
         session = asyncio.run(daemon._get_or_create_session("abc123", "test", "build"))
         assert session.agent is not None
         assert session.message_count == 5
+
+
+class TestSessionIdValidation:
+    """A session id becomes a filename; it must never address anything outside the store dir."""
+
+    def test_save_rejects_unsafe_id(self, tmp_path: Path):
+        store = SessionStore(tmp_path)
+        for bad in UNSAFE_IDS:
+            with pytest.raises(ValueError, match="Invalid session id"):
+                store.save(make_session(bad))
+        assert store.count() == 0
+        assert not (tmp_path.parent / "outside.json").exists()
+
+    def test_remove_rejects_unsafe_id(self, tmp_path: Path):
+        store = SessionStore(tmp_path)
+        store.save(make_session("keepme"))
+        victim = tmp_path.parent / "outside.json"
+        victim.write_text("{}", encoding="utf-8")
+        for bad in UNSAFE_IDS:
+            with pytest.raises(ValueError):
+                store.remove(bad)
+        assert store.count() == 1
+        assert victim.exists()
+        victim.unlink()
+
+    def test_from_dict_rejects_unsafe_id(self):
+        for bad in UNSAFE_IDS:
+            assert FlowSession.from_dict({"id": bad}) is None
+
+    def test_corrupt_store_file_with_unsafe_id_is_skipped(self, tmp_path: Path):
+        store = SessionStore(tmp_path)
+        (store.directory / "escape.json").write_text('{"id": "../../escape"}', encoding="utf-8")
+        assert store.load_all() == []
+
+    def test_get_or_create_rejects_unsafe_id(self, tmp_path: Path):
+        import asyncio
+
+        daemon = RavenFlowDaemon(port=0, data_dir=tmp_path)
+        with pytest.raises(ValueError):
+            asyncio.run(daemon._get_or_create_session("../../escape", "test"))
+        assert daemon.sessions == {}
+        assert daemon._store.count() == 0
+
+    def test_api_agent_rejects_unsafe_session_id(self, tmp_path: Path):
+        daemon = RavenFlowDaemon(port=0, data_dir=tmp_path)
+        headers = {"Authorization": f"Bearer {auth_handler.create_token('testuser', 'admin')}"}
+        with TestClient(daemon.app) as client:
+            resp = client.post(
+                "/api/agent",
+                json={"message": "hi", "session_id": "../../escape"},
+                headers=headers,
+            )
+        assert resp.status_code == 400
+        assert "Invalid session id" in resp.json()["error"]
+        assert daemon.sessions == {}
+
+    def test_websocket_rejects_unsafe_session_id(self, tmp_path: Path):
+        daemon = RavenFlowDaemon(port=0, data_dir=tmp_path)
+        token = auth_handler.create_token("testuser", "admin")
+        with TestClient(daemon.app) as client, client.websocket_connect(f"/ws?token={token}") as ws:
+            ws.send_text('{"type": "message", "content": "hi", "session_id": "../../escape"}')
+            reply = ws.receive_json()
+        assert reply["type"] == "error"
+        assert "Invalid session id" in reply["content"]
+        assert daemon.sessions == {}

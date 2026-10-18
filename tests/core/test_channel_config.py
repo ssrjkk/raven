@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+import raven.channels
 from raven.core.channel_config import (
     all_channel_names,
     configured_channels,
     get_channel_config,
     has_any_channel,
 )
+
+_GATEWAY_RUNNER = Path(raven.channels.__file__).parent.parent / "cli" / "gateway_runner.py"
+
+
+def _channel_packages() -> set[str]:
+    return {p.parent.name for p in Path(raven.channels.__file__).parent.glob("*/channel.py")}
 
 
 def test_get_channel_config_telegram(monkeypatch):
@@ -62,9 +71,43 @@ def test_all_channel_names():
     assert "slack" in names
     assert "matrix" in names
     assert "irc" in names
+    assert "email" in names
     assert len(names) == len(set(names))
 
 
 def test_get_channel_config_no_env():
     cfg = get_channel_config("nonexistent")
     assert cfg == {}
+
+
+def test_every_channel_package_is_wired_into_the_gateway():
+    source = _GATEWAY_RUNNER.read_text(encoding="utf-8")
+    unwired = {name for name in _channel_packages() if f'("{name}", ' not in source}
+    assert not unwired
+
+
+def test_every_wired_channel_is_discoverable_by_doctor():
+    # webchat is served by the gateway itself and needs no platform credentials.
+    missing = _channel_packages() - set(all_channel_names()) - {"webchat"}
+    assert not missing
+
+
+def test_email_env_map_reaches_the_channel(monkeypatch):
+    for var in (
+        "EMAIL_SMTP_HOST",
+        "EMAIL_SMTP_PORT",
+        "EMAIL_SMTP_USER",
+        "EMAIL_SMTP_PASS",
+        "EMAIL_IMAP_HOST",
+        "EMAIL_IMAP_PORT",
+        "EMAIL_IMAP_USER",
+        "EMAIL_IMAP_PASS",
+        "EMAIL_INBOX_FOLDER",
+        "EMAIL_POLL_INTERVAL",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("EMAIL_IMAP_HOST", "imap.example.com")
+    monkeypatch.setenv("EMAIL_SMTP_HOST", "smtp.example.com")
+    assert has_any_channel("email") is True
+    assert get_channel_config("email") == {"smtp_host": "smtp.example.com", "imap_host": "imap.example.com"}
+    assert "email" in configured_channels()

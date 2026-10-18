@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac as hmac_mod
 import time
@@ -34,6 +35,55 @@ async def _verify_webhook_signature(request: Request) -> None:
     sig = request.headers.get("X-Webhook-Signature", "")
     if not sig or not _verify_hmac_sha256(body_bytes, sig, secret):
         raise HTTPException(status_code=403, detail="Invalid or missing webhook signature")
+
+
+def _platform_secret(channel: str, field: str, fallback: str = "") -> str:
+    return str(get_channel_config(channel).get(field, "") or fallback)
+
+
+async def _verify_github_signature(request: Request) -> None:
+    """GitHub signs its own header; the shared HMAC stays as the fallback for a signing proxy."""
+    secret = _platform_secret("github", "webhook_secret")
+    if not secret:
+        await _verify_webhook_signature(request)
+        return
+    body_bytes = await request.body()
+    sig = request.headers.get("X-Hub-Signature-256", "")
+    if not sig or not _verify_hmac_sha256(body_bytes, sig, secret):
+        raise HTTPException(status_code=403, detail="Invalid or missing GitHub webhook signature")
+
+
+async def _verify_gitlab_signature(request: Request) -> None:
+    secret = _platform_secret("gitlab", "webhook_secret", settings.gitlab_webhook_secret.get_secret_value())
+    if not secret:
+        await _verify_webhook_signature(request)
+        return
+    if not hmac_mod.compare_digest(secret, request.headers.get("X-Gitlab-Token", "")):
+        raise HTTPException(status_code=403, detail="Invalid or missing GitLab token")
+
+
+async def _verify_feishu_signature(request: Request) -> None:
+    """Feishu hashes ``timestamp + nonce + encrypt key + raw body`` with plain SHA-256, not HMAC."""
+    key = _platform_secret("feishu", "encrypt_key")
+    if not key:
+        await _verify_webhook_signature(request)
+        return
+    body_bytes = await request.body()
+    seed = request.headers.get("X-Lark-Request-Timestamp", "") + request.headers.get("X-Lark-Request-Nonce", "") + key
+    digest = hashlib.sha256(seed.encode() + body_bytes).hexdigest()
+    if not hmac_mod.compare_digest(digest, request.headers.get("X-Lark-Signature", "")):
+        raise HTTPException(status_code=403, detail="Invalid or missing Feishu signature")
+
+
+async def _verify_line_signature(request: Request) -> None:
+    secret = _platform_secret("line", "channel_secret")
+    if not secret:
+        await _verify_webhook_signature(request)
+        return
+    body_bytes = await request.body()
+    digest = base64.b64encode(hmac_mod.new(secret.encode(), body_bytes, hashlib.sha256).digest()).decode()
+    if not hmac_mod.compare_digest(digest, request.headers.get("X-Line-Signature", "")):
+        raise HTTPException(status_code=403, detail="Invalid or missing LINE signature")
 
 
 def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
@@ -112,10 +162,11 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
     async def whatsapp_webhook(body: dict[str, Any], request: Request):
         body_bytes = await request.body()
         wa_sig = request.headers.get("X-Hub-Signature-256", "")
-        secret = settings.web_secret_key.get_secret_value()
+        secret = _platform_secret("whatsapp", "app_secret", settings.web_secret_key.get_secret_value())
         if not secret:
             raise HTTPException(
-                status_code=403, detail="WhatsApp webhook signature not supported — WEB_SECRET_KEY not configured"
+                status_code=403,
+                detail="WhatsApp webhook signature not supported — WHATSAPP_APP_SECRET or WEB_SECRET_KEY required",
             )
         if not wa_sig or not _verify_hmac_sha256(body_bytes, wa_sig, secret):
             raise HTTPException(status_code=403, detail="Invalid or missing WhatsApp signature")
@@ -129,11 +180,9 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
         mode = request.query_params.get("hub.mode")
         token = request.query_params.get("hub.verify_token")
         challenge = request.query_params.get("hub.challenge")
-        if (
-            mode == "subscribe"
-            and settings.web_secret_key.get_secret_value()
-            and hmac_mod.compare_digest(token or "", settings.web_secret_key.get_secret_value())
-        ):
+        # The verify token travels in a query string, so it gets its own secret rather than WEB_SECRET_KEY.
+        expected = _platform_secret("whatsapp", "verify_token", settings.web_secret_key.get_secret_value())
+        if mode == "subscribe" and expected and hmac_mod.compare_digest(token or "", expected):
             try:
                 return int(challenge)  # type: ignore[arg-type]
             except (TypeError, ValueError):
@@ -172,7 +221,10 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/feishu")
     async def feishu_webhook(body: dict[str, Any], request: Request):
-        await _verify_webhook_signature(request)
+        await _verify_feishu_signature(request)
+        if body.get("type") == "url_verification":
+            # Feishu refuses to save a callback URL until the challenge is echoed back verbatim.
+            return {"challenge": body.get("challenge", "")}
         ch = request.app.state.feishu_channel if hasattr(request.app.state, "feishu_channel") else None
         if not ch:
             logger.warning("feishu channel not configured, webhook ignored")
@@ -182,7 +234,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/line")
     async def line_webhook(body: dict[str, Any], request: Request):
-        await _verify_webhook_signature(request)
+        await _verify_line_signature(request)
         ch = request.app.state.line_channel if hasattr(request.app.state, "line_channel") else None
         if not ch:
             logger.warning("line channel not configured, webhook ignored")
@@ -192,7 +244,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/github")
     async def github_webhook(body: dict[str, Any], request: Request):
-        await _verify_webhook_signature(request)
+        await _verify_github_signature(request)
         ch = request.app.state.github_channel if hasattr(request.app.state, "github_channel") else None
         if not ch:
             logger.warning("github channel not configured, webhook ignored")
@@ -203,7 +255,7 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
 
     @router.post("/gitlab")
     async def gitlab_webhook(body: dict[str, Any], request: Request):
-        await _verify_webhook_signature(request)
+        await _verify_gitlab_signature(request)
         ch = request.app.state.gitlab_channel if hasattr(request.app.state, "gitlab_channel") else None
         if not ch:
             logger.warning("gitlab channel not configured, webhook ignored")

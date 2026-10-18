@@ -47,7 +47,7 @@ npm run dev
 - Run `python scripts/check_all.py --component core` for single component tests
 - Never commit secrets or .env files
 - pyproject `addopts` enables coverage (gate: 65%, `.coveragerc`) + allure; for a single test file use `pytest <path> --no-cov` to skip the gate
-- Full suite: ~5660 tests, ~10 min. Frontend: `cd web && npx tsc --noEmit && npm test -- --run`
+- Full suite: ~6470 tests, ~10 min. Frontend: `cd web && npx tsc --noEmit && npm test -- --run`
 - EXE packaging: `scripts/build_exe.ps1` (uses `scripts/raven.spec`; output in `packaging/dist/`)
 - Record notable changes in `CHANGELOG.md` — do not grow this file with fix logs
 

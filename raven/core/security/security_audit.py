@@ -12,7 +12,7 @@ from typing import Any, ClassVar
 from loguru import logger
 
 from raven.core.audit import AUDIT_KEY_FILE, AUDIT_SIGNING_KEY_ENV, audit_logger
-from raven.core.config import _DEFAULT_TOOLS_DENY, settings
+from raven.core.config import _DEFAULT_TOOLS_DENY, _ENV_FILE_CANDIDATES, settings
 
 # pip-audit resolves the whole environment over the network; without a ceiling a slow
 # mirror blocks the audit (and the 120s per-test limit in check_all.py) indefinitely.
@@ -371,11 +371,11 @@ class SecurityAudit:
 
     def _check_secret_file_perms(self):
         c = self._add("secret_file_perms", "Secrets key file has restricted permissions", "high")
-        secrets_key_path = Path("data/.secrets_key")
+        secrets_key_path = settings.resolved_data_dir / ".secrets_key"
         if secrets_key_path.exists() and sys.platform != "win32":
             mode = secrets_key_path.stat().st_mode
             if mode & stat.S_IROTH:
-                c.fail(".secrets_key is world-readable", fix_hint="chmod 600 data/.secrets_key")
+                c.fail(".secrets_key is world-readable", fix_hint=f"chmod 600 {secrets_key_path}")
             else:
                 c.ok(".secrets_key permissions OK")
         else:
@@ -410,16 +410,30 @@ class SecurityAudit:
         c.ok("Verify with: netstat -an | grep 18888 (should be 127.0.0.1 or firewalled)")
 
     def _check_env_file_perms(self):
-        c = self._add("env_file_perms", ".env file is not world-readable", "high")
-        env = Path(".env")
-        if env.exists() and sys.platform != "win32":
-            mode = env.stat().st_mode
-            if mode & stat.S_IROTH:
-                c.fail(".env is world-readable — contains API keys", fix_hint="chmod 600 .env")
-            else:
-                c.ok(".env permissions OK")
+        c = self._add("env_file_perms", ".env files are not world-readable", "high")
+        if sys.platform == "win32":
+            c.ok("Permission check N/A on Windows")
+            return
+        # The loader reads a cascade, not just ./env: checking only the cwd file would miss
+        # the install-root and ~/.raven files that actually supply the keys.
+        world_readable: list[str] = []
+        found = 0
+        for candidate in _ENV_FILE_CANDIDATES:
+            env = Path(candidate)
+            if not env.is_file():
+                continue
+            found += 1
+            if env.stat().st_mode & stat.S_IROTH:
+                world_readable.append(str(env))
+        if world_readable:
+            c.fail(
+                f"World-readable env file(s) contain API keys: {', '.join(world_readable)}",
+                fix_hint="chmod 600 <env file>",
+            )
+        elif found:
+            c.ok(".env permissions OK")
         else:
-            c.ok("Check manually on your platform")
+            c.ok("No env file in the cascade to check")
 
     def _check_dependencies(self):
         c = self._add("dependency_audit", "Check for known-vulnerable packages", "low")

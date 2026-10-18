@@ -1124,4 +1124,6 @@ class ReActAgent:
         cfg_data = {k: v for k, v in cfg_data.items() if not callable(v) and not k.startswith("_")}
         cfg = AgentConfig(**cfg_data)
         conv = Conversation(messages=state.get("conversation", []))
-        return cls(config=cfg, conversation=conv, llm_provider=llm_provider, name=state.get("name", "raven"))
+        agent = cls(config=cfg, conversation=conv, llm_provider=llm_provider, name=state.get("name", "raven"))
+        _last_agent_var.set(agent)
+        return agent

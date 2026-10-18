@@ -8,20 +8,20 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import PlainTextResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from aios.runtime.adapter import RuntimeAdapter
 from raven.core.agents.truthful_orchestrator import TruthfulResult
-from raven.core.config import settings
+from raven.core.config import data_path, settings
 from raven.core.llm.protocol import LLMClientProtocol
 from ravencode.agents.multi import MultiAgentOrchestrator, SubTask
 from ravencode.agents.orchestrator import AgentType, Orchestrator
 from ravencode.api.client import AIOSClient
 from ravencode.runtime.agent_core import AgentConfig, AgentEvent, EventEmitter, ReActAgent
-from ravencode.runtime.session import SessionStore
+from ravencode.runtime.session import SessionStore, validate_session_id
 from ravencode.runtime.workspace import confine
 
 router = APIRouter(prefix="/aios", tags=["ai-os-mvp"])
@@ -165,14 +165,23 @@ async def aios_agent_truthful(req: TruthfulRequest):
 
 @router.post("/agent/multi", response_model=list[dict[str, Any]])
 async def aios_multi_agent(req: MultiAgentRequest):
-    subtasks = [
-        SubTask(
-            description=t.get("description", ""),
-            agent_type=AgentType(t.get("agent_type", "autonomous")),
-            depends_on=t.get("depends_on"),
+    valid_types = [e.value for e in AgentType]
+    subtasks: list[SubTask] = []
+    for t in req.tasks:
+        raw_type = t.get("agent_type", "autonomous")
+        try:
+            agent_type = AgentType(raw_type)
+        except ValueError:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid agent_type '{raw_type}'. Valid: {valid_types}"
+            ) from None
+        subtasks.append(
+            SubTask(
+                description=t.get("description", ""),
+                agent_type=agent_type,
+                depends_on=t.get("depends_on"),
+            )
         )
-        for t in req.tasks
-    ]
     if req.mode == "parallel":
         results = await _multi.run_parallel(subtasks, max_concurrent=req.max_concurrent)
     elif req.mode == "dag":
@@ -763,11 +772,11 @@ async def aios_get_session(session_id: str):
 
 
 def _session_read(session_id: str) -> dict[str, Any] | None:
-    import re as _re
-    if not _re.match(r"^[A-Za-z0-9_-]{1,128}$", session_id):
+    try:
+        safe_id = validate_session_id(session_id)
+    except ValueError:
         return None
-    from pathlib import Path as PathLib
-    p = PathLib("data/sessions") / f"{session_id}.json"
+    p = data_path("sessions") / f"{safe_id}.json"
     if not p.is_file():
         return None
     try:

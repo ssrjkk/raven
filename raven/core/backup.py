@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from raven.core.config import settings
 from raven.core.memory.base import MemoryTier
 
 if TYPE_CHECKING:
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
 
 
 async def export_memory(memory: MemoryManager, dest: Path | None = None) -> Path:
-    dest = dest or Path("data") / f"memory_backup_{int(time.time())}.json"
+    dest = dest or settings.resolved_data_dir / f"memory_backup_{int(time.time())}.json"
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     data: dict[str, Any] = {
@@ -97,7 +98,7 @@ async def import_memory(memory: MemoryManager, source: Path) -> dict[str, int]:
 
 
 async def list_backups(backup_dir: Path | None = None) -> list[dict[str, Any]]:
-    backup_dir = backup_dir or Path("data")
+    backup_dir = backup_dir or settings.resolved_data_dir
     if not backup_dir.is_dir():
         return []
     backups = []

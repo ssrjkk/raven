@@ -10,13 +10,15 @@ from typing import Any
 
 from loguru import logger
 
+from raven.core.config import data_path
+
 _SAFE_CID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
 class CheckpointManager:
-    def __init__(self, workspace: str | None = None, storage_dir: str = "data/checkpoints") -> None:
+    def __init__(self, workspace: str | None = None, storage_dir: str | Path | None = None) -> None:
         self._workspace = Path(workspace or "workspace").expanduser().resolve()
-        self._storage = Path(storage_dir).expanduser().resolve()
+        self._storage = (Path(storage_dir) if storage_dir else data_path("checkpoints")).expanduser().resolve()
         self._checkpoints: dict[str, dict[str, Any]] = {}
 
     def list(self) -> list[dict[str, Any]]:

@@ -460,3 +460,104 @@ class TestRoutineActions:
         assert (workspace / "text" / "notes.txt").exists()
         assert (workspace / "code" / "main.py").exists()
         assert (workspace / "archive.zip").exists()
+
+
+class TestEmailCheckAction:
+    IMAP_VARS = ("EMAIL_IMAP_HOST", "EMAIL_IMAP_PORT", "EMAIL_IMAP_USER", "EMAIL_IMAP_PASS", "EMAIL_INBOX_FOLDER")
+
+    async def test_skipped_without_imap(self, store: RoutineStore, monkeypatch: pytest.MonkeyPatch):
+        for var in self.IMAP_VARS:
+            monkeypatch.delenv(var, raising=False)
+        engine = RoutineEngine(store)
+        r = Routine(name="mail", action=RoutineAction.CHECK_EMAIL, trigger=RoutineTrigger.MANUAL)
+        assert await engine._execute_email_check(r) == "Email check skipped: no IMAP configured"
+
+    async def test_counts_unseen_and_notifies(
+        self, store: RoutineStore, monkeypatch: pytest.MonkeyPatch
+    ):
+        calls: list[tuple[object, ...]] = []
+
+        class _IMAP:
+            def __init__(self, host: str, port: int) -> None:
+                calls.append(("connect", host, port))
+
+            def login(self, user: str, password: str) -> None:
+                calls.append(("login", user, password))
+
+            def select(self, folder: str) -> tuple[str, list[bytes]]:
+                calls.append(("select", folder))
+                return "OK", [b"3"]
+
+            def search(self, charset: object, criterion: str) -> tuple[str, list[bytes]]:
+                calls.append(("search", criterion))
+                return "OK", [b"7 8 9"]
+
+            def logout(self) -> None:
+                calls.append(("logout",))
+
+        monkeypatch.setenv("EMAIL_IMAP_HOST", "imap.example.com")
+        monkeypatch.setenv("EMAIL_IMAP_PORT", "993")
+        monkeypatch.setenv("EMAIL_IMAP_USER", "agent@example.com")
+        monkeypatch.setenv("EMAIL_IMAP_PASS", "secret")
+        monkeypatch.setenv("EMAIL_INBOX_FOLDER", "Agent mail")
+        monkeypatch.setattr("imaplib.IMAP4_SSL", _IMAP)
+
+        engine = RoutineEngine(store)
+        send = AsyncMock(return_value=None)
+        engine._gateway_ref = SimpleNamespace(_send=send)
+        r = Routine(
+            name="mail",
+            action=RoutineAction.CHECK_EMAIL,
+            trigger=RoutineTrigger.MANUAL,
+            channel="telegram",
+            user_id="42",
+        )
+
+        assert await engine._execute_email_check(r) == "Email check complete: 3 unread messages"
+        assert ("connect", "imap.example.com", 993) in calls
+        # The configured folder, not a hard-coded INBOX, is what gets polled.
+        assert ("select", "Agent mail") in calls
+        assert ("search", "UNSEEN") in calls
+        assert ("logout",) in calls
+        send.assert_awaited_once_with("telegram", "telegram:42:email", "You have 3 unread email(s) in your inbox.")
+
+    async def test_failed_search_is_reported(self, store: RoutineStore, monkeypatch: pytest.MonkeyPatch):
+        class _IMAP:
+            def __init__(self, host: str, port: int) -> None:
+                pass
+
+            def login(self, user: str, password: str) -> None:
+                pass
+
+            def select(self, folder: str) -> tuple[str, list[bytes]]:
+                return "OK", [b"0"]
+
+            def search(self, charset: object, criterion: str) -> tuple[str, list[bytes]]:
+                return "NO", []
+
+            def logout(self) -> None:
+                pass
+
+        for var, value in (
+            ("EMAIL_IMAP_HOST", "imap.example.com"),
+            ("EMAIL_IMAP_USER", "agent@example.com"),
+        ):
+            monkeypatch.setenv(var, value)
+        monkeypatch.setattr("imaplib.IMAP4_SSL", _IMAP)
+        engine = RoutineEngine(store)
+        r = Routine(name="mail", action=RoutineAction.CHECK_EMAIL, trigger=RoutineTrigger.MANUAL)
+        assert await engine._execute_email_check(r) == "Failed to search inbox"
+
+    async def test_socket_error_is_reported_as_failure(
+        self, store: RoutineStore, monkeypatch: pytest.MonkeyPatch
+    ):
+        class _IMAP:
+            def __init__(self, host: str, port: int) -> None:
+                raise OSError("connection refused")
+
+        monkeypatch.setenv("EMAIL_IMAP_HOST", "imap.example.com")
+        monkeypatch.setenv("EMAIL_IMAP_USER", "agent@example.com")
+        monkeypatch.setattr("imaplib.IMAP4_SSL", _IMAP)
+        engine = RoutineEngine(store)
+        r = Routine(name="mail", action=RoutineAction.CHECK_EMAIL, trigger=RoutineTrigger.MANUAL)
+        assert "Email check failed" in await engine._execute_email_check(r)

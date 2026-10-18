@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import time
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from raven.core.config import data_path
 from raven.core.workflow.models import TemplateTrigger, WorkflowTemplate
 
 if TYPE_CHECKING:
@@ -105,7 +107,7 @@ class TemplateRunner:
     @staticmethod
     async def schedule_as_routine(
         template: WorkflowTemplate,
-        db_path: str = "data/raven.db",
+        db_path: str | Path | None = None,
         user_id: str = "system",
         channel: str = "internal",
         config: dict[str, Any] | None = None,
@@ -150,7 +152,7 @@ class TemplateRunner:
             logger.info("Scheduled workflow '{}' as routine {}", template.name, routine_id)
             return routine_id
 
-        store = RoutineStore(db_path)
+        store = RoutineStore(data_path("raven.db") if db_path is None else db_path)
         try:
             await store.save_routine(routine)
             logger.info("Scheduled workflow '{}' as routine {}", template.name, routine_id)

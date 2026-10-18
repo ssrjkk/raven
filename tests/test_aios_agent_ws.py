@@ -8,7 +8,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import WebSocketDisconnect
+from fastapi import HTTPException, WebSocketDisconnect
 
 from aios.api.bridge import (
     AgentDispatchRequest,
@@ -360,6 +360,20 @@ class TestAiosBridgeEndpoints:
         resp = await aios_multi_agent(req)
         assert fake.run_sequential.await_count == 1
         assert resp[0]["duration"] == 0.5
+
+    @pytest.mark.asyncio
+    async def test_multi_unknown_agent_type_is_rejected(self, monkeypatch) -> None:
+        run_sequential = AsyncMock()
+        monkeypatch.setattr(
+            "aios.api.bridge._multi",
+            SimpleNamespace(run_parallel=AsyncMock(), run_dag=AsyncMock(), run_sequential=run_sequential),
+        )
+        req = MultiAgentRequest(tasks=[{"description": "d", "agent_type": "hacker"}])
+        with pytest.raises(HTTPException) as exc:
+            await aios_multi_agent(req)
+        assert exc.value.status_code == 400
+        assert "autonomous" in exc.value.detail
+        run_sequential.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_list_sessions(self, monkeypatch) -> None:

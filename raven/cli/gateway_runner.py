@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from raven.channels.discord.channel import DiscordChannel
+from raven.channels.email.channel import EmailChannel
 from raven.channels.feishu.channel import FeishuChannel
 from raven.channels.github.channel import GithubChannel
 from raven.channels.gitlab.channel import GitlabChannel
@@ -152,6 +153,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     line = LINECChannel()
     github_ch = GithubChannel()
     gitlab = GitlabChannel()
+    email_ch = EmailChannel()
 
     _all_channels = [
         ("telegram", telegram),
@@ -168,6 +170,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         ("line", line),
         ("github", github_ch),
         ("gitlab", gitlab),
+        ("email", email_ch),
     ]
     for _, ch in _all_channels:
         await ch.on_message(gateway.handle_message)

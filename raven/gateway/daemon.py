@@ -25,6 +25,7 @@ from raven.gateway.session_store import SessionStore
 from ravencode.runtime.agent_core import AgentConfig, ReActAgent
 from ravencode.runtime.context import Conversation
 from ravencode.runtime.multisession import get_session_manager
+from ravencode.runtime.session import validate_session_id
 from ravencode.runtime.tools import execute_tool_public, get_tool_definitions
 
 _SESSION_TTL_SECONDS = 300
@@ -77,6 +78,10 @@ class FlowSession:
     def from_dict(cls, data: dict[str, Any]) -> FlowSession | None:
         session_id = data.get("id")
         if not isinstance(session_id, str) or not session_id:
+            return None
+        try:
+            validate_session_id(session_id)
+        except ValueError:
             return None
         return cls(
             id=session_id,
@@ -151,7 +156,12 @@ class RavenFlowDaemon:
         async def send_to_agent(req: AgentRequest):
             if not await self._agent_bucket.acquire():
                 return {"error": "Rate limit exceeded", "session_id": ""}
-            session = await self._get_or_create_session(req.session_id or str(uuid.uuid4())[:8], req.channel, req.mode)
+            try:
+                session = await self._get_or_create_session(
+                    req.session_id or str(uuid.uuid4())[:8], req.channel, req.mode
+                )
+            except ValueError as exc:
+                return JSONResponse(status_code=400, content={"error": str(exc), "session_id": ""})
             if session.agent is None:
                 return {"error": "agent not initialized", "session_id": session.id}
             if req.mode == "plan":
@@ -243,11 +253,14 @@ class RavenFlowDaemon:
                     msg = json.loads(data)
                     msg_type = msg.get("type", "message")
                     if msg_type == "message":
-                        session = await self._get_or_create_session(
-                            msg.get("session_id", str(uuid.uuid4())[:8]),
-                            msg.get("channel", "websocket"),
-                            msg.get("mode", "build"),
-                        )
+                        session_id = str(msg.get("session_id") or "") or str(uuid.uuid4())[:8]
+                        try:
+                            session = await self._get_or_create_session(
+                                session_id, msg.get("channel", "websocket"), msg.get("mode", "build")
+                            )
+                        except ValueError as exc:
+                            await ws.send_text(json.dumps({"type": "error", "content": str(exc)}))
+                            continue
                         if session.agent is None:
                             await ws.send_text(json.dumps({"type": "error", "content": "agent not initialized"}))
                             continue
@@ -272,6 +285,7 @@ class RavenFlowDaemon:
                 logger.exception("RavenFlow WebSocket error: {}", exc)
 
     async def _get_or_create_session(self, session_id: str, channel: str, mode: str = "build") -> FlowSession:
+        validate_session_id(session_id)
         async with self._lock:
             session = self.sessions.get(session_id)
             if session is not None:

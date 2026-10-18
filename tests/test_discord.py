@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -52,8 +53,23 @@ async def test_stop(channel):
 
 @pytest.mark.asyncio
 async def test_connect_disconnect(channel):
-    await channel.connect()
-    await channel.disconnect()
+    """`connect` reaches `start`, which launches the gateway client in a task. Unmocked, a machine
+    that carries DISCORD_BOT_TOKEN gets a live connection attempt and a task nobody cancels."""
+    mock_bot = MagicMock()
+    mock_bot.start = AsyncMock()
+    mock_bot.close = AsyncMock()
+    with (
+        patch("raven.channels.discord.channel.HAS_DISCORD", True),
+        patch("raven.channels.discord.channel.discord.Intents"),
+        patch("raven.channels.discord.channel.commands.Bot", return_value=mock_bot),
+        patch("raven.channels.discord.channel.app_commands.CommandTree"),
+    ):
+        channel._token = "fake_token"
+        await channel.connect()
+        await asyncio.sleep(0)
+        mock_bot.start.assert_awaited_once_with("fake_token")
+        await channel.disconnect()
+    mock_bot.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio

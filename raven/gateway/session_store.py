@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from raven.core._json import json
+from ravencode.runtime.session import validate_session_id
 
 if TYPE_CHECKING:
     from raven.gateway.daemon import FlowSession
@@ -27,9 +28,10 @@ class SessionStore:
         return self._dir
 
     def save(self, session: FlowSession) -> None:
+        session_id = validate_session_id(session.id)
         payload = json.dumps(session.to_dict())
-        target = self._dir / f"{session.id}.json"
-        fd, tmp_name = tempfile.mkstemp(prefix=f"{session.id}-", suffix=".tmp", dir=self._dir)
+        target = self._dir / f"{session_id}.json"
+        fd, tmp_name = tempfile.mkstemp(prefix=f"{session_id}-", suffix=".tmp", dir=self._dir)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(payload)
@@ -57,7 +59,7 @@ class SessionStore:
         return sessions
 
     def remove(self, session_id: str) -> None:
-        target = self._dir / f"{session_id}.json"
+        target = self._dir / f"{validate_session_id(session_id)}.json"
         target.unlink(missing_ok=True)
 
     def prune(self, max_age_seconds: int) -> int:

@@ -45,11 +45,3 @@ class Limits:
     TOKEN_ESTIMATION_DIVISOR = 4
     OUTPUT_TRUNCATE_LEN = 6
     EXP_BACKOFF_MAX_ATTEMPTS = 10
-
-
-class Paths:
-    CHECKPOINTS_DIR = "data/checkpoints"
-    SESSIONS_DIR = "data/sessions"
-    MEMORY_FILE = "data/ravencode_memory.json"
-    AGENTS_MD = "AGENTS.md"
-    RAVENCODE_CONFIG = "ravencode.json"

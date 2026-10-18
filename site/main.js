@@ -63,8 +63,9 @@ class Reveal {
 }
 
 class ToolRegistry {
-    constructor({ grid, status, search, filters, tools, onPick }) {
+    constructor({ grid, empty, status, search, filters, tools, onPick }) {
         this.grid = grid;
+        this.empty = empty;
         this.status = status;
         this.search = search;
         this.filters = Array.from(filters);
@@ -104,11 +105,11 @@ class ToolRegistry {
     render() {
         const shown = this.tools.filter(tool => this.matches(tool));
         this.grid.textContent = '';
+        this.empty.textContent = '';
+        this.empty.hidden = true;
 
         if (!shown.length) {
-            const empty = document.createElement('p');
-            empty.className = 'no-results';
-            empty.append(`No tool matches “${this.search.value.trim()}”`);
+            this.empty.append(`No tool matches “${this.search.value.trim()}”`);
             const reset = document.createElement('button');
             reset.type = 'button';
             reset.textContent = 'clear filters';
@@ -121,14 +122,21 @@ class ToolRegistry {
                 });
                 this.render();
             });
-            empty.append(reset);
-            this.grid.append(empty);
+            this.empty.append(reset);
+            this.empty.hidden = false;
             this.status.textContent = `0 of ${this.tools.length} tools`;
             return;
         }
 
         const fragment = document.createDocumentFragment();
-        shown.forEach(tool => fragment.append(this.card(tool)));
+        shown.forEach(tool => {
+            // The grid is a list of 66 buttons, so each card needs its own listitem: a button
+            // cannot carry both roles, and a bare <p> in a <ul> is invalid markup.
+            const item = document.createElement('li');
+            item.className = 'tool-item';
+            item.append(this.card(tool));
+            fragment.append(item);
+        });
         this.grid.append(fragment);
         this.status.textContent =
             `${shown.length} of ${this.tools.length} tools`
@@ -261,6 +269,7 @@ if (search && tools.length) search.placeholder = `Search ${tools.length} tools`;
 
 new ToolRegistry({
     grid: document.getElementById('tools-grid'),
+    empty: document.getElementById('registry-empty'),
     status: document.getElementById('registry-status'),
     search,
     filters: document.querySelectorAll('.filter-btn'),

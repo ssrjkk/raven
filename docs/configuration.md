@@ -32,12 +32,35 @@ Supported providers: `openai`, `anthropic`, `openrouter`, `ollama`, `vllm`, `azu
 | `MATRIX_ACCESS_TOKEN` | Matrix access token |
 | `WHATSAPP_TOKEN` | WhatsApp access token |
 | `WHATSAPP_PHONE_ID` | WhatsApp phone number ID |
+| `WHATSAPP_APP_SECRET` | Meta app secret; verifies `X-Hub-Signature-256` on inbound posts (falls back to `WEB_SECRET_KEY`) |
+| `WHATSAPP_VERIFY_TOKEN` | Checked against `hub.verify_token` on the GET handshake (falls back to `WEB_SECRET_KEY`) |
 | `SIGNAL_API_URL` | Signal (signal-cli REST API) URL |
 | `IRC_SERVER` | IRC server |
+| `IRC_PORT` | IRC port (default 6697) |
+| `IRC_TLS` | Force TLS on/off; implied by the port when empty |
+| `IRC_NICK` | IRC nickname |
+| `IRC_PASSWORD` | Sent to NickServ as `IDENTIFY` once registration completes |
+| `IRC_CHANNELS` | Comma-separated channels to join |
 | `GOOGLECHAT_WEBHOOK_URL` | Google Chat webhook URL |
 | `TEAMS_WEBHOOK_URL` | Microsoft Teams webhook URL |
 | `FEISHU_WEBHOOK_URL` | Feishu/Lark webhook URL |
+| `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | Custom-app credentials used for outbound `tenant_access_token` |
+| `FEISHU_ENCRYPT_KEY` | Verifies `X-Lark-Signature` on inbound event callbacks |
 | `LINE_CHANNEL_TOKEN` | LINE channel token |
+| `LINE_CHANNEL_SECRET` | Verifies inbound LINE webhook signatures |
+| `GITHUB_TOKEN` | GitHub API token (channel + tools) |
+| `GITHUB_WEBHOOK_SECRET` | Secret set on the GitHub webhook; verifies `X-Hub-Signature-256` |
+| `GITLAB_TOKEN` | GitLab API token |
+| `GITLAB_URL` | GitLab instance URL |
+| `GITLAB_WEBHOOK_SECRET` | Verifies inbound GitLab webhook signatures |
+| `EMAIL_SMTP_HOST` | Outbound SMTP server (needs `raven-agent[email]`) |
+| `EMAIL_SMTP_PORT` | SMTP port, `465` uses implicit TLS (default 587 = STARTTLS) |
+| `EMAIL_SMTP_USER` / `EMAIL_SMTP_PASS` | SMTP credentials |
+| `EMAIL_IMAP_HOST` | Inbound IMAP server (default port 993) |
+| `EMAIL_IMAP_PORT` | IMAP port |
+| `EMAIL_IMAP_USER` / `EMAIL_IMAP_PASS` | IMAP credentials |
+| `EMAIL_INBOX_FOLDER` | Mailbox to poll, default `INBOX` |
+| `EMAIL_POLL_INTERVAL` | Seconds between inbox polls, default 30 |
 
 ### Security
 

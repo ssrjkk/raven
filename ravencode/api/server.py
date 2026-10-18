@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
+import hmac
 import json
 import os
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 from uuid import uuid4
@@ -14,7 +17,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ravencode.runtime.agent_core import AgentConfig, AgentEvent, EventEmitter, ReActAgent
 from ravencode.runtime.context import Conversation
@@ -33,8 +36,9 @@ class ChatCompletionRequest(BaseModel):
     model: str = "ravencode"
     messages: list[ChatMessage]
     stream: bool = False
-    max_tokens: int = 4096
-    temperature: float = 0.7
+    # OpenAI protocol: max_tokens caps the completion; temperature is bounded, sampling stays provider-side.
+    max_tokens: int = Field(default=4096, ge=1, le=200_000)
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
 
 
 class DeltaMessage(BaseModel):
@@ -65,16 +69,42 @@ class ChatCompletionResponse(BaseModel):
 
 
 _API_KEY = os.environ.get("RAVENCODE_API_KEY", "")
+_BASIC_USERNAME = os.environ.get("RAVENCODE_SERVER_USERNAME", "ravencode")
+_BASIC_PASSWORD = os.environ.get("RAVENCODE_SERVER_PASSWORD", "")
+
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def _is_loopback(host: str) -> bool:
+    return host in LOOPBACK_HOSTS or host.startswith("127.")
+
+
+def _basic_credentials(authorization: str) -> tuple[str, str] | None:
+    if not authorization.startswith("Basic "):
+        return None
+    try:
+        decoded = base64.b64decode(authorization[6:], validate=True).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError, ValueError):
+        return None
+    username, sep, password = decoded.partition(":")
+    return (username, password) if sep else None
 
 
 def _check_auth(authorization: str = "") -> None:
-    if not _API_KEY:
+    if not _API_KEY and not _BASIC_PASSWORD:
         return
-    key = authorization
-    if key.startswith("Bearer "):
-        key = key[7:]
-    if key != _API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+    token = authorization[7:] if authorization.startswith("Bearer ") else authorization
+    if _API_KEY and hmac.compare_digest(token, _API_KEY):
+        return
+    creds = _basic_credentials(authorization)
+    if (
+        _BASIC_PASSWORD
+        and creds is not None
+        and hmac.compare_digest(creds[0], _BASIC_USERNAME)
+        and hmac.compare_digest(creds[1], _BASIC_PASSWORD)
+    ):
+        return
+    raise HTTPException(status_code=401, detail="Invalid credentials")
 
 
 @asynccontextmanager
@@ -98,6 +128,16 @@ app = FastAPI(
 
 def _estimate_tokens(text: str) -> int:
     return len(text) // 4 + len(text.split())
+
+
+_CHARS_PER_TOKEN = 4
+
+
+def _truncate_to_budget(text: str, limit: int) -> tuple[str, bool]:
+    """Cut text to the remaining char budget; True when the request's max_tokens ran out."""
+    if len(text) <= limit:
+        return text, False
+    return text[: max(limit, 0)], True
 
 
 def _to_openai_tool_defs() -> list[dict[str, Any]]:
@@ -156,21 +196,35 @@ async def _run_agent_nonstream(messages: list[ChatMessage], model: str, max_toke
         logger.error("Agent non-stream run failed: {}", exc)
         result = "Agent execution error"
 
+    answer, capped = _truncate_to_budget(result, max_tokens * _CHARS_PER_TOKEN)
     prompt_text = json.dumps([m.model_dump() for m in messages])
+    prompt_tokens = _estimate_tokens(prompt_text)
+    completion_tokens = _estimate_tokens(answer)
     return ChatCompletionResponse(
         id=f"chatcmpl-{uuid4().hex[:12]}",
         created=int(time.time()),
         model=model,
-        choices=[ChatChoice(message=ChatMessage(role="assistant", content=result), finish_reason="stop")],
+        choices=[
+            ChatChoice(
+                message=ChatMessage(role="assistant", content=answer),
+                finish_reason="length" if capped else "stop",
+            )
+        ],
         usage=Usage(
-            prompt_tokens=_estimate_tokens(prompt_text),
-            completion_tokens=_estimate_tokens(result),
-            total_tokens=_estimate_tokens(prompt_text) + _estimate_tokens(result),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
         ),
     )
 
 
-async def _run_agent_stream(messages: list[ChatMessage], model: str) -> AsyncIterator[str]:
+def _reap_agent_task(task: asyncio.Task[str]) -> None:
+    """Consume a cancelled run's outcome so asyncio never reports it as an unretrieved exception."""
+    if not task.cancelled() and (exc := task.exception()) is not None:
+        logger.debug("Agent stream task ended unobserved: {}", exc)
+
+
+async def _run_agent_stream(messages: list[ChatMessage], model: str, max_tokens: int) -> AsyncGenerator[str, None]:
     conv, content = _split_conversation_input(messages)
     chunk_id = f"chatcmpl-{uuid4().hex[:12]}"
 
@@ -204,31 +258,44 @@ async def _run_agent_stream(messages: list[ChatMessage], model: str) -> AsyncIte
             await queue.put(None)
 
     task = asyncio.ensure_future(_run())
-
-    yield _sse_chunk(chunk_id, model, {"role": "assistant"})
-
+    task.add_done_callback(_reap_agent_task)
+    budget = max_tokens * _CHARS_PER_TOKEN
     streamed = 0
-    while True:
-        item = await queue.get()
-        if item is None:
-            break
-        kind, payload = item
-        if kind == "token":
-            streamed += len(payload)
-            yield _sse_chunk(chunk_id, model, {"content": payload})
+    capped = False
+
+    try:
+        yield _sse_chunk(chunk_id, model, {"role": "assistant"})
+
+        while not capped:
+            item = await queue.get()
+            if item is None:
+                break
+            kind, payload = item
+            if kind != "token":
+                # SSE comment: invisible to OpenAI-compatible clients, great for debugging.
+                yield f": {payload}\n\n"
+                continue
+            piece, capped = _truncate_to_budget(payload, budget - streamed)
+            streamed += len(piece)
+            if piece:
+                yield _sse_chunk(chunk_id, model, {"content": piece})
+
+        if capped:
+            # The client asked for max_tokens of text: stop the agent rather than burn the rest.
+            task.cancel()
         else:
-            # SSE comment: invisible to OpenAI-compatible clients, great for debugging.
-            yield f": {payload}\n\n"
+            result = await task
+            rest, capped = _truncate_to_budget(result[streamed:], budget - streamed)
+            for i in range(0, len(rest), 100):
+                yield _sse_chunk(chunk_id, model, {"content": rest[i : i + 100]})
+                await asyncio.sleep(0)
 
-    result = await task
-    if streamed < len(result):
-        rest = result[streamed:]
-        for i in range(0, len(rest), 100):
-            yield _sse_chunk(chunk_id, model, {"content": rest[i : i + 100]})
-            await asyncio.sleep(0)
-
-    yield _sse_chunk(chunk_id, model, {}, finish="stop")
-    yield "data: [DONE]\n\n"
+        yield _sse_chunk(chunk_id, model, {}, finish="length" if capped else "stop")
+        yield "data: [DONE]\n\n"
+    finally:
+        if not task.done():
+            # Client disconnected: without this the agent keeps calling the LLM and tools unobserved.
+            task.cancel()
 
 
 @app.post("/v1/chat/completions")
@@ -236,7 +303,7 @@ async def chat_completions(request: ChatCompletionRequest, authorization: str = 
     _check_auth(authorization)
     if request.stream:
         return StreamingResponse(
-            _run_agent_stream(request.messages, request.model),
+            _run_agent_stream(request.messages, request.model, request.max_tokens),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
         )
@@ -254,7 +321,26 @@ async def list_models(authorization: str = Header(default="")) -> dict[str, Any]
     }
 
 
-def run_openai_server(host: str = "127.0.0.1", port: int = 8000) -> None:
+def run_openai_server(
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    username: str | None = None,
+    password: str | None = None,
+) -> None:
     import uvicorn
+
+    global _BASIC_PASSWORD, _BASIC_USERNAME
+    if username:
+        _BASIC_USERNAME = username
+    if password:
+        _BASIC_PASSWORD = password
+
+    if not _API_KEY and not _BASIC_PASSWORD:
+        if not _is_loopback(host):
+            raise RuntimeError(
+                f"Refusing to serve on {host}:{port} without authentication: this API executes "
+                "code and shell commands. Set RAVENCODE_API_KEY or pass --password."
+            )
+        logger.warning("Serving loopback-only without authentication on {}:{}", host, port)
 
     uvicorn.run(app, host=host, port=port, log_level="info")

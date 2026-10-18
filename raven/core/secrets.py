@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from raven.core._json import json
+from raven.core.config import settings
 
 if TYPE_CHECKING:
     from raven.core.db import Database
@@ -34,8 +35,8 @@ def _derive_key(master_key: str, salt: bytes) -> bytes:
 
 
 class SecretsManager:
-    def __init__(self, data_dir: str = "data"):
-        self._data_dir = Path(data_dir)
+    def __init__(self, data_dir: str | Path | None = None):
+        self._data_dir = Path(data_dir) if data_dir else settings.resolved_data_dir
         self._data_dir.mkdir(parents=True, exist_ok=True)
         self._key_path = self._data_dir / ".secrets_key"
         self._enc_path = self._data_dir / "secrets.enc"

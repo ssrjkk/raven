@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from raven.core.asyncdb import AsyncDB, connect_backend
+from raven.core.config import data_path
 
 
 @dataclass
@@ -114,8 +115,8 @@ class SQLitePersister(PersisterBackend):
 _backend: PersisterBackend | None = None
 
 
-def get_persister(db_path: str | Path = "data/services.db") -> PersisterBackend:
+def get_persister(db_path: str | Path | None = None) -> PersisterBackend:
     global _backend
     if _backend is None:
-        _backend = SQLitePersister(db_path)
+        _backend = SQLitePersister(data_path("services.db") if db_path is None else db_path)
     return _backend

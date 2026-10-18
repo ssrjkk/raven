@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from raven.core.constants import Limits, OutputLimits, Paths, Timeouts
+from raven.core.constants import Limits, OutputLimits, Timeouts
 
 
 class TestOutputLimits:
@@ -68,12 +68,3 @@ class TestLimits:
         assert Limits.EXP_BACKOFF_MAX_ATTEMPTS == 10
 
 
-class TestPaths:
-    def test_data_paths(self):
-        assert Paths.CHECKPOINTS_DIR == "data/checkpoints"
-        assert Paths.SESSIONS_DIR == "data/sessions"
-        assert Paths.MEMORY_FILE == "data/ravencode_memory.json"
-
-    def test_config_paths(self):
-        assert Paths.AGENTS_MD == "AGENTS.md"
-        assert Paths.RAVENCODE_CONFIG == "ravencode.json"

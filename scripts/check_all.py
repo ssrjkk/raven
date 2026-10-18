@@ -73,6 +73,9 @@ def _resolve_exe(name: str) -> str:
     return name
 
 
+TIMEOUT_RETURNCODE = 124
+
+
 def _run(
     cmd: list[str],
     timeout: int = 600,
@@ -82,7 +85,14 @@ def _run(
     merged_env = {**os.environ, "LOGURU_LEVEL": "ERROR", **(env or {})}
     if cmd:
         cmd = [_resolve_exe(cmd[0]), *cmd[1:]]
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=merged_env, cwd=cwd)
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=merged_env, cwd=cwd)
+    except subprocess.TimeoutExpired as exc:
+        # A killed stage is a failed stage, not a crashed run: the summary must name the stage that hit its cap.
+        partial = exc.stdout if isinstance(exc.stdout, str) else ""
+        return subprocess.CompletedProcess(
+            cmd, TIMEOUT_RETURNCODE, stdout=partial, stderr=f"TIMED OUT after {timeout}s (process killed)"
+        )
 
 
 def _strip_ansi(text: str) -> str:
@@ -374,7 +384,9 @@ def check_component(name: str) -> CheckResult:
     detail = summary
     if r.returncode != 0:
         status = "fail"
-        if failed:
+        if r.returncode == TIMEOUT_RETURNCODE:
+            detail = r.stderr
+        elif failed:
             detail = f"{failed} FAILED -- {summary}"
         elif errors:
             detail = f"{errors} ERRORS -- {summary}"
@@ -399,7 +411,7 @@ def check_full_tests() -> CheckResult:
         "-W", "ignore::RuntimeWarning",
     ]
 
-    r = _run(cmd, timeout=900)
+    r = _run(cmd, timeout=1800)
     dt = time.time() - t0
 
     output = _strip_ansi(r.stdout + r.stderr)
@@ -417,7 +429,8 @@ def check_full_tests() -> CheckResult:
     _print_pytest_output(output, r.returncode)
 
     status: Status = "pass" if r.returncode == 0 else "fail"
-    return CheckResult("tests/full", status, dt, summary, counts)
+    detail = r.stderr if r.returncode == TIMEOUT_RETURNCODE else summary
+    return CheckResult("tests/full", status, dt, detail, counts)
 
 
 def check_frontend() -> CheckResult:

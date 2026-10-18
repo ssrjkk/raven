@@ -35,7 +35,15 @@ class FrameConsole {
         frames.forEach(frame => this.byId.set(signature(frame.request), frame));
         this.registered = new Set(tools.map(tool => tool.name));
         this.bind(presets, clearButton);
-        this.system(`// ${frames.length} request/response pairs recorded from raven-mcp — pick a method below`);
+        this.recorded = frames.length;
+        this.idle(this.recorded);
+    }
+
+    /* One grey line in a 168px pane read as a broken terminal rather than an idle one. */
+    idle(count) {
+        this.system(`// ${count} request/response pairs recorded from a live raven-mcp process`);
+        this.system('// transports: stdio for a client that spawns the server, HTTP for one that does not');
+        this.system('// pick a method below, edit the frame, press Enter');
     }
 
     bind(presets, clearButton) {
@@ -65,7 +73,7 @@ class FrameConsole {
 
         clearButton.addEventListener('click', () => {
             this.output.textContent = '';
-            this.system('// console cleared');
+            this.idle(this.recorded);
         });
     }
 

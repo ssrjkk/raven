@@ -3,8 +3,10 @@ from __future__ import annotations
 import contextlib
 from pathlib import Path
 
+from raven.core.config import data_path
+
 _ANCHORED_SUMMARY: str | None = None
-_ANCHORED_PATH: Path = Path("data/sessions/anchored.md")
+_ANCHORED_PATH: Path = data_path("sessions", "anchored.md")
 
 
 def set_anchored_path(path: str | Path) -> None:

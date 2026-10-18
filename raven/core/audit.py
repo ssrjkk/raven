@@ -15,9 +15,11 @@ from typing import Any
 from loguru import logger
 
 from raven.core._json import json
+from raven.core.config import data_path
 
 AUDIT_SIGNING_KEY_ENV = "RAVEN_AUDIT_SIGNING_KEY"
-AUDIT_KEY_FILE = "data/audit_signing_key.bin"
+# Anchored to the data dir: a cwd-relative key once landed inside the published site/ tree.
+AUDIT_KEY_FILE = str(data_path("audit_signing_key.bin"))
 
 
 class AuditEventType(StrEnum):
@@ -136,10 +138,10 @@ def _load_or_generate_signing_key() -> tuple[bytes, bool]:
 class AuditLogger:
     def __init__(
         self,
-        log_path: str = "data/audit.log",
+        log_path: str | None = None,
         signing_key: bytes | None = None,
     ):
-        self._path = Path(log_path)
+        self._path = Path(log_path) if log_path else data_path("audit.log")
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._file: io.TextIOWrapper | None = None
         self._closed = False

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import Any
 
 from loguru import logger
@@ -24,11 +25,15 @@ class MatrixChannel(EnterpriseChannel):
         self._sync_token = ""
         self._sync_task: asyncio.Task[None] | None = None
         self._rooms: dict[str, str] = {}
+        await self._start_sync()
 
     async def _stop(self):
-        if self._sync_task:
-            self._sync_task.cancel()
-            self._sync_task = None
+        task = self._sync_task
+        self._sync_task = None
+        if task:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
         logger.info("[matrix] channel stopped")
 
     async def _matrix_get(self, path: str):

@@ -1,0 +1,60 @@
+# RavenCode GitHub Actions workflow
+# Written into your repo by: ravencode integrations github install
+#
+# Required repository secrets (any one of them):
+#   ANTHROPIC_API_KEY / OPENAI_API_KEY / OPENROUTER_API_KEY
+#
+# GITHUB_TOKEN is provided by Actions itself and is used to post results back.
+
+name: RavenCode
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request:
+    types: [opened, reopened, synchronize]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  statuses: write
+
+concurrency:
+  group: ravencode-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ravencode:
+    name: RavenCode
+    runs-on: ubuntu-latest
+    # Issue comments only count when they invoke the agent.
+    if: >
+      github.event_name != 'issue_comment' ||
+      startsWith(github.event.comment.body, '/ravencode')
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RAVENCODE_GITHUB_EVENT_NAME: ${{ github.event_name }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install RavenCode
+        run: pip install raven-agent
+
+      - name: Run RavenCode
+        run: |
+          RAVENCODE_GITHUB_EVENT="$(base64 < "$GITHUB_EVENT_PATH" | tr -d '\n')" \
+            ravencode integrations github run

@@ -32,7 +32,10 @@ from typing import Any, cast
 
 import yaml
 
+from raven.core.channel_config import _LEGACY_ENV
+from raven.core.config import Settings
 from raven.core.mcp.server import _to_mcp_tool
+from raven.core.webhooks import create_webhook_router
 from ravencode.runtime.tools import get_tool_definitions
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -57,6 +60,13 @@ HERO_TOOL_LIST = re.compile(r'\{"jsonrpc":"2\.0","id":\d+,"result":\{"tools":\[.
 CHANNEL_COUNT = re.compile(
     r'<dt class="spec-term">Channel adapters</dt>\s*<dd class="spec-value">(\d+)</dd>'
 )
+ADAPTER_CLAIM = re.compile(r"(\d+) channel adapters")
+CODEBAR_HEAD = re.compile(
+    r'<div class="codeblock">\s*<div class="codebar">\s*<span class="code-lang">\w+</span>\s*'
+    r'<button class="copy-btn"',
+)
+ADAPTER_TABLE = re.compile(r"<caption>How each adapter receives a message</caption>")
+SCREEN_TABLE = re.compile(r"<caption>The (\d+) screens the console serves</caption>")
 CSS_URL = re.compile(r"url\('([^']+)'\)")
 NAV_TOGGLE = re.compile(
     r'<button class="nav-toggle"[^>]*aria-expanded="false"[^>]*aria-controls="([^"]+)"'
@@ -110,6 +120,61 @@ def local_refs() -> set[str]:
         if not name.startswith(("http://", "https://", "data:"))
     }
     return refs
+
+
+class _TableParser(HTMLParser):
+    """Body rows of one table: the ``scope="row"`` header mapped to the text of its cells."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.rows: dict[str, list[str]] = {}
+        self._cells: list[str] = []
+        self._header: str | None = None
+        self._text: str | None = None
+        self._is_row_header = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "tr":
+            self._cells, self._header = [], None
+        elif tag in {"th", "td"}:
+            self._text = ""
+            self._is_row_header = dict(attrs).get("scope") == "row"
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"th", "td"}:
+            text = " ".join((self._text or "").split())
+            if self._is_row_header:
+                self._header = text
+            else:
+                self._cells.append(text)
+            self._text, self._is_row_header = None, False
+        elif tag == "tr" and self._header is not None:
+            self.rows[self._header] = self._cells
+            self._header = None
+
+    def handle_data(self, data: str) -> None:
+        if self._text is not None:
+            self._text += data
+
+
+def landing_table(caption: re.Pattern[str]) -> dict[str, list[str]]:
+    """Rows of the landing table whose caption matches, or the assertion names the table."""
+    parser = _TableParser()
+    parser.feed(table_fragment(caption))
+    return parser.rows
+
+
+def table_fragment(caption: re.Pattern[str]) -> str:
+    """The table's own markup, for claims that live in a ``<code>`` chip rather than in prose."""
+    html = read(INDEX)
+    match = caption.search(html)
+    assert match is not None, caption.pattern
+    start = html.rindex("<table>", 0, match.start())
+    return html[start : html.index("</table>", match.start()) + len("</table>")]
+
+
+def code_samples() -> list[str]:
+    return re.findall(r"<pre><code>(.*?)</code></pre>", read(INDEX), re.S)
 
 
 def parse_js(name: str, path: Path) -> Any:
@@ -220,14 +285,120 @@ def test_initialize_recording_agrees_with_the_server() -> None:
 
 
 def test_version_statements_agree_with_pyproject() -> None:
-    assert {project_version()} == set(re.findall(r"\d+\.\d+\.\d+", read(INDEX)))
+    # The lookarounds keep an address like 127.0.0.1 out of a version census: without them every
+    # dotted quad on the page would have to be a release number.
+    assert {project_version()} == set(re.findall(r"(?<![\d.])\d+\.\d+\.\d+(?![\d.])", read(INDEX)))
 
 
 def test_channel_adapter_count_matches_the_tree() -> None:
     adapters = len(list((ROOT / "raven" / "channels").glob("*/channel.py")))
-    match = CHANNEL_COUNT.search(read(INDEX))
+    html = read(INDEX)
+    match = CHANNEL_COUNT.search(html)
     assert match is not None
     assert int(match.group(1)) == adapters
+    assert {int(n) for n in ADAPTER_CLAIM.findall(html)} == {adapters}
+
+
+def test_adapter_matrix_names_every_channel_that_ships() -> None:
+    adapters = sorted(p.parent.name for p in (ROOT / "raven" / "channels").glob("*/channel.py"))
+    assert sorted(landing_table(ADAPTER_TABLE)) == adapters
+
+
+def test_adapter_matrix_lists_variables_the_code_reads() -> None:
+    """An env var the page names but nothing reads is the worst documentation there is: the
+    operator sets it, restarts, and the adapter stays silent."""
+    gateway_env = {name.upper() for name in Settings.model_fields}
+    example = read(ROOT / ".env.example")
+    rows = landing_table(ADAPTER_TABLE)
+    for adapter, cells in rows.items():
+        listed = re.findall(r"\b([A-Z][A-Z0-9_]{2,})\b", cells[-1])
+        assert listed, adapter
+        assert set(listed) <= set(_LEGACY_ENV.get(adapter, {})) | gateway_env, adapter
+        assert all(f"{name}=" in example for name in listed), adapter
+
+
+def test_webhook_paths_the_page_shows_are_routes() -> None:
+    router = create_webhook_router(cast(Any, object()), cast(Any, lambda *a: None))
+    registered = {cast("Any", route).path for route in router.routes}
+    shown = set(re.findall(r"/api/webhooks/[a-z/-]+", table_fragment(ADAPTER_TABLE)))
+    assert shown, "the adapter matrix stopped naming webhook paths"
+    assert shown <= registered, shown - registered
+
+
+def test_webchat_paths_the_page_shows_are_endpoints() -> None:
+    source = read(ROOT / "raven" / "channels" / "webchat" / "channel.py")
+    shown = set(re.findall(r"<code>(/ws[a-z/-]*)</code>", table_fragment(ADAPTER_TABLE)))
+    assert shown == {"/ws", "/ws/stream", "/ws/canvas"}
+    for path in shown:
+        assert f'websocket("{path}")' in source, path
+
+
+def test_console_screens_are_the_routes_the_spa_registers() -> None:
+    source = read(ROOT / "web" / "src" / "App.tsx")
+    shell = {p for p in re.findall(r'<Route\s+path="([^"]+)"', source) if p not in {"/login", "*"}}
+    chips = {
+        route
+        for cells in landing_table(SCREEN_TABLE).values()
+        for cell in cells
+        for route in cell.split()
+    }
+    assert chips == shell
+    match = SCREEN_TABLE.search(read(INDEX))
+    assert match is not None and int(match.group(1)) == len(shell)
+
+
+def test_pairing_reply_quotes_the_gateway_verbatim() -> None:
+    """The page shows the message a stranger receives. Copy edited to sound better would no
+    longer be what the gateway sends, and the six-character alphabet is a security claim."""
+    gateway = read(ROOT / "raven" / "core" / "gateway" / "gateway.py")
+    sample = next(s for s in code_samples() if "pairing code" in s)
+    for line in sample.splitlines():
+        assert line.replace("H7KQ2M", "{code}") in gateway, line
+    assert "secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6)" in gateway
+
+
+def test_pairing_commands_the_page_shows_are_registered_in_the_cli() -> None:
+    group = read(ROOT / "raven" / "cli" / "pairing_cmd.py")
+    main = read(ROOT / "raven" / "cli" / "main.py")
+    sample = next(s for s in code_samples() if "raven pairing" in s)
+    assert sample.splitlines() == ["raven pairing list", "raven pairing approve H7KQ2M", "raven doctor"]
+    for name in ("list", "approve"):
+        assert f'pairing_group.command("{name}")' in group, name
+    assert "cli.add_command(_pairing)" in main and "cli.add_command(_doctor)" in main
+
+
+def test_registry_grid_is_a_list_the_assistant_can_name() -> None:
+    """The grid is 66 buttons. As bare ``<p>`` children of a ``<ul>`` they announced nothing,
+    and the empty state written inside the grid made the list claim a tool that is not there."""
+    html = read(INDEX)
+    assert '<ul id="tools-grid" class="tools-grid" aria-label="Available tools">' in html
+    assert html.index('id="registry-empty"') > html.index('id="tools-grid"')
+
+    js = read(MAIN_JS)
+    assert "document.createElement('li')" in js
+    assert "item.className = 'tool-item'" in js
+    assert "grid.append(empty)" not in js
+    assert "list-style: none" in css_rule(".tools-grid")
+
+
+def test_no_section_is_off_the_nav() -> None:
+    """A section the nav cannot reach reads as content the project never shipped — the old
+    ``#overview`` scrolled into place from no link at all and stayed invisible either way."""
+    html = read(INDEX)
+    sections = set(re.findall(r'<section id="([a-z-]+)" class="section">', html))
+    nav = html[html.index('<nav aria-label="Primary"') : html.index("</nav>")]
+    assert sections - set(re.findall(r'href="#([a-z-]+)"', nav)) == set()
+
+
+def test_every_nav_anchor_lands_on_a_section() -> None:
+    """The nav names sections by id, and an id the page does not carry scrolls nowhere while
+    still looking like a working link — which is how a renamed section survived a rewrite."""
+    html = read(INDEX)
+    nav = html[html.index('<nav aria-label="Primary"') : html.index("</nav>")]
+    targets = set(re.findall(r'href="#([a-z-]+)"', nav))
+    ids = set(re.findall(r'<section[^>]*\bid="([a-z-]+)"', html))
+    assert targets, nav
+    assert targets - ids == set(), targets - ids
 
 
 def test_local_assets_exist_and_nothing_in_site_is_unreferenced() -> None:
@@ -274,7 +445,7 @@ def media(width: int) -> str:
 
 
 def test_narrow_viewports_get_a_disclosure_menu() -> None:
-    """Below 900px seven links do not fit beside the brand. Kept on one line they scrolled,
+    """Below 900px eight links do not fit beside the brand. Kept on one line they scrolled,
     and because the scrollbar is suppressed the last link left no trace that anything was
     there; wrapped, they stacked rows of links over the hero. The button, the panel and the
     handler are three files that have to name each other, so pin the whole chain."""
@@ -291,6 +462,26 @@ def test_narrow_viewports_get_a_disclosure_menu() -> None:
     js = read(MAIN_JS)
     for hook in ("nav-open", "aria-expanded", "matchMedia"):
         assert hook in js, hook
+
+
+def css_rule(selector: str) -> str:
+    """Body of one top-level rule, written as ``<selector> {`...`}`` in the stylesheet."""
+    css = read(STYLES)
+    start = css.index(f"\n{selector} {{")
+    return css[start : css.index("\n}", start) + 2]
+
+
+def test_code_blocks_keep_their_copy_button_off_the_code() -> None:
+    """The button used to be absolutely positioned over the first command, which only looked
+    fine in the wide setup blocks: in a door card the command ran underneath it. A toolbar row
+    cannot overlap, and wrapping beats a horizontal scrollbar the visitor may not notice."""
+    html = read(INDEX)
+    blocks = html.count('<div class="codeblock">')
+    assert blocks >= 5
+    assert len(CODEBAR_HEAD.findall(html)) == blocks
+
+    assert "position: absolute" not in css_rule(".copy-btn")
+    assert "white-space: pre-wrap" in css_rule(".codeblock code")
 
 
 def test_seo_assets_point_at_the_published_url() -> None:

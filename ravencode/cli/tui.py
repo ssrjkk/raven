@@ -10,17 +10,43 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
-from ravencode.agents.custom_agents import get_custom_agents
+from ravencode.agents.custom_agents import CustomAgentDef, get_custom_agents
 from ravencode.agents.orchestrator import AgentResult, AgentType, Orchestrator
 from ravencode.runtime.agent_core import AgentConfig, EventEmitter, ReActAgent
 from ravencode.runtime.commands import CustomCommand, discover_commands
+from ravencode.runtime.context import Conversation
 from ravencode.runtime.mcp_tools import ensure_mcp_tools
+from ravencode.runtime.permissions import PermissionManager
 from ravencode.runtime.question import set_question_callback, stdin_question_callback
+from ravencode.runtime.tools import get_tool_definitions
 
 console = Console()
 
+# The agent the current TUI session talks to. Created on the first /ask and
+# reused so the conversation actually accumulates; replaced by /load or
+# `ravencode session resume`.
+_session_agent: ReActAgent | None = None
 
-async def run_streaming_agent(prompt: str, config: AgentConfig) -> str:
+
+def _agent_permissions(agent_def: CustomAgentDef) -> PermissionManager | None:
+    """Translate an agent definition's tool policy into runtime permission rules."""
+    if agent_def.tools is None and not agent_def.restricted_tools:
+        return None
+    pm = PermissionManager()
+    for denied in agent_def.restricted_tools:
+        pm.deny(denied, f"restricted for agent '{agent_def.name}'")
+    if agent_def.tools is not None:
+        granted = set(agent_def.tools)
+        for spec in get_tool_definitions():
+            name = spec["function"]["name"]
+            if name not in granted:
+                pm.deny(name, f"not granted to agent '{agent_def.name}'")
+    return pm
+
+
+async def run_streaming_agent(
+    prompt: str, config: AgentConfig, system_prompt: str | None = None
+) -> str:
     """Run an agent with live token streaming and tool-activity hints.
 
     Tokens print as they arrive; tool calls appear as dim inline lines. If
@@ -48,7 +74,10 @@ async def run_streaming_agent(prompt: str, config: AgentConfig) -> str:
     config.event_emitter = emitter
     config.stream_tokens = True
     config.priority = "high"  # a human is watching this run
-    agent = ReActAgent(config=config)
+    agent = ReActAgent(
+        config=config,
+        conversation=Conversation(system_prompt=system_prompt) if system_prompt else None,
+    )
     result = await agent.run(prompt)
     if streamed:
         console.print()
@@ -100,10 +129,13 @@ def print_help() -> None:
 
 
 async def run_agent(task: str, agent_type: AgentType = AgentType.AUTONOMOUS) -> None:
-    AgentConfig.safe()
+    global _session_agent
     orch = Orchestrator()
+    if agent_type is AgentType.AUTONOMOUS and _session_agent is None:
+        _session_agent = orch.new_agent()
+    live = _session_agent if agent_type is AgentType.AUTONOMOUS else None
     with console.status(f"[yellow]{agent_type.value} agent working...[/yellow]"):
-        result: AgentResult = await orch.dispatch(task, agent_type)
+        result: AgentResult = await orch.dispatch(task, agent_type, agent=live)
     if result.success:
         text = str(result.data.get("result") or result.data.get("plan") or result.data.get("code_result") or "")
         console.print(Panel(Markdown(text), title=f"[bold green]{result.agent} ✓[/bold green]", border_style="green"))
@@ -123,8 +155,9 @@ async def run_custom_command(cmd: CustomCommand, args: str) -> None:
             result = await orch.delegate(prompt)
         console.print(Panel(Markdown(result), title=f"[bold]{cmd.name}[/bold]", border_style="blue"))
     elif cmd.agent:
+        # Look up by member name: AgentType values are lowercase, so AgentType("DEBUGGER") raises.
         agent_type = (
-            AgentType(cmd.agent.upper()) if cmd.agent.upper() in AgentType.__members__ else AgentType.AUTONOMOUS
+            AgentType[cmd.agent.upper()] if cmd.agent.upper() in AgentType.__members__ else AgentType.AUTONOMOUS
         )
         await run_agent(prompt, agent_type)
     else:
@@ -132,6 +165,7 @@ async def run_custom_command(cmd: CustomCommand, args: str) -> None:
 
 
 async def main_loop(session_id: str | None = None) -> None:
+    global _session_agent
     set_question_callback(stdin_question_callback)
     try:
         await ensure_mcp_tools()
@@ -146,6 +180,7 @@ async def main_loop(session_id: str | None = None) -> None:
         store = SessionStore()
         agent = await store.load(session_id)
         if agent is not None:
+            _session_agent = agent
             msg_count = agent.conversation.message_count
             console.print(f"[green]Resumed session {session_id} ({msg_count} messages). Continue with /ask.[/green]")
         else:
@@ -189,12 +224,8 @@ async def main_loop(session_id: str | None = None) -> None:
 
         if cmd == "/save" or cmd.startswith("/save "):
             path = cmd[6:].strip() if cmd.startswith("/save ") else "session.json"
-            from ravencode.runtime.agent_core import ReActAgent
-
-            agent = ReActAgent.last_agent()
+            agent = _session_agent or ReActAgent.last_agent()
             if agent is not None:
-                import json
-
                 state = agent.dump_state()
                 Path(path).write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
                 console.print(f"[green]Session saved to {path}[/green]")
@@ -208,11 +239,13 @@ async def main_loop(session_id: str | None = None) -> None:
             if not p.exists():
                 console.print(f"[red]File not found: {path}[/red]")
                 continue
-            import json
-
-            state = json.loads(p.read_text(encoding="utf-8"))
-            agent = ReActAgent.load_state(state)
-            console.print(f"[green]Session loaded from {path}. Use /ask to continue.[/green]")
+            try:
+                _session_agent = ReActAgent.load_state(json.loads(p.read_text(encoding="utf-8")))
+            except (json.JSONDecodeError, OSError, TypeError) as exc:
+                console.print(f"[red]Failed to load {path}: {exc}[/red]")
+                continue
+            msgs = _session_agent.conversation.message_count
+            console.print(f"[green]Session loaded from {path} ({msgs} messages). Use /ask to continue.[/green]")
             continue
 
         if cmd.startswith("/checkpoint"):
@@ -276,8 +309,9 @@ async def main_loop(session_id: str | None = None) -> None:
                 confirm_dangerous=agent_def.confirm_dangerous,
                 diff_preview=agent_def.diff_preview,
                 proactive_scan=agent_def.proactive_scan,
+                permissions=_agent_permissions(agent_def),
             )
-            await run_streaming_agent(task or name, cfg)
+            await run_streaming_agent(task or name, cfg, system_prompt=agent_def.system_prompt or None)
             continue
 
         slash = cmd.split(maxsplit=1)[0]

@@ -1307,7 +1307,7 @@ class TestCoreLoopHardening:
         async def fake_exec(*a: Any, **k: Any) -> _FakeGitProc:
             return _FakeGitProc(b"## main\n")
 
-        monkeypatch.setattr(agent_mod.asyncio, "create_subprocess_exec", fake_exec)
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
         agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
         assert await agent._git_context() == "[repo context] branch main, working tree clean"
 
@@ -1319,7 +1319,7 @@ class TestCoreLoopHardening:
         async def fake_exec(*a: Any, **k: Any) -> _FakeGitProc:
             return _FakeGitProc(b"")
 
-        monkeypatch.setattr(agent_mod.asyncio, "create_subprocess_exec", fake_exec)
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
         agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
         assert await agent._git_context() is None
 
@@ -1330,7 +1330,7 @@ class TestCoreLoopHardening:
             msg = "no git"
             raise RuntimeError(msg)
 
-        monkeypatch.setattr(agent_mod.asyncio, "create_subprocess_exec", fake_exec)
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
         agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
         assert await agent._git_context() is None
 
@@ -1351,7 +1351,7 @@ class TestCoreLoopHardening:
     async def test_llm_429_penalizes_and_retries(self, monkeypatch: pytest.MonkeyPatch) -> None:
         limiter = _FakeLLMLimiter()
         monkeypatch.setattr(agent_mod, "_llm_rate_limiter", limiter)
-        monkeypatch.setattr(agent_mod.asyncio, "sleep", AsyncMock())
+        monkeypatch.setattr(asyncio, "sleep", AsyncMock())
         agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
         seen: list[int] = []
 
@@ -1588,6 +1588,6 @@ class TestCoreLoopHardening:
                 yield {}  # pragma: no cover — makes this an async generator
 
         agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
-        result = await agent._llm_call_streaming(_Client(), [], [])
+        result = await agent._llm_call_streaming(_Client(), [], [])  # type: ignore[arg-type]
         assert result == {"content": "[error: LLM call timed out]", "tool_calls": []}
 

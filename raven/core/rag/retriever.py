@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
+from raven.core.config import data_path
 from raven.core.rag.embeddings import EmbeddingEngine
 from raven.core.rag.vector_store import VectorStore
 
@@ -37,15 +39,16 @@ def _semantic_chunk_text(text: str, max_chars: int = 800, overlap: int = 100) ->
 
 class Retriever:
     def __init__(
-        self, vector_store: VectorStore | None = None, engine: EmbeddingEngine | None = None, db_path: str = "data/rag"
+        self,
+        vector_store: VectorStore | None = None,
+        engine: EmbeddingEngine | None = None,
+        db_path: str | Path | None = None,
     ):
         if vector_store:
             self.store = vector_store
         else:
             eng = engine or EmbeddingEngine(provider="local")
-            from pathlib import Path
-
-            self.store = VectorStore(Path(db_path), eng)
+            self.store = VectorStore(Path(db_path) if db_path else data_path("rag"), eng)
 
     async def index_text(self, doc_id: str, text: str, metadata: dict[str, Any] | None = None):
         await self.store.upsert(doc_id, text, metadata)

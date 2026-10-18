@@ -160,7 +160,7 @@ class Gateway:
             if is_postgres_dsn(str(db_path)):
                 return str(db_path)
             return str(Path(db_path).parent / "outbox.db")
-        return "data/outbox.db"
+        return str(settings.resolved_data_dir / "outbox.db")
 
     async def register_channel(self, channel: BaseChannel):
         await self.channels.register(channel)

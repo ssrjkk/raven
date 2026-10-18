@@ -6,10 +6,12 @@ import time
 from pathlib import Path
 from typing import Any
 
+from raven.core.config import data_path
+
 _TODO_STORE: dict[str, dict[str, Any]] = {}
 _ORDER: list[str] = []
 _LOADED = False
-_TODO_PATH: Path = Path("data/sessions/todo.json")
+_TODO_PATH: Path = data_path("sessions", "todo.json")
 
 
 def set_todo_path(path: str | Path) -> None:

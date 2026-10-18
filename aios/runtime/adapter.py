@@ -5,7 +5,6 @@ from typing import Any
 
 from loguru import logger
 
-from raven.core.config import settings
 from raven.core.rag.retriever import Retriever
 from raven.plugins.files import plugin as files_plugin
 
@@ -101,12 +100,6 @@ class RuntimeAdapter:
 
     @staticmethod
     async def search_codebase(query: str, path: str | None = None) -> list[str]:
-        try:
-            db_path = settings.resolved_db_path
-        except AttributeError:
-            from pathlib import Path
-
-            db_path = Path("data/rag")
-        retriever = Retriever(db_path=str(db_path))
+        retriever = Retriever()
         results = await retriever.retrieve(query, k=5)
         return [r.get("text", str(r)) for r in results]
