@@ -104,7 +104,10 @@ async def test_start_launches_the_sync_loop_and_dispatches_events(monkeypatch: p
     assert event.user_id == "@user:example.com"
     assert event.session_id == "matrix:!room:example.com:@user:example.com"
     assert event.text == "Hello Matrix"
-    assert channel._sync_token == "s1"
+    # `_sync_token` keeps moving while the loop polls, so the proof it advanced is a later long-poll
+    # asking for events since s1 — asserting the field itself only holds if exactly one poll ran,
+    # which depends on how fast the runner schedules the task.
+    assert any("since=s1" in path for path in fake.paths)
     assert fake.paths[0] == "/_matrix/client/v3/account/whoami"
     assert fake.paths[1].startswith("/_matrix/client/v3/sync?timeout=30000")
 

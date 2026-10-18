@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from raven.channels.discord.channel import HAS_DISCORD, DiscordChannel
+import raven.channels.discord.channel as discord_channel_mod
+from raven.channels.discord.channel import DiscordChannel
 from raven.core.models import IncomingMessage
 
 
@@ -13,11 +15,23 @@ def channel():
     return DiscordChannel()
 
 
+@pytest.fixture(autouse=True)
+def _fake_app_commands(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`_register_slash_commands` needs nothing from discord.py except `app_commands.describe`, which
+    only attaches argument descriptions. Injecting a pass-through keeps these handler tests running when
+    the optional extra is absent — CI installs `.[dev]`, which has no discord.py, so without this the
+    seven slash commands were never executed there."""
+    monkeypatch.setattr(
+        discord_channel_mod,
+        "app_commands",
+        SimpleNamespace(describe=lambda **_kwargs: lambda fn: fn),
+        raising=False,
+    )
+
+
 class TestRegisterSlashCommands:
     @pytest.mark.asyncio
     async def test_slash_commands_registered_when_deps_present(self, channel):
-        if not HAS_DISCORD:
-            pytest.skip("discord.py not installed")
         mock_tree = MagicMock()
         mock_tree.command = MagicMock()
         channel._tree = mock_tree
@@ -28,8 +42,6 @@ class TestRegisterSlashCommands:
 class TestSlashCommandIntegration:
     @pytest.mark.asyncio
     async def test_all_four_slash_commands_capture(self, channel):
-        if not HAS_DISCORD:
-            pytest.skip("discord.py not installed")
         captured = {}
         mock_tree = MagicMock()
 
@@ -49,8 +61,6 @@ class TestSlashCommandIntegration:
 
     @pytest.mark.asyncio
     async def test_slash_task_handler(self, channel):
-        if not HAS_DISCORD:
-            pytest.skip("discord.py not installed")
         captured = {}
         mock_tree = MagicMock()
 
@@ -84,8 +94,6 @@ class TestSlashCommandIntegration:
 
     @pytest.mark.asyncio
     async def test_slash_monitor_handler(self, channel):
-        if not HAS_DISCORD:
-            pytest.skip("discord.py not installed")
         captured = {}
         mock_tree = MagicMock()
 
@@ -117,8 +125,6 @@ class TestSlashCommandIntegration:
 
     @pytest.mark.asyncio
     async def test_slash_code_handler(self, channel):
-        if not HAS_DISCORD:
-            pytest.skip("discord.py not installed")
         captured = {}
         mock_tree = MagicMock()
 
@@ -150,8 +156,6 @@ class TestSlashCommandIntegration:
 
     @pytest.mark.asyncio
     async def test_slash_routine_handler(self, channel):
-        if not HAS_DISCORD:
-            pytest.skip("discord.py not installed")
         captured = {}
         mock_tree = MagicMock()
 
@@ -183,8 +187,6 @@ class TestSlashCommandIntegration:
 
     @pytest.mark.asyncio
     async def test_slash_task_no_handler(self, channel):
-        if not HAS_DISCORD:
-            pytest.skip("discord.py not installed")
         captured = {}
         mock_tree = MagicMock()
 
