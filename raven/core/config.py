@@ -102,15 +102,6 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("critical_api_key", "RAVEN_CRITICAL_API_KEY"),
     )  # API key for the dedicated critical provider
 
-    # --- Tier / rate limits ---
-    tier_default: str = "free"
-    tier_free_rpd: int = 50
-    tier_free_rpm: int = 20
-    tier_free_concurrent: int = 1
-    tier_pro_rpd: int = 10_000
-    tier_pro_rpm: int = 100
-    tier_pro_concurrent: int = 5
-
     dm_policy: str = "pairing"
     web_port: int = 18888
     web_host: str = "127.0.0.1"
@@ -178,6 +169,7 @@ class Settings(BaseSettings):
     context_visibility: str = "allowlist"
     sandbox_mode: str = "non-main"
     sandbox_backend: str = "subprocess"
+    """Execution backend for code tools: ``subprocess``, ``docker`` or ``none`` (in-process)."""
 
     # --- Context Window ---
     context_window_enabled: bool = True
@@ -279,6 +271,10 @@ class Settings(BaseSettings):
             errors.append("WEB_SECRET_KEY must be set to a non-default value")
         if self.dm_policy not in ("pairing", "open", "closed"):
             errors.append(f"DM_POLICY must be 'pairing', 'open', or 'closed', got '{self.dm_policy}'")
+        if self.sandbox_backend not in ("subprocess", "docker", "none"):
+            errors.append(
+                f"SANDBOX_BACKEND must be 'subprocess', 'docker', or 'none', got '{self.sandbox_backend}'"
+            )
         if self.web_port < 1 or self.web_port > 65535:
             errors.append(f"WEB_PORT must be 1-65535, got {self.web_port}")
         if self.rate_limit_max < 1:

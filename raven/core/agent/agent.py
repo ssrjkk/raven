@@ -488,7 +488,13 @@ class Agent:
             if path_arg and not self._tool_policy.check_path(str(path_arg)):
                 return {"error": "Path outside workspace root — denied by security policy"}
             logger.info("Tool call: {} args={}", tc.name, tc.arguments)
-            result = await tool.handler(**(tc.arguments or {}))
+            try:
+                result = await asyncio.wait_for(
+                    tool.handler(**(tc.arguments or {})), timeout=settings.agent_tool_timeout
+                )
+            except TimeoutError:
+                logger.error("Tool {} timed out after {}s", tc.name, settings.agent_tool_timeout)
+                return {"error": f"Tool '{tc.name}' timed out after {settings.agent_tool_timeout:g}s"}
             return {"result": str(result)[:4000]}
         except Exception as e:
             logger.error("Tool {} error: {}", tc.name, e)

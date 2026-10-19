@@ -86,7 +86,9 @@ Supported providers: `openai`, `anthropic`, `openrouter`, `ollama`, `vllm`, `azu
 |----------|-------------|---------|
 | `DB_PATH` | Database file path | `data/raven.db` |
 | `DATABASE_URL` | Optional Postgres DSN (`postgresql://` or `postgresql+asyncpg://`); when set, all stores use Postgres instead of SQLite | — |
-| `LOG_FILE` | Log file path | `data/raven.log` |
+| `LOG_FILE` | Log file path; warnings and above are mirrored to the same name with an `.err.log` suffix | `data/raven.log` |
+| `LOG_LEVEL` | Console level; the file sinks always keep `DEBUG` and `WARNING` regardless | `INFO` |
+| `JSON_LOG` | Write the log files as JSON lines (`raven logs` renders both shapes) | `true` |
 | `WORKSPACE_PATH` | Workspace directory | `workspace/` |
 
 ## Config File

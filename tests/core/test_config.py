@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import ClassVar
 
@@ -101,6 +102,52 @@ class TestEnvExampleParity:
 
         unread = sorted(n for n in documented if n not in accepted and n not in source)
         assert unread == [], f".env.example documents variables nothing reads: {unread}"
+
+
+class TestSettingsFieldConsumers:
+    """Every Settings field must reach something that acts on it.
+
+    ``TestEnvExampleParity`` proves the file and the model agree on which names exist; it cannot
+    prove a name does anything, because a field declared in ``raven/core/config.py`` is by
+    definition present in the scanned source. ``SANDBOX_BACKEND`` and the seven ``TIER_*`` fields
+    passed that guard for months while nothing read them: an operator set them, the admin API saved
+    them, ``raven doctor`` reported them, and behaviour never changed.
+    """
+
+    _PROD: ClassVar[tuple[str, ...]] = ("raven", "ravencode", "aios", "scripts", "deploy", "policy", ".github")
+    _DECLARATIONS: ClassVar[frozenset[str]] = frozenset({"raven/core/config.py", "raven/core/config_store.py"})
+    _SUFFIXES: ClassVar[frozenset[str]] = frozenset(
+        {".py", ".ts", ".tsx", ".js", ".mjs", ".json", ".yml", ".yaml", ".toml", ".ps1", ""}
+    )
+
+    def _production_source(self) -> tuple[list[Path], str]:
+        files = [ROOT / "Dockerfile"]
+        for rel in self._PROD:
+            files += [
+                p
+                for p in (ROOT / rel).rglob("*")
+                if p.is_file()
+                and p.suffix in self._SUFFIXES
+                and "__pycache__" not in p.parts
+                and p.relative_to(ROOT).as_posix() not in self._DECLARATIONS
+            ]
+        return files, "\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in files)
+
+    def test_every_settings_field_has_a_consumer(self) -> None:
+        files, source = self._production_source()
+        assert len(files) > 500, f"consumer scan covered only {len(files)} files — it is vacuous"
+        orphans = sorted(
+            name
+            for name, env_names in _settings_env_candidates().items()
+            if not re.search(rf"\b{re.escape(name)}\b", source)
+            and not any(re.search(rf"\b{re.escape(env)}\b", source) for env in env_names)
+        )
+        assert orphans == [], f"Settings fields nothing reads (wire them or delete them): {orphans}"
+
+    def test_a_field_without_a_consumer_is_caught(self) -> None:
+        _, source = self._production_source()
+        assert not re.search(r"\bthe_field_nobody_reads\b", source)
+        assert not re.search(r"\bTHE_FIELD_NOBODY_READS\b", source)
 
 
 def _settings_without_env_file() -> Settings:

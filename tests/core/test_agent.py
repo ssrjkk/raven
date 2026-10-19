@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -105,6 +106,29 @@ class TestAgent:
         tc = ToolCall(id="call1", name="nonexistent", arguments={})
         result = await agent._execute_tool(tc)
         assert "error" in result
+
+    async def test_a_hanging_tool_hits_the_configured_timeout(self, session, mock_db, mock_llm, monkeypatch):
+        """AGENT_TOOL_TIMEOUT must bound a tool, not sit in ``.env.example`` unread."""
+        from raven.core import config as config_module
+        from raven.core.llm import ToolCall
+        from raven.core.security.tool_policy import ToolPolicyEvaluator
+
+        async def stuck() -> str:
+            await asyncio.sleep(5)
+            return "too late"
+
+        monkeypatch.setattr(config_module.settings, "agent_tool_timeout", 0.05)
+        agent = Agent(
+            session=session,
+            tools=[PluginTool(name="stuck", description="Never returns", parameters={}, handler=stuck)],
+            db=mock_db,
+            llm=mock_llm,
+            config=AgentConfig(max_tool_rounds=3, use_memory=False),
+            tool_policy=ToolPolicyEvaluator("full", "", ""),  # type: ignore[arg-type]
+        )
+        result = await agent._execute_tool(ToolCall(id="call1", name="stuck", arguments={}))
+        assert "timed out" in result["error"]
+        assert "0.05" in result["error"]
 
     async def test_run_caps_tool_calls_per_round(self, session, mock_db):
         from raven.core.llm import LLMResponse, ToolCall

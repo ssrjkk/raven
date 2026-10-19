@@ -105,15 +105,18 @@ class TestAiosRuntimeAdapter:
 
     @pytest.mark.asyncio
     async def test_create_sandbox(self, monkeypatch):
-        sandbox = SimpleNamespace(mode="subprocess")
+        sandbox = SimpleNamespace(mode="docker")
         monkeypatch.setattr(
             "raven.core.sandbox.SandboxConfig",
-            lambda **kw: SimpleNamespace(mode="subprocess", docker_image=kw.get("docker_image")),
+            lambda **kw: SimpleNamespace(mode=kw.get("mode"), docker_image=kw.get("docker_image")),
         )
         monkeypatch.setattr("raven.core.sandbox.Sandbox", Mock(return_value=sandbox))
+        from raven.core import config as config_module
+
+        monkeypatch.setattr(config_module.settings, "sandbox_backend", "docker")
         result = await RuntimeAdapter.create_sandbox(image="python:3.13")
         assert result["sandbox"] is sandbox
-        assert result["mode"] == "subprocess"
+        assert result["mode"] == "docker", "the adapter must honour SANDBOX_BACKEND, not the constructor default"
         assert result["image"] == "python:3.13"
 
     @pytest.mark.asyncio

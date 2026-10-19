@@ -160,3 +160,51 @@ def test_audit_chain_verifies_a_non_ascii_entry(tmp_path: Path) -> None:
         check=False,
     )
     assert "OK" in proc.stdout, f"rc={proc.returncode}\nstdout={proc.stdout}\nstderr={proc.stderr[-4000:]}"
+
+
+def _loguru_child(tmp_dir: str) -> str:
+    return textwrap.dedent(
+        f"""
+        import json, sys
+        from pathlib import Path
+        from loguru import logger
+        from raven.core.logging import setup_logging
+
+        text = "{_NON_ASCII_TEXT}"
+        setup_logging(log_file=Path({tmp_dir!r}) / "raven.log")
+        logger.info("marker {{}} end", text)
+        logger.remove()
+
+        raw = (Path({tmp_dir!r}) / "raven.log").read_bytes()
+        record = json.loads(raw.decode("utf-8").strip().splitlines()[-1])
+        assert record["message"] == "marker " + text + " end", record
+        print("OK", flush=True)
+        """
+    )
+
+
+def test_loguru_file_sink_writes_utf8_under_a_c_locale(tmp_path: Path) -> None:
+    """`logger.add(path)` inherits the locale too, and orjson puts raw UTF-8 on the wire.
+
+    Without `encoding="utf-8"` on the sink, a `C` locale raises inside the sink and the record never
+    reaches the file — the failure is silent for whoever reads the log afterwards.
+    """
+    proc = subprocess.run(
+        [sys.executable, "-X", "utf8=0", "-c", _loguru_child(str(tmp_path))],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=300,
+        cwd=str(ROOT),
+        env={
+            **os.environ,
+            "PYTHONUTF8": "0",
+            "PYTHONCOERCECLOCALE": "0",
+            "LC_ALL": "C",
+            "PYTHONPATH": str(ROOT),
+            "LOGURU_LEVEL": "ERROR",
+        },
+        check=False,
+    )
+    assert "OK" in proc.stdout, f"rc={proc.returncode}\nstdout={proc.stdout}\nstderr={proc.stderr[-4000:]}"

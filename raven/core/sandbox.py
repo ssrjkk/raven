@@ -111,6 +111,17 @@ DEFAULT_SANDBOX = SandboxConfig(
 )
 
 
+def get_sandbox_config() -> SandboxConfig:
+    """The sandbox the process ships with, read from SANDBOX_BACKEND.
+
+    Left at the constructor default, an operator who set SANDBOX_BACKEND=docker for container
+    isolation still got a subprocess, which is the weaker promise the docs say it is not.
+    """
+    from raven.core.config import settings
+
+    return SandboxConfig(mode=settings.sandbox_backend)
+
+
 class Sandbox:
     def __init__(self, config: SandboxConfig | None = None):
         self.config = config or DEFAULT_SANDBOX
@@ -342,6 +353,3 @@ class Sandbox:
                     logger.debug("Failed to remove temp dir {}: {}", tmpdir, exc)
 
         await asyncio.to_thread(_remove_all)
-
-
-sandbox_default = Sandbox()

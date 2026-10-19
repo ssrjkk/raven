@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import sys
 import uuid
 from collections.abc import Callable
@@ -64,6 +63,19 @@ def _enrich_record(record: Record) -> bool:
     return _mask_secret_str(record)
 
 
+def _enrich_and_serialize(record: Record) -> bool:
+    """Sink filter that also builds the JSON line.
+
+    loguru uses the return value of a callable `format` as a *template* and runs `format_map` on
+    it, so handing it `_serialize`'s output raised `KeyError: '\"timestamp\"'` and dropped every
+    record. The JSON has to travel in the record instead, and a filter's mutation of
+    `record["extra"]` is visible to the handler's format.
+    """
+    _enrich_record(record)
+    record["extra"]["json_line"] = _serialize(record)
+    return True
+
+
 def get_correlation_id() -> str:
     return correlation_id.get()
 
@@ -119,44 +131,50 @@ def _structlog_processors(json_format: bool) -> list[Callable[..., Any]]:
     return processors
 
 
-def setup_logging(log_file: str | Path | None = None, level: str = "INFO", json_format: bool = True):
-    logger.remove()
-    log_level = level.upper()
-    log_path = Path(log_file) if log_file else None
-    file_path = os.environ.get("RAVEN_LOG_FILE")
+_CONSOLE_FMT = "{time:HH:mm:ss} | {level: <8} | {name} - {message}"
+_FILE_FMT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}"
+_CONSOLE_COLOR_FMT = (
+    "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | "
+    "<cyan>{name}</cyan> - <level>{message}</level>"
+)
 
-    log_target = log_path or (Path(file_path) if file_path else None)
-    if json_format or os.environ.get("RAVEN_JSON_LOG"):
-        if log_target:
-            log_target.parent.mkdir(parents=True, exist_ok=True)
-            logger.add(
-                str(log_target),
-                level="DEBUG",
-                format=_serialize,
-                rotation="100 MB",
-                retention="30 days",
-                filter=_enrich_record,
-            )
-            logger.add(
-                str(log_target.with_suffix(".err.log")),
-                level="WARNING",
-                format=_serialize,
-                rotation="100 MB",
-                retention="90 days",
-                filter=_enrich_record,
-            )
-        console_fmt = "{time:HH:mm:ss} | {level: <8} | {name} - {message}"
-    else:
-        console_fmt = (
-            "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | "
-            "<cyan>{name}</cyan> - <level>{message}</level>"
-        )
+
+def setup_logging(log_file: str | Path | None = None, level: str | None = None, json_format: bool | None = None):
+    from raven.core.config import settings
+
+    logger.remove()
+    log_level = (level or settings.log_level).upper()
+    as_json = settings.json_log if json_format is None else json_format
+    target = Path(log_file) if log_file else settings.resolved_log_file
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    file_fmt = "{extra[json_line]}" if as_json else _FILE_FMT
+    file_filter = _enrich_and_serialize if as_json else _enrich_record
+    logger.add(
+        str(target),
+        level="DEBUG",
+        format=file_fmt,
+        encoding="utf-8",
+        rotation="100 MB",
+        retention="30 days",
+        filter=file_filter,
+    )
+    logger.add(
+        str(target.with_suffix(".err.log")),
+        level="WARNING",
+        format=file_fmt,
+        encoding="utf-8",
+        rotation="100 MB",
+        retention="90 days",
+        filter=file_filter,
+    )
+    console_fmt = _CONSOLE_FMT if as_json else _CONSOLE_COLOR_FMT
 
     logger.add(
         sys.stderr,
         level=log_level,
         format=console_fmt,
-        colorize=not (json_format or os.environ.get("RAVEN_JSON_LOG")),
+        colorize=not as_json,
         filter=_enrich_record,
     )
 
@@ -164,7 +182,7 @@ def setup_logging(log_file: str | Path | None = None, level: str = "INFO", json_
         import logging as _stdlib_logging
 
         _structlog.configure(
-            processors=_structlog_processors(json_format or bool(os.environ.get("RAVEN_JSON_LOG"))),
+            processors=_structlog_processors(as_json),
             wrapper_class=_structlog.make_filtering_bound_logger(
                 getattr(_stdlib_logging, log_level, _stdlib_logging.INFO)
             ),
@@ -173,4 +191,4 @@ def setup_logging(log_file: str | Path | None = None, level: str = "INFO", json_
             cache_logger_on_first_use=False,
         )
 
-    logger.info("Logging initialized (json={}, level={})", json_format, log_level)
+    logger.info("Logging initialized (json={}, level={})", as_json, log_level)

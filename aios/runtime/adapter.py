@@ -92,9 +92,10 @@ class RuntimeAdapter:
 
     @staticmethod
     async def create_sandbox(image: str = "python:3.12") -> dict[str, Any]:
-        from raven.core.sandbox import Sandbox, SandboxConfig
+        from raven.core.sandbox import Sandbox, get_sandbox_config
 
-        config = SandboxConfig(mode="subprocess", docker_image=image)
+        config = get_sandbox_config()
+        config.docker_image = image
         sandbox = Sandbox(config)
         return {"sandbox": sandbox, "mode": config.mode, "image": image}
 

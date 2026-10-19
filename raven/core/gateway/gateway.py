@@ -46,7 +46,7 @@ from raven.core.metrics import MetricsServer, metrics
 from raven.core.models import IncomingMessage, Message
 from raven.core.outbox import Outbox
 from raven.core.plugin_loader import PluginLoader
-from raven.core.sandbox import Sandbox
+from raven.core.sandbox import Sandbox, get_sandbox_config
 from raven.core.security.context_filter import ContextVisibility, filter_context_by_visibility, redact_pii
 from raven.core.security.rate_limiter import RateLimiter
 from raven.core.security.sandbox_policy import (
@@ -74,7 +74,7 @@ class Gateway:
         self._bg_semaphore = asyncio.Semaphore(100)
         self._running = False
         self.registry = AgentRegistry(db, self.llm, plugin_loader.tools)
-        self.sandbox = Sandbox()
+        self.sandbox = Sandbox(get_sandbox_config())
         self._skill_dirs: list[str] = []
         self._monitor_engine: Any = None
         self._rbac = RBAC()

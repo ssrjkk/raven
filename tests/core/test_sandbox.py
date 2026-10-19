@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from raven.core.sandbox import Sandbox, SandboxConfig
+from raven.core.sandbox import Sandbox, SandboxConfig, get_sandbox_config
 
 
 def _block_docker_import(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -132,6 +132,37 @@ async def test_sandbox_direct_allows_legit_introspection():
     s = Sandbox(SandboxConfig(mode="none"))
     result = await s.exec("x = [1, 2, 3]; print(len(x))")
     assert "3" in result
+
+
+class TestSandboxConfigFromSettings:
+    """SANDBOX_BACKEND has to reach the sandbox, not just the admin API that stores it."""
+
+    def test_get_sandbox_config_reads_the_live_setting(self):
+        from raven.core import config as config_module
+
+        assert get_sandbox_config().mode == config_module.settings.sandbox_backend
+
+    def test_get_sandbox_config_follows_the_setting(self, monkeypatch: pytest.MonkeyPatch):
+        from raven.core import config as config_module
+
+        monkeypatch.setattr(config_module.settings, "sandbox_backend", "docker")
+        assert get_sandbox_config().mode == "docker"
+
+    def test_validate_settings_rejects_an_unknown_backend(self, monkeypatch: pytest.MonkeyPatch):
+        from raven.core import config as config_module
+
+        monkeypatch.setattr(config_module.settings, "sandbox_backend", "podman")
+        with pytest.raises(ValueError, match="SANDBOX_BACKEND"):
+            config_module.settings.validate_settings()
+
+    def test_a_shipped_backend_is_not_rejected(self, monkeypatch: pytest.MonkeyPatch):
+        from raven.core import config as config_module
+
+        monkeypatch.setattr(config_module.settings, "sandbox_backend", "none")
+        try:
+            config_module.settings.validate_settings()
+        except ValueError as exc:
+            assert "SANDBOX_BACKEND" not in str(exc)
 
 
 class TestNetworkRules:

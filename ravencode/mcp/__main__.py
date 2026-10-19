@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 
-from raven.core.mcp.server import use_utf8_stdio
+from raven.core.stdio import use_utf8_stdio
 from ravencode.mcp.server import run_mcp_server
 from ravencode.runtime.workspace import set_workspace_root
 
