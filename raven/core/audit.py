@@ -289,7 +289,7 @@ class AuditLogger:
     def recent(self, limit: int = 50) -> list[dict[str, Any]]:
         if not self._path.exists():
             return []
-        with self._path.open() as f:
+        with self._path.open(encoding="utf-8") as f:
             lines = f.readlines()[-limit:]
         result = []
         for line in lines:
@@ -311,7 +311,7 @@ class AuditLogger:
         if not self._path.exists():
             return []
         results: list[AuditEntry] = []
-        with self._path.open() as f:
+        with self._path.open(encoding="utf-8") as f:
             for line in f:
                 try:
                     entry = json.loads(line)
@@ -340,7 +340,7 @@ class AuditLogger:
         first_ts: float | None = None
         last_ts: float | None = None
         parse_errors = 0
-        with self._path.open() as f:
+        with self._path.open(encoding="utf-8") as f:
             for line in f:
                 try:
                     entry = json.loads(line)
@@ -375,7 +375,7 @@ class AuditLogger:
         prev_hash = "0" * 64
         entry_count = 0
         i = 0
-        with self._path.open() as f:
+        with self._path.open(encoding="utf-8") as f:
             for i, line in enumerate(f, 1):
                 try:
                     entry = json.loads(line)
@@ -431,7 +431,7 @@ class AuditLogger:
         if public_key is None:
             return [{"valid": False, "note": "cannot derive public key"}]
         errors: list[dict[str, Any]] = []
-        with self._path.open() as f:
+        with self._path.open(encoding="utf-8") as f:
             for i, line in enumerate(f, 1):
                 try:
                     entry = json.loads(line)

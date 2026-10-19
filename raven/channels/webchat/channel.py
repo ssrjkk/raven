@@ -405,7 +405,7 @@ class WebChatChannel(BaseChannel):
             Path(__file__).resolve().parent.parent.parent.parent / "web" / "dist" / "index.html"
         )
         if built.is_file():
-            return built.read_text()
+            return built.read_text(encoding="utf-8")
         return INDEX_HTML
 
 

@@ -34,7 +34,7 @@ def _parse_retry_after(headers: Any, default: int = 5) -> int:
 
 
 def _read_json_file(path: str) -> dict[str, Any]:
-    with Path(path).open() as f:
+    with Path(path).open(encoding="utf-8") as f:
         import json as _json
 
         return cast("dict[str, Any]", _json.load(f))

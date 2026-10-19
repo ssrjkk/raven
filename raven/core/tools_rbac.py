@@ -24,7 +24,7 @@ class ToolPolicyStore:
         if not self._path.exists():
             return
         try:
-            with self._path.open() as f:
+            with self._path.open(encoding="utf-8") as f:
                 raw = json.load(f)
             if isinstance(raw, dict):
                 self._policy = {
@@ -51,7 +51,7 @@ class ToolPolicyStore:
     def save(self) -> None:
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            with self._path.open("w") as f:
+            with self._path.open("w", encoding="utf-8") as f:
                 json.dump(self._policy, f, indent=2, sort_keys=True)
         except Exception as e:
             logger.warning("Failed to persist tool policy: {}", e)

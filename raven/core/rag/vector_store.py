@@ -78,7 +78,7 @@ class VectorStore:
         vpath = self._vectors_path()
         if vpath.exists():
             try:
-                with vpath.open() as f:
+                with vpath.open(encoding="utf-8") as f:
                     raw = json.load(f)
                     self._vectors = {k: list(v) if isinstance(v, list) else [] for k, v in raw.items()}
             except Exception as e:
@@ -86,7 +86,7 @@ class VectorStore:
         mpath = self._metadata_path()
         if mpath.exists():
             try:
-                with mpath.open() as f:
+                with mpath.open(encoding="utf-8") as f:
                     raw = json.load(f)
                     self._metadata = {k: v for k, v in raw.items()}
             except Exception as e:
@@ -107,9 +107,9 @@ class VectorStore:
 
         self._bm25_cache = None
         serializable = {k: _to_plain(v) for k, v in self._vectors.items()}
-        with self._vectors_path().open("w") as f:
+        with self._vectors_path().open("w", encoding="utf-8") as f:
             json.dump(serializable, f)
-        with self._metadata_path().open("w") as f:
+        with self._metadata_path().open("w", encoding="utf-8") as f:
             json.dump(self._metadata, f, default=str)
 
     async def upsert(self, doc_id: str, text: str, metadata: dict[str, Any] | None = None):

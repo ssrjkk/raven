@@ -97,7 +97,7 @@ class SecretsManager:
         if not self._enc_path.exists():
             return
         try:
-            raw = self._enc_path.read_text()
+            raw = self._enc_path.read_text(encoding="utf-8")
             encrypted = json.loads(raw)
             for k, v in encrypted.items():
                 self._cache[k] = self.decrypt(v)
@@ -129,7 +129,7 @@ class SecretsManager:
         encrypted = {k: self.encrypt(v) for k, v in self._cache.items()}
         tmp = self._enc_path.with_suffix(".enc.tmp")
         try:
-            tmp.write_text(json.dumps(encrypted, indent=2))
+            tmp.write_text(json.dumps(encrypted, indent=2), encoding="utf-8")
             tmp.replace(self._enc_path)
         finally:
             if tmp.exists():

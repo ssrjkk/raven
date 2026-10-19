@@ -196,7 +196,7 @@ def _write_raven_json(llm: dict[str, str], channels: dict[str, Any], security: d
             "hooks": [".raven/hooks"],
         },
     }
-    path.write_text(json.dumps(data, indent=2))
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     console.print(f"[green]Written {path}[/green]")
 
 
@@ -231,7 +231,7 @@ def _write_env_example(llm: dict[str, str], channels: dict[str, Any], security: 
         security_lines=security_lines,
         web_port=settings.web_port,
     )
-    path.write_text(content)
+    path.write_text(content, encoding="utf-8")
     console.print(f"[green]Written {path}[/green]")
 
 
@@ -366,8 +366,8 @@ def init_plugin_template() -> None:
         console.print("[yellow]Aborted.[/yellow]")
         return
     target.mkdir(parents=True, exist_ok=True)
-    (target / "__init__.py").write_text(PLUGIN_TEMPLATE)
-    (target / "README.md").write_text(f"# {name}\n\nRaven plugin.\n")
+    (target / "__init__.py").write_text(PLUGIN_TEMPLATE, encoding="utf-8")
+    (target / "README.md").write_text(f"# {name}\n\nRaven plugin.\n", encoding="utf-8")
     console.print(f"[green]Plugin '{name}' scaffolded at {target}[/green]")
 
 
@@ -381,5 +381,5 @@ def init_skill_template() -> None:
     if target.exists() and not Confirm.ask(f"{target} exists. Overwrite?", default=False):
         console.print("[yellow]Aborted.[/yellow]")
         return
-    target.write_text(SKILL_TEMPLATE)
+    target.write_text(SKILL_TEMPLATE, encoding="utf-8")
     console.print(f"[green]Skill '{name}' scaffolded at {target}[/green]")

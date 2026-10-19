@@ -17,7 +17,7 @@ async def main() -> None:
     from ravencode.runtime.agent_core import AgentConfig, ReActAgent
 
     calc = PROJ / "calc.py"
-    print("before:", calc.read_text().strip())
+    print("before:", calc.read_text(encoding="utf-8").strip())
 
     agent = ReActAgent(AgentConfig(max_steps=6, confirm_dangerous=False))
     result = await agent.run(
@@ -26,9 +26,9 @@ async def main() -> None:
     )
     text = result if isinstance(result, str) else str(result)
     sys.stdout.buffer.write(("agent output tail: " + text[-300:] + "\n").encode("utf-8", "replace"))
-    print("after:", calc.read_text().strip())
+    print("after:", calc.read_text(encoding="utf-8").strip())
 
-    ok = "return a + b" in calc.read_text()
+    ok = "return a + b" in calc.read_text(encoding="utf-8")
     print("FIXED" if ok else "NOT FIXED")
     sys.exit(0 if ok else 1)
 

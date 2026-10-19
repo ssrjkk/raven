@@ -292,7 +292,7 @@ class PluginLoader:
 
         skill_file = path / "SKILL.md"
         if skill_file.exists():
-            skill_content = skill_file.read_text()
+            skill_content = skill_file.read_text(encoding="utf-8")
             self._skills[path.name] = skill_content
             logger.debug("Loaded skill: {}", path.name)
 
@@ -313,7 +313,7 @@ class PluginLoader:
 
     def load_skill_md(self, path: Path) -> str:
         if path.exists() and path.suffix == ".md":
-            content = path.read_text()
+            content = path.read_text(encoding="utf-8")
             self._skills[path.stem] = content
             return content
         return ""

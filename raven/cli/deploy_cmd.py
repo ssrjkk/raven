@@ -158,7 +158,7 @@ def deploy() -> None:
         return
 
     content = COMPOSE_CONTENT[mode]
-    output.write_text(content)
+    output.write_text(content, encoding="utf-8")
     console.print(f"[green]Written {output}[/green]")
 
     console.print()

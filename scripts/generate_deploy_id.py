@@ -58,7 +58,8 @@ def main():
         f"DEPLOY_ID = {deploy_id!r}\n"
         f"DEPLOY_ORIGIN = {origin!r}\n"
         f"DEPLOY_BRANCH = {branch!r}\n"
-        f"DEPLOY_TIMESTAMP = {timestamp!r}\n"
+        f"DEPLOY_TIMESTAMP = {timestamp!r}\n",
+        encoding="utf-8",
     )
     print(f"[watermark] wrote {out}")
     print(f"[watermark]   DEPLOY_ID={deploy_id}")

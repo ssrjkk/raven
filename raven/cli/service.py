@@ -163,7 +163,7 @@ def _install_systemd():
     )
     svc_path = Path("/etc/systemd/system/raven.service")
     try:
-        svc_path.write_text(content)
+        svc_path.write_text(content, encoding="utf-8")
         _run_systemctl("daemon-reload")
         _run_systemctl("enable")
         _run_systemctl("start")
@@ -226,7 +226,7 @@ def _install_launchd():
     plist_dir = Path.home() / "Library" / "LaunchAgents"
     plist_dir.mkdir(parents=True, exist_ok=True)
     plist_path = plist_dir / "com.raven.ai.plist"
-    plist_path.write_text(content)
+    plist_path.write_text(content, encoding="utf-8")
     _run_launchctl("load", str(plist_path))
     console.print(f"[green]Raven AI launchd service installed at {plist_path}[/green]")
 

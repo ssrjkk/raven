@@ -40,7 +40,7 @@ class EmbeddingEngine:
         if path is None or not path.exists():
             return
         try:
-            with path.open() as f:
+            with path.open(encoding="utf-8") as f:
                 raw = json.load(f)
             if isinstance(raw, dict):
                 self._cache = {k: list(v) for k, v in raw.items() if isinstance(v, list)}
@@ -62,7 +62,7 @@ class EmbeddingEngine:
         path = self._cache_path
         if path is None:
             return
-        with path.open("w") as f:
+        with path.open("w", encoding="utf-8") as f:
             json.dump(self._cache, f)
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
