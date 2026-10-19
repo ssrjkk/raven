@@ -17,25 +17,16 @@ def _to_mcp_tool(defn: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _error(req_id: Any, code: int, message: str) -> dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
+
+
 class MCPServer:
     server_name: str = "raven-mcp"
     server_version: str = "0.4.8"
 
     def __init__(self) -> None:
         self._running = False
-
-    async def _read_request(self) -> dict[str, Any] | None:
-        line = await asyncio.to_thread(sys.stdin.readline)
-        if not line:
-            return None
-        line = line.strip()
-        if not line:
-            return None
-        try:
-            data: Any = json.loads(line)
-            return data if isinstance(data, dict) else None
-        except json.JSONDecodeError:
-            return None
 
     async def _send_response(self, msg: dict[str, Any]) -> None:
         text = json.dumps(msg, ensure_ascii=False)
@@ -72,17 +63,30 @@ class MCPServer:
             name = params.get("name", "")
             args = params.get("arguments", {})
             if not name:
-                return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32602, "message": "Missing tool name"}}
+                return _error(req_id, -32602, "Missing tool name")
             result = await execute_tool_public(name, args)
             return {"jsonrpc": "2.0", "id": req_id, "result": {"content": [{"type": "text", "text": result}]}}
-        return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32601, "message": f"Method not found: {method}"}}
+        return _error(req_id, -32601, f"Method not found: {method}")
 
     async def run(self) -> None:
+        """Serve newline-delimited JSON-RPC over stdin until the client closes it."""
         self._running = True
         while self._running:
-            req = await self._read_request()
-            if req is None:
-                break
+            line = await asyncio.to_thread(sys.stdin.readline)
+            if not line:
+                return
+            line = line.strip()
+            # Framing, not a message: a host that writes an empty line keeps its session alive.
+            if not line:
+                continue
+            try:
+                req: Any = json.loads(line)
+            except json.JSONDecodeError:
+                await self._send_response(_error(None, -32700, "Parse error"))
+                continue
+            if not isinstance(req, dict):
+                await self._send_response(_error(None, -32600, "Invalid request: expected a JSON object"))
+                continue
             resp = await self.handle_request(req)
             if resp is not None:
                 await self._send_response(resp)

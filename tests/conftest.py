@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator, AsyncIterator, Iterator
+import io
+import json
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -111,3 +113,17 @@ async def gateway(real_db: Database, mock_settings: None) -> AsyncGenerator[Gate
     channel._handler = g.handle_message
     yield g
     await g.stop()
+
+
+@pytest.fixture
+def mcp_stdio(monkeypatch: pytest.MonkeyPatch) -> Callable[[Any, str], Awaitable[list[dict[str, Any]]]]:
+    """Run an MCP stdio server over a canned stdin transcript and return the frames it wrote."""
+
+    async def _serve(server: Any, transcript: str) -> list[dict[str, Any]]:
+        out = io.StringIO()
+        monkeypatch.setattr("sys.stdin", io.StringIO(transcript))
+        monkeypatch.setattr("sys.stdout", out)
+        await asyncio.wait_for(server.run(), timeout=10)
+        return [json.loads(line) for line in out.getvalue().splitlines() if line.strip()]
+
+    return _serve

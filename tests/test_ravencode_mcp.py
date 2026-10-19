@@ -160,9 +160,7 @@ class TestMCPServer:
         with patch("raven.core.mcp.server.get_tool_definitions", return_value=defs):
             result = await server.handle_request({"method": "tools/list", "id": 2, "params": {}})
         assert result is not None
-        assert result["result"]["tools"] == [
-            {"name": "a", "description": "d", "inputSchema": {"type": "object"}}
-        ]
+        assert result["result"]["tools"] == [{"name": "a", "description": "d", "inputSchema": {"type": "object"}}]
 
     async def test_notification_yields_no_response(self) -> None:
         server = MCPServer()
@@ -189,42 +187,15 @@ class TestMCPServer:
         assert result["error"]["code"] == -32601
         assert "nope" in result["error"]["message"]
 
-    async def test_read_request_valid(self, monkeypatch) -> None:
+    async def test_run_answers_initialize(self, mcp_stdio) -> None:
         server = MCPServer()
-        import io
+        frames = await mcp_stdio(server, '{"jsonrpc":"2.0","id":1,"method":"initialize"}\n')
+        assert frames[0]["result"]["serverInfo"] == {"name": "ravencode", "version": server.server_version}
 
-        monkeypatch.setattr("sys.stdin", io.StringIO('{"method": "initialize"}\n'))
-        req = await server._read_request()
-        assert req == {"method": "initialize"}
-
-    async def test_read_request_empty_and_invalid(self, monkeypatch) -> None:
-        import io
-
-        server = MCPServer()
-        monkeypatch.setattr("sys.stdin", io.StringIO(""))
-        assert await server._read_request() is None
-        monkeypatch.setattr("sys.stdin", io.StringIO("   \n"))
-        assert await server._read_request() is None
-        monkeypatch.setattr("sys.stdin", io.StringIO("not json\n"))
-        assert await server._read_request() is None
-
-    async def test_run_loop(self, monkeypatch) -> None:
-        import io
-
-        out = io.StringIO()
-        monkeypatch.setattr("sys.stdout", out)
-        responses: list[dict[str, object] | None] = [{"method": "initialize"}, None]
-        calls = {"n": 0}
-
-        async def fake_read() -> dict[str, object] | None:
-            val = responses[calls["n"]]
-            calls["n"] += 1
-            return val
-
-        server = MCPServer()
-        server._read_request = fake_read  # type: ignore[method-assign]
-        await server.run()
-        assert '"serverInfo"' in out.getvalue()
+    async def test_run_survives_a_blank_frame(self, mcp_stdio) -> None:
+        # Framing inherited from the shared loop: a blank line must not end the session.
+        transcript = '{"jsonrpc":"2.0","id":1,"method":"ping"}\n\n{"jsonrpc":"2.0","id":2,"method":"ping"}\n'
+        assert [f["id"] for f in await mcp_stdio(MCPServer(), transcript)] == [1, 2]
 
     async def test_stop_sets_running_false(self) -> None:
         server = MCPServer()
