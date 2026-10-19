@@ -34,7 +34,7 @@ dependencies = [
     "python-telegram-bot>=21.0,<23.0",
     "python-dotenv>=1.2.2,<2.0",
     "numpy>=1.26,<3.0",
-    "PyYAML>=6.0,<7.0",
+    "PyYAML>=6.0.3,<7.0",
     "uvloop>=0.19.0,<1.0; sys_platform != 'win32'",
     "orjson>=3.10.0,<4.0",
     "Pillow>=12.3.0,<13.0",
