@@ -26,7 +26,7 @@ const DiffViewer = memo(function DiffViewer({ diff, files, singlePane, maxHeight
   if (!diff) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-sm text-tertiary">
-        <span className="text-2xl mb-2">РІвЂЎвЂћ</span>
+        <span className="text-2xl mb-2">⇄</span>
         <span>No diff to display</span>
       </div>
     );

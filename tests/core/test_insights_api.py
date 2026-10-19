@@ -24,7 +24,9 @@ SAMPLE_LOG = (
 
 
 def _git(r: Path, *args: str) -> tuple[str, str]:
-    p = subprocess.run(["git", "-C", str(r), *args], capture_output=True, text=True)
+    p = subprocess.run(
+        ["git", "-C", str(r), *args], capture_output=True, text=True, encoding="utf-8", errors="replace"
+    )
     return p.stdout.strip(), p.stderr.strip()
 
 

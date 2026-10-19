@@ -83,7 +83,7 @@ async def test_audit_log_chain_integrity():
 
 @pytest.mark.asyncio
 async def test_audit_log_chain_tamper_detection():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False, encoding="utf-8") as f:
         log_path = f.name
 
     logger = AuditLogger(log_path, signing_key=b"0" * 32)
@@ -92,10 +92,10 @@ async def test_audit_log_chain_tamper_detection():
     await logger.log(AuditEventType.MESSAGE_SENT, "system")
     await logger.stop()
 
-    with Path(log_path).open() as f:
+    with Path(log_path).open(encoding="utf-8") as f:
         lines = f.readlines()
     modified = lines[0].replace("system.startup", "tampered")
-    with Path(log_path).open("w") as f:
+    with Path(log_path).open("w", encoding="utf-8") as f:
         f.write(modified)
         f.writelines(lines[1:])
 

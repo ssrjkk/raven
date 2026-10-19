@@ -28,9 +28,11 @@ class TaskSpec:
 
 def _run_python(script: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(script), *args],
+        [sys.executable, "-X", "utf8", str(script), *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=30,
     )
 

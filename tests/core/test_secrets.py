@@ -102,6 +102,6 @@ async def test_save_file_atomic(mgr):
     await mgr.set("k1", "v1")
     enc_file = mgr._enc_path
     assert enc_file.exists()
-    content = enc_file.read_text()
+    content = enc_file.read_text(encoding="utf-8")
     assert "k1" in content
     assert not enc_file.with_suffix(".enc.tmp").exists()

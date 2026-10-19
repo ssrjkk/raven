@@ -65,5 +65,5 @@ async def test_eval_report_output(tmp_path):
     path = runner.save_report("test_report.json")
     assert path
     import json
-    report = json.loads((tmp_path / "test_report.json").read_text())
+    report = json.loads((tmp_path / "test_report.json").read_text(encoding="utf-8"))
     assert report["summary"]["total"] == 1
