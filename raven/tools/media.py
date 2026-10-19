@@ -241,10 +241,10 @@ async def document_parse(filepath: str, pages: str = "") -> str:
 
 
 def _parse_pdf(path: Path, pages: str = "") -> str:
-    import fitz
+    from pypdf import PdfReader
 
-    doc = fitz.open(str(path))
-    total_pages = len(doc)
+    pdf_pages = PdfReader(str(path)).pages
+    total_pages = len(pdf_pages)
     page_nums: list[int] = []
     if pages:
         for part in pages.split(","):
@@ -262,14 +262,12 @@ def _parse_pdf(path: Path, pages: str = "") -> str:
     for i in page_nums:
         if i >= total_pages:
             continue
-        page = doc[i]
-        text = page.get_text().strip()
+        text = (pdf_pages[i].extract_text() or "").strip()
         if text:
             char_count += len(text)
             lines.append(f"\n--- Page {i + 1} ---\n{text[:2000]}")
             if len(text) > 2000:
                 lines.append(f"[... truncated, {len(text)} chars total on this page]")
-    doc.close()
     lines.append(f"\n--- Extracted {char_count} chars from {len(page_nums)} pages ---")
     return "\n".join(lines)
 

@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from raven.core.media_api import create_media_router
+from tests.pdf_factory import make_text_pdf
 
 
 @pytest.fixture()
@@ -27,13 +28,7 @@ def _make_png(path: Path) -> None:
 
 
 def _make_pdf(path: Path) -> None:
-    import fitz
-
-    doc = fitz.open()
-    page = doc.new_page()
-    page.insert_text((72, 72), "Hello pdf")
-    doc.save(str(path))
-    doc.close()
+    make_text_pdf(path, "Hello pdf")
 
 
 def _make_docx(path: Path) -> None:

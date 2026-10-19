@@ -20,7 +20,6 @@ IMPORT_ALIASES = {
     "python-dotenv": "dotenv",
     "beautifulsoup4": "bs4",
     "pillow": "pil",
-    "pymupdf": "fitz",
     "python-docx": "docx",
     "python-pptx": "pptx",
     "prometheus-client": "prometheus_client",

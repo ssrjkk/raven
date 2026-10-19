@@ -16,3 +16,5 @@ jobs:
         with:
           fail-on-severity: high
           allow-licenses: MIT, Apache-2.0, BSD-3-Clause, BSD-2-Clause, ISC, Python-2.0, Unlicense, CC0-1.0, MPL-2.0
+          # typing-extensions is PSF-2.0; its license file quotes the historical GPL-compatibility table.
+          allow-dependencies-licenses: pkg:pypi/typing-extensions

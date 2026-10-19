@@ -148,11 +148,11 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
             text = ""
             meta: dict[str, Any] = {"filename": target.name, "format": ext.lstrip(".")}
             if ext == ".pdf":
-                import fitz
+                from pypdf import PdfReader
 
-                doc = fitz.open(str(target))
-                meta["pages"] = len(doc)
-                selected: list[int] | range = range(len(doc))
+                pdf_pages = PdfReader(str(target)).pages
+                meta["pages"] = len(pdf_pages)
+                selected: list[int] | range = range(len(pdf_pages))
                 if pages:
                     pr: list[int] = []
                     for part in pages.split(","):
@@ -165,12 +165,10 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
                     selected = pr
                 chunks: list[str] = []
                 for i in selected:
-                    if i < len(doc):
-                        p = doc[i]
-                        t = p.get_text().strip()
+                    if i < len(pdf_pages):
+                        t = (pdf_pages[i].extract_text() or "").strip()
                         if t:
                             chunks.append(f"--- Page {i + 1} ---\n{t}")
-                doc.close()
                 text = "\n".join(chunks)
                 meta["extracted_pages"] = len(selected)
             elif ext == ".docx":

@@ -156,12 +156,12 @@ class RavenFlowDaemon:
         async def send_to_agent(req: AgentRequest):
             if not await self._agent_bucket.acquire():
                 return {"error": "Rate limit exceeded", "session_id": ""}
+            session_id = req.session_id or str(uuid.uuid4())[:8]
             try:
-                session = await self._get_or_create_session(
-                    req.session_id or str(uuid.uuid4())[:8], req.channel, req.mode
-                )
-            except ValueError as exc:
-                return JSONResponse(status_code=400, content={"error": str(exc), "session_id": ""})
+                validate_session_id(session_id)
+            except ValueError:
+                return JSONResponse(status_code=400, content={"error": "Invalid session id", "session_id": ""})
+            session = await self._get_or_create_session(session_id, req.channel, req.mode)
             if session.agent is None:
                 return {"error": "agent not initialized", "session_id": session.id}
             if req.mode == "plan":
@@ -255,12 +255,13 @@ class RavenFlowDaemon:
                     if msg_type == "message":
                         session_id = str(msg.get("session_id") or "") or str(uuid.uuid4())[:8]
                         try:
-                            session = await self._get_or_create_session(
-                                session_id, msg.get("channel", "websocket"), msg.get("mode", "build")
-                            )
-                        except ValueError as exc:
-                            await ws.send_text(json.dumps({"type": "error", "content": str(exc)}))
+                            validate_session_id(session_id)
+                        except ValueError:
+                            await ws.send_text(json.dumps({"type": "error", "content": "Invalid session id"}))
                             continue
+                        session = await self._get_or_create_session(
+                            session_id, msg.get("channel", "websocket"), msg.get("mode", "build")
+                        )
                         if session.agent is None:
                             await ws.send_text(json.dumps({"type": "error", "content": "agent not initialized"}))
                             continue

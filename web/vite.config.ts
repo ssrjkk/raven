@@ -19,12 +19,17 @@ export default defineConfig({
     outDir: "dist",
     sourcemap: false,
     chunkSizeWarningLimit: 500,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          vendor: ["react", "react-dom", "react-router-dom", "framer-motion", "@tanstack/react-query"],
-          editor: ["@monaco-editor/react"],
-          charts: ["recharts"],
+        codeSplitting: {
+          groups: [
+            {
+              name: "vendor",
+              test: /node_modules[\/](react|react-dom|react-router|react-router-dom|framer-motion|@tanstack[\/]react-query)[\/]/,
+            },
+            { name: "editor", test: /node_modules[\/]@monaco-editor[\/]react[\/]/ },
+            { name: "charts", test: /node_modules[\/]recharts[\/]/ },
+          ],
         },
       },
     },

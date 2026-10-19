@@ -12,6 +12,7 @@ from PIL import Image
 
 import raven.tools.media as media
 from raven.core.task_engine.tool_registry import ToolRegistry
+from tests.pdf_factory import make_text_pdf
 
 
 @pytest.fixture()
@@ -26,13 +27,7 @@ def _make_png(path: Path) -> None:
 
 
 def _make_pdf(path: Path, text: str = "Hello media tools") -> None:
-    import fitz
-
-    doc = fitz.open()
-    page = doc.new_page()
-    page.insert_textbox(fitz.Rect(50, 50, 545, 792), text, fontsize=8)
-    doc.save(str(path))
-    doc.close()
+    make_text_pdf(path, text)
 
 
 class _FakeResp:
@@ -423,7 +418,7 @@ def test_document_parse_unsupported(ws: Path) -> None:
 
 def test_document_parse_import_error(ws: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def _boom(path: Path, pages: str = "") -> str:
-        msg = "no fitz"
+        msg = "no pypdf"
         raise ImportError(msg)
 
     monkeypatch.setattr(media, "_parse_pdf", _boom)
