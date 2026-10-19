@@ -183,6 +183,7 @@ def register_chaos_tools(registry: ToolRegistry) -> None:
             handler=chaos_inject,
             category="chaos",
             timeout=60,
+            dangerous=True,
         )
     )
     registry.register(
@@ -241,6 +242,7 @@ def register_chaos_tools(registry: ToolRegistry) -> None:
             handler=chaos_run_experiment,
             category="chaos",
             timeout=600,
+            dangerous=True,
         )
     )
     registry.register(

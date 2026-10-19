@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import shutil
 import subprocess
 import sys
 import types
+from collections import namedtuple
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +24,13 @@ from raven.unique.chaos_engineering import (
     SystemMonitor,
     SystemSnapshot,
 )
+
+_DiskUsage = namedtuple("_DiskUsage", "total used free")
+
+
+def _small_free_space(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The injector caps a fill at 100 MB, so without this every disk-fill test would write that.
+    monkeypatch.setattr(shutil, "disk_usage", lambda path: _DiskUsage(3_000_000, 2_000_000, 1_000_000))
 
 
 def _fake_proc_factory() -> tuple[Any, list[int]]:
@@ -155,13 +164,30 @@ class TestFaultInjector:
         assert result["details"]["latency_ms"] == 1500.0
 
     @pytest.mark.asyncio
-    async def test_inject_disk_fill(self):
+    async def test_inject_disk_fill(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        _small_free_space(monkeypatch)
         config = FaultConfig(
-            fault_type=FaultType.DISK_FILL, intensity=0.5, duration_sec=0.01
+            fault_type=FaultType.DISK_FILL, target=str(tmp_path), intensity=0.5, duration_sec=0.01
         )
         result = await self.injector.inject(config)
         assert result["details"]["fill_percent"] == 75.0
-        assert "bytes_written" in result["details"] or "error" in result["details"]
+        fill = Path(result["details"]["file"])
+        assert fill.parent == tmp_path
+        assert fill.exists()
+        assert fill.stat().st_size == result["details"]["bytes_written"]
+
+    @pytest.mark.asyncio
+    async def test_recover_removes_the_file_injection_recorded(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        _small_free_space(monkeypatch)
+        result = await self.injector.inject(
+            FaultConfig(fault_type=FaultType.DISK_FILL, target=str(tmp_path), duration_sec=0.01)
+        )
+        fill = Path(result["details"]["file"])
+        # Recovery must not re-derive the path from a target that may no longer be the one used.
+        result["config"]["target"] = str(tmp_path / "moved-away")
+        await self.injector.recover(result["id"])
+        assert not fill.exists()
+        assert result["recovered"] is True
 
     @pytest.mark.asyncio
     async def test_inject_cpu_storm(self):
@@ -613,6 +639,34 @@ class TestChaosEngineeringExperiment:
         res = await ce.run_experiment(cfg)
         assert res.status == ExperimentStatus.FAILED
         assert "inject boom" in res.errors[0]
+
+    async def test_cancelled_experiment_removes_the_fill_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        def fills() -> list[Path]:
+            return list(tmp_path.glob(".chaos_disk_fill_*.tmp"))
+
+        _small_free_space(monkeypatch)
+        ce = ChaosEngineering()
+        self._patch_monitor(ce, monkeypatch)
+        cfg = ExperimentConfig(
+            name="cancel",
+            hypothesis=ExperimentHypothesis(description="d"),
+            faults=[FaultConfig(fault_type=FaultType.DISK_FILL, target=str(tmp_path), duration_sec=30)],
+        )
+        task = asyncio.create_task(ce.run_experiment(cfg))
+        for _ in range(300):
+            await asyncio.sleep(0.01)
+            if fills():
+                break
+        assert fills(), "injection never created the fill file"
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        [res] = ce.list_experiments()
+        assert res.status == ExperimentStatus.ABORTED
+        assert fills() == []
+        faults = list(ce._injector.active_faults.values())
+        assert faults, "the cancelled injection dropped its record, so nothing could recover it"
+        assert all(f["recovered"] is True for f in faults)
 
     async def test_run_experiment_monitor_stop_fails(self, monkeypatch: pytest.MonkeyPatch):
         ce = ChaosEngineering()

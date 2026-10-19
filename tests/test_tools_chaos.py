@@ -320,3 +320,17 @@ class TestRegisterChaosTools:
             spec = registry.get(name)
             assert spec is not None
             assert spec.category == "chaos"
+
+    def test_fault_injecting_tools_are_admin_only(self) -> None:
+        registry = ToolRegistry()
+        chaos.register_chaos_tools(registry)
+        for name in ("chaos_inject", "chaos_run_experiment"):
+            assert registry.effective_allowed_roles(name) == ["admin"]
+        for name in ("chaos_list_active", "chaos_list_history", "chaos_resilience_summary"):
+            assert registry.effective_allowed_roles(name) is None
+
+    async def test_inject_is_refused_for_a_non_admin_role(self) -> None:
+        registry = ToolRegistry()
+        chaos.register_chaos_tools(registry)
+        result = await registry.call("chaos_inject", role="operator", fault_type="disk_fill")
+        assert "requires role" in str(result)

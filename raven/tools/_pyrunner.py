@@ -28,4 +28,8 @@ def run(code: str) -> str:
 
 
 if __name__ == "__main__":
-    print(run(sys.stdin.read()))
+    # Callers feed UTF-8 bytes into stdin and decode UTF-8 from stdout; the text streams would
+    # insert this machine's ANSI code page in between, exec'ing mojibake and crashing on any
+    # result the page cannot encode.
+    code = sys.stdin.buffer.read().decode("utf-8", errors="replace")
+    sys.stdout.buffer.write(run(code).encode("utf-8") + b"\n")

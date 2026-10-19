@@ -247,6 +247,12 @@ class FaultInjector:
             "error": "",
         }
 
+        # Registered before the injection is dispatched. A fault cancelled mid-injection still owns
+        # its artefact — the disk fill is written by a worker thread that keeps running after the
+        # await raises — and recovery can only clean up faults the injector still knows about.
+        self._active_faults[fault_id] = fault_record
+        self._fault_history.append(fault_record)
+
         try:
             if config.fault_type == FaultType.SERVICE_KILL:
                 await asyncio.to_thread(self._inject_service_kill, fault_record)
@@ -264,8 +270,6 @@ class FaultInjector:
             fault_record["error"] = str(exc)
             logger.error("Fault injection failed [{}]: {}", fault_id, exc)
 
-        self._active_faults[fault_id] = fault_record
-        self._fault_history.append(fault_record)
         return fault_record
 
     async def recover(self, fault_id: str) -> dict[str, Any] | None:
@@ -368,6 +372,7 @@ class FaultInjector:
                 fault["details"] = {
                     "fill_percent": round(fill_percent, 1),
                     "target": str(target_dir),
+                    "file": str(fault_file),
                     "bytes_written": written,
                 }
                 logger.warning("Filled disk to ~{}% in {} ({} bytes)", round(fill_percent, 1), target_dir, written)
@@ -375,11 +380,17 @@ class FaultInjector:
                 fault["details"] = {
                     "fill_percent": round(fill_percent, 1),
                     "target": str(target_dir),
+                    "file": str(fault_file),
                     "error": "no free space",
                 }
         except Exception as exc:
             logger.warning("Disk fill failed: {}", exc)
-            fault["details"] = {"fill_percent": round(fill_percent, 1), "target": str(target_dir), "error": str(exc)}
+            fault["details"] = {
+                "fill_percent": round(fill_percent, 1),
+                "target": str(target_dir),
+                "file": str(fault_file),
+                "error": str(exc),
+            }
 
     async def _inject_cpu_storm(self, fault: dict[str, Any]) -> None:
         cores = max(1, int(fault["config"]["intensity"] * 8))
@@ -448,6 +459,20 @@ class FaultInjector:
             logger.warning("[SIMULATED] Killing process '{}' (psutil not available)", process_name)
             fault["details"] = {"process": process_name, "simulated": True}
 
+    @staticmethod
+    def _remove_fill_file(fill_file: Path) -> bool:
+        for _ in range(50):
+            try:
+                fill_file.unlink()
+                return True
+            except FileNotFoundError:
+                return True
+            except PermissionError:
+                # On Windows a file the cancelled injection thread still holds open refuses to
+                # go; the thread closes it within the write, so the retry is bounded.
+                time.sleep(0.1)
+        return False
+
     def _recover_fault(self, fault: dict[str, Any]) -> None:
         fault_type = FaultType(fault["config"]["fault_type"])
         if fault_type == FaultType.CPU_STORM:
@@ -457,11 +482,20 @@ class FaultInjector:
         elif fault_type == FaultType.DISK_FILL:
             import tempfile
 
-            target = fault["config"].get("target") or tempfile.gettempdir()
-            fill_file = Path(target) / f".chaos_disk_fill_{fault['id']}.tmp"
-            if fill_file.exists():
-                fill_file.unlink()
+            # The path injection recorded, not one re-derived: the temp directory can move between
+            # the two calls (TMP set per shell), and then the fill file would survive recovery.
+            recorded = fault.get("details", {}).get("file", "")
+            if recorded:
+                fill_file = Path(recorded)
+            else:
+                target = fault["config"].get("target") or tempfile.gettempdir()
+                fill_file = Path(target) / f".chaos_disk_fill_{fault['id']}.tmp"
+            if not fill_file.exists():
+                logger.info("[RECOVER] Disk fill file already gone: {}", fill_file)
+            elif self._remove_fill_file(fill_file):
                 logger.info("[RECOVER] Disk fill file removed: {}", fill_file)
+            else:
+                logger.warning("[RECOVER] Disk fill file is still held open, left in place: {}", fill_file)
         elif fault_type == FaultType.NETWORK_LATENCY:
             details = fault.get("details", {})
             if details.get("method") == "tc":
@@ -588,6 +622,13 @@ class ChaosEngineering:
                 except Exception as exc:
                     logger.debug("monitor stop failed: {}", exc)
         finally:
+            if result.status is not ExperimentStatus.COMPLETED:
+                # Without this an aborted or failed run keeps whatever it injected: a disk fill
+                # file is a 100 MB artefact, and nothing else in the process ever removes it.
+                with contextlib.suppress(Exception, asyncio.CancelledError):
+                    await self._injector.recover_all()
+                with contextlib.suppress(Exception, asyncio.CancelledError):
+                    await self._monitor.stop()
             result.end_time = time.time()
             self._running_experiment = None
 

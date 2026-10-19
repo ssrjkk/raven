@@ -1,11 +1,25 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import sys
 from typing import Any
 
 from ravencode.runtime.tools import execute_tool_public, get_tool_definitions
+
+
+def use_utf8_stdio() -> None:
+    """Pin the stdio transport to UTF-8, the only encoding the MCP spec allows on the wire.
+
+    Left alone, `sys.stdin`/`sys.stdout` inherit this machine's ANSI code page (cp1251 on a
+    Russian Windows, ascii under a POSIX C locale), so a host's UTF-8 frames arrive decoded into
+    the wrong string and any result the code page cannot encode raises UnicodeEncodeError inside
+    `_send_response`, which ended the session with a traceback.
+    """
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        with contextlib.suppress(AttributeError, ValueError):
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
 
 def _to_mcp_tool(defn: dict[str, Any]) -> dict[str, Any]:

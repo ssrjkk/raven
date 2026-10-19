@@ -8,7 +8,10 @@ Claude Desktop, Qoder, opencode, Cursor, Windsurf, Cline, and others.
 - **`raven-mcp`** — the Raven gateway tools (66 tools: files, shell, git, web, memory, routines, monitors, canvas, and more).
 - **`ravencode-mcp`** — the same tool set in coding-agent mode.
 
-Both speak JSON-RPC 2.0 over stdio, the transport every MCP client supports out of the box.
+Both speak JSON-RPC 2.0 over stdio — one UTF-8 JSON object per line, the encoding the servers
+pin for themselves rather than inheriting the machine's code page. A blank line between messages
+is framing and is skipped, a line that is not JSON is answered with `-32700`, and a JSON value
+that is not an object with `-32600`; none of them end the session.
 
 ## What the servers expose
 
