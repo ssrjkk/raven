@@ -82,11 +82,20 @@ def _run(
     env: dict[str, str] | None = None,
     cwd: str | Path | None = None,
 ) -> subprocess.CompletedProcess[Any]:
-    merged_env = {**os.environ, "LOGURU_LEVEL": "ERROR", **(env or {})}
+    merged_env = {**os.environ, "LOGURU_LEVEL": "ERROR", "PYTHONIOENCODING": "utf-8", **(env or {})}
     if cmd:
         cmd = [_resolve_exe(cmd[0]), *cmd[1:]]
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=merged_env, cwd=cwd)
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            env=merged_env,
+            cwd=cwd,
+        )
     except subprocess.TimeoutExpired as exc:
         # A killed stage is a failed stage, not a crashed run: the summary must name the stage that hit its cap.
         partial = exc.stdout if isinstance(exc.stdout, str) else ""

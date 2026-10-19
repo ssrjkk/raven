@@ -398,6 +398,8 @@ class TestGenerator:
             result = subprocess.run(
                 [
                     sys.executable,
+                    "-X",
+                    "utf8",
                     "-m",
                     "pytest",
                     str(test_file),
@@ -408,6 +410,8 @@ class TestGenerator:
                 ],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=120,
                 check=False,
             )

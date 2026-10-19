@@ -335,12 +335,14 @@ def upgrade(version: str | None) -> None:
 
     click.echo("Checking for updates...")
     try:
-        pip_cmd = [sys.executable, "-m", "pip", "install", "--upgrade"]
+        pip_cmd = [sys.executable, "-X", "utf8", "-m", "pip", "install", "--upgrade"]
         if version:
             pip_cmd.append(f"raven-agent=={version}")
         else:
             pip_cmd.append("raven-agent")
-        result = subprocess.run(pip_cmd, capture_output=True, text=True, check=False)
+        result = subprocess.run(
+            pip_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False
+        )
         if result.returncode == 0:
             click.echo("Upgrade successful!")
         else:

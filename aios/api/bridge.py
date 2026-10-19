@@ -686,7 +686,12 @@ def _rg_search(query: str, root: Path, limit: int) -> list[dict[str, Any]]:
         try:
             proc = subprocess.run(
                 [rg, "--json", "--max-count", "5", "-n", query, str(root)],
-                capture_output=True, text=True, timeout=10, cwd=str(root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
+                cwd=str(root),
             )
             results: list[dict[str, Any]] = []
             for line in proc.stdout.splitlines():

@@ -69,6 +69,8 @@ class GitIntegration:
             ["git", "-C", str(self._repo), *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=_GIT_TIMEOUT,
             check=True,
         )
