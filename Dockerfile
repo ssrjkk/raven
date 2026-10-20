@@ -26,7 +26,10 @@ FROM python:3.13-slim AS base
 # curl is for the healthcheck only. Chromium's shared libraries used to be installed here for
 # the optional `browser` extra, which nothing in the image installs; add them back together
 # with `pip install "raven-agent[browser]" && playwright install chromium` if that changes.
-RUN apt-get update && apt-get install -y --no-install-recommends curl libpcre2-8-0 \
+# upgrade обязателен: debian 13 приходит с liblzma5 5.8.1-1+deb13u1 (DSA-6549-1),
+# патч вышел только в deb13u2, и без этого слоя Trivy находит его в образе каждый раз.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends curl libpcre2-8-0 \
     && rm -rf /var/lib/apt/lists/*
 RUN groupadd -r raven && useradd -r -g raven -d /app -s /sbin/nologin raven
 RUN pip install --no-cache-dir --upgrade pip setuptools
