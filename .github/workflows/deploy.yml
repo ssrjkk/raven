@@ -54,7 +54,8 @@ jobs:
           # Findings with no upstream fix yet are noise we cannot act on; they stay visible
           # in the Trivy log but do not open alerts.
           ignore-unfixed: true
-        continue-on-error: true
+        # exit-code: 1 выше означает «упасть на исправимой HIGH/CRITICAL».
+        # continue-on-error обнулял это: шаг падал, а джоба шла дальше зелёной.
       - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@v4
         if: always()
