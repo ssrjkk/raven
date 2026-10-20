@@ -69,6 +69,7 @@ jobs:
   upload-release:
     name: Attach EXE to GitHub Release
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: build-exe
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
