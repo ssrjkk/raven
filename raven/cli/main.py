@@ -32,6 +32,7 @@ from raven.cli.models_cmd import models_group as _models
 from raven.cli.monitor_cmd import monitor_group as _monitor
 from raven.cli.nodes_cmd import nodes_group as _nodes
 from raven.cli.pairing_cmd import pairing_group as _pairing
+from raven.cli.pip_env import MISSING_PIP, pip_available
 from raven.cli.plugins_cmd import plugins_group as _plugins
 from raven.cli.ravencode_cmd import ravencode_group as _ravencode
 from raven.cli.routine_cmd import routine_group as _routine
@@ -243,6 +244,9 @@ def deploy():
 @click.option("--dry-run", is_flag=True, help="Check for updates without applying")
 def update(dry_run: bool):
     """Check for and apply updates via pip"""
+    if not pip_available():
+        console.print(f"[yellow]{MISSING_PIP}[/yellow]")
+        return
     console.print("[bold]Checking for Raven updates...[/bold]")
     try:
         result = subprocess.run(

@@ -45,7 +45,11 @@ LABEL org.opencontainers.image.title="Raven AI" \
 
 WORKDIR /app
 COPY --from=wheel-builder /build/dist/*.whl /tmp/
-RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
+RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl     && pip uninstall -y pip setuptools
+# pip и setuptools остаются нужны только на стадии сборки. В готовом образе pip
+# лежит вендоренными копиями зависимостей (pip/_vendor/urllib3 2.7.0), которые
+# сканер затем приписывает приложению, и ставит что-то в контейнер всё равно нечем:
+# site-packages принадлежат root, а процесс работает под raven.
 COPY workspace/ workspace/
 COPY plugins/ plugins/
 COPY --from=web-builder /web/dist /app/web/dist
