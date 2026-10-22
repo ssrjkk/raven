@@ -65,6 +65,20 @@ class TestStageReporting:
         assert result.status == "fail"
         assert "TIMED OUT after 600s" in result.detail
 
+    def test_unit_batch_uses_its_configured_cap(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, Any] = {}
+        _stub_run(monkeypatch, 0, "6424 passed, 22 skipped in 682.73s (0:11:22)", "", captured)
+        result = ca.check_component("unit")
+        assert result.status == "pass"
+        assert captured["timeout"] == 1200
+
+    def test_components_without_a_cap_keep_600s(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, Any] = {}
+        _stub_run(monkeypatch, 0, "169 passed in 9.54s", "", captured)
+        result = ca.check_component("channels")
+        assert result.status == "pass"
+        assert captured["timeout"] == 600
+
     def test_full_suite_timeout_is_a_failed_stage(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -83,3 +97,31 @@ class TestStageReporting:
         assert result.status == "pass"
         assert result.detail == "1234 passed in 900.0s (0:15:00)"
         assert captured["timeout"] == 1800
+
+    def test_mypy_timeout_names_the_kill_instead_of_an_empty_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, Any] = {}
+        _stub_run(monkeypatch, ca.TIMEOUT_RETURNCODE, "", "TIMED OUT after 300s (process killed)", captured)
+        result = ca.check_mypy()
+        assert result.status == "fail"
+        assert "TIMED OUT after 300s" in result.detail
+        assert captured["timeout"] == 300
+
+    def test_mypy_reports_type_errors_as_usual(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, Any] = {}
+        _stub_run(monkeypatch, 1, "raven/tools/media.py:246:24: error: Name 'foo' is not defined", "", captured)
+        result = ca.check_mypy()
+        assert result.status == "fail"
+        assert "media.py:246" in result.detail
+
+    def test_ruff_timeout_names_the_kill(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, Any] = {}
+        _stub_run(monkeypatch, ca.TIMEOUT_RETURNCODE, "", "TIMED OUT after 120s (process killed)", captured)
+        result = ca.check_ruff()
+        assert result.status == "fail"
+        assert "TIMED OUT after 120s" in result.detail

@@ -367,6 +367,14 @@ class TestChaosEngineering:
         assert self.ce._validate_hypothesis(result) is True
 
 
+async def _wait_for_snapshots(m: SystemMonitor, limit: int = 200) -> None:
+    # The collector samples through a worker thread, so a fixed sleep loses the race on a busy runner.
+    for _ in range(limit):
+        if m.get_snapshots():
+            return
+        await asyncio.sleep(0.01)
+
+
 class TestSystemMonitorStartStop:
     async def test_start_collects_then_stop(self, monkeypatch: pytest.MonkeyPatch):
         m = SystemMonitor(collect_interval_sec=0.01)
@@ -377,10 +385,23 @@ class TestSystemMonitorStartStop:
         monkeypatch.setattr(m, "_get_network_latency", _fast_latency)
         await m.start()
         await m.start()  # second start hits the already-running early return
-        await asyncio.sleep(0.05)
+        await _wait_for_snapshots(m)
         snaps = await m.stop()
         assert len(snaps) >= 1
         assert m._task is None
+
+    async def test_start_collects_through_a_slow_first_sample(self, monkeypatch: pytest.MonkeyPatch):
+        m = SystemMonitor(collect_interval_sec=0.01)
+
+        async def _slow_snapshot() -> SystemSnapshot:
+            await asyncio.sleep(0.2)
+            return SystemSnapshot(timestamp=1.0)
+
+        monkeypatch.setattr(m, "_collect_snapshot", _slow_snapshot)
+        await m.start()
+        await _wait_for_snapshots(m)
+        snaps = await m.stop()
+        assert len(snaps) >= 1
 
     def test_get_snapshots_filters_by_since(self):
         m = SystemMonitor()

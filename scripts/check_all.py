@@ -174,6 +174,8 @@ def check_ruff() -> CheckResult:
     dt = time.time() - t0
     if r.returncode == 0:
         return CheckResult("ruff check", "pass", dt)
+    if r.returncode == TIMEOUT_RETURNCODE:
+        return CheckResult("ruff check", "fail", dt, r.stderr)
     errors = [line for line in r.stdout.splitlines() if line.strip()]
     return CheckResult("ruff check", "fail", dt, "\n".join(errors[:20]))
 
@@ -195,10 +197,14 @@ def check_mypy() -> CheckResult:
     _print_section("Type Check (mypy)")
     t0 = time.time()
     targets = _mypy_targets()
-    r = _run([sys.executable, "-m", "mypy", *targets, "--ignore-missing-imports"], timeout=120)
+    # A cold cache over 858 files measured 134.5s on the dev laptop, so a 120s cap kills a
+    # passing run and reports it as a failure with no diagnostics at all.
+    r = _run([sys.executable, "-m", "mypy", *targets, "--ignore-missing-imports"], timeout=300)
     dt = time.time() - t0
     if r.returncode == 0:
         return CheckResult("mypy", "pass", dt)
+    if r.returncode == TIMEOUT_RETURNCODE:
+        return CheckResult("mypy", "fail", dt, r.stderr)
     errors = [line for line in (r.stdout + r.stderr).splitlines() if line.strip() and ":" in line]
     return CheckResult("mypy", "fail", dt, "\n".join(errors[:20]))
 
@@ -339,6 +345,9 @@ COMPONENTS: dict[str, dict[str, Any]] = {
             "tests/integration/",
             "tests/eval/",
         ],
+        # Measured 2026-10-22 in a clean venv, nothing else on the box: 682.7s of pytest,
+        # 704.7s wall for 6424 tests. The 600s default killed a fully green batch.
+        "timeout": 1200,
         "desc": "Unit tests (everything except e2e/integration/eval/sandbox)",
     },
 }
@@ -364,7 +373,7 @@ def check_component(name: str) -> CheckResult:
     if "mark" in cfg:
         cmd.extend(["-m", cfg["mark"]])
 
-    r = _run(cmd, timeout=600)
+    r = _run(cmd, timeout=int(cfg.get("timeout", 600)))
     dt = time.time() - t0
 
     output = _strip_ansi(r.stdout + r.stderr)
