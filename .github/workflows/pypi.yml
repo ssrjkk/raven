@@ -1,12 +1,16 @@
 name: PyPI
 
+# Publish only when asked. The `release: published` trigger used to live here, and its
+# `if: ${{ !inputs.dry_run }}` guard was always true for it: `inputs` is populated only for
+# workflow_dispatch, so on a release event the condition read `!null`. v0.4.1 and v0.4.2 both
+# reached the real `Publish to PyPI` step that way and died on
+# "Trusted publishing exchange failure" -- a red run on every release, and one misconfigured
+# secret away from an irreversible upload.
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Dry run (no publish)"
+        description: "Dry run (publish to TestPyPI instead)"
         type: boolean
         default: true
 
