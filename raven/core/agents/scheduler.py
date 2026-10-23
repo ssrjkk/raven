@@ -30,14 +30,15 @@ class TaskScheduler(Generic[T, R]):
 
     async def run_parallel(self, tasks: Sequence[T], max_concurrent: int | None = None) -> list[R]:
         sem = asyncio.Semaphore(max_concurrent or self._max_concurrent)
-        results: list[R | None] = [None] * len(tasks)
 
-        async def run_one(i: int, task: T) -> None:
+        async def run_one(i: int, task: T) -> R:
             async with sem:
-                results[i] = await self._executor(i, task)
+                return await self._executor(i, task)
 
-        await asyncio.gather(*[run_one(i, t) for i, t in enumerate(tasks)])
-        return [r for r in results if r is not None]
+        # gather keeps the input order, so the result list stays aligned with the task list.
+        # Dropping None results used to shorten it: a task legitimately returning None vanished and
+        # every later result shifted one slot toward the wrong task.
+        return list(await asyncio.gather(*(run_one(i, t) for i, t in enumerate(tasks))))
 
     async def run_dag(self, tasks: Sequence[T], max_concurrent: int | None = None) -> list[R]:
         sem = asyncio.Semaphore(max_concurrent or self._max_concurrent)

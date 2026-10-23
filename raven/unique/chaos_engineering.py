@@ -75,6 +75,7 @@ class ExperimentResult:
     faults_recovered: list[dict[str, Any]] = field(default_factory=list)
     hypothesis_validated: bool = False
     resilience_score: float = 0.0
+    elapsed_sec: float = 0.0
     errors: list[str] = field(default_factory=list)
 
 
@@ -402,8 +403,11 @@ class FaultInjector:
 
     async def _cpu_burn(self, cores: int, duration: float, fault_id: str) -> None:
         async def _burn() -> None:
-            end = time.time() + duration
-            while time.time() < end:
+            # Monotonic: a fault window bounded by the wall clock got longer when the clock
+            # stepped backwards (NTP correction on a laptop), so the machine burned CPU past
+            # the duration that was asked for and reported.
+            deadline = time.monotonic() + duration
+            while time.monotonic() < deadline:
                 _ = [x * x for x in range(10000)]
                 await asyncio.sleep(0.01)
 
@@ -427,8 +431,8 @@ class FaultInjector:
         chunks: list[bytearray] = []
         total_allocated = 0
         try:
-            end = time.time() + duration
-            while time.time() < end and total_allocated < mb * 1024 * 1024:
+            deadline = time.monotonic() + duration
+            while time.monotonic() < deadline and total_allocated < mb * 1024 * 1024:
                 chunk = bytearray(chunk_size)
                 chunks.append(chunk)
                 total_allocated += chunk_size
@@ -549,6 +553,9 @@ class ChaosEngineering:
         experiment_id = uuid.uuid4().hex[:12]
         logger.info("Starting experiment '{}' [{}]: {} fault(s)", config.name, experiment_id, len(config.faults))
 
+        # start_time/end_time stay wall clock (they are timestamps for the report); the elapsed
+        # figure is measured on the monotonic clock so an NTP step cannot stretch a run's duration.
+        started_monotonic = time.monotonic()
         result = ExperimentResult(
             experiment_id=experiment_id,
             config=config,
@@ -560,7 +567,12 @@ class ChaosEngineering:
 
         try:
             await self._monitor.start()
-            result.metrics_before = self._monitor.get_average_metrics()
+            # metrics_before has to be an actual measurement. Sampled straight after start() the
+            # monitor had not collected a single snapshot yet, so the baseline was all zeros:
+            # steadiness came out 0.0 for a machine that never moved, 40% of the resilience score
+            # was dead weight, and the report's "delta" was just the after-value.
+            baseline = await self._monitor._collect_snapshot()
+            result.metrics_before = self._monitor.get_average_metrics([baseline])
 
             result.status = ExperimentStatus.RUNNING
             for i, fault_config in enumerate(config.faults):
@@ -594,10 +606,13 @@ class ChaosEngineering:
 
             result.status = ExperimentStatus.RECOVERING
             await self._injector.recover_all()
-
+            # Only the snapshots taken after recover_all() describe the recovered system; the
+            # monitor's history still holds every fault-phase sample, and averaging all of it
+            # measured "during and after" as if it were "after".
+            recovered_from = len(self._monitor.get_snapshots())
             await asyncio.sleep(2.0)
             snapshots = await self._monitor.stop()
-            result.metrics_after = self._monitor.get_average_metrics(snapshots)
+            result.metrics_after = self._monitor.get_average_metrics(snapshots[recovered_from:] or snapshots)
             result.hypothesis_validated = self._validate_hypothesis(result)
             result.resilience_score = self._compute_resilience_score(result)
             result.status = ExperimentStatus.COMPLETED
@@ -630,6 +645,7 @@ class ChaosEngineering:
                 with contextlib.suppress(Exception, asyncio.CancelledError):
                     await self._monitor.stop()
             result.end_time = time.time()
+            result.elapsed_sec = round(time.monotonic() - started_monotonic, 3)
             self._running_experiment = None
 
         return result
@@ -665,7 +681,9 @@ class ChaosEngineering:
             msg = f"Experiment not found: {experiment_id}"
             raise ValueError(msg)
 
-        duration = result.end_time - result.start_time if result.end_time > 0 else 0.0
+        duration = result.elapsed_sec or (
+            result.end_time - result.start_time if result.end_time > 0 else 0.0
+        )
         steadiness = self._compute_steadiness(result)
         return {
             "experiment_id": result.experiment_id,

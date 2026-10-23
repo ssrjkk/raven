@@ -5,6 +5,7 @@ import contextlib
 import shutil
 import subprocess
 import sys
+import time
 import types
 from collections import namedtuple
 from pathlib import Path
@@ -832,3 +833,100 @@ class TestHypothesisAndScores:
         ce = ChaosEngineering()
         r = self._result([], {}, {}, 0, 0)
         assert ce._compute_steadiness(r) == 1.0
+
+
+class TestExperimentMeasurement:
+    """The scores only mean something if the baseline and the recovery window are real samples."""
+
+    def _ce(self, monkeypatch: pytest.MonkeyPatch, sampler: Any) -> ChaosEngineering:
+        import raven.unique.chaos_engineering as chaos_mod
+
+        ce = ChaosEngineering()
+        ce._monitor._interval = 0.05
+        monkeypatch.setattr(chaos_mod.time, "monotonic", time.monotonic, raising=False)
+        monkeypatch.setattr(ce._monitor, "_collect_snapshot", sampler)
+
+        async def _no_latency() -> float:
+            return 0.0
+
+        monkeypatch.setattr(ce._monitor, "_get_network_latency", _no_latency)
+        return ce
+
+    @staticmethod
+    def _snapshot(cpu: float) -> SystemSnapshot:
+        return SystemSnapshot(
+            cpu_percent=cpu,
+            memory_percent=cpu,
+            disk_percent=cpu,
+            processes_running=int(cpu),
+            network_latency_ms=cpu,
+            timestamp=time.time(),
+        )
+
+    async def test_metrics_before_is_an_actual_measurement(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def _steady() -> SystemSnapshot:
+            return self._snapshot(25.0)
+
+        ce = self._ce(monkeypatch, _steady)
+        cfg = ExperimentConfig(name="baseline", hypothesis=ExperimentHypothesis(description="d"), faults=[])
+        result = await ce.run_experiment(cfg)
+
+        assert result.metrics_before["cpu"] == 25.0, f"the baseline collapsed to zeros: {result.metrics_before}"
+        assert result.metrics_after["cpu"] == 25.0
+        assert result.resilience_score == 1.0
+
+    async def test_metrics_after_describes_only_the_recovery_window(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        state = {"faulted": True}
+
+        async def _sample() -> SystemSnapshot:
+            return self._snapshot(90.0 if state["faulted"] else 10.0)
+
+        ce = self._ce(monkeypatch, _sample)
+        real_recover_all = ce._injector.recover_all
+
+        async def _recover_and_settle() -> None:
+            await real_recover_all()
+            state["faulted"] = False
+
+        monkeypatch.setattr(ce._injector, "recover_all", _recover_and_settle)
+        cfg = ExperimentConfig(name="window", hypothesis=ExperimentHypothesis(description="d"), faults=[])
+        result = await ce.run_experiment(cfg)
+
+        assert result.metrics_before["cpu"] == 90.0
+        assert result.metrics_after["cpu"] == 10.0, "fault-phase samples are still averaged into 'after'"
+
+    async def test_a_cpu_fault_window_ignores_a_backward_clock_step(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import raven.unique.chaos_engineering as chaos_mod
+
+        ce = ChaosEngineering()
+        real_time = time.time
+        reads = {"n": 0}
+
+        def jumping() -> float:
+            # The window is set on the first read; every later read answers 30 s in the past,
+            # which is what an NTP correction does to a loop bounded by the wall clock.
+            reads["n"] += 1
+            return real_time() if reads["n"] == 1 else real_time() - 30.0
+
+        monkeypatch.setattr(chaos_mod.time, "time", jumping)
+        await asyncio.wait_for(ce._injector._cpu_burn(cores=1, duration=0.05, fault_id="f"), timeout=1.5)
+        assert reads["n"] == 0, "the fault window is still bounded by the wall clock"
+
+    async def test_reported_duration_is_measured_on_the_monotonic_clock(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import raven.unique.chaos_engineering as chaos_mod
+
+        ticks = iter(range(0, 10_000_000, 3_600))
+        monkeypatch.setattr(chaos_mod.time, "time", lambda: float(next(ticks)))
+
+        async def _steady() -> SystemSnapshot:
+            return self._snapshot(20.0)
+
+        ce = self._ce(monkeypatch, _steady)
+        cfg = ExperimentConfig(name="duration", hypothesis=ExperimentHypothesis(description="d"), faults=[])
+        result = await ce.run_experiment(cfg)
+        report = ce.generate_report(result.experiment_id)
+
+        assert report["duration_sec"] < 60.0, f"duration came from a jumping wall clock: {report['duration_sec']}"
+        assert result.end_time > result.start_time

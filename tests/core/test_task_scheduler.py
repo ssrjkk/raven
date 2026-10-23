@@ -92,3 +92,13 @@ async def test_dag_empty():
         return i
 
     assert await TaskScheduler(executor).run_dag([]) == []
+
+
+@pytest.mark.asyncio
+async def test_parallel_keeps_position_when_a_task_returns_none():
+    async def executor(i: int, t: T) -> str | None:
+        await asyncio.sleep(0.01 if i == 0 else 0.0)
+        return None if i == 1 else t.name
+
+    results = await TaskScheduler(executor).run_parallel([T("a"), T("b"), T("c")])
+    assert results == ["a", None, "c"]
