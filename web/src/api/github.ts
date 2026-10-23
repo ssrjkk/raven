@@ -1,4 +1,4 @@
-import { request } from "./client";
+import { LONG_REQUEST_TIMEOUT_MS, request } from "./client";
 import type {
 GitHubBranch, GitHubCloneResult, GitHubComment, GitHubContentItem,   GitHubCreateResult, GitHubFileEntry,
 GitHubFileTreeItem,   GitHubIssue, GitHubMergeResult,
@@ -42,7 +42,7 @@ export const githubApi = {
   githubCloneRepo: (owner: string, repo: string, branch = "main", targetDir = "") =>
     request<GitHubCloneResult>(`/api/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/clone`, {
       method: "POST", body: JSON.stringify({ owner, repo, branch, target_dir: targetDir }),
-    }),
+    }, LONG_REQUEST_TIMEOUT_MS),
   githubMergePR: (owner: string, repo: string, number: number, mergeMethod = "merge", commitTitle = "", commitMessage = "") =>
     request<GitHubMergeResult>(`/api/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}/merge`, {
       method: "POST", body: JSON.stringify({ owner, repo, pull_number: number, commit_title: commitTitle, commit_message: commitMessage, merge_method: mergeMethod }),

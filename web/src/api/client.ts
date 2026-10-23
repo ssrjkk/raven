@@ -63,7 +63,16 @@ export function isAuthenticated(): boolean {
   return !!_token;
 }
 
-export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+const REQUEST_TIMEOUT_MS = 15000;
+
+/**
+ * Requests the server runs to completion before it answers: fault experiments, training, pytest,
+ * provider generation, clones, agent loops. They legitimately outlive the default, and aborting
+ * them only fails the UI while the work keeps running on the gateway.
+ */
+export const LONG_REQUEST_TIMEOUT_MS = 900000;
+
+export async function request<T>(path: string, init?: RequestInit, timeoutMs: number = REQUEST_TIMEOUT_MS): Promise<T> {
   const isForm = init?.body instanceof FormData;
   const headers: Record<string, string> = {};
   if (!isForm) {
@@ -84,7 +93,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (externalSignal) {
     externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
   }
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${BASE}${path}`, {
       headers,
@@ -189,18 +198,18 @@ export const api = {
   testsRun: (path?: string, marker?: string, timeout = 120, extraArgs = "") =>
     request<{ text: string }>("/api/tests/run", {
       method: "POST", body: JSON.stringify({ path, marker, timeout, extra_args: extraArgs }),
-    }),
+    }, LONG_REQUEST_TIMEOUT_MS),
   testsCoverage: (path?: string, timeout = 180) =>
-    request<{ text: string }>("/api/tests/coverage", { method: "POST", body: JSON.stringify({ path, timeout }) }),
+    request<{ text: string }>("/api/tests/coverage", { method: "POST", body: JSON.stringify({ path, timeout }) }, LONG_REQUEST_TIMEOUT_MS),
   testsGenerate: (filePath: string) =>
-    request<{ text: string }>("/api/tests/generate", { method: "POST", body: JSON.stringify({ file_path: filePath }) }),
+    request<{ text: string }>("/api/tests/generate", { method: "POST", body: JSON.stringify({ file_path: filePath }) }, LONG_REQUEST_TIMEOUT_MS),
 
   cicdWorkflows: (owner?: string, repo?: string, provider = "github") =>
     request<{ text: string }>(`/api/cicd/workflows?owner=${encodeURIComponent(owner || "")}&repo=${encodeURIComponent(repo || "")}&provider=${provider}`),
   cicdRun: (workflowId: string, owner?: string, repo?: string, ref = "main", inputs = "", provider = "github") =>
     request<{ text: string }>("/api/cicd/run", {
       method: "POST", body: JSON.stringify({ workflow_id: workflowId, owner, repo, ref, inputs, provider }),
-    }),
+    }, LONG_REQUEST_TIMEOUT_MS),
   cicdStatus: (pipelineId: string, owner?: string, repo?: string, provider = "github") =>
     request<{ text: string }>(`/api/cicd/status?pipeline_id=${encodeURIComponent(pipelineId)}&owner=${encodeURIComponent(owner || "")}&repo=${encodeURIComponent(repo || "")}&provider=${provider}`),
   cicdRuns: (owner?: string, repo?: string, branch?: string, status?: string, provider = "github") =>
@@ -209,7 +218,7 @@ export const api = {
   mediaGenerate: (prompt: string, size = "1024x1024", quality = "standard") =>
     request<{ url: string; prompt: string; size: string; error?: string }>("/api/media/generate", {
       method: "POST", body: JSON.stringify({ prompt, size, quality }),
-    }),
+    }, LONG_REQUEST_TIMEOUT_MS),
   mediaProcess: (filepath: string, opts?: { resize?: string; crop?: string; rotate?: number; flip?: string; output_format?: string; quality?: number }) =>
     request<{ format: string; width: number; height: number; bytes: number; data_url: string }>("/api/media/process", {
       method: "POST", body: JSON.stringify({ filepath, ...opts }),
@@ -319,7 +328,7 @@ export const api = {
   finetuneStartTraining: (epochs = 3, learning_rate = 2e-4, batch_size = 4) =>
     request<TrainingResultData>("/api/finetune/train", {
       method: "POST", body: JSON.stringify({ epochs, learning_rate, batch_size }),
-    }),
+    }, LONG_REQUEST_TIMEOUT_MS),
   finetuneModelInfo: () => request<ModelInfoData>("/api/finetune/model/info"),
   finetuneCheckpoints: () => request<{ checkpoints: CheckpointData[] }>("/api/finetune/checkpoints"),
 
@@ -336,7 +345,7 @@ export const api = {
   chaosRunExperiment: (name: string, faults_json: string, hypothesis = "") =>
     request<ChaosExperimentResult>("/api/chaos/experiments", {
       method: "POST", body: JSON.stringify({ name, faults_json, hypothesis }),
-    }),
+    }, LONG_REQUEST_TIMEOUT_MS),
   chaosExperimentReport: (experiment_id: string) =>
     request<ChaosExperimentResult>(`/api/chaos/experiments/${experiment_id}/report`),
   chaosSummary: () => request<ChaosSummaryReport>("/api/chaos/resilience/summary"),
@@ -367,7 +376,7 @@ export const api = {
   scaffoldPlans: () =>
     request<{ id: string; name: string; description: string; questions: { key: string; label: string; default: string | boolean | number; type: string; options?: string[] }[] }[]>("/api/v1/scaffold/plans"),
   scaffoldGenerate: (templateId: string, answers: Record<string, string | boolean | number>, outputDir: string) =>
-    request<{ files: { path: string; content?: string }[]; tree: string }>("/api/v1/scaffold/generate", { method: "POST", body: JSON.stringify({ template_id: templateId, answers, output_dir: outputDir }) }),
+    request<{ files: { path: string; content?: string }[]; tree: string }>("/api/v1/scaffold/generate", { method: "POST", body: JSON.stringify({ template_id: templateId, answers, output_dir: outputDir }) }, LONG_REQUEST_TIMEOUT_MS),
 
   insightsCoding: (days: number) =>
     request<{ total_commits: number; total_days_active: number; avg_commits_per_day: number; commits_per_day: { date: string; count: number }[]; peak_hours: { hour: number; count: number }[]; top_files: { path: string; changes: number }[] }>(`/api/insights/coding?days=${days}`),
@@ -377,18 +386,18 @@ export const api = {
     request<{ total_files: number; total_dirs: number; by_extension: Record<string, number>; largest_files: { path: string; size_bytes: number }[]; recently_modified: { path: string; modified_at: string }[] }>("/api/insights/workspace"),
 
   ideAgentRun: (task: string, mode: string, workspace: string) =>
-    request<{ response?: string }>("/api/v1/agent/run", { method: "POST", body: JSON.stringify({ task, mode, workspace }) }),
+    request<{ response?: string }>("/api/v1/agent/run", { method: "POST", body: JSON.stringify({ task, mode, workspace }) }, LONG_REQUEST_TIMEOUT_MS),
   truthfulAgent: (prompt: string, context = "", model?: string) =>
     request<TruthfulResult>("/aios/agent/truthful", {
       method: "POST",
       body: JSON.stringify({ prompt, context, model: model ?? null }),
     }),
   ideContextIndex: (workspace: string) =>
-    request<{ indexed: number }>("/api/v1/context/index", { method: "POST", body: JSON.stringify({ workspace }) }),
+    request<{ indexed: number }>("/api/v1/context/index", { method: "POST", body: JSON.stringify({ workspace }) }, LONG_REQUEST_TIMEOUT_MS),
   ideContextSearch: (query: string, topK = 5) =>
     request<{ results: { content: string; file: string; score: number }[] }>("/api/v1/context/search", { method: "POST", body: JSON.stringify({ query, top_k: topK }) }),
   ideAgentExecute: (command: string, context: string) =>
-    request<{ output?: string; error?: string }>("/api/v1/agent/execute", { method: "POST", body: JSON.stringify({ command, context }) }),
+    request<{ output?: string; error?: string }>("/api/v1/agent/execute", { method: "POST", body: JSON.stringify({ command, context }) }, LONG_REQUEST_TIMEOUT_MS),
 
   workspaceTree: (path = ".") =>
     request<{ root: string; tree: { type: "file" | "directory"; name: string; path: string; children?: unknown[] } | null }>("/aios/workspace/tree?path=" + encodeURIComponent(path)),
@@ -408,15 +417,15 @@ export const api = {
     request<Record<string, unknown> & { id?: string; error?: string }>(`/aios/sessions/${encodeURIComponent(id)}`),
 
   mediaAnalyze: (filepath: string, prompt: string) =>
-    request<{ result?: string }>("/api/media/analyze", { method: "POST", body: JSON.stringify({ filepath, prompt }) }),
+    request<{ result?: string }>("/api/media/analyze", { method: "POST", body: JSON.stringify({ filepath, prompt }) }, LONG_REQUEST_TIMEOUT_MS),
   mediaVideoInfo: (filepath: string) =>
     request<{ result?: string }>("/api/media/video-info", { method: "POST", body: JSON.stringify({ filepath }) }),
   mediaVideoThumbnail: (filepath: string, timeSec = 1, size = "320x240") =>
     request<{ result?: string }>("/api/media/video-thumbnail", { method: "POST", body: JSON.stringify({ filepath, time_sec: timeSec, size }) }),
   mediaVideoTranscribe: (filepath: string, language?: string) =>
-    request<{ result?: string }>("/api/media/video-transcribe", { method: "POST", body: JSON.stringify({ filepath, language }) }),
+    request<{ result?: string }>("/api/media/video-transcribe", { method: "POST", body: JSON.stringify({ filepath, language }) }, LONG_REQUEST_TIMEOUT_MS),
   mediaVideoExtractFrames: (filepath: string, intervalSec = 5, maxFrames = 10, size = "320x240") =>
-    request<{ result?: string }>("/api/media/video-extract-frames", { method: "POST", body: JSON.stringify({ filepath, interval_sec: intervalSec, max_frames: maxFrames, size }) }),
+    request<{ result?: string }>("/api/media/video-extract-frames", { method: "POST", body: JSON.stringify({ filepath, interval_sec: intervalSec, max_frames: maxFrames, size }) }, LONG_REQUEST_TIMEOUT_MS),
 
   browserTabSwitch: (index: number) =>
     request<BrowserActionResult>("/api/browser/tabs/switch", { method: "POST", body: JSON.stringify({ index }) }),
