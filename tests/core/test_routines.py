@@ -191,20 +191,44 @@ class TestRoutineScheduling:
         assert nxt == datetime(2026, 1, 18, 0, 0, tzinfo=UTC)
         assert nxt.weekday() == 6
 
-    def test_cron_wildcard_dom_matches_every_day(self):
+    def test_cron_dow_only_wildcard_dom_runs_on_that_weekday(self):
+        # "*" in the day-of-month field is a wildcard, not a second matcher: this is Sundays,
+        # not "Sundays or every day".
         now = datetime(2026, 1, 15, 7, 0, tzinfo=UTC)
+        assert now.weekday() == 3
         nxt = RoutineEngine._next_run_time("0 0 * * 7", now)
-        assert nxt == datetime(2026, 1, 16, 0, 0, tzinfo=UTC)
+        assert nxt == datetime(2026, 1, 18, 0, 0, tzinfo=UTC)
+        assert nxt.weekday() == 6
+
+    def test_cron_single_weekday_schedule_waits_for_that_weekday(self):
+        now = datetime(2026, 10, 21, 7, 0, tzinfo=UTC)  # Wednesday
+        assert now.weekday() == 2
+        nxt = RoutineEngine._next_run_time("0 9 * * 1", now)
+        assert nxt == datetime(2026, 10, 26, 9, 0, tzinfo=UTC)
+        assert nxt.weekday() == 0
+
+    def test_cron_weekday_range_skips_the_weekend(self):
+        now = datetime(2026, 10, 24, 7, 0, tzinfo=UTC)  # Saturday
+        assert now.weekday() == 5
+        nxt = RoutineEngine._next_run_time("*/15 9-17 * * 1-5", now)
+        assert nxt == datetime(2026, 10, 26, 9, 0, tzinfo=UTC)
+        assert nxt.weekday() == 0
+
+    def test_cron_union_only_when_both_day_fields_are_restricted(self):
+        # crontab(5): OR applies when neither day field is a wildcard - the 1st or any Sunday.
+        now = datetime(2026, 1, 15, 7, 0, tzinfo=UTC)
+        assert RoutineEngine._next_run_time("0 0 1 * 7", now) == datetime(2026, 1, 18, 0, 0, tzinfo=UTC)
+        assert RoutineEngine._next_run_time("0 0 25 * 7", now) == datetime(2026, 1, 18, 0, 0, tzinfo=UTC)
 
     def test_cron_range_with_step(self):
         now = datetime(2026, 1, 15, 17, 59, tzinfo=UTC)
         nxt = RoutineEngine._next_run_time("*/15 9-17 * * *", now)
         assert nxt == datetime(2026, 1, 16, 9, 0, tzinfo=UTC)
 
-    def test_cron_first_of_month_union_semantics(self):
+    def test_cron_first_of_month_waits_for_the_first(self):
         now = datetime(2026, 1, 15, 7, 0, tzinfo=UTC)
         nxt = RoutineEngine._next_run_time("0 0 1 * *", now)
-        assert nxt == datetime(2026, 1, 16, 0, 0, tzinfo=UTC)
+        assert nxt == datetime(2026, 2, 1, 0, 0, tzinfo=UTC)
 
     def test_cron_invalid_schedule_returns_none(self):
         now = datetime(2026, 1, 15, 7, 0, tzinfo=UTC)

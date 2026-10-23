@@ -12,6 +12,22 @@ from raven.core.periodic_engine import PeriodicEngine
 from raven.core.routine.models import Routine, RoutineAction, RoutineLog, RoutineStatus, RoutineTrigger
 from raven.core.routine.store import RoutineStore
 
+
+def _day_matches(
+    moment: datetime, days: set[int], weekdays: set[int], dom_restricted: bool, dow_restricted: bool
+) -> bool:
+    """crontab(5) day matching: OR only when both day fields are restricted."""
+    day_ok = moment.day in days
+    weekday_ok = moment.weekday() in weekdays
+    if dom_restricted and dow_restricted:
+        return day_ok or weekday_ok
+    if dom_restricted:
+        return day_ok
+    if dow_restricted:
+        return weekday_ok
+    return True
+
+
 _running_engine: RoutineEngine | None = None
 
 
@@ -150,6 +166,11 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
             result.update(range(start, end + 1, step))
         return result
 
+    @staticmethod
+    def _is_star_field(field: str) -> bool:
+        """Whether a day field is a wildcard, optionally stepped ("*" or "*/2")."""
+        return field.partition("/")[0].strip() == "*"
+
     @classmethod
     def _next_cron_run(cls, schedule: str, now: datetime) -> datetime | None:
         fields = schedule.split()
@@ -164,6 +185,12 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
             return None
         # cron: 0 or 7 = Sunday; Python weekday: Monday=0 .. Sunday=6
         dows = {6 if d in (0, 7) else d - 1 for d in dows}
+        # crontab(5): the day of month and the day of week are OR-ed together only when BOTH are
+        # restricted. With one of them a wildcard, the other alone decides - so "0 0 1 * *" is the
+        # first of the month, not every day, and "0 9 * * 1" is Mondays, not Mondays plus the
+        # Wednesday it was written on.
+        dom_restricted = not cls._is_star_field(fields[2])
+        dow_restricted = not cls._is_star_field(fields[4])
         current = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
         deadline = now + timedelta(days=366)
         while current <= deadline:
@@ -172,7 +199,7 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
                 month = 1 if current.month == 12 else current.month + 1
                 current = datetime(year, month, 1, tzinfo=now.tzinfo)
                 continue
-            if current.day not in days and current.weekday() not in dows:
+            if not _day_matches(current, days, dows, dom_restricted, dow_restricted):
                 current = current.replace(hour=0, minute=0) + timedelta(days=1)
                 continue
             if current.hour not in hours:
