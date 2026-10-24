@@ -7,6 +7,11 @@ from loguru import logger
 
 from raven.core.llm import LLMRouter
 
+# The warning note the manager injects into history. It is the manager's own output, so each pass
+# replaces the previous one instead of stacking: without that the gateway persisted a second and
+# third "[Note: ...]" copy on the turns that followed, and they never left the conversation.
+_NOTE_PREFIX = "[Note: Context usage is at "
+
 
 @dataclass
 class ContextWindowConfig:
@@ -70,6 +75,16 @@ class ContextWindowManager:
         return messages[start:] if start else messages
 
     async def manage(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not messages:
+            return messages
+
+        # Drop the note from a previous pass before measuring, so it cannot both stack up and
+        # inflate the ratio that decides whether to add another one. The list is only rebuilt when
+        # a note was actually present: callers compare the result by identity to decide whether
+        # the history has to be rewritten.
+        stripped = [m for m in messages if not str(m.get("content", "")).startswith(_NOTE_PREFIX)]
+        if len(stripped) != len(messages):
+            messages = stripped
         if not messages:
             return messages
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import time
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -13,6 +12,10 @@ import pytest
 import ravencode.runtime.checkpoints as ckpt_mod
 from ravencode.runtime.checkpoints import CheckpointManager
 from ravencode.runtime.tools.wrappers import undo_changes_tool
+
+
+def _write_json(path: Path, payload: Any) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
 @pytest.fixture(autouse=True)
@@ -58,38 +61,51 @@ class TestUniqueIds:
 
 
 class TestUndoTargetsTheNewest:
+    """Ordering is decided by the recorded time, not by which line was appended last.
+
+    The stamps are rewritten on disk instead of patching the clock: a global time.time patch is
+    read by pytest's own duration accounting too, and it takes the run down with it.
+    """
+
+    @staticmethod
+    def _restamp(storage: Path, cid: str, created: float) -> None:
+        index_path = storage / "index.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index[cid]["created"] = created
+        _write_json(index_path, index)
+        info_path = storage / cid / "info.json"
+        info = json.loads(info_path.read_text(encoding="utf-8"))
+        info["created"] = created
+        _write_json(info_path, info)
+
     async def test_list_is_ordered_by_recorded_time(self, tmp_path: Path) -> None:
         mgr = _mgr(tmp_path)
-        real = time.time
-        try:
-            time.time = lambda: 1_000.0  # type: ignore[assignment]
-            (tmp_path / "workspace" / "newer.txt").write_text("NEWER", encoding="utf-8")
-            newer = _cid(await mgr.save("recorded later in the day"))
-            time.time = lambda: 500.0  # type: ignore[assignment]  # clock stepped backwards
-            older = _cid(await mgr.save("recorded earlier"))
-        finally:
-            time.time = real  # type: ignore[assignment]
+        (tmp_path / "workspace" / "newer.txt").write_text("NEWER", encoding="utf-8")
+        later = _cid(await mgr.save("appended second"))
+        older = _cid(await mgr.save("appended third"))
+        storage = tmp_path / "cp"
+        self._restamp(storage, older, 500.0)
+        self._restamp(storage, later, 1_000.0)
+
         ordered = [c["id"] for c in mgr.list()]
-        assert ordered == [older, newer], f"insertion order leaked into list(): {ordered}"
+        assert ordered == [older, later], f"insertion order leaked into list(): {ordered}"
 
     async def test_undo_restores_the_highest_created(self, tmp_path: Path) -> None:
         mgr = _mgr(tmp_path)
-        real = time.time
-        try:
-            time.time = lambda: 1_000.0  # type: ignore[assignment]
-            (tmp_path / "workspace" / "a.txt").write_text("newest", encoding="utf-8")
-            await mgr.save("newest")
-            time.time = lambda: 500.0  # type: ignore[assignment]
-            (tmp_path / "workspace" / "a.txt").write_text("stale", encoding="utf-8")
-            await mgr.save("stale")
-        finally:
-            time.time = real  # type: ignore[assignment]
+        target = tmp_path / "workspace" / "a.txt"
+        target.write_text("first state", encoding="utf-8")
+        newest = _cid(await mgr.save("newest content"))
+        stale = _cid(await mgr.save("stale content"))
+        storage = tmp_path / "cp"
+        self._restamp(storage, stale, 500.0)
+        self._restamp(storage, newest, 1_000.0)
+
         ckpt_mod._checkpoint_manager = mgr
-        (tmp_path / "workspace" / "a.txt").write_text("changed since", encoding="utf-8")
+        target.write_text("changed since", encoding="utf-8")
 
         result = await undo_changes_tool()
         assert result.startswith("[ok]"), result
-        assert (tmp_path / "workspace" / "a.txt").read_text(encoding="utf-8") == "newest"
+        assert target.read_text(encoding="utf-8") == "first state"
 
 
 class TestIndexRecovery:

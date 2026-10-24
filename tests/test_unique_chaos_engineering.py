@@ -8,6 +8,7 @@ import sys
 import time
 import types
 from collections import namedtuple
+from itertools import chain, repeat
 from pathlib import Path
 from typing import Any
 
@@ -839,11 +840,8 @@ class TestExperimentMeasurement:
     """The scores only mean something if the baseline and the recovery window are real samples."""
 
     def _ce(self, monkeypatch: pytest.MonkeyPatch, sampler: Any) -> ChaosEngineering:
-        import raven.unique.chaos_engineering as chaos_mod
-
         ce = ChaosEngineering()
         ce._monitor._interval = 0.05
-        monkeypatch.setattr(chaos_mod.time, "monotonic", time.monotonic, raising=False)
         monkeypatch.setattr(ce._monitor, "_collect_snapshot", sampler)
 
         async def _no_latency() -> float:
@@ -896,8 +894,6 @@ class TestExperimentMeasurement:
         assert result.metrics_after["cpu"] == 10.0, "fault-phase samples are still averaged into 'after'"
 
     async def test_a_cpu_fault_window_ignores_a_backward_clock_step(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import raven.unique.chaos_engineering as chaos_mod
-
         ce = ChaosEngineering()
         real_time = time.time
         reads = {"n": 0}
@@ -908,17 +904,18 @@ class TestExperimentMeasurement:
             reads["n"] += 1
             return real_time() if reads["n"] == 1 else real_time() - 30.0
 
-        monkeypatch.setattr(chaos_mod.time, "time", jumping)
+        monkeypatch.setattr(time, "time", jumping)
         await asyncio.wait_for(ce._injector._cpu_burn(cores=1, duration=0.05, fault_id="f"), timeout=1.5)
         assert reads["n"] == 0, "the fault window is still bounded by the wall clock"
 
     async def test_reported_duration_is_measured_on_the_monotonic_clock(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import raven.unique.chaos_engineering as chaos_mod
-
-        ticks = iter(range(0, 10_000_000, 3_600))
-        monkeypatch.setattr(chaos_mod.time, "time", lambda: float(next(ticks)))
+        ticks = chain(iter(range(0, 10_000_000, 3_600)), repeat(10_000_000.0))
+        # chaos_engineering imports the same stdlib time module this test patches. The tail is an
+        # infinite repeat: a finite iterator would run dry inside pytest's own timing and take the
+        # whole run down with StopIteration.
+        monkeypatch.setattr(time, "time", lambda: float(next(ticks)))
 
         async def _steady() -> SystemSnapshot:
             return self._snapshot(20.0)

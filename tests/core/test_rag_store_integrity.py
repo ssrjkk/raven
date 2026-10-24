@@ -87,7 +87,12 @@ class TestIndexRebuildIsDeferred:
     ) -> None:
         calls: list[str] = []
         real = store._rebuild_index
-        monkeypatch.setattr(store, "_rebuild_index", lambda: (calls.append("r"), real())[1])
+
+        def counted() -> None:
+            calls.append("r")
+            real()
+
+        monkeypatch.setattr(store, "_rebuild_index", counted)
         await store.upsert("a", "alpha")
         await store.search("alpha", k=1)
         await store.upsert("b", "beta")

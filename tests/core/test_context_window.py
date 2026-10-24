@@ -88,3 +88,40 @@ async def test_manage_keeps_tool_pair_inside_window(mgr):
     result = await mgr.manage(msgs)
     assert len(result) == 4
     assert [m.get("role") for m in result[-2:]] == ["assistant", "tool"]
+
+
+@pytest.mark.asyncio
+async def test_manage_does_not_stack_warning_notes(mgr):
+    """The gateway persists what manage() returns and reloads it next turn.
+
+    A note left in that history is the manager's own output, so a second pass used to add a
+    second copy - and the copies counted toward the ratio that decides whether to add more.
+    """
+    msgs: list[dict[str, object]] = [
+        {"role": "system", "content": "you are raven"},
+        {"role": "user", "content": "x" * 1400},
+    ]
+    notes_per_turn: list[int] = []
+    tokens_per_turn: list[int] = []
+    for _ in range(4):
+        result = await mgr.manage(msgs)
+        notes_per_turn.append(sum(1 for m in result if str(m.get("content", "")).startswith("[Note: Context usage")))
+        tokens_per_turn.append(await mgr.estimate_tokens(result))
+        msgs = result
+
+    assert all(n == 1 for n in notes_per_turn), f"warning notes stacked: {notes_per_turn}"
+    assert len(set(tokens_per_turn)) == 1, f"the note grew the context it measures: {tokens_per_turn}"
+
+
+@pytest.mark.asyncio
+async def test_manage_drops_a_stale_note_when_usage_falls(mgr):
+    msgs: list[dict[str, object]] = [
+        {"role": "system", "content": "you are raven"},
+        {
+            "role": "system",
+            "content": "[Note: Context usage is at 45%. Please be concise in responses to conserve context.]",
+        },
+        {"role": "user", "content": "short"},
+    ]
+    result = await mgr.manage(msgs)
+    assert not any(str(m.get("content", "")).startswith("[Note: Context usage") for m in result)
