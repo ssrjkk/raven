@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -96,13 +98,40 @@ class TestRoutineStore:
         assert loaded.status == RoutineStatus.PAUSED
 
     @pytest.mark.asyncio
-    async def test_update_last_run(self, store: RoutineStore, routine: Routine):
+    async def test_record_run_sets_status_and_logs(self, store: RoutineStore, routine: Routine):
         await store.save_routine(routine)
-        await store.update_last_run(routine.id, "success")
+        log = RoutineLog(routine_id=routine.id, status="success", message="sent", duration_ms=12.0)
+        await store.record_run(routine.id, "success", log)
         loaded = await store.load_routine(routine.id)
         assert loaded is not None
         assert loaded.last_run_status == "success"
         assert loaded.last_run_at is not None
+        assert [row.status for row in await store.get_logs(routine.id)] == ["success"]
+
+    @pytest.mark.asyncio
+    async def test_record_run_is_atomic(
+        self, store: RoutineStore, routine: Routine, monkeypatch: pytest.MonkeyPatch
+    ):
+        await store.save_routine(routine)
+        db = await store._conn()
+        real_execute = db.execute
+
+        async def failing_execute(sql: str, params: Sequence[Any] = ()) -> Any:
+            if sql.startswith("UPDATE routines"):
+                raise RuntimeError("database is locked")
+            return await real_execute(sql, params)
+
+        monkeypatch.setattr(db, "execute", failing_execute)
+        log = RoutineLog(routine_id=routine.id, status="success", message="sent", duration_ms=1.0)
+        with pytest.raises(RuntimeError):
+            await store.record_run(routine.id, "success", log)
+
+        # neither half of the unit of work survived, so a reader can never see a run log
+        # describing an execution that the routine row does not know about
+        assert await store.get_logs(routine.id) == []
+        loaded = await store.load_routine(routine.id)
+        assert loaded is not None
+        assert loaded.last_run_status is None
 
     @pytest.mark.asyncio
     async def test_delete(self, store: RoutineStore, routine: Routine):
@@ -377,10 +406,15 @@ class TestRoutineEngineLoop:
         await store.save_routine(r)
         try:
             await engine.start()
+            loaded = None
             for _ in range(50):
-                if gw._send.await_count > 0:
+                loaded = await store.load_routine(r.id)
+                if loaded is not None and loaded.last_run_status is not None:
                     break
                 await asyncio.sleep(0.1)
+            assert loaded is not None
+            assert loaded.last_run_status == "success"
+            assert loaded.last_run_at is not None
             gw._send.assert_awaited_once()
             call_args = gw._send.await_args.args
             assert call_args[0] == "mock"
@@ -388,9 +422,6 @@ class TestRoutineEngineLoop:
             logs = await store.get_logs(r.id)
             assert len(logs) >= 1
             assert logs[0].status == "success"
-            loaded = await store.load_routine(r.id)
-            assert loaded is not None
-            assert loaded.last_run_status == "success"
         finally:
             await engine.stop()
 

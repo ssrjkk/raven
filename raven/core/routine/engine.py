@@ -287,8 +287,7 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
                 duration_ms=duration,
                 created_at=time.time(),
             )
-            await self._store.save_log(log)
-            await self._store.update_last_run(routine.id, "success")
+            await self._store.record_run(routine.id, "success", log)
             routine.last_run_status = "success"
             routine.last_run_at = time.time()
 
@@ -301,8 +300,7 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
                 duration_ms=duration,
                 created_at=time.time(),
             )
-            await self._store.save_log(log)
-            await self._store.update_last_run(routine.id, f"error: {e}")
+            await self._store.record_run(routine.id, f"error: {e}", log)
             routine.last_run_status = f"error: {e}"
             routine.last_run_at = time.time()
             logger.error("Routine {} execution failed: {}", routine.id, e)

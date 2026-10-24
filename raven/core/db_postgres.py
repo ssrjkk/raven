@@ -9,6 +9,7 @@ from loguru import logger
 
 from raven.core._json import json
 from raven.core.asyncdb import PostgresDB
+from raven.core.metrics import timed
 from raven.core.models import Message, Session
 
 _MAX_CONNECT_RETRIES = 3
@@ -56,6 +57,8 @@ class PostgresDatabase:
         return self._pool
 
     async def connect(self):
+        if self._pool is not None:
+            return
         last_error: Exception | None = None
         for attempt in range(1, _MAX_CONNECT_RETRIES + 1):
             try:
@@ -190,11 +193,18 @@ class PostgresDatabase:
             for ddl in tables:
                 await conn.execute(ddl)
 
-    async def disconnect(self):
-        if self._pool:
-            await self._pool.close()
-            self._pool = None
+    async def disconnect(self) -> None:
+        pool, self._pool = self._pool, None
+        if pool is None:
+            return
+        try:
+            await pool.close()
+        except Exception as e:
+            # the reference is already dropped, so a later connect() rebuilds instead of reusing a
+            # pool whose server went away
+            logger.error("Postgres pool close failed: {}", e)
 
+    @timed("get_or_create_session")
     async def get_or_create_session(
         self, session_id: str, channel: str, user_id: str, agent_id: str = "default"
     ) -> Session:
@@ -250,7 +260,8 @@ class PostgresDatabase:
             )
         return session
 
-    async def save_message(self, msg: Message):
+    @timed("save_message")
+    async def save_message(self, msg: Message) -> None:
         async with self._p.acquire() as conn, conn.transaction():
             await conn.execute(
                 "INSERT INTO messages "
@@ -269,6 +280,7 @@ class PostgresDatabase:
                 msg.session_id,
             )
 
+    @timed("get_session_messages")
     async def get_session_messages(self, session_id: str, limit: int = 50) -> list[Message]:
         async with self._p.acquire() as conn:
             rows = await conn.fetch(
@@ -291,6 +303,7 @@ class PostgresDatabase:
             )
         return result
 
+    @timed("find_or_create_user")
     async def find_or_create_user(
         self, channel: str, external_id: str, display_name: str | None = None
     ) -> dict[str, Any]:
@@ -382,12 +395,14 @@ class PostgresDatabase:
             )
         return row["value"] if row else None
 
-    async def delete_session(self, session_id: str):
+    @timed("delete_session")
+    async def delete_session(self, session_id: str) -> None:
         async with self._p.acquire() as conn, conn.transaction():
             await conn.execute("DELETE FROM messages WHERE session_id = $1", session_id)
             await conn.execute("DELETE FROM sessions WHERE id = $1", session_id)
 
-    async def replace_session_messages(self, session_id: str, new_messages: list[dict[str, Any]]):
+    @timed("replace_session_messages")
+    async def replace_session_messages(self, session_id: str, new_messages: list[dict[str, Any]]) -> None:
         async with self._p.acquire() as conn, conn.transaction():
             await conn.execute("DELETE FROM messages WHERE session_id = $1", session_id)
             for msg in new_messages:

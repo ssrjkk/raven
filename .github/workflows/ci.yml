@@ -33,7 +33,11 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        # the postgres extra is installed here as well, not only in the integration job:
+        # db_postgres.py imports asyncpg at module level and every test over PostgresDB /
+        # PostgresDatabase is importorskip'd, so without it those unit tests skipped silently on
+        # every runner while the suite still reported green
+        run: pip install -e ".[dev,postgres]"
 
       - name: Quick checks (lint + types + imports)
         if: github.event_name == 'pull_request'

@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import threading
-from typing import Any
+import time
+from collections.abc import Awaitable, Callable
+from functools import wraps
+from typing import Any, ParamSpec, TypeVar
 
 from loguru import logger
+
+P = ParamSpec("P")
+T = TypeVar("T")
 
 _PCounter: Any = None
 _PHistogram: Any = None
@@ -99,6 +105,30 @@ class MetricsCollector:
 
 
 metrics = MetricsCollector()
+
+
+def timed(operation: str, metric: str = "db_query") -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
+    """Record one call's latency under `metric`, labelled by operation, and count its failures.
+
+    Latency is recorded even when the call raises; a cancelled call is not a storage failure, so
+    only Exception counts as an error.
+    """
+
+    def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+        @wraps(func)
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+            start = time.perf_counter()
+            try:
+                return await func(*args, **kwargs)
+            except Exception:
+                metrics.error(metric, {"operation": operation})
+                raise
+            finally:
+                metrics.observe(metric, time.perf_counter() - start, {"operation": operation})
+
+        return wrapper
+
+    return decorator
 
 
 _prom_registry: dict[str, Any] = {}

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from raven.core._json import json
+from raven.core.asyncdb import AsyncDB
 from raven.core.routine.models import Routine, RoutineAction, RoutineLog, RoutineStatus, RoutineTrigger
 from raven.core.store import BaseStore
 from raven.utils.performance import measure_latency
@@ -117,9 +118,10 @@ class RoutineStore(BaseStore):
 
     @measure_latency()
     async def delete_routine(self, routine_id: str) -> None:
-        await self._execute("DELETE FROM routines WHERE id = ?", (routine_id,))
-        await self._execute("DELETE FROM routine_logs WHERE routine_id = ?", (routine_id,))
-        await self._commit()
+        db = await self._conn()
+        async with db.transaction():
+            await db.execute("DELETE FROM routines WHERE id = ?", (routine_id,))
+            await db.execute("DELETE FROM routine_logs WHERE routine_id = ?", (routine_id,))
 
     @measure_latency()
     async def list_routines(
@@ -160,16 +162,12 @@ class RoutineStore(BaseStore):
         await self._commit()
 
     @measure_latency()
-    async def update_last_run(self, routine_id: str, status: str) -> None:
-        await self._execute(
-            "UPDATE routines SET last_run_status = ?, last_run_at = ? WHERE id = ?",
-            (status, time.time(), routine_id),
-        )
-        await self._commit()
-
-    @measure_latency()
     async def save_log(self, log: RoutineLog) -> None:
-        await self._execute(
+        db = await self._conn()
+        await self._insert_log(db, log)
+
+    async def _insert_log(self, db: AsyncDB, log: RoutineLog) -> None:
+        await db.execute(
             """INSERT INTO routine_logs
                (id, routine_id, status, message, duration_ms, created_at)
                VALUES (?, ?, ?, ?, ?, ?)
@@ -179,7 +177,17 @@ class RoutineStore(BaseStore):
                created_at = excluded.created_at""",
             (log.id, log.routine_id, log.status, log.message, log.duration_ms, log.created_at or time.time()),
         )
-        await self._commit()
+
+    @measure_latency()
+    async def record_run(self, routine_id: str, status: str, log: RoutineLog) -> None:
+        """One run's log row and the routine's last-run fields become visible together."""
+        db = await self._conn()
+        async with db.transaction():
+            await self._insert_log(db, log)
+            await db.execute(
+                "UPDATE routines SET last_run_status = ?, last_run_at = ? WHERE id = ?",
+                (status, time.time(), routine_id),
+            )
 
     @measure_latency()
     async def get_logs(self, routine_id: str, limit: int = 20) -> list[RoutineLog]:

@@ -168,12 +168,13 @@ class AuthStore(BaseStore):
             return False
         user_id = row["user_id"]
         now = time.time()
-        await self._execute(
-            "UPDATE auth_users SET email_verified = 1, updated_at = ? WHERE id = ?",
-            (now, user_id),
-        )
-        await self._execute("DELETE FROM auth_email_tokens WHERE token = ?", (token,))
-        await self._commit()
+        db = await self._conn()
+        async with db.transaction():
+            await db.execute(
+                "UPDATE auth_users SET email_verified = 1, updated_at = ? WHERE id = ?",
+                (now, user_id),
+            )
+            await db.execute("DELETE FROM auth_email_tokens WHERE token = ?", (token,))
         return True
 
     async def revoke_all_user_sessions(self, user_id: str) -> int:

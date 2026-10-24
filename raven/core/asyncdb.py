@@ -2,15 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
+import itertools
 import os
+import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from contextlib import AbstractAsyncContextManager
 from pathlib import Path
 from typing import Any
 
 import aiosqlite
 from loguru import logger
+
+_handle_seq = itertools.count()
 
 
 class AsyncDB(ABC):
@@ -64,13 +69,20 @@ class SQLiteDB(AsyncDB):
     def __init__(self, db_path: str | Path) -> None:
         self._path = str(db_path)
         self._conn: aiosqlite.Connection | None = None
+        self._write_gate = asyncio.Lock()
+        self._tx_owner: asyncio.Task[Any] | None = None
+        self._tx_depth = 0
 
     async def connect(self) -> None:
         await self._ensure()
 
     async def _ensure(self) -> aiosqlite.Connection:
         if self._conn is None:
-            connection = await aiosqlite.connect(self._path)
+            # isolation_level=None gives each statement its own transaction, so a write is durable
+            # the moment it runs instead of waiting for whichever caller reaches commit() first -
+            # and no stale implicit transaction can make a later BEGIN fail. Grouped writes use
+            # transaction(), which still issues an explicit BEGIN.
+            connection = await aiosqlite.connect(self._path, isolation_level=None)
             connection.row_factory = aiosqlite.Row
             for pragma in (
                 "PRAGMA journal_mode=WAL",
@@ -83,66 +95,142 @@ class SQLiteDB(AsyncDB):
             self._conn = connection
         return self._conn
 
+    @contextlib.asynccontextmanager
+    async def _writer(self) -> AsyncIterator[None]:
+        """Serialise every statement against an in-flight transaction.
+
+        One SQLite connection carries one transaction, so a statement issued by another task while
+        a ``transaction()`` is open would join it, read its uncommitted rows, and its ``commit()``
+        would end it halfway. The owner passes through (it already holds the gate); everyone else
+        waits. A transaction body therefore must not await DB work belonging to a *different* task.
+        """
+        if self._tx_owner is asyncio.current_task():
+            yield
+            return
+        async with self._write_gate:
+            yield
+
     async def execute(self, sql: str, params: Sequence[Any] = ()) -> int | None:
-        conn = await self._ensure()
-        cursor = await conn.execute(sql, tuple(params))
-        return cursor.rowcount
+        async with self._writer():
+            conn = await self._ensure()
+            cursor = await conn.execute(sql, tuple(params))
+            return cursor.rowcount
 
     async def executemany(self, sql: str, seq_of_params: Sequence[Sequence[Any]]) -> None:
-        conn = await self._ensure()
-        await conn.executemany(sql, [tuple(p) for p in seq_of_params])
+        rows = [tuple(p) for p in seq_of_params]
+        if not rows:
+            return
+        async with self._writer():
+            conn = await self._ensure()
+            if self._tx_depth:
+                await conn.executemany(sql, rows)
+                return
+            # autocommit would commit per row; a batch is one transaction (and the caller
+            # holding a transaction above is already inside one).
+            await conn.execute("BEGIN IMMEDIATE")
+            try:
+                await conn.executemany(sql, rows)
+            except BaseException:
+                await conn.rollback()
+                raise
+            await conn.commit()
 
     async def fetchone(self, sql: str, params: Sequence[Any] = ()) -> Any | None:
-        conn = await self._ensure()
-        cursor = await conn.execute(sql, tuple(params))
-        try:
-            return await cursor.fetchone()
-        finally:
-            await cursor.close()
+        async with self._writer():
+            conn = await self._ensure()
+            cursor = await conn.execute(sql, tuple(params))
+            try:
+                return await cursor.fetchone()
+            finally:
+                await cursor.close()
 
     async def fetchall(self, sql: str, params: Sequence[Any] = ()) -> list[Any]:
-        conn = await self._ensure()
-        cursor = await conn.execute(sql, tuple(params))
-        try:
-            rows = await cursor.fetchall()
-            return list(rows)
-        finally:
-            await cursor.close()
+        async with self._writer():
+            conn = await self._ensure()
+            cursor = await conn.execute(sql, tuple(params))
+            try:
+                rows = await cursor.fetchall()
+                return list(rows)
+            finally:
+                await cursor.close()
 
     async def fetchval(self, sql: str, params: Sequence[Any] = ()) -> Any:
-        conn = await self._ensure()
-        cursor = await conn.execute(sql, tuple(params))
-        try:
-            row = await cursor.fetchone()
-        finally:
-            await cursor.close()
-        if row is None:
-            return None
-        return row[0]
+        async with self._writer():
+            conn = await self._ensure()
+            cursor = await conn.execute(sql, tuple(params))
+            try:
+                row = await cursor.fetchone()
+            finally:
+                await cursor.close()
+            if row is None:
+                return None
+            return row[0]
 
     async def run_script(self, sql: str) -> None:
-        conn = await self._ensure()
-        await conn.executescript(sql)
+        async with self._writer():
+            conn = await self._ensure()
+            if self._tx_depth == 0:
+                await conn.executescript(sql)
+                return
+            # executescript commits whatever transaction is open before running, so inside a
+            # transaction the script is cut with SQLite's own parser and run one statement at a
+            # time - complete_statement() keeps quoted semicolons and triggers in one piece.
+            buffer = ""
+            for part in sql.split(";"):
+                buffer += part + ";"
+                if sqlite3.complete_statement(buffer):
+                    await conn.execute(buffer)
+                    buffer = ""
+            if buffer.strip():
+                await conn.execute(buffer)
 
     async def commit(self) -> None:
-        conn = await self._ensure()
-        await conn.commit()
+        async with self._writer():
+            if self._tx_depth:
+                return
+            conn = await self._ensure()
+            await conn.commit()
 
     async def close(self) -> None:
-        if self._conn is not None:
-            await self._conn.close()
-            self._conn = None
+        async with self._writer():
+            if self._conn is not None:
+                await self._conn.close()
+                self._conn = None
 
     @contextlib.asynccontextmanager
-    async def transaction(self):
-        conn = await self._ensure()
-        await conn.execute("BEGIN")
+    async def transaction(self) -> AsyncIterator[None]:
+        current = asyncio.current_task()
+        if self._tx_owner is current:
+            name = f"raven_sp_{self._tx_depth}"
+            conn = await self._ensure()
+            await conn.execute(f"SAVEPOINT {name}")
+            self._tx_depth += 1
+            try:
+                yield
+            except BaseException:
+                self._tx_depth -= 1
+                await conn.execute(f"ROLLBACK TO SAVEPOINT {name}")
+                raise
+            self._tx_depth -= 1
+            await conn.execute(f"RELEASE SAVEPOINT {name}")
+            return
+        await self._write_gate.acquire()
+        self._tx_owner = current
+        self._tx_depth = 1
         try:
-            yield
-            await conn.commit()
-        except BaseException:
-            await conn.rollback()
-            raise
+            conn = await self._ensure()
+            await conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+            except BaseException:
+                await conn.rollback()
+                raise
+            else:
+                await conn.commit()
+        finally:
+            self._tx_depth = 0
+            self._tx_owner = None
+            self._write_gate.release()
 
 
 def _rowcount(status: str) -> int | None:
@@ -163,7 +251,12 @@ class PostgresDB(AsyncDB):
         self.dsn = dsn
         self._pool: Any = pool
         self._owns_pool = pool is None
-        self._tx: Any = None
+        # The open transaction belongs to the caller that opened it, not to the handle: as
+        # instance state it leaked into every other task's execute(), which then ran inside a
+        # foreign transaction and was rolled back when that transaction failed.
+        self._tx: contextvars.ContextVar[Any] = contextvars.ContextVar(
+            f"raven_pg_tx_{next(_handle_seq)}", default=None
+        )
 
     @property
     def _p(self) -> Any:
@@ -171,6 +264,10 @@ class PostgresDB(AsyncDB):
             msg = "Postgres database not connected"
             raise RuntimeError(msg)
         return self._pool
+
+    @property
+    def _tx_conn(self) -> Any:
+        return self._tx.get()
 
     async def connect(self) -> None:
         if self._pool is not None:
@@ -213,44 +310,50 @@ class PostgresDB(AsyncDB):
 
     async def execute(self, sql: str, params: Sequence[Any] = ()) -> int | None:
         rewritten, args = self._rewrite(sql, params)
-        if self._tx is not None:
-            return _rowcount(await self._tx.execute(rewritten, *args))
+        tx = self._tx_conn
+        if tx is not None:
+            return _rowcount(await tx.execute(rewritten, *args))
         async with self._p.acquire() as conn:
             return _rowcount(await conn.execute(rewritten, *args))
 
     async def executemany(self, sql: str, seq_of_params: Sequence[Sequence[Any]]) -> None:
         rewritten, _ = self._rewrite(sql, seq_of_params[0] if seq_of_params else ())
         arglists = [tuple(p) for p in seq_of_params]
-        if self._tx is not None:
-            await self._tx.executemany(rewritten, arglists)
+        tx = self._tx_conn
+        if tx is not None:
+            await tx.executemany(rewritten, arglists)
             return
         async with self._p.acquire() as conn:
             await conn.executemany(rewritten, arglists)
 
     async def fetchone(self, sql: str, params: Sequence[Any] = ()) -> Any | None:
         rewritten, args = self._rewrite(sql, params)
-        if self._tx is not None:
-            return await self._tx.fetchrow(rewritten, *args)
+        tx = self._tx_conn
+        if tx is not None:
+            return await tx.fetchrow(rewritten, *args)
         async with self._p.acquire() as conn:
             return await conn.fetchrow(rewritten, *args)
 
     async def fetchall(self, sql: str, params: Sequence[Any] = ()) -> list[Any]:
         rewritten, args = self._rewrite(sql, params)
-        if self._tx is not None:
-            return list(await self._tx.fetch(rewritten, *args))
+        tx = self._tx_conn
+        if tx is not None:
+            return list(await tx.fetch(rewritten, *args))
         async with self._p.acquire() as conn:
             return list(await conn.fetch(rewritten, *args))
 
     async def fetchval(self, sql: str, params: Sequence[Any] = ()) -> Any:
         rewritten, args = self._rewrite(sql, params)
-        if self._tx is not None:
-            return await self._tx.fetchval(rewritten, *args)
+        tx = self._tx_conn
+        if tx is not None:
+            return await tx.fetchval(rewritten, *args)
         async with self._p.acquire() as conn:
             return await conn.fetchval(rewritten, *args)
 
     async def run_script(self, sql: str) -> None:
-        if self._tx is not None:
-            await self._tx.execute(sql)
+        tx = self._tx_conn
+        if tx is not None:
+            await tx.execute(sql)
             return
         async with self._p.acquire() as conn:
             await conn.execute(sql)
@@ -264,15 +367,21 @@ class PostgresDB(AsyncDB):
         self._pool = None
 
     @contextlib.asynccontextmanager
-    async def transaction(self):
+    async def transaction(self) -> AsyncIterator[None]:
+        ambient = self._tx_conn
+        if ambient is not None:
+            # asyncpg turns a transaction opened on a connection that already has one into a
+            # savepoint, and the statements of this task keep using that same connection.
+            async with ambient.transaction():
+                yield
+            return
         async with self._p.acquire() as conn:
-            previous = self._tx
-            self._tx = conn
+            token = self._tx.set(conn)
             try:
                 async with conn.transaction():
                     yield
             finally:
-                self._tx = previous
+                self._tx.reset(token)
 
 
 def is_postgres_url(value: str) -> bool:

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+
+import aiosqlite
 import pytest
 
 from raven.core.db import Database, DatabaseFactory
@@ -268,3 +271,44 @@ class TestIndexes:
             tables = {r[0] for r in await c.fetchall()}
         assert "sessions" in tables
         await d.disconnect()
+
+
+class TestConcurrentWrites:
+    """One connection serves every coroutine, so writes have to queue instead of colliding.
+
+    Before the write lock existed these gathered calls raised `cannot start a transaction within a
+    transaction` (measured: 11 of 12 saves raised, 1 of 12 rows persisted).
+    """
+
+    async def test_parallel_message_saves_all_persist(self, db: Database) -> None:
+        await db.get_or_create_session("s1", channel="telegram", user_id="u1")
+        msgs = [Message(session_id="s1", role="user", content=f"message {i}") for i in range(12)]
+        results = await asyncio.gather(*(db.save_message(m) for m in msgs), return_exceptions=True)
+        assert [r for r in results if isinstance(r, BaseException)] == []
+        assert len(await db.get_session_messages("s1", limit=50)) == 12
+
+    async def test_saves_and_compaction_coexist(self, db: Database) -> None:
+        await db.get_or_create_session("s1", channel="telegram", user_id="u1")
+        await db.get_or_create_session("s2", channel="telegram", user_id="u2")
+        for i in range(3):
+            await db.save_message(Message(session_id="s1", role="user", content=f"old {i}"))
+
+        ops = [db.save_message(Message(session_id="s2", role="user", content=f"live {i}")) for i in range(4)]
+        ops += [
+            db.replace_session_messages("s1", [{"role": "system", "content": "summary"}]) for _ in range(2)
+        ]
+        results = await asyncio.gather(*ops, return_exceptions=True)
+        assert [r for r in results if isinstance(r, BaseException)] == []
+
+        # compaction replaces the whole list, so the session ends with the summary and nothing else
+        assert [m.content for m in await db.get_session_messages("s1", limit=50)] == ["summary"]
+        assert len(await db.get_session_messages("s2", limit=50)) == 4
+
+    async def test_write_is_durable_without_another_callers_commit(
+        self, db: Database, tmp_path
+    ) -> None:
+        await db.get_or_create_session("s1", channel="telegram", user_id="u1")
+        await db.save_message(Message(session_id="s1", role="user", content="visible"))
+        async with aiosqlite.connect(str(tmp_path / "test.db")) as other:
+            rows = await other.execute_fetchall("SELECT content FROM messages")
+        assert [r[0] for r in rows] == ["visible"]

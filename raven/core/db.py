@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
-import time
+from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -12,7 +13,7 @@ from loguru import logger
 
 from raven.core._json import json
 from raven.core.asyncdb import is_postgres_url, normalize_dsn
-from raven.core.metrics import metrics
+from raven.core.metrics import timed
 from raven.core.migrations import Migrator
 from raven.core.models import Message, Session
 
@@ -22,6 +23,7 @@ class Database:
         self.db_path = db_path
         self._conn: aiosqlite.Connection | None = None
         self._connect_lock = asyncio.Lock()
+        self._write_lock = asyncio.Lock()
         self.migrator = Migrator(db_path)
 
     @property
@@ -35,7 +37,11 @@ class Database:
             if self._conn is not None:
                 return
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
-            self._conn = await aiosqlite.connect(str(self.db_path))
+            # isolation_level=None: one connection serves every coroutine, and in legacy mode a
+            # write sat in an implicit transaction until whichever caller reached commit() first
+            # (and was rolled back if that caller failed). Each statement now commits itself, and
+            # grouped writes go through _write_tx().
+            self._conn = await aiosqlite.connect(str(self.db_path), isolation_level=None)
             self.conn.row_factory = aiosqlite.Row
             for pragma in (
                 "PRAGMA journal_mode=WAL",
@@ -48,9 +54,8 @@ class Database:
             await self._migrate()
 
     async def _migrate(self):
-        async with self.conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name") as c:
-            rows = await c.fetchall()
-            existing = {r[0] for r in rows}
+        rows = await self._fetchall("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        existing = {r[0] for r in rows}
 
         tables = {
             "sessions": """
@@ -132,7 +137,7 @@ class Database:
         }
         for name, ddl in tables.items():
             if name not in existing:
-                await self.conn.execute(ddl)
+                await self._write(ddl)
         indexes = [
             "CREATE INDEX IF NOT EXISTS idx_sessions_channel ON sessions(channel)",
             "CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)",
@@ -141,34 +146,57 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_users_external_id ON users(external_id)",
         ]
         for idx in indexes:
-            await self.conn.execute(idx)
-        await self.conn.commit()
+            await self._write(idx)
 
         await self.migrator.migrate()
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         async with self._connect_lock:
-            if self._conn:
-                await self.conn.close()
-                self._conn = None
+            conn, self._conn = self._conn, None
+        if conn is not None:
+            try:
+                await conn.close()
+            except Exception as e:
+                logger.error("Database close failed: {}", e)
 
+    async def _write(self, sql: str, params: Sequence[Any] = ()) -> None:
+        async with self._write_lock:
+            await self._exec(sql, params)
+
+    async def _exec(self, sql: str, params: Sequence[Any] = ()) -> None:
+        cursor = await self.conn.execute(sql, tuple(params))
+        await cursor.close()
+
+    async def _fetchone(self, sql: str, params: Sequence[Any] = ()) -> Any | None:
+        async with self._write_lock, self.conn.execute(sql, tuple(params)) as cursor:
+            return await cursor.fetchone()
+
+    async def _fetchall(self, sql: str, params: Sequence[Any] = ()) -> list[Any]:
+        async with self._write_lock, self.conn.execute(sql, tuple(params)) as cursor:
+            return list(await cursor.fetchall())
+
+    @contextlib.asynccontextmanager
+    async def _write_tx(self) -> AsyncIterator[None]:
+        """Group several writes into one unit of work on this connection.
+
+        A second BEGIN would raise, and a statement from another task would join this transaction
+        and be committed or rolled back with it, so the lock is held for the whole body.
+        """
+        async with self._write_lock:
+            await self._exec("BEGIN IMMEDIATE")
+            try:
+                yield
+            except BaseException:
+                await self._exec("ROLLBACK")
+                raise
+            else:
+                await self._exec("COMMIT")
+
+    @timed("get_or_create_session")
     async def get_or_create_session(
         self, session_id: str, channel: str, user_id: str, agent_id: str = "default"
     ) -> Session:
-        start = time.monotonic()
-        try:
-            return await self._get_or_create_session(session_id, channel, user_id, agent_id)
-        except Exception:
-            metrics.error("db_query", {"operation": "get_or_create_session"})
-            raise
-        finally:
-            metrics.observe("db_query", time.monotonic() - start, {"operation": "get_or_create_session"})
-
-    async def _get_or_create_session(
-        self, session_id: str, channel: str, user_id: str, agent_id: str = "default"
-    ) -> Session:
-        async with self.conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)) as c:
-            row = await c.fetchone()
+        row = await self._fetchone("SELECT * FROM sessions WHERE id = ?", (session_id,))
         if row:
             try:
                 skills_val = row["agent_skills"]
@@ -193,7 +221,7 @@ class Database:
         session = Session(
             id=session_id, channel=channel, user_id=user_id, agent_id=agent_id, created_at=now, updated_at=now
         )
-        await self.conn.execute(
+        await self._write(
             "INSERT OR IGNORE INTO sessions "
             "(id, channel, user_id, agent_id, agent_skills, created_at, updated_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -207,57 +235,28 @@ class Database:
                 session.updated_at.isoformat(),
             ),
         )
-        await self.conn.commit()
         return session
 
-    async def save_message(self, msg: Message):
-        start = time.monotonic()
-        try:
-            await self._save_message(msg)
-        except Exception:
-            metrics.error("db_query", {"operation": "save_message"})
-            raise
-        finally:
-            metrics.observe("db_query", time.monotonic() - start, {"operation": "save_message"})
-
-    async def _save_message(self, msg: Message):
-        await self.conn.execute("BEGIN")
-        try:
-            await self.conn.execute(
+    @timed("save_message")
+    async def save_message(self, msg: Message) -> None:
+        async with self._write_tx():
+            await self._exec(
                 "INSERT OR IGNORE INTO messages "
                 "(id, session_id, role, content, metadata, created_at) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
                 (msg.id, msg.session_id, msg.role, msg.content, json.dumps(msg.metadata), msg.created_at.isoformat()),
             )
-            await self.conn.execute(
+            await self._exec(
                 "UPDATE sessions SET updated_at = ? WHERE id = ?",
                 (datetime.now(UTC).isoformat(), msg.session_id),
             )
-            await self.conn.execute("COMMIT")
-        except Exception:
-            try:
-                await self.conn.execute("ROLLBACK")
-            except Exception as rb_e:
-                logger.error("ROLLBACK failed after save_message error: {}", rb_e)
-            logger.error("save_message failed for session {}", msg.session_id)
-            raise
 
+    @timed("get_session_messages")
     async def get_session_messages(self, session_id: str, limit: int = 50) -> list[Message]:
-        start = time.monotonic()
-        try:
-            return await self._get_session_messages(session_id, limit)
-        except Exception:
-            metrics.error("db_query", {"operation": "get_session_messages"})
-            raise
-        finally:
-            metrics.observe("db_query", time.monotonic() - start, {"operation": "get_session_messages"})
-
-    async def _get_session_messages(self, session_id: str, limit: int = 50) -> list[Message]:
-        async with self.conn.execute(
+        rows = await self._fetchall(
             "SELECT * FROM messages WHERE session_id = ? ORDER BY created_at DESC LIMIT ?",
             (session_id, limit),
-        ) as c:
-            rows = await c.fetchall()
+        )
         result = []
         for row in reversed(list(rows)):
             result.append(
@@ -272,33 +271,19 @@ class Database:
             )
         return result
 
+    @timed("find_or_create_user")
     async def find_or_create_user(
         self, channel: str, external_id: str, display_name: str | None = None
     ) -> dict[str, Any]:
-        start = time.monotonic()
-        try:
-            return await self._find_or_create_user(channel, external_id, display_name)
-        except Exception:
-            metrics.error("db_query", {"operation": "find_or_create_user"})
-            raise
-        finally:
-            metrics.observe("db_query", time.monotonic() - start, {"operation": "find_or_create_user"})
-
-    async def _find_or_create_user(
-        self, channel: str, external_id: str, display_name: str | None = None
-    ) -> dict[str, Any]:
         user_id = f"{channel}:{external_id}"
-        async with self.conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)) as c:
-            row = await c.fetchone()
+        row = await self._fetchone("SELECT * FROM users WHERE id = ?", (user_id,))
         if row:
             return dict(row)
-        await self.conn.execute(
+        await self._write(
             "INSERT OR IGNORE INTO users (id, channel, external_id, display_name, role) VALUES (?, ?, ?, ?, ?)",
             (user_id, channel, external_id, display_name, "user"),
         )
-        await self.conn.commit()
-        async with self.conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)) as c:
-            row = await c.fetchone()
+        row = await self._fetchone("SELECT * FROM users WHERE id = ?", (user_id,))
         if row:
             return dict(row)
         return {
@@ -310,33 +295,27 @@ class Database:
             "role": "user",
         }
 
-    async def set_user_allowed(self, user_id: str, allowed: bool = True):
-        await self.conn.execute("UPDATE users SET is_allowed = ? WHERE id = ?", (1 if allowed else 0, user_id))
-        await self.conn.commit()
+    async def set_user_allowed(self, user_id: str, allowed: bool = True) -> None:
+        await self._write("UPDATE users SET is_allowed = ? WHERE id = ?", (1 if allowed else 0, user_id))
 
-    async def set_pairing_code(self, user_id: str, code: str):
-        await self.conn.execute("UPDATE users SET pairing_code = ? WHERE id = ?", (code, user_id))
-        await self.conn.commit()
+    async def set_pairing_code(self, user_id: str, code: str) -> None:
+        await self._write("UPDATE users SET pairing_code = ? WHERE id = ?", (code, user_id))
 
     async def get_user_by_pairing_code(self, code: str) -> dict[str, Any] | None:
-        async with self.conn.execute("SELECT * FROM users WHERE pairing_code = ?", (code,)) as c:
-            row = await c.fetchone()
+        row = await self._fetchone("SELECT * FROM users WHERE pairing_code = ?", (code,))
         return dict(row) if row else None
 
     async def get_pending_pairing_users(self) -> list[dict[str, Any]]:
-        async with self.conn.execute("SELECT * FROM users WHERE pairing_code IS NOT NULL AND is_allowed = 0") as c:
-            rows = await c.fetchall()
+        rows = await self._fetchall("SELECT * FROM users WHERE pairing_code IS NOT NULL AND is_allowed = 0")
         return [dict(r) for r in rows]
 
     async def get_sessions(self, channel: str | None = None) -> list[Session]:
         if channel:
-            async with self.conn.execute(
+            rows = await self._fetchall(
                 "SELECT * FROM sessions WHERE channel = ? ORDER BY updated_at DESC", (channel,)
-            ) as c:
-                rows = await c.fetchall()
+            )
         else:
-            async with self.conn.execute("SELECT * FROM sessions ORDER BY updated_at DESC") as c:
-                rows = await c.fetchall()
+            rows = await self._fetchall("SELECT * FROM sessions ORDER BY updated_at DESC")
         result = []
         for r in rows:
             try:
@@ -358,58 +337,28 @@ class Database:
             )
         return result
 
-    async def save_plugin_state(self, plugin_id: str, key: str, value: str):
-        await self.conn.execute(
+    async def save_plugin_state(self, plugin_id: str, key: str, value: str) -> None:
+        await self._write(
             "INSERT OR REPLACE INTO plugin_state (plugin_id, key, value) VALUES (?, ?, ?)",
             (plugin_id, key, value),
         )
-        await self.conn.commit()
 
     async def get_plugin_state(self, plugin_id: str, key: str) -> str | None:
-        async with self.conn.execute(
+        row = await self._fetchone(
             "SELECT value FROM plugin_state WHERE plugin_id = ? AND key = ?", (plugin_id, key)
-        ) as c:
-            row = await c.fetchone()
+        )
         return row["value"] if row else None
 
-    async def delete_session(self, session_id: str):
-        start = time.monotonic()
-        try:
-            await self._delete_session(session_id)
-        except Exception:
-            metrics.error("db_query", {"operation": "delete_session"})
-            raise
-        finally:
-            metrics.observe("db_query", time.monotonic() - start, {"operation": "delete_session"})
+    @timed("delete_session")
+    async def delete_session(self, session_id: str) -> None:
+        async with self._write_tx():
+            await self._exec("DELETE FROM messages WHERE session_id = ?", (session_id,))
+            await self._exec("DELETE FROM sessions WHERE id = ?", (session_id,))
 
-    async def _delete_session(self, session_id: str):
-        await self.conn.execute("BEGIN")
-        try:
-            await self.conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
-            await self.conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
-            await self.conn.execute("COMMIT")
-        except Exception:
-            try:
-                await self.conn.execute("ROLLBACK")
-            except Exception as rb_e:
-                logger.error("ROLLBACK failed after delete_session error: {}", rb_e)
-            logger.error("delete_session failed for session {}", session_id)
-            raise
-
-    async def replace_session_messages(self, session_id: str, new_messages: list[dict[str, Any]]):
-        start = time.monotonic()
-        try:
-            await self._replace_session_messages(session_id, new_messages)
-        except Exception:
-            metrics.error("db_query", {"operation": "replace_session_messages"})
-            raise
-        finally:
-            metrics.observe("db_query", time.monotonic() - start, {"operation": "replace_session_messages"})
-
-    async def _replace_session_messages(self, session_id: str, new_messages: list[dict[str, Any]]):
-        await self.conn.execute("BEGIN")
-        try:
-            await self.conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+    @timed("replace_session_messages")
+    async def replace_session_messages(self, session_id: str, new_messages: list[dict[str, Any]]) -> None:
+        async with self._write_tx():
+            await self._exec("DELETE FROM messages WHERE session_id = ?", (session_id,))
             for msg in new_messages:
                 m = Message(
                     session_id=session_id,
@@ -418,47 +367,36 @@ class Database:
                     metadata=msg.get("metadata", {}),
                     created_at=msg.get("created_at", datetime.now(UTC)),
                 )
-                await self.conn.execute(
+                await self._exec(
                     "INSERT INTO messages "
                     "(id, session_id, role, content, metadata, created_at) "
                     "VALUES (?, ?, ?, ?, ?, ?)",
                     (m.id, m.session_id, m.role, m.content, json.dumps(m.metadata), m.created_at.isoformat()),
                 )
-            await self.conn.execute("COMMIT")
-        except Exception:
-            try:
-                await self.conn.execute("ROLLBACK")
-            except Exception as rb_e:
-                logger.error("ROLLBACK also failed after replace_session_messages error: {}", rb_e)
-            logger.error("replace_session_messages failed for session {}, rolled back", session_id)
-            raise
 
-    async def save_secret(self, key: str, value_enc: str):
+    async def save_secret(self, key: str, value_enc: str) -> None:
         now = datetime.now(UTC).isoformat()
-        await self.conn.execute(
+        await self._write(
             "INSERT OR REPLACE INTO secrets (key, value_enc, updated_at) VALUES (?, ?, ?)",
             (key, value_enc, now),
         )
-        await self.conn.commit()
 
     async def get_secret(self, key: str) -> str | None:
-        async with self.conn.execute("SELECT value_enc FROM secrets WHERE key = ?", (key,)) as c:
-            row = await c.fetchone()
+        row = await self._fetchone("SELECT value_enc FROM secrets WHERE key = ?", (key,))
         return row["value_enc"] if row else None
 
-    async def delete_secret(self, key: str):
-        await self.conn.execute("DELETE FROM secrets WHERE key = ?", (key,))
-        await self.conn.commit()
+    async def delete_secret(self, key: str) -> None:
+        await self._write("DELETE FROM secrets WHERE key = ?", (key,))
 
     async def list_secrets(self) -> list[str]:
-        async with self.conn.execute("SELECT key FROM secrets ORDER BY key") as c:
-            rows = await c.fetchall()
+        rows = await self._fetchall("SELECT key FROM secrets ORDER BY key")
         return [r["key"] for r in rows]
 
     async def health_check(self) -> bool:
         if not self._conn:
             return False
         try:
+            # deliberately not _fetchone(): a probe must answer even while the write lock is held
             async with self.conn.execute("SELECT 1") as c:
                 await c.fetchone()
             return True

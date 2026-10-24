@@ -226,9 +226,10 @@ class TaskStore(BaseStore):
 
     @measure_latency()
     async def delete_task(self, task_id: str) -> None:
-        await self._execute("DELETE FROM task_steps WHERE task_id = ?", (task_id,))
-        await self._execute("DELETE FROM tasks WHERE id = ?", (task_id,))
-        await self._commit()
+        db = await self._conn()
+        async with db.transaction():
+            await db.execute("DELETE FROM task_steps WHERE task_id = ?", (task_id,))
+            await db.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
 
     @measure_latency()
     async def count_tasks(self, user_id: str | None = None, status: str | None = None) -> int:

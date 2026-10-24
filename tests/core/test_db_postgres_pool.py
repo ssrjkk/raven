@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -127,3 +128,67 @@ class TestConnectRetry:
                 await db.reconnect()
                 mock_disconnect.assert_called_once()
                 mock_connect.assert_called_once()
+
+
+class TestConnectIdempotency:
+    """A repeat connect() used to replace the pool and drop the reference to the old one."""
+
+    async def test_connect_on_a_connected_pool_creates_no_second_pool(self, db: PostgresDatabase) -> None:
+        with patch("asyncpg.create_pool", new_callable=AsyncMock) as mock_create_pool:
+            await db.connect()
+            await db.connect()
+        assert mock_create_pool.await_count == 0
+        assert db._pool is not None
+
+    async def test_disconnect_drops_the_pool_even_when_close_fails(self, db: PostgresDatabase) -> None:
+        pool = db._pool
+        assert pool is not None
+        pool.close = AsyncMock(side_effect=OSError("server went away"))
+        await db.disconnect()
+        assert db._pool is None
+
+    async def test_connect_rebuilds_after_a_failed_close(self) -> None:
+        db = PostgresDatabase("postgresql://user:pass@localhost:5432/test")
+        broken = MagicMock(spec=asyncpg.Pool)
+        broken.close = AsyncMock(side_effect=OSError("server went away"))
+        db._pool = broken
+        rebuilt = MagicMock(spec=asyncpg.Pool)
+        db.migrator = AsyncMock()
+        with patch("asyncpg.create_pool", new_callable=AsyncMock, return_value=rebuilt):
+            await db.disconnect()
+            await db.connect()
+        assert db._pool is rebuilt
+
+
+class TestQueryMetrics:
+    """The Postgres backend has to feed the same db_query series as the SQLite one."""
+
+    async def _wired_conn(self, db: PostgresDatabase) -> Any:
+        conn = db._p.acquire.return_value.__aenter__.return_value
+        tx = AsyncMock()
+        tx.__aenter__ = AsyncMock(return_value=None)
+        tx.__aexit__ = AsyncMock(return_value=None)
+        conn.transaction = MagicMock(return_value=tx)
+        return conn
+
+    async def test_save_message_records_latency(self, db: PostgresDatabase) -> None:
+        from raven.core.metrics import metrics
+        from raven.core.models import Message
+
+        conn = await self._wired_conn(db)
+        metrics.clear()
+        await db.save_message(Message(session_id="s1", role="user", content="hello"))
+        conn.execute.assert_awaited()
+        snap = metrics.snapshot()
+        assert snap["raven_db_query{operation=save_message}_count"] == 1
+        assert "raven_db_query{operation=save_message}_errors_total" not in snap
+
+    async def test_failed_query_records_an_error(self, db: PostgresDatabase) -> None:
+        from raven.core.metrics import metrics
+
+        conn = await self._wired_conn(db)
+        conn.fetch = AsyncMock(side_effect=OSError("connection lost"))
+        metrics.clear()
+        with pytest.raises(OSError):
+            await db.get_session_messages("s1")
+        assert metrics.snapshot()["raven_db_query{operation=get_session_messages}_errors_total"] == 1
