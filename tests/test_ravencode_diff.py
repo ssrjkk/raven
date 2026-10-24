@@ -104,3 +104,89 @@ class TestSmartEdit:
         f.write_text("content\n")
         result = smart_edit(str(f))
         assert "provide" in result
+
+
+class TestApplyPatchShapes:
+    """Every case here is a shape the old loop got wrong or refused."""
+
+    def _file(self, tmp_path: Path, name: str, content: str | bytes) -> Path:
+        p = tmp_path / name
+        if isinstance(content, bytes):
+            p.write_bytes(content)
+        else:
+            with p.open("w", encoding="utf-8", newline="") as f:
+                f.write(content)
+        return p
+
+    def test_insertion_only_hunk_is_applied(self, tmp_path: Path):
+        p = self._file(tmp_path, "a.txt", "one\ntwo\n")
+        assert apply_patch(str(p), "@@ -1,0 +2,1 @@\n+inserted\n").startswith("[ok]")
+        assert p.read_text(encoding="utf-8") == "one\ninserted\ntwo\n"
+
+    def test_insertion_at_the_very_start(self, tmp_path: Path):
+        p = self._file(tmp_path, "a.txt", "one\n")
+        assert apply_patch(str(p), "@@ -0,0 +1,1 @@\n+before\n").startswith("[ok]")
+        assert p.read_text(encoding="utf-8") == "before\none\n"
+
+    def test_hunk_declaring_more_lines_than_it_carries_is_refused(self, tmp_path: Path):
+        p = self._file(tmp_path, "a.txt", "one\n")
+        result = apply_patch(str(p), "@@ -1,1 +1,4 @@\n-one\n+one\n")
+        assert "declares -1 +4" in result
+        assert p.read_text(encoding="utf-8") == "one\n"
+
+    def test_hunks_apply_in_any_order(self, tmp_path: Path):
+        src = "a\nb\nc\nd\ne\nf\ng\nh\n"
+        wanted = "A\nb\nc\nd\ne\nf\nG1\nG2\nh\n"
+        ascending = "@@ -1,1 +1,1 @@\n-a\n+A\n@@ -7,1 +7,2 @@\n-g\n+G1\n+G2\n"
+        descending = "@@ -7,1 +7,2 @@\n-g\n+G1\n+G2\n@@ -1,1 +1,1 @@\n-a\n+A\n"
+        outputs = []
+        for diff in (ascending, descending):
+            p = self._file(tmp_path, "ord.txt", src)
+            assert apply_patch(str(p), diff).startswith("[ok]")
+            outputs.append(p.read_text(encoding="utf-8"))
+        assert outputs == [wanted, wanted]
+
+    def test_crlf_file_keeps_crlf(self, tmp_path: Path):
+        p = self._file(tmp_path, "win.txt", b"one\r\ntwo\r\nthree\r\n")
+        assert apply_patch(str(p), "@@ -1,2 +1,2 @@\n one\n-two\n+2\n").startswith("[ok]")
+        assert p.read_bytes() == b"one\r\n2\r\nthree\r\n"
+
+    def test_lf_file_is_not_rewritten_with_host_endings(self, tmp_path: Path):
+        p = self._file(tmp_path, "unix.txt", b"one\ntwo\n")
+        assert apply_patch(str(p), "@@ -1,2 +1,2 @@\n one\n-two\n+2\n").startswith("[ok]")
+        assert p.read_bytes() == b"one\n2\n"
+
+    def test_missing_final_newline_survives_a_patch(self, tmp_path: Path):
+        p = self._file(tmp_path, "tail.txt", b"one\ntwo")
+        assert apply_patch(str(p), "@@ -1,2 +1,2 @@\n one\n-two\n+2\n").startswith("[ok]")
+        assert p.read_bytes() == b"one\n2"
+
+    def test_apply_patch_records_an_undo_entry(self, tmp_path: Path):
+        from ravencode.runtime.undo import get_undo_manager
+
+        p = self._file(tmp_path, "u.txt", "x\ny\n")
+        before = len(get_undo_manager()._undo_stack)
+        assert apply_patch(str(p), "@@ -1,1 +1,1 @@\n-x\n+z\n").startswith("[ok]")
+        assert len(get_undo_manager()._undo_stack) == before + 1
+
+    def test_a_rejected_patch_leaves_the_file_and_no_temporary(self, tmp_path: Path):
+        p = self._file(tmp_path, "keep.txt", "one\ntwo\n")
+        assert "context mismatch" in apply_patch(str(p), "@@ -1,1 +1,1 @@\n-nope\n+yes\n")
+        assert p.read_text(encoding="utf-8") == "one\ntwo\n"
+        assert list(p.parent.glob("*.tmp")) == []
+
+    def test_binary_target_reports_inst_of_raising(self, tmp_path: Path):
+        p = self._file(tmp_path, "b.bin", b"\xff\xfe\x00binary")
+        assert apply_patch(str(p), "@@ -1,1 +1,1 @@\n-a\n+b\n").startswith("[error] cannot read")
+
+    def test_multi_file_diff_is_refused(self, tmp_path: Path):
+        p = self._file(tmp_path, "m.txt", "one\n")
+        diff = "--- a/m.txt\n+++ b/m.txt\n@@ -1,1 +1,1 @@\n-one\n+ONE\n--- a/n.txt\n+++ b/n.txt\n@@ -1,1 +1,1 @@\n-x\n+y\n"
+        assert "multi-file" in apply_patch(str(p), diff)
+        assert p.read_text(encoding="utf-8") == "one\n"
+
+    def test_removed_line_starting_with_dashes_is_content_not_a_header(self, tmp_path: Path):
+        p = self._file(tmp_path, "sql.txt", "-- comment\nnext\n")
+        result = apply_patch(str(p), "@@ -1,2 +1,2 @@\n--- comment\n+-- comment\n next\n")
+        assert result.startswith("[ok]"), result
+        assert p.read_text(encoding="utf-8") == "-- comment\nnext\n"

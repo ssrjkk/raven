@@ -87,7 +87,9 @@ class TestApplyPatch:
         f = tmp_path / "a.txt"
         f.write_text("x\n")
         result = apply_patch(str(f), "@@ -1 +1 @@\n+a\n")
-        assert result == "[error] no valid hunks in diff"
+        # The hunk claims it removes one line but shows none, so it is refused for that reason
+        # rather than with the generic "no valid hunks" it used to get.
+        assert result == "[error] hunk at line 1 declares -1 +1 but carries 0/1"
         assert f.read_text(encoding="utf-8") == "x\n"
 
     def test_skip_empty_line_in_hunk(self, tmp_path) -> None:
