@@ -92,7 +92,6 @@ class CodeExample:
 @dataclass
 class DatasetConfig:
     max_length: int = 2048
-    stride: int = 512
     test_split: float = 0.1
     format: str = "chat"  # chat, instruct, code
 
@@ -248,7 +247,6 @@ class DatasetBuilder:
                 truncation=True,
                 padding="max_length",
                 max_length=self._config.max_length,
-                stride=self._config.stride,
                 return_overflowing_tokens=False,
             )
 
@@ -311,6 +309,14 @@ class FineTuningPipeline:
     def config(self) -> TrainingConfig:
         return self._config
 
+    @property
+    def model(self) -> Any:
+        return self._model
+
+    @property
+    def tokenizer(self) -> Any:
+        return self._tokenizer
+
     def _resolve_model_name(self) -> str:
         if self._config.model_name_or_path:
             return self._config.model_name_or_path
@@ -360,7 +366,7 @@ class FineTuningPipeline:
 
         self._model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16 if _TORCH_AVAILABLE else None,
+            dtype=torch.bfloat16 if _TORCH_AVAILABLE else None,
             device_map="auto",
             trust_remote_code=True,
             **quantization_kwargs,
@@ -418,24 +424,30 @@ class FineTuningPipeline:
 
         from torch.utils.data import DataLoader
 
+        # a datasets.Dataset hands DataLoader python lists unless it is told to emit tensors
+        eval_dataset.set_format(type="torch", columns=["input_ids", "attention_mask"])
         eval_loader = DataLoader(eval_dataset, batch_size=self._config.batch_size)
 
         with torch.no_grad():
             for batch in eval_loader:
                 input_ids = batch["input_ids"].to(self._model.device)
                 attention_mask = batch["attention_mask"].to(self._model.device)
+                # pad tokens carry no signal: the model averages its loss over the non-ignored
+                # positions, so weighting must use the same count, on the shifted labels
                 labels = input_ids.clone()
+                labels[attention_mask == 0] = -100
+                token_mask = labels[:, 1:] != -100
+                scored = int(token_mask.sum().item())
+                if scored == 0:
+                    continue
 
                 outputs = self._model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-                loss = outputs.loss
-                total_loss += loss.item() * input_ids.numel()
-                total_tokens += input_ids.numel()
+                total_loss += outputs.loss.item() * scored
+                total_tokens += scored
 
-                logits = outputs.logits
-                predictions = logits.argmax(dim=-1)
-                mask = labels != -100
-                correct += ((predictions == labels) & mask).sum().item()
-                total += mask.sum().item()
+                predictions = outputs.logits.argmax(dim=-1)
+                correct += int(((predictions[:, :-1] == labels[:, 1:]) & token_mask).sum().item())
+                total += scored
 
         avg_loss = total_loss / total_tokens if total_tokens > 0 else float("inf")
         perplexity = self._compute_perplexity(avg_loss)
@@ -472,7 +484,7 @@ class FineTuningPipeline:
             logging_steps=self._config.logging_steps,
             save_steps=self._config.save_steps,
             eval_steps=self._config.eval_steps,
-            evaluation_strategy="steps" if eval_dataset is not None else "no",
+            eval_strategy="steps" if eval_dataset is not None else "no",
             save_total_limit=3,
             load_best_model_at_end=eval_dataset is not None,
             max_grad_norm=self._config.max_grad_norm,
@@ -487,14 +499,18 @@ class FineTuningPipeline:
             fsdp=self._config.fsdp or None,
         )
 
-        from transformers import Trainer
+        from transformers import DataCollatorForLanguageModeling, Trainer
 
         trainer = Trainer(
             model=self._model,
             args=training_args,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-            tokenizer=self._tokenizer,
+            processing_class=self._tokenizer,
+            # tokenize_dataset yields input_ids/attention_mask only; without labels the causal-LM
+            # head returns no loss and Trainer aborts on the first step. This collator sets
+            # labels=input_ids and masks the padding, which is what the loss then averages over.
+            data_collator=DataCollatorForLanguageModeling(tokenizer=self._tokenizer, mlm=False),
         )
 
         train_result = trainer.train()
@@ -573,7 +589,7 @@ class FineTuningPipeline:
             self._tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
             base_model = AutoModelForCausalLM.from_pretrained(
                 model_id,
-                torch_dtype=torch.bfloat16,
+                dtype=torch.bfloat16,
                 device_map="auto",
                 trust_remote_code=True,
             )

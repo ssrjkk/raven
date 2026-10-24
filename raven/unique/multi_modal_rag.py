@@ -167,11 +167,14 @@ class MultiModalRAG:
         self._clip_processor: CLIPProcessor | None = None
         self._clip_model: CLIPModel | None = None
         self._clip_dim: int = 512
+        self._clip_max_tokens: int = 77
         if _CLIP_AVAILABLE:
             try:
                 self._clip_processor = CLIPProcessor.from_pretrained(clip_model_name)
                 self._clip_model = CLIPModel.from_pretrained(clip_model_name)
                 self._clip_dim = getattr(self._clip_model.config, "projection_dim", 512)
+                # the text encoder has a hard positional limit; longer input raises inside forward()
+                self._clip_max_tokens = int(getattr(self._clip_model.config, "max_position_embeddings", 77))
                 logger.info("Loaded CLIP model: {}", clip_model_name)
             except Exception:
                 logger.warning("Failed to load CLIP model '{}'", clip_model_name)
@@ -242,7 +245,9 @@ class MultiModalRAG:
     def _embed_text_clip(self, text: str) -> list[float]:
         if self._clip_model is None or self._clip_processor is None:
             return []
-        inputs = self._clip_processor(text=[text], return_tensors="pt", padding=True)
+        inputs = self._clip_processor(
+            text=[text], return_tensors="pt", padding=True, truncation=True, max_length=self._clip_max_tokens
+        )
         with torch.no_grad():
             emb = self._clip_model.get_text_features(**inputs)
         return list(emb[0])

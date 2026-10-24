@@ -168,6 +168,9 @@ def discover_keys() -> DiscoveryResult:
     result.providers_available.append("ollama")
     if os.environ.get("VLLM_BASE_URL"):
         result.providers_available.append("vllm")
+    # the in-process adapter provider needs both halves; a base without an adapter is not usable
+    if os.environ.get("LLM_LOCAL_BASE_MODEL") and os.environ.get("LLM_LOCAL_ADAPTER_PATH"):
+        result.providers_available.append("local")
 
     return result
 

@@ -2,62 +2,32 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api/client";
+import type { ABTestData, ABTestResults } from "../api/types";
 import PageHeader from "../components/PageHeader";
 import { useApiQuery } from "../hooks/useApiQuery";
 
-interface ABVariant {
-  id: string;
-  name: string;
-  weight: number;
-  config: Record<string, unknown>;
-}
-
-interface ABTest {
-  id: string;
-  name: string;
-  description?: string;
-  status: string;
-  variants: ABVariant[];
-  metric?: string;
-  created_at: string;
-}
-
-interface ABVariantResult {
-  name: string;
-  lift: number;
-  events: number;
-  avg_value: number;
-  sample_count: number;
-}
-
-interface ABTestResults {
-  total_events: number;
-  significance: number;
-  significant: boolean;
-  variants: ABVariantResult[];
-}
-
 export default function ABTesting() {
   const qc = useQueryClient();
-  const [selected, setSelected] = useState<ABTest | null>(null);
+  const [selected, setSelected] = useState<ABTestData | null>(null);
   const [results, setResults] = useState<ABTestResults | null>(null);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
 
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
-  const [variantsJson, setVariantsJson] = useState('[{"name":"Control","weight":0.5,"config":{}},{"name":"Variant","weight":0.5,"config":{}}]');
+  const [variantsJson, setVariantsJson] = useState('[{"name":"Control","weight":0.5,"is_control":true,"config":{}},{"name":"Variant","weight":0.5,"config":{}}]');
   const [metricName, setMetricName] = useState("conversion");
+  const [metricType, setMetricType] = useState("rate");
 
-  const { data: experimentsData, refetch: refetchExperiments } = useApiQuery<{ experiments: ABTest[] }>(["abExperiments"], () => api.abExperiments());
+  const { data: experimentsData, refetch: refetchExperiments } = useApiQuery<{ experiments: ABTestData[] }>(["abExperiments"], () => api.abExperiments());
   const experiments = experimentsData?.experiments ?? [];
 
   const createExperiment = useMutation({
-    mutationFn: () => api.abCreate(name, desc, variantsJson, metricName),
+    mutationFn: () => api.abCreate(name, desc, variantsJson, metricName, metricType),
     onSuccess: (r) => {
       setMsg(`Experiment created: ${r.name} (${r.id})`);
-      setName(""); setDesc(""); setVariantsJson('[{"name":"Control","weight":0.5,"config":{}},{"name":"Variant","weight":0.5,"config":{}}]');
-      setMetricName("conversion");
+      setName(""); setDesc(""); setVariantsJson('[{"name":"Control","weight":0.5,"is_control":true,"config":{}},{"name":"Variant","weight":0.5,"config":{}}]');
+      setMetricName("conversion"); setMetricType("rate");
       qc.invalidateQueries({ queryKey: ["abExperiments"] });
     },
     onError: (e: any) => setError(e.message),
@@ -141,6 +111,10 @@ export default function ABTesting() {
                 rows={3} className="input-base font-mono" />
               <input placeholder="Metric name (default: conversion)" value={metricName} onChange={e => setMetricName(e.target.value)}
                 className="input-base" />
+              <select value={metricType} onChange={e => setMetricType(e.target.value)} className="input-base">
+                <option value="rate">rate — per-unit outcome in 0..1 (two-proportion z-test)</option>
+                <option value="mean">mean — per-unit value, e.g. latency (Welch t-test)</option>
+              </select>
             </div>
             <button onClick={() => createExperiment.mutate()} disabled={createExperiment.isPending || !name || !desc}
               className="btn-primary">
@@ -212,8 +186,11 @@ export default function ABTesting() {
                   </button>
                 </div>
                 <div className="text-sm space-y-1 text-secondary">
-                  <p>Metric: <span className="font-medium">{selected.metric}</span></p>
-                  <p>Variants: {selected.variants?.map((v) => `${v.name} (${(v.weight * 100).toFixed(0)}%)`).join(", ")}</p>
+                  <p>Metric: <span className="font-medium">{selected.metric}</span> ({selected.metric_type})</p>
+                  <p>Variants: {(() => {
+                    const total = (selected.variants ?? []).reduce((s, v) => s + (v.weight || 0), 0) || 1;
+                    return (selected.variants ?? []).map((v) => `${v.name} (${((v.weight / total) * 100).toFixed(1)}%)${v.is_control ? " [control]" : ""}`).join(", ");
+                  })()}</p>
                 </div>
               </div>
 
@@ -222,36 +199,79 @@ export default function ABTesting() {
                   <h2 className="text-lg font-semibold mb-3">Results</h2>
                   <div className="grid grid-cols-2 gap-4 mb-4">
                     <div className="stat-card text-center">
-                      <div className="stat-card-value">{results.total_events}</div>
-                      <div className="stat-card-label">Total Events</div>
+                      <div className="stat-card-value">
+                        {Object.values(results.unit_counts ?? {}).reduce((s, n) => s + n, 0)}
+                      </div>
+                      <div className="stat-card-label">Units (sample size)</div>
                     </div>
                     <div className="stat-card text-center">
-                      <div className="stat-card-value" style={{ color: results.significant ? "var(--dt-colors-success-default)" : "var(--dt-colors-text-tertiary)" }}>
-                        {(results.significance * 100).toFixed(1)}%
-                      </div>
-                      <div className="stat-card-label">
-                        {results.significant ? "Significant!" : "Confidence"}
-                      </div>
+                      <div className="stat-card-value">{results.total_events}</div>
+                      <div className="stat-card-label">Events analyzed</div>
                     </div>
+                  </div>
+
+                  {results.comparisons?.length === 0 && (
+                    <p className="text-sm text-tertiary mb-3">No comparison yet — every arm needs at least 2 units.</p>
+                  )}
+
+                  <div className="space-y-2 mb-3">
+                    {results.comparisons?.map((c) => {
+                      const lift = c.lift === null ? "undefined (control mean is 0)" : `${c.lift > 0 ? "+" : ""}${c.lift.toFixed(2)}%`;
+                      return (
+                        <div key={c.variant} className="p-3 rounded-lg bg-tertiary">
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium">{c.variant} <span className="text-xs text-tertiary">vs {c.control}</span></span>
+                            <span className={`text-sm ${c.significant ? "text-success" : "text-tertiary"}`}>
+                              {c.significant ? `significant (p_adj ${c.p_adjusted.toExponential(2)})` : `not significant (p_adj ${c.p_adjusted.toFixed(3)})`}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 mt-2 text-xs text-tertiary">
+                            <span>Absolute diff: {c.diff >= 0 ? "+" : ""}{c.diff.toPrecision(4)}</span>
+                            <span>95% CI: [{c.diff_ci_low.toPrecision(3)}, {c.diff_ci_high.toPrecision(3)}]</span>
+                            <span>Relative lift: {lift}</span>
+                            <span>p (raw): {c.p_value.toExponential(2)} · test: {c.test}</span>
+                            <span>Units: {c.units} vs {c.control_units}</span>
+                            <span>Mean: {c.mean.toPrecision(4)} vs {c.control_mean.toPrecision(4)}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <div className="space-y-2">
                     {results.variants?.map((v) => (
                       <div key={v.name} className="p-3 rounded-lg bg-tertiary">
                         <div className="flex justify-between items-center">
-                          <span className="font-medium">{v.name}</span>
-                          <span className={`text-sm ${v.lift > 0 ? "text-success" : v.lift < 0 ? "text-danger" : ""}`}>
-                            {v.lift > 0 ? "+" : ""}{v.lift}%
+                          <span className="font-medium">{v.name}{v.is_control ? " [control]" : ""}</span>
+                          <span className={`text-sm ${v.lift === null ? "text-tertiary" : v.lift > 0 ? "text-success" : v.lift < 0 ? "text-danger" : ""}`}>
+                            {v.is_control ? "baseline" : v.lift === null ? "lift undefined" : `${v.lift > 0 ? "+" : ""}${v.lift.toFixed(2)}%`}
                           </span>
                         </div>
-                        <div className="grid grid-cols-3 gap-2 mt-2 text-xs text-tertiary">
+                        <div className="grid grid-cols-4 gap-2 mt-2 text-xs text-tertiary">
+                          <span>Units: {v.sample_count}</span>
                           <span>Events: {v.events}</span>
-                          <span>Avg: {v.avg_value}</span>
-                          <span>Samples: {v.sample_count}</span>
+                          <span>Unit avg: {v.unit_avg}</span>
+                          <span>No unit: {v.unattributed_events}</span>
                         </div>
                       </div>
                     ))}
                   </div>
+
+                  {(results.srm?.imbalanced || (results.warnings?.length ?? 0) > 0 || results.events_dropped > 0 || results.events_orphaned > 0) && (
+                    <div className="mt-3 p-3 rounded-lg text-xs space-y-1" style={{ background: "var(--dt-colors-warning-transparent)" }}>
+                      {results.srm?.imbalanced && (
+                        <p className="text-danger">Sample ratio mismatch: the split itself is broken (χ² {results.srm.chi2.toFixed(2)}, p {results.srm.p_value.toExponential(2)}) — read no comparison from this experiment.</p>
+                      )}
+                      {(results.warnings ?? []).map((w) => <p key={w} className="text-secondary">{w}</p>)}
+                      {results.events_dropped > 0 && <p className="text-danger">{results.events_dropped} events were dropped by the storage cap.</p>}
+                      {results.events_orphaned > 0 && <p className="text-danger">{results.events_orphaned} events belong to removed variants and were excluded.</p>}
+                    </div>
+                  )}
+
+                  <p className="text-xs text-tertiary mt-3">
+                    {results.method} · α {results.alpha} · {results.multiplicity} across {results.comparisons?.length ?? 0} comparison(s).
+                    Sample size is the number of units, not events; events without a unit are counted but excluded.
+                  </p>
                 </div>
               )}
             </>

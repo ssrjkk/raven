@@ -69,7 +69,10 @@ vector = ["chromadb>=0.5.0,<2.0"]
 rag = ["sentence-transformers>=3.0,<4.0"]
 ml = [
     "torch>=2.0,<3.0",
-    "transformers>=4.40,<5.0",
+    # the floor is the version the smoke test in tests/ml actually runs against: fine_tuning.py
+    # passes dtype=, processing_class= and eval_strategy=, and the two older spellings
+    # (torch_dtype=, tokenizer=) plus evaluation_strategy= are gone from this API
+    "transformers>=4.57,<5.0",
     "peft>=0.10,<1.0",
     "datasets>=2.20,<3.0",
 ]
@@ -179,6 +182,7 @@ markers = [
     "rag: RAG/embedding pipeline tests",
     "agent: Agent FSM tests",
     "smoke: Quick smoke/sanity tests",
+    "ml: Fine-tuning smoke tests, need torch/transformers/peft/datasets and RAVEN_ML_SMOKE=1",
 ]
 
 

@@ -178,9 +178,10 @@ export const api = {
 
   chatSearch: (q: string, limit = 50) => request<{ results: ChatSearchResult[]; total: number; query: string }>(`/api/chat/search?q=${encodeURIComponent(q)}&limit=${limit}`),
 
-  abCreate: (name: string, description: string, variantsJson: string, metricName = "conversion") =>
+  abCreate: (name: string, description: string, variantsJson: string, metricName = "conversion", metricType = "rate") =>
     request<ABCreateResponse>("/api/ab/experiments", {
-      method: "POST", body: JSON.stringify({ name, description, variants_json: variantsJson, metric_name: metricName }),
+      method: "POST",
+      body: JSON.stringify({ name, description, variants_json: variantsJson, metric_name: metricName, metric_type: metricType }),
     }),
   abExperiments: () => request<{ experiments: ABTestData[] }>("/api/ab/experiments"),
   abGet: (id: string) => request<ABTestData>(`/api/ab/experiments/${id}`),

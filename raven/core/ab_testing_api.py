@@ -13,6 +13,7 @@ class CreateRequest(BaseModel):
     description: str
     variants_json: str
     metric_name: str = "conversion"
+    metric_type: str = "rate"  # rate: per-unit outcome | mean: per-unit continuous value
 
 
 class UpdateRequest(BaseModel):
@@ -35,15 +36,21 @@ def create_ab_testing_router() -> APIRouter:
             variants = json.loads(req.variants_json)
         except json.JSONDecodeError as e:
             raise HTTPException(400, f"Invalid variants JSON: {e}") from e
+        if not isinstance(variants, list):
+            raise HTTPException(400, "variants JSON must be an array")
         if len(variants) < 2:
             raise HTTPException(400, "At least 2 variants required")
-        exp = _engine.create_experiment(req.name, req.description, variants, req.metric_name)
+        try:
+            exp = _engine.create_experiment(req.name, req.description, variants, req.metric_name, req.metric_type)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
         return {
             "id": exp.id,
             "name": exp.name,
             "status": exp.status,
-            "variants": [{"name": v.name, "weight": v.weight} for v in exp.variants],
+            "variants": [{"name": v.name, "weight": v.weight, "is_control": v.is_control} for v in exp.variants],
             "metric": exp.metric_name,
+            "metric_type": exp.metric_type,
         }
 
     @router.get("/experiments")
@@ -55,8 +62,11 @@ def create_ab_testing_router() -> APIRouter:
                     "id": e.id,
                     "name": e.name,
                     "status": e.status,
-                    "variants": [{"name": v.name, "weight": v.weight} for v in e.variants],
+                    "variants": [
+                        {"name": v.name, "weight": v.weight, "is_control": v.is_control} for v in e.variants
+                    ],
                     "metric": e.metric_name,
+                    "metric_type": e.metric_type,
                     "created_at": e.created_at,
                 }
                 for e in experiments
@@ -73,8 +83,12 @@ def create_ab_testing_router() -> APIRouter:
             "name": exp.name,
             "description": exp.description,
             "status": exp.status,
-            "variants": [{"name": v.name, "weight": v.weight, "config": v.config} for v in exp.variants],
+            "variants": [
+                {"name": v.name, "weight": v.weight, "config": v.config, "is_control": v.is_control}
+                for v in exp.variants
+            ],
             "metric": exp.metric_name,
+            "metric_type": exp.metric_type,
             "created_at": exp.created_at,
             "updated_at": exp.updated_at,
         }
@@ -105,17 +119,22 @@ def create_ab_testing_router() -> APIRouter:
     @router.post("/experiments/{experiment_id}/assign")
     def assign_variant(experiment_id: str, body: dict[str, str] | None = None):
         body = body or {}
-        variant = _engine.assign_variant(experiment_id, body.get("user_id", ""))
+        try:
+            variant = _engine.assign_variant(experiment_id, body.get("user_id", ""))
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
         if variant is None:
             raise HTTPException(400, f"Experiment '{experiment_id}' not found or not running")
         return {"variant": variant}
 
     @router.post("/experiments/{experiment_id}/record")
     def record_event(experiment_id: str, req: RecordRequest):
-        exp = _engine.get_experiment(experiment_id)
-        if not exp:
-            raise HTTPException(404, f"Experiment '{experiment_id}' not found")
-        _engine.record_event(experiment_id, req.variant, req.metric_name, req.value, req.user_id)
+        try:
+            _engine.record_event(experiment_id, req.variant, req.metric_name, req.value, req.user_id)
+        except KeyError as e:
+            raise HTTPException(404, f"Experiment '{experiment_id}' not found") from e
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
         return {"ok": True}
 
     @router.get("/experiments/{experiment_id}/results")

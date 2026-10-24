@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     groq_api_key: SafeSecretStr = SafeSecretStr("")
     ollama_base_url: str = "http://localhost:11434"  # default Ollama URL
     vllm_base_url: str = ""
+    llm_local_base_model: str = ""
+    llm_local_adapter_path: str = ""
+    llm_local_max_new_tokens: int = 256
     default_model: str = ""  # auto-discovered if empty
     model_fast: str = ""
     model_balanced: str = ""

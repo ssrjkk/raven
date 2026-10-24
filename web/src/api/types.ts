@@ -386,6 +386,60 @@ export interface ABTestVariant {
   name: string;
   weight: number;
   config: Record<string, unknown>;
+  is_control?: boolean;
+}
+
+export interface ABTestResults {
+  experiment_id: string;
+  name: string;
+  status: string;
+  metric: string;
+  metric_type: string;
+  method: string;
+  alpha: number;
+  multiplicity: string;
+  control: string;
+  significant: boolean;
+  total_events: number;
+  events_stored: number;
+  events_dropped: number;
+  events_orphaned: number;
+  events_unattributed: number;
+  srm: { chi2: number; p_value: number; imbalanced: boolean };
+  warnings: string[];
+  unit_counts: Record<string, number>;
+  variants: {
+    name: string;
+    weight: number;
+    config: Record<string, unknown>;
+    is_control: boolean;
+    events: number;
+    sample_count: number;
+    unattributed_events: number;
+    avg_value: number;
+    unit_avg: number;
+    lift: number | null;
+    p_value: number | null;
+    p_adjusted: number | null;
+    significant: boolean;
+  }[];
+  comparisons: {
+    variant: string;
+    control: string;
+    units: number;
+    control_units: number;
+    mean: number;
+    control_mean: number;
+    diff: number;
+    diff_ci_low: number;
+    diff_ci_high: number;
+    lift: number | null;
+    p_value: number;
+    p_adjusted: number;
+    test: string;
+    significant: boolean;
+    warning?: string;
+  }[];
 }
 
 export interface ABTestData {
@@ -395,14 +449,8 @@ export interface ABTestData {
   status: string;
   variants: ABTestVariant[];
   metric?: string;
+  metric_type?: string;
   created_at: string;
-}
-
-export interface ABTestResults {
-  total_events: number;
-  significance: number;
-  significant: boolean;
-  variants: { name: string; lift: number; events: number; avg_value: number; sample_count: number }[];
 }
 
 export interface ABCreateResponse {

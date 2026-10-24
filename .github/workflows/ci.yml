@@ -171,6 +171,36 @@ jobs:
           DATABASE_URL: postgresql://raven:raven@localhost:5432/raven_test
         run: pytest tests/integration/ -m integration -v --tb=short --no-cov
 
+  ml-smoke:
+    name: Fine-tuning smoke (CPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RAVEN_ML_SMOKE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: pyproject.toml
+      - name: Install the ml extra
+        run: pip install -e ".[dev,ml]"
+      # tests/ml runs a real LoRA train → save → PeftModel reload → generate → evaluate on a
+      # few-hundred-KB Llama. Before this job the training path had never executed anywhere: the
+      # extra was not installed by any runner and the surrounding tests asserted the
+      # "dependency missing" branch, so five separate defects (stride vs max_length validation,
+      # two removed transformers kwargs, a DataLoader yielding lists, and a dataset without labels)
+      # sat behind a green suite.
+      - name: Train, save, reload and evaluate
+        run: |
+          set -o pipefail
+          pytest tests/ml -m ml --no-cov -q -ra | tee ml-smoke.log
+      - name: Refuse a silent skip
+        run: |
+          grep -qE "[0-9]+ passed" ml-smoke.log
+          ! grep -qE "[0-9]+ skipped|no tests ran" ml-smoke.log
+
   e2e-tests:
     name: E2E tests (Allure)
     runs-on: ubuntu-latest

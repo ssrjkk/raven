@@ -9,6 +9,7 @@ from raven.core.llm.providers.base import (
 from raven.core.llm.providers.bedrock import BedrockProvider
 from raven.core.llm.providers.copilot import CopilotProvider
 from raven.core.llm.providers.groq import FREE_MODELS, GroqProvider
+from raven.core.llm.providers.local import LocalAdapterProvider
 from raven.core.llm.providers.ollama import OllamaProvider
 from raven.core.llm.providers.openai import (
     AzureProvider,
@@ -26,6 +27,7 @@ __all__ = [
     "BedrockProvider",
     "CopilotProvider",
     "GroqProvider",
+    "LocalAdapterProvider",
     "OllamaProvider",
     "OpenAIProvider",
     "OpenRouterProvider",

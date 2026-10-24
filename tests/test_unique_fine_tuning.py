@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from raven.unique import fine_tuning
 from raven.unique.fine_tuning import (
     Checkpoint,
     ConversationExample,
@@ -65,9 +66,12 @@ class TestDatasetBuilder:
         assert len(texts) == 1
         assert "print('hello')" in texts[0]
 
-    def test_build_dataset_raises_without_datasets(self):
+    def test_build_dataset_raises_without_datasets(self, monkeypatch: pytest.MonkeyPatch):
         conv = ConversationExample(messages=[{"role": "user", "content": "hello"}])
         self.builder.add_conversation(conv)
+        # simulate the missing extra: asserting it by assuming it is absent breaks the suite on
+        # every machine that has the ml extra installed
+        monkeypatch.setattr(fine_tuning, "_DATASETS_AVAILABLE", False)
         with pytest.raises(RuntimeError, match=r"datasets.*required"):
             self.builder.build_dataset()
 
@@ -120,19 +124,32 @@ class TestFineTuningPipeline:
         with pytest.raises(ValueError, match="Unknown model type"):
             pipeline._resolve_model_name()
 
-    def test_validate_dependencies_missing(self):
+    @staticmethod
+    def _without_ml_deps(monkeypatch: pytest.MonkeyPatch) -> None:
+        """Pretend the optional ml extra is not installed, on any machine."""
+        monkeypatch.setattr(fine_tuning, "_TORCH_AVAILABLE", False)
+        monkeypatch.setattr(fine_tuning, "_TRANSFORMERS_AVAILABLE", False)
+        monkeypatch.setattr(fine_tuning, "_PEFT_AVAILABLE", False)
+        monkeypatch.setattr(fine_tuning, "LoraConfig", None)
+        monkeypatch.setattr(fine_tuning, "get_peft_model", None)
+
+    def test_validate_dependencies_missing(self, monkeypatch: pytest.MonkeyPatch):
+        self._without_ml_deps(monkeypatch)
         with pytest.raises(RuntimeError, match="Missing required dependencies"):
             self.pipeline._validate_dependencies()
 
-    def test_load_model_raises_without_deps(self):
+    def test_load_model_raises_without_deps(self, monkeypatch: pytest.MonkeyPatch):
+        self._without_ml_deps(monkeypatch)
         with pytest.raises(RuntimeError, match="Missing required dependencies"):
             self.pipeline.load_model()
 
-    def test_evaluate_raises_without_deps(self):
+    def test_evaluate_raises_without_deps(self, monkeypatch: pytest.MonkeyPatch):
+        self._without_ml_deps(monkeypatch)
         with pytest.raises(RuntimeError, match="transformers and torch are required"):
             self.pipeline.evaluate(None)
 
-    def test_train_raises_without_deps(self):
+    def test_train_raises_without_deps(self, monkeypatch: pytest.MonkeyPatch):
+        self._without_ml_deps(monkeypatch)
         with pytest.raises(RuntimeError, match="transformers and torch are required"):
             self.pipeline.train(None, eval_dataset=None)
 

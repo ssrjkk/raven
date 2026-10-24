@@ -1,178 +1,222 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from unittest.mock import MagicMock
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import raven.core.ab_testing_api as ab_api
+from raven.core.ab_testing import ABTestEngine
 from raven.core.ab_testing_api import create_ab_testing_router
 
-
-@pytest.fixture()
-def mock_engine() -> MagicMock:
-    return MagicMock()
+VARIANTS = '[{"name":"Control","weight":1.0,"is_control":true},{"name":"Treatment","weight":1.0}]'
 
 
 @pytest.fixture()
-def client(mock_engine: MagicMock) -> Iterator[TestClient]:
-    app = FastAPI()
+def client() -> Iterator[TestClient]:
+    engine = ABTestEngine()
     original = ab_api._engine
-    ab_api._engine = mock_engine
+    ab_api._engine = engine
     try:
+        app = FastAPI()
         app.include_router(create_ab_testing_router())
         yield TestClient(app)
     finally:
         ab_api._engine = original
 
 
-def test_create_experiment(client: TestClient, mock_engine: MagicMock) -> None:
-    exp = MagicMock()
-    exp.id = "e1"
-    exp.name = "test"
-    exp.status = "draft"
-    v1 = MagicMock(name="a", weight=0.5)
-    v2 = MagicMock(name="b", weight=0.5)
-    exp.variants = [v1, v2]
-    exp.metric_name = "conversion"
-    mock_engine.create_experiment.return_value = exp
-
-    resp = client.post(
-        "/api/ab/experiments",
-        json={"name": "test", "description": "desc", "variants_json": '[{"name":"a"},{"name":"b"}]'},
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["id"] == "e1"
+def create(client: TestClient, **overrides: Any) -> str:
+    payload = {"name": "exp", "description": "desc", "variants_json": VARIANTS, "metric_name": "conversion"}
+    payload.update(overrides)
+    resp = client.post("/api/ab/experiments", json=payload)
+    assert resp.status_code == 200, resp.text
+    return str(resp.json()["id"])
 
 
-def test_create_experiment_invalid_json(client: TestClient) -> None:
-    resp = client.post(
-        "/api/ab/experiments",
-        json={"name": "test", "description": "desc", "variants_json": "not json"},
-    )
-    assert resp.status_code == 400
+class TestCreate:
+    def test_created_experiment_reports_the_control_and_metric_type(self, client: TestClient) -> None:
+        payload = {
+            "name": "exp",
+            "description": "desc",
+            "variants_json": VARIANTS,
+            "metric_name": "latency",
+            "metric_type": "mean",
+        }
+        resp = client.post("/api/ab/experiments", json=payload)
+        data = resp.json()
+        assert data["metric"] == "latency"
+        assert data["metric_type"] == "mean"
+        assert [v["is_control"] for v in data["variants"]] == [True, False]
+
+    def test_invalid_json_is_a_client_error(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/ab/experiments",
+            json={"name": "e", "description": "d", "variants_json": "not json"},
+        )
+        assert resp.status_code == 400
+
+    def test_a_json_object_instead_of_an_array_is_rejected(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/ab/experiments",
+            json={"name": "e", "description": "d", "variants_json": '{"name": "only"}'},
+        )
+        assert resp.status_code == 400
+        assert "must be an array" in resp.json()["detail"]
+
+    def test_single_variant_is_rejected(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/ab/experiments",
+            json={"name": "e", "description": "d", "variants_json": '[{"name":"a"}]'},
+        )
+        assert resp.status_code == 400
+
+    def test_engine_validation_errors_become_400(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/ab/experiments",
+            json={"name": "e", "description": "d", "variants_json": '[{"name":"a"},{"name":"a"}]'},
+        )
+        assert resp.status_code == 400
+        assert "duplicate variant name" in resp.json()["detail"]
+
+    def test_unknown_metric_type_is_rejected(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/ab/experiments",
+            json={"name": "e", "description": "d", "variants_json": VARIANTS, "metric_type": "median"},
+        )
+        assert resp.status_code == 400
 
 
-def test_create_experiment_too_few_variants(client: TestClient) -> None:
-    resp = client.post(
-        "/api/ab/experiments",
-        json={"name": "test", "description": "desc", "variants_json": '[{"name":"a"}]'},
-    )
-    assert resp.status_code == 400
+class TestReading:
+    def test_list_shows_variants_and_metric_type(self, client: TestClient) -> None:
+        create(client)
+        experiments = client.get("/api/ab/experiments").json()["experiments"]
+        assert len(experiments) == 1
+        assert experiments[0]["metric_type"] == "rate"
+        assert [v["name"] for v in experiments[0]["variants"]] == ["Control", "Treatment"]
+
+    def test_get_returns_the_experiment(self, client: TestClient) -> None:
+        exp_id = create(client)
+        data = client.get(f"/api/ab/experiments/{exp_id}").json()
+        assert data["id"] == exp_id
+        assert data["status"] == "draft"
+        assert data["metric_type"] == "rate"
+
+    def test_get_unknown_is_404(self, client: TestClient) -> None:
+        assert client.get("/api/ab/experiments/missing").status_code == 404
 
 
-def test_list_experiments(client: TestClient, mock_engine: MagicMock) -> None:
-    e = MagicMock()
-    e.id = "e1"
-    e.name = "test"
-    e.status = "running"
-    e.variants = []
-    e.metric_name = "conversion"
-    e.created_at = "2026-01-01"
-    mock_engine.list_experiments.return_value = [e]
+class TestStatus:
+    @pytest.mark.parametrize("action", ["running", "paused", "completed"])
+    def test_transitions(self, client: TestClient, action: str) -> None:
+        exp_id = create(client)
+        resp = client.post(f"/api/ab/experiments/{exp_id}/status", json={"status": action})
+        assert resp.status_code == 200
+        assert resp.json()["status"] == action
 
-    resp = client.get("/api/ab/experiments")
-    assert resp.status_code == 200
-    assert len(resp.json()["experiments"]) == 1
+    def test_invalid_action(self, client: TestClient) -> None:
+        exp_id = create(client)
+        assert client.post(f"/api/ab/experiments/{exp_id}/status", json={"status": "halt"}).status_code == 400
 
+    def test_unknown_experiment(self, client: TestClient) -> None:
+        resp = client.post("/api/ab/experiments/missing/status", json={"status": "running"})
+        assert resp.status_code == 404
 
-def test_get_experiment(client: TestClient, mock_engine: MagicMock) -> None:
-    exp = MagicMock()
-    exp.id = "e1"
-    exp.name = "test"
-    exp.description = "desc"
-    exp.status = "running"
-    exp.variants = []
-    exp.metric_name = "conversion"
-    exp.created_at = "2026-01-01"
-    exp.updated_at = "2026-01-02"
-    mock_engine.get_experiment.return_value = exp
+    def test_delete_removes_the_experiment(self, client: TestClient) -> None:
+        exp_id = create(client)
+        assert client.delete(f"/api/ab/experiments/{exp_id}").json() == {"ok": True}
+        assert client.get(f"/api/ab/experiments/{exp_id}").status_code == 404
 
-    resp = client.get("/api/ab/experiments/e1")
-    assert resp.status_code == 200
-    assert resp.json()["id"] == "e1"
+    def test_delete_unknown(self, client: TestClient) -> None:
+        assert client.delete("/api/ab/experiments/missing").status_code == 404
 
 
-def test_get_experiment_not_found(client: TestClient, mock_engine: MagicMock) -> None:
-    mock_engine.get_experiment.return_value = None
-    resp = client.get("/api/ab/experiments/unknown")
-    assert resp.status_code == 404
+class TestAssignmentAndRecording:
+    def test_assign_returns_a_variant_of_the_running_experiment(self, client: TestClient) -> None:
+        exp_id = create(client)
+        client.post(f"/api/ab/experiments/{exp_id}/status", json={"status": "running"})
+        resp = client.post(f"/api/ab/experiments/{exp_id}/assign", json={"user_id": "u1"})
+        assert resp.status_code == 200
+        assert resp.json()["variant"] in {"Control", "Treatment"}
+
+    def test_assign_without_a_subject_is_a_client_error(self, client: TestClient) -> None:
+        exp_id = create(client)
+        client.post(f"/api/ab/experiments/{exp_id}/status", json={"status": "running"})
+        resp = client.post(f"/api/ab/experiments/{exp_id}/assign", json={})
+        assert resp.status_code == 422
+        assert "subject id" in resp.json()["detail"]
+
+    def test_assign_on_a_draft_is_reported_as_not_running(self, client: TestClient) -> None:
+        exp_id = create(client)
+        resp = client.post(f"/api/ab/experiments/{exp_id}/assign", json={"user_id": "u1"})
+        assert resp.status_code == 400
+
+    def test_record_accepts_a_valid_event(self, client: TestClient) -> None:
+        exp_id = create(client)
+        resp = client.post(
+            f"/api/ab/experiments/{exp_id}/record",
+            json={"variant": "Control", "metric_name": "conversion", "value": 1.0, "user_id": "u1"},
+        )
+        assert resp.status_code == 200
+
+    def test_record_on_an_unknown_experiment_is_404(self, client: TestClient) -> None:
+        resp = client.post("/api/ab/experiments/missing/record", json={"variant": "Control"})
+        assert resp.status_code == 404
+
+    def test_record_of_an_unknown_variant_is_refused_loudly(self, client: TestClient) -> None:
+        exp_id = create(client)
+        resp = client.post(f"/api/ab/experiments/{exp_id}/record", json={"variant": "Typo"})
+        assert resp.status_code == 422
+        assert "is not part of experiment" in resp.json()["detail"]
+
+    def test_record_of_an_out_of_range_rate_is_refused(self, client: TestClient) -> None:
+        exp_id = create(client)
+        resp = client.post(
+            f"/api/ab/experiments/{exp_id}/record", json={"variant": "Control", "value": 7.0, "user_id": "u1"}
+        )
+        assert resp.status_code == 422
+
+    def test_record_of_a_different_metric_is_refused(self, client: TestClient) -> None:
+        exp_id = create(client)
+        resp = client.post(f"/api/ab/experiments/{exp_id}/record", json={"variant": "Control", "metric_name": "other"})
+        assert resp.status_code == 422
 
 
-def test_update_status(client: TestClient, mock_engine: MagicMock) -> None:
-    exp = MagicMock()
-    exp.id = "e1"
-    exp.status = "running"
-    mock_engine.start_experiment.return_value = exp
+class TestResults:
+    def test_report_carries_the_method_and_the_unit_counts(self, client: TestClient) -> None:
+        exp_id = create(client)
+        client.post(f"/api/ab/experiments/{exp_id}/status", json={"status": "running"})
+        for i in range(60):
+            converted = i % 10 == 0
+            client.post(
+                f"/api/ab/experiments/{exp_id}/record",
+                json={"variant": "Control", "value": 1.0 if converted else 0.0, "user_id": f"c{i}"},
+            )
+            client.post(
+                f"/api/ab/experiments/{exp_id}/record",
+                json={"variant": "Treatment", "value": 1.0 if i % 4 == 0 else 0.0, "user_id": f"t{i}"},
+            )
+        data = client.get(f"/api/ab/experiments/{exp_id}/results").json()
+        assert data["method"] == "two_proportion_z_on_units"
+        assert data["control"] == "Control"
+        assert data["alpha"] == 0.05
+        assert data["multiplicity"] == "holm-bonferroni"
+        assert data["unit_counts"] == {"Control": 60, "Treatment": 60}
+        assert data["total_events"] == 120
+        assert data["events_dropped"] == 0
+        comparison = data["comparisons"][0]
+        assert comparison["variant"] == "Treatment"
+        assert -1.0 <= comparison["diff_ci_low"] <= comparison["diff_ci_high"] <= 1.0
+        assert comparison["p_adjusted"] >= comparison["p_value"]
+        assert data["significant"] is True
 
-    resp = client.post("/api/ab/experiments/e1/status", json={"status": "running"})
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "running"
+    def test_report_of_an_empty_experiment_is_not_significant(self, client: TestClient) -> None:
+        exp_id = create(client)
+        data = client.get(f"/api/ab/experiments/{exp_id}/results").json()
+        assert data["significant"] is False
+        assert data["comparisons"][0]["p_value"] == 1.0
+        assert data["unit_counts"] == {"Control": 0, "Treatment": 0}
 
-
-def test_update_status_invalid(client: TestClient) -> None:
-    resp = client.post("/api/ab/experiments/e1/status", json={"status": "invalid"})
-    assert resp.status_code == 400
-
-
-def test_update_status_not_found(client: TestClient, mock_engine: MagicMock) -> None:
-    mock_engine.start_experiment.return_value = None
-    resp = client.post("/api/ab/experiments/e1/status", json={"status": "running"})
-    assert resp.status_code == 404
-
-
-def test_delete_experiment(client: TestClient, mock_engine: MagicMock) -> None:
-    mock_engine.delete_experiment.return_value = True
-    resp = client.delete("/api/ab/experiments/e1")
-    assert resp.status_code == 200
-    assert resp.json()["ok"] is True
-
-
-def test_delete_experiment_not_found(client: TestClient, mock_engine: MagicMock) -> None:
-    mock_engine.delete_experiment.return_value = False
-    resp = client.delete("/api/ab/experiments/unknown")
-    assert resp.status_code == 404
-
-
-def test_assign_variant(client: TestClient, mock_engine: MagicMock) -> None:
-    mock_engine.assign_variant.return_value = "a"
-    resp = client.post("/api/ab/experiments/e1/assign", json={"user_id": "u1"})
-    assert resp.status_code == 200
-    assert resp.json()["variant"] == "a"
-
-
-def test_assign_variant_not_found(client: TestClient, mock_engine: MagicMock) -> None:
-    mock_engine.assign_variant.return_value = None
-    resp = client.post("/api/ab/experiments/e1/assign")
-    assert resp.status_code == 400
-
-
-def test_record_event(client: TestClient, mock_engine: MagicMock) -> None:
-    exp = MagicMock()
-    mock_engine.get_experiment.return_value = exp
-    resp = client.post(
-        "/api/ab/experiments/e1/record",
-        json={"variant": "a", "metric_name": "conversion", "value": 1.0},
-    )
-    assert resp.status_code == 200
-
-
-def test_record_event_not_found(client: TestClient, mock_engine: MagicMock) -> None:
-    mock_engine.get_experiment.return_value = None
-    resp = client.post("/api/ab/experiments/e1/record", json={"variant": "a"})
-    assert resp.status_code == 404
-
-
-def test_get_results(client: TestClient, mock_engine: MagicMock) -> None:
-    mock_engine.get_results.return_value = {"variant_a": {"conversions": 10}}
-    resp = client.get("/api/ab/experiments/e1/results")
-    assert resp.status_code == 200
-
-
-def test_get_results_not_found(client: TestClient, mock_engine: MagicMock) -> None:
-    mock_engine.get_results.return_value = None
-    resp = client.get("/api/ab/experiments/unknown/results")
-    assert resp.status_code == 404
+    def test_unknown_experiment_results_404(self, client: TestClient) -> None:
+        assert client.get("/api/ab/experiments/missing/results").status_code == 404

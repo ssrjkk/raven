@@ -43,7 +43,11 @@ class _FakeTorch:
 
 
 class _FakeClipProcessor:
+    def __init__(self) -> None:
+        self.recorded: dict[str, object] = {}
+
     def __call__(self, *args: object, **kwargs: object) -> dict[str, bool]:
+        self.recorded = dict(kwargs)
         return {"dummy": True}
 
     @classmethod
@@ -82,6 +86,15 @@ def _make_rag_with_clip(monkeypatch: pytest.MonkeyPatch) -> MultiModalRAG:
     monkeypatch.setattr(mmr, "torch", _FakeTorch())
     return MultiModalRAG(dimension=32)
 
+
+
+@pytest.fixture(autouse=True)
+def _optional_embedders_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The unit suite must not pull `openai/clip-vit-base-patch32` over the network just because
+    transformers happens to be installed; the CLIP and SentenceTransformer paths have their own
+    tests that install fakes and re-enable the flag explicitly."""
+    monkeypatch.setattr(mmr, "_CLIP_AVAILABLE", False)
+    monkeypatch.setattr(mmr, "_SENTENCE_TRANSFORMER_AVAILABLE", False)
 
 
 class TestMultiModalRAG:
@@ -383,6 +396,14 @@ class TestClipInitAndEmbeddings:
     def test_embed_text_clip_no_model(self):
         rag = MultiModalRAG(dimension=32)
         assert rag._embed_text_clip("hello") == []
+
+    def test_long_text_is_truncated_to_the_clip_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # CLIP's text encoder has a hard positional limit; without truncation a 500-char chunk
+        # raised ValueError inside forward() and index_document died
+        rag = _make_rag_with_clip(monkeypatch)
+        rag._embed_text_clip("word " * 2000)
+        assert rag._clip_processor.recorded.get("truncation") is True
+        assert rag._clip_processor.recorded.get("max_length") == 77
 
     def test_embed_image_valid(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         rag = _make_rag_with_clip(monkeypatch)

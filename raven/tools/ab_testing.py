@@ -4,21 +4,30 @@ from raven.core.ab_testing import _engine
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 
-def ab_create(name: str, description: str, variants_json: str, metric_name: str = "conversion") -> str:
+def ab_create(
+    name: str, description: str, variants_json: str, metric_name: str = "conversion", metric_type: str = "rate"
+) -> str:
     import json
 
     try:
         variants = json.loads(variants_json)
     except json.JSONDecodeError as e:
         return f"[error] Invalid variants JSON: {e}"
+    if not isinstance(variants, list):
+        return "[error] variants must be a JSON array"
     if len(variants) < 2:
         return "[error] At least 2 variants required"
-    exp = _engine.create_experiment(name, description, variants, metric_name)
+    try:
+        exp = _engine.create_experiment(name, description, variants, metric_name, metric_type)
+    except ValueError as e:
+        return f"[error] {e}"
+    control = exp.control.name
     return (
         f"Experiment created [id={exp.id}]:\n"
         f"- Name: {exp.name}\n"
-        f"- Variants: {', '.join(v['name'] for v in variants)}\n"
-        f"- Metric: {exp.metric_name}\n"
+        f"- Variants: {', '.join(f'{v.name} (weight {v.weight:g})' for v in exp.variants)}\n"
+        f"- Control: {control}\n"
+        f"- Metric: {exp.metric_name} ({exp.metric_type})\n"
         f"Use ab_start {exp.id} to begin."
     )
 
@@ -37,13 +46,16 @@ def ab_get(experiment_id: str) -> str:
     exp = _engine.get_experiment(experiment_id)
     if not exp:
         return f"[error] Experiment '{experiment_id}' not found."
+    rendered = ", ".join(
+        f"{v.name} (weight {v.weight:g})" + (" [control]" if v.is_control else "") for v in exp.variants
+    )
     return (
         f"Experiment: {exp.name}\n"
         f"- ID: {exp.id}\n"
         f"- Description: {exp.description}\n"
         f"- Status: {exp.status}\n"
-        f"- Metric: {exp.metric_name}\n"
-        f"- Variants: {', '.join(f'{v.name} ({v.weight * 100:.0f}%)' for v in exp.variants)}\n"
+        f"- Metric: {exp.metric_name} ({exp.metric_type})\n"
+        f"- Variants: {rendered}\n"
         f"- Created: {exp.created_at}"
     )
 
@@ -77,7 +89,10 @@ def ab_delete(experiment_id: str) -> str:
 
 
 def ab_assign(experiment_id: str, user_id: str = "") -> str:
-    variant = _engine.assign_variant(experiment_id, user_id)
+    try:
+        variant = _engine.assign_variant(experiment_id, user_id)
+    except ValueError as e:
+        return f"[error] {e}"
     if variant is None:
         return f"[error] Experiment '{experiment_id}' not found or not running."
     return variant
@@ -86,8 +101,14 @@ def ab_assign(experiment_id: str, user_id: str = "") -> str:
 def ab_record(
     experiment_id: str, variant: str, metric_name: str = "conversion", value: float = 1.0, user_id: str = ""
 ) -> str:
-    _engine.record_event(experiment_id, variant, metric_name, value, user_id)
-    return f"Event recorded: {experiment_id}/{variant}/{metric_name}={value}"
+    try:
+        _engine.record_event(experiment_id, variant, metric_name, value, user_id)
+    except KeyError:
+        return f"[error] Experiment '{experiment_id}' not found."
+    except (ValueError, RuntimeError) as e:
+        return f"[error] {e}"
+    unit = user_id or "none (will be excluded from the test: no unit of randomization)"
+    return f"Event recorded: {experiment_id}/{variant}/{metric_name}={value} unit={unit}"
 
 
 def ab_results(experiment_id: str) -> str:
@@ -96,15 +117,37 @@ def ab_results(experiment_id: str) -> str:
         return f"[error] Experiment '{experiment_id}' not found."
     lines = [
         f"Results: {results['name']} ({results['status']})",
-        f"Metric: {results['metric']}",
-        f"Total events: {results['total_events']}",
+        f"Metric: {results['metric']} ({results['metric_type']}), test: {results['method']}, "
+        f"control: {results['control']}",
+        f"Events: {results['total_events']} analyzed / {results['events_stored']} stored"
+        f" (dropped {results['events_dropped']}, no unit {results['events_unattributed']},"
+        f" orphaned {results['events_orphaned']})",
     ]
-    if results["significant"]:
-        lines.append(f"Statistically significant! (p={results['significance']:.4f})")
-    else:
-        lines.append(f"Not yet significant (p={results['significance']:.4f}, need >=0.95)")
-    for v in results["variants"]:
-        lines.append(f"  [{v['name']}] events={v['events']}, avg={v['avg_value']}, lift={v['lift']}%")
+    for row in results["variants"]:
+        role = " [control]" if row["is_control"] else ""
+        lines.append(
+            f"  [{row['name']}]{role} units={row['sample_count']} events={row['events']} "
+            f"unit_avg={row['unit_avg']} event_avg={row['avg_value']}"
+        )
+    if not results["comparisons"]:
+        lines.append("  no comparison available (every arm is the control, or an arm has no units)")
+    for c in results["comparisons"]:
+        lift = "undefined (control mean is 0)" if c["lift"] is None else f"{c['lift']:+.2f}%"
+        verdict = "significant" if c["significant"] else "not significant"
+        lines.append(
+            f"  {c['variant']} vs {c['control']}: diff={c['diff']:+.6g} "
+            f"95% CI [{c['diff_ci_low']:.6g}, {c['diff_ci_high']:.6g}] lift={lift} "
+            f"p={c['p_value']:.4g} p_adjusted={c['p_adjusted']:.4g} (alpha {results['alpha']}) -> {verdict}"
+        )
+    srm = results["srm"]
+    if srm["imbalanced"]:
+        lines.append(f"  WARNING sample ratio mismatch: chi2={srm['chi2']:.2f} p={srm['p_value']:.2e}")
+    for warning in results["warnings"]:
+        lines.append(f"  WARNING {warning}")
+    lines.append(
+        "Note: p_adjusted is Holm-Bonferroni across the comparisons; units, not events, are the "
+        "sample size. Experiment state lives in this process only until it is persisted."
+    )
     return "\n".join(lines)
 
 
@@ -118,12 +161,23 @@ def register_ab_testing_tools(registry: ToolRegistry) -> None:
                 "description": {"type": "string", "description": "Experiment description", "required": True},
                 "variants_json": {
                     "type": "string",
-                    "description": 'JSON array of variants [{"name":"A","weight":0.5,"config":{}},...]',
+                    "description": (
+                        'JSON array of variants [{"name":"A","weight":0.5,"config":{},"is_control":true},...]; '
+                        "exactly one variant may be the control, and the first is used if none is marked"
+                    ),
                     "required": True,
                 },
                 "metric_name": {
                     "type": "string",
                     "description": "Primary metric name (default conversion)",
+                    "required": False,
+                },
+                "metric_type": {
+                    "type": "string",
+                    "description": (
+                        "'rate' for a per-unit outcome (values 0..1, two-proportion z-test) or "
+                        "'mean' for a per-unit continuous value (Welch t-test). Default rate."
+                    ),
                     "required": False,
                 },
             },
@@ -208,7 +262,11 @@ def register_ab_testing_tools(registry: ToolRegistry) -> None:
             description="Assign a user to a variant for an experiment",
             parameters={
                 "experiment_id": {"type": "string", "description": "Experiment ID", "required": True},
-                "user_id": {"type": "string", "description": "User ID (optional, deterministic)", "required": False},
+                "user_id": {
+                    "type": "string",
+                    "description": "Unit of randomization (required: without it the arm cannot be kept stable)",
+                    "required": True,
+                },
             },
             handler=ab_assign,
             category="ab_testing",
@@ -224,7 +282,14 @@ def register_ab_testing_tools(registry: ToolRegistry) -> None:
                 "variant": {"type": "string", "description": "Variant name", "required": True},
                 "metric_name": {"type": "string", "description": "Metric name (default conversion)", "required": False},
                 "value": {"type": "number", "description": "Metric value (default 1.0)", "required": False},
-                "user_id": {"type": "string", "description": "User ID (optional)", "required": False},
+                "user_id": {
+                    "type": "string",
+                    "description": (
+                        "Unit of randomization. Events without it are counted but excluded from the "
+                        "test, because they cannot be attributed to a subject"
+                    ),
+                    "required": False,
+                },
             },
             handler=ab_record,
             category="ab_testing",
