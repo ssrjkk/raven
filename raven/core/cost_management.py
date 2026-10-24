@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from itertools import islice
 from typing import Any
 from uuid import uuid4
 
@@ -25,6 +26,12 @@ MODEL_PRICING: dict[str, dict[str, float]] = {
 }
 
 DEFAULT_PRICING = {"input_per_1k": 0.001, "output_per_1k": 0.002}
+
+# Detail ring. Every LLM call used to append forever, so a gateway that had been up for weeks
+# carried hundreds of thousands of records that only ever got scanned in full; the totals that
+# matter are accumulated separately, so bounding the detail list cannot change a number anyone
+# reads - it only bounds how far back the per-call drill-down reaches.
+_RECORD_WINDOW = 10_000
 
 
 @dataclass
@@ -55,7 +62,10 @@ class BudgetLimit:
 
 class CostManager:
     def __init__(self) -> None:
-        self._records: list[UsageRecord] = []
+        self._records: deque[UsageRecord] = deque(maxlen=_RECORD_WINDOW)
+        self._lifetime_cost = 0.0
+        self._dropped_records = 0
+        self._pricing: dict[str, dict[str, float]] = {m: dict(v) for m, v in MODEL_PRICING.items()}
         self._budgets: dict[str, BudgetLimit] = {}
         self._daily_usage: dict[str, float] = defaultdict(float)
         self._monthly_usage: dict[str, float] = defaultdict(float)
@@ -72,7 +82,7 @@ class CostManager:
         session_id: str = "",
         duration_ms: float = 0.0,
     ) -> UsageRecord:
-        pricing = MODEL_PRICING.get(model, DEFAULT_PRICING)
+        pricing = self._pricing.get(model, DEFAULT_PRICING)
         cost = (input_tokens / 1000) * pricing["input_per_1k"] + (output_tokens / 1000) * pricing["output_per_1k"]
         rec = UsageRecord(
             id=uuid4().hex[:12],
@@ -85,7 +95,10 @@ class CostManager:
             session_id=session_id,
             duration_ms=duration_ms,
         )
+        if len(self._records) == self._records.maxlen:
+            self._dropped_records += 1
         self._records.append(rec)
+        self._lifetime_cost += cost
         self._check_reset()
         self._daily_usage[model] += cost
         self._monthly_usage[model] += cost
@@ -102,10 +115,12 @@ class CostManager:
             self._last_reset_month = this_month
 
     def get_model_pricing(self) -> dict[str, dict[str, float]]:
-        return dict(MODEL_PRICING)
+        # Overrides were written into the module-level MODEL_PRICING, so one PUT poisoned the
+        # table for every other CostManager in the process and for later tests.
+        return {m: dict(v) for m, v in self._pricing.items()}
 
     def set_model_pricing(self, model: str, input_per_1k: float, output_per_1k: float) -> None:
-        MODEL_PRICING[model] = {"input_per_1k": input_per_1k, "output_per_1k": output_per_1k}
+        self._pricing[model] = {"input_per_1k": input_per_1k, "output_per_1k": output_per_1k}
 
     def get_daily_cost(self, model: str | None = None) -> float:
         self._check_reset()
@@ -120,7 +135,19 @@ class CostManager:
         return sum(self._monthly_usage.values())
 
     def get_total_cost(self) -> float:
-        return sum(r.cost for r in self._records)
+        return self._lifetime_cost
+
+    def records_since(self, cutoff: float) -> list[UsageRecord]:
+        """Records still held in the detail ring that were logged at or after *cutoff*.
+
+        Callers used to read ``_cost._records`` directly; that private list is now bounded, so
+        the window is exposed here together with ``dropped_records``.
+        """
+        return [r for r in self._records if r.timestamp >= cutoff]
+
+    @property
+    def dropped_records(self) -> int:
+        return self._dropped_records
 
     def get_usage_summary(self, hours: int = 24) -> dict[str, Any]:
         cutoff = time.time() - hours * 3600
@@ -157,7 +184,9 @@ class CostManager:
         }
 
     def get_recent_usage(self, limit: int = 50) -> list[dict[str, Any]]:
-        records = sorted(self._records, key=lambda r: r.timestamp, reverse=True)[:limit]
+        # The ring is already append-ordered, and it is scanned in full on every dashboard
+        # poll: reversed()+islice gives the newest *limit* records without sorting.
+        records = list(islice(reversed(self._records), max(0, limit)))
         return [
             {
                 "id": r.id,

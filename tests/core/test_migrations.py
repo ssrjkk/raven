@@ -3,7 +3,7 @@ from __future__ import annotations
 import aiosqlite
 import pytest
 
-from raven.core.asyncdb import SQLiteDB
+from raven.core.asyncdb import AsyncDB, SQLiteDB
 from raven.core.migrations import _MIGRATIONS, Migrator
 
 
@@ -66,3 +66,60 @@ async def test_migrator_idempotent(db_path):
         assert row is not None
         assert row[0] >= 4
     await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_apply_pending_catches_a_migration_added_below_the_max(db_path):
+    """A hotfix back-merged as an older version used to be skipped forever.
+
+    Selecting on MAX(version) meant any registered version below the installed maximum never
+    applied and never reported - the table simply lacked whatever it added.
+    """
+    from raven.core.migrations import Migration, apply_pending_migrations
+
+    db = SQLiteDB(db_path)
+    await db.connect()
+    await db.execute("CREATE TABLE _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP)")
+    await db.execute("INSERT INTO _migrations (version) VALUES (1000)")  # what the old MAX would see
+    await db.commit()
+
+    ran: list[str] = []
+
+    async def _noop(handle: AsyncDB) -> None:
+        ran.append("back-merged")
+
+    registered = list(_MIGRATIONS)
+    _MIGRATIONS[:] = [Migration(0, "back-merged hotfix", None, _noop)]
+    try:
+        await apply_pending_migrations(db)
+        applied = sorted(
+            row["version"] for row in await db.fetchall("SELECT version FROM _migrations")
+        )
+    finally:
+        _MIGRATIONS[:] = registered
+
+    assert ran == ["back-merged"]
+    assert applied == [0, 1000]
+    await db.close()
+
+
+def test_register_rejects_a_duplicate_version():
+    from raven.core.migrations import register
+
+    existing = next(m for m in _MIGRATIONS)
+    with pytest.raises(ValueError, match="duplicate migration version"):
+
+        @register(existing.version, "collides")
+        async def _collision(db):  # pragma: no cover - registration fails first
+            return None
+
+
+@pytest.mark.asyncio
+async def test_migrator_records_every_registered_version(db_path):
+    m = Migrator(db_path)
+    await m.migrate()
+    conn = await aiosqlite.connect(str(db_path))
+    async with conn.execute("SELECT version FROM _migrations") as cur:
+        rows = await cur.fetchall()
+    await conn.close()
+    assert {r[0] for r in rows} >= {mig.version for mig in _MIGRATIONS}

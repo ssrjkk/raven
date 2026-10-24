@@ -137,7 +137,7 @@ def test_get_git_log_async_error() -> None:
 
 
 def test_llm_insights_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(ia, "_cost", SimpleNamespace(_records=[]))
+    monkeypatch.setattr(ia, "_cost", SimpleNamespace(records_since=lambda cutoff: []))
     c = _client(str(tmp_path))
     resp = c.get("/api/insights/llm")
     assert resp.status_code == 200
@@ -160,7 +160,7 @@ def test_llm_insights_aggregation(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         _rec(yesterday, "claude-3", 0.1, 10, 5),
         _rec(yesterday - 10 * 86400, "gpt-4o", 0.2, 10, 10),
     ]
-    monkeypatch.setattr(ia, "_cost", SimpleNamespace(_records=records))
+    monkeypatch.setattr(ia, "_cost", SimpleNamespace(records_since=lambda cutoff: [r for r in records if r.timestamp >= cutoff]))
     c = _client(str(tmp_path))
     resp = c.get("/api/insights/llm", params={"days": 7})
     assert resp.status_code == 200

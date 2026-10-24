@@ -88,7 +88,7 @@ def create_insights_router(workspace: str = "") -> APIRouter:
     @router.get("/llm")
     async def llm_insights(days: int = Query(30, ge=1, le=365)):
         cutoff = time.time() - days * 86400
-        records = [r for r in _cost._records if r.timestamp >= cutoff]
+        records = _cost.records_since(cutoff)
 
         per_day: dict[str, dict[str, float]] = {}
         per_model: Counter[str] = Counter()

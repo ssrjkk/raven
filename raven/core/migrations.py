@@ -39,6 +39,9 @@ _MIGRATIONS: list[Migration] = []
 
 def register(version: int, description: str, sql: str | None = None) -> Callable[[MigrateFn], MigrateFn]:
     def wrapper(fn: MigrateFn) -> MigrateFn:
+        if any(m.version == version for m in _MIGRATIONS):
+            msg = f"duplicate migration version {version}"
+            raise ValueError(msg)
         _MIGRATIONS.append(Migration(version, description, sql, fn))
         return fn
 
@@ -459,9 +462,10 @@ async def _migration_10(db: AsyncDB) -> None:
 async def apply_pending_migrations(db: AsyncDB) -> None:
     table = MIGRATIONS_TABLE_POSTGRES if db.dialect == "postgresql" else MIGRATIONS_TABLE_SQLITE
     await db.execute(table)
-    current = await db.fetchval("SELECT COALESCE(MAX(version), 0) FROM _migrations") or 0
-
-    pending = sorted([m for m in _MIGRATIONS if m.version > current], key=lambda m: m.version)
+    # Selecting on MAX(version) meant a migration added below the installed maximum - a hotfix
+    # back-merged as v7 into a database already at v10 - was skipped silently on every start.
+    applied = {row["version"] for row in await db.fetchall("SELECT version FROM _migrations")}
+    pending = sorted((m for m in _MIGRATIONS if m.version not in applied), key=lambda m: m.version)
     if not pending:
         return
 
@@ -494,17 +498,18 @@ class Migrator:
             await db.close()
 
     async def migrate(self, target: int | None = None):
-        current = await self.get_current_version()
-        pending = sorted([m for m in _MIGRATIONS if m.version > current], key=lambda m: m.version)
-        if target:
-            pending = [m for m in pending if m.version <= target]
-
-        if not pending:
-            logger.info("DB is up-to-date (version {})", current)
-            return
-
         db = SQLiteDB(self.db_path)
         try:
+            await db.execute(MIGRATIONS_TABLE_SQLITE)
+            applied = {row["version"] for row in await db.fetchall("SELECT version FROM _migrations")}
+            pending = sorted((m for m in _MIGRATIONS if m.version not in applied), key=lambda m: m.version)
+            if target:
+                pending = [m for m in pending if m.version <= target]
+
+            if not pending:
+                logger.info("DB is up-to-date ({} migrations recorded)", len(applied))
+                return
+
             async with db.transaction():
                 for mig in pending:
                     logger.info("Applying migration {}: {}", mig.version, mig.description)
@@ -521,7 +526,4 @@ class Migrator:
         finally:
             await db.close()
 
-        logger.info("DB migrated to version {}", current + len(pending))
-
-    def list_pending(self) -> list[Migration]:
-        return sorted([m for m in _MIGRATIONS], key=lambda m: m.version)
+        logger.info("DB migrated: {} migrations applied", len(pending))
