@@ -12,8 +12,14 @@ Two independent client integrations live here:
 ## Browser extension
 
 - `src/background.js` — service worker (opens the side panel, proxies `type: "query"` messages to `/api/status`)
-- `src/popup/index.html` — Alpine.js chat UI (WebSocket `ws://localhost:18888/ws`)
+- `src/popup/index.html`, `src/popup/popup.css`, `src/popup/popup.js` — the chat client: own CSS and vanilla JS, no
+  framework and nothing loaded from another host, because MV3 prohibits remotely hosted code and the manifest pins
+  `script-src 'self'`
 - `icons/icon16.png`, `icons/icon48.png`, `icons/icon128.png` — required by `manifest.json`
+
+The gateway's `/ws` authenticates, so the panel needs a token: open **settings** in the popup and enter the gateway
+URL plus `WEB_SECRET_KEY` (or a session token). It is kept in `chrome.storage.local` and sent as `?token=`, the same
+way the web UI sends it.
 
 Load it with `chrome://extensions` → *Load unpacked* → select this directory.
 

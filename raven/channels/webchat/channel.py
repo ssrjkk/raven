@@ -18,6 +18,7 @@ from raven.core.canvas import canvas_manager
 from raven.core.db import Database
 from raven.core.llm.queue import PRIORITY_HIGH
 from raven.core.models import IncomingMessage, Message
+from raven.core.version import __version__
 from raven.core.watermark import canary_html_comment, install_fastapi_watermark
 
 _MAX_LINK_PROXY_BYTES = 10 * 1024 * 1024
@@ -406,200 +407,267 @@ class WebChatChannel(BaseChannel):
         )
         if built.is_file():
             return built.read_text(encoding="utf-8")
-        return INDEX_HTML
+        return INDEX_HTML.replace("__VERSION__", __version__)
 
 
-INDEX_HTML = """<!DOCTYPE html>
-<!--
-  The full React + Vite web UI is available at raven-ai/web/
-  Build: cd web && npm install && npm run build
-  The FastAPI server serves this minimal Alpine.js version as fallback.
--->
+# The fallback for a source checkout where `cd web && npm run build` never ran. The React SPA is the
+# real UI; this page exists so the gateway is reachable from a browser without Node, and it therefore
+# loads nothing from a host other than the one that served it: no CDN, no framework, no floating
+# version, and nothing injected into the DOM through innerHTML -- model output is turned into text
+# nodes by the small markdown subset below.
+#
+# It also carries a token. /ws authenticates from `?token=` or a first `{"token": ...}` frame and
+# closes 1008 when neither arrives; the page shipped before this one supplied neither, so no message
+# ever reached the gateway -- with or without WEB_SECRET_KEY set.
+INDEX_HTML = r"""<!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; img-src 'self' data: https:; connect-src 'self' ws: wss:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'">
+<!-- frame-ancestors is deliberately absent: it is ignored in a meta element and is set as an
+     HTTP header by raven/core/middleware.py, where X-Frame-Options: DENY is also sent -->
 <meta name="referrer" content="no-referrer">
 <title>Raven AI</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
-:root { --bg: #1a1a2e; --surface: #16213e; --accent: #0f3460; --text: #e4e4e7; --secondary: #a1a1aa; }
-body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
-.sidebar { background: var(--surface); border-right: 1px solid #2a2a4a; }
-.chat-area { background: var(--bg); }
-.message { max-width: 80%; margin-bottom: 0.75rem; line-height: 1.5; }
-.message.user { background: var(--accent); color: white; border-radius: 1rem 1rem 0.25rem 1rem; padding: 0.75rem 1rem; }
-.message.assistant { background: var(--surface); border: 1px solid #2a2a4a;
-  border-radius: 1rem 1rem 1rem 0.25rem; padding: 0.75rem 1rem; }
-.message.system { background: #2d1b4e; border: 1px solid #4a2d6e;
-  border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; color: #c4a0e0; }
-.input-area { background: var(--surface); border-top: 1px solid #2a2a4a; }
-input { background: #1e1e3a; border: 1px solid #2a2a4a; color: var(--text); }
-input:focus { outline: none; border-color: var(--accent); }
-.channel-indicator { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.channel-telegram { background: #0088cc; }
-.channel-discord { background: #5865F2; }
-.channel-webchat { background: #22c55e; }
-pre { background: #0d0d1a; border-radius: 0.5rem; padding: 1rem; overflow-x: auto; margin: 0.5rem 0; }
-code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.875rem; }
-p code { background: #0d0d1a; padding: 0.125rem 0.375rem; border-radius: 0.25rem; }
-.typing::after { content: '...'; animation: dots 1.5s infinite; }
-@keyframes dots { 0%,20% { content: '.'; } 40% { content: '..'; } 60%,100% { content: '...'; } }
+:root { --bg: #12121f; --surface: #1b1b2c; --line: #2a2a42; --accent: #8b5cf6; --text: #e4e4e7; --muted: #9a9ab0; }
+* { box-sizing: border-box; }
+body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--text); font: 14px/1.55 system-ui, -apple-system, sans-serif; }
+header { display: flex; align-items: center; gap: .6rem; padding: .75rem 1rem; border-bottom: 1px solid var(--line); background: var(--surface); }
+header b { font-size: 1rem; }
+header span { color: var(--muted); font-size: .8rem; }
+#log { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: .6rem; }
+.msg { max-width: 76%; padding: .6rem .85rem; border-radius: .9rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.user { align-self: flex-end; background: #2c2150; }
+.msg.assistant { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); }
+.msg.system { align-self: center; background: transparent; color: var(--muted); font-size: .8rem; padding: 0 .5rem; }
+.msg pre { background: #0d0d17; border: 1px solid var(--line); border-radius: .5rem; padding: .7rem; overflow-x: auto; margin: .4rem 0; }
+.msg code { font-family: ui-monospace, "JetBrains Mono", monospace; font-size: .85em; }
+.msg p { margin: .3rem 0; }
+.msg ul, .msg ol { margin: .3rem 0 .3rem 1.2rem; padding: 0; }
+.msg a { color: var(--accent); }
+#composer { display: flex; gap: .5rem; padding: .75rem 1rem; border-top: 1px solid var(--line); background: var(--surface); }
+#draft { flex: 1; background: #14141f; border: 1px solid var(--line); border-radius: .7rem; color: var(--text); padding: .6rem .8rem; font: inherit; }
+#draft:focus { outline: none; border-color: var(--accent); }
+button { background: var(--accent); border: 0; border-radius: .7rem; color: #fff; font: inherit; padding: .6rem 1.1rem; cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+#key { display: flex; gap: .5rem; padding: .75rem 1rem; border-bottom: 1px solid var(--line); background: #241a33; }
+#key input { flex: 1; background: #14141f; border: 1px solid var(--line); border-radius: .5rem; color: var(--text); padding: .45rem .6rem; font: inherit; }
+[hidden] { display: none !important; }
 </style>
 </head>
-<body class="h-screen flex overflow-hidden" x-data="app()">
-<div class="sidebar w-72 flex-shrink-0 flex flex-col h-full">
-<div class="p-4 border-b border-gray-700/50">
-<h1 class="text-xl font-bold flex items-center gap-2">
-<span class="text-2xl">🐦</span> Raven AI
-</h1>
+<body>
+<header><b>Raven AI</b><span>raven-ai __VERSION__ · no third-party requests</span><span id="state">connecting…</span></header>
+<div id="key" hidden>
+<input id="token" type="password" placeholder="WEB_SECRET_KEY or a session token" autocomplete="off">
+<button id="unlock" type="button">Unlock</button>
 </div>
-<div class="flex-1 overflow-y-auto p-2 space-y-1">
-<div class="text-xs text-gray-500 uppercase tracking-wider px-2 py-2">Sessions</div>
-<template x-for="session in sessions" :key="session.id">
-<div class="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer hover:bg-white/5 transition"
-:class="{'bg-white/10': session.id === currentSession}"
-@click="switchSession(session.id)">
-<span class="channel-indicator" :class="'channel-' + session.channel"></span>
-<span class="text-sm truncate flex-1" x-text="session.id.split(':').slice(0,2).join(' ').slice(-20)"></span>
-<span class="text-xs text-gray-500" x-text="new Date(session.updated_at).toLocaleDateString()"></span>
-</div>
-</template>
-</div>
-<div class="p-3 border-t border-gray-700/50 text-xs text-gray-500 text-center">
-raven-ai v0.1.0
-</div>
-</div>
-<div class="flex-1 flex flex-col h-full chat-area">
-<div class="flex-1 overflow-y-auto p-4 space-y-1" id="messages-container">
-<template x-for="msg in messages" :key="msg.id">
-<div class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
-<div class="message" :class="msg.role">
-                    <div x-html="renderContent(msg.content)"></div>
-                </div>
-</div>
-</template>
-<div x-show="isLoading" class="message assistant" style="max-width:80%">
-            <span class="typing"></span>
-<div x-show="streamingEvent" class="message assistant streaming-event"
-  style="max-width:80%" x-html="streamingEvent"></div>
-<div x-show="streamingToolCalls.length > 0" class="message system" style="max-width:80%">
-<template x-for="tc in streamingToolCalls" :key="tc.id">
-<div class="text-xs"><span x-text="tc.name"></span> <span x-text="tc.status"></span></div>
-</template>
-</div>
-</div>
-</div>
-<div class="input-area p-4">
-<form @submit.prevent="sendMessage()" class="flex gap-2">
-<input type="text" x-model="inputText" placeholder="Type a message..."
-  class="flex-1 rounded-xl px-4 py-3 text-sm" @keydown.enter.prevent="sendMessage()">
-<button type="submit"
-  class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-sm font-medium transition">Send</button>
+<div id="log"></div>
+<form id="composer">
+<input id="draft" type="text" placeholder="Type a message…" autocomplete="off" disabled>
+<button id="send" type="submit" disabled>Send</button>
 </form>
-</div>
-</div>
 <script>
-function app() {
-return {
-sessions: [],
-messages: [],
-currentSession: null,
-inputText: '',
-ws: null,
-isLoading: false,
-streamingEvent: '',
-streamingToolCalls: [],
-useStream: true,
-init() {
-this.loadSessions();
-this.connectWs();
-},
-async loadSessions() {
-const res = await fetch('/api/sessions');
-this.sessions = await res.json();
-if (this.sessions.length > 0) {
-this.currentSession = this.sessions[0].id;
-this.loadMessages();
-}
-},
-async loadMessages() {
-if (!this.currentSession) return;
-const res = await fetch(`/api/messages/${this.currentSession}`);
-this.messages = await res.json();
-this.$nextTick(() => this.scrollDown());
-},
-connectWs() {
-const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-this.ws = new WebSocket(`${protocol}//${location.host}/ws`);
-this.ws.onmessage = (e) => {
-const data = JSON.parse(e.data);
-if (data.type === 'session' && data.session_id) {
-this.currentSession = data.session_id;
-} else if (data.type === 'message') {
-this.messages.push({ id: Date.now(), role: data.role, content: data.content, created_at: new Date().toISOString() });
-this.isLoading = false;
-this.$nextTick(() => this.scrollDown());
-} else if (data.type === 'step_start') {
-this.streamingEvent = '<em>thinking...</em>';
-this.isLoading = true;
-} else if (data.type === 'tool_call') {
-const tc = { id: Date.now(), name: data.data.name, status: 'running' };
-this.streamingToolCalls.push(tc);
-this.streamingEvent = '<em>running tool: ' + data.data.name + '</em>';
-} else if (data.type === 'tool_result') {
-const tc = this.streamingToolCalls.find(t => t.name === data.data.name);
-if (tc) tc.status = 'done';
-} else if (data.type === 'done') {
-this.streamingToolCalls = [];
-this.streamingEvent = '';
-this.isLoading = false;
-}
-};
-this.ws.onclose = () => setTimeout(() => this.connectWs(), 1000);
-},
-async sendMessage() {
-if (!this.inputText.trim() || this.isLoading) return;
-this.isLoading = true;
-const sessionId = this.currentSession || 'webchat:anon:default';
-this.messages.push({ id: Date.now(), role: 'user', content: this.inputText, created_at: new Date().toISOString() });
-if (this.useStream) {
-this.ws.send(JSON.stringify({ text: this.inputText, session_id: sessionId }));
-} else {
-this.ws.send(JSON.stringify({ text: this.inputText, session_id: sessionId }));
-}
-this.inputText = '';
-this.$nextTick(() => this.scrollDown());
-},
-switchSession(id) {
-this.currentSession = id;
-this.loadMessages();
-},
-renderContent(content) {
-try {
-const raw = marked.parse(content);
-const div = document.createElement('div');
-div.innerHTML = raw;
-div.querySelectorAll('script,iframe,object,embed,link,meta,style,form,input,button').forEach(el => el.remove());
-div.querySelectorAll('*').forEach(el => {
-for (const attr of [...el.attributes]) {
-if (/^on/i.test(attr.name) || attr.name.toLowerCase() === 'href' && /^[\t\r\n ]*javascript:/i.test(attr.value)) {
-el.removeAttribute(attr.name);
-}
-}
-});
-return div.innerHTML;
-} catch(e) { return content; }
-},
-scrollDown() {
-const container = document.getElementById('messages-container');
-if (container) container.scrollTop = container.scrollHeight;
-}
-}
-}
+(function () {
+  "use strict";
+  var log = document.getElementById("log");
+  var state = document.getElementById("state");
+  var draft = document.getElementById("draft");
+  var sendButton = document.getElementById("send");
+  var keyRow = document.getElementById("key");
+  var tokenField = document.getElementById("token");
+  var token = new URLSearchParams(location.search).get("token") || "";
+  var ws = null;
+  var sessionId = null;
+  var streamRow = null;
+  var pendingTools = {};
+
+  function note(text) {
+    var row = document.createElement("div");
+    row.className = "msg system";
+    row.textContent = text;
+    log.appendChild(row);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function bubble(role) {
+    var row = document.createElement("div");
+    row.className = "msg " + role;
+    log.appendChild(row);
+    log.scrollTop = log.scrollHeight;
+    return row;
+  }
+
+  function mdInline(src, into) {
+    var pattern = /(\*\*[^*\n]+\*\*|\*[^*\n]+\*|`[^`\n]+`|\[[^\]\n]+\]\((?:https?:\/\/|\/)[^)\s]+\))/g;
+    var last = 0;
+    var match;
+    while ((match = pattern.exec(src)) !== null) {
+      if (match.index > last) into.appendChild(document.createTextNode(src.slice(last, match.index)));
+      var chunk = match[0];
+      if (chunk.charAt(0) === "*") {
+        var strong = chunk.charAt(1) === "*";
+        var tag = document.createElement(strong ? "strong" : "em");
+        tag.textContent = chunk.slice(strong ? 2 : 1, strong ? -2 : -1);
+        into.appendChild(tag);
+      } else if (chunk.charAt(0) === "`") {
+        var code = document.createElement("code");
+        code.textContent = chunk.slice(1, -1);
+        into.appendChild(code);
+      } else {
+        var split = chunk.slice(1, -1).split("](");
+        var link = document.createElement("a");
+        link.textContent = split[0];
+        link.href = split[1];
+        link.rel = "noopener noreferrer";
+        link.target = "_blank";
+        into.appendChild(link);
+      }
+      last = pattern.lastIndex;
+    }
+    if (last < src.length) into.appendChild(document.createTextNode(src.slice(last)));
+  }
+
+  function render(text, into) {
+    var lines = String(text === null || text === undefined ? "" : text).split("\n");
+    var i = 0;
+    while (i < lines.length) {
+      var line = lines[i];
+      if (/^```/.test(line)) {
+        var buf = [];
+        i += 1;
+        while (i < lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]);
+        i += 1;
+        var pre = document.createElement("pre");
+        var code = document.createElement("code");
+        code.textContent = buf.join("\n");
+        pre.appendChild(code);
+        into.appendChild(pre);
+        continue;
+      }
+      var heading = line.match(/^(#{1,4})\s+(.*)$/);
+      if (heading) {
+        var h = document.createElement("h" + Math.min(6, heading[1].length + 3));
+        mdInline(heading[2], h);
+        into.appendChild(h);
+        i += 1;
+        continue;
+      }
+      if (/^\s*[-*+]\s+/.test(line) || /^\s*\d+\.\s+/.test(line)) {
+        var ordered = /^\s*\d+\.\s+/.test(line);
+        var list = document.createElement(ordered ? "ol" : "ul");
+        var bullet = ordered ? /^\s*\d+\.\s+/ : /^\s*[-*+]\s+/;
+        while (i < lines.length && bullet.test(lines[i])) {
+          var item = document.createElement("li");
+          mdInline(lines[i].replace(bullet, ""), item);
+          list.appendChild(item);
+          i += 1;
+        }
+        into.appendChild(list);
+        continue;
+      }
+      if (!line.trim()) { i += 1; continue; }
+      var para = document.createElement("p");
+      var acc = [line];
+      i += 1;
+      while (i < lines.length && lines[i].trim() && !/^```/.test(lines[i])
+        && !/^(#{1,4})\s+/.test(lines[i]) && !/^\s*[-*+]\s+/.test(lines[i]) && !/^\s*\d+\.\s+/.test(lines[i])) {
+        acc.push(lines[i]);
+        i += 1;
+      }
+      mdInline(acc.join("\n"), para);
+      into.appendChild(para);
+    }
+  }
+
+  function ready(isReady) {
+    draft.disabled = !isReady;
+    sendButton.disabled = !isReady;
+    state.textContent = isReady ? "connected" : state.textContent;
+  }
+
+  function authUrl(path) {
+    return path + (path.indexOf("?") === -1 ? "?" : "&") + "token=" + encodeURIComponent(token);
+  }
+
+  function loadHistory() {
+    if (!sessionId || !token) return;
+    fetch(authUrl("/api/messages/" + encodeURIComponent(sessionId)))
+      .then(function (res) { return res.ok ? res.json() : []; })
+      .then(function (rows) {
+        if (!Array.isArray(rows) || !rows.length) return;
+        log.textContent = "";
+        rows.forEach(function (row) {
+          var body = bubble(row.role === "user" ? "user" : "assistant");
+          render(row.content, body);
+        });
+      })
+      .catch(function () { /* history is a convenience; the conversation works without it */ });
+  }
+
+  function connect() {
+    if (!token) {
+      state.textContent = "key required";
+      keyRow.hidden = false;
+      return;
+    }
+    state.textContent = "connecting…";
+    // ?token= because a browser WebSocket cannot set an Authorization header; the gateway logs the
+    // path without the query, so the secret never reaches an access log
+    ws = new WebSocket((location.protocol === "https:" ? "wss:" : "ws:") + "//" + location.host + "/ws?token=" + encodeURIComponent(token));
+    ws.onmessage = function (event) {
+      var data;
+      try { data = JSON.parse(event.data); } catch (e) { return; }
+      if (data.type === "session") {
+        sessionId = data.session_id;
+        ready(true);
+        loadHistory();
+      } else if (data.type === "stream") {
+        if (!streamRow) streamRow = bubble("assistant");
+        streamRow.textContent += data.content || "";
+        log.scrollTop = log.scrollHeight;
+      } else if (data.type === "message") {
+        var body = streamRow || bubble("assistant");
+        body.textContent = "";
+        render(data.content, body);
+        streamRow = null;
+      } else if (data.type === "tool_call") {
+        var name = (data.data && data.data.name) || "tool";
+        pendingTools[name] = true;
+        note(name + " → running");
+      } else if (data.type === "tool_result") {
+        note(((data.data && data.data.name) || "tool") + " → done");
+      } else if (data.type === "error") {
+        note("error: " + (data.content || "unknown"));
+      } else if (data.type === "done" || data.type === "step_start") {
+        if (data.type === "done") { streamRow = null; pendingTools = {}; }
+      }
+    };
+    ws.onclose = function () {
+      ready(false);
+      state.textContent = "disconnected — retrying";
+      setTimeout(connect, 1500);
+    };
+    ws.onerror = function () { ws.close(); };
+  }
+
+  document.getElementById("unlock").addEventListener("click", function () {
+    token = tokenField.value.trim();
+    keyRow.hidden = true;
+    if (token) connect();
+  });
+  document.getElementById("composer").addEventListener("submit", function (event) {
+    event.preventDefault();
+    var text = draft.value;
+    if (!text.trim() || !ws || ws.readyState !== 1) return;
+    var mine = bubble("user");
+    render(text, mine);
+    ws.send(JSON.stringify({ text: text, session_id: sessionId || "" }));
+    draft.value = "";
+  });
+
+  if (token) connect(); else { keyRow.hidden = false; state.textContent = "key required"; }
+})();
 </script>
 </body>
 </html>"""

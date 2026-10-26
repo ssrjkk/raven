@@ -318,10 +318,10 @@ async def security_headers_middleware(request: Request, call_next):
         "Content-Security-Policy",
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline'; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: https: blob:; "
         "connect-src 'self' ws: wss: http://localhost:18888; "
-        "font-src 'self' data: https://fonts.gstatic.com; "
+        "font-src 'self' data:; "
         "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
     )
     if request.url.scheme == "https":

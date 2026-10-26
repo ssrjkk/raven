@@ -76,10 +76,26 @@ class TestWebChatChannel:
         assert app is not None
 
     def test_index_html(self):
+        import re
+
         from raven.channels.webchat.channel import INDEX_HTML
 
         assert "Raven AI" in INDEX_HTML
-        assert "alpinejs" in INDEX_HTML
+        # the page renders on a machine with no Node build: nothing may be fetched from another host
+        assert not re.search(r'(?:src|href)\s*=\s*"\s*(?:https?:)?//', INDEX_HTML), "third-party subresource"
+        # /ws closes 1008 without a token, which is what made the previous page unable to send a message
+        assert "?token=" in INDEX_HTML
+        # model output becomes text nodes, never markup the page was not written with
+        assert "x-html" not in INDEX_HTML
+        assert "innerHTML" not in INDEX_HTML
+
+    def test_fallback_page_carries_the_real_version(self):
+        from raven.channels.webchat.channel import INDEX_HTML
+        from raven.core.version import __version__
+
+        # the footer used to read "raven-ai v0.1.0" for as long as the product has been at 0.4.x
+        assert "__VERSION__" in INDEX_HTML
+        assert __version__ in INDEX_HTML.replace("__VERSION__", __version__)
 
     def test_api_sessions_list(self, channel):
         from raven.core.config import settings

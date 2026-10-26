@@ -23,6 +23,7 @@ instead of accepting it.
 | 11 | Credentials at rest | Key derivation, secret masking, signed audit trail | `raven/core/auth/password.py`, `raven/core/config.py`, `raven/core/audit.py` |
 | 12 | Untrusted XML | `defusedxml` only, never `xml.etree` | `raven/tools/tests.py`, `raven/coding/test_generator.py` |
 | 13 | Self-audit + CI scans | Configuration and dependencies are checked continuously | `raven/core/security/security_audit.py`, `.github/workflows/` |
+| 14 | Egress map | Every host the code can reach is declared, and an undeclared one fails the build | [egress.md](egress.md), `tests/test_egress_map.py` |
 
 ## 1. DM Access Policy
 

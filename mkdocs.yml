@@ -45,7 +45,9 @@ nav:
   - MCP: mcp.md
   - CLI: cli.md
   - Plugins: plugins.md
-  - Security: security/overview.md
+  - Security:
+      - Model: security/overview.md
+      - Network egress map: security/egress.md
   - Development: development.md
 
 markdown_extensions:
