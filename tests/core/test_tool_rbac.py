@@ -70,8 +70,14 @@ class TestRoleDefaults:
 
 
 class TestCallRbac:
-    async def test_allowed_without_role(self, registry: ToolRegistry):
-        assert await registry.call("db_query") == "ran:db_query"
+    async def test_restricted_tool_denies_without_a_subject(self, registry: ToolRegistry):
+        # the caller carrying no role is not a caller with a blank cheque
+        result = await registry.call("db_query")
+        assert result.startswith("[error]")
+        assert "no subject role" in result
+
+    async def test_unrestricted_tool_runs_without_a_subject(self, registry: ToolRegistry):
+        assert await registry.call("read_only") == "ran:read_only"
 
     async def test_allowed_with_role(self, registry: ToolRegistry):
         assert await registry.call("db_query", role="admin") == "ran:db_query"
@@ -100,5 +106,7 @@ class TestCallRbac:
         registry._policy.set("db_query", ["user"])
         assert await registry.call("db_query", role="user") == "ran:db_query"
 
-    async def test_no_role_never_denied(self, registry: ToolRegistry):
-        assert await registry.call("shell") == "ran:shell"
+    async def test_empty_role_override_locks_the_tool_shut(self, registry: ToolRegistry):
+        registry._policy.set("shell", [])
+        assert (await registry.call("shell", role="admin")).startswith("[error]")
+        assert (await registry.call("shell")).startswith("[error]")

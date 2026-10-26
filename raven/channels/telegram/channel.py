@@ -102,7 +102,9 @@ class TelegramChannel(BaseChannel):
 
     async def ask_confirmation(self, user_id: str, action_description: str, session_id: str = "") -> bool:
         if not self._app:
-            return True
+            # the bot is not connected, so nothing can be asked and nobody can answer
+            logger.warning("Telegram not connected, denying confirmation for: {}", action_description[:120])
+            return False
         parts = session_id.split(":")
         chat_id = parts[1] if len(parts) >= 2 else user_id
         confirm_id = uuid4().hex[:12]

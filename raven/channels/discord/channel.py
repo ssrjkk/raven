@@ -258,7 +258,8 @@ class DiscordChannel(BaseChannel):
 
     async def ask_confirmation(self, user_id: str, action_description: str, session_id: str = "") -> bool:
         if not self._bot or not self._ready:
-            return True
+            logger.warning("Discord not connected, denying confirmation for: {}", action_description[:120])
+            return False
         parts = session_id.split(":")
         channel_id_str = parts[1] if len(parts) >= 2 else user_id
         try:

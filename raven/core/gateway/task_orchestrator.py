@@ -97,6 +97,7 @@ class TaskOrchestrator:
         user_id: str,
         channel: str,
         session_id: str = "",
+        role: str | None = None,
     ) -> Task:
         if self._planner is None or self._runner is None or self._store is None:
             raise RuntimeError("TaskOrchestrator not started")
@@ -124,6 +125,12 @@ class TaskOrchestrator:
 
         async with self._lock:
             self._tasks[task.id] = task
+
+        # The subject is attested here, by whatever authenticated the request, and never by the
+        # planner: the LLM chooses which tools a task steps through, so it must not choose who the
+        # task runs as. Tasks created without a role reach only the unrestricted tools.
+        if role:
+            task.metadata["role"] = role
 
         plan_text = task.plan_summary or goal
         steps_text = "\n".join(f"  {i + 1}. {s.description}" for i, s in enumerate(task.steps[:10]))

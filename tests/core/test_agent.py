@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -401,3 +402,171 @@ class TestAgentRegistry:
         assert agent is not None
         assert agent.session.id == "s1"
 
+
+
+class TestToolExecutionPolicy:
+    """The agent path must enforce what EXEC_SECURITY / EXEC_ASK document, and it must run
+    ordinary plugin functions, not only coroutines."""
+
+    @staticmethod
+    def _agent(session, mock_db, mock_llm, tools, *, exec_security="deny", exec_ask="always"):
+        from raven.core.security.tool_policy import ExecAskMode, ExecSecurity, ToolPolicyEvaluator
+
+        policy = ToolPolicyEvaluator(
+            profile="full",
+            exec_security=ExecSecurity(exec_security),
+            exec_ask=ExecAskMode(exec_ask),
+        )
+        return Agent(
+            session=session,
+            tools=tools,
+            db=mock_db,
+            llm=mock_llm,
+            config=AgentConfig(max_tool_rounds=1, use_memory=False),
+            tool_policy=policy,
+        )
+
+    @staticmethod
+    def _tool(name, handler=None, *, confirm=False):
+        async def _default() -> str:
+            return "ran"
+
+        return PluginTool(
+            name=name,
+            description=name,
+            parameters={},
+            handler=handler or _default,
+            confirm=confirm,
+        )
+
+    async def test_exec_class_tool_is_denied_under_the_documented_default(
+        self, session, mock_db, mock_llm
+    ) -> None:
+        from raven.core.llm import ToolCall
+
+        agent = self._agent(session, mock_db, mock_llm, [self._tool("shell_exec")])
+        result = await agent._execute_tool(ToolCall(id="c", name="shell_exec", arguments={}))
+        assert "deny" in result["error"]
+
+    async def test_exec_class_tool_runs_when_policy_is_full(self, session, mock_db, mock_llm) -> None:
+        from raven.core.llm import ToolCall
+
+        agent = self._agent(
+            session, mock_db, mock_llm, [self._tool("shell_exec")], exec_security="full"
+        )
+        result = await agent._execute_tool(ToolCall(id="c", name="shell_exec", arguments={}))
+        assert result.get("result") == "ran"
+
+    async def test_non_exec_tool_is_unaffected_by_the_exec_policy(
+        self, session, mock_db, mock_llm
+    ) -> None:
+        from raven.core.llm import ToolCall
+
+        agent = self._agent(session, mock_db, mock_llm, [self._tool("ping")])
+        result = await agent._execute_tool(ToolCall(id="c", name="ping", arguments={}))
+        assert result.get("result") == "ran"
+
+    async def test_confirm_required_without_a_confirmer_is_denied(
+        self, session, mock_db, mock_llm
+    ) -> None:
+        from raven.core.llm import ToolCall
+
+        agent = self._agent(
+            session, mock_db, mock_llm, [self._tool("notes", confirm=True)], exec_security="full"
+        )
+        result = await agent._execute_tool(ToolCall(id="c", name="notes", arguments={}))
+        assert "no confirmer" in result["error"]
+
+    async def test_confirm_declined_by_the_user_blocks_execution(self, session, mock_db, mock_llm) -> None:
+        from raven.core.llm import ToolCall
+
+        async def decline(_name: str, _args: dict[str, Any]) -> bool:
+            return False
+
+        agent = self._agent(
+            session, mock_db, mock_llm, [self._tool("notes", confirm=True)], exec_security="full"
+        )
+        agent._confirm_fn = decline
+        result = await agent._execute_tool(ToolCall(id="c", name="notes", arguments={}))
+        assert "cancelled" in result["error"]
+
+    async def test_sync_handler_executes(self, session, mock_db, mock_llm) -> None:
+        """plugin_loader wraps plain functions; awaiting their return value used to raise
+        TypeError and surface as an opaque tool error."""
+        from raven.core.llm import ToolCall
+
+        def sync_tool(value: int = 0) -> str:
+            return f"sync:{value}"
+
+        agent = self._agent(
+            session, mock_db, mock_llm, [self._tool("calc", sync_tool)], exec_security="full"
+        )
+        result = await agent._execute_tool(ToolCall(id="c", name="calc", arguments={"value": 7}))
+        assert result.get("result") == "sync:7"
+
+
+class TestConfirmerPropagation:
+    async def test_registry_passes_the_confirmer_to_the_agent(self, session, mock_db, mock_llm, tools) -> None:
+        from raven.core.security.confirm import terminal_confirm
+
+        registry = AgentRegistry(mock_db, mock_llm, tools)
+        registry.setup_defaults()
+        agent = registry.create_agent(session, confirm_fn=terminal_confirm)
+        assert agent._confirm_fn is terminal_confirm
+
+    async def test_a_built_in_confirmer_is_used_for_a_confirming_tool(
+        self, session, mock_db, mock_llm
+    ) -> None:
+        from raven.core.llm import ToolCall
+        from raven.core.security.tool_policy import ToolPolicyEvaluator
+
+        seen: list[str] = []
+
+        async def spy(name: str, _args: dict[str, Any]) -> bool:
+            seen.append(name)
+            return True
+
+        agent = Agent(
+            session=session,
+            tools=[TestToolExecutionPolicy._tool("notes", confirm=True)],
+            db=mock_db,
+            llm=mock_llm,
+            config=AgentConfig(max_tool_rounds=1, use_memory=False),
+            tool_policy=ToolPolicyEvaluator("full"),
+            confirm_fn=spy,
+        )
+        result = await agent._execute_tool(ToolCall(id="c", name="notes", arguments={}))
+        assert result.get("result") == "ran"
+        assert seen == ["notes"]
+
+    async def test_run_without_a_confirmer_does_not_clear_the_agent_default(
+        self, session, mock_db, mock_llm, tools
+    ) -> None:
+        from raven.core.security.tool_policy import ToolPolicyEvaluator
+
+        async def keeper(_name: str, _args: dict[str, Any]) -> bool:
+            return True
+
+        agent = Agent(
+            session=session,
+            tools=tools,
+            db=mock_db,
+            llm=mock_llm,
+            config=AgentConfig(max_tool_rounds=1, use_memory=False),
+            tool_policy=ToolPolicyEvaluator("full"),
+            confirm_fn=keeper,
+        )
+        async for _ in agent.run("hello"):
+            pass
+        assert agent._confirm_fn is keeper
+
+    async def test_terminal_confirm_denies_when_no_terminal_is_available(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from raven.core.security.confirm import terminal_confirm
+
+        def raise_eof(*_args: object) -> str:
+            raise EOFError
+
+        monkeypatch.setattr("builtins.input", raise_eof)
+        assert await terminal_confirm("shell", {"command": "ls"}) is False

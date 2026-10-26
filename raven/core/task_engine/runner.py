@@ -40,6 +40,17 @@ def _is_transient_error(error: str) -> bool:
     return any(marker in low for marker in _TRANSIENT_MARKERS)
 
 
+def subject_role(task: Task) -> str | None:
+    """The role the task's creator attested, or None when nobody attested one.
+
+    Read from task metadata, so it is only as trustworthy as the writer of the task row: the CLI
+    attests "admin" for whoever is sitting at the terminal, the gateway attests nothing, and an
+    unattested subject reaches only the tools that carry no role restriction.
+    """
+    role = task.metadata.get("role")
+    return role if isinstance(role, str) and role.strip() else None
+
+
 class TaskRunner:
     MAX_CONCURRENT = 10
     SUBMIT_TIMEOUT = 60.0
@@ -175,7 +186,7 @@ class TaskRunner:
         return processed
 
     async def _call_tool_with_retries(
-        self, task_id: str, step: TaskStep, spec: ToolSpec, cancel_ev: asyncio.Event
+        self, task_id: str, step: TaskStep, spec: ToolSpec, cancel_ev: asyncio.Event, *, role: str | None = None
     ) -> tuple[Any, str | None]:
         """Execute one tool step with bounded retries for transient failures.
 
@@ -192,7 +203,7 @@ class TaskRunner:
             error: str | None = None
             result: Any = None
             try:
-                result = await asyncio.wait_for(self._tools.call(step.tool, **step.params), timeout=timeout)
+                result = await asyncio.wait_for(self._tools.call(step.tool, role=role, **step.params), timeout=timeout)
                 if _is_tool_error(result):
                     error = str(result)
                 else:
@@ -290,7 +301,9 @@ class TaskRunner:
                         msg = f"Unknown tool: {step.tool}"
                         raise ValueError(msg)
 
-                    result, step_error = await self._call_tool_with_retries(task_id, step, spec, cancel_ev)
+                    result, step_error = await self._call_tool_with_retries(
+                        task_id, step, spec, cancel_ev, role=subject_role(task)
+                    )
                     if step_error is not None:
                         step.status = TaskStatus.FAILED
                         step.error = step_error

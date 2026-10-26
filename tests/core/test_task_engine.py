@@ -552,3 +552,69 @@ class TestTaskRunner:
         await asyncio.sleep(0)
         processed = await runner.reconcile()
         assert processed == []
+
+
+class TestSubjectRole:
+    """A task step runs as the role its creator attested, and an unattested task gets least
+    privilege: the registry denies restricted tools instead of running them anonymously."""
+
+    async def test_unattested_task_denies_a_restricted_tool(self, store: TaskStore, registry: ToolRegistry):
+        registry.register(
+            ToolSpec(
+                name="db_query",
+                description="Query the database",
+                parameters={},
+                handler=lambda **kw: "ran:db_query",
+                dangerous=True,
+            )
+        )
+        t = Task(
+            goal="restricted",
+            steps=[TaskStep(task_id="", order=0, description="query", tool="db_query", params={})],
+        )
+        for s in t.steps:
+            s.task_id = t.id
+
+        from raven.core.task_engine.runner import TaskRunner
+
+        runner = TaskRunner(store, registry)
+        await runner.submit(t)
+        done = await runner.wait(t.id, timeout=10)
+        assert done is not None
+        assert done.status is TaskStatus.FAILED
+        assert "no subject role" in (done.error or "")
+
+    async def test_attested_admin_task_runs_a_restricted_tool(self, store: TaskStore, registry: ToolRegistry):
+        registry.register(
+            ToolSpec(
+                name="db_query",
+                description="Query the database",
+                parameters={},
+                handler=lambda **kw: "ran:db_query",
+                dangerous=True,
+            )
+        )
+        t = Task(
+            goal="restricted",
+            metadata={"role": "admin"},
+            steps=[TaskStep(task_id="", order=0, description="query", tool="db_query", params={})],
+        )
+        for s in t.steps:
+            s.task_id = t.id
+
+        from raven.core.task_engine.runner import TaskRunner
+
+        runner = TaskRunner(store, registry)
+        await runner.submit(t)
+        done = await runner.wait(t.id, timeout=10)
+        assert done is not None
+        assert done.status is TaskStatus.COMPLETED
+        assert done.steps[0].result == "ran:db_query"
+
+    async def test_subject_role_reads_only_a_string_attestation(self):
+        from raven.core.task_engine.runner import subject_role
+
+        assert subject_role(Task(goal="g", metadata={"role": "admin"})) == "admin"
+        assert subject_role(Task(goal="g")) is None
+        assert subject_role(Task(goal="g", metadata={"role": 7})) is None
+        assert subject_role(Task(goal="g", metadata={"role": "  "})) is None

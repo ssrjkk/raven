@@ -11,6 +11,7 @@ from raven.core.db import DatabaseFactory
 from raven.core.llm import LLMRouter
 from raven.core.models import Message
 from raven.core.plugin_loader import PluginLoader
+from raven.core.security.confirm import terminal_confirm
 
 console = Console()
 
@@ -51,7 +52,7 @@ def msg_send(channel: str, user: str, text: str, session: str | None):
         llm = LLMRouter()
         registry = AgentRegistry(db, llm, plugin_loader.tools)
         registry.setup_defaults()
-        agent = registry.create_agent(sess)
+        agent = registry.create_agent(sess, confirm_fn=terminal_confirm)
 
         user_msg = Message(session_id=session_id, channel=channel, role="user", content=text)
         await db.save_message(user_msg)

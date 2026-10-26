@@ -12,7 +12,7 @@ from raven.core.security.context_filter import (
     filter_context_by_visibility,
     sanitize_external_content,
 )
-from raven.core.security.tool_policy import ExecSecurity, ToolPolicyEvaluator
+from raven.core.security.tool_policy import ExecAskMode, ExecSecurity, ToolPolicyEvaluator
 
 
 class TestToolPolicyEvaluator:
@@ -333,3 +333,30 @@ class TestSecurityAudit:
         results = auditor.run_all()
         non_empty_names = [r.name for r in results if r.name]
         assert len(non_empty_names) == len(results)
+
+
+class TestConfirmationFailsClosed:
+    """EXEC_ASK=always means "ask", not "run silently when nobody is wired to ask"."""
+
+    @pytest.mark.asyncio
+    async def test_always_without_a_confirmer_denies(self) -> None:
+        p = ToolPolicyEvaluator(exec_security=ExecSecurity.ASK, exec_ask=ExecAskMode.ALWAYS)
+        allowed, reason = await p.check_exec("process.kill", {})
+        assert not allowed
+        assert "confirmer" in (reason or "")
+
+    @pytest.mark.asyncio
+    async def test_on_miss_without_a_confirmer_denies_an_unlisted_tool(self) -> None:
+        p = ToolPolicyEvaluator(
+            exec_security=ExecSecurity.ASK, exec_ask=ExecAskMode.ON_MISS, allow=["known.tool"]
+        )
+        allowed, _reason = await p.check_exec("mystery.tool", {})
+        assert not allowed
+        allowed_known, _ = await p.check_exec("known.tool", {})
+        assert allowed_known
+
+    @pytest.mark.asyncio
+    async def test_ask_off_needs_no_confirmer(self) -> None:
+        p = ToolPolicyEvaluator(exec_security=ExecSecurity.ASK, exec_ask=ExecAskMode.OFF)
+        allowed, _reason = await p.check_exec("process.kill", {})
+        assert allowed

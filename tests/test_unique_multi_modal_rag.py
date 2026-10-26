@@ -402,8 +402,10 @@ class TestClipInitAndEmbeddings:
         # raised ValueError inside forward() and index_document died
         rag = _make_rag_with_clip(monkeypatch)
         rag._embed_text_clip("word " * 2000)
-        assert rag._clip_processor.recorded.get("truncation") is True
-        assert rag._clip_processor.recorded.get("max_length") == 77
+        processor = rag._clip_processor
+        assert processor is not None
+        assert processor.recorded.get("truncation") is True
+        assert processor.recorded.get("max_length") == 77
 
     def test_embed_image_valid(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         rag = _make_rag_with_clip(monkeypatch)

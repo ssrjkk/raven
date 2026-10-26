@@ -271,9 +271,16 @@ class TestPrivateReadGuard:
             "/api/code/list",
             "/api/status",
             "/api/agents",
-            "/api/tools/policy",
         ):
             assert client.get(path, headers={"Authorization": f"Bearer {token}"}).status_code == 200, path
+
+    def test_tools_policy_needs_more_than_a_session(self) -> None:
+        # /api/tools/policy rewrites the tool allowlist, so it is an admin endpoint, not a read one
+        user = token_manager.create_token("u1", "user")
+        admin = token_manager.create_token("a1", "admin")
+        client = TestClient(_make_full_app())
+        assert client.get("/api/tools/policy", headers={"Authorization": f"Bearer {user}"}).status_code == 403
+        assert client.get("/api/tools/policy", headers={"Authorization": f"Bearer {admin}"}).status_code == 200
 
     def test_private_read_open_when_unsecured(self, monkeypatch) -> None:
         from pydantic import SecretStr

@@ -121,6 +121,10 @@ def task_run(goal: str, user: str, channel: str):
         with console.status("[bold]Planning...", spinner="dots"):
             task = await planner.plan(goal, llm, user_id=user, channel=channel)
 
+        # a terminal invocation is an authenticated operator action, so the subject here is the
+        # owner of this gateway rather than an unattributed caller
+        task.metadata["role"] = "admin"
+
         if not task.steps:
             console.print("[red]Planner returned no steps. LLM response parsing may have failed.[/red]")
             return

@@ -473,10 +473,22 @@ async def test_task_runs_in_background(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("raven.core.gateway.commands.task.get_policy_for_channel", lambda ch: MAIN_SESSION_POLICY)
     gw = _task_gw()
     ctx = _ctx(args=["build", "a", "report"])
+    ctx.user["role"] = "user"
     assert await TaskCommand(gw).execute(ctx) is True
     gw._check_permission.assert_called_once_with(ctx.user, Permission.TASK_RUN)
     assert _sent(gw)[2] == "Planning task: build a report..."
+    # the requester's role is attested to the task, because the task's steps run under it later
     gw.tasks.create_and_run.assert_called_once_with(
-        goal="build a report", user_id="u1", channel="tg", session_id="tg:web:u1"
+        goal="build a report", user_id="u1", channel="tg", session_id="tg:web:u1", role="user"
     )
     gw._bg_task.assert_awaited_once_with("coro")
+
+
+async def test_task_without_a_known_role_attests_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    from raven.core.security.sandbox_policy import MAIN_SESSION_POLICY
+
+    monkeypatch.setattr("raven.core.gateway.commands.task.get_policy_for_channel", lambda ch: MAIN_SESSION_POLICY)
+    gw = _task_gw()
+    ctx = _ctx(args=["do a thing"])
+    await TaskCommand(gw).execute(ctx)
+    assert gw.tasks.create_and_run.call_args.kwargs["role"] is None

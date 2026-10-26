@@ -12,30 +12,30 @@ from raven.core.security.tool_policy import (
     ExecAskMode,
     ExecSecurity,
     ToolPolicyEvaluator,
-    _resolve_safe,
+    resolve_within_root,
 )
 
 
 class TestResolveSafe:
     def test_empty_and_whitespace_return_none(self):
-        assert _resolve_safe("") is None
-        assert _resolve_safe("   ") is None
+        assert resolve_within_root("") is None
+        assert resolve_within_root("   ") is None
 
     def test_null_byte_returns_none(self):
-        assert _resolve_safe("a\x00b") is None
+        assert resolve_within_root("a\x00b") is None
 
     def test_resolve_error_returns_none(self, monkeypatch: pytest.MonkeyPatch):
         def boom(self: Path, strict: bool = False) -> Path:
             raise OSError("unresolvable")
 
         monkeypatch.setattr(Path, "resolve", boom)
-        assert _resolve_safe("some/path") is None
+        assert resolve_within_root("some/path") is None
 
     def test_excessive_depth_returns_none(self):
-        assert _resolve_safe("/" + "/".join(["x"] * 30)) is None
+        assert resolve_within_root("/" + "/".join(["x"] * 30)) is None
 
     def test_outside_root_returns_none(self, tmp_path: Path):
-        assert _resolve_safe(str(tmp_path.parent / "escape"), tmp_path) is None
+        assert resolve_within_root(str(tmp_path.parent / "escape"), tmp_path) is None
 
 
 class TestSetWorkspaceRoot:
@@ -111,15 +111,46 @@ class TestPolicyEngineDeny:
 
 
 class TestCheckExecWorkspace:
+    """Containment applies to arguments that name a location, and only when a root is configured."""
+
     async def test_path_outside_workspace_rejected(self, tmp_path: Path):
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL, workspace_root=str(tmp_path))
-        allowed, reason = await p.check_exec("t", {"f": str(tmp_path.parent / "escape")})
+        allowed, reason = await p.check_exec("t", {"path": str(tmp_path.parent / "escape")})
         assert allowed is False
-        assert "outside workspace" in (reason or "")
+        assert "outside the workspace root" in (reason or "")
 
     async def test_path_inside_workspace_passes(self, tmp_path: Path):
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL, workspace_root=str(tmp_path))
-        allowed, _reason = await p.check_exec("t", {"f": str(tmp_path / "ok.txt")})
+        allowed, _reason = await p.check_exec("t", {"path": str(tmp_path / "ok.txt")})
+        assert allowed is True
+
+    async def test_suffixed_location_key_is_scanned(self, tmp_path: Path):
+        p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL, workspace_root=str(tmp_path))
+        allowed, _reason = await p.check_exec("t", {"output_file": str(tmp_path.parent / "escape")})
+        assert allowed is False
+
+    async def test_command_text_is_not_mistaken_for_a_path(self, tmp_path: Path):
+        # a shell command is not a filesystem location; resolving it as one both denies harmless
+        # calls and approves escapes, so restraint here belongs to EXEC_SECURITY instead
+        p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL, workspace_root=str(tmp_path))
+        allowed, _reason = await p.check_exec("shell_execute", {"command": "type C:\\Windows\\System32\\config\\SAM"})
+        assert allowed is True
+
+    async def test_empty_location_argument_is_not_a_denial(self, tmp_path: Path):
+        p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL, workspace_root=str(tmp_path))
+        allowed, _reason = await p.check_exec("shell_execute", {"command": "ls", "cwd": ""})
+        assert allowed is True
+
+    async def test_no_root_configured_skips_containment(self):
+        p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL, workspace_only=True, workspace_root=None)
+        allowed, _reason = await p.check_exec("t", {"path": "C:\\Windows\\System32\\config\\SAM"})
+        assert allowed is True
+
+    async def test_workspace_only_off_skips_containment(self, tmp_path: Path):
+        p = ToolPolicyEvaluator(
+            exec_security=ExecSecurity.FULL, workspace_only=False, workspace_root=str(tmp_path)
+        )
+        allowed, _reason = await p.check_exec("t", {"path": str(tmp_path.parent / "escape")})
         assert allowed is True
 
 
@@ -143,10 +174,12 @@ class TestCheckExecAskModes:
         assert allowed is False
         assert "cancelled" in (reason or "")
 
-    async def test_ask_always_without_confirm_fn(self):
+    async def test_ask_always_without_confirm_fn_denies(self):
+        # "ask" without anybody to ask is not "ask"; running anyway turns the mode into a comment
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.ASK)
-        allowed, _ = await p.check_exec("t")
-        assert allowed is True
+        allowed, reason = await p.check_exec("t")
+        assert allowed is False
+        assert "confirmer" in (reason or "")
 
     async def test_ask_on_miss_confirms_unlisted(self):
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.ASK, exec_ask=ExecAskMode.ON_MISS)

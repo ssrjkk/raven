@@ -18,16 +18,25 @@ from raven.unique.fine_tuning import (
 
 
 def _patch_wandb():
-    """Inject mock wandb into sys.modules and reload the module."""
+    """Inject a fake wandb and mark the module as having it.
+
+    Deliberately not ``importlib.reload``: re-executing ``fine_tuning`` re-imports ``datasets``,
+    which imports ``pandas`` -- so one unusable compiled extension turned three monitor tests into
+    an import failure that had nothing to do with what they assert.
+    """
+    import contextlib
+
     mock_wandb = MagicMock()
     mock_run = MagicMock()
     mock_wandb.init.return_value = mock_run
     mock_wandb.Artifact.return_value = MagicMock()
-    patcher = patch.dict("sys.modules", {"wandb": mock_wandb})
-    patcher.start()
+    stack = contextlib.ExitStack()
+    stack.enter_context(patch.dict("sys.modules", {"wandb": mock_wandb}))
     import raven.unique.fine_tuning as ft
-    importlib.reload(ft)
-    return mock_wandb, mock_run, patcher
+
+    stack.enter_context(patch.object(ft, "_WANDB_AVAILABLE", True))
+    stack.enter_context(patch.object(ft, "wandb", mock_wandb))
+    return mock_wandb, mock_run, stack
 
 
 class TestTrainingMonitor:
@@ -66,7 +75,7 @@ class TestTrainingMonitor:
             monitor.log_metrics({"loss": 0.5})
             mock_wandb.log.assert_called_once_with({"loss": 0.5})
         finally:
-            patcher.stop()
+            patcher.close()
 
     def test_log_checkpoint_with_wandb(self, tmp_path: Path):
         mock_wandb, mock_run, patcher = _patch_wandb()
@@ -82,7 +91,7 @@ class TestTrainingMonitor:
             mock_wandb.Artifact.assert_called_once_with("checkpoint-100", type="model")
             mock_run.log_artifact.assert_called_once()
         finally:
-            patcher.stop()
+            patcher.close()
 
     def test_finish_no_wandb(self):
         self.monitor.finish()
@@ -97,7 +106,7 @@ class TestTrainingMonitor:
             monitor.finish()
             mock_wandb.finish.assert_called_once()
         finally:
-            patcher.stop()
+            patcher.close()
 
     def test_finish_clears_run(self):
         with patch("raven.unique.fine_tuning._WANDB_AVAILABLE", False):
@@ -123,16 +132,11 @@ class TestFineTuningPipelineWandbIntegration:
 
     @pytest.mark.asyncio
     async def test_train_with_wandb_calls_wandb_init(self):
-        mock_wandb = MagicMock()
-        mock_run = MagicMock()
-        mock_wandb.init.return_value = mock_run
-        with patch.dict("sys.modules", {"wandb": mock_wandb}):
-            import raven.unique.fine_tuning as ft
-            importlib.reload(ft)
-            pipeline = ft.FineTuningPipeline()
-            with patch.object(pipeline, "load_model"), patch.object(
-                pipeline, "train", return_value={"train_loss": 0.3, "global_step": 50}
-            ):
-                _, metrics = await pipeline.train_with_wandb(TrainingConfig(), MagicMock())
-                mock_wandb.init.assert_called_once()
-                assert metrics["train_loss"] == 0.3
+        mock_wandb, _run, patcher = _patch_wandb()
+        with patcher, patch.object(FineTuningPipeline, "load_model"), patch.object(
+            FineTuningPipeline, "train", return_value={"train_loss": 0.3, "global_step": 50}
+        ):
+            pipeline = FineTuningPipeline()
+            _, metrics = await pipeline.train_with_wandb(TrainingConfig(), MagicMock())
+            mock_wandb.init.assert_called_once()
+            assert metrics["train_loss"] == 0.3

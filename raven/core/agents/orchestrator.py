@@ -29,8 +29,6 @@ _VALID_HANDOFF_PROFILES = frozenset(
     {"architect", "planner", "coder", "reviewer", "debugger", "qa", "researcher", "security", "done"}
 )
 
-_PATH_KEYS = ("path", "file", "directory", "source", "target")
-
 _IMPLEMENT_TOOLS = frozenset(
     {"file_write", "file_edit", "file_append", "shell", "python", "git_commit", "git_add"}
 )
@@ -951,23 +949,18 @@ class AgentOrchestrator:
                 return {"error": str(e)[:500]}
 
     def _check_security_policy(self, tc: ToolCall, workspace: Path | None) -> None:
-        args = tc.arguments or {}
-        for pk in _PATH_KEYS:
-            val = args.get(pk)
-            if not val or not isinstance(val, str):
-                continue
-            from raven.core.security.ssrf import validate_url
-            from raven.core.security.tool_policy import _resolve_safe
+        from raven.core.security.ssrf import validate_url
+        from raven.core.security.tool_policy import path_args, resolve_within_root
 
-            if val.startswith(("http://", "https://")):
-                block_reason = validate_url(val)
+        ws = workspace or settings.resolved_workspace
+        for _key, value in path_args(tc.arguments or {}):
+            if value.startswith(("http://", "https://")):
+                block_reason = validate_url(value)
                 if block_reason is not None:
                     raise ValueError(f"SSRF blocked: {block_reason}")
-            ws = workspace or settings.resolved_workspace
-            if ws is not None and not val.startswith(("http://", "https://", "data:", "file:")):
-                resolved = _resolve_safe(val, ws)
-                if resolved is None:
-                    raise ValueError(f"Path '{val}' is outside workspace or invalid")
+                continue
+            if ws is not None and not value.startswith(("data:", "file:")) and resolve_within_root(value, ws) is None:
+                raise ValueError(f"Path '{value}' is outside workspace or invalid")
 
     async def _create_plan(self, query: str, profile: AgentProfile, workspace_hint: str = "") -> list[str]:
         if not self._planner_enabled:

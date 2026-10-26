@@ -9,6 +9,7 @@ from typing import Any
 from loguru import logger
 
 from raven.core.config import settings
+from raven.core.llm.chat_render import render_chat, stop_token_ids
 from raven.core.llm.protocol import LLMProvider, LLMResponse
 
 # find_spec only looks the packages up; importing torch here would put ~10 s and ~400 MiB on
@@ -112,9 +113,13 @@ class LocalAdapterProvider(LLMProvider):
             raise RuntimeError(msg)
 
     def _sampling(self) -> dict[str, Any]:
+        # the turn terminator comes from the template, and a base model's single eos is not it
+        kwargs: dict[str, Any] = {"eos_token_id": stop_token_ids(self._tokenizer)}
         if self.temperature > 0:
-            return {"do_sample": True, "temperature": self.temperature, "top_p": self.top_p}
-        return {"do_sample": False}
+            kwargs.update(do_sample=True, temperature=self.temperature, top_p=self.top_p)
+        else:
+            kwargs["do_sample"] = False
+        return kwargs
 
     async def _ensure_loaded(self, base_model: str) -> None:
         if not _ML_AVAILABLE:
@@ -155,17 +160,16 @@ class LocalAdapterProvider(LLMProvider):
     def _encode_sync(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         tokenizer = self._tokenizer
         text = self._render(messages)
-        encoded = tokenizer(text, return_tensors="pt", truncation=True)
+        # add_special_tokens stays off: render_chat already emitted whatever the template emits, and
+        # a tokenizer that adds a BOS of its own would put the request one token out of distribution
+        # from every row the adapter trained on (measured on a Llama tokenizer: [1, 1, ...] vs [1, ...])
+        encoded = tokenizer(text, return_tensors="pt", truncation=True, add_special_tokens=False)
         return {key: value.to(self._model.device) for key, value in encoded.items()}
 
     def _render(self, messages: list[dict[str, Any]]) -> str:
-        tokenizer = self._tokenizer
-        template = getattr(tokenizer, "chat_template", None)
-        if template:
-            rendered = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-            return str(rendered)
-        # no chat template on the base tokenizer: keep roles visible rather than dropping them
-        return "\n".join(f"{m.get('role', 'user')}: {m.get('content', '')}" for m in messages) + "\nassistant:"
+        # the same function the trainer used to build its rows, so a prompt at inference time is
+        # rendered exactly as it was rendered during training
+        return render_chat(messages, self._tokenizer)
 
     def _generate_sync(self, kwargs: dict[str, Any]) -> Any:
         import torch

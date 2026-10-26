@@ -31,6 +31,7 @@ class TaskCommand(CommandHandler):
                 user_id=ctx.event.user_id,
                 channel=ctx.event.channel,
                 session_id=ctx.event.session_id or "",
+                role=str(ctx.user.get("role") or "") or None,
             )
         )
         return True

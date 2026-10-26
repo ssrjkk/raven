@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from raven.core.security.tool_policy import is_exec_class
 from raven.core.task_engine.tool_registry import ToolRegistry
 from raven.tools.ab_testing import register_ab_testing_tools
 from raven.tools.analytics import register_analytics_tools
@@ -84,27 +85,6 @@ def create_tool_registry(mcp_pool: Any = None) -> ToolRegistry:
     return registry
 
 
-_TASK_EXEC_TOKENS: tuple[str, ...] = (
-    "shell",
-    "python",
-    "process_",
-    "browser_",
-    "mcp_",
-    "node_",
-    "chaos_",
-    "db_query",
-    "email_send",
-    "http_post",
-    "git_commit",
-    "git_push",
-    "git_pull",
-    "git_checkout",
-    "git_create_pr",
-    "git_review",
-    "plugin_",
-)
-
-
 def create_task_tool_registry(mcp_pool: Any = None) -> ToolRegistry:
     """Registry for planner-driven task execution (web / Telegram / gateway /task).
 
@@ -112,6 +92,6 @@ def create_task_tool_registry(mcp_pool: Any = None) -> ToolRegistry:
     planner-authored step cannot escalate to arbitrary command execution.
     """
     registry = create_tool_registry(mcp_pool)
-    for name in [t.name for t in registry.list() if any(tok in t.name for tok in _TASK_EXEC_TOKENS)]:
+    for name in [t.name for t in registry.list() if is_exec_class(t.name)]:
         registry.unregister(name)
     return registry

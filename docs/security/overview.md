@@ -38,18 +38,33 @@ An invalid value is a startup error, not a silent fallback (`Settings.model_post
 
 `raven/core/security/tool_policy.py` combines three mechanisms:
 
-- **exec security level** (`exec_security`, default `deny`) — `deny` blocks shell/exec
-  tools outright, `ask` routes them through confirmation, `full` permits everything
+- **exec security level** (`exec_security`, default `deny`) — applies to the *exec class* of
+  tools, one shared list (`EXEC_CLASS_TOKENS`: shell, python, `process_*`, `browser_*`, `mcp_*`,
+  `node_*`, `chaos_*`, `db_query`, `http_post`, `email_send`, the git mutating verbs and
+  `plugin_*`). `deny` refuses them, `ask` routes them through confirmation, `full` permits
+  everything. `Agent._execute_tool()` consults it for every exec-class call, and
+  `create_task_tool_registry()` strips exactly this set from planner-driven tasks
 - **exec ask mode** (`exec_ask_mode`, default `always`) — only read when the level is
   `ask`: `always` confirms every exec, `on-miss` confirms tools that are not already in
-  the profile or allowlist, `off` skips confirmation
+  the profile or allowlist, `off` skips confirmation. **A confirmation that cannot be asked is a
+  denial, not a pass**: with no `confirm_fn` wired the call is refused with the reason, the CLI
+  agents ask on the controlling terminal and deny when there is no terminal
+  (`raven/core/security/confirm.py`), and a channel that has not implemented
+  `ask_confirmation()` — thirteen of the fifteen adapters, including webchat — denies instead of
+  answering for the user
 - **tool profiles** (`messaging` / `minimal` / `full`) — per-agent surface area, so a
   messaging agent cannot reach filesystem tools at all
 
-Every string argument is additionally resolved against the workspace root
-(`_resolve_safe`), and paths deeper than `MAX_PATH_DEPTH` (20) segments are rejected. The
-`dangerous` flag on each tool spec is what the confirmation flow keys on; `ravencode` and
-`raven` both honour it.
+Arguments that name a filesystem location (key in `PATH_ARG_KEYS`, or suffixed `_path`, `_file`,
+`_dir`, `_root`, `_cwd`) are additionally resolved against the workspace root, and paths deeper
+than `MAX_PATH_DEPTH` (20) segments are rejected. A `command`, `url` or `sql` string is not a
+location and is not resolved as one — restraining those is the exec level's job.
+
+On the task and orchestrator path, authorization is per subject: `ToolSpec.dangerous` and
+`ToolSpec.allowed_roles` (with `tool_policy.json` overrides, `raven/core/tools_rbac.py`) are
+enforced by `ToolRegistry.call(..., role=…)`. A call that carries no role runs only the tools
+with no role restriction, and the role a task runs under is written by whoever created it, never
+by the planner.
 
 ## 3. Workspace Isolation
 
@@ -106,7 +121,7 @@ applies four escalating rules:
   `hmac.compare_digest`, never `==`. Gateway logs record `request.url.path` without the query
   string, so a token passed that way is not written to the access log
 - **always-authenticated prefixes** — `/aios`, `/api/tests` and `/mcp` reject anonymous callers
-- **RBAC** — `PATH_PERMISSIONS` maps 18 route prefixes (`/api/admin`, `/api/secrets`,
+- **RBAC** — `PATH_PERMISSIONS` maps 19 route prefixes (`/api/admin`, `/api/secrets`,
   `/api/auth/users`, `/aios/exec`, …) to a required `Permission`, checked against the caller's
   role, so a `user`-role token gets `403` on admin surfaces even when authenticated
 - **fail-closed writes** — any `POST`/`PUT`/`PATCH`/`DELETE` under `/api` from an anonymous

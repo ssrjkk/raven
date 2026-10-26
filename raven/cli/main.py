@@ -48,6 +48,7 @@ from raven.core.db import DatabaseFactory
 from raven.core.llm import LLMRouter
 from raven.core.logging import setup_logging
 from raven.core.plugin_loader import PluginLoader
+from raven.core.security.confirm import terminal_confirm
 from raven.core.version import __version__
 
 try:
@@ -348,7 +349,7 @@ def agent(message: str, agent_id: str, channel: str):
         registry.setup_defaults()
         session_id = f"{channel}:agent:{agent_id}"
         session = await db.get_or_create_session(session_id, channel, "agent_user", agent_id)
-        agent_obj = registry.create_agent(session, agent_id=agent_id)
+        agent_obj = registry.create_agent(session, agent_id=agent_id, confirm_fn=terminal_confirm)
         console.print(f"[dim]Agent: {agent_id} | Channel: {channel}[/dim]")
         full = ""
         async for token in agent_obj.run(message):

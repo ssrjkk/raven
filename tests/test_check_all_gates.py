@@ -70,7 +70,8 @@ class TestStageReporting:
         _stub_run(monkeypatch, 0, "6424 passed, 22 skipped in 682.73s (0:11:22)", "", captured)
         result = ca.check_component("unit")
         assert result.status == "pass"
-        assert captured["timeout"] == 1200
+        # the point is that the stage honours its own configured cap, not what the number is today
+        assert captured["timeout"] == ca.COMPONENTS["unit"]["timeout"]
 
     def test_components_without_a_cap_keep_600s(self, monkeypatch: pytest.MonkeyPatch) -> None:
         captured: dict[str, Any] = {}

@@ -16,7 +16,7 @@ from raven.core.llm import LLMRouter, ToolCall
 from raven.core.llm.queue import PRIORITY_LOW, PRIORITY_NORMAL
 from raven.core.models import Message, PluginTool, Session
 from raven.core.security.context_filter import sanitize_external_content
-from raven.core.security.tool_policy import ToolPolicyEvaluator
+from raven.core.security.tool_policy import ToolPolicyEvaluator, is_exec_class, path_args
 
 
 class AgentState(Enum):
@@ -73,6 +73,7 @@ class Agent:
         llm: LLMRouter,
         config: AgentConfig | None = None,
         tool_policy: ToolPolicyEvaluator | None = None,
+        confirm_fn: Callable[[str, dict[str, Any]], Awaitable[bool]] | None = None,
     ):
         self.session = session
         self.tools = tools
@@ -82,6 +83,7 @@ class Agent:
         self.priority = self.config.priority
         self._tool_map: dict[str, PluginTool] = {t.name: t for t in tools}
         self._tool_policy: ToolPolicyEvaluator = tool_policy or self._init_tool_policy()
+        self._confirm_fn: Callable[[str, dict[str, Any]], Awaitable[bool]] | None = confirm_fn
 
     def _init_tool_policy(self) -> ToolPolicyEvaluator:
         from raven.core.config import _DEFAULT_TOOLS_DENY, settings
@@ -319,7 +321,9 @@ class Agent:
     ) -> AsyncIterator[str]:
         state = AgentState.INIT
         messages: list[dict[str, Any]] = [{"role": "system", "content": await self._build_system_prompt()}]
-        self._confirm_fn = confirm_fn
+        if confirm_fn is not None:
+            # a run() without a confirmer must not erase the one the agent was built with
+            self._confirm_fn = confirm_fn
         tool_used = False
         final_content = ""
         streamed = False
@@ -475,23 +479,34 @@ class Agent:
             if not allowed:
                 logger.warning("Tool '{}' denied by policy", tc.name)
                 return {"error": f"Tool '{tc.name}' is denied by security policy"}
-            if tool.confirm and self._confirm_fn:
+            if is_exec_class(tc.name):
+                exec_allowed, exec_reason = await self._tool_policy.check_exec(
+                    tc.name, tc.arguments or {}, confirm_fn=self._confirm_fn
+                )
+                if not exec_allowed:
+                    logger.warning("Exec policy denied {}: {}", tc.name, exec_reason)
+                    return {"error": f"Tool '{tc.name}' denied — {exec_reason}"}
+            if tool.confirm:
+                if self._confirm_fn is None:
+                    logger.warning("Tool '{}' requires confirmation but this caller cannot ask", tc.name)
+                    return {"error": f"Tool '{tc.name}' requires confirmation and no confirmer is wired"}
                 confirmed = await self._confirm_fn(tc.name, tc.arguments or {})
                 if not confirmed:
                     logger.info("Tool '{}' cancelled by user", tc.name)
                     return {"error": f"Tool '{tc.name}' cancelled — user denied confirmation"}
-            path_arg = (
-                (tc.arguments or {}).get("path")
-                or (tc.arguments or {}).get("file")
-                or (tc.arguments or {}).get("directory")
-            )
-            if path_arg and not self._tool_policy.check_path(str(path_arg)):
-                return {"error": "Path outside workspace root — denied by security policy"}
+            for key, value in path_args(tc.arguments or {}):
+                if not self._tool_policy.check_path(value):
+                    return {"error": f"Path outside workspace root — denied by security policy ({key})"}
             logger.info("Tool call: {} args={}", tc.name, tc.arguments)
+            # plugin and MCP handlers are ordinary functions as often as coroutines, and awaiting a
+            # returned string raises TypeError that the broad handler below reports as a tool failure
+            call: Awaitable[Any] = (
+                tool.handler(**(tc.arguments or {}))
+                if asyncio.iscoroutinefunction(tool.handler)
+                else asyncio.to_thread(tool.handler, **(tc.arguments or {}))
+            )
             try:
-                result = await asyncio.wait_for(
-                    tool.handler(**(tc.arguments or {})), timeout=settings.agent_tool_timeout
-                )
+                result = await asyncio.wait_for(call, timeout=settings.agent_tool_timeout)
             except TimeoutError:
                 logger.error("Tool {} timed out after {}s", tc.name, settings.agent_tool_timeout)
                 return {"error": f"Tool '{tc.name}' timed out after {settings.agent_tool_timeout:g}s"}

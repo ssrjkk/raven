@@ -151,7 +151,10 @@ class ToolRegistry:
             return await handler_fn(**params)
         return await asyncio.to_thread(handler_fn, **params)
 
-    async def call(self, name: str, role: str | None = None, **params: Any) -> Any:
+    async def call(self, name: str, *, role: str | None = None, **params: Any) -> Any:
+        """Invoke a tool on behalf of `role`. A None role means no verified subject, and restricted
+        tools (dangerous ones, or ones with an allowed_roles entry) deny for it. The role is
+        keyword-only so it is never confused with a tool argument."""
         spec = self.get(name)
         if not spec:
             return f"[error] Unknown tool: {name}"
@@ -197,10 +200,13 @@ class ToolRegistry:
                 return f"[error] {exc}"
 
     def _denied_by_role(self, name: str, role: str | None) -> str | None:
-        if role is None:
-            return None
         required = self.effective_allowed_roles(name)
-        if required and role not in required:
+        if required is None:
+            return None
+        if role is None:
+            # a restricted tool called with no subject is not a restricted tool called by anybody
+            return f"[error] Tool '{name}' is restricted to {sorted(required)}; this call carries no subject role"
+        if role not in required:
             return f"[error] Tool '{name}' requires role {sorted(required)}; current role is '{role}'"
         return None
 

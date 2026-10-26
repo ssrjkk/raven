@@ -69,11 +69,12 @@ class MessageProcessor:
         supports_stream = hasattr(channel_obj, "send_stream") if channel_obj else False
 
         async def confirm_fn(tool_name: str, args: dict[str, Any]) -> bool:
-            if not channel_obj:
-                return True
+            ask = getattr(channel_obj, "ask_confirmation", None)
+            if ask is None:
+                logger.warning("Channel '{}' cannot confirm '{}' — denied, not auto-approved", event.channel, tool_name)
+                return False
             action_desc = f"Execute tool '{tool_name}' with args: {_mask_tool_args(args)}"
-            result = await channel_obj.ask_confirmation(event.user_id, action_desc, event.session_id or "")
-            return bool(result)
+            return bool(await ask(event.user_id, action_desc, event.session_id or ""))
 
         full_response = ""
         buffer = ""

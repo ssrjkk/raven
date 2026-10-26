@@ -345,9 +345,10 @@ COMPONENTS: dict[str, dict[str, Any]] = {
             "tests/integration/",
             "tests/eval/",
         ],
-        # Measured 2026-10-22 in a clean venv, nothing else on the box: 682.7s of pytest,
-        # 704.7s wall for 6424 tests. The 600s default killed a fully green batch.
-        "timeout": 1200,
+        # Measured 622-707s for 6628 tests with the box otherwise idle, and killed at 89% by the
+        # old 1200s cap when another session was competing for CPU. The margin has to absorb a
+        # contended machine, not just an idle one: 1800s matches the full-suite stage.
+        "timeout": 1800,
         "desc": "Unit tests (everything except e2e/integration/eval/sandbox)",
     },
 }

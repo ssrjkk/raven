@@ -3,6 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 
+from loguru import logger
+
 from raven.core.models import IncomingMessage, Message
 
 MessageHandler = Callable[[IncomingMessage], Awaitable[None]]
@@ -33,10 +35,14 @@ class BaseChannel(ABC):
         return True
 
     async def ask_confirmation(self, user_id: str, action_description: str, session_id: str = "") -> bool:
-        """Ask user for confirmation before executing an action that requires approval.
+        """Ask the user to approve an action and return their decision.
 
-        Default implementation auto-confirms (returns True).
-        Channels that support interactive confirmation should override this
-        to send a yes/no prompt to the user and return their decision.
+        The default denies: a channel that has not implemented a prompt cannot report an approval
+        it never received. Telegram and Discord override this with an interactive prompt.
         """
-        return True
+        logger.warning(
+            "Channel '{}' has no confirmation prompt, denying: {}",
+            self.channel_id or type(self).__name__,
+            action_description,
+        )
+        return False

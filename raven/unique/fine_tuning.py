@@ -10,6 +10,8 @@ from typing import Any
 
 from loguru import logger
 
+from raven.core.llm.chat_render import render_chat
+
 try:
     import torch
 
@@ -62,6 +64,7 @@ try:
     _WANDB_AVAILABLE = True
 except ImportError:
     _WANDB_AVAILABLE = False
+    wandb = None
 
 
 SUPPORTED_MODEL_TYPES: dict[str, str] = {
@@ -93,7 +96,6 @@ class CodeExample:
 class DatasetConfig:
     max_length: int = 2048
     test_split: float = 0.1
-    format: str = "chat"  # chat, instruct, code
 
 
 @dataclass
@@ -194,27 +196,11 @@ class DatasetBuilder:
         logger.info("Loaded {} {} samples from {}", count, source_type, path)
         return count
 
-    def _format_conversation(self, conv: ConversationExample) -> str:
-        if self._config.format == "chat":
-            parts: list[str] = []
-            if conv.system_prompt:
-                parts.append(f"<|system|>\n{conv.system_prompt}")
-            for msg in conv.messages:
-                role = msg.get("role", "user")
-                content = msg.get("content", "")
-                parts.append(f"<|{role}|>\n{content}")
-            parts.append("<|assistant|>\n")
-            return "\n".join(parts)
-        parts = []
+    def _messages(self, conv: ConversationExample) -> list[dict[str, str]]:
+        messages = [dict(m) for m in conv.messages]
         if conv.system_prompt:
-            parts.append(f"### System:\n{conv.system_prompt}")
-        for msg in conv.messages:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            prefix = "### Instruction:" if role == "user" else "### Response:"
-            parts.append(f"{prefix}\n{content}")
-        parts.append("### Response:\n")
-        return "\n".join(parts)
+            messages.insert(0, {"role": "system", "content": conv.system_prompt})
+        return messages
 
     def _format_code(self, code: CodeExample) -> str:
         header = f"// {code.description}" if code.description else ""
@@ -222,35 +208,37 @@ class DatasetBuilder:
             header = f"// Language: {code.language}\n{header}"
         return f"{header}\n{code.code}" if header else code.code
 
-    def build_texts(self) -> list[str]:
-        texts: list[str] = []
-        for conv in self._conversations:
-            texts.append(self._format_conversation(conv))
-        for code in self._code_samples:
-            texts.append(self._format_code(code))
-        return texts
-
     def build_dataset(self) -> Any:
+        """Rows carry messages, not rendered text: only the tokenizer knows its own chat template."""
         if not _DATASETS_AVAILABLE:
             raise RuntimeError("`datasets` library is required to build a Dataset object")
-        texts = self.build_texts()
-        data = {"text": texts}
+        data = {
+            "messages": [self._messages(c) for c in self._conversations] + [[] for _ in self._code_samples],
+            "text": [""] * len(self._conversations) + [self._format_code(c) for c in self._code_samples],
+        }
         dataset = Dataset.from_dict(data)
         split = dataset.train_test_split(test_size=self._config.test_split, seed=42)
         logger.info("Built dataset: {} train, {} test samples", len(split["train"]), len(split["test"]))
         return split
 
     def tokenize_dataset(self, dataset: Any, tokenizer: Any) -> Any:
-        def tokenize_fn(examples: dict[str, list[str]]) -> dict[str, Any]:
-            return tokenizer(  # type: ignore[no-any-return]
-                examples["text"],
+        def encode(examples: dict[str, Any]) -> dict[str, Any]:
+            texts = [
+                render_chat(messages, tokenizer) if messages else raw
+                for messages, raw in zip(examples["messages"], examples["text"], strict=True)
+            ]
+            return tokenizer(
+                texts,
                 truncation=True,
                 padding="max_length",
                 max_length=self._config.max_length,
                 return_overflowing_tokens=False,
+                # the chat template already emitted the special tokens; adding another pair would
+                # train a sequence the serving path never produces
+                add_special_tokens=False,
             )
 
-        tokenized = dataset.map(tokenize_fn, batched=True, remove_columns=["text"])
+        tokenized = dataset.map(encode, batched=True, remove_columns=["messages", "text"])
         logger.info("Tokenized dataset: {} samples", len(tokenized))
         return tokenized
 
@@ -261,7 +249,6 @@ class DatasetBuilder:
             "config": {
                 "max_length": self._config.max_length,
                 "test_split": self._config.test_split,
-                "format": self._config.format,
             },
         }
 
@@ -271,28 +258,31 @@ class DatasetBuilder:
 
 
 class TrainingMonitor:
-    def __init__(self, use_wandb: bool = True) -> None:
-        self._use_wandb = use_wandb and _WANDB_AVAILABLE
+    def __init__(self, use_wandb: bool = True, client: Any = None) -> None:
+        # the client is held, not reached for as a module global: that global is only bound when
+        # the optional extra is installed, which made every test of this class a reload or a patch
+        self._client = client if client is not None else (wandb if use_wandb and _WANDB_AVAILABLE else None)
+        self._use_wandb = self._client is not None
         self._run: Any = None
         self._metrics_log: list[dict[str, Any]] = []
 
     def log_metrics(self, metrics: dict[str, float]) -> None:
         if self._use_wandb and self._run:
-            wandb.log(metrics)
+            self._client.log(metrics)
         self._metrics_log.append(metrics)
         for key, value in metrics.items():
             logger.info("Training metric - {}: {}", key, value)
 
     def log_checkpoint(self, checkpoint: Checkpoint, metrics: dict[str, float] | None = None) -> None:
         if self._use_wandb and self._run:
-            artifact = wandb.Artifact(f"checkpoint-{checkpoint.step}", type="model")
+            artifact = self._client.Artifact(f"checkpoint-{checkpoint.step}", type="model")
             artifact.add_dir(str(checkpoint.path))
             self._run.log_artifact(artifact)
         logger.info("Checkpoint logged: step={}, path={}", checkpoint.step, checkpoint.path)
 
     def finish(self) -> None:
         if self._use_wandb and self._run:
-            wandb.finish()
+            self._client.finish()
         logger.info("Training monitor finished, logged {} metric entries", len(self._metrics_log))
 
 
@@ -624,9 +614,12 @@ class FineTuningPipeline:
             torch.cuda.empty_cache()
         logger.info("Model unloaded, GPU cache cleared")
 
-    async def train_with_wandb(self, config: TrainingConfig, dataset: Any) -> tuple[Any, dict[str, Any]]:
+    async def train_with_wandb(
+        self, config: TrainingConfig, dataset: Any, client: Any = None
+    ) -> tuple[Any, dict[str, Any]]:
         self._config = config
-        if not _WANDB_AVAILABLE:
+        wandb_client = client if client is not None else (wandb if _WANDB_AVAILABLE else None)
+        if wandb_client is None:
             logger.warning("W&B not available, training without monitoring")
             self.load_model()
             metrics = self.train(dataset)
@@ -635,7 +628,7 @@ class FineTuningPipeline:
         loop = asyncio.get_running_loop()
 
         def _train_sync() -> tuple[Any, dict[str, Any]]:
-            wandb_run = wandb.init(
+            wandb_run = wandb_client.init(
                 project="fine-tuning",
                 config={
                     "learning_rate": config.learning_rate,
@@ -649,7 +642,7 @@ class FineTuningPipeline:
                 },
                 reinit=True,
             )
-            monitor = TrainingMonitor(use_wandb=True)
+            monitor = TrainingMonitor(client=wandb_client)
             monitor._run = wandb_run
             try:
                 self.load_model()

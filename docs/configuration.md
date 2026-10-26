@@ -69,7 +69,8 @@ Supported providers: `openai`, `anthropic`, `openrouter`, `ollama`, `vllm`, `azu
 | `DM_POLICY` | DM access policy | `pairing` |
 | `WEB_SECRET_KEY` | Admin web secret | — |
 | `WEB_CORS_ORIGINS` | Allowed CORS origins | `http://localhost:5173,http://localhost:3000,http://localhost:18888` |
-| `EXEC_SECURITY` | Tool execution security | `deny` |
+| `EXEC_SECURITY` | Gate for exec-class tools (shell, python, browser, MCP, plugin, git writes, db_query) on the agent path | `deny` |
+| `EXEC_ASK_MODE` | When `EXEC_SECURITY=ask`, which exec calls need a human yes/no; with no confirmer wired the tool denies | `always` |
 | `SANDBOX_MODE` | Sandboxing mode | `non-main` |
 | `SANDBOX_BACKEND` | Sandbox backend | `subprocess` |
 

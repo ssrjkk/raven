@@ -128,7 +128,7 @@ WEB_SECRET_KEY=<openssl rand -hex 32>
 
 # Safety rails
 TOOLS_PROFILE=messaging    # messaging | minimal | full — which tools are enabled
-EXEC_SECURITY=deny         # deny | ask | full — shell command policy
+EXEC_SECURITY=deny         # deny | ask | full — gate for exec-class tools (shell, python, browser, MCP, plugin, git writes, db_query)
 DM_POLICY=pairing          # pairing | closed | open
 SANDBOX_MODE=non-main      # main | non-main | all | none
 

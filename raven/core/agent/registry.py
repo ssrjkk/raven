@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from loguru import logger
@@ -34,7 +35,12 @@ class AgentRegistry:
     def get_agent_for_channel(self, channel: str) -> str:
         return self._channel_agents.get(channel, "default")
 
-    def create_agent(self, session: Session, agent_id: str | None = None) -> Agent:
+    def create_agent(
+        self,
+        session: Session,
+        agent_id: str | None = None,
+        confirm_fn: Callable[[str, dict[str, Any]], Awaitable[bool]] | None = None,
+    ) -> Agent:
         aid = agent_id or self._channel_agents.get(session.channel, "default")
         config = self.get_config(aid)
         return Agent(
@@ -43,6 +49,7 @@ class AgentRegistry:
             db=self.db,
             llm=self.llm,
             config=config,
+            confirm_fn=confirm_fn,
         )
 
     def setup_defaults(self):

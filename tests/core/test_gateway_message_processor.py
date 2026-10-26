@@ -112,7 +112,8 @@ async def test_process_confirm_fn_without_channel(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(proc.registry, "create_agent", lambda s: _agent(_factory))
     await proc.process(_event(), "sid")
-    assert captured["allowed"] is True
+    # nobody was there to ask, so the tool is denied — an unanswered approval is not consent
+    assert captured["allowed"] is False
     assert send.await_args_list[-1].args[2] == "done"
 
 
