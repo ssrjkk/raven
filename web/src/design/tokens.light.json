@@ -28,7 +28,7 @@
     "text": {
       "primary": "#17171d",
       "secondary": "#52525c",
-      "tertiary": "#9c9ca8",
+      "tertiary": "#707080",
       "inverse": "#ffffff",
       "link": "#7c3aed",
       "link-hover": "#6d28d9"
@@ -40,14 +40,26 @@
       "muted": "#f0f1f6"
     },
     "status": {
-      "success": "#16a34a",
-      "warning": "#ca8a04",
+      "success": "#12833c",
+      "warning": "#996803",
       "error": "#dc2626",
       "info": "#2563eb",
-      "success-bg": "rgba(22, 163, 74, 0.08)",
-      "warning-bg": "rgba(202, 138, 4, 0.08)",
+      "success-bg": "rgba(18, 131, 60, 0.08)",
+      "warning-bg": "rgba(153, 104, 3, 0.08)",
       "error-bg": "rgba(220, 38, 38, 0.08)",
       "info-bg": "rgba(37, 99, 235, 0.08)"
+    },
+    "chart": {
+      "series-1": "#7c3aed",
+      "series-2": "#d946ef",
+      "series-3": "#059db6",
+      "series-4": "#1ca44e",
+      "series-5": "#b28806",
+      "series-6": "#e56a14",
+      "series-7": "#ef4444",
+      "series-8": "#11a090",
+      "series-9": "#669d11",
+      "series-10": "#3b82f6"
     }
   },
   "spacing": {

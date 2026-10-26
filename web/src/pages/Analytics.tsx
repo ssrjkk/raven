@@ -4,6 +4,7 @@ Bar, BarChart, CartesianGrid, Cell,
 Line,   LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, } from "recharts";
 
 import { api } from "../api/client";
+import { ChartCard } from "../components/ChartCard";
 import PageHeader from "../components/PageHeader";
 import { Skeleton } from "../components/Skeleton";
 import { useApiQuery } from "../hooks/useApiQuery";
@@ -74,7 +75,9 @@ interface ProjectMetrics {
   activity?: Record<string, number>;
 }
 
-const COLORS = ["#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#14b8a6", "#84cc16", "#f97316"];
+// Categorical series come from the theme's chart group, so a light-theme pie is not painted in
+// colours tuned for a dark one.
+const COLORS = Array.from({ length: 10 }, (_, i) => `var(--dt-colors-chart-series-${i + 1})`);
 
 export default function Analytics() {
   const [range, setRange] = useState<Range>("1h");
@@ -197,7 +200,7 @@ export default function Analytics() {
                     <Tooltip
                       contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
                     />
-                    <Bar dataKey="code" fill="#6366f1" radius={[4, 4, 0, 0]} name="Code Lines" />
+                    <Bar dataKey="code" fill="var(--dt-colors-chart-series-1)" radius={[4, 4, 0, 0]} name="Code Lines" />
                   </BarChart>
                 </ResponsiveContainer>
               </ChartCard>
@@ -217,7 +220,7 @@ export default function Analytics() {
                     <Tooltip
                       contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
                     />
-                    <Bar dataKey="count" fill="#22c55e" radius={[0, 4, 4, 0]} name="References" />
+                    <Bar dataKey="count" fill="var(--dt-colors-chart-series-4)" radius={[0, 4, 4, 0]} name="References" />
                   </BarChart>
                 </ResponsiveContainer>
               </ChartCard>
@@ -264,8 +267,8 @@ export default function Analytics() {
                   contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
                   labelFormatter={(v) => new Date(Number(v) * 1000).toLocaleString()}
                 />
-                <Line type="monotone" dataKey="avg" stroke="#6366f1" strokeWidth={2} dot={false} name="Avg" activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="max" stroke="#f59e0b" strokeWidth={1} dot={false} name="Max" strokeDasharray="4 2" />
+                <Line type="monotone" dataKey="avg" stroke="var(--dt-colors-chart-series-1)" strokeWidth={2} dot={false} name="Avg" activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="max" stroke="var(--dt-colors-chart-series-5)" strokeWidth={1} dot={false} name="Max" strokeDasharray="4 2" />
               </LineChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -283,8 +286,8 @@ export default function Analytics() {
                   contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
                   labelFormatter={(v) => new Date(Number(v) * 1000).toLocaleString()}
                 />
-                <Line type="monotone" dataKey="avg" stroke="#ef4444" strokeWidth={2} dot={false} name="Avg" activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="max" stroke="#f59e0b" strokeWidth={1} dot={false} name="Max" strokeDasharray="4 2" />
+                <Line type="monotone" dataKey="avg" stroke="var(--dt-colors-status-error)" strokeWidth={2} dot={false} name="Avg" activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="max" stroke="var(--dt-colors-chart-series-5)" strokeWidth={1} dot={false} name="Max" strokeDasharray="4 2" />
               </LineChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -306,8 +309,8 @@ export default function Analytics() {
                   contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
                   labelFormatter={(v) => new Date(Number(v) * 1000).toLocaleString()}
                 />
-                <Line type="monotone" dataKey="success" stroke="#22c55e" strokeWidth={2} dot={false} name="Success" />
-                <Line type="monotone" dataKey="error" stroke="#ef4444" strokeWidth={2} dot={false} name="Error" />
+                <Line type="monotone" dataKey="success" stroke="var(--dt-colors-status-success)" strokeWidth={2} dot={false} name="Success" />
+                <Line type="monotone" dataKey="error" stroke="var(--dt-colors-status-error)" strokeWidth={2} dot={false} name="Error" />
               </LineChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -359,7 +362,7 @@ export default function Analytics() {
                 <Tooltip
                   contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
                 />
-                <Bar dataKey="calls" fill="#6366f1" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="calls" fill="var(--dt-colors-chart-series-1)" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -385,7 +388,7 @@ export default function Analytics() {
                   contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
                   labelFormatter={(v, payload: readonly { payload?: { fullName?: string } }[]) => payload?.[0]?.payload?.fullName || v}
                 />
-                <Bar dataKey="value" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="value" fill="var(--dt-colors-chart-series-3)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -471,8 +474,7 @@ export default function Analytics() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {Object.entries(data.latency_series).slice(0, 4).map(([name, series]) =>
               series?.length > 0 ? (
-                <div key={name}>
-                  <div className="text-xs font-mono mb-1 text-secondary">{name}</div>
+                <ChartCard key={name} title={`Latency series ${name}`} className="">
                   <ResponsiveContainer width="100%" height={150}>
                     <LineChart data={series}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
@@ -481,11 +483,11 @@ export default function Analytics() {
                       <Tooltip
                         contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 11 }}
                       />
-                      <Line type="monotone" dataKey="avg" stroke="#8b5cf6" strokeWidth={1.5} dot={false} name="Avg" />
-                      <Line type="monotone" dataKey="max" stroke="#f97316" strokeWidth={1} dot={false} name="Max" strokeDasharray="3 1" />
+                      <Line type="monotone" dataKey="avg" stroke="var(--dt-colors-chart-series-2)" strokeWidth={1.5} dot={false} name="Avg" />
+                      <Line type="monotone" dataKey="max" stroke="var(--dt-colors-chart-series-6)" strokeWidth={1} dot={false} name="Max" strokeDasharray="3 1" />
                     </LineChart>
                   </ResponsiveContainer>
-                </div>
+                </ChartCard>
               ) : null
             )}
           </div>
@@ -509,11 +511,3 @@ function MetricCard({ label, value, danger }: { label: string; value: string; da
   );
 }
 
-function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="card">
-      <h2 className="text-sm font-semibold mb-3 text-secondary">{title}</h2>
-      {children}
-    </div>
-  );
-}

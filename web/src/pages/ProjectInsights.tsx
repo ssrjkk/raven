@@ -3,6 +3,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 
 import { api } from "../api/client";
 import type { ProjectInsightsData } from "../api/types";
+import { ChartCard } from "../components/ChartCard";
 import PageHeader from "../components/PageHeader";
 import { Skeleton } from "../components/Skeleton";
 import { useApiQuery } from "../hooks/useApiQuery";
@@ -92,8 +93,7 @@ export default function ProjectInsights() {
             <StatCard label="Активных дней" value={String(data.active_days)} />
           </div>
 
-          <div className="card">
-            <h3 className="text-sm font-semibold mb-3">Коммиты по дням</h3>
+          <ChartCard title="Коммиты по дням">
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data.trend} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
@@ -103,18 +103,18 @@ export default function ProjectInsights() {
                       <stop offset="100%" stopColor="var(--dt-colors-accent-default)" stopOpacity={0.05} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v: string) => v.slice(5)} minTickGap={24} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: "var(--dt-colors-bg-elevated)", borderColor: "var(--dt-colors-border)", color: "var(--dt-colors-text-primary)" }}
+                    contentStyle={{ backgroundColor: "var(--dt-colors-bg-tertiary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
                     labelFormatter={(v) => String(v)}
                   />
                   <Area type="monotone" dataKey="commits" stroke="var(--dt-colors-accent-default)" fill="url(#commitFill)" strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-          </div>
+          </ChartCard>
 
           <p className="text-xs text-tertiary">
             Метрики рассчитываются автоматически по активности в workspace: коммиты git, строки кода и частота откатов за выбранный период. Обновлено: {new Date(data.generated_at).toLocaleString()}

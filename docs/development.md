@@ -79,6 +79,32 @@ pytest tests/ --cov=raven --cov-report=term-missing
 pytest tests/core/test_sse.py -v
 ```
 
+### Design contracts
+
+`tests/test_design_contracts.py`, `tests/test_egress_map.py` and `web/src/design/accent.test.ts`
+fail the build on UI regressions, so a design change has to satisfy them rather than look fine on the
+author's monitor:
+
+- every `var(--dt-*)` a component asks for must be published by all three themes; the palettes must
+  declare the same token set
+- text pairs clear WCAG 2.1 AA (4.5:1 normal, 3:1 for large text and UI parts) in dark, light and
+  midnight, computed from the token hexes themselves
+- chart series come from `colors.chart.series-*` — no hard-coded hex inside recharts props — are at
+  least 3:1 against their own theme's background, and spread over the hue wheel; every
+  `<ResponsiveContainer>` sits inside `ChartCard`, which carries the `role="img"` + `aria-label` a
+  screen reader needs because recharts paints semantics-free SVG
+- any accent the user can pick (`ACCENT_PRESETS`, the accent picker) is clamped by
+  `generateAccentPalette` so white button labels stay AA in every state; the matrix is 16 presets ×
+  3 themes in vitest
+- shipped web surfaces — the SPA, the extension popup, the no-Node fallback page — reference no
+  off-origin `src`/`href`, self-host their fonts with a Cyrillic subset, keep a visible focus ring,
+  and stop animation under `prefers-reduced-motion`
+
+```bash
+pytest tests/test_design_contracts.py tests/test_egress_map.py -q --no-cov
+cd web && npx vitest run src/design
+```
+
 ## Code Style
 
 - Follow existing patterns in the codebase

@@ -14,7 +14,8 @@
         "accent": { "type": "object" },
         "text": { "type": "object" },
         "border": { "type": "object" },
-        "status": { "type": "object" }
+        "status": { "type": "object" },
+        "chart": { "type": "object" }
       }
     },
     "spacing": { "type": "object" },

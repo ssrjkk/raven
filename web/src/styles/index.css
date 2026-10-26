@@ -353,7 +353,9 @@ p code {
 .text-danger { color: var(--dt-colors-status-error); }
 .text-success { color: var(--dt-colors-status-success); }
 .text-warning { color: var(--dt-colors-status-warning); }
-.text-accent { color: var(--dt-colors-accent-default); }
+/* Violet as *text* has to clear 4.5:1 against the page, which accent.default does not: it is the
+   button surface, chosen to sit under white labels. text.link is the readable violet. */
+.text-accent { color: var(--dt-colors-text-link); }
 .text-white { color: #fff; }
 
 .bg-danger-muted { background-color: rgba(239, 68, 68, 0.1); }

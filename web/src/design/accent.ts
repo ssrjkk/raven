@@ -31,6 +31,22 @@ export function toRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+function channelLuminance(value: number): number {
+  const c = value / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+export function relativeLuminance(hex: string): number {
+  const [r, g, b] = hexToRgb(hex);
+  return 0.2126 * channelLuminance(r) + 0.7152 * channelLuminance(g) + 0.0722 * channelLuminance(b);
+}
+
+export function contrastRatio(a: string, b: string): number {
+  const first = relativeLuminance(a);
+  const second = relativeLuminance(b);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+
 export type AccentTheme = "dark" | "light" | "midnight";
 
 export interface AccentPalette {
@@ -45,18 +61,59 @@ export interface AccentPalette {
   glow: string;
 }
 
+/** WCAG 2.1 minima: 4.5:1 for normal text, 3:1 for a UI part such as a focus ring. */
+const NORMAL_TEXT = 4.5;
+const UI_PART = 3.0;
+const WHITE = "#ffffff";
+
+/** The page background of each theme: the accent is measured against a surface, not in the abstract.
+ * Single source for ThemeContext's meta theme-color as well, so the two cannot drift apart. */
+export const THEME_BACKGROUND: Record<AccentTheme, string> = {
+  dark: "#0f1117",
+  light: "#f6f7fb",
+  midnight: "#050507",
+};
+
+/**
+ * Keeps hue and chroma and moves lightness until white button labels clear `target`. Without this,
+ * picking a bright preset (Lime, Amber, Sky) made every button in the application unreadable, and
+ * the hover state lightened further still.
+ */
+function readableOnWhite(hex: string, target: number): string {
+  let current = hex;
+  for (let step = 0; step <= 100 && contrastRatio(WHITE, current) < target; step += 1) {
+    current = darken(hex, step / 100);
+  }
+  return current;
+}
+
+/** Moves the colour away from the surface it sits on, in the direction that surface needs. Exported
+ * because chart series need the same measurement against the panel they are drawn on. */
+export function readableAgainst(hex: string, background: string, target: number): string {
+  if (contrastRatio(hex, background) >= target) return hex;
+  const towardsWhite = relativeLuminance(background) < 0.5;
+  let current = hex;
+  for (let step = 1; step <= 100; step += 1) {
+    current = towardsWhite ? lighten(hex, step / 100) : darken(hex, step / 100);
+    if (contrastRatio(current, background) >= target) return current;
+  }
+  return current;
+}
+
 export function generateAccentPalette(hex: string, theme: AccentTheme = "dark"): AccentPalette {
-  const lightMode = theme === "light";
+  const background = THEME_BACKGROUND[theme];
+  const surface = readableOnWhite(hex, NORMAL_TEXT);
+  const link = readableAgainst(surface, background, NORMAL_TEXT);
   return {
-    default: hex,
-    hover: lightMode ? darken(hex, 0.08) : lighten(hex, 0.12),
-    active: lightMode ? darken(hex, 0.18) : darken(hex, 0.12),
-    muted: toRgba(hex, 0.15),
-    subtle: toRgba(hex, 0.08),
-    borderFocus: hex,
-    textLink: lightMode ? darken(hex, 0.08) : lighten(hex, 0.18),
-    textLinkHover: lightMode ? darken(hex, 0.18) : lighten(hex, 0.32),
-    glow: toRgba(hex, 0.4),
+    default: surface,
+    hover: darken(surface, 0.08),
+    active: darken(surface, 0.16),
+    muted: toRgba(surface, 0.15),
+    subtle: toRgba(surface, 0.08),
+    borderFocus: readableAgainst(surface, background, UI_PART),
+    textLink: link,
+    textLinkHover: readableAgainst(lighten(link, 0.1), background, NORMAL_TEXT),
+    glow: toRgba(surface, 0.4),
   };
 }
 

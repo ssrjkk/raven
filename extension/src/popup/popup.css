@@ -102,6 +102,10 @@ button:disabled { opacity: .5; cursor: default; }
 .typing span:nth-child(3) { animation-delay: .4s; }
 @keyframes blink { 0%, 80%, 100% { opacity: 0; } 40% { opacity: 1; } }
 
+@media (prefers-reduced-motion: reduce) {
+  .typing span { animation: none; opacity: 1; }
+}
+
 footer { padding: .75rem; border-top: 1px solid var(--line); }
 #composer { display: flex; gap: .5rem; }
 #draft {

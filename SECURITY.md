@@ -9,6 +9,18 @@ _by [@ssrjkk](https://github.com/ssrjkk)_
 | >= 0.4 | :white_check_mark: |
 | < 0.4  | :x:             |
 
+### Проверка загрузки
+
+Каждый тег публикует `Raven.exe` вместе с `Raven.exe.sha256` и attest-документом о сборке:
+
+```bash
+sha256sum --check Raven.exe.sha256     # Windows: certutil -hashfile Raven.exe SHA256
+gh attestation verify Raven.exe --repo ssrjkk/raven
+```
+
+Контрольная сумма отвечает на вопрос «целый ли файл», attest — «из этого репозитория, из этого
+коммита и этого запуска `Build EXE`». Ни то, ни другое не означает «безопасно запускать».
+
 ## Сообщить об уязвимости
 
 Мы серьёзно относимся к безопасности Raven AI. Если вы нашли уязвимость, сообщите нам как можно скорее.
@@ -45,10 +57,25 @@ _by [@ssrjkk](https://github.com/ssrjkk)_
 
 ### Безопасность выполнения инструментов
 
-- **exec_security**: `deny` (по умолчанию), `ask` или `full`
-- **workspace_only**: `true` (по умолчанию) — доступ к файлам только в workspace
+- **exec_security**: `deny` (по умолчанию), `ask` или `full` — относится к *exec-классу* инструментов:
+  `shell`, `python`, `process_*`, `browser_*`, `mcp_*`, `node_*`, `chaos_*`, `db_query`, `http_post`,
+  `email_send`, `git commit/push/pull/checkout`, `plugin_*`. При `deny` агент отказывает им всем —
+  этот режим действительно проверяется в `Agent._execute_tool()`, а не только задокументирован
+- **exec_ask_mode**: `off`, `on-miss` (по умолчанию — `always`). Подтверждение, которое некому
+  запросить, — это **отказ**, а не разрешение: без `confirm_fn` инструмент блокируется с указанием
+  причины. В CLI спрос идёт в терминал и отказывает, если терминала нет; из 15 адаптеров каналов
+  спросить умеют только Telegram и Discord, остальные (включая webchat) отказывают
+- **workspace_only**: `true` (по умолчанию) — ограничивает пути, но требует `WORKSPACE_PATH`; без
+  него ограничивать нечем, и `raven doctor` об этом сообщает
+- **роли инструментов**: `dangerous=True` и `allowed_roles` исполняет `ToolRegistry.call(role=…)`;
+  вызов без субъекта получает наименьшие привилегии, пустой список ролей закрывает инструмент.
+  Роль задачи указывает тот, кто её создал (веб-сессия, CLI = `admin`), а не планировщик
 - **sandbox_mode**: `non-main` (по умолчанию) — изолированное выполнение
 - **sandbox_backend**: `subprocess` (по умолчанию), `docker` или `none`
+- **изменения политик** (`POST /api/tools/policy`) — только роль `admin`
+
+Подробнее: [docs/security/overview.md](docs/security/overview.md), а все внешние адреса, куда
+процесс может отправить данные, перечислены в [docs/security/egress.md](docs/security/egress.md).
 
 ### Видимость контекста
 

@@ -190,7 +190,7 @@ export default function ComponentLibrary() {
               </div>
             ))}
           </div>
-        ), `<div className="flex items-center gap-2 p-3 rounded-lg text-sm"\n  style={{ backgroundColor: "rgba(var(--dt-colors-accent-rgb), 0.1)" }}>\n  <Info className="w-4 h-4" style={{ color: "var(--dt-colors-accent-default)" }} />\n  <span>Info message</span>\n</div>`)}
+        ), `<div className="flex items-center gap-2 p-3 rounded-lg text-sm"\n  style={{ backgroundColor: "color-mix(in srgb, var(--dt-colors-accent-default) 10%, transparent)" }}>\n  <Info className="w-4 h-4" style={{ color: "var(--dt-colors-accent-default)" }} />\n  <span>Info message</span>\n</div>`)}
 
         {/* Progress bars */}
         {section("Progress Bars", "Determinate and indeterminate bars", (

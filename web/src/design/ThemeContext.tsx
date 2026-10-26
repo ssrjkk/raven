@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 
-import { applyAccentPalette, generateAccentPalette } from "./accent";
+import { applyAccentPalette, generateAccentPalette, THEME_BACKGROUND } from "./accent";
 import darkTokens from "./tokens.json";
 import lightTokens from "./tokens.light.json";
 import midnightTokens from "./tokens.midnight.json";
@@ -19,12 +19,6 @@ type ThemeContextValue = {
 const DEFAULT_ACCENT = "#7c3aed";
 
 const THEME_ORDER: Theme[] = ["dark", "light", "midnight"];
-
-const THEME_META: Record<Theme, string> = {
-  dark: "#0f1117",
-  light: "#f6f7fb",
-  midnight: "#050507",
-};
 
 const ThemeContext = createContext<ThemeContextValue>({
   theme: "dark",
@@ -100,7 +94,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     applyTokens(theme);
     const meta = document.querySelector("meta[name=theme-color]");
     if (meta) {
-      meta.setAttribute("content", THEME_META[theme]);
+      meta.setAttribute("content", THEME_BACKGROUND[theme]);
     }
     if (firstRender.current) {
       firstRender.current = false;

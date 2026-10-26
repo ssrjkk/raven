@@ -10,10 +10,60 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from raven.core.config import settings
+from raven.core.config import Settings, settings
 from raven.core.config_store import config_store
 
 console = Console()
+
+_EXEC_MODES = ("deny", "ask", "full")
+
+
+def get_settings() -> Settings:
+    """One seam for the configuration the posture block reads."""
+    return settings
+
+
+def security_posture_checks() -> list[tuple[str, str]]:
+    """What the security settings on this install actually decide, not what they are called."""
+    from raven.core.config import data_path
+    from raven.core.features import FeatureFlags
+
+    rows: list[tuple[str, str]] = []
+    state = get_settings()
+
+    mode = state.exec_security
+    if mode == "deny":
+        rows.append(("Tool Exec Policy", "[OK] deny — shell, python, browser, mcp_, plugin_, git writes, db_query refused"))
+    elif mode == "ask":
+        if state.exec_ask_mode == "off":
+            rows.append(("Tool Exec Policy", "[!] ask with EXEC_ASK_MODE=off — exec runs without asking anyone"))
+        else:
+            rows.append(("Tool Exec Policy", f"[OK] ask ({state.exec_ask_mode}) — refused where nobody can be asked"))
+    elif mode == "full":
+        rows.append(("Tool Exec Policy", "[!] full — exec-class tools run with no confirmation"))
+    else:
+        rows.append(("Tool Exec Policy", f"[ERR] EXEC_SECURITY={mode!r} is not one of {list(_EXEC_MODES)}; every agent build raises"))
+
+    if not state.workspace_only:
+        rows.append(("Workspace Confinement", "[!] WORKSPACE_ONLY=false — path arguments are not confined"))
+    elif state.resolved_workspace is None:
+        rows.append(("Workspace Confinement", "[!] WORKSPACE_PATH is not set — workspace_only has no root to confine to"))
+    else:
+        rows.append(("Workspace Confinement", f"[OK] {state.resolved_workspace}"))
+
+    overrides = data_path("tool_policy.json")
+    rows.append(
+        (
+            "Tool Role Overrides",
+            f"[OK] {overrides} exists — restricted tools need the role it grants" if overrides.exists() else "none — defaults apply",
+        )
+    )
+
+    flags = FeatureFlags.get()
+    telemetry = "on — local analytics only" if flags.is_enabled("telemetry") else "off"
+    rows.append(("Features", f"{', '.join(flags.enabled_list()) or 'none'} (telemetry {telemetry})"))
+
+    return rows
 
 
 @click.command()
@@ -112,6 +162,8 @@ def doctor():
         except json.JSONDecodeError:
             sb_status = "[!] Invalid JSON"
         checks.append(("Channel Sandbox Policy", sb_status))
+
+    checks.extend(security_posture_checks())
 
     table = Table(show_header=False)
     table.add_column("Check", style="cyan")

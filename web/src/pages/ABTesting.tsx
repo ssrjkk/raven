@@ -258,7 +258,7 @@ export default function ABTesting() {
                   </div>
 
                   {(results.srm?.imbalanced || (results.warnings?.length ?? 0) > 0 || results.events_dropped > 0 || results.events_orphaned > 0) && (
-                    <div className="mt-3 p-3 rounded-lg text-xs space-y-1" style={{ background: "var(--dt-colors-warning-transparent)" }}>
+                    <div className="mt-3 p-3 rounded-lg text-xs space-y-1" style={{ background: "var(--dt-colors-status-warning-bg)" }}>
                       {results.srm?.imbalanced && (
                         <p className="text-danger">Sample ratio mismatch: the split itself is broken (χ² {results.srm.chi2.toFixed(2)}, p {results.srm.p_value.toExponential(2)}) — read no comparison from this experiment.</p>
                       )}
