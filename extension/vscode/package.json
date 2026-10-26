@@ -129,5 +129,8 @@
     "@types/node": "^26.6.5",
     "typescript": "^5.6.0",
     "@vscode/vsce": "^4.0.0"
+  },
+  "overrides": {
+    "@azure/msal-node": "^7.1.0"
   }
 }
