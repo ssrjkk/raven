@@ -352,6 +352,41 @@ def test_the_spa_has_a_focus_ring_and_never_removes_one_without_replacing_it() -
             assert "box-shadow" in body or "border-color" in body, f"{selector.strip()} removes the ring and draws nothing in its place"
 
 
+FIXED_WIDTH = re.compile(r"(?<!max-)(?<!min-)width:\s*(\d{3,})px")
+
+
+def _oversized_fixed_widths(name: str, css: str) -> list[str]:
+    """A rule that pins a width at or above a small phone's viewport needs a max-width to go with it,
+    or the page scrolls sideways wherever the surface is narrower than the author's window."""
+    offenders: list[str] = []
+    for rule in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
+        selector, body = rule.group(1).strip().replace("\n", " "), rule.group(2)
+        for match in FIXED_WIDTH.finditer(body):
+            if int(match.group(1)) >= 320 and "max-width" not in body:
+                offenders.append(f"{name}: {selector[:60]} sets width:{match.group(1)}px with no max-width")
+    return offenders
+
+
+def test_shipped_ui_does_not_pin_itself_wider_than_a_phone() -> None:
+    from raven.channels.webchat.channel import INDEX_HTML
+
+    style = re.search(r"<style>(.*?)</style>", INDEX_HTML, re.S)
+    assert style is not None, "the fallback page must carry its stylesheet inline"
+    sheets = {
+        "popup.css": (ROOT / "extension" / "src" / "popup" / "popup.css").read_text(encoding="utf-8"),
+        "webchat": style.group(1),
+        "spa index.css": (WEB / "src" / "styles" / "index.css").read_text(encoding="utf-8"),
+    }
+    offenders = [hit for name, css in sheets.items() for hit in _oversized_fixed_widths(name, css)]
+    assert not offenders, "\n".join(offenders)
+
+
+def test_the_fixed_width_detector_detects_the_pattern_it_forbids() -> None:
+    assert _oversized_fixed_widths("probe", "body { width: 380px; min-height: 500px; }")
+    assert not _oversized_fixed_widths("probe", "body { width: 380px; max-width: 100%; }")
+    assert not _oversized_fixed_widths("probe", ".chip { min-width: 640px; }")
+
+
 def test_landing_avoids_the_100vh_mobile_trap() -> None:
     css = _site_css()
     for rule in re.findall(r"[^{}]*\{[^}]*\}", css):

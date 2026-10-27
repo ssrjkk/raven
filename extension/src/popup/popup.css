@@ -17,7 +17,11 @@
 body {
   display: flex;
   flex-direction: column;
+  /* An action popup needs a width of its own; a docked side panel is whatever width the user dragged
+     it to, and a fixed 380px there pushed the composer off the edge (measured: scrollWidth 380 at an
+     innerWidth of 360). max-width keeps both honest. */
   width: 380px;
+  max-width: 100%;
   min-height: 500px;
   margin: 0;
   background: var(--bg);

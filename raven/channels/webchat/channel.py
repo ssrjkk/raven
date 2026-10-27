@@ -451,7 +451,7 @@ header span { color: var(--muted); font-size: .8rem; }
 #draft:focus { outline: none; border-color: var(--accent); }
 button { background: var(--accent); border: 0; border-radius: .7rem; color: #fff; font: inherit; padding: .6rem 1.1rem; cursor: pointer; }
 button:disabled { opacity: .5; cursor: default; }
-#key { display: flex; gap: .5rem; padding: .75rem 1rem; border-bottom: 1px solid var(--line); background: #241a33; }
+#key { display: flex; flex-wrap: wrap; gap: .5rem; padding: .75rem 1rem; border-bottom: 1px solid var(--line); background: #241a33; }
 #key input { flex: 1; background: #14141f; border: 1px solid var(--line); border-radius: .5rem; color: var(--text); padding: .45rem .6rem; font: inherit; }
 [hidden] { display: none !important; }
 </style>
