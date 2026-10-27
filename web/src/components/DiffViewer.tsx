@@ -73,8 +73,8 @@ function SinglePaneView({ lines }: { lines: DiffLine[] }) {
         {lines.map((line, i) => {
           let bg = "transparent";
           let prefix = " ";
-          if (line.type === "add") { bg = "rgba(34,197,94,0.08)"; prefix = "+"; }
-          else if (line.type === "del") { bg = "rgba(239,68,68,0.08)"; prefix = "-"; }
+          if (line.type === "add") { bg = "var(--dt-colors-status-success-bg)"; prefix = "+"; }
+          else if (line.type === "del") { bg = "var(--dt-colors-status-error-bg)"; prefix = "-"; }
           return (
             <tr key={i}>
               <td className="select-none text-right px-2 py-0 w-12 align-top" style={{ color: "var(--dt-colors-text-tertiary)", backgroundColor: "var(--dt-colors-bg-secondary)", borderRight: "1px solid var(--dt-colors-border-default)" }}>
@@ -84,7 +84,7 @@ function SinglePaneView({ lines }: { lines: DiffLine[] }) {
                 {line.type === "ctx" ? line.newLine : ""}
               </td>
               <td className="px-2 py-0 align-top whitespace-pre" style={{ backgroundColor: bg }}>
-                <span style={{ color: line.type === "add" ? "#22c55e" : line.type === "del" ? "#ef4444" : "var(--dt-colors-text-primary)" }}>
+                <span style={{ color: line.type === "add" ? "var(--dt-colors-status-success)" : line.type === "del" ? "var(--dt-colors-status-error)" : "var(--dt-colors-text-primary)" }}>
                   {prefix}{escapeHtml(line.content)}
                 </span>
               </td>
@@ -120,8 +120,8 @@ function SideBySideView({ lines }: { lines: DiffLine[] }) {
                 <td className="text-right px-2 py-0 align-top w-12 select-none" style={{ color: "var(--dt-colors-text-tertiary)", backgroundColor: "var(--dt-colors-bg-secondary)", borderRight: "1px solid var(--dt-colors-border-default)" }}>
                   {chunk.left.newLine || ""}
                 </td>
-                <td className="px-2 py-0 align-top whitespace-pre" style={{ backgroundColor: chunk.left.type === "add" ? "rgba(34,197,94,0.08)" : chunk.left.type === "del" ? "rgba(239,68,68,0.08)" : "transparent" }}>
-                  <span style={{ color: chunk.left.type === "add" ? "#22c55e" : chunk.left.type === "del" ? "#ef4444" : "var(--dt-colors-text-primary)" }}>
+                <td className="px-2 py-0 align-top whitespace-pre" style={{ backgroundColor: chunk.left.type === "add" ? "var(--dt-colors-status-success-bg)" : chunk.left.type === "del" ? "var(--dt-colors-status-error-bg)" : "transparent" }}>
+                  <span style={{ color: chunk.left.type === "add" ? "var(--dt-colors-status-success)" : chunk.left.type === "del" ? "var(--dt-colors-status-error)" : "var(--dt-colors-text-primary)" }}>
                     {chunk.left.type === "add" ? "+" : chunk.left.type === "del" ? "-" : " "}{escapeHtml(chunk.left.content)}
                   </span>
                 </td>
@@ -137,8 +137,8 @@ function SideBySideView({ lines }: { lines: DiffLine[] }) {
                 <td className="text-right px-2 py-0 align-top w-12 select-none" style={{ color: "var(--dt-colors-text-tertiary)", backgroundColor: "var(--dt-colors-bg-secondary)", borderRight: "1px solid var(--dt-colors-border-default)" }}>
                   {chunk.right.newLine || ""}
                 </td>
-                <td className="px-2 py-0 align-top whitespace-pre" style={{ backgroundColor: chunk.right.type === "add" ? "rgba(34,197,94,0.08)" : chunk.right.type === "del" ? "rgba(239,68,68,0.08)" : "transparent" }}>
-                  <span style={{ color: chunk.right.type === "add" ? "#22c55e" : chunk.right.type === "del" ? "#ef4444" : "var(--dt-colors-text-primary)" }}>
+                <td className="px-2 py-0 align-top whitespace-pre" style={{ backgroundColor: chunk.right.type === "add" ? "var(--dt-colors-status-success-bg)" : chunk.right.type === "del" ? "var(--dt-colors-status-error-bg)" : "transparent" }}>
+                  <span style={{ color: chunk.right.type === "add" ? "var(--dt-colors-status-success)" : chunk.right.type === "del" ? "var(--dt-colors-status-error)" : "var(--dt-colors-text-primary)" }}>
                     {chunk.right.type === "add" ? "+" : chunk.right.type === "del" ? "-" : " "}{escapeHtml(chunk.right.content)}
                   </span>
                 </td>

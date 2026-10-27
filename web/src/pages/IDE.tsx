@@ -624,8 +624,8 @@ export default function IDEPage() {
                         <div className="max-h-[200px] overflow-auto font-mono text-[11px] bg-primary rounded px-2 py-1">
                           {inlineEdit.diff.split("\n").map((line, i) => (
                             <div key={i} className={
-                              line.startsWith("+") ? "text-green-400" :
-                              line.startsWith("-") ? "text-red-400" :
+                              line.startsWith("+") ? "text-success" :
+                              line.startsWith("-") ? "text-danger" :
                               "text-tertiary"
                             }>{line}</div>
                           ))}
@@ -726,7 +726,7 @@ export default function IDEPage() {
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold">AI Agent</div>
                 <div className="flex items-center gap-1.5 text-[10px] text-tertiary">
-                  <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-green-400" : "bg-red-400"}`} />
+                  <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-success" : "bg-danger"}`} />
                   {connected ? (running ? "working" : "idle") : "offline"}
                 </div>
               </div>
@@ -735,7 +735,7 @@ export default function IDEPage() {
                   <button key={m.value} onClick={() => setAgentMode(m.value)} disabled={running}
                     className={`text-xs px-2.5 py-1 rounded border-none cursor-pointer transition ${
                       agentMode === m.value
-                        ? "bg-accent text-white font-semibold"
+                        ? "bg-accent on-accent font-semibold"
                         : "bg-tertiary text-secondary hover:bg-accent-muted"
                     } ${running ? "opacity-50" : ""}`}
                     title={m.desc}>
@@ -810,13 +810,13 @@ export default function IDEPage() {
                 {speech.supported && (
                   <button onClick={toggleMic} disabled={running}
                     title={speech.listening ? "Stop voice input" : "Dictate prompt"}
-                    className={`flex items-center justify-center rounded px-2.5 ${speech.listening ? "bg-accent text-white" : "bg-tertiary text-secondary hover:bg-accent-muted"} ${running ? "opacity-50" : ""}`}>
+                    className={`flex items-center justify-center rounded px-2.5 ${speech.listening ? "bg-accent on-accent" : "bg-tertiary text-secondary hover:bg-accent-muted"} ${running ? "opacity-50" : ""}`}>
                     {speech.listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                   </button>
                 )}
                 {running ? (
                   <button onClick={cancel}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded border-none cursor-pointer text-xs font-semibold bg-red-600 hover:bg-red-700 text-white transition">
+                    className="flex items-center gap-1 px-3 py-1.5 rounded border-none cursor-pointer text-xs font-semibold bg-[var(--dt-colors-status-error)] hover:brightness-110 on-status-error transition">
                     <Square className="w-3 h-3" /> Stop
                   </button>
                 ) : (
@@ -827,7 +827,7 @@ export default function IDEPage() {
                 )}
               </div>
               {speech.error && (
-                <div className="text-[10px] text-amber-400">Voice input error: {speech.error}</div>
+                <div className="text-[10px] text-warning">Voice input error: {speech.error}</div>
               )}
               <div className="flex gap-1">
                 <button onClick={indexCodebase}
@@ -878,7 +878,7 @@ export default function IDEPage() {
           <div className="absolute inset-0 z-20 bg-black/50 flex items-center justify-center p-4">
             <div className="card p-4 w-full max-w-lg bg-tertiary max-h-[80vh] flex flex-col">
               <div className="flex items-center gap-2 text-sm font-semibold text-primary mb-2">
-                <ShieldAlert className="h-4 w-4 text-amber-400" />
+                <ShieldAlert className="h-4 w-4 text-warning" />
                 {pendingConfirm.diff ? "Review changes" : "Allow tool?"}
               </div>
               <div className="text-xs text-secondary mb-1">
@@ -891,9 +891,9 @@ export default function IDEPage() {
               {pendingConfirm.diff ? (
                 <div className="font-mono text-[11px] bg-primary rounded px-2 py-1.5 overflow-auto flex-1 min-h-0 mb-4 border border-default">
                   {pendingConfirm.diff.split("\n").map((line, i) => {
-                    if (line.startsWith("+") && !line.startsWith("+++")) return <div key={i} className="bg-green-900/30 text-green-300">{line}</div>
-                    if (line.startsWith("-") && !line.startsWith("---")) return <div key={i} className="bg-red-900/30 text-red-300">{line}</div>
-                    if (line.startsWith("@@")) return <div key={i} className="text-blue-400">{line}</div>
+                    if (line.startsWith("+") && !line.startsWith("+++")) return <div key={i} className="bg-success-muted text-success">{line}</div>
+                    if (line.startsWith("-") && !line.startsWith("---")) return <div key={i} className="bg-danger-muted text-danger">{line}</div>
+                    if (line.startsWith("@@")) return <div key={i} className="text-info">{line}</div>
                     return <div key={i} className="text-tertiary">{line}</div>
                   })}
                 </div>

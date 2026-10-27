@@ -32,7 +32,7 @@ export class ErrorBoundary extends Component<Props, State> {
         </pre>
         <button
           onClick={() => this.setState({ error: null })}
-          className="px-4 py-2 rounded-lg text-sm font-medium transition bg-accent text-white"
+          className="px-4 py-2 rounded-lg text-sm font-medium transition bg-accent on-accent"
         >
           Try again
         </button>

@@ -61,13 +61,13 @@ const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProp
       {!isUser && <Avatar role="assistant" />}
       <div
         className={`group relative max-w-[78%] rounded-2xl px-4 py-2.5 ${
-          isUser ? "text-white rounded-br-sm" : "rounded-bl-sm"
+          isUser ? "on-accent rounded-br-sm" : "rounded-bl-sm"
         }`}
         style={
           isUser
             ? {
-                backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-accent-hover, #6d28d9))",
-                boxShadow: "0 4px 16px var(--dt-colors-accent-muted, rgba(124, 58, 237, 0.3))",
+                backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-accent-hover))",
+                boxShadow: "0 4px 16px var(--dt-colors-accent-muted)",
               }
             : {
                 backgroundColor: "var(--dt-colors-bg-tertiary)",
@@ -107,12 +107,12 @@ export default MessageBubble;
 function Avatar({ role }: { role: "user" | "assistant" }) {
   return (
     <div
-      className="w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-white shadow-md"
+      className="w-7 h-7 shrink-0 rounded-full flex items-center justify-center on-accent shadow-md"
       style={
         role === "user"
           ? {
-              backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), #d946ef)",
-              boxShadow: "0 2px 10px var(--dt-colors-accent-muted, rgba(124, 58, 237, 0.35))",
+              backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-brand-secondary))",
+              boxShadow: "0 2px 10px var(--dt-colors-accent-muted)",
             }
           : {
               backgroundColor: "var(--dt-colors-bg-tertiary)",
@@ -121,7 +121,7 @@ function Avatar({ role }: { role: "user" | "assistant" }) {
       }
     >
       {role === "user" ? (
-        <User size={14} className="text-white" />
+        <User size={14} className="on-accent" />
       ) : (
         <Bot size={14} style={{ color: "var(--dt-colors-accent-default)" }} />
       )}

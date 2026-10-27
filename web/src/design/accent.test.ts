@@ -1,14 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { ACCENT_PRESETS, type AccentTheme,contrastRatio, generateAccentPalette, relativeLuminance } from "./accent";
+import {
+  ACCENT_PRESETS,
+  type AccentTheme,
+  contrastRatio,
+  generateAccentPalette,
+  relativeLuminance,
+  THEME_BACKGROUND,
+  THEME_CARD,
+} from "./accent";
 
 const WHITE = "#ffffff";
 const THEMES: AccentTheme[] = ["dark", "light", "midnight"];
-const BACKGROUNDS: Record<AccentTheme, string> = {
-  dark: "#0f1117",
-  light: "#f6f7fb",
-  midnight: "#050507",
-};
+// Measured against the values the themes publish, never a copy of them: a literal here is a second
+// source of truth that goes stale the moment tokens.json moves.
+const BACKGROUNDS = THEME_BACKGROUND;
+const CARDS = THEME_CARD;
 
 /** The surfaces a button label can sit on, in every state the picker can produce. */
 const LABEL_SURFACES = ["default", "hover", "active"] as const;
@@ -50,8 +57,13 @@ describe("accent palette generation", () => {
       expect(contrastRatio(palette.textLinkHover, background), `link hover ${preset.name}/${theme}`).toBeGreaterThanOrEqual(
         4.5
       );
-      // a focus ring is a UI part, so 3:1 is the published minimum
+      // a focus ring is a UI part, so 3:1 is the published minimum — against the page it sits on, and
+      // against the card every interactive control is actually drawn on
       expect(contrastRatio(palette.borderFocus, background), `focus ${preset.name}/${theme}`).toBeGreaterThanOrEqual(3);
+      expect(
+        contrastRatio(palette.borderFocus, CARDS[theme]),
+        `focus on card ${preset.name}/${theme}`
+      ).toBeGreaterThanOrEqual(3);
     }
   );
 

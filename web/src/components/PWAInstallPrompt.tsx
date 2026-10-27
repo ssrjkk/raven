@@ -61,7 +61,7 @@ export default function PWAInstallPrompt() {
         </button>
         <button
           onClick={handleInstall}
-          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-accent text-white"
+          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-accent on-accent"
         >
           Install
         </button>

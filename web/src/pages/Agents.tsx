@@ -187,7 +187,7 @@ export default function Agents() {
                   <Pencil size={13} className="mr-1" /> Edit
                 </button>
                 <button className="btn-soft px-2.5 py-1 text-xs text-danger"
-                  style={{ backgroundColor: "rgba(239, 68, 68, 0.12)" }}
+                  style={{ backgroundColor: "var(--dt-colors-status-error-bg)" }}
                   onClick={() => { if (window.confirm(`Delete agent ${a.name}?`)) del.mutate(a.id); }}>
                   <Trash2 size={13} className="mr-1" /> Delete
                 </button>

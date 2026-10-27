@@ -2,7 +2,7 @@ import { memo } from "react";
 
 const SHIMMER = "shimmer";
 const BG = "var(--dt-colors-bg-tertiary)";
-const HIGHLIGHT = "rgba(255, 255, 255, 0.06)";
+const HIGHLIGHT = "var(--dt-colors-skeleton-highlight)";
 
 function shimmerStyle() {
   return {
@@ -63,7 +63,7 @@ export const SkeletonCard = memo(function SkeletonCard({ height = 96 }: { height
       className="rounded-xl p-4"
       style={{
         height,
-        backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))",
+        backgroundColor: "var(--dt-colors-surface-card)",
         border: "1px solid var(--dt-colors-border-default)",
       }}
     >

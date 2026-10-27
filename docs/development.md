@@ -86,9 +86,23 @@ fail the build on UI regressions, so a design change has to satisfy them rather 
 author's monitor:
 
 - every `var(--dt-*)` a component asks for must be published by all three themes; the palettes must
-  declare the same token set
+  declare the same token set, and each token file must validate against `tokens.schema.json`
+- `web/src/styles/themes.css` is generated from the token files (`python scripts/gen_theme_css.py`)
+  and declares every theme before React mounts; the gate regenerates it and fails on any drift, so a
+  component never needs a literal fallback — and no component may carry one
+- no colour literal outside `web/src/design`: a hex or `rgba()` in a component is a value no theme
+  owns, invisible to every contrast rule below. Tailwind palette classes (`text-red-400`,
+  `bg-green-900/30`) are forbidden for the same reason — they survive neither a theme switch nor the
+  accent picker
+- a hover border or focus ring has to be seen to be believed: every `:hover`/`:focus*` rule that sets
+  `border-color` or a `0 0 0 Npx` ring is measured at 3:1 against each theme's `surface.card`. That is
+  what moved the card hover states off `accent-muted` (a 0.15-alpha wash: 1.13:1, the state changed and
+  nobody could see it) and re-clamped dark's `border.focus` to `#8446ee`
 - text pairs clear WCAG 2.1 AA (4.5:1 normal, 3:1 for large text and UI parts) in dark, light and
-  midnight, computed from the token hexes themselves
+  midnight, computed from the token hexes themselves. That includes `text.on-*` against the fill it
+  labels, the 15 `colors.category.*` entity fills against the panel the knowledge graph draws them on
+  (the same token is a node fill and a badge label), and canvas text, whose colours `paint.ts` reads
+  from the theme once a frame because a canvas cannot resolve `var()`
 - chart series come from `colors.chart.series-*` — no hard-coded hex inside recharts props — are at
   least 3:1 against their own theme's background, and spread over the hue wheel; every
   `<ResponsiveContainer>` sits inside `ChartCard`, which carries the `role="img"` + `aria-label` a
@@ -99,11 +113,17 @@ author's monitor:
 - shipped web surfaces — the SPA, the extension popup, the no-Node fallback page — reference no
   off-origin `src`/`href`, self-host their fonts with a Cyrillic subset, keep a visible focus ring,
   and stop animation under `prefers-reduced-motion`
+- no shipped stylesheet pins itself wider than a phone, and every `<iframe>` is sandboxed without the
+  `allow-scripts` + `allow-same-origin` pair that hands the embedder its own origin back
 
 ```bash
 pytest tests/test_design_contracts.py tests/test_egress_map.py -q --no-cov
 cd web && npx vitest run src/design
 ```
+
+Measured in real Chrome rather than asserted (harness outside the repo): the built stylesheet alone,
+with no scripts, paints every theme's page, card and accent values; the inline injection
+`ThemeContext` writes afterwards still wins, so a stored accent is not frozen by the static sheet.
 
 ## Code Style
 

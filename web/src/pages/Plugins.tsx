@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
+import { labelOn, readToken } from "../design/paint";
 
 interface PluginManifest {
   id?: string;
@@ -90,11 +91,20 @@ export default function Plugins() {
   }
 
   const categoryColor = (cat: string) => {
-    const colors: Record<string, string> = {
-      coding: "#3b82f6", automation: "#10b981", unique: "#f59e0b",
-      voice: "#8b5cf6", channel: "#ec4899",
+    const series: Record<string, string> = {
+      coding: "var(--dt-colors-chart-series-4)",
+      automation: "var(--dt-colors-chart-series-5)",
+      unique: "var(--dt-colors-chart-series-3)",
+      voice: "var(--dt-colors-chart-series-1)",
+      channel: "var(--dt-colors-chart-series-2)",
     };
-    return colors[cat] || "var(--dt-colors-text-tertiary)";
+    return series[cat] ?? "var(--dt-colors-chart-series-6)";
+  };
+
+  /** A tag is a solid categorical fill, so its label has to be measured against that fill, per theme. */
+  const categoryBadge = (cat: string) => {
+    const fill = readToken(categoryColor(cat).slice(4, -1));
+    return { backgroundColor: categoryColor(cat), color: labelOn(fill) };
   };
 
   return (
@@ -128,7 +138,7 @@ export default function Plugins() {
                   <div>
                     <span className="font-semibold">{p.name}</span>
                     <span className="ml-2 text-xs text-tertiary">v{p.version}</span>
-                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: categoryColor(p.category ?? ""), color: "#fff" }}>{p.category}</span>
+                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={categoryBadge(p.category ?? "")}>{p.category}</span>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => handleUpdate(p.name)}
@@ -136,7 +146,7 @@ export default function Plugins() {
                       Update
                     </button>
                     <button onClick={() => handleUninstall(p.name)}
-                      className="btn-soft px-2.5 py-1 text-xs text-danger" style={{ backgroundColor: "rgba(239, 68, 68, 0.12)" }}>
+                      className="btn-soft px-2.5 py-1 text-xs text-danger" style={{ backgroundColor: "var(--dt-colors-status-error-bg)" }}>
                       Uninstall
                     </button>
                   </div>
@@ -164,8 +174,8 @@ export default function Plugins() {
                     <div className="font-semibold">{p.name}</div>
                     <div className="text-xs text-tertiary">{(p.description ?? "").slice(0, 100)}</div>
                     <div className="mt-1 flex items-center gap-2 text-xs text-tertiary">
-                      <span style={{ color: "#f59e0b" }}>★ {(p.rating ?? 0).toFixed(1)}</span>
-                      <span className="px-1 py-0.5 rounded text-[10px]" style={{ backgroundColor: categoryColor(p.category ?? ""), color: "#fff" }}>{p.category}</span>
+                      <span className="text-warning">★ {(p.rating ?? 0).toFixed(1)}</span>
+                      <span className="px-1 py-0.5 rounded text-[10px]" style={categoryBadge(p.category ?? "")}>{p.category}</span>
                     </div>
                   </div>
                 ))}
@@ -184,7 +194,7 @@ export default function Plugins() {
                     <div>
                       <span className="font-semibold">{p.name}</span>
                       <span className="ml-2 text-xs text-tertiary">v{p.version}</span>
-                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: categoryColor(p.category ?? ""), color: "#fff" }}>{p.category}</span>
+                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={categoryBadge(p.category ?? "")}>{p.category}</span>
                     </div>
                     <button onClick={() => { setInstallUrl(p.id ?? ""); setTab("install"); }}
                       className="btn-soft px-3 py-1 text-xs">

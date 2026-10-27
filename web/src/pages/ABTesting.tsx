@@ -167,17 +167,17 @@ export default function ABTesting() {
                 </div>
                 <div className="flex gap-2 mb-3">
                   {selected.status === "draft" && (
-                    <button onClick={() => changeStatus.mutate({ id: selected.id, action: "running" })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: "var(--dt-colors-success-default)", color: "#fff" }}>
+                    <button onClick={() => changeStatus.mutate({ id: selected.id, action: "running" })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: "var(--dt-colors-success-default)", color: "var(--dt-colors-text-on-accent)" }}>
                       Start
                     </button>
                   )}
                   {selected.status === "running" && (
-                    <button onClick={() => changeStatus.mutate({ id: selected.id, action: "paused" })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: "var(--dt-colors-warning-default)", color: "#fff" }}>
+                    <button onClick={() => changeStatus.mutate({ id: selected.id, action: "paused" })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: "var(--dt-colors-warning-default)", color: "var(--dt-colors-text-on-accent)" }}>
                       Pause
                     </button>
                   )}
                   {(selected.status === "running" || selected.status === "paused") && (
-                    <button onClick={() => changeStatus.mutate({ id: selected.id, action: "completed" })} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-white">
+                    <button onClick={() => changeStatus.mutate({ id: selected.id, action: "completed" })} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-accent on-accent">
                       Complete
                     </button>
                   )}

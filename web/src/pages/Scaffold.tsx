@@ -135,7 +135,7 @@ export default function Scaffold() {
                         className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
                         style={{
                           backgroundColor: answers[q.key] === v ? "var(--dt-colors-accent-default)" : "var(--dt-colors-bg-tertiary)",
-                          color: answers[q.key] === v ? "#fff" : "var(--dt-colors-text-secondary)",
+                          color: answers[q.key] === v ? "var(--dt-colors-text-on-accent)" : "var(--dt-colors-text-secondary)",
                         }}>
                         {v ? "Yes" : "No"}
                       </button>
@@ -149,7 +149,7 @@ export default function Scaffold() {
                         className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all capitalize"
                         style={{
                           backgroundColor: answers[q.key] === o ? "var(--dt-colors-accent-default)" : "var(--dt-colors-bg-tertiary)",
-                          color: answers[q.key] === o ? "#fff" : "var(--dt-colors-text-secondary)",
+                          color: answers[q.key] === o ? "var(--dt-colors-text-on-accent)" : "var(--dt-colors-text-secondary)",
                         }}>
                         {o}
                       </button>

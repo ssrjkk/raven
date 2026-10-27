@@ -42,8 +42,8 @@ function traceTitle(kind: string): string {
 }
 
 function TraceIcon({ kind }: { kind: string }) {
-  if (kind === "error") return <XCircle className="h-4 w-4 text-red-400" />;
-  if (kind === "done") return <CheckCircle2 className="h-4 w-4 text-green-400" />;
+  if (kind === "error") return <XCircle className="h-4 w-4 text-danger" />;
+  if (kind === "done") return <CheckCircle2 className="h-4 w-4 text-success" />;
   if (kind === "tool_call" || kind === "tool_result") return <Terminal className="h-4 w-4 text-accent" />;
   return <Bot className="h-4 w-4 text-secondary" />;
 }
@@ -131,7 +131,7 @@ export default function AgentConsole() {
         actions={
           <div className="flex items-center gap-2">
             <span className="badge badge-info flex items-center gap-1.5">
-              <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-green-400" : "bg-red-400"}`} />
+              <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-success" : "bg-danger"}`} />
               {status}
             </span>
             <button type="button" className="btn-secondary" onClick={clear}>

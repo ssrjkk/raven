@@ -74,6 +74,15 @@ export const THEME_BACKGROUND: Record<AccentTheme, string> = {
   midnight: "#050507",
 };
 
+/** The panel a card or input border is drawn on. Focus and hover borders are measured against this
+ * rather than the page: every interactive surface in the app sits on a card, and the card is the
+ * lighter of the two in dark, so it is the stricter of the two requirements. */
+export const THEME_CARD: Record<AccentTheme, string> = {
+  dark: "#1e2140",
+  light: "#ffffff",
+  midnight: "#0e0e14",
+};
+
 /**
  * Keeps hue and chroma and moves lightness until white button labels clear `target`. Without this,
  * picking a bright preset (Lime, Amber, Sky) made every button in the application unreadable, and
@@ -110,7 +119,7 @@ export function generateAccentPalette(hex: string, theme: AccentTheme = "dark"):
     active: darken(surface, 0.16),
     muted: toRgba(surface, 0.15),
     subtle: toRgba(surface, 0.08),
-    borderFocus: readableAgainst(surface, background, UI_PART),
+    borderFocus: readableAgainst(surface, THEME_CARD[theme], UI_PART),
     textLink: link,
     textLinkHover: readableAgainst(lighten(link, 0.1), background, NORMAL_TEXT),
     glow: toRgba(surface, 0.4),

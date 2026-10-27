@@ -7,13 +7,25 @@ import { useApiQuery } from "../hooks/useApiQuery";
 
 type Tab = "graph" | "extract" | "search" | "stats";
 
-const COLORS: Record<string, string> = {
-  PERSON: "#3b82f6", ORG: "#10b981", GPE: "#f59e0b",
-  TECHNOLOGY: "#8b5cf6", EMAIL: "#ec4899", URL: "#06b6d4",
-  VERSION: "#f97316", FILE_PATH: "#14b8a6", DATE: "#eab308",
-  PRODUCT: "#a855f7", module: "#6366f1", class: "#ef4444",
-  function: "#22c55e", concept: "#6b7280",
+const ENTITY_CATEGORY: Record<string, string> = {
+  PERSON: "person", ORG: "org", GPE: "gpe", TECHNOLOGY: "technology", EMAIL: "email",
+  URL: "url", VERSION: "version", FILE_PATH: "file-path", DATE: "date", PRODUCT: "product",
+  module: "module", class: "class", function: "function", concept: "concept",
 };
+
+/** A canvas takes colours, not var() references, so the palette is read from the theme once a frame. */
+function readGraphPalette() {
+  const style = getComputedStyle(document.documentElement);
+  const token = (name: string) => style.getPropertyValue(`--dt-colors-${name}`).trim();
+  return {
+    node: (type: string) => token(`category-${ENTITY_CATEGORY[type] ?? "unknown"}`),
+    edge: token("text-tertiary"),
+    ring: token("border-default"),
+    label: token("text-secondary"),
+  };
+}
+
+type GraphPalette = ReturnType<typeof readGraphPalette>;
 
 function simulateForce(nodes: GraphNode[], links: GraphLink[], W: number, H: number) {
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
@@ -39,7 +51,7 @@ function simulateForce(nodes: GraphNode[], links: GraphLink[], W: number, H: num
   }
 }
 
-function renderGraph(ctx: CanvasRenderingContext2D, nodes: GraphNode[], links: GraphLink[], W: number, H: number) {
+function renderGraph(ctx: CanvasRenderingContext2D, nodes: GraphNode[], links: GraphLink[], W: number, H: number, palette: GraphPalette) {
   ctx.clearRect(0, 0, W, H);
   for (const link of links) {
     const s = typeof link.source === "string" ? nodes.find((n) => n.id === link.source) : link.source;
@@ -48,19 +60,19 @@ function renderGraph(ctx: CanvasRenderingContext2D, nodes: GraphNode[], links: G
     ctx.beginPath();
     ctx.moveTo(s.x, s.y);
     ctx.lineTo(t.x, t.y);
-    ctx.strokeStyle = "rgba(255,255,255,0.2)";
+    ctx.strokeStyle = palette.edge;
     ctx.lineWidth = 1;
     ctx.stroke();
   }
   for (const n of nodes) {
     ctx.beginPath();
     ctx.arc(n.x, n.y, 6, 0, Math.PI * 2);
-    ctx.fillStyle = COLORS[n.type] || "#6b7280";
+    ctx.fillStyle = palette.node(n.type);
     ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.3)";
+    ctx.strokeStyle = palette.ring;
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    ctx.fillStyle = "#9ca3af";
+    ctx.fillStyle = palette.label;
     ctx.font = "10px sans-serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
@@ -110,7 +122,7 @@ export default function Knowledge() {
       if (frameCount.current < 200) {
         simulateForce(nodesRef.current, links, W, H);
       }
-      renderGraph(ctx!, nodesRef.current, links, W, H);
+      renderGraph(ctx!, nodesRef.current, links, W, H, readGraphPalette());
       animRef.current = requestAnimationFrame(tick);
     }
     animRef.current = requestAnimationFrame(tick);
@@ -201,7 +213,7 @@ export default function Knowledge() {
               ) : (
                 searchResults.map((r) => (
                   <div key={r.id} className="card-bordered text-sm p-3">
-                    <span className="font-semibold" style={{ color: COLORS[r.type] || "var(--dt-colors-text-tertiary)" }}>[{r.type}]</span>
+                    <span className="font-semibold text-tertiary">[{r.type}]</span>
                     {" "}{r.name}
                     {r.neighbors && r.neighbors.length > 0 && (
                       <div className="mt-1 text-xs text-tertiary">

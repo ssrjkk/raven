@@ -147,7 +147,7 @@ export default function DebugPanel() {
               onKeyDown={e => e.key === "Enter" && startSession()}
             />
             <button onClick={startSession}
-              className="flex items-center gap-1 text-white bg-[var(--dt-colors-status-success)] hover:brightness-110 border-none rounded px-2 py-1 cursor-pointer text-xs transition">
+              className="flex items-center gap-1 on-status-success bg-[var(--dt-colors-status-success)] hover:brightness-110 border-none rounded px-2 py-1 cursor-pointer text-xs transition">
               <Play className="w-3 h-3" /> Start
             </button>
           </div>
@@ -166,7 +166,7 @@ export default function DebugPanel() {
               <CornerDownRight className="w-3 h-3" /> Into
             </button>
             <button onClick={stopSession}
-              className="flex items-center gap-1 text-white bg-[var(--dt-colors-status-error)] hover:brightness-110 border-none rounded px-2 py-1 cursor-pointer text-xs transition ml-auto">
+              className="flex items-center gap-1 on-status-error bg-[var(--dt-colors-status-error)] hover:brightness-110 border-none rounded px-2 py-1 cursor-pointer text-xs transition ml-auto">
               <Square className="w-3 h-3" /> Stop
             </button>
           </>

@@ -232,10 +232,10 @@ export default function Chat() {
       {showWelcome && (
         <div className="flex-1 flex flex-col items-center justify-center text-center px-4 msg-enter">
           <div
-            className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-black mb-5"
+            className="w-16 h-16 rounded-2xl flex items-center justify-center on-accent text-2xl font-black mb-5"
             style={{
-              backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), #d946ef)",
-              boxShadow: "0 10px 32px var(--dt-colors-accent-muted, rgba(124, 58, 237, 0.45))",
+              backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-brand-secondary))",
+              boxShadow: "0 10px 32px var(--dt-colors-accent-muted)",
             }}
           >
             R

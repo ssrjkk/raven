@@ -205,7 +205,7 @@ export default function Layout() {
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-10 md:hidden"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)", backdropFilter: "blur(2px)" }}
+          style={{ backgroundColor: "var(--dt-colors-overlay-scrim)", backdropFilter: "blur(2px)" }}
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -222,10 +222,10 @@ export default function Layout() {
         {/* Brand */}
         <div className="flex items-center gap-2.5 px-4 py-4 border-b border-default">
           <div
-            className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-white font-black text-lg shadow-lg"
+            className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center on-accent font-black text-lg shadow-lg"
             style={{
-              backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default, #7c3aed), #d946ef)",
-              boxShadow: "0 4px 14px var(--dt-colors-accent-muted, rgba(124, 58, 237, 0.35))",
+              backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-brand-secondary))",
+              boxShadow: "0 4px 14px var(--dt-colors-accent-muted)",
             }}
           >
             R
@@ -303,7 +303,7 @@ export default function Layout() {
           <button
             onClick={handleRevokeAll}
             disabled={revoking}
-            className="w-full text-center text-[10px] transition text-tertiary hover:text-red-400"
+            className="w-full text-center text-[10px] transition text-tertiary hover:text-danger"
             title="Revoke all sessions on all devices"
           >
             {revoking ? "Revoking…" : "Logout everywhere"}

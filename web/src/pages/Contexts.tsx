@@ -188,7 +188,7 @@ export default function Contexts() {
                 <Pencil size={13} className="mr-1" /> Edit
               </button>
               <button className="btn-soft px-2.5 py-1 text-xs text-danger"
-                style={{ backgroundColor: "rgba(239, 68, 68, 0.12)" }}
+                style={{ backgroundColor: "var(--dt-colors-status-error-bg)" }}
                 onClick={() => { if (window.confirm(`Delete context ${c.name}?`)) del.mutate(c.id); }}>
                 <Trash2 size={13} className="mr-1" /> Delete
               </button>

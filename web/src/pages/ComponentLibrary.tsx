@@ -71,16 +71,16 @@ export default function ComponentLibrary() {
         {/* Buttons */}
         {section("Buttons", "Primary, secondary, ghost, and danger variants", (
           <div className="flex flex-wrap gap-3 items-center">
-            <button className="px-4 py-2 rounded-lg text-sm font-medium bg-accent text-white">Primary</button>
+            <button className="px-4 py-2 rounded-lg text-sm font-medium bg-accent on-accent">Primary</button>
             <button className="px-4 py-2 rounded-lg text-sm font-medium bg-tertiary text-primary border-default">Secondary</button>
             <button className="px-4 py-2 rounded-lg text-sm font-medium text-secondary">Ghost</button>
             <button className="px-4 py-2 rounded-lg text-sm font-medium bg-danger-subtle text-danger">Danger</button>
-            <button disabled className="px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 bg-accent text-white">Disabled</button>
-            <button className="px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 bg-accent text-white">
+            <button disabled className="px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 bg-accent on-accent">Disabled</button>
+            <button className="px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 bg-accent on-accent">
               <Plus className="w-4 h-4" /> With Icon
             </button>
           </div>
-        ), `<button className="bg-accent text-white">Primary</button>\n<button className="bg-tertiary">Secondary</button>\n<button className="text-secondary">Ghost</button>`)}
+        ), `<button className="bg-accent on-accent">Primary</button>\n<button className="bg-tertiary">Secondary</button>\n<button className="text-secondary">Ghost</button>`)}
 
         {/* Inputs */}
         {section("Inputs & Forms", "Text inputs, selects, and textareas with theme-aware styling", (
@@ -98,13 +98,13 @@ export default function ComponentLibrary() {
         {/* Badges */}
         {section("Badges & Tags", "Inline status and label indicators", (
           <div className="flex flex-wrap gap-2 items-center">
-            <span className="text-[11px] px-1.5 py-0.5 rounded bg-accent text-white">Primary</span>
+            <span className="text-[11px] px-1.5 py-0.5 rounded bg-accent on-accent">Primary</span>
             <span className="text-[11px] px-1.5 py-0.5 rounded btn-secondary-text">Default</span>
-            <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "var(--dt-colors-success-default)" }}>Success</span>
-            <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "rgba(234,179,8,0.15)", color: "var(--dt-colors-warning-default)" }}>Warning</span>
+            <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "color-mix(in srgb, var(--dt-colors-status-success) 15%, transparent)", color: "var(--dt-colors-success-default)" }}>Success</span>
+            <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "color-mix(in srgb, var(--dt-colors-status-warning) 15%, transparent)", color: "var(--dt-colors-warning-default)" }}>Warning</span>
             <span className="text-[11px] px-1.5 py-0.5 rounded bg-danger-subtle text-danger">Danger</span>
           </div>
-        ), `<span className="text-[11px] px-1.5 py-0.5 rounded bg-accent text-white">Label</span>\n<span className="badge badge-success">Success</span>\n<span className="badge badge-warning">Warning</span>`)}
+        ), `<span className="text-[11px] px-1.5 py-0.5 rounded bg-accent on-accent">Label</span>\n<span className="badge badge-success">Success</span>\n<span className="badge badge-warning">Warning</span>`)}
 
         {/* Skeleton variants */}
         {section("Skeletons", "Loading placeholders for all content shapes", (
@@ -212,7 +212,7 @@ export default function ComponentLibrary() {
           <div className="flex gap-1 p-1 rounded-lg max-w-sm bg-tertiary">
             {["Tab 1", "Tab 2", "Tab 3"].map((t, i) => (
               <button key={t} className="flex-1 px-4 py-1.5 rounded-md text-sm font-medium transition-all"
-                style={{ backgroundColor: i === 0 ? "var(--dt-colors-accent-default)" : "transparent", color: i === 0 ? "#fff" : "var(--dt-colors-text-secondary)" }}>
+                style={{ backgroundColor: i === 0 ? "var(--dt-colors-accent-default)" : "transparent", color: i === 0 ? "var(--dt-colors-text-on-accent)" : "var(--dt-colors-text-secondary)" }}>
                 {t}
               </button>
             ))}

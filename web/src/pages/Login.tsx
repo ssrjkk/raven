@@ -83,29 +83,29 @@ export default function Login() {
       <div
         className="absolute -top-32 -right-24 w-96 h-96 rounded-full pointer-events-none"
         style={{
-          backgroundImage: "radial-gradient(closest-side, var(--dt-colors-accent-muted, rgba(124,58,237,0.35)), transparent)",
+          backgroundImage: "radial-gradient(closest-side, var(--dt-colors-accent-muted), transparent)",
         }}
       />
       <div
         className="absolute -bottom-40 -left-24 w-[28rem] h-[28rem] rounded-full pointer-events-none"
         style={{
-          backgroundImage: "radial-gradient(closest-side, var(--dt-colors-accent-subtle, rgba(217,70,239,0.18)), transparent)",
+          backgroundImage: "radial-gradient(closest-side, var(--dt-colors-accent-subtle), transparent)",
         }}
       />
       <div
         className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[36rem] h-[24rem] rounded-full pointer-events-none"
         style={{
-          backgroundImage: "radial-gradient(closest-side, var(--dt-colors-accent-subtle, rgba(124,58,237,0.08)), transparent)",
+          backgroundImage: "radial-gradient(closest-side, var(--dt-colors-accent-subtle), transparent)",
         }}
       />
 
-      <div className="card rounded-2xl p-8 w-full max-w-sm space-y-6 relative" style={{ boxShadow: "0 20px 60px rgba(0, 0, 0, 0.35)" }}>
+      <div className="card rounded-2xl p-8 w-full max-w-sm space-y-6 relative" style={{ boxShadow: "0 20px 60px var(--dt-colors-overlay-scrim)" }}>
         <div className="text-center space-y-2">
           <div
-            className="mx-auto w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-2xl shadow-lg"
+            className="mx-auto w-12 h-12 rounded-xl flex items-center justify-center on-accent font-black text-2xl shadow-lg"
             style={{
-              backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default, #7c3aed), #d946ef)",
-              boxShadow: "0 8px 24px var(--dt-colors-accent-muted, rgba(124, 58, 237, 0.35))",
+              backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-brand-secondary))",
+              boxShadow: "0 8px 24px var(--dt-colors-accent-muted)",
             }}
           >
             R

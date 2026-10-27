@@ -66,7 +66,7 @@ export default function Insights() {
             className="px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-all"
             style={{
               backgroundColor: tab === t ? "var(--dt-colors-accent-default)" : "transparent",
-              color: tab === t ? "#fff" : "var(--dt-colors-text-secondary)",
+              color: tab === t ? "var(--dt-colors-text-on-accent)" : "var(--dt-colors-text-secondary)",
             }}>
             {t === "llm" ? "LLM Usage" : t === "workspace" ? "Workspace" : "Coding Activity"}
           </button>

@@ -8,14 +8,31 @@
     "description": { "type": "string" },
     "colors": {
       "type": "object",
+      "required": ["bg", "surface", "accent", "text", "border", "status", "chart", "category", "brand", "overlay", "skeleton"],
       "properties": {
-        "bg": { "type": "object" },
-        "surface": { "type": "object" },
-        "accent": { "type": "object" },
-        "text": { "type": "object" },
-        "border": { "type": "object" },
-        "status": { "type": "object" },
-        "chart": { "type": "object" }
+        "bg": { "type": "object", "required": ["primary", "secondary", "tertiary", "hover", "active", "inverse"] },
+        "surface": {
+          "type": "object",
+          "required": ["default", "elevated", "card", "tooltip", "modal", "inset-highlight"]
+        },
+        "accent": { "type": "object", "required": ["default", "hover", "active", "muted", "subtle"] },
+        "text": {
+          "type": "object",
+          "required": [
+            "primary", "secondary", "tertiary", "inverse", "link",
+            "on-accent", "on-status-success", "on-status-warning", "on-status-error", "on-status-info"
+          ]
+        },
+        "border": { "type": "object", "required": ["default", "hover", "focus", "muted"] },
+        "status": {
+          "type": "object",
+          "required": ["success", "warning", "error", "info", "success-bg", "warning-bg", "error-bg", "info-bg"]
+        },
+        "chart": { "type": "object", "minProperties": 10 },
+        "category": { "type": "object", "minProperties": 15 },
+        "brand": { "type": "object", "required": ["secondary"] },
+        "overlay": { "type": "object", "required": ["scrim"] },
+        "skeleton": { "type": "object", "required": ["highlight"] }
       }
     },
     "spacing": { "type": "object" },
@@ -29,7 +46,7 @@
       }
     },
     "border-radius": { "type": "object" },
-    "shadow": { "type": "object" },
+    "shadow": { "type": "object", "required": ["md", "float"] },
     "animation": { "type": "object" },
     "z-index": { "type": "object" }
   }

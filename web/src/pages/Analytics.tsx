@@ -120,7 +120,7 @@ export default function Analytics() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))", border: "1px solid var(--dt-colors-border-default)" }}>
+            <div key={i} className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card)", border: "1px solid var(--dt-colors-border-default)" }}>
               <Skeleton width={64} height={12} rounded="md" />
               <Skeleton width={48} height={32} rounded="md" className="mt-2" />
             </div>
@@ -128,7 +128,7 @@ export default function Analytics() {
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {[1, 2].map((i) => (
-            <div key={i} className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))", border: "1px solid var(--dt-colors-border-default)" }}>
+            <div key={i} className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card)", border: "1px solid var(--dt-colors-border-default)" }}>
               <Skeleton height={220} rounded="lg" />
             </div>
           ))}
@@ -155,7 +155,7 @@ export default function Analytics() {
                 className="px-3 py-1.5 rounded-md text-sm font-medium transition"
                 style={{
                   backgroundColor: range === r.key ? "var(--dt-colors-accent-default)" : "transparent",
-                  color: range === r.key ? "#fff" : "var(--dt-colors-text-secondary)",
+                  color: range === r.key ? "var(--dt-colors-text-on-accent)" : "var(--dt-colors-text-secondary)",
                 }}
               >
                 {r.label}
@@ -446,10 +446,10 @@ export default function Analytics() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-tertiary">
-                  <th className="text-left pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))" }}>Metric Name</th>
-                  <th className="text-right pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))" }}>Avg</th>
-                  <th className="text-right pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))" }}>Max</th>
-                  <th className="text-right pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))" }}>Samples</th>
+                  <th className="text-left pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card)" }}>Metric Name</th>
+                  <th className="text-right pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card)" }}>Avg</th>
+                  <th className="text-right pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card)" }}>Max</th>
+                  <th className="text-right pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card)" }}>Samples</th>
                 </tr>
               </thead>
               <tbody>

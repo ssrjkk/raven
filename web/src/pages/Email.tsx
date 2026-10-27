@@ -94,7 +94,7 @@ export default function EmailPage() {
               rows={6} className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
           </div>
           <button onClick={() => sendMail.mutate()} disabled={sendMail.isPending || !to || !subject}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent text-white">
+            className="px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 bg-accent on-accent">
             {sendMail.isPending ? "Sending..." : "Send Email"}
           </button>
         </div>

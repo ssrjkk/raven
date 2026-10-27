@@ -101,7 +101,7 @@ export default function Settings() {
                         backgroundColor: "var(--dt-colors-accent-muted)",
                         color: "var(--dt-colors-accent-default)",
                         border: "1px solid var(--dt-colors-accent-muted)",
-                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+                        boxShadow: "inset 0 1px 0 var(--dt-colors-skeleton-highlight)",
                       }
                     : {
                         backgroundColor: "var(--dt-colors-bg-tertiary)",
@@ -175,7 +175,7 @@ export default function Settings() {
                 handleAccentChange(customHex);
               }
             }}
-            placeholder="#7c3aed"
+            placeholder="var(--dt-colors-accent-default)"
             className="input-base flex-1 font-mono"
           />
           <button
@@ -221,7 +221,7 @@ export default function Settings() {
           <button
             onClick={() => {
               resetScheme();
-              setAccentColor("#7c3aed");
+              setAccentColor("var(--dt-colors-accent-default)");
               toast("Theme reset to defaults", "info");
             }}
             className="btn-ghost"
@@ -245,7 +245,7 @@ export default function Settings() {
       </div>
 
       <button onClick={() => shutdown.mutate()} disabled={shutdown.isPending}
-        className="btn-soft px-5 py-2 text-danger" style={{ backgroundColor: "rgba(239, 68, 68, 0.12)" }}>
+        className="btn-soft px-5 py-2 text-danger" style={{ backgroundColor: "var(--dt-colors-status-error-bg)" }}>
         {shutdown.isPending ? "Shutting down..." : "Shutdown Raven"}
       </button>
     </div>

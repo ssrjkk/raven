@@ -59,12 +59,12 @@ function renderComponent(node: ComponentDef, onAction: (id: string, action: stri
       const variant = (props.variant as string) || "default";
       let variantStyle: Record<string, string> = {
         backgroundColor: "var(--dt-colors-accent-default)",
-        color: "#fff",
+        color: "var(--dt-colors-text-on-accent)",
       };
       if (variant === "danger") {
-        variantStyle = { backgroundColor: "var(--dt-colors-status-error)", color: "#fff" };
+        variantStyle = { backgroundColor: "var(--dt-colors-status-error)", color: "var(--dt-colors-text-on-status-error)" };
       } else if (variant === "success") {
-        variantStyle = { backgroundColor: "var(--dt-colors-status-success)", color: "#fff" };
+        variantStyle = { backgroundColor: "var(--dt-colors-status-success)", color: "var(--dt-colors-text-on-status-success)" };
       } else if (variant === "outline") {
         variantStyle = {
           backgroundColor: "transparent",

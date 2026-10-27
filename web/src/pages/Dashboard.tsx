@@ -35,7 +35,7 @@ export default function Dashboard() {
         <Skeleton width={180} height={28} />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))", border: "1px solid var(--dt-colors-border-default)" }}>
+            <div key={i} className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card)", border: "1px solid var(--dt-colors-border-default)" }}>
               <Skeleton width={60} height={12} rounded="md" />
               <Skeleton width={40} height={32} rounded="md" className="mt-2" />
             </div>
@@ -64,7 +64,7 @@ export default function Dashboard() {
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "radial-gradient(600px 220px at 90% -20%, var(--dt-colors-accent-subtle, rgba(124, 58, 237, 0.14)), transparent 70%)",
+              "radial-gradient(600px 220px at 90% -20%, var(--dt-colors-accent-subtle), transparent 70%)",
           }}
         />
         <div className="relative flex flex-col md:flex-row md:items-center gap-5">

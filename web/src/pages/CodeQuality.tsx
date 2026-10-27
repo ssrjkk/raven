@@ -54,7 +54,7 @@ export default function CodeQuality() {
           className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
           style={{
             backgroundColor: !activeCheck ? "var(--dt-colors-accent-default)" : "var(--dt-colors-bg-tertiary)",
-            color: !activeCheck ? "#fff" : "var(--dt-colors-text-secondary)",
+            color: !activeCheck ? "var(--dt-colors-text-on-accent)" : "var(--dt-colors-text-secondary)",
           }}>
           All checks
         </button>
@@ -63,7 +63,7 @@ export default function CodeQuality() {
             className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
             style={{
               backgroundColor: activeCheck === c.id ? "var(--dt-colors-accent-default)" : "var(--dt-colors-bg-tertiary)",
-              color: activeCheck === c.id ? "#fff" : "var(--dt-colors-text-secondary)",
+              color: activeCheck === c.id ? "var(--dt-colors-text-on-accent)" : "var(--dt-colors-text-secondary)",
             }}>
             {c.name}
           </button>

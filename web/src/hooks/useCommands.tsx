@@ -49,7 +49,7 @@ export function useCommands(onToggleTheme?: () => void) {
             id: "new-project",
             label: "Создать новый проект",
             description: "Запустить мастер создания проекта с AI",
-            icon: <Sparkles className="w-5 h-5 text-indigo-400" />,
+            icon: <Sparkles className="w-5 h-5 text-accent" />,
             category: "ai",
             action: () => navigate("/scaffold"),
             shortcut: "⌘N",
@@ -58,7 +58,7 @@ export function useCommands(onToggleTheme?: () => void) {
             id: "toggle-theme",
             label: "Переключить тему",
             description: "Светлая / Тёмная / Midnight",
-            icon: <Settings className="w-5 h-5 text-zinc-400" />,
+            icon: <Settings className="w-5 h-5 text-secondary" />,
             category: "action",
             action: onToggleTheme ?? (() => {}),
             shortcut: "⌘T",
@@ -67,9 +67,9 @@ export function useCommands(onToggleTheme?: () => void) {
             id: String(cmd.id ?? ""),
             label: String(cmd.label ?? ""),
             description: String(cmd.description ?? ""),
-            icon: cmd.icon === "code" ? <Code className="w-5 h-5 text-emerald-400" /> :
-                  cmd.icon === "db" ? <Database className="w-5 h-5 text-blue-400" /> :
-                  <FileText className="w-5 h-5 text-zinc-400" />,
+            icon: cmd.icon === "code" ? <Code className="w-5 h-5 text-success" /> :
+                  cmd.icon === "db" ? <Database className="w-5 h-5 text-info" /> :
+                  <FileText className="w-5 h-5 text-secondary" />,
             category: parseCategory(cmd.category),
             action: () => {},
             shortcut: cmd.shortcut ? String(cmd.shortcut) : undefined,

@@ -16,7 +16,8 @@
       "elevated": "#f1f3f8",
       "card": "#ffffff",
       "tooltip": "#1a1d2e",
-      "modal": "#ffffff"
+      "modal": "#ffffff",
+      "inset-highlight": "rgba(0, 0, 0, 0.04)"
     },
     "accent": {
       "default": "#7c3aed",
@@ -31,7 +32,12 @@
       "tertiary": "#707080",
       "inverse": "#ffffff",
       "link": "#7c3aed",
-      "link-hover": "#6d28d9"
+      "link-hover": "#6d28d9",
+      "on-status-success": "#ffffff",
+      "on-status-warning": "#ffffff",
+      "on-status-error": "#ffffff",
+      "on-status-info": "#ffffff",
+      "on-accent": "#ffffff"
     },
     "border": {
       "default": "#e5e7ee",
@@ -60,6 +66,32 @@
       "series-8": "#11a090",
       "series-9": "#669d11",
       "series-10": "#3b82f6"
+    },
+    "category": {
+      "person": "#1e6ff5",
+      "org": "#0c875e",
+      "gpe": "#a56a07",
+      "technology": "#8452f5",
+      "email": "#e2177c",
+      "url": "#048197",
+      "version": "#c45305",
+      "file-path": "#0e8478",
+      "date": "#937105",
+      "product": "#9e42f6",
+      "module": "#6063f1",
+      "class": "#eb1414",
+      "function": "#178841",
+      "concept": "#6b7280",
+      "unknown": "#6d7787"
+    },
+    "brand": {
+      "secondary": "#be13d8"
+    },
+    "overlay": {
+      "scrim": "rgba(0, 0, 0, 0.45)"
+    },
+    "skeleton": {
+      "highlight": "rgba(0, 0, 0, 0.06)"
     }
   },
   "spacing": {
@@ -110,7 +142,8 @@
     "md": "0 4px 8px -1px rgba(16, 18, 27, 0.07)",
     "lg": "0 10px 18px -3px rgba(16, 18, 27, 0.08)",
     "xl": "0 24px 32px -8px rgba(16, 18, 27, 0.1)",
-    "glow-accent": "0 0 12px rgba(124, 58, 237, 0.2)"
+    "glow-accent": "0 0 12px rgba(124, 58, 237, 0.2)",
+    "float": "0 4px 16px rgba(15, 17, 23, 0.16)"
   },
   "animation": {
     "duration": {

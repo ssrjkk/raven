@@ -39,6 +39,17 @@ TEXT_PAIRS = (
     (("text", "link"), ("bg", "primary"), NORMAL_TEXT),
     (("text", "link"), ("bg", "secondary"), NORMAL_TEXT),
     (("text", "inverse"), ("bg", "inverse"), NORMAL_TEXT),
+    # Labels on saturated fills: white is not one of these, it measures 1.67:1 on midnight warning.
+    (("text", "on-accent"), ("accent", "default"), NORMAL_TEXT),
+    (("text", "on-status-success"), ("status", "success"), NORMAL_TEXT),
+    (("text", "on-status-warning"), ("status", "warning"), NORMAL_TEXT),
+    (("text", "on-status-error"), ("status", "error"), NORMAL_TEXT),
+    (("text", "on-status-info"), ("status", "info"), NORMAL_TEXT),
+    # The second stop of the brand gradient carries text in .gradient-text, so it needs text contrast.
+    (("brand", "secondary"), ("bg", "primary"), NORMAL_TEXT),
+    # Canvas text and canvas edges in the knowledge graph are painted from these, once a frame.
+    (("text", "secondary"), ("surface", "card"), NORMAL_TEXT),
+    (("text", "tertiary"), ("surface", "card"), LARGE_TEXT_OR_UI),
 )
 
 WHITE = "#ffffff"
@@ -387,6 +398,133 @@ def test_the_fixed_width_detector_detects_the_pattern_it_forbids() -> None:
     assert not _oversized_fixed_widths("probe", ".chip { min-width: 640px; }")
 
 
+# A var() with a fallback, read with a balanced scan rather than a regex: the fallback may contain a
+# call (rgba()) or another var(), and a pattern that stops at the first ")" reports the rest of the
+# declaration as the fallback value.
+_VAR_HEAD = re.compile(r"var\(\s*(--dt-[a-zA-Z0-9-]+)\s*,")
+
+
+def _var_fallbacks(text: str) -> list[tuple[str, str]]:
+    """Every (token, fallback) pair on a ``--dt-`` custom property, outermost first."""
+    out: list[tuple[str, str]] = []
+    pos = 0
+    while True:
+        match = _VAR_HEAD.search(text, pos)
+        if match is None:
+            return out
+        depth = 0
+        end = -1
+        for i in range(text.index("(", match.start()), len(text)):
+            depth += text[i] == "("
+            depth -= text[i] == ")"
+            if depth == 0:
+                end = i
+                break
+        assert end != -1, f"unbalanced var() at offset {match.start()}"
+        out.append((match.group(1), text[match.end() : end].strip()))
+        pos = match.end()
+
+
+def _theme_values(name: str) -> dict[str, str]:
+    data = json.loads((DESIGN / name).read_text(encoding="utf-8"))
+    out: dict[str, str] = {}
+
+    def walk(node: Any, prefix: list[str]) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                walk(value, [*prefix, key])
+        elif prefix:
+            out["--dt-" + "-".join(prefix)] = str(node)
+
+    for group, values in data.items():
+        if group.startswith("$") or group in {"description", "version"}:
+            continue
+        walk(values, [group])
+    return out
+
+
+def _web_sources() -> list[Path]:
+    """Everything the SPA ships, minus the token layer that is allowed to name colours and the sheet
+    generated from it."""
+    return [
+        path
+        for path in (WEB / "src").rglob("*")
+        if path.suffix in {".css", ".tsx", ".ts"}
+        and ".test." not in path.name
+        and path.name != "themes.css"
+        and "design" not in path.parts
+    ]
+
+
+def test_nothing_stands_between_a_component_and_a_published_token() -> None:
+    """web/src/styles/themes.css declares every token of all three themes before React mounts, so a
+    literal after the comma is a second copy of a value the theme already owns. It can only describe
+    one of the three themes, it goes stale the moment the palette moves, and it is what paints for a
+    user who picked another accent."""
+    published: set[str] = set()
+    for theme in THEME_FILES:
+        published |= set(_theme_values(theme))
+    offenders: list[str] = []
+    for path in _web_sources():
+        for token, fallback in _var_fallbacks(path.read_text(encoding="utf-8", errors="replace")):
+            if token in published:
+                offenders.append(f"{path.relative_to(WEB)}: {token} still carries {fallback[:60]!r}")
+    assert not offenders, "\n".join(offenders)
+
+
+def test_the_fallback_scanner_reads_the_nesting_the_rule_has_to_see_through() -> None:
+    assert _var_fallbacks("color: var(--dt-colors-accent-muted, rgba(124, 58, 237, 0.5));") == [
+        ("--dt-colors-accent-muted", "rgba(124, 58, 237, 0.5)")
+    ]
+    assert _var_fallbacks("background: var(--dt-colors-surface-card, var(--dt-colors-bg-secondary))") == [
+        ("--dt-colors-surface-card", "var(--dt-colors-bg-secondary)")
+    ]
+    assert _var_fallbacks("box-shadow: 0 0 3px var(--dt-colors-accent-default)") == []
+
+
+def test_the_generated_sheet_equals_the_token_files_and_is_loaded() -> None:
+    """A generated sheet is only trustworthy while the generator still agrees with it, and a sheet the
+    SPA never imports paints nothing."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("gen_theme_css", ROOT / "scripts" / "gen_theme_css.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    sheet = WEB / "src" / "styles" / "themes.css"
+    rendered = module.render()
+    assert sheet.read_text(encoding="utf-8") == rendered, "themes.css is stale — run python scripts/gen_theme_css.py"
+    assert '@import "./themes.css";' in (WEB / "src" / "styles" / "index.css").read_text(encoding="utf-8")
+    for selector in (':root,\n[data-theme="dark"]', '[data-theme="light"]', '[data-theme="midnight"]'):
+        assert selector in rendered, f"{selector} block missing from the sheet"
+
+
+
+def test_token_files_validate_against_their_schema() -> None:
+    import jsonschema
+
+    schema = json.loads((DESIGN / "tokens.schema.json").read_text(encoding="utf-8"))
+    for theme in THEME_FILES:
+        data = json.loads((DESIGN / theme).read_text(encoding="utf-8"))
+        jsonschema.validate(data, schema)
+        assert data["colors"]["chart"], f"{theme} declares no chart series"
+
+
+def test_shipped_iframes_are_sandboxed_without_a_self_escape() -> None:
+    """allow-scripts together with allow-same-origin hands the embedder its own origin back."""
+    offenders: list[str] = []
+    for path in (WEB / "src").rglob("*.tsx"):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for tag in re.findall(r"<iframe\b[^>]*>", text, re.S):
+            sandbox = re.search(r'sandbox=\{?"([^"}]*)"?', tag)
+            if sandbox is None:
+                offenders.append(f"{path.name}: <iframe> without sandbox: {tag[:70]}")
+            elif "allow-scripts" in sandbox.group(1) and "allow-same-origin" in sandbox.group(1):
+                offenders.append(f"{path.name}: sandbox allows scripts and same-origin together")
+    assert not offenders, "\n".join(offenders)
+
+
 def test_landing_avoids_the_100vh_mobile_trap() -> None:
     css = _site_css()
     for rule in re.findall(r"[^{}]*\{[^}]*\}", css):
@@ -419,3 +557,152 @@ def test_shipped_chat_pages_declare_their_colour_contrast() -> None:
         for foreground, background in items:
             ratio = contrast(foreground, background)
             assert ratio >= LARGE_TEXT_OR_UI, f"{label}: {foreground} on {background} = {ratio:.2f}"
+
+
+_COLOUR_LITERAL = re.compile(r"#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b|\brgba?\([^)]*\)")
+
+# Tailwind's own palette: usable, but a colour the themes do not own, so it survives neither a theme
+# switch nor the contrast gates above.
+_PALETTE_CLASS = re.compile(
+    r"\b(?:bg|text|border|ring|fill|stroke|from|to|via)-(?:red|rose|pink|fuchsia|purple|violet|"
+    r"indigo|blue|sky|cyan|teal|emerald|green|lime|yellow|amber|orange|gray|grey|slate|zinc|stone|"
+    r"neutral)-\d{2,3}\b"
+)
+
+
+def test_no_component_paints_a_colour_the_theme_does_not_publish() -> None:
+    """A literal is a colour no theme owns: invisible to every contrast gate here, unmoved by the
+    accent picker, and measured wrong in two of the three themes. web/src/design is where colours are
+    allowed to be named, and nowhere else."""
+    offenders: list[str] = []
+    for path in _web_sources():
+        for lineno, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            for hit in _COLOUR_LITERAL.findall(line):
+                offenders.append(f"{path.relative_to(WEB)}:{lineno}: {hit}")
+    assert not offenders, "\n".join(offenders)
+
+
+def test_the_literal_detector_detects_the_pattern_it_forbids() -> None:
+    assert _COLOUR_LITERAL.search('style={{ color: "#fff" }}')
+    assert _COLOUR_LITERAL.search("backgroundColor: rgba(239, 68, 68, 0.12)")
+    assert not _COLOUR_LITERAL.search('color: "var(--dt-colors-text-on-accent)"')
+    assert _PALETTE_CLASS.search('className="hover:text-red-400"')
+    assert not _PALETTE_CLASS.search('className="text-danger"')
+
+
+def test_no_component_reaches_past_the_theme_for_a_colour() -> None:
+    offenders: list[str] = []
+    for path in _web_sources():
+        if path.suffix != ".tsx":
+            continue
+        for lineno, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            for hit in _PALETTE_CLASS.finditer(line):
+                offenders.append(f"{path.relative_to(WEB)}:{lineno}: {hit.group(0)}")
+    assert not offenders, "\n".join(offenders)
+
+
+@pytest.mark.parametrize("theme", THEME_FILES)
+def test_entity_fills_are_readable_on_the_panel_they_are_drawn_on(theme: str) -> None:
+    """The knowledge graph paints these into a canvas, so nothing but this gate keeps them legible:
+    the same token is a node fill (a UI part, 3:1) and a badge label (text, 4.5:1)."""
+    colors = _palette(theme)
+    card = colors["surface"]["card"]
+    category = colors["category"]
+    assert len(category) == 15, f"{theme}: expected 15 entity colours, found {len(category)}"
+    for name, value in category.items():
+        ratio = contrast(value, card)
+        assert ratio >= NORMAL_TEXT, f"{theme}: category.{name} {value} on surface.card = {ratio:.2f} < 4.5"
+    assert len(set(category.values())) == len(category), f"{theme}: duplicate entity colours"
+    hues = [_hsl(value)[0] for value in category.values()]
+    assert max(hues) - min(hues) >= 120, f"{theme}: entity hues do not span the wheel"
+
+
+def _top_level_blocks(css: str) -> list[tuple[str, str]]:
+    """Every ``(selector, body)`` rule outside any @-block, brace-matched from the top level."""
+    blocks: list[tuple[str, str]] = []
+    index = 0
+    while index < len(css):
+        if css[index] == "@":
+            end = _skip_block(css, index)
+            index = end
+            continue
+        brace = css.find("{", index)
+        if brace == -1:
+            break
+        end = _skip_block(css, brace)
+        selector = css[index:brace].strip()
+        if selector and not selector.startswith("}"):
+            blocks.append((selector, css[brace + 1 : end - 1]))
+        index = end
+    return blocks
+
+
+def _skip_block(css: str, start: int) -> int:
+    """Index just past the ``{...}`` group that begins at or after ``start``."""
+    open_brace = css.index("{", start)
+    depth = 0
+    for index in range(open_brace, len(css)):
+        depth += css[index] == "{"
+        depth -= css[index] == "}"
+        if depth == 0:
+            return index + 1
+    raise AssertionError(f"unbalanced brace from {start}")
+
+
+def _as_paint(value: str, background: str) -> str:
+    """Composite an rgba() token over the surface it is drawn on; hexes pass through."""
+    if not value.startswith("rgba"):
+        return value
+    inner = value[value.index("(") + 1 : -1]
+    red, green, blue, alpha = (float(part) for part in inner.split(","))
+    back = _to_rgb(background)
+    mixed = tuple(round(colour * alpha + other * (1 - alpha)) for colour, other in zip((red, green, blue), back, strict=True))
+    return "#{:02x}{:02x}{:02x}".format(*mixed)
+
+
+def _to_rgb(hex_value: str) -> tuple[int, ...]:
+    body = hex_value.lstrip("#")
+    return tuple(int(body[i : i + 2], 16) for i in (0, 2, 4))
+
+
+_STATE_PATTERNS = (":hover", ":focus-within", ":focus-visible", ":focus")
+_STATE_BORDER = re.compile(r"border-color:\s*var\((--dt-[a-zA-Z0-9-]+)\)")
+_STATE_RING = re.compile(r"box-shadow:[^;]*?0 0 0 \d+(?:\.\d+)?px var\((--dt-[a-zA-Z0-9-]+)\)")
+
+
+def test_a_state_indicator_is_perceptible_on_the_panel_it_changes() -> None:
+    """A hover border or focus ring painted from a 0.15-alpha wash measures 1.13:1 against the card:
+    the state changes and nobody can see it. WCAG counts a state indicator as content, so the token it
+    uses has to clear 3:1 against the surface the control is drawn on, in every theme."""
+    css = (WEB / "src" / "styles" / "index.css").read_text(encoding="utf-8")
+    published = {name: _theme_values(name) for name in THEME_FILES}
+    offenders: list[str] = []
+    for selector, body in _top_level_blocks(css):
+        if not any(pattern in selector for pattern in _STATE_PATTERNS):
+            continue
+        tokens = _STATE_BORDER.findall(body) + _STATE_RING.findall(body)
+        for token in tokens:
+            for theme, values in published.items():
+                value = values.get(token)
+                if value is None:
+                    offenders.append(f"{selector}: {token} is not published by {theme}")
+                    continue
+                card = published[theme]["--dt-colors-surface-card"]
+                ratio = contrast(_as_paint(value, card), card)
+                if ratio < LARGE_TEXT_OR_UI:
+                    offenders.append(
+                        f"{selector.strip()[:48]}: {token}={value} on {theme} card {card} = {ratio:.2f}:1"
+                    )
+    assert not offenders, "\n".join(offenders)
+
+
+def test_the_state_indicator_detector_reads_the_declarations_it_forbids() -> None:
+    css = ".card:hover {\n  border-color: var(--dt-colors-accent-muted);\n  box-shadow: 0 0 0 3px var(--dt-colors-accent-subtle);\n}"
+    blocks = _top_level_blocks(css)
+    assert len(blocks) == 1 and ":hover" in blocks[0][0]
+    body = blocks[0][1]
+    assert _STATE_BORDER.findall(body) == ["--dt-colors-accent-muted"]
+    assert _STATE_RING.findall(body) == ["--dt-colors-accent-subtle"]
+    assert _as_paint("rgba(124, 58, 237, 0.15)", "#1e2140") == "#2c255a"
+    assert _as_paint("rgba(124, 58, 237, 0)", "#1e2140") == "#1e2140"
+    assert contrast(_as_paint("rgba(124, 58, 237, 0.15)", "#1e2140"), "#1e2140") < LARGE_TEXT_OR_UI
