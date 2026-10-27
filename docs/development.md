@@ -88,7 +88,7 @@ author's monitor:
 - every `var(--dt-*)` a component asks for must be published by all three themes; the palettes must
   declare the same token set, and each token file must validate against `tokens.schema.json`
 - `web/src/styles/themes.css` is generated from the token files (`python scripts/gen_theme_css.py`)
-  and declares every theme before React mounts; the gate regenerates it and fails on any drift, so a
+  and declares every theme's tokens before React mounts; the gate regenerates it and fails on any drift, so a
   component never needs a literal fallback — and no component may carry one
 - no colour literal outside `web/src/design`: a hex or `rgba()` in a component is a value no theme
   owns, invisible to every contrast rule below. Tailwind palette classes (`text-red-400`,
@@ -100,9 +100,11 @@ author's monitor:
   nobody could see it) and re-clamped dark's `border.focus` to `#8446ee`
 - text pairs clear WCAG 2.1 AA (4.5:1 normal, 3:1 for large text and UI parts) in dark, light and
   midnight, computed from the token hexes themselves. That includes `text.on-*` against the fill it
-  labels, the 15 `colors.category.*` entity fills against the panel the knowledge graph draws them on
-  (the same token is a node fill and a badge label), and canvas text, whose colours `paint.ts` reads
-  from the theme once a frame because a canvas cannot resolve `var()`
+  labels, the fifteen slots of the named categorical scale (`colors.category.*` — blue…grey, shared
+  by the knowledge-graph canvas and the plugin tag badges) against the panel they are drawn on, and
+  that at least one of the theme's two inverse colours carries an AA label on every one of those
+  slots; plus canvas text, whose colours `paint.ts` reads from the theme once a frame because a canvas
+  cannot resolve `var()`
 - chart series come from `colors.chart.series-*` — no hard-coded hex inside recharts props — are at
   least 3:1 against their own theme's background, and spread over the hue wheel; every
   `<ResponsiveContainer>` sits inside `ChartCard`, which carries the `role="img"` + `aria-label` a

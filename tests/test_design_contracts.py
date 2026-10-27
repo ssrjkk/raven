@@ -602,19 +602,31 @@ def test_no_component_reaches_past_the_theme_for_a_colour() -> None:
 
 
 @pytest.mark.parametrize("theme", THEME_FILES)
-def test_entity_fills_are_readable_on_the_panel_they_are_drawn_on(theme: str) -> None:
-    """The knowledge graph paints these into a canvas, so nothing but this gate keeps them legible:
-    the same token is a node fill (a UI part, 3:1) and a badge label (text, 4.5:1)."""
+def test_the_categorical_scale_is_readable_on_the_panel_it_is_drawn_on(theme: str) -> None:
+    """Fifteen named hues, shared by the knowledge graph (a canvas, so no gate but this one sees it)
+    and the plugin tag badges. Each is a fill -- a UI part at 3:1 -- and also the label colour of a
+    soft badge, so the scale is held to the text minimum of 4.5:1 against the panel it is drawn on."""
     colors = _palette(theme)
     card = colors["surface"]["card"]
     category = colors["category"]
-    assert len(category) == 15, f"{theme}: expected 15 entity colours, found {len(category)}"
+    assert set(category) == {
+        "blue", "green", "amber", "violet", "pink", "cyan", "orange", "teal", "yellow", "purple",
+        "indigo", "red", "lime", "slate", "grey",
+    }, f"{theme}: the categorical scale is not the fifteen named hues"
     for name, value in category.items():
         ratio = contrast(value, card)
         assert ratio >= NORMAL_TEXT, f"{theme}: category.{name} {value} on surface.card = {ratio:.2f} < 4.5"
-    assert len(set(category.values())) == len(category), f"{theme}: duplicate entity colours"
+    assert len(set(category.values())) == len(category), f"{theme}: duplicate categorical colours"
     hues = [_hsl(value)[0] for value in category.values()]
-    assert max(hues) - min(hues) >= 120, f"{theme}: entity hues do not span the wheel"
+    assert max(hues) - min(hues) >= 120, f"{theme}: the categorical hues do not span the wheel"
+
+    # paint.ts picks the badge label from the theme's two inverses, whichever reads better on the
+    # fill; the picker is only safe if at least one of them clears AA for every slot of the scale.
+    light_label = colors["bg"]["inverse"]
+    dark_label = colors["text"]["inverse"]
+    for name, value in category.items():
+        best = max(contrast(light_label, value), contrast(dark_label, value))
+        assert best >= NORMAL_TEXT, f"{theme}: no label clears AA on category.{name} {value} (best {best:.2f}:1)"
 
 
 def _top_level_blocks(css: str) -> list[tuple[str, str]]:

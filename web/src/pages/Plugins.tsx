@@ -91,17 +91,17 @@ export default function Plugins() {
   }
 
   const categoryColor = (cat: string) => {
-    const series: Record<string, string> = {
-      coding: "var(--dt-colors-chart-series-4)",
-      automation: "var(--dt-colors-chart-series-5)",
-      unique: "var(--dt-colors-chart-series-3)",
-      voice: "var(--dt-colors-chart-series-1)",
-      channel: "var(--dt-colors-chart-series-2)",
+    const scale: Record<string, string> = {
+      coding: "var(--dt-colors-category-blue)",
+      automation: "var(--dt-colors-category-green)",
+      unique: "var(--dt-colors-category-amber)",
+      voice: "var(--dt-colors-category-violet)",
+      channel: "var(--dt-colors-category-pink)",
     };
-    return series[cat] ?? "var(--dt-colors-chart-series-6)";
+    return scale[cat] ?? "var(--dt-colors-category-grey)";
   };
 
-  /** A tag is a solid categorical fill, so its label has to be measured against that fill, per theme. */
+  /** A tag is a solid fill from the categorical scale, so its label is measured against that fill. */
   const categoryBadge = (cat: string) => {
     const fill = readToken(categoryColor(cat).slice(4, -1));
     return { backgroundColor: categoryColor(cat), color: labelOn(fill) };

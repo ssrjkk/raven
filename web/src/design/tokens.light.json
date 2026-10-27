@@ -68,21 +68,21 @@
       "series-10": "#3b82f6"
     },
     "category": {
-      "person": "#1e6ff5",
-      "org": "#0c875e",
-      "gpe": "#a56a07",
-      "technology": "#8452f5",
-      "email": "#e2177c",
-      "url": "#048197",
-      "version": "#c45305",
-      "file-path": "#0e8478",
-      "date": "#937105",
-      "product": "#9e42f6",
-      "module": "#6063f1",
-      "class": "#eb1414",
-      "function": "#178841",
-      "concept": "#6b7280",
-      "unknown": "#6d7787"
+      "blue": "#1e6ff5",
+      "green": "#0c875e",
+      "amber": "#a56a07",
+      "violet": "#8452f5",
+      "pink": "#e2177c",
+      "cyan": "#048197",
+      "orange": "#c45305",
+      "teal": "#0e8478",
+      "yellow": "#937105",
+      "purple": "#9e42f6",
+      "indigo": "#6063f1",
+      "red": "#eb1414",
+      "lime": "#178841",
+      "slate": "#6b7280",
+      "grey": "#6d7787"
     },
     "brand": {
       "secondary": "#be13d8"

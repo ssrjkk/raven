@@ -7,10 +7,12 @@ import { useApiQuery } from "../hooks/useApiQuery";
 
 type Tab = "graph" | "extract" | "search" | "stats";
 
+// The named categorical scale in colors.category.* -- keyed by hue, because both the graph and the
+// plugin tags draw from the same fifteen colours and neither owns the names.
 const ENTITY_CATEGORY: Record<string, string> = {
-  PERSON: "person", ORG: "org", GPE: "gpe", TECHNOLOGY: "technology", EMAIL: "email",
-  URL: "url", VERSION: "version", FILE_PATH: "file-path", DATE: "date", PRODUCT: "product",
-  module: "module", class: "class", function: "function", concept: "concept",
+  PERSON: "blue", ORG: "green", GPE: "amber", TECHNOLOGY: "violet", EMAIL: "pink",
+  URL: "cyan", VERSION: "orange", FILE_PATH: "teal", DATE: "yellow", PRODUCT: "purple",
+  module: "indigo", class: "red", function: "lime", concept: "slate",
 };
 
 /** A canvas takes colours, not var() references, so the palette is read from the theme once a frame. */
