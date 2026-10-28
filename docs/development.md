@@ -115,6 +115,13 @@ author's monitor:
 - shipped web surfaces — the SPA, the extension popup, the no-Node fallback page — reference no
   off-origin `src`/`href`, self-host their fonts with a Cyrillic subset, keep a visible focus ring,
   and stop animation under `prefers-reduced-motion`
+- the two surfaces that never load the SPA bundle — the gateway's no-Node webchat page and the
+  extension popup — embed a generated token region (`python scripts/gen_theme_css.py --print-surface`,
+  delimited by `design-tokens:start`/`end` sentinels). A gate compares both regions byte for byte with
+  the generator, requires every `var(--dt-*)` they reference to be declared inside the region, forbids
+  any other colour literal in those files, forbids an alias no rule uses, and computes their contrast
+  pairs from `tokens.json` rather than from hexes copied into the test — including pairs that only
+  exist because the page renders markdown in *user* rows too
 - no shipped stylesheet pins itself wider than a phone, and every `<iframe>` is sandboxed without the
   `allow-scripts` + `allow-same-origin` pair that hands the embedder its own origin back
 

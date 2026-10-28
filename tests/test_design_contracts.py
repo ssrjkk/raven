@@ -544,19 +544,98 @@ def test_shipped_chat_pages_keep_a_visible_focus_ring_and_sane_targets() -> None
         assert "prefers-reduced-motion" in sheet or "animation" not in sheet, f"{label} animates with no reduce rule"
 
 
-def test_shipped_chat_pages_declare_their_colour_contrast() -> None:
-    """Both pages are plain-CSS surfaces, so their pairs are checked rather than eyeballed."""
-    from raven.channels.webchat.channel import INDEX_HTML
+def _load_theme_generator() -> Any:
+    import importlib.util
 
-    pairs = {
-        "webchat": (("#e4e4e7", "#12121f"), ("#9a9ab0", "#12121f"), ("#ffffff", "#7c3aed")),
-        "popup": (("#e4e4e7", "#0f1117"), ("#9a9ab0", "#0f1117"), ("#ffffff", "#7c3aed")),
-    }
-    assert INDEX_HTML  # imported for its stylesheet block below
-    for label, items in pairs.items():
-        for foreground, background in items:
-            ratio = contrast(foreground, background)
-            assert ratio >= LARGE_TEXT_OR_UI, f"{label}: {foreground} on {background} = {ratio:.2f}"
+    spec = importlib.util.spec_from_file_location("gen_theme_css", ROOT / "scripts" / "gen_theme_css.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+OFFLINE_SHEETS = {
+    "webchat": ROOT / "raven" / "channels" / "webchat" / "channel.py",
+    "extension popup": ROOT / "extension" / "src" / "popup" / "popup.css",
+}
+
+
+def _region_of(text: str, generator: Any) -> str:
+    start = text.index(generator.SENTINEL_START)
+    end = text.index(generator.SENTINEL_END, start) + len(generator.SENTINEL_END)
+    return text[start:end]
+
+
+@pytest.mark.parametrize("label", sorted(OFFLINE_SHEETS))
+def test_offline_surfaces_embed_the_generated_token_region(label: str) -> None:
+    """The two surfaces never load the SPA bundle, so they used to hand-copy a palette. The copy
+    drifted: the webchat page invented #8b5cf6 as its button surface and put white on it at 4.23:1.
+    The region between the sentinels is generated output, checked byte for byte, and every token the
+    sheet references has to be declared inside it."""
+    generator = _load_theme_generator()
+    text = OFFLINE_SHEETS[label].read_text(encoding="utf-8", errors="replace")
+    region = _region_of(text, generator)
+    assert region == generator.surface_block(), f"{label}: embedded region is not what the generator emits"
+
+    declared = set(re.findall(r"^\s*(--dt-[a-zA-Z0-9-]+):", region, re.M))
+    body = re.sub(r"\s*" + re.escape(generator.SENTINEL_START) + r".*" + re.escape(generator.SENTINEL_END), "", text, flags=re.S)
+    referenced = set(re.findall(r"var\(\s*(--dt-[a-zA-Z0-9-]+)", body))
+    dangling = sorted(referenced - declared)
+    assert not dangling, f"{label} references tokens its region does not declare: {dangling}"
+
+    # the sheet's own short names are part of the contract too: an alias no rule reads is a colour
+    # someone will later assume is live
+    aliases = re.findall(r"^\s{2}(--(?!dt-)[a-z-]+):", body, re.M)
+    used = set(re.findall(r"var\(\s*(--[a-z-]+)", body))
+    unused = sorted(name for name in aliases if name not in used)
+    assert not unused, f"{label} declares aliases nothing uses: {unused}"
+
+
+@pytest.mark.parametrize("label", sorted(OFFLINE_SHEETS))
+def test_offline_surfaces_carry_no_colour_of_their_own(label: str) -> None:
+    """Outside the generated region these sheets may not name a colour: that is how the private
+    palette got written in the first place."""
+    generator = _load_theme_generator()
+    text = OFFLINE_SHEETS[label].read_text(encoding="utf-8", errors="replace")
+    body = text.replace(_region_of(text, generator), "")
+    offenders = [
+        f"{label}:{i}: {hit}"
+        for i, line in enumerate(body.splitlines(), 1)
+        for hit in _COLOUR_LITERAL.findall(line)
+    ]
+    assert not offenders, "\n".join(offenders)
+
+
+def test_shipped_chat_pages_declare_their_colour_contrast() -> None:
+    """Both pages are plain CSS, so their pairs are computed from the tokens they now embed rather
+    than from hexes typed into this file -- a copy of a colour here would assert nothing about the
+    product."""
+    dark = _theme_values("tokens.json")
+    token = lambda name: dark[f"--dt-colors-{name}"]  # noqa: E731
+
+    page = token("bg-primary")
+    surface = token("bg-secondary")
+    accent = token("accent-default")
+    bubble = _as_paint(to_rgba(accent, 0.26), surface)
+    notice = _as_paint(to_rgba(accent, 0.14), surface)
+
+    pairs = (
+        ("body text on the page", token("text-primary"), page, NORMAL_TEXT),
+        ("body text on a panel", token("text-primary"), surface, NORMAL_TEXT),
+        ("muted text on the page", token("text-secondary"), page, NORMAL_TEXT),
+        ("muted text on a panel", token("text-secondary"), surface, NORMAL_TEXT),
+        ("link on a panel", token("text-link"), surface, NORMAL_TEXT),
+        ("button label on the accent", token("text-on-accent"), accent, NORMAL_TEXT),
+        ("user bubble text", token("text-primary"), bubble, NORMAL_TEXT),
+        ("user bubble link", token("text-primary"), bubble, NORMAL_TEXT),
+        ("notice bar text", token("text-primary"), notice, NORMAL_TEXT),
+        ("live status dot", token("status-success"), page, LARGE_TEXT_OR_UI),
+        ("down status dot", token("status-error"), page, LARGE_TEXT_OR_UI),
+        ("focus border on a panel", token("border-focus"), surface, LARGE_TEXT_OR_UI),
+    )
+    for label, foreground, background, minimum in pairs:
+        ratio = contrast(foreground, background)
+        assert ratio >= minimum, f"{label}: {foreground} on {background} = {ratio:.2f}:1, need {minimum}"
 
 
 _COLOUR_LITERAL = re.compile(r"#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b|\brgba?\([^)]*\)")
@@ -670,6 +749,12 @@ def _as_paint(value: str, background: str) -> str:
     back = _to_rgb(background)
     mixed = tuple(round(colour * alpha + other * (1 - alpha)) for colour, other in zip((red, green, blue), back, strict=True))
     return "#{:02x}{:02x}{:02x}".format(*mixed)
+
+
+def to_rgba(hex_value: str, alpha: float) -> str:
+    """The rgba() form of a hex token, the way `color-mix()` composites it over a surface."""
+    red, green, blue = _to_rgb(hex_value)
+    return f"rgba({red}, {green}, {blue}, {alpha})"
 
 
 def _to_rgb(hex_value: str) -> tuple[int, ...]:
