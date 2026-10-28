@@ -63,7 +63,23 @@ def security_posture_checks() -> list[tuple[str, str]]:
     telemetry = "on — local analytics only" if flags.is_enabled("telemetry") else "off"
     rows.append(("Features", f"{', '.join(flags.enabled_list()) or 'none'} (telemetry {telemetry})"))
 
+    rows.append(_training_posture_row())
+
     return rows
+
+
+def _training_posture_row() -> tuple[str, str]:
+    """Fine-tuning is the one feature that can move model weights off the machine, so doctor says
+    whether that door is open rather than leaving it to be inferred from what is installed."""
+    import os
+
+    from raven.unique.fine_tuning import training_tracking_enabled
+
+    if training_tracking_enabled():
+        return ("Finetune Tracking", "[!] RAVEN_TRAIN_TRACKING=on — metrics and checkpoint artifacts are published to api.wandb.ai")
+    if os.environ.get("WANDB_API_KEY"):
+        return ("Finetune Tracking", "[!] off, but WANDB_API_KEY is set: one RAVEN_TRAIN_TRACKING=on starts publishing weights")
+    return ("Finetune Tracking", "[OK] off — training publishes nothing; corpus rows need consented=true and are PII-redacted")
 
 
 @click.command()

@@ -14,12 +14,16 @@ _pipeline = FineTuningPipeline()
 class AddConversationRequest(BaseModel):
     system_prompt: str = ""
     messages_json: str = ""
+    consented: bool = False
+    source: str = ""
 
 
 class AddCodeRequest(BaseModel):
     code: str
     language: str = ""
     description: str = ""
+    consented: bool = False
+    source: str = ""
 
 
 class LoadModelRequest(BaseModel):
@@ -43,6 +47,8 @@ def create_finetune_router() -> APIRouter:
 
     @router.post("/dataset/conversation")
     def add_conversation(req: AddConversationRequest):
+        if not req.consented:
+            raise HTTPException(400, "consented=true is required: this row enters a trainable corpus")
         from raven.unique.fine_tuning import ConversationExample
 
         try:
@@ -51,16 +57,37 @@ def create_finetune_router() -> APIRouter:
             messages = json.loads(req.messages_json) if req.messages_json else []
         except json.JSONDecodeError as e:
             raise HTTPException(400, f"Invalid messages JSON: {e}") from e
-        conv = ConversationExample(messages=messages, system_prompt=req.system_prompt)
+        if not messages:
+            raise HTTPException(400, "messages_json must contain at least one message")
+        conv = ConversationExample(
+            messages=messages, system_prompt=req.system_prompt, metadata={"source": req.source}, consented=True
+        )
         _builder.add_conversation(conv)
-        return {"success": True, "total": _builder.stats()["conversations"]}
+        return {"success": True, "consented": _builder.stats()["consented"]["conversations"]}
 
     @router.post("/dataset/code")
     def add_code(req: AddCodeRequest):
+        if not req.consented:
+            raise HTTPException(400, "consented=true is required: this row enters a trainable corpus")
         from raven.unique.fine_tuning import CodeExample
 
-        _builder.add_code(CodeExample(code=req.code, language=req.language, description=req.description))
-        return {"success": True, "total": _builder.stats()["code_samples"]}
+        _builder.add_code(
+            CodeExample(
+                code=req.code, language=req.language, description=req.description, metadata={"source": req.source}, consented=True
+            )
+        )
+        return {"success": True, "consented": _builder.stats()["consented"]["code_samples"]}
+
+    @router.post("/dataset/clear")
+    def clear_dataset():
+        stats = _builder.stats()
+        removed = stats["conversations"] + stats["code_samples"]
+        _builder.clear()
+        return {"success": True, "removed": removed}
+
+    @router.get("/dataset/card")
+    def dataset_card():
+        return _builder.dataset_card()
 
     @router.post("/model/load")
     def load_model(req: LoadModelRequest):

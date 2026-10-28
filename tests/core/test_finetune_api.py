@@ -44,32 +44,88 @@ def test_dataset_stats(client: TestClient, mock_builder: MagicMock) -> None:
     assert data["conversations"] == 5
 
 
+def _consent_stats(conversations: int, code: int = 0) -> dict[str, object]:
+    return {
+        "conversations": conversations,
+        "code_samples": code,
+        "consented": {"conversations": conversations, "code_samples": code},
+        "excluded_without_consent": 0,
+        "policy": {"require_consent": True, "redact_pii": True},
+        "config": {"max_length": 2048, "test_split": 0.1},
+    }
+
+
 def test_add_conversation(client: TestClient, mock_builder: MagicMock) -> None:
-    mock_builder.stats.return_value = {"conversations": 1, "code_samples": 0}
+    mock_builder.stats.return_value = _consent_stats(1)
     resp = client.post(
         "/api/finetune/dataset/conversation",
-        json={"system_prompt": "You are helpful", "messages_json": '[{"role":"user","content":"hi"}]'},
+        json={
+            "system_prompt": "You are helpful",
+            "messages_json": '[{"role":"user","content":"hi"}]',
+            "consented": True,
+            "source": "operator-demo",
+        },
     )
     assert resp.status_code == 200
-    assert resp.json()["success"] is True
+    assert resp.json()["consented"] == 1
+    assert mock_builder.add_conversation.call_args.args[0].consented is True
+
+
+def test_add_conversation_without_consent_is_refused(client: TestClient, mock_builder: MagicMock) -> None:
+    resp = client.post(
+        "/api/finetune/dataset/conversation",
+        json={"messages_json": '[{"role":"user","content":"hi"}]'},
+    )
+    assert resp.status_code == 400
+    assert "consented=true" in resp.json()["detail"]
+    mock_builder.add_conversation.assert_not_called()
+
+
+def test_add_conversation_empty_messages(client: TestClient) -> None:
+    resp = client.post(
+        "/api/finetune/dataset/conversation",
+        json={"messages_json": "[]", "consented": True},
+    )
+    assert resp.status_code == 400
 
 
 def test_add_conversation_invalid_json(client: TestClient) -> None:
     resp = client.post(
         "/api/finetune/dataset/conversation",
-        json={"system_prompt": "", "messages_json": "not json"},
+        json={"system_prompt": "", "messages_json": "not json", "consented": True},
     )
     assert resp.status_code == 400
 
 
 def test_add_code(client: TestClient, mock_builder: MagicMock) -> None:
-    mock_builder.stats.return_value = {"conversations": 0, "code_samples": 1}
+    mock_builder.stats.return_value = _consent_stats(0, 1)
     resp = client.post(
         "/api/finetune/dataset/code",
-        json={"code": "def hello(): pass", "language": "python", "description": "test"},
+        json={"code": "def hello(): pass", "language": "python", "description": "test", "consented": True},
     )
     assert resp.status_code == 200
-    assert resp.json()["success"] is True
+    assert resp.json()["consented"] == 1
+
+
+def test_add_code_without_consent_is_refused(client: TestClient, mock_builder: MagicMock) -> None:
+    resp = client.post("/api/finetune/dataset/code", json={"code": "print(1)"})
+    assert resp.status_code == 400
+    mock_builder.add_code.assert_not_called()
+
+
+def test_dataset_clear_reports_what_it_removed(client: TestClient, mock_builder: MagicMock) -> None:
+    mock_builder.stats.return_value = _consent_stats(3, 2)
+    resp = client.post("/api/finetune/dataset/clear")
+    assert resp.status_code == 200
+    assert resp.json()["removed"] == 5
+    mock_builder.clear.assert_called_once()
+
+
+def test_dataset_card_is_served(client: TestClient, mock_builder: MagicMock) -> None:
+    mock_builder.dataset_card.return_value = {"rows": {"conversations": 1}, "corpus_sha256": "ab" * 32}
+    resp = client.get("/api/finetune/dataset/card")
+    assert resp.status_code == 200
+    assert resp.json()["corpus_sha256"].startswith("ab")
 
 
 def test_model_info(client: TestClient, mock_pipeline: MagicMock) -> None:

@@ -84,11 +84,23 @@ class PIIEngine:
             PIIPattern(
                 "github_token",
                 re.compile(
-                    r"(?:ghp_|gho_|ghu_|ghs_|ghr_)[a-zA-Z0-9]{36}",
+                    # {36} pinned this to classic tokens only; a shorter or fine-grained PAT fell
+                    # through and the phone pattern then masked a slice of it, leaving most of the
+                    # secret intact. The prefix is the signal, so length is a floor, not an exact.
+                    r"(?:ghp_|gho_|ghu_|ghs_|ghr_)[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{22,}",
                 ),
                 "[GITHUB_TOKEN]",
-                score=0.95,
+                score=0.98,
                 context_keywords=["github", "git"],
+                category="credential",
+            ),
+            PIIPattern(
+                "huggingface_token",
+                re.compile(
+                    r"hf_[A-Za-z0-9]{30,}",
+                ),
+                "[HUGGINGFACE_TOKEN]",
+                score=0.98,
                 category="credential",
             ),
             PIIPattern(

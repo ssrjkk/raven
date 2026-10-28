@@ -67,9 +67,11 @@ class _NoTemplateTokenizer(_ChatTemplateTokenizer):
 
 
 def _conversation() -> ConversationExample:
+    # consented: build_dataset refuses an unconsented corpus, and these tests are about the render
     return ConversationExample(
         system_prompt="You are helpful.",
         messages=[{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello!"}],
+        consented=True,
     )
 
 
@@ -124,7 +126,7 @@ class TestDatasetBuilder:
         _skip_without_datasets()
         tokenizer = _ChatTemplateTokenizer()
         builder = DatasetBuilder(DatasetConfig(max_length=64, test_split=0.5))
-        builder.add_code_samples([CodeExample(code="x = 1"), CodeExample(code="y = 2")])
+        builder.add_code_samples([CodeExample(code="x = 1", consented=True), CodeExample(code="y = 2", consented=True)])
         builder.tokenize_dataset(builder.build_dataset()["train"], tokenizer)
         encoded = next(call for call in tokenizer.calls if "_count" in call)
         assert encoded["_count"] == 1

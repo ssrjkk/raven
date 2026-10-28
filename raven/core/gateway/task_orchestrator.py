@@ -146,10 +146,15 @@ class TaskOrchestrator:
         if self._runner is None:
             raise RuntimeError("TaskOrchestrator not started")
         try:
-            task = await self._runner.wait(task.id, timeout=None)
-            async with self._lock:
-                self._tasks[task.id] = task
-            msg = self._format_result(task)
+            settled = await self._runner.wait(task.id, timeout=None)
+            if settled is None:
+                logger.error("Task {} vanished from the store while it was being awaited", task.id)
+                msg = f"❌ Task {task.id[:8]} is no longer in the task store."
+            else:
+                task = settled
+                async with self._lock:
+                    self._tasks[task.id] = task
+                msg = self._format_result(task)
         except Exception as e:
             logger.error("Task {} execution error: {}", task.id, e)
             msg = f"❌ Task error: {e}"
@@ -178,8 +183,16 @@ class TaskOrchestrator:
         return f"Task status: {task.status.value}"
 
     async def _notify(self, channel: str, session_id: str, text: str) -> None:
+        if not session_id:
+            return  # a task submitted over HTTP has no chat session to report progress to
         if self._send_notification:
             await self._send_notification(channel, session_id, text)
+
+    async def cancel_task(self, task_id: str) -> bool:
+        """Cancel through the runner that owns the task, so the step in flight is interrupted."""
+        if self._runner is None:
+            raise RuntimeError("TaskOrchestrator not started")
+        return await self._runner.cancel(task_id)
 
     def get_task(self, task_id: str) -> Task | None:
         return self._tasks.get(task_id)

@@ -131,8 +131,21 @@ async def test_create_and_run_planning_error() -> None:
     orch._planner = MagicMock()
     orch._planner.plan = AsyncMock(side_effect=RuntimeError("llm down"))
     with pytest.raises(RuntimeError, match="llm down"):
-        await orch.create_and_run("goal", "u1", "web")
+        await orch.create_and_run("goal", "u1", "web", session_id="s1")
     assert "Task planning failed" in sender.await_args_list[-1].args[2]
+
+
+async def test_create_and_run_without_a_session_notifies_nothing() -> None:
+    """A task submitted over HTTP has no chat to report to; the send must not be attempted."""
+    sender = AsyncMock()
+    orch = _orch(send=sender)
+    orch._store = _store()
+    orch._runner = _runner()
+    orch._planner = MagicMock()
+    orch._planner.plan = AsyncMock(side_effect=RuntimeError("llm down"))
+    with pytest.raises(RuntimeError, match="llm down"):
+        await orch.create_and_run("goal", "u1", "ops")
+    sender.assert_not_awaited()
 
 
 async def test_create_and_run_no_steps() -> None:
@@ -143,7 +156,7 @@ async def test_create_and_run_no_steps() -> None:
     orch._runner = _runner()
     orch._planner = MagicMock()
     orch._planner.plan = AsyncMock(return_value=Task(id="t1", steps=[]))
-    result = await orch.create_and_run("goal", "u1", "web")
+    result = await orch.create_and_run("goal", "u1", "web", session_id="s1")
     assert result.status is TaskStatus.FAILED
     assert result.error is not None and "no steps" in result.error
     store.save_task.assert_awaited_once_with(result)

@@ -82,6 +82,20 @@ These happen when a person runs a command, never while the gateway is serving.
 |------|--------|---------------|
 | `ollama.com` | `raven/cli/setup_cmd.py` | downloads the Ollama installer or runs its install script |
 
+## Fine-tuning
+
+Training is the one feature that moves large amounts of data across the boundary in both directions, so
+it is spelled out rather than left inside "LLM providers".
+
+| Host | Caller | What goes out |
+|------|--------|---------------|
+| `huggingface.co` | `raven/unique/fine_tuning.py` | the base model and tokenizer you asked for (`model_type`/`model_name_or_path`), downloaded on demand when a training session loads. Gated repositories answer 401 without a `HUGGINGFACE_API_KEY`; nothing is sent up |
+| `api.wandb.ai` | `raven/unique/fine_tuning.py` | **opt-in only.** Metrics, the training config, and — through `TrainingMonitor.log_checkpoint` — checkpoint directories as artifacts, i.e. model weights. Off unless `RAVEN_TRAIN_TRACKING=on`; having `wandb` installed and importable is deliberately not enough, because a self-hosted install must not publish weights because of what happens to be in its environment |
+
+The corpus itself never leaves through this path unless tracking is on: rows are held in a
+process-global builder, and the builder drops any row not added with `consented=true` and runs
+`redact_pii` over every row it keeps, before the tokenizer sees it.
+
 ## LAN and paired devices
 
 | Host | Caller | What goes out |

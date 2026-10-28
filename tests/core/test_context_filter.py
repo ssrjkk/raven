@@ -59,6 +59,37 @@ def test_redact_pii_credit_card():
     assert "[CREDIT_CARD]" in result
 
 
+@pytest.mark.parametrize(
+    ("secret", "label"),
+    [
+        ("ghp_" + "A" * 36, "[GITHUB_TOKEN]"),  # classic PAT: the only length the pattern used to take
+        ("gho_" + "B" * 32, "[GITHUB_TOKEN]"),  # OAuth: fell straight through, length was exact
+        ("github_pat_11ABCDEFG0123456789_" + "c" * 73, "[GITHUB_TOKEN]"),  # fine-grained PAT
+        ("hf_" + "d" * 34, "[HUGGINGFACE_TOKEN]"),  # the Hub token this product reads models with
+    ],
+)
+def test_credential_shapes_are_redacted_whole(secret: str, label: str) -> None:
+    """Regression. `github_token` required exactly 36 characters and `hf_` had no pattern at all, so
+    anything else ran past the credential rules and into the *phone* pattern, which masked a slice and
+    left most of the secret standing -- `github_pat_11ABCDEFG[PHONE]_cccc…` reads as redacted and is
+    not. `raven/unique/fine_tuning.py` runs this engine over every corpus row before the tokenizer, so
+    a missed credential does not stay in a chat log, it becomes model weights."""
+    result = redact_pii(f"rotate {secret} before Friday")
+    assert label in result
+    assert secret not in result
+    assert secret[4:20] not in result, "most of the secret survived the redaction"
+    assert "[PHONE]" not in result, "the phone pattern matched inside a credential"
+    assert analyze_pii(secret)[0].entity_type in {"github_token", "huggingface_token"}
+
+
+def test_a_real_phone_number_still_redacts_after_the_credential_fix() -> None:
+    """The credentials moved ahead of the phone pattern in the list; the phone case must survive
+    that, or the fix would have traded a secret leak for a PII one."""
+    result = redact_pii("call +1 202-555-0142 please")
+    assert "[PHONE]" in result
+    assert "555-0142" not in result
+
+
 def test_redact_pii_api_key():
     result = redact_pii("Key: sk-abcdefghijklmnopqrstuvwxyz123456")
     assert "[API_KEY]" in result

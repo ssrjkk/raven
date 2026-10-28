@@ -3,7 +3,7 @@ from __future__ import annotations
 from loguru import logger
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
-from raven.unique.fine_tuning import DatasetBuilder, FineTuningPipeline
+from raven.unique.fine_tuning import CodeExample, ConversationExample, DatasetBuilder, FineTuningPipeline
 
 _pipeline: FineTuningPipeline | None = None
 _builder: DatasetBuilder | None = None
@@ -24,38 +24,74 @@ def _get_builder() -> DatasetBuilder:
 
 
 def finetune_dataset_stats() -> str:
-    builder = _get_builder()
-    stats = builder.stats()
+    stats = _get_builder().stats()
+    consented = stats["consented"]
+    policy = stats["policy"]
     return (
         f"Dataset Builder Statistics\n"
-        f"- Conversations: {stats['conversations']}\n"
-        f"- Code samples: {stats['code_samples']}\n"
-        f"- Max length: {stats['config']['max_length']}\n"
-        f"- Format: {stats['config']['format']}"
+        f"- Conversations: {consented['conversations']} of {stats['conversations']} consented\n"
+        f"- Code samples: {consented['code_samples']} of {stats['code_samples']} consented\n"
+        f"- Excluded without consent: {stats['excluded_without_consent']}\n"
+        f"- Consent required: {policy['require_consent']} · PII redaction: {policy['redact_pii']}\n"
+        f"- Max length: {stats['config']['max_length']} · Test split: {stats['config']['test_split']}"
     )
 
 
-def finetune_add_conversation(system_prompt: str = "", messages_json: str = "") -> str:
+def finetune_dataset_card() -> str:
+    """The card is the answer to 'which corpus produced this adapter'."""
+    import json
+
+    return json.dumps(_get_builder().dataset_card(), indent=2, ensure_ascii=False)
+
+
+def _consent_refusal(kind: str) -> str:
+    return (
+        f"[error] Refused: a {kind} row enters a trainable corpus, so it needs consented=true "
+        f"from whoever holds the data's rights. Nothing was added."
+    )
+
+
+def finetune_add_conversation(
+    system_prompt: str = "", messages_json: str = "", consented: bool = False, source: str = ""
+) -> str:
     builder = _get_builder()
-    from raven.unique.fine_tuning import ConversationExample
+    if not consented:
+        return _consent_refusal("conversation")
+
+    import json
 
     try:
-        import json
-
         messages = json.loads(messages_json) if messages_json else []
     except json.JSONDecodeError as e:
         return f"[error] Invalid JSON for messages: {e}"
-    conv = ConversationExample(messages=messages, system_prompt=system_prompt)
-    builder.add_conversation(conv)
-    return f"Conversation added ({len(messages)} messages). Total: {builder.stats()['conversations']}"
+    if not isinstance(messages, list) or not messages:
+        return "[error] messages_json must be a non-empty JSON array of {role, content} objects"
+    metadata = {"source": source} if source else {}
+    builder.add_conversation(
+        ConversationExample(messages=messages, system_prompt=system_prompt, metadata=metadata, consented=True)
+    )
+    stats = builder.stats()
+    return f"Conversation added ({len(messages)} messages). Consented: {stats['consented']['conversations']}"
 
 
-def finetune_add_code(code: str, language: str = "", description: str = "") -> str:
+def finetune_add_code(code: str, language: str = "", description: str = "", consented: bool = False, source: str = "") -> str:
     builder = _get_builder()
-    from raven.unique.fine_tuning import CodeExample
+    if not consented:
+        return _consent_refusal("code")
+    metadata = {"source": source} if source else {}
+    builder.add_code(CodeExample(code=code, language=language, description=description, metadata=metadata, consented=True))
+    stats = builder.stats()
+    return f"Code sample added ({language}, {len(code)} chars). Consented: {stats['consented']['code_samples']}"
 
-    builder.add_code(CodeExample(code=code, language=language, description=description))
-    return f"Code sample added ({language}, {len(code)} chars). Total: {builder.stats()['code_samples']}"
+
+def finetune_dataset_clear() -> str:
+    """The corpus is process-global, so a row added for one experiment is in every later one until
+    someone removes it. Without this tool the only way out is a restart."""
+    builder = _get_builder()
+    stats = builder.stats()
+    removed = stats["conversations"] + stats["code_samples"]
+    builder.clear()
+    return f"Dataset cleared: {removed} row(s) removed"
 
 
 def finetune_load_model(model_type: str = "llama", use_lora: bool = True, use_qlora: bool = False) -> str:
@@ -101,7 +137,8 @@ def finetune_start_training(epochs: int = 3, learning_rate: float = 2e-4, batch_
             f"- Steps: {metrics.get('global_step', 0)}\n"
             f"- Epochs: {metrics.get('epoch', 0)}\n"
             f"- Eval loss: {metrics.get('eval_loss', 'N/A')}\n"
-            f"- Perplexity: {metrics.get('eval_perplexity', 'N/A')}"
+            f"- Perplexity: {metrics.get('eval_perplexity', 'N/A')}\n"
+            f"- Corpus: sha256 {builder.corpus_hash()[:16]}"
         )
     except Exception as e:
         logger.error("Training failed: {}", e)
@@ -109,8 +146,7 @@ def finetune_start_training(epochs: int = 3, learning_rate: float = 2e-4, batch_
 
 
 def finetune_model_info() -> str:
-    pipeline = _get_pipeline()
-    info = pipeline.get_model_info()
+    info = _get_pipeline().get_model_info()
     return (
         f"Model: {info['model_name']}\n"
         f"Type: {info['model_type']}\n"
@@ -121,8 +157,7 @@ def finetune_model_info() -> str:
 
 
 def finetune_list_checkpoints() -> str:
-    pipeline = _get_pipeline()
-    cps = pipeline.list_checkpoints()
+    cps = _get_pipeline().list_checkpoints()
     if not cps:
         return "[info] No checkpoints saved."
     lines = [f"Checkpoints ({len(cps)}):"]
@@ -131,11 +166,21 @@ def finetune_list_checkpoints() -> str:
     return "\n".join(lines)
 
 
+_CONSENT_PROPERTY = {
+    "consented": {
+        "type": "boolean",
+        "description": "Must be true: the row may not enter a trainable corpus without it",
+        "required": True,
+    },
+    "source": {"type": "string", "description": "Where the data came from, for the dataset card", "required": False},
+}
+
+
 def register_finetune_tools(registry: ToolRegistry) -> None:
     registry.register(
         ToolSpec(
             name="finetune_dataset_stats",
-            description="Get statistics about the fine-tuning dataset builder",
+            description="Consent and redaction accounting for the fine-tuning dataset builder",
             parameters={},
             handler=finetune_dataset_stats,
             category="finetune",
@@ -144,33 +189,60 @@ def register_finetune_tools(registry: ToolRegistry) -> None:
     )
     registry.register(
         ToolSpec(
+            name="finetune_dataset_card",
+            description="Dataset card: corpus counts by role, size, consent policy and sha256 of the rows",
+            parameters={},
+            handler=finetune_dataset_card,
+            category="finetune",
+            timeout=30,
+        )
+    )
+    registry.register(
+        ToolSpec(
             name="finetune_add_conversation",
-            description="Add a conversation example to the fine-tuning dataset",
+            description="Add a consented conversation example to the fine-tuning dataset",
             parameters={
                 "system_prompt": {"type": "string", "description": "System prompt", "required": False},
                 "messages_json": {
                     "type": "string",
                     "description": "JSON array of {role, content} messages",
-                    "required": False,
+                    "required": True,
                 },
+                **_CONSENT_PROPERTY,
             },
             handler=finetune_add_conversation,
             category="finetune",
             timeout=10,
+            # a corpus row outlives the conversation that added it: the builder is process-global, so
+            # whatever the agent puts here is trained on by whoever asks for a run next
+            dangerous=True,
         )
     )
     registry.register(
         ToolSpec(
             name="finetune_add_code",
-            description="Add a code sample to the fine-tuning dataset",
+            description="Add a consented code sample to the fine-tuning dataset",
             parameters={
                 "code": {"type": "string", "description": "Source code", "required": True},
                 "language": {"type": "string", "description": "Programming language", "required": False},
                 "description": {"type": "string", "description": "Description of the code", "required": False},
+                **_CONSENT_PROPERTY,
             },
             handler=finetune_add_code,
             category="finetune",
             timeout=10,
+            dangerous=True,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="finetune_dataset_clear",
+            description="Remove every row from the fine-tuning dataset builder",
+            parameters={},
+            handler=finetune_dataset_clear,
+            category="finetune",
+            timeout=10,
+            dangerous=True,
         )
     )
     registry.register(
@@ -193,6 +265,8 @@ def register_finetune_tools(registry: ToolRegistry) -> None:
             handler=finetune_load_model,
             category="finetune",
             timeout=300,
+            # gigabytes of resident weights, triggered from a chat window
+            dangerous=True,
         )
     )
     registry.register(
@@ -211,6 +285,8 @@ def register_finetune_tools(registry: ToolRegistry) -> None:
             handler=finetune_start_training,
             category="finetune",
             timeout=3600,
+            confirm=True,
+            dangerous=True,
         )
     )
     registry.register(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -132,9 +133,13 @@ class TestFineTuningPipelineWandbIntegration:
 
     @pytest.mark.asyncio
     async def test_train_with_wandb_calls_wandb_init(self):
+        # tracking is opt-in: importable is not consent, so the run has to be asked for
         mock_wandb, _run, patcher = _patch_wandb()
-        with patcher, patch.object(FineTuningPipeline, "load_model"), patch.object(
-            FineTuningPipeline, "train", return_value={"train_loss": 0.3, "global_step": 50}
+        with (
+            patch.dict(os.environ, {"RAVEN_TRAIN_TRACKING": "on"}),
+            patcher,
+            patch.object(FineTuningPipeline, "load_model"),
+            patch.object(FineTuningPipeline, "train", return_value={"train_loss": 0.3, "global_step": 50}),
         ):
             pipeline = FineTuningPipeline()
             _, metrics = await pipeline.train_with_wandb(TrainingConfig(), MagicMock())

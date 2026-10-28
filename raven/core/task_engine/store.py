@@ -4,6 +4,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from raven.core._json import json
 from raven.core.store import BaseStore
 from raven.core.task_engine.models import Task, TaskPriority, TaskStatus, TaskStep
@@ -111,10 +113,12 @@ class TaskStore(BaseStore):
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT (id) DO UPDATE SET
                    user_id = excluded.user_id, channel = excluded.channel, goal = excluded.goal,
-                   plan_summary = excluded.plan_summary, status = excluded.status,
+                   plan_summary = excluded.plan_summary,
+                   status = CASE WHEN tasks.status = ? THEN tasks.status ELSE excluded.status END,
+                   error = CASE WHEN tasks.status = ? THEN tasks.error ELSE excluded.error END,
                    priority = excluded.priority, current_step_index = excluded.current_step_index,
-                   result = excluded.result, error = excluded.error,
-                   created_at = excluded.created_at, updated_at = excluded.updated_at,
+                   result = excluded.result,
+                   updated_at = excluded.updated_at,
                    scheduled_at = excluded.scheduled_at, metadata = excluded.metadata""",
                 (
                     task.id,
@@ -131,6 +135,8 @@ class TaskStore(BaseStore):
                     task.updated_at,
                     task.scheduled_at,
                     json.dumps(task.metadata, default=str),
+                    TaskStatus.CANCELLED.value,
+                    TaskStatus.CANCELLED.value,
                 ),
             )
             for step in task.steps:
@@ -207,6 +213,33 @@ class TaskStore(BaseStore):
             (status.value, time.time(), error, task_id),
         )
         await self._commit()
+
+    @measure_latency()
+    async def reopen(self, task_id: str) -> None:
+        """Clear a terminal status so the task can run again.
+
+        `save_task` refuses to move a cancelled row, because a cancel must beat the runner that is
+        still finishing a step. Re-running is the operator's deliberate opposite of that, so it
+        goes through here rather than through the routine write.
+        """
+        await self._execute(
+            "UPDATE tasks SET status = ?, updated_at = ?, error = NULL WHERE id = ?",
+            (TaskStatus.PENDING.value, time.time(), task_id),
+        )
+        await self._commit()
+
+    @measure_latency()
+    async def get_status(self, task_id: str) -> TaskStatus | None:
+        """Status column only. The runner polls this while a step is in flight, so it must not
+        rebuild the task and its steps."""
+        raw = await self._fetchval("SELECT status FROM tasks WHERE id = ?", (task_id,))
+        if raw is None:
+            return None
+        try:
+            return TaskStatus(raw)
+        except ValueError:
+            logger.warning("Task {} holds unknown status {!r}", task_id, raw)
+            return None
 
     @measure_latency()
     async def update_step(self, step: TaskStep) -> None:

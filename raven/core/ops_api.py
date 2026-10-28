@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -177,38 +176,27 @@ def create_ops_router(gateway: Gateway, features: FeatureFlags) -> APIRouter:
             }
 
         @router.post("/api/task/run")
-        async def api_task_run(request: Request, body: dict[str, Any]):
-            from raven.core.task_engine.planner import TaskPlanner
-            from raven.core.task_engine.runner import TaskRunner
-            from raven.core.task_engine.store import TaskStore
-            from raven.tools.register_all import create_task_tool_registry
-
+        async def api_task_run(body: dict[str, Any]):
             goal = body.get("goal", "")
             if not goal:
                 raise HTTPException(400, "goal required")
-            tools = create_task_tool_registry()
-            store = TaskStore(settings.resolved_db_path)
-            planner = TaskPlanner(tools)
-            runner = TaskRunner(store, tools)
-            task = await planner.plan(goal, gateway.llm)
-            await runner.submit(task)
-            bg_task = asyncio.create_task(runner.wait(task.id, timeout=600))
-            if not hasattr(request.app.state, "_bg_tasks"):
-                request.app.state._bg_tasks = set()
-            request.app.state._bg_tasks.add(bg_task)
-            bg_task.add_done_callback(request.app.state._bg_tasks.discard)
+            try:
+                task = await gateway.tasks.create_and_run(
+                    goal,
+                    user_id=str(body.get("user_id", "ops")),
+                    channel=str(body.get("channel", "ops")),
+                    session_id=str(body.get("session_id", "")),
+                )
+            except RuntimeError as e:
+                raise HTTPException(503, str(e)) from e
             return {"id": task.id}
 
         @router.post("/api/task/{task_id}/cancel")
         async def api_task_cancel(task_id: str):
-            from raven.core.task_engine.runner import TaskRunner
-            from raven.core.task_engine.store import TaskStore
-            from raven.tools.register_all import create_tool_registry
-
-            tools = create_tool_registry()
-            store = TaskStore(settings.resolved_db_path)
-            runner = TaskRunner(store, tools)
-            ok = await runner.cancel(task_id)
+            try:
+                ok = await gateway.tasks.cancel_task(task_id)
+            except RuntimeError as e:
+                raise HTTPException(503, str(e)) from e
             return {"ok": ok}
 
     else:

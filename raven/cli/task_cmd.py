@@ -136,15 +136,19 @@ def task_run(goal: str, user: str, channel: str):
         await runner.submit(task)
         console.print(f"[green]Task {task.id[:8]} submitted, running...[/green]")
 
-        task = await runner.wait(task.id, timeout=300)
-        if task.status.value == "completed":
+        submitted_id = task.id
+        settled = await runner.wait(submitted_id, timeout=300)
+        if settled is None:
+            console.print(f"[red]Task {submitted_id[:8]} is no longer in the task store.[/red]")
+            return
+        if settled.status.value == "completed":
             console.print("[green][OK] Task completed![/green]")
-        elif task.status.value == "failed":
-            console.print(f"[red][NO] Task failed: {task.error}[/red]")
-        elif task.status.value == "cancelled":
+        elif settled.status.value == "failed":
+            console.print(f"[red][NO] Task failed: {settled.error}[/red]")
+        elif settled.status.value == "cancelled":
             console.print("[yellow][!] Task cancelled[/yellow]")
         else:
-            console.print(f"[yellow]Task status: {task.status.value}[/yellow]")
+            console.print(f"[yellow]Task status: {settled.status.value}[/yellow]")
 
     asyncio.run(_run())
 
@@ -195,6 +199,7 @@ def task_retry(task_id: str):
             step.status = TaskStatus.PENDING
             step.error = None
         await store.save_task(task)
+        await store.reopen(task_id)
         await runner.submit(task)
         console.print(f"[green]Task {task_id[:8]} retry submitted[/green]")
 

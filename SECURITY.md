@@ -70,6 +70,11 @@ gh attestation verify Raven.exe --repo ssrjkk/raven
 - **роли инструментов**: `dangerous=True` и `allowed_roles` исполняет `ToolRegistry.call(role=…)`;
   вызов без субъекта получает наименьшие привилегии, пустой список ролей закрывает инструмент.
   Роль задачи указывает тот, кто её создал (веб-сессия, CLI = `admin`), а не планировщик
+- **дообучение**: `finetune_add_conversation`, `finetune_add_code`, `finetune_dataset_clear`,
+  `finetune_load_model` и `finetune_start_training` помечены `dangerous=True`, то есть доступны только
+  роли `admin` (запуск обучения дополнительно требует подтверждения). Корпус — процесс-глобальный
+  билдер: строка без `consented=true` в него не попадает, а каждая попавшая строка проходит
+  PII/кредакшн-редакцию до токенизации. `raven doctor` показывает состояние `Finetune Tracking`
 - **sandbox_mode**: `non-main` (по умолчанию) — изолированное выполнение
 - **sandbox_backend**: `subprocess` (по умолчанию), `docker` или `none`
 - **изменения политик** (`POST /api/tools/policy`) — только роль `admin`

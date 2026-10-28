@@ -352,6 +352,7 @@ class TestTaskRunner:
         runner = TaskRunner(store, registry)
         await runner.submit(t)
         result = await runner.wait(t.id, timeout=10)
+        assert result is not None
         assert result.status == TaskStatus.FAILED
         snap = metrics.snapshot()
         assert snap.get("raven_task_failed_total") == 1
@@ -366,6 +367,7 @@ class TestTaskRunner:
         cancelled = await runner.cancel(task.id)
         assert cancelled is True
         result = await runner.wait(task.id, timeout=10)
+        assert result is not None
         assert result.status == TaskStatus.CANCELLED
         snap = metrics.snapshot()
         assert snap.get("raven_task_cancelled_total") == 1
@@ -393,6 +395,7 @@ class TestTaskRunner:
         assert early.status != TaskStatus.CANCELLED
 
         final = await runner.wait(t.id, timeout=10)
+        assert final is not None
         assert final.status == TaskStatus.COMPLETED
 
     async def test_store_failure_marks_task_failed(self, store: TaskStore, registry: ToolRegistry):
@@ -446,6 +449,7 @@ class TestTaskRunner:
         runner = TaskRunner(store, registry)
         await runner.submit(t)
         done = await runner.wait(t.id, timeout=10)
+        assert done is not None
         assert done.status == TaskStatus.COMPLETED
         assert attempts["n"] == 3
 
@@ -472,6 +476,7 @@ class TestTaskRunner:
         runner = TaskRunner(store, registry)
         await runner.submit(t)
         done = await runner.wait(t.id, timeout=10)
+        assert done is not None
         assert done.status == TaskStatus.FAILED
         assert attempts["n"] == 3
         assert "temporarily unavailable" in (done.error or "")
@@ -497,6 +502,7 @@ class TestTaskRunner:
         runner = TaskRunner(store, registry)
         await runner.submit(t)
         done = await runner.wait(t.id, timeout=10)
+        assert done is not None
         assert done.status == TaskStatus.FAILED
         assert attempts["n"] == 1
 

@@ -62,11 +62,27 @@ class _FakeBuilder:
         self._build_other = build_other
 
     def stats(self) -> dict[str, Any]:
+        consented_rows = [r for r in self._conversations if r.consented]
+        consented_code = [r for r in self._code if r.consented]
         return {
             "conversations": len(self._conversations),
             "code_samples": len(self._code),
-            "config": {"max_length": 2048, "format": "alpaca"},
+            "consented": {"conversations": len(consented_rows), "code_samples": len(consented_code)},
+            "excluded_without_consent": (len(self._conversations) - len(consented_rows))
+            + (len(self._code) - len(consented_code)),
+            "policy": {"require_consent": True, "redact_pii": True},
+            "config": {"max_length": 2048, "test_split": 0.1},
         }
+
+    def clear(self) -> None:
+        self._conversations.clear()
+        self._code.clear()
+
+    def corpus_hash(self) -> str:
+        return "0123456789abcdef" * 4
+
+    def dataset_card(self) -> dict[str, Any]:
+        return {"rows": self.stats()["consented"], "corpus_sha256": self.corpus_hash()}
 
     def add_conversation(self, c: Any) -> None:
         self._conversations.append(c)
@@ -120,28 +136,50 @@ class TestDatasetOps:
     def test_stats(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _patch(monkeypatch, _FakeBuilder(), _FakePipeline())
         out = ft_mod.finetune_dataset_stats()
-        assert "Conversations: 0" in out
+        assert "Conversations: 0 of 0 consented" in out
+        assert "Excluded without consent: 0" in out
+        assert "Consent required: True" in out
         assert "Max length: 2048" in out
-        assert "Format: alpaca" in out
+
+    def test_card_reports_the_corpus_hash(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch(monkeypatch, _FakeBuilder(), _FakePipeline())
+        assert "corpus_sha256" in ft_mod.finetune_dataset_card()
+
+    def test_add_conversation_requires_consent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        b = _FakeBuilder()
+        _patch(monkeypatch, b, _FakePipeline())
+        out = ft_mod.finetune_add_conversation("sys", '[{"role":"user","content":"hi"}]')
+        assert out.startswith("[error] Refused")
+        assert b._conversations == []
 
     def test_add_conversation_valid(self, monkeypatch: pytest.MonkeyPatch) -> None:
         b = _FakeBuilder()
         _patch(monkeypatch, b, _FakePipeline())
-        out = ft_mod.finetune_add_conversation("sys", '[{"role":"user","content":"hi"}]')
-        assert out == "Conversation added (1 messages). Total: 1"
+        out = ft_mod.finetune_add_conversation("sys", '[{"role":"user","content":"hi"}]', consented=True, source="operator")
+        assert out == "Conversation added (1 messages). Consented: 1"
+        assert b._conversations[0].consented is True
+        assert b._conversations[0].metadata == {"source": "operator"}
 
     def test_add_conversation_empty_json(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _patch(monkeypatch, _FakeBuilder(), _FakePipeline())
-        assert "Conversation added (0 messages)" in ft_mod.finetune_add_conversation("", "")
+        assert ft_mod.finetune_add_conversation("", "", consented=True).startswith("[error] messages_json")
 
     def test_add_conversation_invalid(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _patch(monkeypatch, _FakeBuilder(), _FakePipeline())
-        assert ft_mod.finetune_add_conversation("", "not-json").startswith("[error] Invalid JSON")
+        assert ft_mod.finetune_add_conversation("", "not-json", consented=True).startswith("[error] Invalid JSON")
 
     def test_add_code(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _patch(monkeypatch, _FakeBuilder(), _FakePipeline())
-        out = ft_mod.finetune_add_code("print(1)", "python", "demo")
-        assert out == "Code sample added (python, 8 chars). Total: 1"
+        assert ft_mod.finetune_add_code("print(1)", "python", "demo").startswith("[error] Refused")
+        out = ft_mod.finetune_add_code("print(1)", "python", "demo", consented=True)
+        assert out == "Code sample added (python, 8 chars). Consented: 1"
+
+    def test_clear_empties_the_process_global_corpus(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        b = _FakeBuilder()
+        _patch(monkeypatch, b, _FakePipeline())
+        ft_mod.finetune_add_code("print(1)", "python", consented=True)
+        assert ft_mod.finetune_dataset_clear() == "Dataset cleared: 1 row(s) removed"
+        assert b._code == []
 
 
 class TestModelOps:
@@ -170,6 +208,8 @@ class TestTraining:
         assert "Training completed:" in out
         assert "Loss: 0.1235" in out
         assert "Eval loss: 0.2" in out
+        # the answer names the corpus it trained on, or the number is unattributable
+        assert "Corpus: sha256 0123456789abcdef" in out
 
     def test_success_without_eval(self, monkeypatch: pytest.MonkeyPatch) -> None:
         b = _FakeBuilder(dataset={"train": [1], "test": []})

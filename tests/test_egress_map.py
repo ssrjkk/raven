@@ -14,6 +14,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "docs" / "security" / "egress.md"
 PACKAGES = ("raven", "ravencode", "aios")
@@ -26,6 +28,14 @@ _TEMPLATE = re.compile(r"\{[^}]*\}")
 # Hosts the source builds entirely from a runtime value, so no label survives to match against.
 # "*" is the node address in raven/cli/nodes_cmd.py -- see "LAN and paired devices" in the map.
 _UNRESOLVABLE = frozenset({"*"})
+
+# Hosts a third-party client assembles itself, so our source holds no literal to match. The
+# exemption has to be earned: `proof` must still appear in the named file, which is the call that
+# reaches the host. Delete the call and the map row loses its basis and fails.
+_SDK_OWNED: dict[str, tuple[str, str]] = {
+    "huggingface.co": ("raven/unique/fine_tuning.py", "from_pretrained"),
+    "api.wandb.ai": ("raven/unique/fine_tuning.py", "import wandb"),
+}
 
 
 def _netloc(raw: str) -> str:
@@ -92,9 +102,19 @@ def test_the_map_names_no_host_the_code_stopped_using() -> None:
         token
         for token in documented_tokens()
         if "*" not in token
+        and token not in _SDK_OWNED
         and not any(host == token.rstrip(".") or host.startswith(token.rstrip(".") + ".") for host in present)
     )
     assert not stale, f"map rows with no matching host literal in {PACKAGES}: {stale}"
+
+
+@pytest.mark.parametrize("host", sorted(_SDK_OWNED))
+def test_an_sdk_owned_host_is_still_reached_by_the_call_that_earns_it(host: str) -> None:
+    """A row with no host literal is the one way this map could start describing a socket nobody
+    opens. The proof is the call: remove it and the row is unverifiable, so it must go."""
+    where, proof = _SDK_OWNED[host]
+    source = (ROOT / where).read_text(encoding="utf-8")
+    assert proof in source, f"{where} no longer contains {proof!r}; drop the {host} row or restore the call"
 
 
 def _external_refs(markup: str) -> list[str]:

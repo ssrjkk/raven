@@ -188,7 +188,18 @@ class ToolRegistry:
                 return result
             except TimeoutError:
                 elapsed = time.monotonic() - t0
-                logger.warning("Tool {} timed out after {}s", name, spec.timeout)
+                if asyncio.iscoroutinefunction(spec.handler):
+                    logger.warning("Tool {} timed out after {}s", name, spec.timeout)
+                else:
+                    # The wait ended, the work did not: a sync handler runs on the loop's shared
+                    # to_thread executor and holds one of its workers until it returns by itself.
+                    logger.warning(
+                        "Tool {} timed out after {}s; its handler is still running on the shared "
+                        "thread pool and its outcome is unknown, so this call is not retried",
+                        name,
+                        spec.timeout,
+                    )
+                    metrics.inc("tool_calls_abandoned_total", {"tool": name})
                 metrics.inc("tool_calls_error_total", {"tool": name, "reason": "timeout"})
                 metrics.observe("tool_call_duration", elapsed, {"tool": name})
                 return f"[error] Tool '{name}' timed out after {spec.timeout}s"

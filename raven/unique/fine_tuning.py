@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import math
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,6 +13,7 @@ from typing import Any
 from loguru import logger
 
 from raven.core.llm.chat_render import render_chat
+from raven.core.security.context_filter import redact_pii
 
 try:
     import torch
@@ -82,6 +85,9 @@ class ConversationExample:
     messages: list[dict[str, str]]
     system_prompt: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+    consented: bool = False
+    """Whether the people in this row agreed to be trained on. Empty corpus is a better outcome than
+    an unconsented one: the builder drops the row rather than quietly including it."""
 
 
 @dataclass
@@ -90,12 +96,15 @@ class CodeExample:
     language: str = ""
     description: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+    consented: bool = False
 
 
 @dataclass
 class DatasetConfig:
     max_length: int = 2048
     test_split: float = 0.1
+    require_consent: bool = True
+    redact_pii: bool = True
 
 
 @dataclass
@@ -196,30 +205,62 @@ class DatasetBuilder:
         logger.info("Loaded {} {} samples from {}", count, source_type, path)
         return count
 
+    def _text(self, value: str) -> str:
+        return redact_pii(value) if self._config.redact_pii else value
+
+    def _consented(self, rows: list[Any]) -> list[Any]:
+        if not self._config.require_consent:
+            return list(rows)
+        return [row for row in rows if row.consented]
+
     def _messages(self, conv: ConversationExample) -> list[dict[str, str]]:
-        messages = [dict(m) for m in conv.messages]
+        messages = [{"role": m["role"], "content": self._text(m.get("content", ""))} for m in conv.messages]
         if conv.system_prompt:
-            messages.insert(0, {"role": "system", "content": conv.system_prompt})
+            messages.insert(0, {"role": "system", "content": self._text(conv.system_prompt)})
         return messages
 
     def _format_code(self, code: CodeExample) -> str:
-        header = f"// {code.description}" if code.description else ""
+        description = self._text(code.description)
+        header = f"// {description}" if description else ""
         if code.language:
             header = f"// Language: {code.language}\n{header}"
-        return f"{header}\n{code.code}" if header else code.code
+        return f"{header}\n{self._text(code.code)}" if header else self._text(code.code)
 
     def build_dataset(self) -> Any:
         """Rows carry messages, not rendered text: only the tokenizer knows its own chat template."""
         if not _DATASETS_AVAILABLE:
             raise RuntimeError("`datasets` library is required to build a Dataset object")
+        conversations = self._consented(self._conversations)
+        code_samples = self._consented(self._code_samples)
+        skipped = (len(self._conversations) - len(conversations)) + (len(self._code_samples) - len(code_samples))
+        if skipped:
+            logger.warning("Dataset skipped {} row(s) without consent", skipped)
+        if not conversations and not code_samples:
+            raise RuntimeError(
+                "no consented rows to train on: add them with consented=True or set require_consent=False"
+            )
         data = {
-            "messages": [self._messages(c) for c in self._conversations] + [[] for _ in self._code_samples],
-            "text": [""] * len(self._conversations) + [self._format_code(c) for c in self._code_samples],
+            "messages": [self._messages(c) for c in conversations] + [[] for _ in code_samples],
+            "text": [""] * len(conversations) + [self._format_code(c) for c in code_samples],
         }
         dataset = Dataset.from_dict(data)
+        rows = len(conversations) + len(code_samples)
+        if rows < 2:
+            # `datasets` rejects both a zero and a proportional split for a single row -- "the
+            # resulting train set will be empty", then "test_size should be positive" -- which reads
+            # as a library crash rather than as the small corpus it is
+            logger.warning("Corpus has one row: no held-out split is possible, training on it whole")
+            return {"train": dataset, "test": dataset.select([])}
         split = dataset.train_test_split(test_size=self._config.test_split, seed=42)
         logger.info("Built dataset: {} train, {} test samples", len(split["train"]), len(split["test"]))
         return split
+
+    def corpus_hash(self) -> str:
+        """sha256 over the rows exactly as they enter the tokenizer, redaction included. A dataset
+        card without this cannot say which corpus a checkpoint came from."""
+        lines = [json.dumps(self._messages(c), ensure_ascii=False, sort_keys=True) for c in self._consented(self._conversations)]
+        lines += [self._format_code(c) for c in self._consented(self._code_samples)]
+        return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
 
     def tokenize_dataset(self, dataset: Any, tokenizer: Any) -> Any:
         def encode(examples: dict[str, Any]) -> dict[str, Any]:
@@ -243,22 +284,68 @@ class DatasetBuilder:
         return tokenized
 
     def stats(self) -> dict[str, Any]:
+        consented_conversations = self._consented(self._conversations)
+        consented_code = self._consented(self._code_samples)
         return {
             "conversations": len(self._conversations),
             "code_samples": len(self._code_samples),
+            "consented": {"conversations": len(consented_conversations), "code_samples": len(consented_code)},
+            "excluded_without_consent": (len(self._conversations) - len(consented_conversations))
+            + (len(self._code_samples) - len(consented_code)),
+            "policy": {"require_consent": self._config.require_consent, "redact_pii": self._config.redact_pii},
             "config": {
                 "max_length": self._config.max_length,
                 "test_split": self._config.test_split,
             },
         }
 
+    def dataset_card(self) -> dict[str, Any]:
+        """What the corpus actually is, derived from the rows rather than asserted by whoever added
+        them: counts by role, size, the consent and redaction policies in force, and the hash the
+        checkpoint's card has to match."""
+        rows = self._consented(self._conversations)
+        codes = self._consented(self._code_samples)
+        roles: dict[str, int] = {}
+        for conv in rows:
+            for message in self._messages(conv):
+                roles[message["role"]] = roles.get(message["role"], 0) + 1
+        characters = sum(len(message["content"]) for conv in rows for message in self._messages(conv))
+        characters += sum(len(self._format_code(code)) for code in codes)
+        return {
+            "rows": {"conversations": len(rows), "code_samples": len(codes)},
+            "messages_by_role": dict(sorted(roles.items())),
+            "characters": characters,
+            "policy": self.stats()["policy"],
+            "excluded_without_consent": self.stats()["excluded_without_consent"],
+            "corpus_sha256": self.corpus_hash(),
+        }
+
+    def write_card(self, path: str | Path) -> Path:
+        """The card travels with the adapter: a checkpoint directory nobody can tie to a corpus is
+        not a reproducible artifact."""
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(self.dataset_card(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        return target
+
     def clear(self) -> None:
         self._conversations.clear()
         self._code_samples.clear()
 
 
+#: RAVEN_TRAIN_TRACKING is the switch. Importable is not consent: a self-hosted install that happens
+#: to have `wandb` in its environment must not publish metrics, and `log_checkpoint` uploads model
+#: weights, because the package resolved.
+_TRACKING_ENV_VAR = "RAVEN_TRAIN_TRACKING"
+_TRACKING_ON = frozenset({"1", "true", "yes", "on"})
+
+
+def training_tracking_enabled() -> bool:
+    return os.environ.get(_TRACKING_ENV_VAR, "").strip().lower() in _TRACKING_ON
+
+
 class TrainingMonitor:
-    def __init__(self, use_wandb: bool = True, client: Any = None) -> None:
+    def __init__(self, use_wandb: bool = False, client: Any = None) -> None:
         # the client is held, not reached for as a module global: that global is only bound when
         # the optional extra is installed, which made every test of this class a reload or a patch
         self._client = client if client is not None else (wandb if use_wandb and _WANDB_AVAILABLE else None)
@@ -617,7 +704,19 @@ class FineTuningPipeline:
     async def train_with_wandb(
         self, config: TrainingConfig, dataset: Any, client: Any = None
     ) -> tuple[Any, dict[str, Any]]:
+        """Train, optionally mirroring metrics to W&B.
+
+        The mirror needs a decision from the operator: either an explicit `client` (the caller already
+        holds one, so it wants this) or RAVEN_TRAIN_TRACKING on. Without either, this is `train()` and
+        nothing leaves the machine -- the upload includes checkpoint artifacts, i.e. model weights.
+        """
         self._config = config
+        if client is None and not training_tracking_enabled():
+            logger.info("Training tracking is off; set {}=on to mirror metrics", _TRACKING_ENV_VAR)
+            self.load_model()
+            metrics = self.train(dataset)
+            return self._model, metrics
+
         wandb_client = client if client is not None else (wandb if _WANDB_AVAILABLE else None)
         if wandb_client is None:
             logger.warning("W&B not available, training without monitoring")
