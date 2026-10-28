@@ -161,7 +161,7 @@ export default function ComponentLibrary() {
             {iconList.map((Icon, i) => (
               <div key={i} className="flex flex-col items-center gap-1 p-2 rounded-lg bg-tertiary">
                 <Icon className="w-4 h-4 text-secondary" />
-                <span className="text-[8px] text-tertiary">{Icon.displayName || Icon.name || "?"}</span>
+                <span className="text-[10px] text-tertiary">{Icon.displayName || Icon.name || "?"}</span>
               </div>
             ))}
           </div>

@@ -114,7 +114,7 @@ function CodingInsights({ data }: { data: CodingInsights | null }) {
                 backgroundColor: "var(--dt-colors-accent-default)",
                 opacity: 0.7 + (d.count / maxCommit) * 0.3,
               }} title={`${d.date}: ${d.count} commits`} />
-              <span className="text-[9px] text-tertiary">
+              <span className="text-[10px] text-tertiary">
                 {d.date.slice(5)}
               </span>
             </div>
@@ -137,7 +137,7 @@ function CodingInsights({ data }: { data: CodingInsights | null }) {
                     backgroundColor: "var(--dt-colors-accent-default)",
                     opacity: 0.4 + (count / maxHour) * 0.6,
                   }} title={`${i}:00 — ${count} commits`} />
-                  <span className="text-[8px] mt-0.5 text-tertiary">{i}</span>
+                  <span className="text-[10px] mt-0.5 text-tertiary">{i}</span>
                 </div>
               );
             })}
@@ -192,7 +192,7 @@ function LLMInsights({ data }: { data: LlmInsights | null }) {
                   backgroundColor: "var(--dt-colors-accent-default)",
                   opacity: 0.6 + (d.calls / maxCalls) * 0.4,
                 }} />
-                <span className="text-[9px] text-tertiary">{d.date.slice(5)}</span>
+                <span className="text-[10px] text-tertiary">{d.date.slice(5)}</span>
               </div>
             ))}
           </div>
@@ -234,7 +234,7 @@ function LLMInsights({ data }: { data: LlmInsights | null }) {
                   backgroundColor: "var(--dt-colors-accent-default)",
                   opacity: 0.3 + (count / maxHour) * 0.7,
                 }} />
-                <span className="text-[8px] mt-0.5 text-tertiary">{i}</span>
+                <span className="text-[10px] mt-0.5 text-tertiary">{i}</span>
               </div>
             );
           })}

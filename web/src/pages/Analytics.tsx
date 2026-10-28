@@ -216,7 +216,7 @@ export default function Analytics() {
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
                     <XAxis type="number" stroke="var(--dt-colors-text-secondary)" fontSize={11} />
-                    <YAxis type="category" dataKey="name" stroke="var(--dt-colors-text-secondary)" fontSize={9} width={100} />
+                    <YAxis type="category" dataKey="name" stroke="var(--dt-colors-text-secondary)" fontSize={10} width={100} />
                     <Tooltip
                       contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
                     />
@@ -382,7 +382,7 @@ export default function Analytics() {
                 }))}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
-                <XAxis dataKey="name" stroke="var(--dt-colors-text-secondary)" fontSize={9} angle={-30} textAnchor="end" height={60} />
+                <XAxis dataKey="name" stroke="var(--dt-colors-text-secondary)" fontSize={10} angle={-30} textAnchor="end" height={60} />
                 <YAxis stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                 <Tooltip
                   contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
@@ -478,8 +478,8 @@ export default function Analytics() {
                   <ResponsiveContainer width="100%" height={150}>
                     <LineChart data={series}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
-                      <XAxis dataKey="ts" tickFormatter={(v: number) => new Date(Number(v) * 1000).toLocaleTimeString()} stroke="var(--dt-colors-text-secondary)" fontSize={9} />
-                      <YAxis stroke="var(--dt-colors-text-secondary)" fontSize={9} />
+                      <XAxis dataKey="ts" tickFormatter={(v: number) => new Date(Number(v) * 1000).toLocaleTimeString()} stroke="var(--dt-colors-text-secondary)" fontSize={10} />
+                      <YAxis stroke="var(--dt-colors-text-secondary)" fontSize={10} />
                       <Tooltip
                         contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 11 }}
                       />

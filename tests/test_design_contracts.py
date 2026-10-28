@@ -894,6 +894,35 @@ def test_theme_differences_come_from_tokens_not_from_class_remaps() -> None:
     assert not offenders, "per-theme class remaps found: " + "; ".join(offenders)
 
 
+MINIMUM_FONT_PX = 10.0
+_FONT_PX = re.compile(
+    r"text-\[(\d+(?:\.\d+)?)px\]|font-size:\s*(\d+(?:\.\d+)?)px|fontSize=\{(\d+(?:\.\d+)?)\}|fontSize:\s*(\d+(?:\.\d+)?)\}"
+)
+
+
+def test_nothing_renders_text_below_the_floor() -> None:
+    """Chart ticks were painted at 9px and micro-labels at 8px. WCAG sets no absolute floor, but the
+    product ships at 360px, and a 9px timestamp on a phone is decoration rather than information. Ten
+    CSS pixels is the declared floor -- the token scale itself starts at 0.75rem (12px), so anything
+    below ten is an arbitrary utility that walked past the scale."""
+    offenders: list[str] = []
+    for path in _web_sources():
+        for lineno, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            for match in _FONT_PX.finditer(line):
+                size = float(next(group for group in match.groups() if group))
+                if size < MINIMUM_FONT_PX:
+                    offenders.append(f"{path.relative_to(WEB)}:{lineno}: {size}px")
+
+    for theme in THEME_FILES:
+        for name, value in _theme_values(theme).items():
+            if not name.startswith("--dt-typography-font-size-") or not value.endswith("rem"):
+                continue
+            pixels = float(value[:-3]) * 16
+            if pixels < MINIMUM_FONT_PX:
+                offenders.append(f"{theme}: {name} = {pixels:.1f}px")
+    assert not offenders, "\n".join(offenders)
+
+
 def test_no_component_paints_a_colour_the_theme_does_not_publish() -> None:
     """A literal is a colour no theme owns: invisible to every contrast gate here, unmoved by the
     accent picker, and measured wrong in two of the three themes. web/src/design is where colours are

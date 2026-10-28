@@ -133,6 +133,9 @@ author's monitor:
 - the storefront (`site/styles.css`) is gated too: any rule that declares a label and a background is
   measured at AA against each dark panel its wash could land on (worst case kept), and no colour literal
   may appear outside its `:root` scale
+- nothing renders text below a 10px floor: arbitrary utilities and inline chart props are scanned in
+  `web/src`, and the `typography.font-size.*` tokens are held to the same minimum -- the scale starts at
+  12px, so anything smaller had to have walked past it
 - no shipped stylesheet pins itself wider than a phone, and every `<iframe>` is sandboxed without the
   `allow-scripts` + `allow-same-origin` pair that hands the embedder its own origin back
 
