@@ -195,8 +195,8 @@ export default function Analytics() {
                       }))}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
-                    <XAxis dataKey="name" stroke="var(--dt-colors-text-tertiary)" fontSize={10} />
-                    <YAxis stroke="var(--dt-colors-text-tertiary)" fontSize={11} />
+                    <XAxis dataKey="name" stroke="var(--dt-colors-text-secondary)" fontSize={10} />
+                    <YAxis stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                     <Tooltip
                       contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
                     />
@@ -215,8 +215,8 @@ export default function Analytics() {
                     layout="vertical"
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
-                    <XAxis type="number" stroke="var(--dt-colors-text-tertiary)" fontSize={11} />
-                    <YAxis type="category" dataKey="name" stroke="var(--dt-colors-text-tertiary)" fontSize={9} width={100} />
+                    <XAxis type="number" stroke="var(--dt-colors-text-secondary)" fontSize={11} />
+                    <YAxis type="category" dataKey="name" stroke="var(--dt-colors-text-secondary)" fontSize={9} width={100} />
                     <Tooltip
                       contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
                     />
@@ -261,8 +261,8 @@ export default function Analytics() {
             <ResponsiveContainer width="100%" height={250}>
               <LineChart data={messageSeries}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
-                <XAxis dataKey="ts" tickFormatter={(v) => new Date(Number(v) * 1000).toLocaleTimeString()} stroke="var(--dt-colors-text-tertiary)" fontSize={11} />
-                <YAxis stroke="var(--dt-colors-text-tertiary)" fontSize={11} />
+                <XAxis dataKey="ts" tickFormatter={(v) => new Date(Number(v) * 1000).toLocaleTimeString()} stroke="var(--dt-colors-text-secondary)" fontSize={11} />
+                <YAxis stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                 <Tooltip
                   contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
                   labelFormatter={(v) => new Date(Number(v) * 1000).toLocaleString()}
@@ -280,8 +280,8 @@ export default function Analytics() {
             <ResponsiveContainer width="100%" height={250}>
               <LineChart data={errorSeries}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
-                <XAxis dataKey="ts" tickFormatter={(v) => new Date(Number(v) * 1000).toLocaleTimeString()} stroke="var(--dt-colors-text-tertiary)" fontSize={11} />
-                <YAxis stroke="var(--dt-colors-text-tertiary)" fontSize={11} />
+                <XAxis dataKey="ts" tickFormatter={(v) => new Date(Number(v) * 1000).toLocaleTimeString()} stroke="var(--dt-colors-text-secondary)" fontSize={11} />
+                <YAxis stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                 <Tooltip
                   contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
                   labelFormatter={(v) => new Date(Number(v) * 1000).toLocaleString()}
@@ -303,8 +303,8 @@ export default function Analytics() {
                 error: toolBd.error_series?.[i]?.avg ?? 0,
               }))}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
-                <XAxis dataKey="ts" tickFormatter={(v) => new Date(Number(v) * 1000).toLocaleTimeString()} stroke="var(--dt-colors-text-tertiary)" fontSize={11} />
-                <YAxis stroke="var(--dt-colors-text-tertiary)" fontSize={11} />
+                <XAxis dataKey="ts" tickFormatter={(v) => new Date(Number(v) * 1000).toLocaleTimeString()} stroke="var(--dt-colors-text-secondary)" fontSize={11} />
+                <YAxis stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                 <Tooltip
                   contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
                   labelFormatter={(v) => new Date(Number(v) * 1000).toLocaleString()}
@@ -357,8 +357,8 @@ export default function Analytics() {
                 layout="vertical"
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
-                <XAxis type="number" stroke="var(--dt-colors-text-tertiary)" fontSize={11} />
-                <YAxis type="category" dataKey="name" stroke="var(--dt-colors-text-tertiary)" fontSize={10} width={150} />
+                <XAxis type="number" stroke="var(--dt-colors-text-secondary)" fontSize={11} />
+                <YAxis type="category" dataKey="name" stroke="var(--dt-colors-text-secondary)" fontSize={10} width={150} />
                 <Tooltip
                   contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
                 />
@@ -382,8 +382,8 @@ export default function Analytics() {
                 }))}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
-                <XAxis dataKey="name" stroke="var(--dt-colors-text-tertiary)" fontSize={9} angle={-30} textAnchor="end" height={60} />
-                <YAxis stroke="var(--dt-colors-text-tertiary)" fontSize={11} />
+                <XAxis dataKey="name" stroke="var(--dt-colors-text-secondary)" fontSize={9} angle={-30} textAnchor="end" height={60} />
+                <YAxis stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                 <Tooltip
                   contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
                   labelFormatter={(v, payload: readonly { payload?: { fullName?: string } }[]) => payload?.[0]?.payload?.fullName || v}
@@ -478,8 +478,8 @@ export default function Analytics() {
                   <ResponsiveContainer width="100%" height={150}>
                     <LineChart data={series}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
-                      <XAxis dataKey="ts" tickFormatter={(v: number) => new Date(Number(v) * 1000).toLocaleTimeString()} stroke="var(--dt-colors-text-tertiary)" fontSize={9} />
-                      <YAxis stroke="var(--dt-colors-text-tertiary)" fontSize={9} />
+                      <XAxis dataKey="ts" tickFormatter={(v: number) => new Date(Number(v) * 1000).toLocaleTimeString()} stroke="var(--dt-colors-text-secondary)" fontSize={9} />
+                      <YAxis stroke="var(--dt-colors-text-secondary)" fontSize={9} />
                       <Tooltip
                         contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 11 }}
                       />

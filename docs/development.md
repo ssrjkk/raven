@@ -105,6 +105,9 @@ author's monitor:
   that at least one of the theme's two inverse colours carries an AA label on every one of those
   slots; plus canvas text, whose colours `paint.ts` reads from the theme once a frame because a canvas
   cannot resolve `var()`
+- chart chrome is themed too: no `<XAxis>`/`<YAxis>` may rely on recharts' default `#666` (2.72:1 on
+  the dark card) and no `<Tooltip>` on its default white box; each axis `stroke` token is measured at
+  4.5:1 against the card of every theme, tick labels being normal text to WCAG at 9-11px
 - chart series come from `colors.chart.series-*` — no hard-coded hex inside recharts props — are at
   least 3:1 against their own theme's background, and spread over the hue wheel; every
   `<ResponsiveContainer>` sits inside `ChartCard`, which carries the `role="img"` + `aria-label` a

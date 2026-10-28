@@ -104,8 +104,8 @@ export default function ProjectInsights() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v: string) => v.slice(5)} minTickGap={24} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                  <XAxis stroke="var(--dt-colors-text-secondary)" dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v: string) => v.slice(5)} minTickGap={24} />
+                  <YAxis stroke="var(--dt-colors-text-secondary)" allowDecimals={false} tick={{ fontSize: 10 }} />
                   <Tooltip
                     contentStyle={{ backgroundColor: "var(--dt-colors-bg-tertiary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
                     labelFormatter={(v) => String(v)}

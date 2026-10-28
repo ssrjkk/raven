@@ -47,9 +47,10 @@ TEXT_PAIRS = (
     (("text", "on-status-info"), ("status", "info"), NORMAL_TEXT),
     # The second stop of the brand gradient carries text in .gradient-text, so it needs text contrast.
     (("brand", "secondary"), ("bg", "primary"), NORMAL_TEXT),
-    # Canvas text and canvas edges in the knowledge graph are painted from these, once a frame.
+    # Canvas text and canvas edges in the knowledge graph are painted from these, once a frame, and
+    # so are chart tick labels: 9-11px text is normal text to WCAG, not a UI part.
     (("text", "secondary"), ("surface", "card"), NORMAL_TEXT),
-    (("text", "tertiary"), ("surface", "card"), LARGE_TEXT_OR_UI),
+    (("text", "tertiary"), ("surface", "card"), NORMAL_TEXT),
 )
 
 WHITE = "#ffffff"
@@ -637,6 +638,66 @@ def test_shipped_chat_pages_declare_their_colour_contrast() -> None:
         ratio = contrast(foreground, background)
         assert ratio >= minimum, f"{label}: {foreground} on {background} = {ratio:.2f}:1, need {minimum}"
 
+
+
+
+def _jsx_tags(name: str) -> list[tuple[str, int, str]]:
+    """Every `<name ...>` tag in the SPA sources, with the file and line it starts on."""
+    out: list[tuple[str, int, str]] = []
+    for path in _web_sources():
+        if path.suffix != ".tsx":
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for match in re.finditer(rf"<{name}\b", text):
+            braces = 0
+            index = match.start()
+            while index < len(text):
+                char = text[index]
+                if char == "{":
+                    braces += 1
+                elif char == "}":
+                    braces -= 1
+                elif char == ">" and braces == 0:
+                    break
+                index += 1
+            out.append((str(path.relative_to(WEB)), text[: match.start()].count(chr(10)) + 1, text[match.start() : index + 1]))
+    return out
+
+
+def test_no_chart_axis_falls_back_to_the_library_default_colour() -> None:
+    """recharts paints an unstyled axis with #666: 2.72:1 on the dark card and 3.35:1 on midnight, on
+    tick labels that are 9-11px -- text a user has to read. Every axis therefore names a token, and the
+    token has to clear the text minimum against the panel the chart sits on."""
+    offenders: list[str] = []
+    for name in ("XAxis", "YAxis"):
+        for file, line, tag in _jsx_tags(name):
+            stroke = re.search(r'stroke=\{?"var\((--dt-[a-zA-Z0-9-]+)\)', tag)
+            if stroke is None:
+                offenders.append(f"{file}:{line}: <{name}> has no token stroke -> {tag[:70]}")
+                continue
+            token = stroke.group(1)
+            for theme in THEME_FILES:
+                values = _theme_values(theme)
+                value = values.get(token)
+                if value is None:
+                    offenders.append(f"{file}:{line}: {token} is not published by {theme}")
+                    continue
+                card = values["--dt-colors-surface-card"]
+                ratio = contrast(value, card)
+                if ratio < NORMAL_TEXT:
+                    offenders.append(f"{file}:{line}: <{name}> {token}={value} on {theme} card = {ratio:.2f}:1")
+    assert not offenders, "\n".join(offenders)
+
+
+def test_no_tooltip_is_left_to_the_library_default_box() -> None:
+    """The default recharts tooltip is a white box with black text: on a dark theme it is the one part
+    of the chart that ignores it entirely."""
+    offenders = [
+        f"{file}:{line}: <Tooltip> without a themed contentStyle"
+        for file, line, tag in _jsx_tags("Tooltip")
+        if "contentStyle" not in tag and "content=" not in tag
+    ]
+    assert not offenders, "\n".join(offenders)
 
 
 def _css_rules(css: str) -> list[tuple[str, str]]:
