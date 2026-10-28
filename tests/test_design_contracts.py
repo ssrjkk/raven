@@ -638,6 +638,124 @@ def test_shipped_chat_pages_declare_their_colour_contrast() -> None:
         assert ratio >= minimum, f"{label}: {foreground} on {background} = {ratio:.2f}:1, need {minimum}"
 
 
+
+def _css_rules(css: str) -> list[tuple[str, str]]:
+    """Every (selector, body) pair, descending into at-rule blocks so a rule that only exists inside
+    a `@media` query is still read."""
+    out: list[tuple[str, str]] = []
+    position = 0
+    while True:
+        brace = css.find("{", position)
+        if brace == -1:
+            return out
+        end = _skip_block(css, brace)
+        selector = css[position:brace].strip().replace("\n", " ")
+        body = css[brace + 1 : end - 1]
+        if selector.startswith("@"):
+            out.extend(_css_rules(body))
+        elif selector:
+            out.append((selector, body))
+        position = end
+
+
+_LANDING_PANELS = ("--bg", "--bg-panel", "--bg-card", "--bg-raised")
+_GRADIENT_STOP = re.compile(r"var\(--[a-z-]+\)|#[0-9a-fA-F]{3,6}|rgba?\([^)]*\)")
+
+
+def _landing_variables(css: str) -> dict[str, str]:
+    root = next((body for selector, body in _css_rules(css) if selector == ":root"), "")
+    return dict(re.findall(r"(--[a-z-]+):\s*([^;]+);", root))
+
+
+def _resolve_colour(text: str, variables: dict[str, str]) -> tuple[float, float, float, float] | None:
+    """A CSS colour as channels plus alpha, following one var() level; None when it is not a colour."""
+    value = text.strip()
+    for _ in range(2):
+        match = re.fullmatch(r"var\((--[a-z-]+)\)", value)
+        if match is None:
+            break
+        value = variables.get(match.group(1), "").strip()
+    if value.startswith("#"):
+        body = value[1:]
+        if len(body) == 3:
+            body = "".join(ch * 2 for ch in body)
+        if len(body) != 6:
+            return None
+        channels = [int(body[i : i + 2], 16) for i in (0, 2, 4)]
+        return (float(channels[0]), float(channels[1]), float(channels[2]), 1.0)
+    if value.startswith(("rgb(", "rgba")):
+        parts = [float(p) for p in re.split(r"[,\s/]+", value[value.index("(") + 1 : value.rindex(")")].strip()) if p]
+        if len(parts) < 3:
+            return None
+        alpha = parts[3] if len(parts) > 3 else 1.0
+        return (parts[0], parts[1], parts[2], alpha)
+    return None
+
+
+def _over(foreground: tuple[float, float, float, float], background: tuple[float, float, float]) -> tuple[float, float, float]:
+    if foreground[3] >= 1.0:
+        return foreground[:3]
+    alpha = foreground[3]
+    return tuple(foreground[i] * alpha + background[i] * (1 - alpha) for i in range(3))  # type: ignore[return-value]
+
+
+def _hex(rgb: tuple[float, float, float]) -> str:
+    return "#{:02x}{:02x}{:02x}".format(*[max(0, min(255, round(c))) for c in rgb])
+
+
+def test_landing_labels_are_readable_on_every_panel_they_paint_on() -> None:
+    """The storefront is the surface a buyer reads first, and it keeps its own brand scale rather than
+    the SPA tokens, so nothing else in this suite would notice it regressing. Every rule that declares a
+    label and a background is measured: a translucent surface is composited over each dark panel it
+    could sit on and the worst answer is the one kept, because the rule does not say which ancestor it
+    lands on. This is what found white on --violet at 4.23:1 in ::selection and in the primary button's
+    gradient stop."""
+    css = (ROOT / "site" / "styles.css").read_text(encoding="utf-8")
+    variables = _landing_variables(css)
+    panels = []
+    for name in _LANDING_PANELS:
+        resolved = _resolve_colour(name if name.startswith("var") else f"var({name})", variables)
+        assert resolved is not None, f"site/styles.css declares no readable {name}"
+        panels.append(resolved[:3])
+
+    offenders: list[str] = []
+    for selector, body in _css_rules(css):
+        label = re.search(r"(?<![\w-])color:\s*([^;]+);", body)
+        surface = re.search(r"background(?:-image)?:\s*([^;]+);", body)
+        if label is None or surface is None:
+            continue
+        ink = _resolve_colour(label.group(1), variables)
+        if ink is None:
+            continue
+        declaration = surface.group(1)
+        stops = _GRADIENT_STOP.findall(declaration) if "gradient" in declaration else [declaration]
+        for background in panels:
+            paints = [
+                _over(step, background)
+                for step in (_resolve_colour(stop, variables) for stop in (stops or [declaration]))
+                if step is not None
+            ] or [background]
+            worst = min(contrast(_hex(_over(ink, paint)), _hex(paint)) for paint in paints)
+            if worst < NORMAL_TEXT:
+                offenders.append(
+                    f"{selector[:52]}: {label.group(1).strip()} on {declaration.strip()[:40]} = {worst:.2f}:1"
+                )
+    assert not offenders, "\n".join(offenders)
+
+
+def test_the_landing_reads_only_its_declared_scale() -> None:
+    """A colour the landing invents is invisible to the gate above's token names and to a brand change:
+    outside the :root block the stylesheet may only reference its own variables."""
+    css = (ROOT / "site" / "styles.css").read_text(encoding="utf-8")
+    offenders = []
+    for selector, body in _css_rules(css):
+        if selector == ":root":
+            continue
+        for match in _COLOUR_LITERAL.finditer(body):
+            offenders.append(f"{selector[:48]}: {match.group(0)}")
+    assert not offenders, "\n".join(offenders)
+
+
 _COLOUR_LITERAL = re.compile(r"#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b|\brgba?\([^)]*\)")
 
 # Tailwind's own palette: usable, but a colour the themes do not own, so it survives neither a theme

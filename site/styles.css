@@ -77,13 +77,17 @@
     --violet-bright: #a78bfa;
     --violet-text: #c4b5fd;
     --violet-deep: #7c3aed;
+    /* The lightest violet that still carries a white label (4.66:1); --violet is 4.23:1 under it. */
+    --violet-surface: #8452f5;
+    --on-violet: #ffffff;
+    --scrim: #000000;
     --fuchsia: #d946ef;
     --danger: #ff6b6b;
 
-    --hairline: rgba(236, 234, 244, 0.08);
-    --hairline-strong: rgba(236, 234, 244, 0.16);
-    --violet-edge: rgba(139, 92, 246, 0.34);
-    --violet-wash: rgba(139, 92, 246, 0.1);
+    --hairline: color-mix(in srgb, var(--ink) 8%, transparent);
+    --hairline-strong: color-mix(in srgb, var(--ink) 16%, transparent);
+    --violet-edge: color-mix(in srgb, var(--violet) 34%, transparent);
+    --violet-wash: color-mix(in srgb, var(--violet) 10%, transparent);
 
     --shell: 1120px;
     --gut: 1.5rem;
@@ -155,7 +159,7 @@ body::after {
     z-index: 200;
     padding: 0.6rem 1rem;
     background: var(--violet-deep);
-    color: #fff;
+    color: var(--on-violet);
     font-family: var(--font-mono);
     font-size: var(--fs-sm);
     text-decoration: none;
@@ -212,8 +216,8 @@ a {
 }
 
 ::selection {
-    background: var(--violet);
-    color: #fff;
+    background: var(--violet-surface);
+    color: var(--on-violet);
 }
 
 /* ---------- navbar ---------- */
@@ -228,15 +232,15 @@ a {
     gap: 1rem;
     min-height: var(--bar);
     padding: 0.6rem clamp(1rem, 4vw, 2rem);
-    background: rgba(10, 8, 18, 0.92);
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
     border-bottom: 1px solid var(--hairline);
     backdrop-filter: blur(12px) saturate(180%);
     transition: background-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .navbar:hover {
-    background: rgba(10, 8, 18, 0.95);
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.3);
+    background: color-mix(in srgb, var(--bg) 95%, transparent);
+    box-shadow: 0 2px 16px color-mix(in srgb, var(--scrim) 30%, transparent);
 }
 
 .navbar > nav {
@@ -348,7 +352,7 @@ a {
     transform: translateX(-50%);
     width: 80%;
     height: 60%;
-    background: radial-gradient(ellipse, rgba(139, 92, 246, 0.12), transparent 70%);
+    background: radial-gradient(ellipse, color-mix(in srgb, var(--violet) 12%, transparent), transparent 70%);
     pointer-events: none;
     z-index: 0;
 }
@@ -482,17 +486,17 @@ a {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, var(--violet-deep), var(--violet));
+    background: linear-gradient(135deg, var(--violet-deep), var(--violet-surface));
     border-color: var(--violet);
-    color: #fff;
-    box-shadow: 0 2px 12px rgba(139, 92, 246, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    color: var(--on-violet);
+    box-shadow: 0 2px 12px color-mix(in srgb, var(--violet) 25%, transparent), inset 0 1px 0 color-mix(in srgb, var(--on-violet) 10%, transparent);
     transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .btn-primary:hover {
     background: linear-gradient(135deg, var(--violet), var(--violet-bright));
     border-color: var(--violet-bright);
-    box-shadow: 0 6px 24px rgba(139, 92, 246, 0.5), 0 0 0 1px var(--violet-bright), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    box-shadow: 0 6px 24px color-mix(in srgb, var(--violet) 50%, transparent), 0 0 0 1px var(--violet-bright), inset 0 1px 0 color-mix(in srgb, var(--on-violet) 15%, transparent);
     transform: translateY(-2px);
 }
 
@@ -570,7 +574,7 @@ a {
 
 .feature-card {
     position: relative;
-    background: linear-gradient(135deg, rgba(22, 18, 33, 0.6), rgba(13, 10, 22, 0.4));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-card) 60%, transparent), color-mix(in srgb, var(--bg-panel) 40%, transparent));
     backdrop-filter: blur(12px);
     border: 1px solid var(--hairline);
     border-radius: 12px;
@@ -583,7 +587,7 @@ a {
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(217, 70, 239, 0.04));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--violet) 8%, transparent), color-mix(in srgb, var(--fuchsia) 4%, transparent));
     opacity: 0;
     transition: opacity 0.3s ease;
 }
@@ -609,7 +613,7 @@ a {
 .feature-card:hover {
     transform: translateY(-4px);
     border-color: var(--violet-edge);
-    box-shadow: 0 8px 32px rgba(139, 92, 246, 0.15), 0 0 0 1px var(--violet-edge);
+    box-shadow: 0 8px 32px color-mix(in srgb, var(--violet) 15%, transparent), 0 0 0 1px var(--violet-edge);
 }
 
 .feature-card:hover::before {
@@ -661,7 +665,7 @@ a {
 
 .search-input:focus {
     border-color: var(--violet);
-    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1), 0 2px 8px rgba(139, 92, 246, 0.15);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 10%, transparent), 0 2px 8px color-mix(in srgb, var(--violet) 15%, transparent);
     outline: none;
 }
 
@@ -689,7 +693,7 @@ a {
     border-color: var(--violet-edge);
     color: var(--ink);
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.15);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--violet) 15%, transparent);
 }
 
 .filter-btn[aria-pressed="true"] {
@@ -725,7 +729,7 @@ a {
     flex-direction: column;
     gap: 0.45rem;
     text-align: left;
-    background: linear-gradient(135deg, rgba(22, 18, 33, 0.7), rgba(13, 10, 22, 0.5));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-card) 70%, transparent), color-mix(in srgb, var(--bg-panel) 50%, transparent));
     backdrop-filter: blur(8px);
     border: 1px solid var(--hairline);
     border-radius: 8px;
@@ -742,7 +746,7 @@ a {
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.06), rgba(217, 70, 239, 0.03));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--violet) 6%, transparent), color-mix(in srgb, var(--fuchsia) 3%, transparent));
     opacity: 0;
     transition: opacity 0.25s ease;
 }
@@ -750,8 +754,8 @@ a {
 .tool-card:hover {
     transform: translateY(-2px);
     border-color: var(--violet-edge);
-    background: linear-gradient(135deg, rgba(26, 18, 38, 0.8), rgba(13, 10, 22, 0.6));
-    box-shadow: 0 4px 16px rgba(139, 92, 246, 0.12);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-raised) 80%, transparent), color-mix(in srgb, var(--bg-panel) 60%, transparent));
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--violet) 12%, transparent);
 }
 
 .tool-card:hover::before {
@@ -784,8 +788,8 @@ a {
     letter-spacing: 0.08em;
     text-transform: uppercase;
     padding: 0.1rem 0.4rem;
-    background: rgba(217, 70, 239, 0.12);
-    border: 1px solid rgba(217, 70, 239, 0.3);
+    background: color-mix(in srgb, var(--fuchsia) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--fuchsia) 30%, transparent);
     color: var(--fuchsia);
     border-radius: 2px;
     white-space: nowrap;
@@ -808,7 +812,7 @@ a {
     font-family: var(--font-mono);
     font-size: var(--fs-label);
     padding: 0.1rem 0.4rem;
-    background: rgba(236, 234, 244, 0.05);
+    background: color-mix(in srgb, var(--ink) 5%, transparent);
     border: 1px solid var(--hairline);
     border-radius: 2px;
     color: var(--ink-mute);
@@ -870,17 +874,17 @@ a {
 /* ---------- protocol console ---------- */
 
 .console {
-    background: linear-gradient(135deg, rgba(13, 10, 22, 0.8), rgba(10, 8, 18, 0.6));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-panel) 80%, transparent), color-mix(in srgb, var(--bg) 60%, transparent));
     backdrop-filter: blur(12px);
     border: 1px solid var(--violet-edge);
     border-radius: 8px;
     overflow: hidden;
-    box-shadow: 0 0 24px rgba(139, 92, 246, 0.08), 0 0 0 1px rgba(139, 92, 246, 0.05);
+    box-shadow: 0 0 24px color-mix(in srgb, var(--violet) 8%, transparent), 0 0 0 1px color-mix(in srgb, var(--violet) 5%, transparent);
     transition: box-shadow 0.3s ease, border-color 0.3s ease;
 }
 
 .console:hover {
-    box-shadow: 0 0 32px rgba(139, 92, 246, 0.15), 0 0 0 1px rgba(139, 92, 246, 0.1);
+    box-shadow: 0 0 32px color-mix(in srgb, var(--violet) 15%, transparent), 0 0 0 1px color-mix(in srgb, var(--violet) 10%, transparent);
     border-color: var(--violet);
 }
 
@@ -1006,7 +1010,7 @@ a {
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(217, 70, 239, 0.05));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--violet) 10%, transparent), color-mix(in srgb, var(--fuchsia) 5%, transparent));
     opacity: 0;
     transition: opacity 0.2s ease;
 }
@@ -1015,7 +1019,7 @@ a {
     background: var(--violet-wash);
     border-color: var(--violet);
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.2);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--violet) 20%, transparent);
 }
 
 .ghost-btn:hover::before {
@@ -1037,7 +1041,7 @@ a {
 }
 
 .arch-layer {
-    background: linear-gradient(135deg, rgba(22, 18, 33, 0.7), rgba(13, 10, 22, 0.5));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-card) 70%, transparent), color-mix(in srgb, var(--bg-panel) 50%, transparent));
     backdrop-filter: blur(8px);
     border: 1px solid var(--hairline);
     border-left: 2px solid transparent;
@@ -1049,7 +1053,7 @@ a {
 .arch-layer:hover {
     border-color: var(--violet-edge);
     border-left-color: var(--violet);
-    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.1);
+    box-shadow: 0 4px 20px color-mix(in srgb, var(--violet) 10%, transparent);
     transform: translateX(4px);
 }
 
@@ -1109,7 +1113,7 @@ a {
     flex-direction: column;
     gap: 0.6rem;
     padding: 1.1rem;
-    background: linear-gradient(135deg, rgba(22, 18, 33, 0.7), rgba(13, 10, 22, 0.5));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-card) 70%, transparent), color-mix(in srgb, var(--bg-panel) 50%, transparent));
     border: 1px solid var(--hairline);
     border-top: 2px solid var(--violet-edge);
     border-radius: 8px;
@@ -1351,7 +1355,7 @@ tbody tr:hover td {
     gap: 0.6rem;
     padding: 0.25rem 0.3rem 0.25rem 0.6rem;
     border-bottom: 1px solid var(--violet-edge);
-    background: rgb(139 92 246 / 5%);
+    background: color-mix(in srgb, var(--violet) 5%, transparent);
 }
 
 .code-lang {
@@ -1398,7 +1402,7 @@ tbody tr:hover td {
     color: var(--violet-text);
     border-color: var(--violet);
     transform: scale(1.05);
-    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.2);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--violet) 20%, transparent);
 }
 
 .step-note {
@@ -1536,7 +1540,7 @@ footer {
         padding: 0.25rem clamp(1rem, 4vw, 2rem) 0.5rem;
         background: var(--bg);
         border-bottom: 1px solid var(--hairline);
-        box-shadow: 0 18px 32px -16px rgba(0, 0, 0, 0.85);
+        box-shadow: 0 18px 32px -16px color-mix(in srgb, var(--scrim) 85%, transparent);
     }
 
     .js .navbar.nav-open > nav {

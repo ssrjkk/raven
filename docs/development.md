@@ -122,6 +122,9 @@ author's monitor:
   any other colour literal in those files, forbids an alias no rule uses, and computes their contrast
   pairs from `tokens.json` rather than from hexes copied into the test — including pairs that only
   exist because the page renders markdown in *user* rows too
+- the storefront (`site/styles.css`) is gated too: any rule that declares a label and a background is
+  measured at AA against each dark panel its wash could land on (worst case kept), and no colour literal
+  may appear outside its `:root` scale
 - no shipped stylesheet pins itself wider than a phone, and every `<iframe>` is sandboxed without the
   `allow-scripts` + `allow-same-origin` pair that hands the embedder its own origin back
 
