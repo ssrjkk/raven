@@ -828,6 +828,72 @@ _PALETTE_CLASS = re.compile(
 )
 
 
+
+def test_markdown_surfaces_restore_what_preflight_took_away() -> None:
+    """react-markdown emits h1-h6, ul/ol and a, and Tailwind's preflight resets each of them --
+    headings to `font-size: inherit`, lists to `list-style: none`, anchors to `color: inherit;
+    text-decoration: inherit` -- so a chat answer arrived with no structure and no visible links.
+    `.prose` has to put every one of them back, and the link cue cannot be colour alone."""
+    css = (WEB / "src" / "styles" / "index.css").read_text(encoding="utf-8")
+    # index by each selector in the list, so `.prose ul ul` cannot stand in for `.prose ul`
+    declarations: dict[str, str] = {}
+    for selector, body in _css_rules(css):
+        for part in selector.split(","):
+            name = part.strip()
+            if name.startswith(".prose"):
+                declarations[name] = f"{declarations.get(name, '')} {body}"
+
+    def declared(selector: str) -> str:
+        return re.sub(r"\s+", " ", declarations.get(selector, ""))
+
+    offenders: list[str] = []
+
+    # every heading level react-markdown can emit, and both list kinds, have to be re-declared on
+    # their own selector: preflight flattened them in one rule, so a near-miss is not evidence
+    for level in ("h1", "h2", "h3"):
+        if "font-size" not in declared(f".prose {level}"):
+            offenders.append(f".prose {level} declares no font-size: preflight left it at inherit")
+    for kind in ("ul", "ol"):
+        if "list-style" not in declared(f".prose {kind}"):
+            offenders.append(f".prose {kind} declares no list-style: preflight set ol,ul,menu to none")
+
+    anchor = declared(".prose a")
+    if not anchor:
+        offenders.append(".prose has no link rule at all")
+    else:
+        if "text-decoration: underline" not in anchor:
+            offenders.append(".prose a carries no text-decoration: underline -- colour alone is not a cue")
+        link = re.search(r"color:\s*var\((--dt-[a-zA-Z0-9-]+)\)", anchor)
+        if link is None:
+            offenders.append(".prose a does not take its colour from a token")
+        else:
+            token = link.group(1)
+            for theme in THEME_FILES:
+                values = _theme_values(theme)
+                if token not in values:
+                    offenders.append(f"{theme} publishes no {token}")
+                    continue
+                card = values["--dt-colors-surface-card"]
+                ratio = contrast(values[token], card)
+                if ratio < NORMAL_TEXT:
+                    offenders.append(f"{theme}: .prose link {values[token]} on the card = {ratio:.2f}:1")
+    assert not offenders, "\n".join(offenders)
+
+
+def test_theme_differences_come_from_tokens_not_from_class_remaps() -> None:
+    """`[data-theme="light"] .bg-gray-900 { ... }` was how the SPA used to do themes: a parallel list of
+    Tailwind utilities with token values pasted behind them. Fifteen such rules outlived the classes
+    they remapped, and the pattern itself is what stops a palette being a system -- the theme lives in
+    the tokens, and a per-theme utility remap is a second copy that drifts."""
+    css = (WEB / "src" / "styles" / "index.css").read_text(encoding="utf-8")
+    offenders = [
+        selector.strip()[:70]
+        for selector, _ in _css_rules(css)
+        if re.search(r'\[data-theme="(light|midnight)"\]\s*\.', selector)
+    ]
+    assert not offenders, "per-theme class remaps found: " + "; ".join(offenders)
+
+
 def test_no_component_paints_a_colour_the_theme_does_not_publish() -> None:
     """A literal is a colour no theme owns: invisible to every contrast gate here, unmoved by the
     accent picker, and measured wrong in two of the three themes. web/src/design is where colours are

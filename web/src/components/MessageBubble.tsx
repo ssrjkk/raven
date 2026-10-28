@@ -84,7 +84,7 @@ const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProp
             </span>
           )}
         </div>
-        <div className="text-sm leading-relaxed prose prose-invert max-w-none">
+        <div className="text-sm leading-relaxed prose max-w-none">
           {isUser ? (
             <MarkdownContent content={message.content} />
           ) : (

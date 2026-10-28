@@ -115,6 +115,11 @@ author's monitor:
 - any accent the user can pick (`ACCENT_PRESETS`, the accent picker) is clamped by
   `generateAccentPalette` so white button labels stay AA in every state; the matrix is 16 presets ×
   3 themes in vitest
+- markdown is styled by the token layer, not by luck: `@tailwindcss/typography` is not installed and
+  Tailwind's preflight resets headings to `font-size: inherit`, lists to `list-style: none` and anchors
+  to `color: inherit; text-decoration: inherit`, so `.prose` re-declares each of them (a gate checks
+  h1/h2/h3, `ul`, `ol` and the link underline individually, and the link colour at AA on the card), and
+  `index.css` may hold no `[data-theme="…"] .class` remaps — the theme lives in the tokens
 - shipped web surfaces — the SPA, the extension popup, the no-Node fallback page — reference no
   off-origin `src`/`href`, self-host their fonts with a Cyrillic subset, keep a visible focus ring,
   and stop animation under `prefers-reduced-motion`

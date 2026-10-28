@@ -32,7 +32,7 @@ function ArtifactBody({ artifact }: { artifact: AgentArtifact }) {
 
   if (type === "markdown") {
     return (
-      <div className="text-sm leading-relaxed prose prose-invert max-w-none">
+      <div className="text-sm leading-relaxed prose max-w-none">
         <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{artifact.content}</ReactMarkdown>
       </div>
     );

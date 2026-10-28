@@ -137,7 +137,7 @@ function ArtifactCard({ artifact }: { artifact: ArtifactPayload }) {
       </div>
       <div className="p-3">
         {type === "markdown" ? (
-          <div className="text-sm leading-relaxed prose prose-invert max-w-none">
+          <div className="text-sm leading-relaxed prose max-w-none">
             <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{artifact.content}</ReactMarkdown>
           </div>
         ) : type === "mermaid" ? (
@@ -168,7 +168,7 @@ export default function ArtifactRenderer({ content }: { content: string }) {
 
   if (extracted.length === 0) {
     return (
-      <div className="text-sm leading-relaxed prose prose-invert max-w-none">
+      <div className="text-sm leading-relaxed prose max-w-none">
         <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{content}</ReactMarkdown>
       </div>
     );
@@ -179,7 +179,7 @@ export default function ArtifactRenderer({ content }: { content: string }) {
       {extracted.map((item, i) => (
         <div key={i}>
           {item.text.trim() && (
-            <div className="text-sm leading-relaxed prose prose-invert max-w-none mb-2">
+            <div className="text-sm leading-relaxed prose max-w-none mb-2">
               <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{item.text}</ReactMarkdown>
             </div>
           )}

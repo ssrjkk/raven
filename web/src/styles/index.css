@@ -232,98 +232,54 @@ p code {
 
 [data-theme="light"] {
   scrollbar-color: var(--dt-colors-border-default) transparent;
-  --tw-bg-opacity: 1;
   color-scheme: light;
 }
 
 [data-theme="midnight"] {
   scrollbar-color: var(--dt-colors-border-hover) transparent;
-  --tw-bg-opacity: 1;
   color-scheme: dark;
 }
-
-[data-theme="light"] body,
-[data-theme="midnight"] body { background-color: var(--dt-colors-bg-primary); color: var(--dt-colors-text-primary); }
-
-[data-theme="light"] .bg-gray-950,
-[data-theme="light"] .bg-gray-900,
-[data-theme="light"] .bg-gray-900\/60,
-[data-theme="light"] .bg-gray-900\/90,
-[data-theme="midnight"] .bg-gray-950,
-[data-theme="midnight"] .bg-gray-900,
-[data-theme="midnight"] .bg-gray-900\/60,
-[data-theme="midnight"] .bg-gray-900\/90 { background-color: var(--dt-colors-bg-primary); }
-
-[data-theme="light"] .bg-gray-800,
-[data-theme="light"] .bg-gray-800\/50,
-[data-theme="light"] .bg-gray-800\/60,
-[data-theme="light"] .bg-gray-800\/30,
-[data-theme="midnight"] .bg-gray-800,
-[data-theme="midnight"] .bg-gray-800\/50,
-[data-theme="midnight"] .bg-gray-800\/60,
-[data-theme="midnight"] .bg-gray-800\/30 { background-color: var(--dt-colors-bg-secondary); }
-
-[data-theme="light"] .bg-gray-950\/50,
-[data-theme="light"] .bg-gray-950\/80,
-[data-theme="midnight"] .bg-gray-950\/50,
-[data-theme="midnight"] .bg-gray-950\/80 { background-color: var(--dt-colors-bg-primary); }
-
-[data-theme="light"] .text-gray-100,
-[data-theme="light"] .text-gray-200,
-[data-theme="midnight"] .text-gray-100,
-[data-theme="midnight"] .text-gray-200 { color: var(--dt-colors-text-primary); }
-
-[data-theme="light"] .text-gray-300,
-[data-theme="midnight"] .text-gray-300 { color: var(--dt-colors-text-secondary); }
-
-[data-theme="light"] .text-gray-400,
-[data-theme="light"] .text-gray-500,
-[data-theme="light"] .text-gray-600,
-[data-theme="light"] .text-gray-700,
-[data-theme="midnight"] .text-gray-400,
-[data-theme="midnight"] .text-gray-500,
-[data-theme="midnight"] .text-gray-600,
-[data-theme="midnight"] .text-gray-700 { color: var(--dt-colors-text-tertiary); }
-
-[data-theme="light"] .border-gray-800\/50,
-[data-theme="light"] .border-gray-800,
-[data-theme="light"] .border-gray-700\/50,
-[data-theme="light"] .border-gray-700,
-[data-theme="light"] .border-gray-700\/30,
-[data-theme="light"] .border-gray-700\/20,
-[data-theme="light"] .border-gray-800\/30,
-[data-theme="midnight"] .border-gray-800\/50,
-[data-theme="midnight"] .border-gray-800,
-[data-theme="midnight"] .border-gray-700\/50,
-[data-theme="midnight"] .border-gray-700,
-[data-theme="midnight"] .border-gray-700\/30,
-[data-theme="midnight"] .border-gray-700\/20,
-[data-theme="midnight"] .border-gray-800\/30 { border-color: var(--dt-colors-border-default); }
-
-[data-theme="light"] .placeholder-gray-500::placeholder,
-[data-theme="midnight"] .placeholder-gray-500::placeholder { color: var(--dt-colors-text-tertiary); }
-
-[data-theme="light"] .bg-red-900\/90,
-[data-theme="midnight"] .bg-red-900\/90 { background-color: var(--dt-colors-status-error-bg); }
-[data-theme="light"] .bg-green-900\/90,
-[data-theme="midnight"] .bg-green-900\/90 { background-color: var(--dt-colors-status-success-bg); }
-[data-theme="light"] .text-red-200,
-[data-theme="midnight"] .text-red-200 { color: var(--dt-colors-status-error); }
-[data-theme="light"] .text-green-200,
-[data-theme="midnight"] .text-green-200 { color: var(--dt-colors-status-success); }
-
-[data-theme="light"] .hover\:bg-gray-800:hover,
-[data-theme="midnight"] .hover\:bg-gray-800:hover { background-color: var(--dt-colors-bg-hover); }
-
-[data-theme="light"] .prose-invert,
-[data-theme="midnight"] .prose-invert {
-  --tw-prose-body: var(--dt-colors-text-primary);
-  --tw-prose-headings: var(--dt-colors-text-primary);
-  --tw-prose-links: var(--dt-colors-text-link);
-  --tw-prose-bold: var(--dt-colors-text-primary);
-  --tw-prose-code: var(--dt-colors-text-primary);
-  --tw-prose-pre-bg: var(--dt-colors-surface-elevated);
+/* Markdown surfaces. react-markdown emits real HTML and Tailwind's preflight resets it — h1..h6 to
+   `font-size: inherit`, `ol,ul,menu` to `list-style: none`, `a` to `color: inherit;
+   text-decoration: inherit` — so a model's headings, bullets and links disappeared. Every value here
+   is a token, and a link is given colour *and* an underline: preflight took the underline away, and
+   colour alone is not something a screen reader or a colour-blind user gets to keep. */
+.prose { color: var(--dt-colors-text-primary); }
+.prose > :first-child { margin-top: 0; }
+.prose > :last-child { margin-bottom: 0; }
+.prose p { margin: 0.5rem 0; }
+.prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+  color: var(--dt-colors-text-primary);
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 1rem 0 0.5rem;
 }
+.prose h1 { font-size: 1.25rem; }
+.prose h2 { font-size: 1.125rem; }
+.prose h3 { font-size: 1rem; }
+.prose h4, .prose h5, .prose h6 { font-size: 0.875rem; }
+.prose ul, .prose ol { margin: 0.5rem 0; padding-left: 1.35rem; }
+.prose ul { list-style: disc; }
+.prose ol { list-style: decimal; }
+.prose ul ul { list-style: circle; }
+.prose li { margin: 0.2rem 0; }
+.prose li::marker { color: var(--dt-colors-text-secondary); }
+.prose a {
+  color: var(--dt-colors-text-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose a:hover { color: var(--dt-colors-text-link-hover); }
+.prose strong { color: var(--dt-colors-text-primary); font-weight: 700; }
+.prose em { font-style: italic; }
+.prose blockquote {
+  border-left: 2px solid var(--dt-colors-border-focus);
+  color: var(--dt-colors-text-secondary);
+  margin: 0.5rem 0;
+  padding-left: 0.75rem;
+}
+.prose hr { border-color: var(--dt-colors-border-default); }
+.prose pre code { background: none; padding: 0; }
 
 /* ------------------------------------------------------------------ */
 /* Semantic color utilities                                           */
