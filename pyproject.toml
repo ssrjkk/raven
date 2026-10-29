@@ -92,7 +92,7 @@ dev = [
     "pytest-timeout>=2.3,<4.0",
     "pytest-github-actions-annotate-failures>=0.2,<1.0",
     "pytest-benchmark>=4.0,<6.0",
-    "allure-pytest>=2.13,<3.0",
+    "allure-pytest>=2.16.2,<3.0",
     "coverage>=7.5,<8.0",
     # >=50.0.0 is the first release with no open advisories (pip-audit clean); the old
     # <45.0 cap pinned a version with 10 known vulnerabilities
