@@ -59,7 +59,7 @@ slack = ["slack-sdk>=3.27"]
 email = ["aiosmtplib>=2.0,<6.0", "aioimaplib>=1.0,<3.0"]
 docker = ["docker>=7.0"]
 secrets = ["cryptography>=50.0.0"]  # security floor: PYSEC-2026-3552 is only patched in 50.0.0
-service-win = ["pywin32>=306"]
+service-win = ["pywin32>=312"]
 tui = ["textual>=1.0"]
 tracing = ["opentelemetry-api>=1.25", "opentelemetry-sdk>=1.25"]
 numba = ["numba>=0.60,<1.0"]
