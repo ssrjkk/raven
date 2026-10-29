@@ -98,7 +98,7 @@ dev = [
     # <45.0 cap pinned a version with 10 known vulnerabilities
     "cryptography>=50.0.0,<51.0",
     "ruff>=0.5,<1.0",
-    "mypy>=1.10,<3.0",
+    "mypy>=2.4.0,<3.0",
     "pre-commit>=3.0,<5.0",
     "testcontainers[redis]>=4.0.0,<4.15.0",
     "textual>=1.0,<9.0",
