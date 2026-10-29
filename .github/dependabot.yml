@@ -66,4 +66,10 @@ updates:
     labels:
       - "dependencies"
       - "docker"
+    ignore:
+      # node:25 is not an LTS line; the image and the CI runners stay on the
+      # 22 LTS track (supported to April 2027). An LTS move is a deliberate
+      # commit across Dockerfile and workflows, not a bot bump.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
 
