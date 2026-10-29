@@ -38,6 +38,14 @@ updates:
     groups:
       web-minor-patch:
         update-types: ["minor", "patch"]
+    ignore:
+      # The OpenTelemetry stack moves as one: instrumentation/exporter 0.300 is
+      # built against sdk 3 while sdk-trace-web/resources are still 2.x, so a
+      # single-package bump breaks the web build. Patches still come through.
+      - dependency-name: "@opentelemetry/*"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
 
   - package-ecosystem: "npm"
     directory: "/extension/vscode"
