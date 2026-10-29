@@ -79,7 +79,7 @@ ml = [
 ner = ["spacy>=3.7,<4.0"]
 postgres = ["asyncpg>=0.29"]
 crdt = ["y-py>=0.6.2,<1.0"]
-profiling = ["py-spy>=0.3,<1.0"]
+profiling = ["py-spy>=0.4.2,<1.0"]
 chaos = ["psutil>=7.2.2,<8.0"]
 metrics = ["prometheus-client>=0.19,<1.0"]
 redis = ["redis>=5.0,<6.0"]
