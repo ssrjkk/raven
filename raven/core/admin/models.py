@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator
 
 _SSRF_BLOCKED_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "[::1]", "169.254.169.254", "metadata.google.internal"}
 
@@ -73,6 +73,12 @@ class SecretRequest(BaseModel):
 class AuthLoginRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=100)
     password: str = Field(..., min_length=1, max_length=256)
+
+
+class AuthVerifyEmailRequest(BaseModel):
+    """SecretStr so the credential cannot reach a repr, a log line or a traceback."""
+
+    token: SecretStr
 
 
 class AuthRegisterRequest(BaseModel):

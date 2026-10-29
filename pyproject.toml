@@ -65,7 +65,22 @@ tracing = ["opentelemetry-api>=1.25", "opentelemetry-sdk>=1.25"]
 numba = ["numba>=0.60,<1.0"]
 voice = ["sounddevice>=0.5.6"]
 browser = ["playwright>=1.44,<2.0"]
-vector = ["chromadb>=0.5.0,<2.0"]
+vector = ["chromadb>=0.5.0,<2.0", "hnswlib>=0.8,<1.0"]
+# Providers the code imports lazily and falls back from silently. They belong here because an
+# optional import that is named nowhere is how the voice anti-spoof check stopped checking and
+# stayed green: nothing failed, a control just stopped existing.
+tts = ["elevenlabs>=1.11,<2.0", "gTTS>=2.5,<3.0", "edge-tts>=7.0,<8.0"]
+stt = [
+    "vosk>=0.3.45,<0.4",
+    "SpeechRecognition>=3.10,<4.0",
+    "openai-whisper>=20240930",
+    "azure-cognitiveservices-speech>=1.40,<2.0",
+]
+speaker = ["librosa>=0.10,<2.0", "speechbrain>=1.0,<2.0"]
+search = ["duckduckgo-search>=6.1,<9.0"]
+nlp = ["presidio-analyzer>=2.2,<3.0"]
+logging = ["structlog>=24.1,<27.0"]
+tracking = ["wandb>=0.17,<1.0"]
 rag = ["sentence-transformers>=3.0,<4.0"]
 ml = [
     "torch>=2.0,<3.0",
@@ -106,7 +121,9 @@ dev = [
 ]
 media = ["ffmpeg-python>=0.2.0,<1.0"]
 re = ["capstone>=5.0,<6.0", "pyelftools>=0.31,<1.0", "pefile>=2023,<2024"]
-all = ["raven-agent[discord,slack,email,docker,secrets,service-win,tui,tracing,voice,dev,browser,vector,numba,crdt,profiling,chaos,postgres,media]"]
+all = ["raven-agent[discord,slack,email,docker,secrets,service-win,tui,tracing,voice,tts,search,logging,dev,browser,vector,numba,crdt,profiling,chaos,postgres,media]"]
+# Deliberately outside `all`, like `ml`: these pull torch, spacy or vendor SDK wheels.
+# stt, speaker, nlp, tracking.
 
 [project.scripts]
 raven = "raven.cli.main:cli"

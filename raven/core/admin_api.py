@@ -12,6 +12,7 @@ from raven.core.admin.models import (
     AuthLoginRequest,
     AuthRegisterRequest,
     AuthUpdateRoleRequest,
+    AuthVerifyEmailRequest,
     ConfigUpdateRequest,
     MonitorCreateRequest,
     MonitorUpdateRequest,
@@ -517,6 +518,28 @@ AUTH_ENABLED = False
 _auth_store = None
 
 
+async def _deliver_email_verification(email: str, token: str) -> None:
+    """Give the credential to the address it proves.
+
+    This is the credential's only carrier: it is never logged, and the row keeps just its digest, so
+    when no SMTP transport is configured verification stays pending and that is said out loud rather
+    than left to a log line somebody else can read.
+    """
+    from raven.tools.email import email_send
+
+    result = await email_send(
+        email,
+        "Confirm your Raven email address",
+        "Confirm this address on your Raven account with POST /api/auth/verify-email:\n\n" + token + "\n",
+    )
+    if result.startswith("[error]"):
+        logger.warning(
+            "Email verification for {} stays pending, the token could not be delivered: {}",
+            email,
+            result.removeprefix("[error] ").strip(),
+        )
+
+
 def init_auth_routes(app: FastAPI, db_path: str) -> None:
     global AUTH_ENABLED, _auth_store
     from raven.core.auth.store import AuthStore
@@ -592,8 +615,7 @@ def init_auth_routes(app: FastAPI, db_path: str) -> None:
         user = await store.create_user(body.username, body.password, display_name=display, email=body.email or "")
         token = token_manager.create_token(user.id, user.role.value)
         if body.email:
-            verification_token = await store.create_email_verification_token(user.id)
-            logger.info("Email verification token for {}: {}", body.email, verification_token)
+            await _deliver_email_verification(body.email, await store.create_email_verification_token(user.id))
         return {"token": token, "user_id": user.id, "role": user.role.value, "username": user.username}
 
     @app.get("/api/auth/me")
@@ -619,9 +641,11 @@ def init_auth_routes(app: FastAPI, db_path: str) -> None:
         token_manager.revoke_user_tokens(user_id)
         return {"ok": True, "message": "All sessions revoked"}
 
-    @app.get("/api/auth/verify-email")
-    async def auth_verify_email(token: str):
-        success = await store.verify_email_token(token)
+    @app.post("/api/auth/verify-email")
+    async def auth_verify_email(body: AuthVerifyEmailRequest):
+        # A POST, not a link: a credential that appears in a query string also ends up in access
+        # logs, browser history and Referer headers of whatever the response page loads.
+        success = await store.verify_email_token(body.token.get_secret_value())
         if not success:
             raise HTTPException(400, "Invalid or expired verification token")
         return {"ok": True, "message": "Email verified successfully"}

@@ -284,11 +284,27 @@ class SecurityAudit:
 
     def _check_web_cors(self):
         c = self._add("web_cors", "CORS origins are restricted", "medium")
-        if settings.web_cors_origins == "*":
+        origins = settings.cors_origin_list
+        wildcards = [origin for origin in origins if "*" in origin]
+        if wildcards and settings.web_cors_allow_credentials:
             c.fail(
-                "WEB_CORS_ORIGINS=* — any website can make API requests",
+                f"WEB_CORS_ORIGINS={', '.join(wildcards)} with credentials on — Starlette answers a "
+                "wildcard with the caller's own Origin, so any site can read a logged-in user's responses",
                 fix_hint=f"Set WEB_CORS_ORIGINS to specific origins (e.g., http://localhost:{settings.web_port})",
             )
+            return
+        unusable = [origin for origin in wildcards if origin != "*"]
+        if unusable:
+            c.fail(
+                f"WEB_CORS_ORIGINS entry/entries {', '.join(unusable)} are matched literally and match "
+                "nothing — the origin you think you allow is not allowed",
+                fix_hint="List each origin in full, or use '*' alone with WEB_CORS_ALLOW_CREDENTIALS=off",
+            )
+            return
+        if not origins:
+            c.ok("WEB_CORS_ORIGINS is empty — no cross-origin browser call is accepted")
+        elif "*" in origins:
+            c.ok("public API: WEB_CORS_ALLOW_CREDENTIALS=off and no origin restriction (verify this is intended)")
         else:
             c.ok(f"CORS origins: {settings.web_cors_origins}")
 

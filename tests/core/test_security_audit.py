@@ -119,6 +119,24 @@ class TestSimpleSettingsBranches:
         monkeypatch.setattr(config_module.settings, "web_cors_origins", "*")
         assert not _run("_check_web_cors").passed
 
+    def test_web_cors_wildcard_subdomain_fails_even_without_credentials(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(config_module.settings, "web_cors_origins", "https://*.raven.test")
+        monkeypatch.setattr(config_module.settings, "web_cors_allow_credentials", False)
+        assert not _run("_check_web_cors").passed
+
+    @pytest.mark.parametrize(
+        ("origins", "credentials"),
+        [("*", False), ("", True), ("http://localhost:5173", True), (" http://a , http://b ", False)],
+    )
+    def test_web_cors_accepted_configurations(
+        self, monkeypatch: pytest.MonkeyPatch, origins: str, credentials: bool
+    ) -> None:
+        monkeypatch.setattr(config_module.settings, "web_cors_origins", origins)
+        monkeypatch.setattr(config_module.settings, "web_cors_allow_credentials", credentials)
+        assert _run("_check_web_cors").passed
+
     def test_config_validation_failure_reported(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def _boom(self: Any) -> bool:
             raise ValueError("bad config")

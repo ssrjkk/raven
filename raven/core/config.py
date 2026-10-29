@@ -4,6 +4,7 @@ import contextlib
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from loguru import logger
 from pydantic import AliasChoices, Field, SecretStr
@@ -112,6 +113,8 @@ class Settings(BaseSettings):
     ravenflow_port: int = 18789
     web_secret_key: SafeSecretStr = SafeSecretStr("")
     web_cors_origins: str = "http://localhost:5173,http://localhost:3000,http://localhost:18888"
+    web_cors_allow_credentials: bool = True
+    """Credentialed cross-origin requests. Keep on for the SPA; with it on, `*` is refused below."""
     rate_limit_max: int = 60
     rate_limit_window: int = 60
     json_log: bool = True
@@ -233,6 +236,37 @@ class Settings(BaseSettings):
                     logger.info("Persisted WEB_SECRET_KEY to {}", key_file)
                 except OSError as exc:
                     logger.warning("Failed to persist WEB_SECRET_KEY to {}: {}", key_file, exc)
+        self._check_cors_policy()
+
+    def _check_cors_policy(self) -> None:
+        """Refuse a CORS configuration that cannot mean what it says.
+
+        With credentials on, Starlette answers a wildcard with the caller's own Origin, so `*` does
+        not mean "nobody" -- it means "any site may read a logged-in user's responses". A wildcard
+        subdomain is a different failure: it is matched literally, so it silently matches nothing.
+        """
+        origins = self.cors_origin_list
+        if self.web_cors_allow_credentials and any(origin.strip() == "*" for origin in origins):
+            raise ValueError(
+                "WEB_CORS_ORIGINS=* with WEB_CORS_ALLOW_CREDENTIALS=on lets any origin read "
+                "authenticated responses; list the origins you serve, or set "
+                "WEB_CORS_ALLOW_CREDENTIALS=off for a public API"
+            )
+        for origin in origins:
+            if origin == "*":
+                continue
+            parts = urlsplit(origin)
+            if parts.scheme in ("http", "https") and parts.netloc and "*" not in origin:
+                continue
+            raise ValueError(
+                f"WEB_CORS_ORIGINS entry {origin!r} is not usable: a wildcard subdomain is matched "
+                "literally and matches nothing; give scheme://host[:port], or '*' alone with "
+                "WEB_CORS_ALLOW_CREDENTIALS=off"
+            )
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [origin.strip() for origin in self.web_cors_origins.split(",") if origin.strip()]
 
     metrics_port: int = 9090
     otlp_endpoint: str = ""

@@ -459,6 +459,37 @@ async def _migration_10(db: AsyncDB) -> None:
         )
 
 
+async def _table_columns(db: AsyncDB, table: str) -> set[str] | None:
+    """Column names of a table, or None when the table is not there yet."""
+    if db.dialect == "postgresql":
+        rows = await db.fetchall(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
+            (table,),
+        )
+    else:
+        rows = await db.fetchall(f"PRAGMA table_info({table})")
+    if not rows:
+        return None
+    key = "column_name" if db.dialect == "postgresql" else "name"
+    return {str(row[key]) for row in rows}
+
+
+@register(11, "Store auth_email_tokens as a digest of the credential, not the credential")
+async def _migration_11(db: AsyncDB) -> None:
+    columns = await _table_columns(db, "auth_email_tokens")
+    if columns is None or "token_hash" in columns:
+        return
+    outstanding = await db.fetchval("SELECT COUNT(*) FROM auth_email_tokens")
+    await db.execute("ALTER TABLE auth_email_tokens RENAME COLUMN token TO token_hash")
+    # The rows that were here held the spendable credential itself, so they cannot survive as
+    # digests: a verification link a reader of the old column could already spend is revoked.
+    await db.run_script("DELETE FROM auth_email_tokens")
+    logger.warning(
+        "Revoked {} pending email verification token(s): they were stored as plaintext credentials",
+        outstanding or 0,
+    )
+
+
 async def apply_pending_migrations(db: AsyncDB) -> None:
     table = MIGRATIONS_TABLE_POSTGRES if db.dialect == "postgresql" else MIGRATIONS_TABLE_SQLITE
     await db.execute(table)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import secrets
 import time
 from pathlib import Path
 from typing import Any
@@ -33,13 +35,20 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
     expires_at REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS auth_email_tokens (
-    token TEXT PRIMARY KEY,
+    token_hash TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     created_at REAL NOT NULL,
     expires_at REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 """
+
+_TOKEN_TTL_SECONDS = 86400
+
+
+def _token_digest(token: str) -> str:
+    """Digest a verification credential so the stored row cannot be spent as the credential is."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 class AuthStore(BaseStore):
@@ -144,26 +153,28 @@ class AuthStore(BaseStore):
         await self._commit()
 
     async def create_email_verification_token(self, user_id: str) -> str:
-        import secrets
+        """Issue a verification credential. Only its digest is stored: the row is not a copy of
+        something that can be spent by whoever reads the database."""
         token = secrets.token_urlsafe(32)
         now = time.time()
-        expires_at = now + 86400
+        expires_at = now + _TOKEN_TTL_SECONDS
         await self._execute(
-            "INSERT INTO auth_email_tokens (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
-            (token, user_id, now, expires_at),
+            "INSERT INTO auth_email_tokens (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            (_token_digest(token), user_id, now, expires_at),
         )
         await self._commit()
         return token
 
     async def verify_email_token(self, token: str) -> bool:
+        digest = _token_digest(token)
         row = await self._fetchone(
-            "SELECT user_id, expires_at FROM auth_email_tokens WHERE token = ?",
-            (token,),
+            "SELECT user_id, expires_at FROM auth_email_tokens WHERE token_hash = ?",
+            (digest,),
         )
         if not row:
             return False
         if row["expires_at"] < time.time():
-            await self._execute("DELETE FROM auth_email_tokens WHERE token = ?", (token,))
+            await self._execute("DELETE FROM auth_email_tokens WHERE token_hash = ?", (digest,))
             await self._commit()
             return False
         user_id = row["user_id"]
@@ -174,8 +185,15 @@ class AuthStore(BaseStore):
                 "UPDATE auth_users SET email_verified = 1, updated_at = ? WHERE id = ?",
                 (now, user_id),
             )
-            await db.execute("DELETE FROM auth_email_tokens WHERE token = ?", (token,))
+            await db.execute("DELETE FROM auth_email_tokens WHERE token_hash = ?", (digest,))
         return True
+
+    async def has_pending_email_verification(self, user_id: str) -> bool:
+        row = await self._fetchone(
+            "SELECT 1 FROM auth_email_tokens WHERE user_id = ? AND expires_at > ?",
+            (user_id, time.time()),
+        )
+        return row is not None
 
     async def revoke_all_user_sessions(self, user_id: str) -> int:
         await self._execute("DELETE FROM auth_sessions WHERE user_id = ?", (user_id,))

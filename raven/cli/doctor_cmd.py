@@ -64,8 +64,23 @@ def security_posture_checks() -> list[tuple[str, str]]:
     rows.append(("Features", f"{', '.join(flags.enabled_list()) or 'none'} (telemetry {telemetry})"))
 
     rows.append(_training_posture_row())
+    rows.append(_cors_posture_row())
 
     return rows
+
+
+def _cors_posture_row() -> tuple[str, str]:
+    """Who may call the API from a browser, and whether those calls carry the session."""
+    origins = settings.cors_origin_list
+    if not origins:
+        return ("CORS", "[!] WEB_CORS_ORIGINS is empty - no cross-origin browser call is accepted")
+    if "*" in origins:
+        return ("CORS", f"[!] public: any origin, credentials off ({len(origins)} entry)")
+    return (
+        "CORS",
+        f"{'[OK]' if settings.web_cors_allow_credentials else '[i]'} {', '.join(origins)} "
+        f"(credentials {'on' if settings.web_cors_allow_credentials else 'off'})",
+    )
 
 
 def _training_posture_row() -> tuple[str, str]:

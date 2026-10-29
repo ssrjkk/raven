@@ -10,6 +10,30 @@ cd raven
 pip install -e ".[dev]"
 ```
 
+### Optional providers
+
+The base install runs everything that needs no third-party provider. Providers are imported lazily
+and fall back when their package is absent, so a group you did not install is not an error message --
+it is a feature that quietly stops running. Install the groups you use:
+
+| Extra | Brings in | What it makes real |
+|---|---|---|
+| `voice` | sounddevice | microphone capture and the conversation loop |
+| `tts` | elevenlabs, gTTS, edge-tts | cloud text-to-speech (falls back to system TTS) |
+| `stt` | vosk, SpeechRecognition, openai-whisper, azure-cognitiveservices-speech | speech-to-text providers |
+| `speaker` | librosa, speechbrain | speaker verification, including the band-consistency anti-spoof check |
+| `search` | duckduckgo-search | web search in ravencode |
+| `nlp` | presidio-analyzer | PII entities in the context filter beyond the built-in patterns |
+| `logging` | structlog | structured log rendering |
+| `tracking` | wandb | W&B mirror of training runs; publishes only with `RAVEN_TRAIN_TRACKING=on` |
+| `rag` | sentence-transformers | local embeddings for retrieval |
+| `ml` | torch, transformers, peft, datasets | fine-tuning |
+| `vector` | chromadb, hnswlib | the vector stores |
+| `all` | everything above except `stt`, `speaker`, `nlp`, `tracking`, `ml`, `rag` | a full non-torch install |
+
+`tests/test_dependency_declarations.py` fails the build if shipped code starts importing a package
+that no group declares, which is the control that was missing when the anti-spoof check went silent.
+
 ### From a release (Windows)
 
 `Raven.exe` is attached to every tag together with `Raven.exe.sha256`, and both carry a build

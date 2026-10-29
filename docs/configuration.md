@@ -68,7 +68,8 @@ Supported providers: `openai`, `anthropic`, `openrouter`, `ollama`, `vllm`, `azu
 |----------|-------------|---------|
 | `DM_POLICY` | DM access policy | `pairing` |
 | `WEB_SECRET_KEY` | Admin web secret | — |
-| `WEB_CORS_ORIGINS` | Allowed CORS origins | `http://localhost:5173,http://localhost:3000,http://localhost:18888` |
+| `WEB_CORS_ORIGINS` | Allowed CORS origins, comma-separated. `*` is refused while credentials are allowed (Starlette answers a wildcard with the caller's Origin, so any site could read a logged-in user's responses), and a wildcard subdomain is refused too because it is matched literally and matches nothing | `http://localhost:5173,http://localhost:3000,http://localhost:18888` |
+| `WEB_CORS_ALLOW_CREDENTIALS` | Send `Access-Control-Allow-Credentials`. Set `0` for a public API — that is the only configuration where `*` is accepted | `1` |
 | `EXEC_SECURITY` | Gate for exec-class tools (shell, python, browser, MCP, plugin, git writes, db_query) on the agent path | `deny` |
 | `EXEC_ASK_MODE` | When `EXEC_SECURITY=ask`, which exec calls need a human yes/no; with no confirmer wired the tool denies | `always` |
 | `SANDBOX_MODE` | Sandboxing mode | `non-main` |
