@@ -8,6 +8,7 @@ find in the docs is provenance that only the author ever uses.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -72,7 +73,9 @@ def test_the_checksum_is_verified_before_anything_is_published() -> None:
 
 def test_the_release_artifacts_are_attested() -> None:
     attest = _find("upload-release", "actions/attest-build-provenance")
-    assert attest["uses"].endswith("@v2"), "pin the action to a major tag, not @main"
+    assert re.fullmatch(r"actions/attest-build-provenance@v\d+", attest["uses"]), (
+        "pin the action to a major tag, not @main"
+    )
     subjects = str(attest["with"]["subject-path"])
     assert EXE_ARTIFACT in subjects and SUM_ARTIFACT in subjects
 
