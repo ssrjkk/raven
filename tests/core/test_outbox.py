@@ -96,21 +96,30 @@ async def test_purge_dropped_removes_old_rows(db_path: str) -> None:
 
 async def test_worker_delivers_after_retry_interval(db_path: str) -> None:
     attempts = {"n": 0}
+    delivered = asyncio.Event()
 
     async def flaky_send(channel_id: str, session_id: str, text: str) -> None:
         attempts["n"] += 1
         if attempts["n"] == 1:
             raise RuntimeError("transient failure")
+        delivered.set()
 
     box = Outbox(db_path, flaky_send, max_attempts=3, retry_interval=0.1, backoff_base=0.0)
     await box.start()
     try:
         await box.enqueue("telegram", "s1", "hello")
-        for _ in range(20):
-            if await box.pending_count() == 0:
+        # pending_count() is not a "delivered" signal: a claimed row is 'in_flight', so a
+        # poll can read 0 mid-send, break, and then see the row back as 'pending' once the
+        # retry is scheduled. Wait for the second attempt itself, then for the deletion.
+        await asyncio.wait_for(delivered.wait(), timeout=10)
+        assert attempts["n"] == 2
+        assert box._db is not None
+        for _ in range(100):
+            rows = await box._db.fetchval("SELECT COUNT(*) FROM outbox")
+            if rows == 0:
                 break
-            await asyncio.sleep(0.1)
-        assert await box.pending_count() == 0
+            await asyncio.sleep(0.02)
+        assert await box._db.fetchval("SELECT COUNT(*) FROM outbox") == 0
         assert await box.dropped_count() == 0
     finally:
         await box.stop()
