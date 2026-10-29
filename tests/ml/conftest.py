@@ -57,7 +57,8 @@ def trained_adapter(tmp_path_factory: pytest.TempPathFactory) -> dict[str, objec
                 messages=[
                     {"role": "user", "content": f"count to {turn}"},
                     {"role": "assistant", "content": f"counting: {turn}"},
-                ]
+                ],
+                consented=True,
             )
         )
     split = builder.build_dataset()

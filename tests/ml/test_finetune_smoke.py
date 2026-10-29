@@ -66,7 +66,8 @@ def _corpus() -> DatasetBuilder:
                 messages=[
                     {"role": "user", "content": f"count to {turn}"},
                     {"role": "assistant", "content": f"counting: {turn}"},
-                ]
+                ],
+                consented=True,
             )
         )
     return builder
