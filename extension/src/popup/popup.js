@@ -6,6 +6,8 @@
    unless it receives a token, so the token now comes from storage and travels as ?token= the same way
    the browser UI sends it. */
 
+import { safeExternalUrl } from './popup-security.js';
+
 const DEFAULT_ENDPOINT = "http://localhost:18888";
 
 const messages = document.getElementById("messages");
@@ -58,11 +60,16 @@ function inline(source, into) {
       into.appendChild(el("code", null, chunk.slice(1, -1)));
     } else {
       const parts = chunk.slice(1, -1).split("](");
-      const link = el("a", null, parts[0]);
-      link.href = parts[1];
-      link.rel = "noopener noreferrer";
-      link.target = "_blank";
-      into.appendChild(link);
+      const href = safeExternalUrl(parts[1] ?? '');
+      if (!href) {
+        into.appendChild(document.createTextNode(chunk));
+      } else {
+        const link = el("a", null, parts[0]);
+        link.href = href;
+        link.rel = "noopener noreferrer";
+        link.target = "_blank";
+        into.appendChild(link);
+      }
     }
     last = pattern.lastIndex;
   }

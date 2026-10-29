@@ -16,6 +16,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Syntax-check popup modules
+        run: |
+          node --check extension/src/popup/popup.js
+          node --check extension/src/popup/popup-security.js
+
+      - name: Test popup link policy
+        run: node --test extension/tests/*.test.mjs
+
       - name: Package extension
         working-directory: extension
         run: |
