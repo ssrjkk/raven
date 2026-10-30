@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <meta name="color-scheme" content="dark">
     <title>Raven — 66 tools and a request console</title>
     <meta name="description" content="Every tool raven-mcp exposes with its JSON Schema, plus a console that replays JSON-RPC frames recorded from a live server — requests, results and error replies.">
     <link rel="canonical" href="https://ssrjkk.github.io/raven/tools.html">
@@ -13,16 +15,28 @@
     <meta property="og:image" content="https://ssrjkk.github.io/raven/og-image.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Raven landing page: the hero, a recorded MCP handshake, and the install commands.">
     <meta property="og:url" content="https://ssrjkk.github.io/raven/tools.html">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Raven — 66 tools and a request console">
     <meta name="twitter:description" content="The registry as the server reports it, and a console answering from recorded frames.">
     <meta name="twitter:image" content="https://ssrjkk.github.io/raven/og-image.png">
+    <meta name="twitter:image:alt" content="Raven landing page: the hero, a recorded MCP handshake, and the install commands.">
     <meta name="theme-color" content="#0a0812">
     <link rel="preload" href="fonts/SpaceGrotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="fonts/IBMPlexSans-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://ssrjkk.github.io/raven/" },
+        { "@type": "ListItem", "position": 2, "name": "Tools", "item": "https://ssrjkk.github.io/raven/tools.html" }
+      ]
+    }
+    </script>
 </head>
 <body>
     <a class="skip-link" href="#main">Skip to content</a>
@@ -62,7 +76,9 @@
                     The registry below is generated from <code>tools/list</code> on a live
                     <code>raven-mcp</code> process: name, description, parameter names and types from
                     each tool's JSON Schema. Select a row to build its <code>tools/call</code> frame,
-                    then send it in the console.
+                    then send it in the console. The address bar keeps the state, so
+                    <code>#tool=read</code> and <code>#cat=file</code> are links to a tool and a
+                    category.
                 </p>
             </div>
         </section>
@@ -73,7 +89,7 @@
                     <div>
                         <label class="sr-only" for="tool-search">Search tools by name or description</label>
                         <input type="search" id="tool-search" class="search-input"
-                               placeholder="Search 66 tools" autocomplete="off">
+                               placeholder="Search 66 tools" autocomplete="off" aria-keyshortcuts="/">
                     </div>
                     <div class="filter-buttons" role="group" aria-label="Filter tools by category">
                         <button class="filter-btn" type="button" data-category="all" aria-pressed="true">All</button>
@@ -120,7 +136,7 @@
                     <div class="console-body" id="terminal-output" role="log" aria-live="polite" tabindex="0"
                          aria-label="Frame console: requests you send and the recorded answers"></div>
                     <form class="console-input" id="request-form">
-                        <label class="prompt" for="terminal-command">$</label>
+                        <label class="prompt" for="terminal-command"><span aria-hidden="true">$</span><span class="sr-only">JSON-RPC frame</span></label>
                         <textarea id="terminal-command" name="frame" rows="2" spellcheck="false"
                                   autocomplete="off" aria-describedby="console-hint"
                                   placeholder='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'></textarea>
@@ -140,8 +156,10 @@
                     <button class="ghost-btn" type="button" id="clear-console">Clear</button>
                 </div>
                 <p class="console-note" id="console-hint">
-                    Enter sends the frame, Shift+Enter adds a line. The eight exchanges behind these buttons
-                    were captured from a live <code>raven-mcp</code> process, including its
+                    Enter sends the frame, Shift+Enter adds a line, and the Up and Down arrow keys
+                    recall earlier frames.
+                    The eight exchanges behind these buttons were captured from a live
+                    <code>raven-mcp</code> process, including its
                     <code>-32602</code> and <code>-32601</code> replies. Anything outside that recording is
                     answered by a running server, not by this page.
                 </p>
@@ -170,6 +188,7 @@
             <div class="footer-col">
                 <h2 class="footer-title">Documentation</h2>
                 <ul class="footer-links">
+                    <li><a href="https://ssrjkk.github.io/raven/docs/" rel="noopener">Documentation site</a></li>
                     <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/getting-started.md" rel="noopener">Getting started</a></li>
                     <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/mcp.md" rel="noopener">MCP setup guide</a></li>
                     <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/cli.md" rel="noopener">CLI reference</a></li>

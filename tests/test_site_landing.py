@@ -35,6 +35,7 @@ import struct
 import tomllib
 from datetime import date
 from html.parser import HTMLParser
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, cast
 
@@ -53,6 +54,7 @@ STYLES = SITE / "styles.css"
 MAIN_JS = SITE / "main.js"
 CANVAS_JS = SITE / "procedural-animation.js"
 REGISTRY_JS = SITE / "registry.js"
+TERMINAL_JS = SITE / "terminal-demo.js"
 TOOLS_DATA = SITE / "tools-data.js"
 FRAMES_DATA = SITE / "mcp-frames.js"
 OG_IMAGE = SITE / "og-image.png"
@@ -63,6 +65,20 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 DEPLOY_SITE = WORKFLOWS / "deploy-site.yml"
 
 PUBLISHED_URL = "https://ssrjkk.github.io/raven/"
+DOCS_URL = f"{PUBLISHED_URL}docs/"
+SOCIAL_ALT = "Raven landing page: the hero, a recorded MCP handshake, and the install commands."
+CSP_POLICY = (
+    "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; "
+    "img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; "
+    "form-action 'none'"
+)
+PAGE_LABELS = {
+    "tools.html": "Tools",
+    "gateway.html": "Gateway",
+    "architecture.html": "Architecture",
+    "security.html": "Security",
+    "install.html": "Install",
+}
 CONTENT_PAGES = (
     "index.html",
     "tools.html",
@@ -93,6 +109,8 @@ CSS_URL = re.compile(r"url\('([^']+)'\)")
 NAV_TOGGLE = re.compile(
     r'<button class="nav-toggle"[^>]*aria-expanded="false"[^>]*aria-controls="([^"]+)"'
 )
+LD_JSON = re.compile(r'<script type="application/ld\+json">(.*?)</script>', re.S)
+REFERENCE_ATTR = re.compile(r'\b(aria-labelledby|aria-describedby|aria-controls|for)="([^"]+)"')
 
 # Markup that belongs to one page and must not reappear on another. Each entry names the page
 # that owns it; the test walks every page so a block copied back onto the landing page fails.
@@ -229,6 +247,60 @@ def page_table(caption: re.Pattern[str], name: str) -> dict[str, list[str]]:
     parser = _TableParser()
     parser.feed(table_fragment(caption, name))
     return parser.rows
+
+
+_HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
+
+
+class _StructureParser(HTMLParser):
+    """What the CSP assumes about the markup, and the outline a screen reader hears.
+
+    ``script-src 'self'`` without ``'unsafe-inline'`` silently drops an inline script, an
+    ``on*`` handler and a ``style`` attribute: the page still loads and the control looks
+    broken, with no failing build. JSON-LD is data rather than script, so it stays allowed.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.language: str | None = None
+        self.landmarks: dict[str, int] = {}
+        self.headings: list[tuple[int, str]] = []
+        self.inline_scripts = 0
+        self.inline_handlers: list[str] = []
+        self.style_attributes = 0
+        self._heading: int | None = None
+        self._heading_text: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        values = dict(attrs)
+        if tag == "html":
+            self.language = values.get("lang")
+        if tag in {"header", "main", "nav", "footer"}:
+            self.landmarks[tag] = self.landmarks.get(tag, 0) + 1
+        if tag == "script" and "src" not in values and values.get("type") != "application/ld+json":
+            self.inline_scripts += 1
+        self.inline_handlers.extend(name for name in values if name.startswith("on"))
+        if "style" in values:
+            self.style_attributes += 1
+        if tag in _HEADING_TAGS:
+            self._heading = int(tag[1])
+            self._heading_text = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in _HEADING_TAGS and self._heading is not None:
+            text = " ".join("".join(self._heading_text).split())
+            self.headings.append((self._heading, text))
+            self._heading = None
+
+    def handle_data(self, data: str) -> None:
+        if self._heading is not None:
+            self._heading_text.append(data)
+
+
+def parse_structure(name: str) -> _StructureParser:
+    parser = _StructureParser()
+    parser.feed(page(name))
+    return parser
 
 
 def table_fragment(caption: re.Pattern[str], name: str) -> str:
@@ -503,6 +575,51 @@ def test_the_registry_page_loads_the_recorded_data() -> None:
         assert f'<script src="{script}" defer></script>' in html, script
 
 
+def test_the_registry_state_can_be_opened_from_the_url_hash() -> None:
+    """A card click writes ``#tool=<name>`` and a filter click ``#cat=<name>``, so a registry
+    state is a link. The hash only selects a tool the server reported, never builds markup from
+    it: the name is looked up in ``tools`` and the card is found by its data attribute."""
+    js = read(REGISTRY_JS)
+    assert "new URLSearchParams(location.hash.slice(1))" in js
+    assert "history.replaceState(" in js
+    assert "card.dataset.tool = tool.name;" in js
+    assert "this.tools.find(entry => entry.name === name)" in js
+    assert "registry.selectTool(initial.tool)" in js
+    assert "initialCategory: initial.category" in js
+    assert "addEventListener('hashchange'" in js
+
+
+def test_a_selected_tool_names_itself_from_visible_text_and_leaves_focus_alone() -> None:
+    """The card's name used to be an ``aria-label`` sentence the page never shows, which hid
+    the tool's own description from a screen reader. A deep link also focused the console
+    input, scrolling the visitor away from the card the link pointed at."""
+    js = read(REGISTRY_JS)
+    assert "setAttribute('aria-label'" not in js
+    assert "name.id = `tool-name-${tool.name}`;" in js
+    assert "description.id = `tool-desc-${tool.name}`;" in js
+    assert "card.setAttribute('aria-labelledby', name.id)" in js
+    assert "card.setAttribute('aria-describedby', description.id)" in js
+    assert "this.onPick(frameFor(tool), { focus: false })" in js
+    assert "onPick: (frame, options) => frames.prefill(frame, options)" in js
+
+
+def test_clear_filters_returns_focus_and_resets_the_url() -> None:
+    js = read(REGISTRY_JS)
+    reset = js[js.index("reset.addEventListener") : js.index("this.empty.append(reset)")]
+    assert "this.setCategory('all')" in reset
+    assert "this.onFilter?.('all')" in reset
+    assert "this.search.focus()" in reset
+
+
+def test_slash_focuses_the_registry_search_but_not_from_a_field() -> None:
+    """Sixty-six cards are a long tab walk; ``/`` is the shortcut to the filter. It must stay
+    a character while the visitor is typing in the console or the search box itself."""
+    assert 'aria-keyshortcuts="/"' in page("tools.html")
+    js = read(REGISTRY_JS)
+    assert "event.key !== '/'" in js
+    assert "closest('input, textarea, select, [contenteditable=\"true\"]')" in js
+
+
 # ── the split ─────────────────────────────────────────────────────
 
 
@@ -542,6 +659,19 @@ def test_the_footer_is_identical_on_every_page() -> None:
     assert re.findall(r'<li><a href="([^"]+\.html)">', base) == list(CONTENT_PAGES)
 
 
+def test_every_page_links_the_published_documentation_site() -> None:
+    """The documentation is built and served at /raven/docs/, but the footer only pointed at
+    GitHub blobs, so the styled, searchable manual had no door from the site."""
+    link = f'<a href="{DOCS_URL}" rel="noopener">Documentation site</a>'
+    for name in ALL_PAGES:
+        assert link in footer(name), name
+
+
+def test_the_docs_navigation_links_back_to_the_landing_page() -> None:
+    config = yaml.safe_load(read(MKDOCS_YML))
+    assert config["nav"][-1] == {"Raven home": PUBLISHED_URL}
+
+
 def test_the_landing_page_maps_every_other_page() -> None:
     html = page("index.html")
     cards = re.findall(r'<a class="explore-card" href="([^"]+)">', html)
@@ -569,6 +699,89 @@ def test_cross_page_anchors_resolve() -> None:
             assert anchor in page(target), f"{name} links to {target}#{anchor}, which has no such id"
 
 
+def test_identifiers_are_unique_and_every_reference_resolves() -> None:
+    """A duplicated id makes ``aria-labelledby`` and ``for`` point at whichever element the
+    parser met first; an unresolved one names nothing at all."""
+    for name in ALL_PAGES:
+        html = page(name)
+        ids = re.findall(r'\bid="([^"]+)"', html)
+        duplicates = sorted({value for value in ids if ids.count(value) > 1})
+        assert duplicates == [], (name, duplicates)
+        for attribute, value in REFERENCE_ATTR.findall(html):
+            for token in value.split():
+                assert token in ids, (name, attribute, token)
+
+
+def test_the_skip_link_is_the_first_focus_target_and_reveals_on_focus() -> None:
+    for name in ALL_PAGES:
+        html = page(name)
+        assert html.index('<a class="skip-link" href="#main">') < html.index("<header"), name
+        assert '<main id="main">' in html, name
+    assert "left: -9999px;" in css_rule(".skip-link")
+    focus = css_rule(".skip-link:focus")
+    assert "left: 0.5rem;" in focus and "top: 0.5rem;" in focus
+
+
+# ── the markup contract ───────────────────────────────────────────
+
+
+def test_no_page_ships_what_the_policy_would_silently_drop() -> None:
+    """``script-src 'self'`` without ``'unsafe-inline'`` ignores an inline script, an ``on*``
+    handler and a ``style`` attribute. The page still loads and the control silently does
+    nothing, so the markup is held to the same policy the meta tag states."""
+    for name in ALL_PAGES:
+        parsed = parse_structure(name)
+        assert parsed.inline_scripts == 0, name
+        assert parsed.inline_handlers == [], name
+        assert parsed.style_attributes == 0, name
+
+
+def test_each_page_keeps_one_h1_and_never_skips_a_heading_level() -> None:
+    for name in ALL_PAGES:
+        headings = parse_structure(name).headings
+        levels = [level for level, _ in headings]
+        assert levels.count(1) == 1, (name, levels)
+        for previous, current in pairwise(levels):
+            assert current <= previous + 1, (name, levels)
+        assert all(text for _, text in headings), (name, headings)
+
+
+def test_every_page_declares_its_language_and_landmarks() -> None:
+    for name in ALL_PAGES:
+        parsed = parse_structure(name)
+        assert parsed.language == "en", name
+        assert parsed.landmarks == {"header": 1, "nav": 1, "main": 1, "footer": 1}, name
+        assert '<main id="main">' in page(name), name
+
+
+def test_every_code_block_offers_copy_and_the_result_is_announced() -> None:
+    """The Clipboard API only exists in a secure context, so a preview served over plain
+    http fell back to a label that told the visitor to select text without selecting it."""
+    js = read(MAIN_JS)
+    assert "navigator.clipboard.writeText(code.textContent)" in js
+    assert "range.selectNodeContents(code)" in js
+    assert "document.getElementById('copy-status')" in js
+    assert "region.setAttribute('role', 'status')" in js
+    assert "region.setAttribute('aria-live', 'polite')" in js
+    for name in ALL_PAGES:
+        html = page(name)
+        blocks = html.count('<div class="codeblock">')
+        assert html.count("<pre><code>") == blocks, name
+        assert html.count('<button class="copy-btn" type="button" aria-label="') == blocks, name
+
+
+def test_the_console_field_is_named_and_recalls_sent_frames() -> None:
+    html = page("tools.html")
+    assert '<span class="sr-only">JSON-RPC frame</span>' in html
+    assert 'for="terminal-command"' in html
+    assert 'id="terminal-command"' in html and 'aria-describedby="console-hint"' in html
+    js = read(TERMINAL_JS)
+    assert "event.key === 'ArrowUp' || event.key === 'ArrowDown'" in js
+    assert "this.history.push(text)" in js
+    assert "recall(offset)" in js
+    assert "prefill(frameText, { focus = true } = {})" in js
+
+
 # ── assets and metadata ───────────────────────────────────────────
 
 
@@ -593,6 +806,18 @@ def test_no_page_loads_a_third_party_asset() -> None:
                 assert url.startswith(FIRST_PARTY), f"{name} loads {url}"
         assert "fonts.googleapis.com" not in page(name)
         assert "fonts.gstatic.com" not in page(name)
+
+
+def test_every_page_pins_its_runtime_requests_to_this_host() -> None:
+    """The audit reads the markup; the CSP holds if a later edit adds a tag the audit misses.
+    ``connect-src 'none'`` is the stronger half: no script on the page can call out at all."""
+    assert "connect-src 'none'" in CSP_POLICY
+    for name in ALL_PAGES:
+        html = page(name)
+        policy = f'<meta http-equiv="Content-Security-Policy" content="{CSP_POLICY}">'
+        assert policy in html, name
+        assert '<meta name="color-scheme" content="dark">' in html, name
+    assert re.search(r"^:root \{\n    color-scheme: dark;", read(STYLES), re.MULTILINE)
 
 
 def test_faces_point_at_fonts_that_ship() -> None:
@@ -650,10 +875,31 @@ def test_social_metadata_is_complete_on_every_content_page() -> None:
         assert f'<meta property="og:image" content="{PUBLISHED_URL}og-image.png">' in html, name
         assert f'<meta property="og:image:width" content="{width}">' in html, name
         assert f'<meta property="og:image:height" content="{height}">' in html, name
+        assert f'<meta property="og:image:alt" content="{SOCIAL_ALT}">' in html, name
         assert f'<meta name="twitter:image" content="{PUBLISHED_URL}og-image.png">' in html, name
+        assert f'<meta name="twitter:image:alt" content="{SOCIAL_ALT}">' in html, name
         assert f'<meta name="theme-color" content="{brand_token("bg")}">' in html, name
     assert len(titles) == len(CONTENT_PAGES), "two pages share a title"
     assert len(descriptions) == len(CONTENT_PAGES), "two pages share a description"
+
+
+def test_each_inner_page_publishes_its_breadcrumb() -> None:
+    for name, label in PAGE_LABELS.items():
+        blocks = [json.loads(block) for block in LD_JSON.findall(page(name))]
+        crumb = next((item for item in blocks if item.get("@type") == "BreadcrumbList"), None)
+        assert crumb is not None, name
+        trail = [(entry["position"], entry["name"], entry["item"]) for entry in crumb["itemListElement"]]
+        assert trail == [(1, "Home", PUBLISHED_URL), (2, label, page_url(name))], name
+
+
+def test_the_software_application_claim_matches_the_project() -> None:
+    blocks = [json.loads(block) for block in LD_JSON.findall(page("index.html"))]
+    app = next(item for item in blocks if item.get("@type") == "SoftwareApplication")
+    assert app["name"] == "Raven"
+    assert app["url"] == PUBLISHED_URL
+    assert app["codeRepository"] == "https://github.com/ssrjkk/raven"
+    assert app["softwareVersion"] == project_version()
+    assert app["license"] == "https://opensource.org/licenses/MIT"
 
 
 def test_the_404_is_not_indexed_and_has_no_canonical() -> None:

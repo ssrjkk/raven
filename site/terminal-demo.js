@@ -34,6 +34,9 @@ class FrameConsole {
         this.byId = new Map();
         frames.forEach(frame => this.byId.set(signature(frame.request), frame));
         this.registered = new Set(tools.map(tool => tool.name));
+        this.history = [];
+        this.historyIndex = 0;
+        this.draft = '';
         this.bind(presets, clearButton);
         this.recorded = frames.length;
         this.idle(this.recorded);
@@ -61,6 +64,8 @@ class FrameConsole {
             if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
                 this.send(this.input.value);
+            } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                if (this.recall(event.key === 'ArrowUp' ? -1 : 1)) event.preventDefault();
             }
         });
 
@@ -92,15 +97,30 @@ class FrameConsole {
     note(text) { this.line(text, 'key'); }
     error(text) { this.line(text, 'error'); }
 
-    prefill(frameText) {
+    prefill(frameText, { focus = true } = {}) {
         this.input.value = frameText;
+        if (!focus) return;
         this.input.focus();
         this.input.setSelectionRange(frameText.length, frameText.length);
+    }
+
+    /* Shell-style recall: Up walks back through sent frames, Down walks forward and then
+       restores whatever was being typed. A multi-line frame keeps the caret keys instead. */
+    recall(offset) {
+        if (!this.history.length || this.input.value.includes('\n')) return false;
+        if (this.historyIndex === this.history.length) this.draft = this.input.value;
+        const next = Math.min(Math.max(this.historyIndex + offset, 0), this.history.length);
+        this.historyIndex = next;
+        this.input.value = next === this.history.length ? this.draft : this.history[next];
+        this.input.setSelectionRange(this.input.value.length, this.input.value.length);
+        return true;
     }
 
     send(raw) {
         const text = raw.trim();
         if (!text) return;
+        if (this.history[this.history.length - 1] !== text) this.history.push(text);
+        this.historyIndex = this.history.length;
         this.input.style.height = '';
         let frame;
         try {

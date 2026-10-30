@@ -28,22 +28,49 @@ class Reveal {
     }
 }
 
+function copyStatus() {
+    let region = document.getElementById('copy-status');
+    if (!region) {
+        region = document.createElement('div');
+        region.id = 'copy-status';
+        region.className = 'sr-only';
+        region.setAttribute('role', 'status');
+        region.setAttribute('aria-live', 'polite');
+        document.body.append(region);
+    }
+    return region;
+}
+
+function selectCode(code) {
+    const range = document.createRange();
+    range.selectNodeContents(code);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+}
+
 function copyButtons() {
+    const status = copyStatus();
     document.querySelectorAll('.codeblock').forEach(block => {
         const button = block.querySelector('.copy-btn');
         const code = block.querySelector('code');
         if (!button || !code) return;
         button.addEventListener('click', async () => {
             const label = button.textContent;
-            let ok = false;
+            let copied = false;
             try {
+                // The Clipboard API only exists in a secure context; a preview served over
+                // plain http from a LAN address has none, so the fallback selects the text.
                 await navigator.clipboard.writeText(code.textContent);
-                ok = true;
+                copied = true;
             } catch {
-                ok = false;
+                selectCode(code);
             }
-            button.textContent = ok ? 'Copied' : 'Select and copy';
-            button.classList.toggle('copied', ok);
+            button.textContent = copied ? 'Copied' : 'Selected';
+            button.classList.toggle('copied', copied);
+            status.textContent = copied
+                ? 'The code is on the clipboard.'
+                : 'The clipboard is unavailable here; the code is selected, press Ctrl+C or Command+C.';
             window.setTimeout(() => {
                 button.textContent = label;
                 button.classList.remove('copied');

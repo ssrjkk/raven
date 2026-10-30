@@ -54,7 +54,16 @@ registry, if a hand-written count on any page (tool count, version, channel adap
 hero's preview list) disagrees with the code, if a preset button has no recording behind
 it, if `styles.css` names a `url()` or an `@font-face` source that does not ship, if any
 page loads an asset from a host other than GitHub, if a page is missing from the nav or
-the sitemap, or if a file appears in this directory that no page loads.
+the sitemap, or if a file appears in this directory that no page loads. It also fails on a
+duplicated id or an `aria-labelledby`/`aria-controls`/`for` that names nothing, on a page
+without its CSP and `color-scheme`, on a breadcrumb or social-image alt that disagrees with
+the page, on a footer without the documentation link, on docs navigation without the way
+back to the landing page, and on a registry that stopped reading its state from the hash.
+The markup is held to its own policy as well: no inline script, `on*` handler or `style`
+attribute may ship while the meta tag forbids them, every page has one `h1` and no skipped
+heading level, and `lang` plus the four landmarks are declared. Every code block has a
+labelled copy button, the console field carries a name, and the registry cards take their
+accessible name from the text on screen.
 
 ## Fonts
 
@@ -91,11 +100,27 @@ curl -s -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 
 - Every page shares the same seven-link nav; the current page carries `aria-current="page"`.
   Below 900px the links move into a panel the menu button opens, and Escape closes it.
-- The registry cards are `<button>` elements: selecting one prefills a `tools/call` frame
-  for that tool with its required arguments in the console input.
+- The registry cards are `<button>` elements: selecting one pre-fills a `tools/call` frame
+  for that tool with its required arguments and moves focus to the console input. The
+  address bar carries the state: `#tool=read` fills the console and highlights that card
+  without moving focus, `#cat=file` opens a filter, both update through `replaceState`, and
+  a name the server did not report is ignored rather than rendered. A card is named by its
+  visible tool name and described by its description, not by a hidden sentence. When a
+  search or filter matches nothing, the reset button clears both, drops the hash and puts
+  focus back in the search box; `/` focuses that box from anywhere outside a field.
+- Every page declares a Content-Security-Policy that allows only same-origin scripts,
+  styles, fonts and images and forbids `connect-src` outright, plus a dark `color-scheme`
+  in the meta tag and `:root`, so native controls and scrollbars stay dark. The footer
+  links the published documentation at `/raven/docs/`, and its nav ends with a link back
+  to the landing page.
+- Each code block has a copy button that reports through a `role="status"` live region.
+  Where the Clipboard API does not exist — a preview served over plain http from a LAN
+  address — the click selects the code instead and says to press Ctrl+C, rather than
+  asking the visitor to select text it never selected.
 - The console accepts any frame you type. Frames matching the recording get the recorded
   answer; anything else gets a line saying a running server answers it, and the page does
-  not pretend to be one.
+  not pretend to be one. The input is labelled `JSON-RPC frame`, and Up/Down recall the
+  frames already sent, shell-style, restoring the draft on the way back.
 - Both console bodies are scrollable regions exposed as `role="log"` with `aria-live="polite"`,
   keyboard reachable, so screen readers announce new lines as they appear.
 - Section reveal is progressive enhancement: `main.js` adds a `js` class to `<html>` and

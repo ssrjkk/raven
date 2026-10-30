@@ -40,8 +40,34 @@ function frameFor(tool) {
     });
 }
 
+/* #tool=read and #cat=file make a registry state linkable. replaceState keeps the address
+   bar in step without pushing a history entry for every click. */
+function hashState() {
+    const params = new URLSearchParams(location.hash.slice(1));
+    return { category: params.get('cat') || 'all', tool: params.get('tool') };
+}
+
+function writeHash(state) {
+    const params = new URLSearchParams();
+    if (state.tool) params.set('tool', state.tool);
+    if (state.category && state.category !== 'all') params.set('cat', state.category);
+    const hash = params.toString();
+    history.replaceState(null, '', `${location.pathname}${location.search}${hash ? `#${hash}` : ''}`);
+}
+
 class ToolRegistry {
-    constructor({ grid, empty, status, search, filters, tools, onPick }) {
+    constructor({
+        grid,
+        empty,
+        status,
+        search,
+        filters,
+        tools,
+        onPick,
+        initialCategory = 'all',
+        onNavigate,
+        onFilter,
+    }) {
         this.grid = grid;
         this.empty = empty;
         this.status = status;
@@ -49,16 +75,15 @@ class ToolRegistry {
         this.filters = Array.from(filters);
         this.tools = tools;
         this.onPick = onPick;
+        this.onNavigate = onNavigate;
+        this.onFilter = onFilter;
         this.category = 'all';
         this.query = '';
 
         this.filters.forEach(button => {
             button.addEventListener('click', () => {
-                this.category = button.dataset.category;
-                this.filters.forEach(other => {
-                    other.setAttribute('aria-pressed', String(other === button));
-                });
-                this.render();
+                this.setCategory(button.dataset.category);
+                this.onFilter?.(this.category);
             });
         });
 
@@ -70,7 +95,44 @@ class ToolRegistry {
             }, 120);
         });
 
+        document.addEventListener('keydown', event => {
+            if (event.key !== '/' || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+            const typing = event.target instanceof HTMLElement
+                && event.target.closest('input, textarea, select, [contenteditable="true"]');
+            if (typing) return;
+            this.search.focus();
+            event.preventDefault();
+        });
+
+        if (!this.setCategory(initialCategory)) this.setCategory('all');
+    }
+
+    setCategory(category) {
+        const button = this.filters.find(other => other.dataset.category === category);
+        if (!button) return false;
+        this.category = category;
+        this.filters.forEach(other => {
+            other.setAttribute('aria-pressed', String(other === button));
+        });
         this.render();
+        return true;
+    }
+
+    selectTool(name) {
+        const tool = this.tools.find(entry => entry.name === name);
+        if (!tool) return false;
+        this.search.value = '';
+        this.query = '';
+        this.setCategory('all');
+        const card = Array.from(this.grid.querySelectorAll('.tool-card'))
+            .find(entry => entry.dataset.tool === name);
+        if (card) {
+            card.classList.add('tool-card-built');
+            card.scrollIntoView({ block: 'center' });
+        }
+        // A link shows the card and fills the console; only a click moves focus to the input.
+        this.onPick(frameFor(tool), { focus: false });
+        return true;
     }
 
     matches(tool) {
@@ -94,11 +156,9 @@ class ToolRegistry {
             reset.addEventListener('click', () => {
                 this.search.value = '';
                 this.query = '';
-                this.category = 'all';
-                this.filters.forEach(other => {
-                    other.setAttribute('aria-pressed', String(other.dataset.category === 'all'));
-                });
-                this.render();
+                this.setCategory('all');
+                this.onFilter?.('all');
+                this.search.focus();
             });
             this.empty.append(reset);
             this.empty.hidden = false;
@@ -126,12 +186,13 @@ class ToolRegistry {
         const card = document.createElement('button');
         card.type = 'button';
         card.className = 'tool-card';
-        card.setAttribute('aria-label', `Build a tools/call frame for ${tool.name}`);
+        card.dataset.tool = tool.name;
 
         const header = document.createElement('span');
         header.className = 'tool-card-header';
         const name = document.createElement('span');
         name.className = 'tool-name';
+        name.id = `tool-name-${tool.name}`;
         name.textContent = tool.name;
         const badge = document.createElement('span');
         badge.className = 'tool-category-badge';
@@ -140,7 +201,12 @@ class ToolRegistry {
 
         const description = document.createElement('span');
         description.className = 'tool-desc';
+        description.id = `tool-desc-${tool.name}`;
         description.textContent = tool.description;
+        // The card names itself from the text a sighted visitor reads instead of a
+        // second, hidden sentence; the description follows as the accessible description.
+        card.setAttribute('aria-labelledby', name.id);
+        card.setAttribute('aria-describedby', description.id);
 
         const params = document.createElement('span');
         params.className = 'tool-params';
@@ -171,6 +237,7 @@ class ToolRegistry {
             });
             card.classList.add('tool-card-built');
             this.onPick(frameFor(tool));
+            this.onNavigate?.(tool.name);
         });
         return card;
     }
@@ -194,12 +261,24 @@ document.querySelectorAll('[data-tool-count]').forEach(element => {
 const search = document.getElementById('tool-search');
 if (search && tools.length) search.placeholder = `Search ${tools.length} tools`;
 
-new ToolRegistry({
+const initial = hashState();
+const registry = new ToolRegistry({
     grid: document.getElementById('tools-grid'),
     empty: document.getElementById('registry-empty'),
     status: document.getElementById('registry-status'),
     search,
     filters: document.querySelectorAll('.filter-btn'),
     tools,
-    onPick: frame => frames.prefill(frame),
+    onPick: (frame, options) => frames.prefill(frame, options),
+    initialCategory: initial.category,
+    onNavigate: name => writeHash({ tool: name }),
+    onFilter: category => writeHash({ category }),
+});
+
+if (initial.tool) registry.selectTool(initial.tool);
+
+window.addEventListener('hashchange', () => {
+    const state = hashState();
+    if (state.tool) registry.selectTool(state.tool);
+    else registry.setCategory(state.category);
 });

@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <meta name="color-scheme" content="dark">
     <title>Raven — how a request reaches a tool</title>
     <meta name="description" content="The path from a client frame through raven-mcp to a registered tool: both transports, every HTTP surface the server answers on, and the numbers counted from the tree.">
     <link rel="canonical" href="https://ssrjkk.github.io/raven/architecture.html">
@@ -13,16 +15,28 @@
     <meta property="og:image" content="https://ssrjkk.github.io/raven/og-image.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Raven landing page: the hero, a recorded MCP handshake, and the install commands.">
     <meta property="og:url" content="https://ssrjkk.github.io/raven/architecture.html">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Raven — how a request reaches a tool">
     <meta name="twitter:description" content="Three stages, two transports, every surface and the numbers counted from the repository.">
     <meta name="twitter:image" content="https://ssrjkk.github.io/raven/og-image.png">
+    <meta name="twitter:image:alt" content="Raven landing page: the hero, a recorded MCP handshake, and the install commands.">
     <meta name="theme-color" content="#0a0812">
     <link rel="preload" href="fonts/SpaceGrotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="fonts/IBMPlexSans-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://ssrjkk.github.io/raven/" },
+        { "@type": "ListItem", "position": 2, "name": "Architecture", "item": "https://ssrjkk.github.io/raven/architecture.html" }
+      ]
+    }
+    </script>
 </head>
 <body>
     <a class="skip-link" href="#main">Skip to content</a>
@@ -220,6 +234,7 @@
             <div class="footer-col">
                 <h2 class="footer-title">Documentation</h2>
                 <ul class="footer-links">
+                    <li><a href="https://ssrjkk.github.io/raven/docs/" rel="noopener">Documentation site</a></li>
                     <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/getting-started.md" rel="noopener">Getting started</a></li>
                     <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/mcp.md" rel="noopener">MCP setup guide</a></li>
                     <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/cli.md" rel="noopener">CLI reference</a></li>

@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <meta name="color-scheme" content="dark">
     <title>Raven — self-hosted MCP server with 66 tools</title>
     <meta name="description" content="Raven is a self-hosted MCP server: 66 tools over stdio and JSON-RPC over HTTP, with workspace confinement and keyed auth. Works with any MCP client.">
     <link rel="canonical" href="https://ssrjkk.github.io/raven/">
@@ -13,11 +15,13 @@
     <meta property="og:image" content="https://ssrjkk.github.io/raven/og-image.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Raven landing page: the hero, a recorded MCP handshake, and the install commands.">
     <meta property="og:url" content="https://ssrjkk.github.io/raven/">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Raven — self-hosted MCP server with 66 tools">
     <meta name="twitter:description" content="66 tools over stdio and JSON-RPC over HTTP. Workspace confinement, keyed auth, MIT licensed.">
     <meta name="twitter:image" content="https://ssrjkk.github.io/raven/og-image.png">
+    <meta name="twitter:image:alt" content="Raven landing page: the hero, a recorded MCP handshake, and the install commands.">
     <meta name="theme-color" content="#0a0812">
     <link rel="preload" href="fonts/SpaceGrotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="fonts/IBMPlexSans-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -312,6 +316,7 @@ ravenflow</code></pre>
             <div class="footer-col">
                 <h2 class="footer-title">Documentation</h2>
                 <ul class="footer-links">
+                    <li><a href="https://ssrjkk.github.io/raven/docs/" rel="noopener">Documentation site</a></li>
                     <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/getting-started.md" rel="noopener">Getting started</a></li>
                     <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/mcp.md" rel="noopener">MCP setup guide</a></li>
                     <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/cli.md" rel="noopener">CLI reference</a></li>

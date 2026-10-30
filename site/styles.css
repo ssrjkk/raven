@@ -65,6 +65,7 @@
 }
 
 :root {
+    color-scheme: dark;
     --bg: #0a0812;
     --bg-panel: #0d0a16;
     --bg-card: #161221;
