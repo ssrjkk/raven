@@ -7,13 +7,19 @@ no third-party request: GitHub Pages serves the files in this directory as they 
 
 ```
 site/
-├── index.html                # the page: hero, registry, console, architecture, spec, setup
-├── 404.html                  # served for unknown paths, styles only, no scripts
+├── index.html                # hero, install band, features, three ways in, page map
+├── tools.html                # the registry and the request console
+├── gateway.html              # adapter matrix, pairing policy, console screens
+├── architecture.html         # request path, surfaces, counts
+├── security.html             # six refusals, what never leaves
+├── install.html              # three setup steps and the gateway commands
+├── 404.html                  # served for unknown paths
 ├── styles.css                # design tokens, self-hosted @font-face rules, every rule
 ├── fonts/                    # woff2 subsets used by styles.css
 ├── tools-data.js             # generated: the tool registry as raven-mcp reports it
 ├── mcp-frames.js             # generated: real request/response frames from raven-mcp
-├── main.js                   # registry rendering, filters, reveal, copy buttons, bootstrap
+├── main.js                   # js flag, reveal, copy buttons, nav toggle, hero canvas
+├── registry.js               # registry rendering, filters and frame builder (tools page)
 ├── terminal-demo.js          # replays the recorded frames, explains the ones missing
 ├── procedural-animation.js   # static hero canvas painted from the palette
 ├── favicon.svg
@@ -22,14 +28,17 @@ site/
 └── sitemap.xml
 ```
 
+Each page carries its own canonical URL, Open Graph and Twitter metadata; `sitemap.xml`
+lists the six content pages and the 404 page asks search engines not to index it.
+
 ## Where the content comes from
 
 `scripts/record_site_frames.py` starts `python -m raven.core.mcp --workspace .`,
 exchanges eight frames with it and rewrites both generated files:
 
 - `tools-data.js` — one entry per tool: name, category, description, parameter names with
-  the types from its JSON Schema, and the required list. The registry section renders from
-  this array, so the page can only show tools the server actually exposes.
+  the types from its JSON Schema, and the required list. The registry on `tools.html`
+  renders from this array, so the page can only show tools the server actually exposes.
 - `mcp-frames.js` — the eight recorded `request`/`response` pairs, including the `-32602`
   reply to a `tools/call` with no tool name and the `-32601` reply to `resources/list`.
   The console replays these answers instead of inventing them.
@@ -41,11 +50,11 @@ python scripts/record_site_frames.py
 ```
 
 `tests/test_site_landing.py` fails if the committed generated files no longer match the
-registry, if a hand-written count in `index.html` (tool count, version, channel adapters,
-the hero's preview list) disagrees with the code, if a preset button has no recording
-behind it, if `styles.css` names a `url()` or an `@font-face` source that does not ship,
-if `index.html` or `404.html` loads an asset from a host other than GitHub, or if a file
-appears in this directory that the page never loads.
+registry, if a hand-written count on any page (tool count, version, channel adapters, the
+hero's preview list) disagrees with the code, if a preset button has no recording behind
+it, if `styles.css` names a `url()` or an `@font-face` source that does not ship, if any
+page loads an asset from a host other than GitHub, if a page is missing from the nav or
+the sitemap, or if a file appears in this directory that no page loads.
 
 ## Fonts
 
@@ -80,6 +89,8 @@ curl -s -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 
 ## Behaviour
 
+- Every page shares the same seven-link nav; the current page carries `aria-current="page"`.
+  Below 900px the links move into a panel the menu button opens, and Escape closes it.
 - The registry cards are `<button>` elements: selecting one prefills a `tools/call` frame
   for that tool with its required arguments in the console input.
 - The console accepts any frame you type. Frames matching the recording get the recorded
@@ -91,7 +102,8 @@ curl -s -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
   only then does CSS hide a section before it is in view. With JavaScript off, every
   section is visible and the registry falls back to a `<noscript>` note.
 - The hero canvas is painted once from the palette tokens (no random particles, no
-  animation loop) and is `aria-hidden`.
+  animation loop) and is `aria-hidden`. Under `prefers-reduced-motion: reduce` it centres
+  the light and ignores the pointer, so the surface stays still.
 
 ## Local preview
 
@@ -111,7 +123,12 @@ stages this directory as `build/pages` with the documentation copied to
 under `/raven/docs/`, so asset references here stay relative and `robots.txt` /
 `sitemap.xml` carry the absolute published URL.
 
-The theme is installed pinned, and the build step that follows fails the run if any built
+The documentation builds with `strict: true` in `mkdocs.yml`: a broken internal link or a
+page outside the nav fails the workflow instead of shipping. `docs/archive/` is excluded
+from the build, so session notes stay in the repository and off the published site.
+
+The theme is installed pinned, and an audit step after the build fails the run if any built
 documentation page fetches a stylesheet, script or font from a host other than the published
 site — Material loads Roboto from Google Fonts unless `mkdocs.yml` turns that off, and a
-self-hosted server should not hand a visitor's IP address to someone else.
+self-hosted server should not hand a visitor's IP address to someone else. The same audit
+fails when `build/docs` is missing, so a build that silently produced nothing cannot pass.

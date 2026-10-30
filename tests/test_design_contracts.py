@@ -236,8 +236,9 @@ def _site_css() -> str:
     return (ROOT / "site" / "styles.css").read_text(encoding="utf-8")
 
 
-def _site_html() -> str:
-    return (ROOT / "site" / "index.html").read_text(encoding="utf-8")
+def _site_pages() -> dict[str, str]:
+    site = ROOT / "site"
+    return {path.name: path.read_text(encoding="utf-8") for path in sorted(site.glob("*.html"))}
 
 
 def test_landing_defines_every_token_it_uses() -> None:
@@ -262,17 +263,17 @@ def test_landing_has_a_visible_focus_indicator() -> None:
 
 
 def test_landing_images_are_sized_and_named() -> None:
-    html = _site_html()
-    for img in re.findall(r"<img\b[^>]*>", html):
-        assert "alt=" in img, f"img without alt: {img[:80]}"
-        assert "width=" in img and "height=" in img, f"img without intrinsic size (layout shift): {img[:80]}"
+    for name, html in _site_pages().items():
+        for img in re.findall(r"<img\b[^>]*>", html):
+            assert "alt=" in img, f"{name}: img without alt: {img[:80]}"
+            assert "width=" in img and "height=" in img, f"{name}: img without intrinsic size (layout shift): {img[:80]}"
 
 
 def test_landing_anchors_resolve() -> None:
-    html = _site_html()
-    targets = set(re.findall(r"id=\"([^\"]+)\"", html))
-    for href in re.findall(r"href=\"(#[^\"]+)\"", html):
-        assert href[1:] in targets, f"dangling in-page link {href}"
+    for name, html in _site_pages().items():
+        targets = set(re.findall(r"id=\"([^\"]+)\"", html))
+        for href in re.findall(r"href=\"(#[^\"]+)\"", html):
+            assert href[1:] in targets, f"{name}: dangling in-page link {href}"
 
 
 # ── visualisation ──────────────────────────────────────────────────

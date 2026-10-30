@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raven — 15 channel adapters on one gateway</title>
+    <meta name="description" content="How each of the 15 channel adapters receives a message, the pairing policy that greets a stranger, and the 38-screen React console the same process serves.">
+    <link rel="canonical" href="https://ssrjkk.github.io/raven/gateway.html">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Raven">
+    <meta property="og:title" content="Raven — 15 channel adapters on one gateway">
+    <meta property="og:description" content="Every inbound path, the pairing policy, and the console the gateway serves.">
+    <meta property="og:image" content="https://ssrjkk.github.io/raven/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://ssrjkk.github.io/raven/gateway.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Raven — 15 channel adapters on one gateway">
+    <meta name="twitter:description" content="Every inbound path, the pairing policy, and the console the gateway serves.">
+    <meta name="twitter:image" content="https://ssrjkk.github.io/raven/og-image.png">
+    <meta name="theme-color" content="#0a0812">
+    <link rel="preload" href="fonts/SpaceGrotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="fonts/IBMPlexSans-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="navbar">
+        <a class="nav-brand" href="index.html">
+            <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 2 3 12l9 10 4-4.6V13h5v-2h-5V6.6z" fill="#8b5cf6"></path>
+                <path d="M12 7.5 7.5 12 12 16.5l1.9-2.2V13H16v-2h-2.1v-1.3z" fill="#d946ef"></path>
+            </svg>
+            <span>Raven</span>
+        </a>
+        <nav aria-label="Primary" id="primary-nav">
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="tools.html">Tools</a></li>
+                <li><a href="gateway.html" aria-current="page">Gateway</a></li>
+                <li><a href="architecture.html">Architecture</a></li>
+                <li><a href="security.html">Security</a></li>
+                <li><a href="install.html">Install</a></li>
+                <li><a href="https://github.com/ssrjkk/raven" rel="noopener">GitHub</a></li>
+            </ul>
+        </nav>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-nav" aria-label="Menu">
+            <span class="nav-toggle-bar" aria-hidden="true"></span>
+            <span class="nav-toggle-bar" aria-hidden="true"></span>
+            <span class="nav-toggle-bar" aria-hidden="true"></span>
+        </button>
+    </header>
+
+    <main id="main">
+        <section id="gateway" class="section page-head">
+            <div class="section-inner">
+                <p class="eyebrow">Gateway</p>
+                <h1>15 channel adapters, one admission policy</h1>
+                <p class="section-desc">
+                    One process holds every messenger on one event loop. Each adapter reads its own
+                    variables and stays silent when they are empty, so starting the server without
+                    credentials opens no connections and answers no chats.
+                </p>
+
+                <details class="matrix">
+                    <summary>The inbound matrix — every adapter and the variables it reads</summary>
+                    <div class="table-wrap">
+                        <table>
+                            <caption>How each adapter receives a message</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col">Adapter</th>
+                                    <th scope="col">Inbound path</th>
+                                    <th scope="col">Variables it reads</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <th scope="row"><code>discord</code></th>
+                                    <td>Gateway websocket, launched with the bot token</td>
+                                    <td><code>DISCORD_BOT_TOKEN</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>email</code></th>
+                                    <td>IMAP poll of the inbox, SMTP for the reply</td>
+                                    <td>
+                                        <code>EMAIL_IMAP_HOST</code> <code>EMAIL_IMAP_USER</code>
+                                        <code>EMAIL_IMAP_PASS</code> <code>EMAIL_POLL_INTERVAL</code>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>feishu</code></th>
+                                    <td><code>POST /api/webhooks/feishu</code>, SHA-256 over
+                                        timestamp, nonce, key and body</td>
+                                    <td><code>FEISHU_ENCRYPT_KEY</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>github</code></th>
+                                    <td><code>POST /api/webhooks/github</code>, HMAC of the raw body
+                                        in <code>X-Hub-Signature-256</code></td>
+                                    <td><code>GITHUB_WEBHOOK_SECRET</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>gitlab</code></th>
+                                    <td><code>POST /api/webhooks/gitlab</code>, shared token in
+                                        <code>X-Gitlab-Token</code></td>
+                                    <td><code>GITLAB_WEBHOOK_SECRET</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>googlechat</code></th>
+                                    <td><code>POST /api/webhooks/googlechat</code></td>
+                                    <td><code>WEB_SECRET_KEY</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>irc</code></th>
+                                    <td>Socket, TLS by port; channels joined after 001</td>
+                                    <td>
+                                        <code>IRC_SERVER</code> <code>IRC_NICK</code> <code>IRC_CHANNELS</code>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>line</code></th>
+                                    <td><code>POST /api/webhooks/line</code>, base64 HMAC in
+                                        <code>X-Line-Signature</code></td>
+                                    <td><code>LINE_CHANNEL_SECRET</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>matrix</code></th>
+                                    <td><code>GET /_matrix/client/v3/sync</code> long-poll, 30 s</td>
+                                    <td><code>MATRIX_HOMESERVER</code> <code>MATRIX_ACCESS_TOKEN</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>signal</code></th>
+                                    <td><code>POST /api/webhooks/signal</code> from a signal-cli receiver</td>
+                                    <td><code>WEB_SECRET_KEY</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>slack</code></th>
+                                    <td><code>POST /api/webhooks/slack/events</code>, v0 HMAC of
+                                        timestamp and body</td>
+                                    <td><code>SLACK_SIGNING_SECRET</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>teams</code></th>
+                                    <td><code>POST /api/webhooks/teams</code></td>
+                                    <td><code>WEB_SECRET_KEY</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>telegram</code></th>
+                                    <td><code>getUpdates</code> long-polling through the Bot API</td>
+                                    <td><code>TELEGRAM_BOT_TOKEN</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>webchat</code></th>
+                                    <td>WebSocket <code>/ws</code>, <code>/ws/stream</code>,
+                                        <code>/ws/canvas</code></td>
+                                    <td><code>WEB_SECRET_KEY</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>whatsapp</code></th>
+                                    <td><code>POST /api/webhooks/whatsapp</code> plus the
+                                        <code>GET</code> handshake</td>
+                                    <td>
+                                        <code>WHATSAPP_APP_SECRET</code> <code>WHATSAPP_VERIFY_TOKEN</code>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+
+                <p class="spec-note">
+                    A webhook route that has no secret of its own accepts the shared HMAC of the raw body in
+                    <code>X-Webhook-Signature</code> instead. With neither key configured it answers 403 to
+                    everything: an unverified payload is refused, not parked in a low-priority queue.
+                    Outbound-only settings — <code>TEAMS_WEBHOOK_URL</code>, <code>GOOGLECHAT_WEBHOOK_URL</code>,
+                    <code>FEISHU_WEBHOOK_URL</code> — carry replies, they do not admit anyone.
+                </p>
+
+                <h2 class="block-title">Who may talk to it</h2>
+                <div class="install-steps">
+                    <div class="step">
+                        <div class="step-number" aria-hidden="true">1</div>
+                        <div class="step-content">
+                            <h3>An unknown address opens a pairing, not a session</h3>
+                            <div class="codeblock">
+                                <div class="codebar">
+                                    <span class="code-lang">reply</span>
+                                    <button class="copy-btn" type="button" aria-label="Copy the pairing reply">Copy</button>
+                                </div>
+                                <pre><code>Welcome! Your pairing code is: `H7KQ2M`
+Please send `/pair H7KQ2M` to authorize.</code></pre>
+                            </div>
+                            <p class="step-note">Six characters from <code>A–Z0–9</code>, minted per address while <code>DM_POLICY=pairing</code></p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number" aria-hidden="true">2</div>
+                        <div class="step-content">
+                            <h3>The owner approves it on the machine, not in the chat</h3>
+                            <div class="codeblock">
+                                <div class="codebar">
+                                    <span class="code-lang">cli</span>
+                                    <button class="copy-btn" type="button" aria-label="Copy the pairing commands">Copy</button>
+                                </div>
+                                <pre><code>raven pairing list
+raven pairing approve H7KQ2M
+raven doctor</code></pre>
+                            </div>
+                            <p class="step-note"><code>raven doctor</code> lists the adapters that have credentials, so an inert one is visible</p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number" aria-hidden="true">3</div>
+                        <div class="step-content">
+                            <h3>Policy is a switch you throw on purpose</h3>
+                            <p>
+                                <code>DM_POLICY=open</code> admits anyone who finds the bot;
+                                <code>closed</code> admits only addresses already in the store.
+                                <code>CHANNEL_ALLOW_FROM</code> takes a JSON map of channel to user ids and
+                                answers a refusal on the spot. Every approval is written to the audit log and
+                                counted in the metrics.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 class="block-title">The console the same process serves</h2>
+                <p class="section-desc">
+                    <code>raven start</code> mounts the built React console on the API it already runs —
+                    no separate web server, no CDN, no second port to firewall.
+                </p>
+                <div class="codeblock">
+                    <div class="codebar">
+                        <span class="code-lang">shell</span>
+                        <button class="copy-btn" type="button" aria-label="Copy the console build commands">Copy</button>
+                    </div>
+                    <pre><code>cd web &amp;&amp; npm install &amp;&amp; npm run build
+raven start
+# http://127.0.0.1:18888 — WEB_HOST, WEB_PORT, RAVEN_WEB_DIST</code></pre>
+                </div>
+                <p class="step-note">
+                    Bound to loopback by default; the gateway warns when you point <code>WEB_HOST</code> at
+                    <code>0.0.0.0</code>. The bundle is looked up in <code>RAVEN_WEB_DIST</code>, then the wheel,
+                    then <code>web/dist</code>, and if none of them carry an <code>index.html</code> the API still
+                    starts and logs the build command instead.
+                </p>
+
+                <details class="matrix">
+                    <summary>The 38 screens the console serves, by group</summary>
+                    <div class="table-wrap">
+                        <table>
+                            <caption>The 38 screens the console serves</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col">Group</th>
+                                    <th scope="col">Routes under the SPA shell</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <th scope="row">Agent</th>
+                                    <td><code>agent</code> <code>agents</code> <code>chat</code>
+                                        <code>chat/history</code> <code>collab</code> <code>contexts</code>
+                                        <code>dream</code> <code>tasks</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Code</th>
+                                    <td><code>code</code> <code>code-quality</code> <code>git</code>
+                                        <code>github</code> <code>ide</code> <code>scaffold</code>
+                                        <code>tests</code> <code>cicd</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Automation</th>
+                                    <td><code>workflows</code> <code>routines</code> <code>monitors</code>
+                                        <code>plugins</code> <code>chaos</code> <code>abtesting</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Knowledge</th>
+                                    <td><code>knowledge</code> <code>rag</code> <code>finetune</code>
+                                        <code>providers</code> <code>cost</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Insight</th>
+                                    <td><code>analytics</code> <code>insights</code>
+                                        <code>project-insights</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Content</th>
+                                    <td><code>media</code> <code>voice</code> <code>email</code>
+                                        <code>browser</code> <code>web-search</code></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Operations</th>
+                                    <td><code>admin</code> <code>settings</code> <code>components</code></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+
+                <p class="spec-note">
+                    <code>/assets</code> and a catch-all are mounted last, after every router, so
+                    <code>/api/*</code> keeps winning and an unknown path under <code>/api/</code> answers 404
+                    instead of the shell. The console speaks to those same routes: it is a client of the
+                    gateway, not a service beside it.
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-shell">
+            <div class="footer-col footer-brand">
+                <p class="footer-wordmark">Raven</p>
+                <p>Self-hosted MCP server. 66 tools, two transports, MIT licensed.</p>
+                <p class="footer-fine">v0.4.8 · no telemetry · UI assets served from this host</p>
+            </div>
+            <div class="footer-col">
+                <h2 class="footer-title">Pages</h2>
+                <ul class="footer-links">
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="tools.html">Tools</a></li>
+                    <li><a href="gateway.html">Gateway</a></li>
+                    <li><a href="architecture.html">Architecture</a></li>
+                    <li><a href="security.html">Security</a></li>
+                    <li><a href="install.html">Install</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h2 class="footer-title">Documentation</h2>
+                <ul class="footer-links">
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/getting-started.md" rel="noopener">Getting started</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/mcp.md" rel="noopener">MCP setup guide</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/cli.md" rel="noopener">CLI reference</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/configuration.md" rel="noopener">Configuration</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/channels/overview.md" rel="noopener">Channels</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/security/overview.md" rel="noopener">Security model</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/security/egress.md" rel="noopener">Network egress map</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h2 class="footer-title">Project</h2>
+                <ul class="footer-links">
+                    <li><a href="https://github.com/ssrjkk/raven" rel="noopener">Source</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/CHANGELOG.md" rel="noopener">Changelog</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/LICENSE" rel="noopener">License</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/issues" rel="noopener">Issues</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h2 class="footer-title">Author</h2>
+                <ul class="footer-links">
+                    <li><a href="https://github.com/ssrjkk" rel="noopener">ssrjkk on GitHub</a></li>
+                    <li><a href="https://t.me/ssrjkk" rel="noopener">Telegram</a></li>
+                    <li><a href="https://t.me/ssrjkk_bot" rel="noopener">Bot</a></li>
+                </ul>
+            </div>
+        </div>
+    </footer>
+
+    <script src="main.js" defer></script>
+</body>
+</html>

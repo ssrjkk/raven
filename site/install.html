@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raven — install and configure</title>
+    <meta name="description" content="Three steps from a clone to a client calling tools: install the server, add it to an MCP client, and let the assistant work inside the workspace you allowed.">
+    <link rel="canonical" href="https://ssrjkk.github.io/raven/install.html">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Raven">
+    <meta property="og:title" content="Raven — install and configure">
+    <meta property="og:description" content="Clone, install, add the stdio server to a client, call the tools.">
+    <meta property="og:image" content="https://ssrjkk.github.io/raven/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://ssrjkk.github.io/raven/install.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Raven — install and configure">
+    <meta name="twitter:description" content="Clone, install, add the stdio server to a client, call the tools.">
+    <meta name="twitter:image" content="https://ssrjkk.github.io/raven/og-image.png">
+    <meta name="theme-color" content="#0a0812">
+    <link rel="preload" href="fonts/SpaceGrotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="fonts/IBMPlexSans-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="navbar">
+        <a class="nav-brand" href="index.html">
+            <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 2 3 12l9 10 4-4.6V13h5v-2h-5V6.6z" fill="#8b5cf6"></path>
+                <path d="M12 7.5 7.5 12 12 16.5l1.9-2.2V13H16v-2h-2.1v-1.3z" fill="#d946ef"></path>
+            </svg>
+            <span>Raven</span>
+        </a>
+        <nav aria-label="Primary" id="primary-nav">
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="tools.html">Tools</a></li>
+                <li><a href="gateway.html">Gateway</a></li>
+                <li><a href="architecture.html">Architecture</a></li>
+                <li><a href="security.html">Security</a></li>
+                <li><a href="install.html" aria-current="page">Install</a></li>
+                <li><a href="https://github.com/ssrjkk/raven" rel="noopener">GitHub</a></li>
+            </ul>
+        </nav>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-nav" aria-label="Menu">
+            <span class="nav-toggle-bar" aria-hidden="true"></span>
+            <span class="nav-toggle-bar" aria-hidden="true"></span>
+            <span class="nav-toggle-bar" aria-hidden="true"></span>
+        </button>
+    </header>
+
+    <main id="main">
+        <section id="install" class="section page-head">
+            <div class="section-inner">
+                <p class="eyebrow">Setup</p>
+                <h1>Install and configure</h1>
+                <p class="section-desc">Three steps from a clone to a client calling tools.</p>
+
+                <div class="install-steps">
+                    <div class="step">
+                        <div class="step-number" aria-hidden="true">1</div>
+                        <div class="step-content">
+                            <h2 class="step-title">Install the server</h2>
+                            <div class="codeblock">
+                                <div class="codebar">
+                                    <span class="code-lang">shell</span>
+                                    <button class="copy-btn" type="button" aria-label="Copy the install commands">Copy</button>
+                                </div>
+                                <pre><code>git clone https://github.com/ssrjkk/raven
+cd raven
+pip install .</code></pre>
+                            </div>
+                            <p class="step-note">Python 3.11+ · installs the <code>raven-mcp</code> and <code>ravencode-mcp</code> commands</p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number" aria-hidden="true">2</div>
+                        <div class="step-content">
+                            <h2 class="step-title">Add it to your client</h2>
+                            <div class="codeblock">
+                                <div class="codebar">
+                                    <span class="code-lang">json</span>
+                                    <button class="copy-btn" type="button" aria-label="Copy the client configuration">Copy</button>
+                                </div>
+                                <pre><code>{
+  "mcpServers": {
+    "raven": {
+      "command": "raven-mcp",
+      "args": ["--workspace", "/path/to/project"]
+    }
+  }
+}</code></pre>
+                            </div>
+                            <p class="step-note">Same shape for every MCP client that starts a stdio server</p>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number" aria-hidden="true">3</div>
+                        <div class="step-content">
+                            <h2 class="step-title">Call the tools</h2>
+                            <p>
+                                Ask the assistant to read a file, run a command or search the web. It calls the
+                                MCP tool and Raven runs it inside the workspace you allowed. Over HTTP, the same
+                                tools answer <code>POST /mcp/rpc</code> with a bearer key.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 class="block-title">Run the gateway</h2>
+                <p class="section-desc">
+                    The same install also starts the gateway — the process that holds the channel
+                    adapters, the DM policy and the web console.
+                </p>
+                <div class="codeblock">
+                    <div class="codebar">
+                        <span class="code-lang">shell</span>
+                        <button class="copy-btn" type="button" aria-label="Copy the gateway commands">Copy</button>
+                    </div>
+                    <pre><code>raven start
+raven start --daemon
+ravenflow
+raven doctor</code></pre>
+                </div>
+                <p class="step-note">
+                    <code>raven doctor</code> names the adapters that have credentials and the ones that would
+                    stay silent, so a misconfigured channel is visible before the first message. Configuration
+                    lives in <code>.env</code>; <code>.env.example</code> documents every variable.
+                </p>
+
+                <div class="cta-links">
+                    <a href="https://github.com/ssrjkk/raven/blob/main/docs/mcp.md" rel="noopener" class="btn-primary">Open the MCP setup guide</a>
+                    <a href="https://github.com/ssrjkk/raven/blob/main/docs/getting-started.md" rel="noopener" class="btn-secondary">Getting started</a>
+                    <a href="https://github.com/ssrjkk/raven/blob/main/docs/cli.md" rel="noopener" class="btn-secondary">CLI reference</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-shell">
+            <div class="footer-col footer-brand">
+                <p class="footer-wordmark">Raven</p>
+                <p>Self-hosted MCP server. 66 tools, two transports, MIT licensed.</p>
+                <p class="footer-fine">v0.4.8 · no telemetry · UI assets served from this host</p>
+            </div>
+            <div class="footer-col">
+                <h2 class="footer-title">Pages</h2>
+                <ul class="footer-links">
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="tools.html">Tools</a></li>
+                    <li><a href="gateway.html">Gateway</a></li>
+                    <li><a href="architecture.html">Architecture</a></li>
+                    <li><a href="security.html">Security</a></li>
+                    <li><a href="install.html">Install</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h2 class="footer-title">Documentation</h2>
+                <ul class="footer-links">
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/getting-started.md" rel="noopener">Getting started</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/mcp.md" rel="noopener">MCP setup guide</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/cli.md" rel="noopener">CLI reference</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/configuration.md" rel="noopener">Configuration</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/channels/overview.md" rel="noopener">Channels</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/security/overview.md" rel="noopener">Security model</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/security/egress.md" rel="noopener">Network egress map</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h2 class="footer-title">Project</h2>
+                <ul class="footer-links">
+                    <li><a href="https://github.com/ssrjkk/raven" rel="noopener">Source</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/CHANGELOG.md" rel="noopener">Changelog</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/LICENSE" rel="noopener">License</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/issues" rel="noopener">Issues</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h2 class="footer-title">Author</h2>
+                <ul class="footer-links">
+                    <li><a href="https://github.com/ssrjkk" rel="noopener">ssrjkk on GitHub</a></li>
+                    <li><a href="https://t.me/ssrjkk" rel="noopener">Telegram</a></li>
+                    <li><a href="https://t.me/ssrjkk_bot" rel="noopener">Bot</a></li>
+                </ul>
+            </div>
+        </div>
+    </footer>
+
+    <script src="main.js" defer></script>
+</body>
+</html>

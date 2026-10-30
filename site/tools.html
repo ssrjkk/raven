@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raven — 66 tools and a request console</title>
+    <meta name="description" content="Every tool raven-mcp exposes with its JSON Schema, plus a console that replays JSON-RPC frames recorded from a live server — requests, results and error replies.">
+    <link rel="canonical" href="https://ssrjkk.github.io/raven/tools.html">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Raven">
+    <meta property="og:title" content="Raven — 66 tools and a request console">
+    <meta property="og:description" content="The registry as the server reports it, and a console answering from recorded frames.">
+    <meta property="og:image" content="https://ssrjkk.github.io/raven/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="https://ssrjkk.github.io/raven/tools.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Raven — 66 tools and a request console">
+    <meta name="twitter:description" content="The registry as the server reports it, and a console answering from recorded frames.">
+    <meta name="twitter:image" content="https://ssrjkk.github.io/raven/og-image.png">
+    <meta name="theme-color" content="#0a0812">
+    <link rel="preload" href="fonts/SpaceGrotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="fonts/IBMPlexSans-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="navbar">
+        <a class="nav-brand" href="index.html">
+            <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 2 3 12l9 10 4-4.6V13h5v-2h-5V6.6z" fill="#8b5cf6"></path>
+                <path d="M12 7.5 7.5 12 12 16.5l1.9-2.2V13H16v-2h-2.1v-1.3z" fill="#d946ef"></path>
+            </svg>
+            <span>Raven</span>
+        </a>
+        <nav aria-label="Primary" id="primary-nav">
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="tools.html" aria-current="page">Tools</a></li>
+                <li><a href="gateway.html">Gateway</a></li>
+                <li><a href="architecture.html">Architecture</a></li>
+                <li><a href="security.html">Security</a></li>
+                <li><a href="install.html">Install</a></li>
+                <li><a href="https://github.com/ssrjkk/raven" rel="noopener">GitHub</a></li>
+            </ul>
+        </nav>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-nav" aria-label="Menu">
+            <span class="nav-toggle-bar" aria-hidden="true"></span>
+            <span class="nav-toggle-bar" aria-hidden="true"></span>
+            <span class="nav-toggle-bar" aria-hidden="true"></span>
+        </button>
+    </header>
+
+    <main id="main">
+        <section class="section page-head">
+            <div class="section-inner">
+                <p class="eyebrow">Tools</p>
+                <h1>Every tool, and a console to call it</h1>
+                <p class="section-desc">
+                    The registry below is generated from <code>tools/list</code> on a live
+                    <code>raven-mcp</code> process: name, description, parameter names and types from
+                    each tool's JSON Schema. Select a row to build its <code>tools/call</code> frame,
+                    then send it in the console.
+                </p>
+            </div>
+        </section>
+
+        <section id="registry" class="section">
+            <div class="section-inner">
+                <div class="tool-toolbar">
+                    <div>
+                        <label class="sr-only" for="tool-search">Search tools by name or description</label>
+                        <input type="search" id="tool-search" class="search-input"
+                               placeholder="Search 66 tools" autocomplete="off">
+                    </div>
+                    <div class="filter-buttons" role="group" aria-label="Filter tools by category">
+                        <button class="filter-btn" type="button" data-category="all" aria-pressed="true">All</button>
+                        <button class="filter-btn" type="button" data-category="file" aria-pressed="false">File</button>
+                        <button class="filter-btn" type="button" data-category="shell" aria-pressed="false">Shell</button>
+                        <button class="filter-btn" type="button" data-category="web" aria-pressed="false">Web</button>
+                        <button class="filter-btn" type="button" data-category="git" aria-pressed="false">Git</button>
+                        <button class="filter-btn" type="button" data-category="code" aria-pressed="false">Code</button>
+                        <button class="filter-btn" type="button" data-category="agent" aria-pressed="false">Agent</button>
+                        <button class="filter-btn" type="button" data-category="workflow" aria-pressed="false">Workflow</button>
+                        <button class="filter-btn" type="button" data-category="infra" aria-pressed="false">Infra</button>
+                    </div>
+                </div>
+
+                <p class="registry-status" id="registry-status" role="status">Loading registry…</p>
+                <ul id="tools-grid" class="tools-grid" aria-label="Available tools"></ul>
+                <p class="no-results" id="registry-empty" hidden></p>
+                <noscript>
+                    <p class="no-results">
+                        The registry is rendered from <code>tools-data.js</code>.
+                        Enable JavaScript, or read the tool list in
+                        <a href="https://github.com/ssrjkk/raven/blob/main/docs/mcp.md">the MCP docs</a>.
+                    </p>
+                </noscript>
+            </div>
+        </section>
+
+        <section id="console" class="section">
+            <div class="section-inner">
+                <div class="section-head">
+                    <p class="eyebrow">Protocol</p>
+                    <h2>Send a request</h2>
+                    <p class="section-desc">
+                        Build a real JSON-RPC 2.0 frame in your browser: start from an example,
+                        edit it, or select a tool in the registry and the frame comes pre-filled.
+                    </p>
+                </div>
+
+                <div class="console" aria-labelledby="console-title">
+                    <div class="console-header">
+                        <span id="console-title">raven-mcp — request builder</span>
+                        <span class="console-meta"><span data-tool-count>66</span> tools reachable</span>
+                    </div>
+                    <div class="console-body" id="terminal-output" role="log" aria-live="polite" tabindex="0"
+                         aria-label="Frame console: requests you send and the recorded answers"></div>
+                    <form class="console-input" id="request-form">
+                        <label class="prompt" for="terminal-command">$</label>
+                        <textarea id="terminal-command" name="frame" rows="2" spellcheck="false"
+                                  autocomplete="off" aria-describedby="console-hint"
+                                  placeholder='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'></textarea>
+                        <button class="sr-only" type="submit">Send request</button>
+                    </form>
+                </div>
+
+                <div class="console-actions">
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"raven-landing","version":"1.0"}}}'>initialize</button>
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","method":"notifications/initialized"}'>notification</button>
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'>tools/list</button>
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read","arguments":{"path":"README.md","max_chars":100}}}'>tools/call read</button>
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"glob","arguments":{"pattern":"docs/*.md","path":"."}}}'>tools/call glob</button>
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{}}'>missing tool name</button>
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","id":6,"method":"ping","params":{}}'>ping</button>
+                    <button class="ghost-btn" type="button" data-cmd='{"jsonrpc":"2.0","id":7,"method":"resources/list","params":{}}'>resources/list</button>
+                    <button class="ghost-btn" type="button" id="clear-console">Clear</button>
+                </div>
+                <p class="console-note" id="console-hint">
+                    Enter sends the frame, Shift+Enter adds a line. The eight exchanges behind these buttons
+                    were captured from a live <code>raven-mcp</code> process, including its
+                    <code>-32602</code> and <code>-32601</code> replies. Anything outside that recording is
+                    answered by a running server, not by this page.
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-shell">
+            <div class="footer-col footer-brand">
+                <p class="footer-wordmark">Raven</p>
+                <p>Self-hosted MCP server. 66 tools, two transports, MIT licensed.</p>
+                <p class="footer-fine">v0.4.8 · no telemetry · UI assets served from this host</p>
+            </div>
+            <div class="footer-col">
+                <h2 class="footer-title">Pages</h2>
+                <ul class="footer-links">
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="tools.html">Tools</a></li>
+                    <li><a href="gateway.html">Gateway</a></li>
+                    <li><a href="architecture.html">Architecture</a></li>
+                    <li><a href="security.html">Security</a></li>
+                    <li><a href="install.html">Install</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h2 class="footer-title">Documentation</h2>
+                <ul class="footer-links">
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/getting-started.md" rel="noopener">Getting started</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/mcp.md" rel="noopener">MCP setup guide</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/cli.md" rel="noopener">CLI reference</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/configuration.md" rel="noopener">Configuration</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/channels/overview.md" rel="noopener">Channels</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/security/overview.md" rel="noopener">Security model</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/docs/security/egress.md" rel="noopener">Network egress map</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h2 class="footer-title">Project</h2>
+                <ul class="footer-links">
+                    <li><a href="https://github.com/ssrjkk/raven" rel="noopener">Source</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/CHANGELOG.md" rel="noopener">Changelog</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/blob/main/LICENSE" rel="noopener">License</a></li>
+                    <li><a href="https://github.com/ssrjkk/raven/issues" rel="noopener">Issues</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h2 class="footer-title">Author</h2>
+                <ul class="footer-links">
+                    <li><a href="https://github.com/ssrjkk" rel="noopener">ssrjkk on GitHub</a></li>
+                    <li><a href="https://t.me/ssrjkk" rel="noopener">Telegram</a></li>
+                    <li><a href="https://t.me/ssrjkk_bot" rel="noopener">Bot</a></li>
+                </ul>
+            </div>
+        </div>
+    </footer>
+
+    <script src="tools-data.js" defer></script>
+    <script src="mcp-frames.js" defer></script>
+    <script src="terminal-demo.js" defer></script>
+    <script src="registry.js" defer></script>
+    <script src="main.js" defer></script>
+</body>
+</html>

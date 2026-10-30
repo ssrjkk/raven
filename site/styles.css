@@ -92,7 +92,7 @@
     --shell: 1120px;
     --gut: 1.5rem;
     --radius: 6px;
-    --bar: 56px;
+    --bar: 64px;
 
     --font-display: 'Space Grotesk', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
     --font-body: 'IBM Plex Sans', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
@@ -146,7 +146,7 @@ body::after {
 
 /* ---------- focus: one rule, every interactive element ---------- */
 
-:where(a, button, input, textarea, [tabindex]):focus-visible {
+:where(a, button, input, textarea, summary, [tabindex]):focus-visible {
     outline: 2px solid var(--violet-text);
     outline-offset: 3px;
     border-radius: 2px;
@@ -204,8 +204,7 @@ body::after {
 }
 
 code,
-kbd,
-.mono {
+kbd {
     font-family: var(--font-mono);
     font-size: 0.92em;
     color: var(--violet-text);
@@ -251,6 +250,7 @@ a {
     display: inline-flex;
     align-items: center;
     gap: 0.55rem;
+    min-height: 44px;
     color: var(--ink);
     text-decoration: none;
     font-family: var(--font-display);
@@ -468,6 +468,36 @@ a {
     color: var(--violet);
 }
 
+.hero-install {
+    /* The two blocks a visitor needs before reading anything else: the install line and the
+       client stanza. They used to live below four scrolls of prose. */
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    max-width: var(--shell);
+    margin: 1.75rem auto 0;
+}
+
+.hero-install .codeblock {
+    margin: 0;
+}
+
+.hero-install-note {
+    position: relative;
+    z-index: 1;
+    max-width: var(--shell);
+    margin: 0.85rem auto 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--ink-mute);
+}
+
+.hero-install-note a {
+    color: var(--violet-text);
+}
+
 /* ---------- buttons ---------- */
 
 .btn-primary,
@@ -564,6 +594,60 @@ a {
     transform: none;
 }
 
+/* ---------- page heads ---------- */
+
+.page-head {
+    padding-top: clamp(2.5rem, 5vh, 3.75rem);
+}
+
+.page-head h1 {
+    /* The only h1 outside the landing hero, so it borrows the hero's display face and gradient
+       without its 5rem ceiling: these titles are sentences, not a wordmark. */
+    font-family: var(--font-display);
+    font-size: clamp(1.9rem, 4.6vw, 3.1rem);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    max-width: 26ch;
+    margin: 0.5rem 0 0.75rem;
+    background: linear-gradient(135deg, var(--ink) 0%, var(--ink) 45%, var(--violet-text) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.page-head .section-desc {
+    max-width: 64ch;
+}
+
+/* A block that opens its own part of a page, rather than the page itself. */
+.section .block-title {
+    font-family: var(--font-display);
+    font-size: var(--fs-subhead);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    color: var(--violet-text);
+    background: none;
+    -webkit-text-fill-color: currentColor;
+    margin: 2.6rem 0 0.75rem;
+}
+
+/* Headings that name an item inside a list, a step or a layer: sized as h3, not as a section. */
+.section .rule-title,
+.section .step-title,
+.section .layer-title {
+    font-family: var(--font-display);
+    font-size: var(--fs-h3);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+    color: var(--ink);
+    background: none;
+    -webkit-text-fill-color: currentColor;
+    margin: 0 0 0.6rem;
+}
+
 /* ---------- features grid ---------- */
 
 .features-grid {
@@ -637,6 +721,71 @@ a {
     margin: 0;
 }
 
+/* ---------- explore map ---------- */
+
+.explore-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 0.75rem;
+}
+
+.explore-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    position: relative;
+    padding: 1.15rem 1.2rem 2.6rem;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bg-card) 70%, transparent), color-mix(in srgb, var(--bg-panel) 50%, transparent));
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    text-decoration: none;
+    transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.explore-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--violet-edge);
+    box-shadow: 0 6px 20px color-mix(in srgb, var(--violet) 12%, transparent);
+}
+
+.explore-kicker {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--violet-bright);
+}
+
+.explore-title {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+}
+
+.explore-desc {
+    font-size: var(--fs-sm);
+    line-height: 1.55;
+    color: var(--ink-mute);
+}
+
+.explore-go {
+    position: absolute;
+    right: 1.2rem;
+    bottom: 0.9rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-base);
+    color: var(--violet-text);
+    transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.explore-card:hover .explore-go {
+    transform: translateX(3px);
+    color: var(--violet-bright);
+}
+
 /* ---------- tool registry ---------- */
 
 .tool-toolbar {
@@ -677,7 +826,8 @@ a {
 }
 
 .filter-btn {
-    padding: 0.42rem 0.75rem;
+    min-height: 44px;
+    padding: 0.5rem 0.85rem;
     background: transparent;
     border: 1px solid var(--hairline);
     color: var(--ink-mute);
@@ -711,8 +861,8 @@ a {
 
 .tools-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
-    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 0.6rem;
     list-style: none;
 }
 
@@ -725,19 +875,25 @@ a {
 }
 
 .tool-card {
+    /* One row per tool: 66 cards at 160-257px each made the registry a second page of
+       its own. The description is clamped to one line and the parameters unfold on
+       hover, keyboard focus or after a click has built the frame. A button's auto width
+       is fit-content, not fill-available, so the nowrap summary would widen the card past
+       its grid track (measured 403px in a 273px track) and push the page sideways. */
     display: flex;
     flex-direction: column;
-    gap: 0.45rem;
+    gap: 0.15rem;
+    width: 100%;
+    min-width: 0;
     text-align: left;
     background: linear-gradient(135deg, color-mix(in srgb, var(--bg-card) 70%, transparent), color-mix(in srgb, var(--bg-panel) 50%, transparent));
-    backdrop-filter: blur(8px);
     border: 1px solid var(--hairline);
     border-radius: 8px;
-    padding: 0.9rem;
+    padding: 0.55rem 0.75rem;
     color: var(--ink);
     font: inherit;
     cursor: pointer;
-    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
     position: relative;
     overflow: hidden;
 }
@@ -752,7 +908,6 @@ a {
 }
 
 .tool-card:hover {
-    transform: translateY(-2px);
     border-color: var(--violet-edge);
     background: linear-gradient(135deg, color-mix(in srgb, var(--bg-raised) 80%, transparent), color-mix(in srgb, var(--bg-panel) 60%, transparent));
     box-shadow: 0 4px 16px color-mix(in srgb, var(--violet) 12%, transparent);
@@ -797,15 +952,30 @@ a {
 
 .tool-desc {
     font-size: var(--fs-sm);
-    line-height: 1.55;
+    line-height: 1.5;
     color: var(--ink-mute);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .tool-params {
     display: flex;
     flex-wrap: wrap;
     gap: 0.3rem;
-    margin-top: auto;
+    max-height: 0;
+    margin-top: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-height 0.22s ease, opacity 0.18s ease, margin-top 0.22s ease;
+}
+
+.tool-card:hover .tool-params,
+.tool-card:focus-visible .tool-params,
+.tool-card-built .tool-params {
+    max-height: 9rem;
+    margin-top: 0.45rem;
+    opacity: 1;
 }
 
 .param {
@@ -831,21 +1001,6 @@ a {
 .param-none {
     border-style: dashed;
     background: transparent;
-}
-
-.card-hint {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--ink-mute);
-    opacity: 0;
-    transition: opacity 0.18s;
-}
-
-.tool-card:hover .card-hint,
-.tool-card:focus-visible .card-hint {
-    opacity: 1;
 }
 
 .no-results {
@@ -1165,6 +1320,38 @@ a {
     color: var(--ink-mute);
 }
 
+/* ---------- what never leaves ---------- */
+
+.never-list {
+    display: grid;
+    gap: 0.8rem;
+    max-width: 78ch;
+    margin: 1.1rem 0 2rem;
+    list-style: none;
+}
+
+.never-list li {
+    position: relative;
+    padding-left: 1.5rem;
+    font-size: var(--fs-sm);
+    line-height: 1.65;
+    color: var(--ink-mute);
+}
+
+.never-list li::before {
+    content: "×";
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-family: var(--font-mono);
+    color: var(--fuchsia);
+}
+
+.never-list strong {
+    color: var(--ink);
+    font-weight: 600;
+}
+
 /* ---------- spec sheet + endpoints ---------- */
 
 .spec-sheet {
@@ -1222,14 +1409,6 @@ a {
     line-height: 1.3;
     color: var(--ink);
     margin-bottom: 0.7rem;
-}
-
-.section-inner > h3 {
-    /* A heading that opens a block of its own, rather than sitting inside a card or a step.
-       It has to out-rank the step headings below it, which share the same element. */
-    margin-top: 2.6rem;
-    font-size: var(--fs-subhead);
-    color: var(--violet-text);
 }
 
 .section-inner > .step-note {
@@ -1299,6 +1478,63 @@ tbody td {
 tbody tr:hover th,
 tbody tr:hover td {
     background: var(--bg-card);
+}
+
+/* ---------- policy matrix ---------- */
+
+.matrix {
+    /* Fifteen rows of env-var prose are worth reading on demand, not on the way to the pairing
+       rule. Closed by default; the summary is the whole 44px row, not just its text. */
+    margin: 1.4rem 0 0;
+    background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+}
+
+.matrix > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 44px;
+    padding: 0.6rem 0.9rem;
+    cursor: pointer;
+    list-style: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    color: var(--violet-text);
+}
+
+.matrix > summary::-webkit-details-marker {
+    display: none;
+}
+
+.matrix > summary::before {
+    content: "+";
+    flex: none;
+    width: 1ch;
+    font-family: var(--font-mono);
+    color: var(--violet-bright);
+}
+
+.matrix[open] > summary::before {
+    content: "−";
+}
+
+.matrix > summary:hover {
+    color: var(--ink);
+}
+
+.matrix[open] > summary {
+    border-bottom: 1px solid var(--hairline);
+}
+
+.matrix .table-wrap {
+    border: 0;
+    border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.matrix + .spec-note {
+    margin-top: 1.4rem;
 }
 
 /* ---------- setup ---------- */
@@ -1430,7 +1666,7 @@ footer {
 
 .footer-shell {
     display: grid;
-    grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1.6fr) repeat(4, minmax(0, 1fr));
     gap: 1.75rem 1.5rem;
     max-width: var(--shell);
     margin: 0 auto;
@@ -1580,6 +1816,13 @@ footer {
         background: var(--violet-text);
     }
 
+    /* The preset and copy chips are tapped here, not hovered. At 26-28px they clear the 24px
+       AA floor but sit below the 44px the filters, matrix rows and nav already meet. */
+    .ghost-btn,
+    .copy-btn {
+        min-height: 44px;
+    }
+
     .hero-shell {
         grid-template-columns: 1fr;
         gap: 2rem;
@@ -1587,6 +1830,18 @@ footer {
 
     .hero-description {
         max-width: 60ch;
+    }
+
+    .hero-install {
+        grid-template-columns: 1fr;
+    }
+
+    .footer-shell {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .footer-brand {
+        grid-column: 1 / -1;
     }
 
     .features-grid {
@@ -1648,6 +1903,10 @@ footer {
     .features-grid {
         grid-template-columns: 1fr;
         gap: 0.75rem;
+    }
+
+    .explore-grid {
+        grid-template-columns: 1fr;
     }
 
     .footer-shell {
@@ -1719,7 +1978,6 @@ footer {
 
     .ghost-btn {
         padding: 0.3rem 0.55rem;
-        min-height: var(--target);
         font-size: var(--fs-label);
     }
 

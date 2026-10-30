@@ -10,6 +10,13 @@ repo_name: ssrjkk/raven
 # overwrites index.html and the published site stops being the landing page.
 site_dir: build/docs
 
+# A broken internal link or a page outside the nav fails the deploy instead of shipping a
+# half-built manual. docs/archive/ holds session notes for the repository, not for readers,
+# and is excluded so it neither builds nor warns about missing nav entries.
+strict: true
+exclude_docs: |
+  archive/
+
 theme:
   name: material
   # Material loads Roboto from Google Fonts unless told otherwise, which hands every visitor's

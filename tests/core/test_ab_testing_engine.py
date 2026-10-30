@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import random
+import uuid
 from collections.abc import Callable
 from typing import Any
 
@@ -34,6 +35,16 @@ def make_running(
     started = engine.start_experiment(exp.id)
     assert started is not None
     return started
+
+
+def pin_experiment_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fix the experiment id, which the assignment hash includes as the key prefix.
+
+    With a fresh uuid every run the 20,000-unit split is a new binomial draw each time, and a
+    1% band sits under three standard deviations, so the test failed by luck in roughly one run
+    out of two hundred. A pinned id measures the same splitter behaviour every run.
+    """
+    monkeypatch.setattr("raven.core.ab_testing.uuid4", lambda: uuid.UUID(int=0))
 
 
 class TestExperimentCreation:
@@ -81,7 +92,10 @@ class TestAssignment:
         arms = {engine.assign_variant(exp.id, "user-1") for _ in range(50)}
         assert arms == {engine.assign_variant(exp.id, "user-1")}
 
-    def test_different_users_are_split_close_to_the_configured_weights(self, engine: ABTestEngine) -> None:
+    def test_different_users_are_split_close_to_the_configured_weights(
+        self, engine: ABTestEngine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pin_experiment_id(monkeypatch)
         exp = make_running(engine, [{"name": "a", "weight": 3}, {"name": "b", "weight": 7}])
         counts = {"a": 0, "b": 0}
         total = 20000
@@ -90,8 +104,11 @@ class TestAssignment:
         assert abs(counts["a"] / total - 0.3) < 0.01
         assert abs(counts["b"] / total - 0.7) < 0.01
 
-    def test_boundary_weight_does_not_leak_traffic_into_the_other_arm(self, engine: ABTestEngine) -> None:
+    def test_boundary_weight_does_not_leak_traffic_into_the_other_arm(
+        self, engine: ABTestEngine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # a 1-1 split must not systematically favour the first arm, which the old <= boundary did
+        pin_experiment_id(monkeypatch)
         exp = make_running(engine, [{"name": "a", "weight": 1}, {"name": "b", "weight": 1}])
         first = sum(1 for i in range(20000) if assigned(engine, exp.id, f"u{i}") == "a")
         assert abs(first / 20000 - 0.5) < 0.01

@@ -46,14 +46,9 @@ jobs:
         run: mkdocs build
 
       - name: Check the documentation loads nothing off-site
-        run: |
-          fetched=$(grep -ERoh '<(link|script)[^>]+(href|src)="https?://[^"]+"' build/docs \
-            --include='*.html' | grep -Eo 'https?://[^"]+' \
-            | grep -v '^https://ssrjkk\.github\.io' | sort -u || true)
-          if [ -n "$fetched" ]; then
-            echo "::error::Built documentation fetches assets from another host: $fetched"
-            exit 1
-          fi
+        # Fails when the build produced nothing, and when any page or stylesheet requests
+        # a host other than the published site (Material's Roboto default would).
+        run: python scripts/check_docs_offsite.py build/docs
 
       - name: Assemble Pages artifact
         run: |
