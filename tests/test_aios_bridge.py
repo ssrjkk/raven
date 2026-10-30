@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 from collections.abc import Iterator
@@ -297,8 +298,8 @@ def client() -> Iterator[TestClient]:
 
 
 @pytest.fixture
-def admin_h() -> dict[str, str]:
-    token = token_manager.create_token("bridge-admin", "admin")
+def admin_h(client: TestClient) -> dict[str, str]:
+    token = asyncio.run(token_manager.create_token("bridge-admin", "admin"))
     return {"Authorization": f"Bearer {token}"}
 
 

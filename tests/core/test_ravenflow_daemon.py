@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -11,7 +12,7 @@ from raven.gateway.daemon import RavenFlowDaemon
 
 @pytest.fixture
 def auth_headers():
-    token = auth_handler.create_token("testuser", "admin")
+    token = asyncio.run(auth_handler.create_token("testuser", "admin"))
     return {"Authorization": f"Bearer {token}"}
 
 

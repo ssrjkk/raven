@@ -13,9 +13,14 @@ from loguru import logger
 from raven.core.config import get_settings
 
 PRIVATE_NETS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
+    ipaddress.ip_network("0.0.0.0/8"),
     ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),  # carrier-grade NAT, still not the public internet
     ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.0.0.0/24"),
     ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("240.0.0.0/4"),
     ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("169.254.0.0/16"),
     ipaddress.ip_network("::1/128"),
@@ -126,24 +131,32 @@ async def validate_url_async(url: str) -> str | None:
         return "Missing hostname"
 
     try:
-        ipaddress.ip_address(host)
-        if _is_private_ip(host):
-            return f"Direct request to private IP: {host}"
-        return None
+        literal = ipaddress.ip_address(host)
     except ValueError:
-        pass
+        literal = None
+    if literal is not None:
+        return _policy_error(host, [literal])
 
-    if get_settings().ghost_mode:
-        return f"Ghost mode: external URL blocked: {url[:100]}"
+    return _policy_error(host, await _resolve_host_async(host))
 
-    ips = await _resolve_host_async(host)
+
+def _policy_error(
+    host: str, ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address]
+) -> str | None:
+    """One policy for the pre-flight check and the pinned transport.
+
+    Ghost mode is the inverse of the default: only the private network is reachable,
+    so a public address is the one that gets refused.
+    """
     if not ips:
         return f"Failed to resolve hostname: {host}"
-
-    for ip in ips:
-        if _is_private_address(ip):
-            return f"Hostname resolves to private IP: {ip}"
-
+    private = [ip for ip in ips if _is_private_address(ip)]
+    if get_settings().ghost_mode:
+        if len(private) != len(ips):
+            return f"Ghost mode: external URL blocked: {host}"
+        return None
+    if private:
+        return f"Hostname resolves to private IP: {private[0]}"
     return None
 
 
@@ -152,28 +165,41 @@ class SSRFSafeTransport(httpx.AsyncHTTPTransport):
         hostname = request.url.host
 
         try:
-            ipaddress.ip_address(hostname)
-            if _is_private_ip(hostname):
-                msg = f"Request to private IP blocked: {hostname}"
+            literal = ipaddress.ip_address(hostname)
+        except ValueError:
+            literal = None
+        if literal is not None:
+            error = _policy_error(hostname, [literal])
+            if error:
+                msg = f"SSRF protection: {error}"
                 raise httpx.ConnectError(msg)
             return await super().handle_async_request(request)
-        except ValueError:
-            pass
 
         ips = await _resolve_host_async(hostname)
-        if not ips:
-            msg = f"Failed to resolve hostname: {hostname}"
+        error = _policy_error(hostname, ips)
+        if error:
+            msg = f"SSRF protection: {error}"
             raise httpx.ConnectError(msg)
 
-        for ip in ips:
-            if _is_private_ip(str(ip)):
-                msg = f"SSRF protection: hostname {hostname} resolves to private IP: {ip}"
-                raise httpx.ConnectError(msg)
-
+        # The TCP connection goes to the verified address, but TLS SNI and virtual hosting
+        # are keyed on the name: rewriting the URL without carrying both makes every HTTPS
+        # request fail its handshake against the pinned IP. httpx builds the Host header from
+        # the original URL, so keep it verbatim — it carries the port, and callers may have
+        # set their own virtual-host override.
+        original_url = request.url
         pinned = str(ips[0])
-        request.url = request.url.copy_with(host=pinned)
+        host_header = request.headers.get("host") or hostname
+        request.url = original_url.copy_with(host=pinned)
+        request.headers["Host"] = host_header
+        if original_url.scheme == "https":
+            request.extensions["sni_hostname"] = hostname
 
-        return await super().handle_async_request(request)
+        try:
+            return await super().handle_async_request(request)
+        finally:
+            # response.url reads request.url, and callers resolve redirects against it. Leaving
+            # the pin in place turns a relative Location into a request to the bare address.
+            request.url = original_url
 
 
 async def safe_http_request(url: str, **kwargs: Any) -> httpx.Response:
@@ -183,7 +209,7 @@ async def safe_http_request(url: str, **kwargs: Any) -> httpx.Response:
         if response.is_redirect:
             location = response.headers.get("Location")
             if location:
-                error = await validate_url_async(location)
+                error = await validate_url_async(str(response.url.join(location)))
                 if error:
                     msg = f"Redirect blocked by SSRF: {error}"
                     raise httpx.ConnectError(msg)

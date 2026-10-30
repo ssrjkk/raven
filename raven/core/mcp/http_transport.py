@@ -19,7 +19,7 @@ def create_mcp_router() -> APIRouter:
 
     @router.post("/rpc")
     async def mcp_rpc(request: Request) -> JSONResponse:
-        if not authorize_request(request):
+        if not await authorize_request(request):
             return JSONResponse(
                 {"jsonrpc": "2.0", "error": {"code": -32601, "message": "Unauthorized"}}, status_code=401
             )
@@ -40,7 +40,7 @@ def create_mcp_router() -> APIRouter:
 
     @router.get("/tools")
     async def list_tools(request: Request) -> JSONResponse:
-        if not authorize_request(request):
+        if not await authorize_request(request):
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
         defs = get_tool_definitions()
         result = []
@@ -58,7 +58,7 @@ def create_mcp_router() -> APIRouter:
 
     @router.post("/tools/{name}")
     async def call_tool(name: str, request: Request) -> JSONResponse:
-        if not authorize_request(request):
+        if not await authorize_request(request):
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
         body: Any = await request.json() or {}
         args = body.get("arguments", body) if isinstance(body, dict) else {}

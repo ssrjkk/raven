@@ -173,6 +173,31 @@ async def test_validate_url_async_resolves_public(monkeypatch: pytest.MonkeyPatc
     assert await validate_url_async("http://example.com") is None
 
 
+@pytest.mark.parametrize(
+    "ip",
+    ["0.0.0.1", "100.64.0.1", "198.18.0.1", "198.19.255.254", "192.0.0.1", "240.0.0.1", "169.254.169.254"],
+)
+async def test_validate_url_async_extended_private_ranges(ip: str) -> None:
+    result = await validate_url_async(f"http://{ip}/")
+    assert result is not None and "private IP" in result
+
+
+async def test_validate_url_async_ghost_allows_private_literal(monkeypatch: pytest.MonkeyPatch) -> None:
+    _settings(monkeypatch, ghost=True)
+    assert await validate_url_async("http://127.0.0.1:8080/") is None
+
+
+async def test_validate_url_async_ghost_rejects_mixed_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    _settings(monkeypatch, ghost=True)
+    monkeypatch.setattr(
+        ssrf,
+        "_resolve_host_async",
+        AsyncMock(return_value=[ipaddress.ip_address("10.0.0.5"), ipaddress.ip_address("1.1.1.1")]),
+    )
+    result = await validate_url_async("http://example.com")
+    assert result is not None and "Ghost mode" in result
+
+
 # ── SSRFSafeTransport ─────────────────────────────────────────────
 
 
@@ -203,15 +228,56 @@ async def test_transport_hostname_resolves_private(monkeypatch: pytest.MonkeyPat
 
 async def test_transport_hostname_pins_public(monkeypatch: pytest.MonkeyPatch) -> None:
     resp = httpx.Response(200)
-    super_handle = AsyncMock(return_value=resp)
-    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", super_handle)
+    sent: dict[str, Any] = {}
+
+    async def _record(_self: Any, request: httpx.Request) -> httpx.Response:
+        sent["url"] = request.url
+        return resp
+
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", _record)
     monkeypatch.setattr(ssrf, "_resolve_host_async", AsyncMock(return_value=[ipaddress.ip_address("93.184.216.34")]))
     transport = SSRFSafeTransport()
     request = httpx.Request("GET", "http://example.com/")
     assert await transport.handle_async_request(request) is resp
+    assert sent["url"].host == "93.184.216.34"
+    # The wire target is the pin; the caller keeps the name it asked for.
+    assert request.url.host == "example.com"
+
+
+async def test_transport_https_pinning_keeps_host_port_and_sni(monkeypatch: pytest.MonkeyPatch) -> None:
+    resp = httpx.Response(200)
+    sent: dict[str, Any] = {}
+
+    async def _record(_self: Any, request: httpx.Request) -> httpx.Response:
+        sent["url"] = request.url
+        sent["host"] = request.headers["host"]
+        sent["sni"] = request.extensions.get("sni_hostname")
+        return resp
+
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", _record)
+    monkeypatch.setattr(ssrf, "_resolve_host_async", AsyncMock(return_value=[ipaddress.ip_address("93.184.216.34")]))
+    transport = SSRFSafeTransport()
+    request = httpx.Request("GET", "https://example.com:8443/status")
+    assert await transport.handle_async_request(request) is resp
+    assert sent["url"].host == "93.184.216.34"
+    assert sent["url"].port == 8443
+    # Virtual hosting and the TLS handshake are keyed on the name, not the pinned address.
+    assert sent["host"] == "example.com:8443"
+    assert sent["sni"] == "example.com"
+    assert request.url.host == "example.com"
+
+
+async def test_transport_keeps_caller_host_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    resp = httpx.Response(200)
+    super_handle = AsyncMock(return_value=resp)
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", super_handle)
+    monkeypatch.setattr(ssrf, "_resolve_host_async", AsyncMock(return_value=[ipaddress.ip_address("93.184.216.34")]))
+    transport = SSRFSafeTransport()
+    request = httpx.Request("GET", "https://example.com/", headers={"Host": "vhost.example"})
+    assert await transport.handle_async_request(request) is resp
     assert super_handle.await_args is not None
     sent_request = super_handle.await_args.args[0]
-    assert sent_request.url.host == "93.184.216.34"
+    assert sent_request.headers["host"] == "vhost.example"
 
 
 # ── _materialize ──────────────────────────────────────────────────
@@ -313,6 +379,29 @@ async def test_safe_http_request_redirect_allowed(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(ssrf, "validate_url_async", AsyncMock(return_value=None))
     resp = await safe_http_request("http://example.com")
     assert resp.status_code == 302
+
+
+async def test_safe_http_request_relative_redirect_is_resolved(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Client:
+        def __init__(self, **kw: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> _Client:
+            return self
+
+        async def __aexit__(self, *exc: Any) -> None:
+            return None
+
+        async def request(self, *, url: str, **kwargs: Any) -> httpx.Response:
+            req = httpx.Request("GET", url)
+            return httpx.Response(302, headers={"Location": "/next"}, request=req)
+
+    checked: AsyncMock = AsyncMock(return_value=None)
+    monkeypatch.setattr(httpx, "AsyncClient", _Client)
+    monkeypatch.setattr(ssrf, "validate_url_async", checked)
+    await safe_http_request("http://example.com/start")
+    assert checked.await_args is not None
+    assert checked.await_args.args[0] == "http://example.com/next"
 
 
 # ── safe_fetch_async ──────────────────────────────────────────────

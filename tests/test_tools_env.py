@@ -4,7 +4,14 @@ import os
 from unittest.mock import patch
 
 from raven.core.task_engine.tool_registry import ToolRegistry
-from raven.tools.env import _is_sensitive, _safe_val, env_get, env_list, register_env_tools
+from raven.tools.env import (
+    _is_sensitive,
+    _mask_url_userinfo,
+    _safe_val,
+    env_get,
+    env_list,
+    register_env_tools,
+)
 
 
 class TestIsSensitive:
@@ -39,6 +46,34 @@ class TestSafeVal:
 
     def test_sensitive_whitespace_placeholder(self) -> None:
         assert _safe_val("API_KEY", " 0 ") == " 0 "
+
+
+class TestUrlUserinfoMasking:
+    def test_dsn_password_masked(self) -> None:
+        assert (
+            _mask_url_userinfo("postgresql://raven:hunter2@db.internal:5432/raven")
+            == "postgresql://raven:***@db.internal:5432/raven"
+        )
+
+    def test_passwordless_user_masked(self) -> None:
+        assert _mask_url_userinfo("redis://:s3cret@cache:6379/0") == "redis://:***@cache:6379/0"
+
+    def test_at_in_password_is_swallowed(self) -> None:
+        assert (
+            _mask_url_userinfo("postgresql://user:p@ss@db/raven") == "postgresql://user:***@db/raven"
+        )
+
+    def test_plain_value_untouched(self) -> None:
+        assert _mask_url_userinfo("https://example.com/path") == "https://example.com/path"
+        assert _mask_url_userinfo("raven") == "raven"
+
+    def test_non_sensitive_name_still_masks_dsn(self) -> None:
+        value = "postgresql://raven:hunter2@db.internal/raven"
+        assert _safe_val("DATABASE_URL", value) == "postgresql://raven:***@db.internal/raven"
+
+    def test_env_get_masks_dsn(self) -> None:
+        with patch.dict("os.environ", {"MONGODB_URI": "mongodb://u:pw@mongo:27017/x"}, clear=False):
+            assert env_get("MONGODB_URI") == "mongodb://u:***@mongo:27017/x"
 
 
 class TestEnvGet:

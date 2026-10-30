@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -23,7 +23,7 @@ def test_events_sessions_no_auth(client: TestClient) -> None:
 
 def test_events_sessions_invalid_token(client: TestClient) -> None:
     with patch("raven.core.sse_api.token_manager") as mock_tm, patch("raven.core.sse_api.settings") as mock_settings:
-        mock_tm.validate_token.return_value = None
+        mock_tm.validate_token = AsyncMock(return_value=None)
         mock_secret = MagicMock()
         mock_secret.get_secret_value.return_value = ""
         mock_settings.web_secret_key = mock_secret
@@ -33,7 +33,7 @@ def test_events_sessions_invalid_token(client: TestClient) -> None:
 
 def test_events_sessions_valid_token(client: TestClient) -> None:
     with patch("raven.core.sse_api.token_manager") as mock_tm, patch("raven.core.sse_api.sse_stream") as mock_stream:
-        mock_tm.validate_token.return_value = {"user_id": "test-user"}
+        mock_tm.validate_token = AsyncMock(return_value={"user_id": "test-user"})
 
         async def empty_gen():
             return
@@ -47,7 +47,7 @@ def test_events_sessions_valid_token(client: TestClient) -> None:
 
 def test_events_sessions_web_secret(client: TestClient) -> None:
     with patch("raven.core.sse_api.token_manager") as mock_tm, patch("raven.core.sse_api.settings") as mock_settings, patch("raven.core.sse_api.sse_stream") as mock_stream:
-        mock_tm.validate_token.return_value = None
+        mock_tm.validate_token = AsyncMock(return_value=None)
         mock_secret = MagicMock()
         mock_secret.get_secret_value.return_value = "admin-secret"
         mock_settings.web_secret_key = mock_secret

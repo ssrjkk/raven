@@ -15,6 +15,7 @@ from typing import Any
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+WORKFLOWS = ROOT / ".github" / "workflows"
 WORKFLOW = ROOT / ".github" / "workflows" / "exe-build.yml"
 DOCS = ROOT / "docs" / "getting-started.md"
 
@@ -73,11 +74,31 @@ def test_the_checksum_is_verified_before_anything_is_published() -> None:
 
 def test_the_release_artifacts_are_attested() -> None:
     attest = _find("upload-release", "actions/attest-build-provenance")
-    assert re.fullmatch(r"actions/attest-build-provenance@v\d+", attest["uses"]), (
-        "pin the action to a major tag, not @main"
+    assert re.fullmatch(r"actions/attest-build-provenance@[0-9a-f]{40}", attest["uses"]), (
+        "pin the action to a commit SHA, not a mutable tag"
     )
     subjects = str(attest["with"]["subject-path"])
     assert EXE_ARTIFACT in subjects and SUM_ARTIFACT in subjects
+
+
+def test_every_third_party_action_is_pinned_to_a_commit() -> None:
+    # A tag is a pointer that its owner can repoint at any code; only a commit SHA is immutable.
+    # The release workflows carry PyPI and GHCR credentials, where that difference is the supply chain.
+    sources = sorted(WORKFLOWS.glob("*.yml")) + sorted(
+        (ROOT / ".github" / "actions").glob("*/action.yml")
+    )
+    unpinned: list[str] = []
+    for path in sources:
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            match = re.search(r"\buses:\s*(\S+)", line)
+            if match is None:
+                continue
+            target = match.group(1)
+            if target.startswith("./"):
+                continue
+            if not re.fullmatch(r"[^@\s]+@[0-9a-f]{40}", target):
+                unpinned.append(f"{path.name}:{lineno} {target}")
+    assert not unpinned, "unpinned actions: " + ", ".join(unpinned)
 
 
 def test_the_attest_job_has_only_the_permissions_it_needs() -> None:

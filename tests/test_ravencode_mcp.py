@@ -33,7 +33,9 @@ class TestMCPHttpTransport:
 
     @pytest.fixture(autouse=True)
     def authorized(self):
-        with patch("ravencode.mcp.http_transport.authorize_request", return_value=True) as mock_auth:
+        with patch(
+            "ravencode.mcp.http_transport.authorize_request", new=AsyncMock(return_value=True)
+        ) as mock_auth:
             yield mock_auth
 
     def test_router_routes(self, router) -> None:

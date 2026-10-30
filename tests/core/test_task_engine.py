@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -168,6 +169,31 @@ class TestTaskStore:
         await store.save_task(Task(goal="a"))
         await store.save_task(Task(goal="b"))
         assert await store.count_tasks() == 2
+
+    @pytest.mark.asyncio
+    async def test_purge_finished_keeps_unfinished_work(self, store: TaskStore):
+        old = time.time() - 40 * 24 * 3600
+        done = Task(goal="done", status=TaskStatus.COMPLETED, created_at=old)
+        done.steps = [TaskStep(task_id=done.id, description="s", tool="t")]
+        failed = Task(goal="failed", status=TaskStatus.FAILED, created_at=old)
+        cancelled = Task(goal="cancelled", status=TaskStatus.CANCELLED, created_at=old)
+        fresh = Task(goal="fresh", status=TaskStatus.COMPLETED)
+        running = Task(goal="running", status=TaskStatus.RUNNING, created_at=old)
+        paused = Task(goal="paused", status=TaskStatus.PAUSED, created_at=old)
+        for t in (done, failed, cancelled, fresh, running, paused):
+            await store.save_task(t)
+
+        removed = await store.purge_finished(30 * 24 * 3600)
+
+        assert removed == 3
+        remaining = {t.goal for t in await store.list_tasks()}
+        assert remaining == {"fresh", "running", "paused"}
+        assert await store.load_task(done.id) is None
+        assert await store._fetchval("SELECT COUNT(*) FROM task_steps WHERE task_id = ?", (done.id,)) == 0
+
+    @pytest.mark.asyncio
+    async def test_purge_finished_noop_on_empty_store(self, store: TaskStore):
+        assert await store.purge_finished() == 0
 
 
 class TestTaskPlanner:

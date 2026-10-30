@@ -490,6 +490,26 @@ async def _migration_11(db: AsyncDB) -> None:
     )
 
 
+@register(12, "Store auth_sessions as a digest of the credential, not the credential")
+async def _migration_12(db: AsyncDB) -> None:
+    columns = await _table_columns(db, "auth_sessions")
+    if columns is None or "token_hash" in columns:
+        return
+    if "token" not in columns:
+        return
+    outstanding = await db.fetchval("SELECT COUNT(*) FROM auth_sessions")
+    await db.execute("ALTER TABLE auth_sessions RENAME COLUMN token TO token_hash")
+    # Old rows hold the credential itself, which cannot be turned into a digest retroactively:
+    # the sessions are revoked instead of being migrated with a secret still in place.
+    await db.run_script("DELETE FROM auth_sessions")
+    await db.run_script(
+        "CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions(user_id)"
+    )
+    logger.warning(
+        "Revoked {} session(s): they were stored as plaintext bearer tokens", outstanding or 0
+    )
+
+
 async def apply_pending_migrations(db: AsyncDB) -> None:
     table = MIGRATIONS_TABLE_POSTGRES if db.dialect == "postgresql" else MIGRATIONS_TABLE_SQLITE
     await db.execute(table)

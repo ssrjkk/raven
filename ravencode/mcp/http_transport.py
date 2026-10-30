@@ -19,8 +19,8 @@ _mcp_server = MCPServer()
 _sse_transport = SSETransport()
 
 
-def _require_auth(request: Request) -> None:
-    if not authorize_request(request):
+async def _require_auth(request: Request) -> None:
+    if not await authorize_request(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
@@ -29,7 +29,7 @@ def create_mcp_router() -> APIRouter:
 
     @router.post("/rpc")
     async def mcp_rpc(request: Request) -> JSONResponse:
-        _require_auth(request)
+        await _require_auth(request)
         try:
             body: Any = await request.json()
         except ValueError:
@@ -47,7 +47,7 @@ def create_mcp_router() -> APIRouter:
 
     @router.get("/tools")
     async def list_tools(request: Request) -> list[dict[str, Any]]:
-        _require_auth(request)
+        await _require_auth(request)
         defs = get_tool_definitions()
         result = []
         for d in defs:
@@ -64,7 +64,7 @@ def create_mcp_router() -> APIRouter:
 
     @router.post("/tools/{name}")
     async def call_tool(name: str, request: Request) -> JSONResponse:
-        _require_auth(request)
+        await _require_auth(request)
         body: Any = await request.json() or {}
         args = body.get("arguments", body) if isinstance(body, dict) else {}
         result = await execute_tool_public(name, args)

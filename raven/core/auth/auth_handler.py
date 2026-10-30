@@ -10,7 +10,7 @@ from raven.core.auth.tokens import token_manager
 class AuthHandler:
     async def decode_token(self, token: str) -> dict[str, Any] | None:
         try:
-            data = token_manager.validate_token(token)
+            data = await token_manager.validate_token(token)
             if not data:
                 return None
             return {
@@ -22,11 +22,11 @@ class AuthHandler:
             logger.debug("Token decode failed: {}", e)
             return None
 
-    def create_token(self, user_id: str, role: str, ttl_seconds: int = 86400) -> str:
-        return token_manager.create_token(user_id, role, ttl_seconds)
+    async def create_token(self, user_id: str, role: str, ttl_seconds: int = 86400) -> str:
+        return await token_manager.create_token(user_id, role, ttl_seconds)
 
-    def revoke_token(self, token: str) -> None:
-        token_manager.revoke_token(token)
+    async def revoke_token(self, token: str) -> None:
+        await token_manager.revoke_token(token)
 
 
 auth_handler = AuthHandler()

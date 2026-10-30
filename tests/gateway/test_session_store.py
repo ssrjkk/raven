@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -227,7 +228,7 @@ class TestSessionIdValidation:
 
     def test_api_agent_rejects_unsafe_session_id(self, tmp_path: Path):
         daemon = RavenFlowDaemon(port=0, data_dir=tmp_path)
-        headers = {"Authorization": f"Bearer {auth_handler.create_token('testuser', 'admin')}"}
+        headers = {"Authorization": f"Bearer {asyncio.run(auth_handler.create_token('testuser', 'admin'))}"}
         with TestClient(daemon.app) as client:
             resp = client.post(
                 "/api/agent",
@@ -240,7 +241,7 @@ class TestSessionIdValidation:
 
     def test_websocket_rejects_unsafe_session_id(self, tmp_path: Path):
         daemon = RavenFlowDaemon(port=0, data_dir=tmp_path)
-        token = auth_handler.create_token("testuser", "admin")
+        token = asyncio.run(auth_handler.create_token("testuser", "admin"))
         with TestClient(daemon.app) as client, client.websocket_connect(f"/ws?token={token}") as ws:
             ws.send_text('{"type": "message", "content": "hi", "session_id": "../../escape"}')
             reply = ws.receive_json()

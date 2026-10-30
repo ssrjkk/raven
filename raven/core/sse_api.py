@@ -20,7 +20,7 @@ def create_sse_router() -> APIRouter:
         token = request.query_params.get("token", "")
         user: str | None = None
         if token:
-            session = token_manager.validate_token(token)
+            session = await token_manager.validate_token(token)
             if session:
                 user = str(session.get("user_id", "")) or None
             elif settings.web_secret_key.get_secret_value() and hmac.compare_digest(

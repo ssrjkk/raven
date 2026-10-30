@@ -108,6 +108,14 @@ def _strip_ansi(text: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
+def _reset_allure_results() -> None:
+    # addopts makes every run append per-test JSON here; left alone it reached 2M files and each
+    # pytest start paid seconds per written result on a directory that large.
+    results_dir = ROOT / "allure-results"
+    if results_dir.is_dir():
+        shutil.rmtree(results_dir, ignore_errors=True)
+
+
 def _parse_summary_line(line: str) -> tuple[int, int, int]:
     """Parse 'N passed, N failed, N skipped' from a pytest summary line."""
     passed = failed = skipped = 0
@@ -513,6 +521,8 @@ def main() -> int:
         results.append(check_cli_imports())
 
     # Tests
+    if args.component or args.tests or run_all:
+        _reset_allure_results()
     if args.component:
         results.append(check_component(args.component))
     elif args.tests or run_all:

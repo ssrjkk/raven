@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -19,6 +20,9 @@ from raven.tools.register_all import create_task_tool_registry
 
 class TaskOrchestrator:
     STALE_TASK_TIMEOUT = 600.0
+    RETENTION_SECONDS = 30 * 24 * 3600
+    RETENTION_INTERVAL_SECONDS = 24 * 3600
+
     def __init__(
         self,
         db: Any,
@@ -38,6 +42,7 @@ class TaskOrchestrator:
         self._planner: TaskPlanner | None = None
         self._runner: TaskRunner | None = None
         self._bg_tasks: set[asyncio.Task[None]] = set()
+        self._retention_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
         self._store = TaskStore(self._db.db_path)
@@ -73,8 +78,31 @@ class TaskOrchestrator:
                             t.id, TaskStatus.FAILED, error=f"Task failed to resume after restart: {e}"
                         )
         logger.info("TaskOrchestrator started, {} active tasks", len(self._tasks))
+        self._retention_task = asyncio.create_task(self._retention_loop())
+
+    async def _retention_loop(self) -> None:
+        while True:
+            try:
+                if self._store is not None:
+                    removed = await self._store.purge_finished(self.RETENTION_SECONDS)
+                    if removed:
+                        logger.info(
+                            "Pruned {} finished task(s) older than {} days",
+                            removed,
+                            self.RETENTION_SECONDS // 86400,
+                        )
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.warning("Task retention sweep failed: {}", e)
+            await asyncio.sleep(self.RETENTION_INTERVAL_SECONDS)
 
     async def stop(self) -> None:
+        if self._retention_task is not None:
+            self._retention_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._retention_task
+            self._retention_task = None
         async with self._lock:
             self._tasks.clear()
         for t in list(self._bg_tasks):

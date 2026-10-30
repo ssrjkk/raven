@@ -20,7 +20,7 @@ def _auth_req(**overrides: object) -> MagicMock:
 @pytest.fixture
 def authed():
     with patch("raven.core.mcp.auth.token_manager") as tm:
-        tm.validate_token.return_value = {"user_id": "u1", "role": "admin"}
+        tm.validate_token = AsyncMock(return_value={"user_id": "u1", "role": "admin"})
         yield tm
 
 

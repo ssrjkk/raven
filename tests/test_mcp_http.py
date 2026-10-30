@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -19,7 +19,7 @@ def app():
 
 @pytest.fixture
 def authed():
-    with patch("ravencode.mcp.http_transport.authorize_request", return_value=True):
+    with patch("ravencode.mcp.http_transport.authorize_request", new=AsyncMock(return_value=True)):
         yield
 
 

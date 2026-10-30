@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urljoin
 
 import httpx
 
-from raven.core.security.ssrf import SSRFSafeTransport, validate_url
+from raven.core.security.ssrf import SSRFSafeTransport, validate_url_async
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 _MAX_BODY_CHARS = 20_000
@@ -30,7 +31,7 @@ async def _read_limited_text(resp: Any) -> str:
 
 
 async def _fetch(url: str, method: str = "GET", **kwargs: Any) -> str:
-    blocked = validate_url(url)
+    blocked = await validate_url_async(url)
     if blocked:
         return f"[blocked] {blocked}"
     transport = SSRFSafeTransport()
@@ -38,13 +39,16 @@ async def _fetch(url: str, method: str = "GET", **kwargs: Any) -> str:
         try:
             resp = await c.request(method, url, **kwargs)
         except (httpx.ConnectError, httpx.TimeoutException, httpx.RequestError) as e:
-            return f"[blocked] {e}"
+            # A refused connection is not a policy verdict; saying "[blocked]" here teaches the
+            # model that a reachable host is forbidden, and it stops retrying a transient fault.
+            return f"[network error] {e}"
         for _ in range(_MAX_REDIRECTS):
             if resp.is_redirect or resp.is_informational:
                 location = resp.headers.get("Location")
                 if not location:
                     break
-                blocked = validate_url(location)
+                target = urljoin(str(resp.url), location)
+                blocked = await validate_url_async(target)
                 if blocked:
                     return f"[blocked] redirect blocked: {blocked}"
                 redirect_method = method
@@ -53,9 +57,9 @@ async def _fetch(url: str, method: str = "GET", **kwargs: Any) -> str:
                     redirect_method = "GET"
                     redirect_kwargs.pop("content", None)
                 try:
-                    resp = await c.request(redirect_method, location, **redirect_kwargs)
+                    resp = await c.request(redirect_method, target, **redirect_kwargs)
                 except (httpx.ConnectError, httpx.TimeoutException, httpx.RequestError) as e:
-                    return f"[blocked] redirect blocked: {e}"
+                    return f"[network error] redirect failed: {e}"
             else:
                 break
         if resp.is_redirect:

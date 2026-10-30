@@ -225,15 +225,14 @@ async def auth_middleware(request: Request, call_next):
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
 
-    # WebSocket and EventSource/SSE clients cannot set custom headers, so the
-    # same token is accepted as a query parameter (?token=...). The gateway
-    # logs request.url.path (no query string), so the token never lands in
-    # access/rate-limit logs.
+    # WebSocket and EventSource/SSE clients cannot set custom headers, so the same token is
+    # accepted as a query parameter (?token=...). uvicorn's access log is switched off because a
+    # request line carries the query string; request_id_middleware logs the sanitized path only.
     if not token:
         token = request.query_params.get("token", "")
 
     if token:
-        session = token_manager.validate_token(token)
+        session = await token_manager.validate_token(token)
         if session:
             request.state.user_role = session["role"]
             request.state.user_id = session["user_id"]

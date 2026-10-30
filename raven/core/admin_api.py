@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+from collections.abc import AsyncIterator
 from dataclasses import replace
 from typing import Any
 
@@ -21,6 +23,8 @@ from raven.core.admin.models import (
 )
 from raven.core.api_errors import internal_error
 from raven.core.audit import AuditEventType, audit_logger
+from raven.core.auth.store import AuthStore
+from raven.core.auth.tokens import token_manager
 from raven.core.config import settings
 from raven.core.health import health
 from raven.core.jobs import job_manager
@@ -485,7 +489,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         user_info = await handle_callback(provider, code, state)
         if not user_info:
             raise HTTPException(401, "OAuth authentication failed")
-        token = token_manager.create_token(user_info["user_id"], "user")
+        token = await token_manager.create_token(user_info["user_id"], "user")
         if provider == "github" and user_info.get("access_token"):
             access_token = user_info.pop("access_token")
             gh_scope = user_info.pop("scope", "")
@@ -540,12 +544,33 @@ async def _deliver_email_verification(email: str, token: str) -> None:
         )
 
 
+def _close_store_on_shutdown(app: FastAPI, store: AuthStore) -> None:
+    """Give the store an owner that closes it.
+
+    FastAPI keeps every route callable in a process-wide cache, so the closures below stay alive
+    long after the app they belong to; without shutdown the store's database connection (and its
+    aiosqlite worker thread) outlives the process that could still use it.
+    """
+    previous = app.router.lifespan_context
+
+    @contextlib.asynccontextmanager
+    async def lifespan(inner_app: FastAPI) -> AsyncIterator[Any]:
+        async with previous(inner_app) as state:
+            try:
+                yield state
+            finally:
+                token_manager.unbind(store)
+                await store.close()
+
+    app.router.lifespan_context = lifespan
+
+
 def init_auth_routes(app: FastAPI, db_path: str) -> None:
     global AUTH_ENABLED, _auth_store
-    from raven.core.auth.store import AuthStore
-    from raven.core.auth.tokens import token_manager
-
     store = AuthStore(db_path)
+    token_manager.bind(store)
+    app.state.auth_store = store
+    _close_store_on_shutdown(app, store)
 
     _login_attempts: dict[str, list[float]] = {}
     _lockout_until: dict[str, float] = {}
@@ -600,7 +625,7 @@ def init_auth_routes(app: FastAPI, db_path: str) -> None:
             "login_success",
             detail={"ip": ip},
         )
-        token = token_manager.create_token(user.id, user.role.value)
+        token = await token_manager.create_token(user.id, user.role.value)
         return {"token": token, "user_id": user.id, "role": user.role.value, "username": user.username}
 
     @app.post("/api/auth/register")
@@ -613,7 +638,7 @@ def init_auth_routes(app: FastAPI, db_path: str) -> None:
         if existing:
             raise HTTPException(409, "Username already exists")
         user = await store.create_user(body.username, body.password, display_name=display, email=body.email or "")
-        token = token_manager.create_token(user.id, user.role.value)
+        token = await token_manager.create_token(user.id, user.role.value)
         if body.email:
             await _deliver_email_verification(body.email, await store.create_email_verification_token(user.id))
         return {"token": token, "user_id": user.id, "role": user.role.value, "username": user.username}
@@ -626,10 +651,10 @@ def init_auth_routes(app: FastAPI, db_path: str) -> None:
         }
 
     @app.post("/api/auth/logout")
-    def auth_logout(request: Request):
+    async def auth_logout(request: Request):
         token = request.headers.get("Authorization", "").replace("Bearer ", "")
         if token:
-            token_manager.revoke_token(token)
+            await token_manager.revoke_token(token)
         return {"ok": True}
 
     @app.post("/api/auth/logout-all")
@@ -638,7 +663,6 @@ def init_auth_routes(app: FastAPI, db_path: str) -> None:
         if not user_id or user_id == "anonymous":
             raise HTTPException(401, "Authentication required")
         await store.revoke_all_user_sessions(user_id)
-        token_manager.revoke_user_tokens(user_id)
         return {"ok": True, "message": "All sessions revoked"}
 
     @app.post("/api/auth/verify-email")
@@ -675,7 +699,7 @@ def init_auth_routes(app: FastAPI, db_path: str) -> None:
     @app.post("/api/auth/users/{username}/deactivate")
     async def auth_deactivate_user(username: str):
         await store.set_active(username, False)
-        token_manager.revoke_user_tokens(f"user:{username}")
+        await token_manager.revoke_user_tokens(f"user:{username}")
         return {"ok": True}
 
     @app.get("/api/stream")

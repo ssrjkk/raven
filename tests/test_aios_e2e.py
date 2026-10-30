@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from unittest.mock import AsyncMock, patch
 
@@ -20,14 +21,14 @@ def client():
 
 
 @pytest.fixture
-def admin_headers():
-    token = token_manager.create_token("e2e-admin", "admin")
+def admin_headers(client):
+    token = asyncio.run(token_manager.create_token("e2e-admin", "admin"))
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
-def user_headers():
-    token = token_manager.create_token("e2e-user", "user")
+def user_headers(client):
+    token = asyncio.run(token_manager.create_token("e2e-user", "user"))
     return {"Authorization": f"Bearer {token}"}
 
 

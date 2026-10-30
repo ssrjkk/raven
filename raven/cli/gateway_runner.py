@@ -7,6 +7,7 @@ import signal
 from pathlib import Path
 
 import uvicorn
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
@@ -101,6 +102,16 @@ def create_gateway() -> Gateway:
     plugin_loader = PluginLoader()
     redis_url = settings.redis_url or None
     return Gateway(db, plugin_loader, redis_url=redis_url)
+
+
+def _server_config(app: FastAPI, host: str, port: int) -> uvicorn.Config:
+    # uvicorn's access log prints the full request line, query string included, and SSE and
+    # WebSocket clients have no way to send an Authorization header — the token travels as
+    # ?token=. request_id_middleware already logs method, sanitized path, status and duration,
+    # so the access log would only add the credential.
+    return uvicorn.Config(
+        app, host=host, port=port, log_level="info", ws="auto", access_log=False
+    )
 
 
 async def _run_gateway(gateway: Gateway, web_port: int):
@@ -399,7 +410,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         sse_stream.start_cleanup()
         if settings.web_host in ("0.0.0.0", "::", ""):
             logger.warning("Binding to {}:{}. Ensure firewall/reverse proxy is configured.", settings.web_host, web_port)
-        config = uvicorn.Config(api_app, host=settings.web_host, port=web_port, log_level="info", ws="auto")
+        config = _server_config(api_app, settings.web_host, web_port)
         server = uvicorn.Server(config)
         server_task = asyncio.create_task(server.serve())
 

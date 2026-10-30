@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import threading
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -88,6 +89,18 @@ def _isolate_plugin_registry() -> Iterator[None]:
         registry.unregister(name)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_token_manager() -> Iterator[None]:
+    """token_manager is process-wide and a bound AuthStore points at one test's database."""
+    from raven.core.auth.tokens import token_manager
+
+    token_manager.bind(None)
+    token_manager._tokens.clear()
+    yield
+    token_manager.bind(None)
+    token_manager._tokens.clear()
+
+
 @pytest.fixture
 def mock_settings(monkeypatch):
     monkeypatch.setattr("raven.core.gateway.gateway.settings.default_model", "ollama/test")
@@ -127,3 +140,28 @@ def mcp_stdio(monkeypatch: pytest.MonkeyPatch) -> Callable[[Any, str], Awaitable
         return [json.loads(line) for line in out.getvalue().splitlines() if line.strip()]
 
     return _serve
+
+
+def _is_sqlite_worker(thread: threading.Thread) -> bool:
+    target = getattr(thread, "_target", None)
+    return (
+        not thread.daemon
+        and getattr(target, "__module__", "") == "aiosqlite.core"
+        and getattr(target, "__qualname__", "") == "_connection_worker_thread"
+    )
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """An unclosed SQLite connection leaves a non-daemon thread that blocks interpreter exit.
+
+    The process then prints its summary and hangs in threading._shutdown, which a gate sees only
+    as a killed stage; naming the leak here is the difference between a timeout and a cause.
+    """
+    workers = [t for t in threading.enumerate() if _is_sqlite_worker(t)]
+    for thread in workers:
+        thread.join(timeout=5.0)
+    leaked = [t for t in workers if t.is_alive()]
+    if leaked:
+        session.exitstatus = 1
+        names = ", ".join(t.name for t in leaked)
+        print(f"\n[leak] {len(leaked)} aiosqlite worker(s) outlived the tests: {names}", flush=True)

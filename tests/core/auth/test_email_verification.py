@@ -11,7 +11,7 @@ import contextlib
 import hashlib
 import re
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -51,12 +51,19 @@ def read_table(db_path: Path, table: str) -> tuple[list[str], list[tuple[object,
         con.close()
 
 
-def make_client(db_path: Path) -> TestClient:
+@pytest.fixture
+def make_client() -> Iterator[Callable[[Path], TestClient]]:
+    """Build clients that are entered, so the lifespan closes each app's auth store."""
     from raven.core.admin_api import init_auth_routes
 
-    app = FastAPI()
-    init_auth_routes(app, str(db_path))
-    return TestClient(app)
+    with contextlib.ExitStack() as stack:
+
+        def _make(db_path: Path) -> TestClient:
+            app = FastAPI()
+            init_auth_routes(app, str(db_path))
+            return stack.enter_context(TestClient(app))
+
+        yield _make
 
 
 def patch_transport(monkeypatch: pytest.MonkeyPatch, captured: dict[str, str], result: str) -> None:
@@ -129,7 +136,7 @@ async def test_the_migration_revokes_rows_that_were_stored_as_credentials(store:
 
 @pytest.mark.asyncio
 async def test_the_credential_reaches_the_address_and_no_log_line(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_client: Callable[[Path], TestClient]
 ) -> None:
     client = make_client(tmp_path / "auth_api.db")
     captured: dict[str, str] = {}
@@ -148,7 +155,7 @@ async def test_the_credential_reaches_the_address_and_no_log_line(
 
 @pytest.mark.asyncio
 async def test_a_missing_transport_is_reported_without_leaking_anything(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_client: Callable[[Path], TestClient]
 ) -> None:
     client = make_client(tmp_path / "auth_api.db")
     captured: dict[str, str] = {}
@@ -166,7 +173,9 @@ async def test_a_missing_transport_is_reported_without_leaking_anything(
     assert not [line for line in logs if _TOKEN_SHAPE.search(line)], "a credential-shaped string was logged"
 
 
-def test_verification_is_a_post_and_a_get_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_verification_is_a_post_and_a_get_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_client: Callable[[Path], TestClient]
+) -> None:
     client = make_client(tmp_path / "auth_api.db")
     captured: dict[str, str] = {}
     patch_transport(monkeypatch, captured, "sent")

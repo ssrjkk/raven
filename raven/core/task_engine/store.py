@@ -265,6 +265,26 @@ class TaskStore(BaseStore):
             await db.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
 
     @measure_latency()
+    async def purge_finished(self, older_than_seconds: float = 30 * 24 * 3600) -> int:
+        """Drop finished tasks and their steps; pending, running and paused work is kept."""
+        terminal = (TaskStatus.COMPLETED.value, TaskStatus.FAILED.value, TaskStatus.CANCELLED.value)
+        cutoff = time.time() - older_than_seconds
+        placeholders = ", ".join("?" for _ in terminal)
+        db = await self._conn()
+        async with db.transaction():
+            rows = await db.fetchall(
+                f"SELECT id FROM tasks WHERE status IN ({placeholders}) AND created_at < ?",
+                (*terminal, cutoff),
+            )
+            ids = [row["id"] for row in rows]
+            if not ids:
+                return 0
+            id_placeholders = ", ".join("?" for _ in ids)
+            await db.execute(f"DELETE FROM task_steps WHERE task_id IN ({id_placeholders})", ids)
+            await db.execute(f"DELETE FROM tasks WHERE id IN ({id_placeholders})", ids)
+        return len(ids)
+
+    @measure_latency()
     async def count_tasks(self, user_id: str | None = None, status: str | None = None) -> int:
         where: list[str] = []
         params: list[Any] = []

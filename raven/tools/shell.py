@@ -80,7 +80,9 @@ _WIN_COMMANDS = frozenset(
     }
 )
 
-if platform.system() == "Windows":
+_IS_WINDOWS = platform.system() == "Windows"
+
+if _IS_WINDOWS:
     ALLOWED_COMMANDS = _WIN_COMMANDS
 else:
     ALLOWED_COMMANDS = _UNIX_COMMANDS
@@ -90,6 +92,16 @@ MAX_STDERR_CHARS = 10_000
 
 
 _FORBIDDEN_EXEC_FLAGS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
+
+# cmd.exe re-parses its whole command line, so an ampersand inside an argument builds a second
+# command that never passed the allowlist. The check only matters on the cmd /c path.
+_CMD_METACHARACTERS = frozenset("&|<>^\r\n")
+
+
+def _reject_cmd_metacharacters(args: list[str]) -> None:
+    for token in args:
+        if any(ch in _CMD_METACHARACTERS for ch in token):
+            raise ValueError(f"cmd metacharacter in argument: {token!r}")
 
 
 def _validate_command(command: str) -> list[str]:
@@ -116,7 +128,11 @@ async def shell_command(command: str, timeout: int = 30) -> str:
         return f"[denied] {e}"
 
     _cmd_builtins = {"echo", "dir", "type", "copy", "del", "ren", "cd", "cls", "ver", "date", "time", "set"}
-    if platform.system() == "Windows" and args[0].lower() in _cmd_builtins:
+    if _IS_WINDOWS and args[0].lower() in _cmd_builtins:
+        try:
+            _reject_cmd_metacharacters(args)
+        except ValueError as e:
+            return f"[denied] {e}"
         args = ["cmd", "/c", *args]
 
     proc = await asyncio.create_subprocess_exec(

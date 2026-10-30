@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Coroutine, MutableMapping
+from collections.abc import Coroutine, Iterator, MutableMapping
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
@@ -79,13 +80,17 @@ class FakeSecrets:
 
 
 @pytest.fixture
-def store(tmp_path: Path) -> MonitorStore:
-    return MonitorStore(str(tmp_path / "admin.db"))
+def store(tmp_path: Path) -> Iterator[MonitorStore]:
+    s = MonitorStore(str(tmp_path / "admin.db"))
+    yield s
+    asyncio.run(s.close())
 
 
 @pytest.fixture
-def gateway(tmp_path: Path) -> FakeGateway:
-    return FakeGateway(tmp_path / "admin.db")
+def gateway(tmp_path: Path) -> Iterator[FakeGateway]:
+    gw = FakeGateway(tmp_path / "admin.db")
+    yield gw
+    asyncio.run(gw._monitor_store.close())
 
 
 @pytest.fixture
@@ -376,7 +381,7 @@ class TestSystem:
             return {"user_id": "u1", "username": "alice"}
 
         monkeypatch.setattr(oauth_mod, "handle_callback", fake_callback)
-        monkeypatch.setattr(tokens_mod.token_manager, "create_token", lambda uid, role: "tok-123")
+        monkeypatch.setattr(tokens_mod.token_manager, "create_token", AsyncMock(return_value="tok-123"))
         client = _make_client(gateway, registry, channels)
         resp = client.post("/api/admin/auth/oauth/callback/github", json={"code": "c", "state": "s"})
         assert resp.status_code == 200
@@ -396,7 +401,7 @@ class TestSystem:
             recorded[key] = value
 
         monkeypatch.setattr(oauth_mod, "handle_callback", fake_callback)
-        monkeypatch.setattr(tokens_mod.token_manager, "create_token", lambda uid, role: "tok-gh")
+        monkeypatch.setattr(tokens_mod.token_manager, "create_token", AsyncMock(return_value="tok-gh"))
         monkeypatch.setattr(secrets, "set", fake_set)
         client = _make_client(gateway, registry, channels)
         resp = client.post("/api/admin/auth/oauth/callback/github", json={"code": "c", "state": "s"})
@@ -601,12 +606,14 @@ class TestOAuth:
 
 class TestAuthRoutes:
     @pytest.fixture
-    def auth_client(self, tmp_path: Path) -> TestClient:
+    def auth_client(self, tmp_path: Path) -> Iterator[TestClient]:
         from raven.core.admin_api import init_auth_routes
 
         app = FastAPI()
         init_auth_routes(app, str(tmp_path / "auth.db"))
-        return TestClient(app)
+        # The context manager runs the lifespan, which closes the auth store.
+        with TestClient(app) as client:
+            yield client
 
     def test_register_and_login(self, auth_client) -> None:
         reg = auth_client.post("/api/auth/register", json={"username": "alice", "password": "Secret123!"})
@@ -665,7 +672,11 @@ class TestAuthRoutes:
 
         app = FastAPI()
         init_auth_routes(app, str(tmp_path / "auth.db"))
-        first = _first_body_chunk(app, "/api/stream")
+        try:
+            first = _first_body_chunk(app, "/api/stream")
+        finally:
+            # This test drives the ASGI app directly, so no lifespan runs to close the store.
+            asyncio.run(app.state.auth_store.close())
         assert "connected" in first
         assert "data:" in first
 

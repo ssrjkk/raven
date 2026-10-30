@@ -270,3 +270,29 @@ class TestFullCycle:
             assert any("✅ Task completed" in t for t in texts)
         finally:
             await orch.stop()
+
+
+class TestTaskRetention:
+    async def test_start_prunes_finished_tasks_and_stops_cleanly(
+        self, db_path: str, monkeypatch: pytest.MonkeyPatch
+    ):
+        store = TaskStore(db_path)
+        try:
+            old = Task(goal="old", status=TaskStatus.COMPLETED, created_at=time.time() - 31 * 24 * 3600)
+            await store.save_task(old)
+        finally:
+            await store.close()
+
+        orch = await _make_orchestrator(db_path, monkeypatch)
+        await orch.start()
+        try:
+            assert orch._retention_task is not None
+            assert orch._store is not None
+            for _ in range(200):
+                if await orch._store.load_task(old.id) is None:
+                    break
+                await asyncio.sleep(0.01)
+            assert await orch._store.load_task(old.id) is None
+        finally:
+            await orch.stop()
+        assert orch._retention_task is None

@@ -185,6 +185,13 @@ Outbound fetches go through `safe_fetch_async` (`raven/core/security/ssrf.py`) i
 a bare `httpx.get`:
 
 - scheme allowlist (`http` / `https`)
+- the address that is actually connected to is checked, not only the URL: the hostname is
+  resolved and every answer (literal or DNS) is tested against loopback, link-local,
+  RFC 1918, CGNAT `100.64.0.0/10`, `192.0.0.0/24`, benchmarking `198.18.0.0/15`,
+  `240.0.0.0/4`, `fc00::/7` and `fe80::/10`
+- the connection is pinned to the validated address while `Host` and the TLS SNI stay the
+  requested name (with its port), so a public name that resolves privately is blocked and
+  a pinned HTTPS request still verifies the certificate of the host it asked for
 - every redirect hop is re-validated **and IP-pinned**, so a public hostname that
   redirects to `127.0.0.1` / `169.254.169.254` or resolves privately on retry is blocked
 - bounded redirects (5) and a streamed response capped at 10 MiB to stop memory exhaustion
@@ -193,6 +200,12 @@ a bare `httpx.get`:
 
 - Passwords: PBKDF2-HMAC-SHA256, **600 000 iterations**, 32-byte random salt per hash.
   Legacy 100 000-iteration hashes still verify and are rehashed on successful login.
+- Login sessions are rows in `auth_sessions` keyed by `sha256(token)`, with a 24-hour expiry;
+  they survive a restart, are revoked by logout/logout-all/deactivation, and a database dump
+  contains no usable bearer token. Migration 12 revokes the rows stored before this change,
+  because a plaintext token cannot be turned into a digest retroactively.
+- The uvicorn access log is disabled: SSE and WebSocket clients can only pass their token in
+  the query string (`?token=`), and the access log prints the request line verbatim.
 - Configuration secrets use `SafeSecretStr`, so API keys and webhook secrets do not appear
   in `repr()`, logs or exception traces.
 - The audit trail is signed with Ed25519 using a private key auto-generated as

@@ -448,6 +448,35 @@ class TestShellValidation:
         result = await shell_command("find . -name a.txt")
         assert "./a.txt" in result
 
+    @pytest.mark.parametrize("argument", ["a&b", "a|b", "a>b", "a<b", "a^b", "a\nb"])
+    def test_cmd_metacharacters_rejected(self, argument: str) -> None:
+        with pytest.raises(ValueError, match="cmd metacharacter"):
+            shell_mod._reject_cmd_metacharacters(["echo", argument])
+
+    async def test_windows_builtin_with_metacharacter_denied(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(shell_mod, "_IS_WINDOWS", True)
+        result = await shell_command("echo benign & echo pwned")
+        assert result == "[denied] cmd metacharacter in argument: '&'"
+
+    async def test_windows_clean_builtin_runs_through_cmd(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(shell_mod, "_IS_WINDOWS", True)
+        seen: list[str] = []
+
+        class _Proc:
+            returncode = 0
+
+            async def communicate(self) -> tuple[bytes, bytes]:
+                return b"hi\n", b""
+
+        async def fake_exec(*a: object, **_k: object) -> _Proc:
+            seen.extend(str(x) for x in a)
+            return _Proc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        result = await shell_command("echo hi")
+        assert result.strip() == "hi"
+        assert seen[:3] == ["cmd", "/c", "echo"]
+
 
 class TestShellOutputBranches:
     async def test_captures_stderr_and_nonzero_exit(self, monkeypatch: pytest.MonkeyPatch) -> None:

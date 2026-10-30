@@ -28,12 +28,13 @@ CREATE TABLE IF NOT EXISTS auth_users (
     updated_at REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS auth_sessions (
-    token TEXT PRIMARY KEY,
+    token_hash TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     role TEXT NOT NULL,
     created_at REAL NOT NULL,
     expires_at REAL NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions(user_id);
 CREATE TABLE IF NOT EXISTS auth_email_tokens (
     token_hash TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -195,7 +196,46 @@ class AuthStore(BaseStore):
         )
         return row is not None
 
-    async def revoke_all_user_sessions(self, user_id: str) -> int:
-        await self._execute("DELETE FROM auth_sessions WHERE user_id = ?", (user_id,))
+    async def create_session(self, user_id: str, role: str, ttl_seconds: int = _TOKEN_TTL_SECONDS) -> str:
+        """Issue a bearer token and store only its digest, so a database reader cannot replay it."""
+        token = secrets.token_urlsafe(32)
+        now = time.time()
+        await self._execute(
+            "INSERT INTO auth_sessions (token_hash, user_id, role, created_at, expires_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (_token_digest(token), user_id, role, now, now + ttl_seconds),
+        )
         await self._commit()
-        return 0
+        return token
+
+    async def get_session(self, token: str) -> dict[str, Any] | None:
+        row = await self._fetchone(
+            """SELECT s.user_id, s.role, s.created_at, s.expires_at, u.id AS user_row, u.is_active
+               FROM auth_sessions s LEFT JOIN auth_users u ON u.id = s.user_id
+               WHERE s.token_hash = ?""",
+            (_token_digest(token),),
+        )
+        if not row:
+            return None
+        if row["expires_at"] <= time.time():
+            await self.revoke_session(token)
+            return None
+        # A session for a user the table knows must die with deactivation; an identity that only
+        # exists in the session itself (OAuth callback) has no account row to consult.
+        if row["user_row"] is not None and not row["is_active"]:
+            return None
+        return {
+            "user_id": row["user_id"],
+            "role": row["role"],
+            "created_at": row["created_at"],
+            "expires_at": row["expires_at"],
+        }
+
+    async def revoke_session(self, token: str) -> None:
+        await self._execute("DELETE FROM auth_sessions WHERE token_hash = ?", (_token_digest(token),))
+        await self._commit()
+
+    async def revoke_all_user_sessions(self, user_id: str) -> int:
+        rowcount = await self._execute("DELETE FROM auth_sessions WHERE user_id = ?", (user_id,))
+        await self._commit()
+        return rowcount or 0

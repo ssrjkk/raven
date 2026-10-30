@@ -172,8 +172,8 @@ class TestApiMutationGuard:
         client = TestClient(_make_full_app())
         assert client.get("/api/read").status_code == 200
 
-    def test_bearer_token_allowed(self) -> None:
-        token = token_manager.create_token("u1", "user")
+    async def test_bearer_token_allowed(self) -> None:
+        token = await token_manager.create_token("u1", "user")
         client = TestClient(_make_full_app())
         resp = client.post("/api/echo", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 200
@@ -243,8 +243,8 @@ class TestPrivateReadGuard:
         ):
             assert client.get(path).status_code == 401, path
 
-    def test_private_read_allowed_with_bearer(self) -> None:
-        token = token_manager.create_token("u1", "user")
+    async def test_private_read_allowed_with_bearer(self) -> None:
+        token = await token_manager.create_token("u1", "user")
         client = TestClient(_make_full_app())
         for path in (
             "/api/chat/search",
@@ -274,10 +274,10 @@ class TestPrivateReadGuard:
         ):
             assert client.get(path, headers={"Authorization": f"Bearer {token}"}).status_code == 200, path
 
-    def test_tools_policy_needs_more_than_a_session(self) -> None:
+    async def test_tools_policy_needs_more_than_a_session(self) -> None:
         # /api/tools/policy rewrites the tool allowlist, so it is an admin endpoint, not a read one
-        user = token_manager.create_token("u1", "user")
-        admin = token_manager.create_token("a1", "admin")
+        user = await token_manager.create_token("u1", "user")
+        admin = await token_manager.create_token("a1", "admin")
         client = TestClient(_make_full_app())
         assert client.get("/api/tools/policy", headers={"Authorization": f"Bearer {user}"}).status_code == 403
         assert client.get("/api/tools/policy", headers={"Authorization": f"Bearer {admin}"}).status_code == 200
