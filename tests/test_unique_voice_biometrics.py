@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from raven.unique import voice_biometrics
 from raven.unique.voice_biometrics import (
     EnrollmentResult,
     SpectralProcessor,
@@ -110,13 +111,57 @@ class TestSpectralProcessor:
         result = self.processor.extract_spectral_features([0.1, 0.2, 0.3])
         assert result == {"error": 1.0}
 
-    def test_detect_spoof_without_librosa(self):
-        score = self.processor.detect_spoof([0.1, 0.2, 0.3])
-        assert score == 0.0
+    def test_detect_spoof_without_librosa_reports_nothing(self):
+        """0.0 used to be returned here, and every caller read it as "checked, and clean"."""
+        assert self.processor.detect_spoof([0.1, 0.2, 0.3]) is None
 
     def test_extract_mfcc_raises_without_librosa(self):
         with pytest.raises(RuntimeError, match="librosa is required"):
             self.processor.extract_mfcc([0.1, 0.2, 0.3])
+
+
+class TestBandConsistency:
+    """The band term must not score a voice as an attack. A voice puts almost all of its
+    energy in the lowest bands; the metric that compared the profile with a flat spectrum
+    therefore gave every genuine utterance close to the worst possible score."""
+
+    def setup_method(self) -> None:
+        np = pytest.importorskip("numpy")
+        self.np = np
+        self.processor = SpectralProcessor()
+
+    def _stft(self, profiles: list[list[float]], frames: int):
+        columns = []
+        for index in range(frames):
+            profile = profiles[index % len(profiles)]
+            total = sum(profile)
+            columns.append([value / total for value in profile])
+        return self.np.array(columns).T
+
+    def test_a_low_band_voice_profile_counts_as_stable(self):
+        stft = self._stft([[0.9, 0.06, 0.03, 0.01]], frames=24)
+        assert self.processor._check_band_consistency(stft) == pytest.approx(1.0, abs=1e-6)
+
+    def test_a_spliced_profile_counts_as_unstable(self):
+        stft = self._stft([[0.97, 0.01, 0.01, 0.01], [0.01, 0.01, 0.01, 0.97]], frames=24)
+        assert self.processor._check_band_consistency(stft) == pytest.approx(0.0, abs=0.01)
+
+    def test_silence_and_single_frame_are_neutral(self):
+        assert self.processor._check_band_consistency(self.np.zeros((8, 0))) == 1.0
+        assert self.processor._check_band_consistency(self.np.zeros((8, 4))) == 1.0
+        assert self.processor._check_band_consistency(self.np.array([[1.0, 0.0], [0.0, 0.0]])) == 1.0
+
+
+class TestAntiSpoofAvailability:
+    def test_verify_reports_the_control_as_not_run(self):
+        if voice_biometrics._LIBROSA_AVAILABLE:
+            pytest.skip("librosa is installed here, so the analysis runs and returns a score")
+        biometrics = VoiceBiometrics()
+        biometrics.enroll("speaker1", [[0.1, 0.2, 0.3, 0.4]])
+        result = biometrics.verify("speaker1", [0.1, 0.2, 0.3, 0.4], anti_spoof=True)
+        assert result.anti_spoof_score is None
+        assert result.is_spoof is False
+        assert result.metadata == {"anti_spoof_requested": True, "anti_spoof_checked": False}
 
 
 class TestVoiceEncoder:

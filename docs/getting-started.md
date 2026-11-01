@@ -21,7 +21,7 @@ it is a feature that quietly stops running. Install the groups you use:
 | `voice` | sounddevice | microphone capture and the conversation loop |
 | `tts` | elevenlabs, gTTS, edge-tts | cloud text-to-speech (falls back to system TTS) |
 | `stt` | vosk, SpeechRecognition, openai-whisper, azure-cognitiveservices-speech | speech-to-text providers |
-| `speaker` | librosa, speechbrain | speaker verification, including the band-consistency anti-spoof check |
+| `speaker` | librosa, speechbrain | speaker verification and the anti-spoof check (spectral flatness, energy ratio, band-profile stability) |
 | `search` | duckduckgo-search | web search in ravencode |
 | `nlp` | presidio-analyzer | PII entities in the context filter beyond the built-in patterns |
 | `logging` | structlog | structured log rendering |
@@ -33,6 +33,10 @@ it is a feature that quietly stops running. Install the groups you use:
 
 `tests/test_dependency_declarations.py` fails the build if shipped code starts importing a package
 that no group declares, which is the control that was missing when the anti-spoof check went silent.
+
+An optional import that is absent is reported, not hidden: without `speaker`, `voice_verify` says
+`Anti-spoof: NOT evaluated` and `/api/voice/verify` answers `anti_spoof_checked: false`, because a
+verification that never ran must not read as a verification that passed.
 
 ### From a release (Windows)
 

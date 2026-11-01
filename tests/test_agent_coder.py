@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from raven.core.coder.indexer import CodeIndexer
@@ -113,6 +115,18 @@ class TestCodeIndexer:
         indexer = CodeIndexer("\\\\nonexistent\\\\path")
         files = indexer.index()
         assert files == {}
+
+    def test_index_survives_a_root_windows_cannot_canonicalize(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """resolve() walks the network provider on Windows, so a dead UNC share raises
+        OSError (WinError 64) instead of returning a path. The indexer must answer with an
+        empty index, not crash the agent that asked it to index a share."""
+        def explode(self, *args: object, **kwargs: object) -> None:
+            raise OSError(22, "The server name could not be resolved (WinError 64)")
+
+        monkeypatch.setattr(Path, "resolve", explode)
+        indexer = CodeIndexer("\\\\dead\\\\share")
+        assert indexer.index() == {}
+        assert indexer.summary()["files"] == 0
 
     def test_get_file(self, tmp_path):
         (tmp_path / "get.py").write_text("x = 1")

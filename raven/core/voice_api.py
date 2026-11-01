@@ -78,6 +78,9 @@ def create_voice_router() -> APIRouter:
                 "speaker_id": result.speaker_id,
                 "latency_ms": result.latency_ms,
                 "anti_spoof_score": result.anti_spoof_score,
+                # Without this a client reads is_spoof:false as "checked and clean" even when
+                # the analysis never ran because librosa is missing.
+                "anti_spoof_checked": result.anti_spoof_score is not None,
                 "is_spoof": result.is_spoof,
             }
         except ValueError as e:

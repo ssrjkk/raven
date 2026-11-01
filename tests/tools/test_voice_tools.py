@@ -124,8 +124,20 @@ def test_verify_without_anti_spoof(vb: _FakeVB) -> None:
     vb.verify_result = SimpleNamespace(
         verified=False, score=0.4, threshold=0.75, latency_ms=1.0, anti_spoof_score=None, is_spoof=False
     )
-    out = voice_verify("sp", [0.1])
+    out = voice_verify("sp", [0.1], anti_spoof=False)
     assert "rejected" in out
+    assert "Anti-spoof" not in out
+
+
+def test_verify_announces_that_anti_spoof_did_not_run(vb: _FakeVB) -> None:
+    """Without librosa the analysis cannot run. Silence here used to read as a clean check,
+    so the caller had no way to learn that a requested control never existed."""
+    vb.verify_result = SimpleNamespace(
+        verified=True, score=0.9, threshold=0.75, latency_ms=1.0, anti_spoof_score=None, is_spoof=False
+    )
+    out = voice_verify("sp", [0.1], anti_spoof=True)
+    assert "Anti-spoof: NOT evaluated" in out
+    assert "raven[speaker]" in out
     assert "Anti-spoof score" not in out
 
 

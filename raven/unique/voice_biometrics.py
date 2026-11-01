@@ -118,12 +118,14 @@ class SpectralProcessor:
             "rms": round(rms, 4),
         }
 
-    def detect_spoof(self, audio: list[float]) -> float:
+    def detect_spoof(self, audio: list[float]) -> float | None:
+        """None means the analysis did not run. Returning 0.0 instead made a machine without
+        librosa report every utterance as checked and clean."""
         if not _LIBROSA_AVAILABLE or not _NUMPY_AVAILABLE:
-            return 0.0
+            return None
         features = self.extract_spectral_features(audio)
         if "error" in features:
-            return 0.0
+            return None
         audio_arr = np.array(audio, dtype=np.float32)
         stft = np.abs(librosa.stft(audio_arr))
         spectral_flatness = float(np.mean(librosa.feature.spectral_flatness(y=audio_arr)))
@@ -134,15 +136,20 @@ class SpectralProcessor:
         return float(min(max(spoof_score, 0.0), 1.0))
 
     def _check_band_consistency(self, stft: np.ndarray) -> float:
-        if stft.size == 0:
+        """Frame-to-frame stability of the band-energy profile, 1.0 = nothing moved.
+
+        This used to measure how far the profile sat from a flat spectrum. A voice puts most
+        of its energy in the lowest bands, so every genuine utterance landed near the worst
+        score (+0.3 on a 0.5 threshold) while a burst of white noise scored as clean."""
+        if stft.size == 0 or stft.shape[1] < 2:
             return 1.0
-        band_energy = np.sum(stft**2, axis=1)
-        if np.sum(band_energy) == 0:
+        energy = stft**2
+        profiles = energy[:, np.sum(energy, axis=0) > 0]
+        if profiles.shape[1] < 2:
             return 1.0
-        band_ratio = band_energy / np.sum(band_energy)
-        expected = 1.0 / len(band_ratio)
-        divergence = float(np.sum(np.abs(band_ratio - expected)))
-        return float(max(0.0, 1.0 - divergence / 2.0))
+        profiles = profiles / np.sum(profiles, axis=0, keepdims=True)
+        drift = float(np.mean(np.sum(np.abs(np.diff(profiles, axis=1)), axis=0)) / 2.0)
+        return float(max(0.0, min(1.0, 1.0 - drift)))
 
 
 class VoiceEncoder:
@@ -261,7 +268,13 @@ class VoiceVerifier:
         score = self._encoder.compute_similarity(embedding, voiceprint.embedding)
         processor = SpectralProcessor(sample_rate)
         anti_spoof_score = processor.detect_spoof(audio)
-        is_spoof = anti_spoof_score > anti_spoof_threshold
+        checked = anti_spoof_score is not None
+        is_spoof = anti_spoof_score is not None and anti_spoof_score > anti_spoof_threshold
+        if not checked:
+            logger.warning(
+                "Anti-spoof analysis did not run for speaker '{}' — the result says so instead of reporting clean",
+                voiceprint.speaker_id,
+            )
         latency_ms = (time.time() - start) * 1000.0
         verified = score >= self._threshold and not is_spoof
         return VerificationResult(
@@ -270,8 +283,9 @@ class VoiceVerifier:
             threshold=self._threshold,
             speaker_id=voiceprint.speaker_id,
             latency_ms=round(latency_ms, 2),
-            anti_spoof_score=round(anti_spoof_score, 4),
+            anti_spoof_score=round(anti_spoof_score, 4) if checked else None,
             is_spoof=is_spoof,
+            metadata={"anti_spoof_requested": True, "anti_spoof_checked": checked},
         )
 
 

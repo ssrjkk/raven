@@ -88,10 +88,22 @@ IGNORE_DIRS = frozenset(
 
 class CodeIndexer:
     def __init__(self, root_path: str):
-        self._root = Path(root_path).resolve()
+        self._root = self._canonical_root(root_path)
         self._files: dict[str, CodeFile] = {}
         self._index: dict[str, list[str]] = {}  # term -> file paths
         self._last_indexed: float = 0.0
+
+    @staticmethod
+    def _canonical_root(root_path: str) -> Path:
+        """Windows canonicalizes through the network provider, so a dead UNC share makes
+        resolve() raise OSError (WinError 64) rather than return a path. Walking an
+        unreachable root already yields nothing, so keep the index alive and unresolvable."""
+        root = Path(root_path).expanduser()
+        try:
+            return root.resolve()
+        except OSError as exc:
+            logger.debug("Indexer: cannot resolve {} ({}); using it uncanonicalized", root, exc)
+            return Path.absolute(root)
 
     def index(self, max_files: int = 5000) -> dict[str, CodeFile]:
         self._files = {}

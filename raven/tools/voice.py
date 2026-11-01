@@ -41,6 +41,11 @@ def voice_verify(speaker_id: str, audio: list[float], sample_rate: int = 16000, 
             parts.append(
                 f"Anti-spoof score: {result.anti_spoof_score:.4f}{' (spoof detected)' if result.is_spoof else ''}"
             )
+        elif anti_spoof:
+            parts.append(
+                "Anti-spoof: NOT evaluated — the spectral analysis is unavailable "
+                "(install the raven[speaker] extra, which brings librosa)"
+            )
         return "\n".join(parts)
     except ValueError as e:
         return f"[error] {e}"
