@@ -24,5 +24,6 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "host_permissions": ["http://localhost:18888/*", "ws://localhost:18888/*"]
+  "host_permissions": ["http://localhost:18888/*", "ws://localhost:18888/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"]
 }

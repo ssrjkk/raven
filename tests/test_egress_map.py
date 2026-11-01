@@ -160,3 +160,22 @@ def test_extension_manifest_forbids_remote_and_inline_code() -> None:
     assert "script-src 'self'" in policy
     assert "unsafe-inline" not in policy
     assert manifest["manifest_version"] == 3
+
+
+def test_the_extension_reaches_whichever_gateway_it_lets_you_type() -> None:
+    """The panel takes a gateway URL, so a manifest that only ever grants loopback makes any
+    other address fail as a socket Chrome closed before the gateway saw it. The broad origins
+    stay optional and are asked for one host at a time; what ships granted is loopback only."""
+    manifest: dict[str, Any] = json.loads((ROOT / "extension" / "manifest.json").read_text(encoding="utf-8"))
+    assert all("localhost" in pattern or "127.0.0.1" in pattern for pattern in manifest["host_permissions"]), (
+        "an install must not grant the extension more than its own machine"
+    )
+    assert {"http://*/*", "https://*/*", "ws://*/*", "wss://*/*"} <= set(manifest["optional_host_permissions"])
+
+    popup = (ROOT / "extension" / "src" / "popup" / "popup.js").read_text(encoding="utf-8")
+    assert "chrome.permissions.request" in popup
+    assert "chrome.permissions.contains" in popup
+    assert 'from "./popup-gateway.js"' in popup or "from './popup-gateway.js'" in popup
+
+    background = (ROOT / "extension" / "src" / "background.js").read_text(encoding="utf-8")
+    assert "localhost" not in background, "the service worker must not hold a gateway address of its own"

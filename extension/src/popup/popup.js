@@ -7,6 +7,7 @@
    the browser UI sends it. */
 
 import { safeExternalUrl } from './popup-security.js';
+import { gatewayOriginPatterns, normalizeGatewayEndpoint } from './popup-gateway.js';
 
 const DEFAULT_ENDPOINT = "http://localhost:18888";
 
@@ -151,6 +152,25 @@ function connect() {
     openSettings("Enter the gateway token to connect.");
     return;
   }
+  const origins = gatewayOriginPatterns(config.endpoint);
+  if (!origins.length) {
+    setStatus("bad gateway url", "down");
+    openSettings("The gateway address is not a usable http(s) origin.");
+    return;
+  }
+  // A socket to a host the manifest never mentions is closed by Chrome before the gateway
+  // ever sees it, so say which of the two failures the visitor is looking at.
+  chrome.permissions.contains({ origins }, (allowed) => {
+    if (!allowed) {
+      setStatus("host not allowed", "down");
+      openSettings(`${config.endpoint} is unreachable until you allow this extension to connect to it.`);
+      return;
+    }
+    openSocket();
+  });
+}
+
+function openSocket() {
   setStatus("connecting", "");
   try {
     socket = new WebSocket(wsUrl());
@@ -201,11 +221,26 @@ function openSettings(hint) {
 gear.addEventListener("click", () => { settings.hidden = !settings.hidden; openSettings(); });
 
 saveButton.addEventListener("click", () => {
-  config = { endpoint: endpointField.value.trim() || DEFAULT_ENDPOINT, token: tokenField.value.trim() };
-  chrome.storage.local.set({ raven: config }, () => {
-    settings.hidden = true;
-    if (socket) socket.close();
-    connect();
+  const endpoint = normalizeGatewayEndpoint(endpointField.value);
+  const token = tokenField.value.trim();
+  if (!endpoint) {
+    settingsNote.textContent = "That address is not usable — give an http(s) origin, optionally with a port.";
+    return;
+  }
+  // The request has to sit in the click itself: Chrome only grants host permissions from a
+  // user gesture, and the panel cannot open the socket until it has the one for this origin.
+  chrome.permissions.request({ origins: gatewayOriginPatterns(endpoint) }, (granted) => {
+    if (!granted) {
+      settingsNote.textContent = `${endpoint} was not allowed, so nothing was saved.`;
+      return;
+    }
+    config = { endpoint, token };
+    chrome.storage.local.set({ raven: config }, () => {
+      settings.hidden = true;
+      settingsNote.textContent = "";
+      if (socket) socket.close();
+      connect();
+    });
   });
 });
 
@@ -219,6 +254,9 @@ composer.addEventListener("submit", (event) => {
 });
 
 chrome.storage.local.get("raven", (stored) => {
-  config = { endpoint: (stored.raven && stored.raven.endpoint) || DEFAULT_ENDPOINT, token: (stored.raven && stored.raven.token) || "" };
+  config = {
+    endpoint: normalizeGatewayEndpoint(stored.raven && stored.raven.endpoint) || DEFAULT_ENDPOINT,
+    token: (stored.raven && stored.raven.token) || "",
+  };
   connect();
 });
