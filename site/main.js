@@ -55,8 +55,9 @@ function copyButtons() {
         const button = block.querySelector('.copy-btn');
         const code = block.querySelector('code');
         if (!button || !code) return;
+        const label = button.textContent;
+        let reset;
         button.addEventListener('click', async () => {
-            const label = button.textContent;
             let copied = false;
             try {
                 // The Clipboard API only exists in a secure context; a preview served over
@@ -71,7 +72,10 @@ function copyButtons() {
             status.textContent = copied
                 ? 'The code is on the clipboard.'
                 : 'The clipboard is unavailable here; the code is selected, press Ctrl+C or Command+C.';
-            window.setTimeout(() => {
+            // A second click inside the 1.8 s window would otherwise read "Copied" as the
+            // label to restore and leave the button saying it for good.
+            window.clearTimeout(reset);
+            reset = window.setTimeout(() => {
                 button.textContent = label;
                 button.classList.remove('copied');
             }, 1800);

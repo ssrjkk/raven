@@ -763,6 +763,11 @@ def test_every_code_block_offers_copy_and_the_result_is_announced() -> None:
     assert "document.getElementById('copy-status')" in js
     assert "region.setAttribute('role', 'status')" in js
     assert "region.setAttribute('aria-live', 'polite')" in js
+    # The label to restore is read once, outside the click handler: a second click while
+    # the button says "Copied" would capture that as the label and never restore "Copy".
+    assert js.count("const label = button.textContent;") == 1
+    assert js.index("const label = button.textContent;") < js.index("button.addEventListener('click'")
+    assert "window.clearTimeout(reset);" in js
     for name in ALL_PAGES:
         html = page(name)
         blocks = html.count('<div class="codeblock">')
@@ -780,6 +785,28 @@ def test_the_console_field_is_named_and_recalls_sent_frames() -> None:
     assert "this.history.push(text)" in js
     assert "recall(offset)" in js
     assert "prefill(frameText, { focus = true } = {})" in js
+
+
+def test_the_console_fits_a_multiline_frame_and_leaves_an_ime_alone() -> None:
+    """A tools/call frame is several lines. Sending, prefilling or recalling one left the
+    textarea at its 2.6rem height with the frame scrolling inside it, and an Up pressed in
+    the middle of a frame jumped to history instead of moving the caret. A composition
+    keystroke (Enter that commits a candidate, ``/`` typed through an IME) must do neither."""
+    js = read(TERMINAL_JS)
+
+    def body(method: str) -> str:
+        start = js.index(f"\n    {method}(") + 1
+        return js[start : js.index("\n    }", start)]
+
+    assert "this.input.style.height = 'auto'" in body("resize")
+    assert "this.input.scrollHeight" in body("resize")
+    for caller in ("prefill", "recall", "send"):
+        assert "this.resize();" in body(caller), caller
+    assert "this.input.value = '';" in body("send")
+    assert "event.isComposing || event.keyCode === 229" in body("bind")
+    assert "value.lastIndexOf('\\n', start - 1) !== -1" in body("recall")
+    assert "value.indexOf('\\n', end) !== -1" in body("recall")
+    assert "event.isComposing || event.keyCode === 229" in read(REGISTRY_JS)
 
 
 # ── assets and metadata ───────────────────────────────────────────

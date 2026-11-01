@@ -55,12 +55,10 @@ class FrameConsole {
             this.send(this.input.value);
         });
 
-        this.input.addEventListener('input', () => {
-            this.input.style.height = 'auto';
-            this.input.style.height = `${this.input.scrollHeight}px`;
-        });
+        this.input.addEventListener('input', () => this.resize());
 
         this.input.addEventListener('keydown', event => {
+            if (event.isComposing || event.keyCode === 229) return;
             if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
                 this.send(this.input.value);
@@ -97,21 +95,35 @@ class FrameConsole {
     note(text) { this.line(text, 'key'); }
     error(text) { this.line(text, 'error'); }
 
+    /* A frame typed across several lines (Shift+Enter) would otherwise sit in the 2.6rem box
+       with its own scrollbar after a send, a prefill or a recall. */
+    resize() {
+        this.input.style.height = 'auto';
+        this.input.style.height = `${this.input.scrollHeight}px`;
+    }
+
     prefill(frameText, { focus = true } = {}) {
         this.input.value = frameText;
+        this.resize();
         if (!focus) return;
         this.input.focus();
         this.input.setSelectionRange(frameText.length, frameText.length);
     }
 
     /* Shell-style recall: Up walks back through sent frames, Down walks forward and then
-       restores whatever was being typed. A multi-line frame keeps the caret keys instead. */
+       restores whatever was being typed. Inside a multi-line frame the arrows still move the
+       caret; only from the first line up and the last line down do they recall. */
     recall(offset) {
-        if (!this.history.length || this.input.value.includes('\n')) return false;
-        if (this.historyIndex === this.history.length) this.draft = this.input.value;
+        if (!this.history.length) return false;
+        const { value, selectionStart: start, selectionEnd: end } = this.input;
+        if (start !== end) return false;
+        if (offset < 0 && value.lastIndexOf('\n', start - 1) !== -1) return false;
+        if (offset > 0 && value.indexOf('\n', end) !== -1) return false;
+        if (this.historyIndex === this.history.length) this.draft = value;
         const next = Math.min(Math.max(this.historyIndex + offset, 0), this.history.length);
         this.historyIndex = next;
         this.input.value = next === this.history.length ? this.draft : this.history[next];
+        this.resize();
         this.input.setSelectionRange(this.input.value.length, this.input.value.length);
         return true;
     }
@@ -121,7 +133,8 @@ class FrameConsole {
         if (!text) return;
         if (this.history[this.history.length - 1] !== text) this.history.push(text);
         this.historyIndex = this.history.length;
-        this.input.style.height = '';
+        this.input.value = '';
+        this.resize();
         let frame;
         try {
             frame = JSON.parse(text);

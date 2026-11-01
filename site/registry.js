@@ -96,6 +96,7 @@ class ToolRegistry {
         });
 
         document.addEventListener('keydown', event => {
+            if (event.isComposing || event.keyCode === 229) return;
             if (event.key !== '/' || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
             const typing = event.target instanceof HTMLElement
                 && event.target.closest('input, textarea, select, [contenteditable="true"]');

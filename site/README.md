@@ -119,8 +119,12 @@ curl -s -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
   asking the visitor to select text it never selected.
 - The console accepts any frame you type. Frames matching the recording get the recorded
   answer; anything else gets a line saying a running server answers it, and the page does
-  not pretend to be one. The input is labelled `JSON-RPC frame`, and Up/Down recall the
-  frames already sent, shell-style, restoring the draft on the way back.
+  not pretend to be one. The input is labelled `JSON-RPC frame`, grows to fit a multi-line
+  frame instead of scrolling it inside the box, and is cleared once a frame is sent; Up/Down
+  recall the frames already sent, shell-style, restoring the draft on the way back. Inside
+  a multi-line frame the arrows move the caret and only recall from the first line up or the
+  last line down, and a keystroke belonging to an IME composition is left to the IME — the
+  same rule keeps `/` from stealing a character typed through one.
 - Both console bodies are scrollable regions exposed as `role="log"` with `aria-live="polite"`,
   keyboard reachable, so screen readers announce new lines as they appear.
 - Section reveal is progressive enhancement: `main.js` adds a `js` class to `<html>` and
