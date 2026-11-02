@@ -60,11 +60,12 @@ def create_dream_router(memory_manager: MemoryManager) -> APIRouter:
         return {"ok": True, "stats": stats}
 
     @router.post("/api/memory/backup")
-    async def api_memory_backup():
+    async def api_memory_backup(body: dict[str, bool] | None = None):
         from raven.core.backup import export_memory
 
-        path = await export_memory(memory_manager)
-        return {"ok": True, "path": str(path)}
+        sanitize = bool((body or {}).get("sanitize", False))
+        path = await export_memory(memory_manager, sanitize=sanitize)
+        return {"ok": True, "path": str(path), "sanitized": sanitize}
 
     @router.post("/api/memory/restore")
     async def api_memory_restore(body: dict[str, str]):

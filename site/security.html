@@ -113,10 +113,8 @@
                     <li class="rule">
                         <h2 class="rule-title">Hand a key to an export</h2>
                         <p>
-                            <code>session export --sanitize</code> masks entries whose names look like
-                            credentials and values that match provider key shapes, recursing through
-                            nested lists and objects.
-                        </p>
+                            Both exporters take <code>--sanitize</code>: <code>ravencode session export --sanitize</code> for a session file, <code>raven backup export --sanitize</code> for the memory tiers. They share one credential definition, so the two cannot drift apart: it masks entries whose names look like credentials and values matching provider key shapes, recursing through nested lists and objects. The memory export marks the file it wrote and <code>raven backup restore</code> refuses a marked one, because restoring masked values would overwrite real memory with <code>***</code>.
+                                                </p>
                     </li>
                     <li class="rule">
                         <h2 class="rule-title">Report a number it did not measure</h2>

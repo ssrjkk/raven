@@ -10,12 +10,13 @@ from loguru import logger
 
 from raven.core.config import settings
 from raven.core.memory.base import MemoryTier
+from raven.core.security.credential_masker import mask_entry
 
 if TYPE_CHECKING:
     from raven.core.memory.manager import MemoryManager
 
 
-async def export_memory(memory: MemoryManager, dest: Path | None = None) -> Path:
+async def export_memory(memory: MemoryManager, dest: Path | None = None, sanitize: bool = False) -> Path:
     dest = dest or settings.resolved_data_dir / f"memory_backup_{int(time.time())}.json"
     dest.parent.mkdir(parents=True, exist_ok=True)
 
@@ -45,6 +46,16 @@ async def export_memory(memory: MemoryManager, dest: Path | None = None) -> Path
         except Exception as e:
             logger.warning("[backup] failed to export tier {}: {}", tier.value, e)
 
+    if sanitize:
+        for tier_name, entries in data["tiers"].items():
+            data["tiers"][tier_name] = [
+                {"key": entry["key"], "value": mask_entry(entry["key"], entry["value"])}
+                for entry in entries
+            ]
+        # The flag is written into the file, not just into the filename: import refuses it,
+        # because restoring masked values would overwrite real memory with ***.
+        data["sanitized"] = True
+
     await asyncio.to_thread(dest.write_text, json.dumps(data, indent=2, default=str), "utf-8")
     logger.info("[backup] exported {} tiers to {} ({} KB)", len(data["tiers"]), dest, dest.stat().st_size // 1024)
     return dest
@@ -66,6 +77,9 @@ async def import_memory(memory: MemoryManager, source: Path) -> dict[str, int]:
     version = data.get("version", 0)
     if version < 1:
         raise ValueError(f"Unknown backup version: {version}")
+    if data.get("sanitized"):
+        msg = f"Backup file is sanitized and cannot be restored: {source}"
+        raise ValueError(msg)
 
     tier_map_import: dict[MemoryTier, Any] = {
         MemoryTier.WORKING: memory.working,

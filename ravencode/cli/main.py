@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,6 +21,7 @@ import click
 from raven.core._json import json
 from raven.core.config import data_path
 from raven.core.logging import setup_logging
+from raven.core.security.credential_masker import MASK, mask_string, name_is_credential
 from raven.core.stdio import use_utf8_console
 from raven.core.version import __version__
 from ravencode.cli.tui import tui_run
@@ -192,44 +192,25 @@ def session_import_func(source: str, sessions_dir: str) -> None:
     click.echo(f"Imported session {sid}")
 
 
-_MASK = "***"
-
-# Key names that always carry a credential; the separators keep "monkey"/"tokenizer"/"keyboard" out.
-_SECRET_KEY_RE = re.compile(
-    r"(?:^|[^a-zA-Z])(?:api[_-]?keys?|access[_-]?keys?|secrets?|tokens?|passwords?|passwd|"
-    r"credentials?|authorization|private[_-]?keys?|keys?)(?:$|[^a-zA-Z])",
-    re.IGNORECASE,
-)
-
-# Secret shapes that leak through message text, header lists and env dicts where no key name hints at them.
-_SECRET_VALUE_RE = re.compile(
-    r"(?<![A-Za-z0-9])(?:sk-ant-[A-Za-z0-9-]{6,}|sk-[A-Za-z0-9_-]{6,}|gh[pousr]_[A-Za-z0-9]{16,}|"
-    r"github_pat_[A-Za-z0-9_]{16,}|AIza[0-9A-Za-z_-]{20,}|xox[baprs]-[A-Za-z0-9-]{6,}|"
-    r"AKIA[0-9A-Z]{16}|npm_[A-Za-z0-9]{20,})"
-    r"|Bearer\s+[A-Za-z0-9._~+/=-]{8,}"
-    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----",
-    re.IGNORECASE,
-)
-
-
 def _sanitize_session(data: Any) -> None:
+    """Masks in place with the project's single credential definition."""
     if isinstance(data, dict):
         for k, v in list(data.items()):
-            if isinstance(k, str) and _SECRET_KEY_RE.search(k):
-                data[k] = _MASK
+            if isinstance(k, str) and name_is_credential(k):
+                data[k] = MASK
+            elif isinstance(v, (dict, list)):
+                _sanitize_session(v)
             elif isinstance(v, str):
-                masked = _SECRET_VALUE_RE.sub(_MASK, v)
+                masked = mask_string(v)
                 if masked != v:
                     data[k] = masked
-            else:
-                _sanitize_session(v)
     elif isinstance(data, list):
         for i, item in enumerate(data):
             if isinstance(item, str):
-                masked = _SECRET_VALUE_RE.sub(_MASK, item)
+                masked = mask_string(item)
                 if masked != item:
                     data[i] = masked
-            else:
+            elif isinstance(item, (dict, list)):
                 _sanitize_session(item)
 
 

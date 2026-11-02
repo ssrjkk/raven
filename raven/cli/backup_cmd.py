@@ -28,16 +28,28 @@ def backup_group() -> None:
 
 @backup_group.command()
 @click.option("--output", "-o", default=None, help="Output file path")
-def export(output: str | None) -> None:
+@click.option(
+    "--sanitize",
+    is_flag=True,
+    help="Mask credentials in the export so the file can be shared; it then cannot be restored",
+)
+def export(output: str | None, sanitize: bool) -> None:
     """Export all memory tiers to a JSON backup file"""
     try:
         resp = httpx.post(
-            f"http://localhost:{settings.web_port}/api/memory/backup", headers=_headers(), timeout=30
+            f"http://localhost:{settings.web_port}/api/memory/backup",
+            headers=_headers(),
+            json={"sanitize": sanitize},
+            timeout=30,
         )
         resp.raise_for_status()
         data = resp.json()
         path = data.get("path", "unknown")
         console.print(f"[green]Memory exported to {path}[/green]")
+        if data.get("sanitized"):
+            console.print(
+                "[yellow]Credentials are masked; `raven backup restore` will refuse this file.[/yellow]"
+            )
     except httpx.RequestError as e:
         console.print(f"[red]Failed to connect to gateway: {e}[/red]")
         console.print("[yellow]Make sure the gateway is running with: raven start[/yellow]")

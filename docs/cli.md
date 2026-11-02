@@ -199,6 +199,8 @@ a path separator is rejected instead of addressing a file outside the sessions d
 same rule guards the gateway and REST session stores.
 
 `--sanitize` replaces anything that looks like a credential: keys named api_key/token/secret/
+
+The memory counterpart is `raven backup export --sanitize`. Both flags call the same definition (`raven/core/security/credential_masker.py`), and `raven backup restore` refuses a file written with it, because restoring masked values would overwrite real memory with `***`.
 password/credential/authorization (in any nesting, lists and header dicts included), plus
 secret shapes found inside message text (`sk-…`, `ghp_…`, `AIza…`, `xox…`, `AKIA…`, `npm_…`,
 `Bearer …`, PEM private-key headers). Ordinary words such as `tokenizer` or `monkey` are kept.
