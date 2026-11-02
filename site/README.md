@@ -59,6 +59,9 @@ duplicated id or an `aria-labelledby`/`aria-controls`/`for` that names nothing, 
 without its CSP and `color-scheme`, on a breadcrumb or social-image alt that disagrees with
 the page, on a footer without the documentation link, on docs navigation without the way
 back to the landing page, and on a registry that stopped reading its state from the hash.
+It also fails if a group named on the install page is not published in
+`pyproject.toml`, if the optional-group count the page states drifts from the packaging, or if
+the page stops explaining what a missing group does to a control.
 The markup is held to its own policy as well: no inline script, `on*` handler or `style`
 attribute may ship while the meta tag forbids them, every page has one `h1` and no skipped
 heading level, and `lang` plus the four landmarks are declared. Every code block has a

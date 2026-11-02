@@ -48,7 +48,7 @@ raven onboard               # интерактивный мастер настр
 raven start                 # шлюз + веб-интерфейс на http://localhost:18888
 ```
 
-Три точки входа:
+Пять команд ставятся вместе с пакетом:
 
 | Команда | Что запускает |
 |---|---|
@@ -56,6 +56,7 @@ raven start                 # шлюз + веб-интерфейс на http://l
 | `ravencode tui` | Coding-агент в терминале |
 | `ravenflow` | Workflow-демон на порту 18789 |
 | `raven-mcp` | MCP-сервер (stdio) для Claude Desktop, Qoder, opencode, Cursor |
+| `ravencode-mcp` | отдельный MCP-сервер coding-агента (stdio), со своим реестром инструментов |
 
 Или через Docker:
 

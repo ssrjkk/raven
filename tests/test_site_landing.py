@@ -123,10 +123,16 @@ OWNED_MARKUP: dict[str, tuple[str, ...]] = {
         'id="terminal-output"',
         'id="request-form"',
     ),
-    "gateway.html": ('class="matrix"', "<caption>How each adapter receives a message</caption>"),
+    # `class="matrix"` is a component, not content: gateway.html and install.html both use it for
+    # a wide disclosure table. What must stay unique is the table itself, so the ownership marker
+    # is the caption.
+    "gateway.html": ("<caption>How each adapter receives a message</caption>",),
     "architecture.html": ('class="arch-stack"', 'class="spec-sheet"'),
     "security.html": ('class="rule"', 'class="never-list"'),
-    "install.html": ('class="step-title"',),
+    "install.html": (
+        'class="step-title"',
+        "<caption>Optional dependency groups and the features they carry</caption>",
+    ),
 }
 
 
@@ -476,6 +482,39 @@ def test_version_statements_agree_with_pyproject() -> None:
     for name in ALL_PAGES:
         found = set(re.findall(r"(?<![\d.])\d+\.\d+\.\d+(?![\d.])", page(name)))
         assert found == {version}, name
+
+
+EXTRAS_TABLE = re.compile(r"Optional dependency groups and the features they carry", re.I)
+EXTRAS_COUNT = re.compile(r"There are (\d+) optional groups")
+EXTRAS_MUST_SHOW = (
+    "voice", "speaker", "stt", "tts", "search", "vector", "rag", "ml", "browser",
+    "discord", "slack", "email", "docker", "secrets", "postgres", "metrics", "tui",
+)
+
+
+def test_the_install_page_promises_only_optional_groups_that_exist() -> None:
+    """A group that pyproject does not publish is a command that fails on the visitor's own
+    machine, and a drifted count is a page that no longer describes the package it documents."""
+    published = tomllib.loads(read(ROOT / "pyproject.toml"))["project"]["optional-dependencies"]
+    rows = page_table(EXTRAS_TABLE, "install.html")
+    assert rows, "the extras table is gone from install.html"
+    unknown = sorted(name for name in rows if name not in published)
+    assert unknown == [], f"install.html promises groups that are not published: {unknown}"
+    for group in EXTRAS_MUST_SHOW:
+        assert group in rows, f"{group} dropped off the extras table"
+    claim = EXTRAS_COUNT.search(page("install.html"))
+    assert claim is not None, "the page stopped saying how many optional groups there are"
+    assert int(claim.group(1)) == len(published), f"page says {claim.group(1)}, pyproject has {len(published)}"
+
+
+def test_the_install_page_says_what_a_missing_group_does() -> None:
+    """Silence is the defect this page exists to prevent: a feature that stopped running without
+    an error. So the page must name the controls that report their own absence."""
+    install = " ".join(page("install.html").split())
+    assert "it is a feature that stopped running" in install
+    assert "Anti-spoof: NOT evaluated" in install
+    assert "anti_spoof_checked: false" in install
+    assert "test_dependency_declarations.py" in install
 
 
 def test_channel_adapter_count_matches_the_tree() -> None:

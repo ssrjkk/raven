@@ -125,6 +125,59 @@ pip install .</code></pre>
                     </div>
                 </div>
 
+                <h2 class="block-title">Install the extras you actually use</h2>
+                <p class="section-desc">
+                    The base install runs the gateway, the tools and the console. Everything that talks to
+                    another system lives in optional groups, and a group you did not install is not an
+                    error message — it is a feature that stopped running. Install what you use:
+                    <code>pip install -e ".[voice,speaker]"</code>.
+                </p>
+
+                <details class="matrix">
+                    <summary>What each group makes real</summary>
+                    <div class="table-wrap">
+                        <table>
+                            <caption>Optional dependency groups and the features they carry</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col">Group</th>
+                                    <th scope="col">Brings in</th>
+                                    <th scope="col">What starts working</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><th scope="row"><code>voice</code></th><td>sounddevice</td><td>microphone capture and the conversation loop</td></tr>
+                                <tr><th scope="row"><code>speaker</code></th><td>librosa, speechbrain</td><td>speaker verification and the anti-spoof check</td></tr>
+                                <tr><th scope="row"><code>stt</code></th><td>vosk, SpeechRecognition, openai-whisper, azure-cognitiveservices-speech</td><td>speech-to-text providers</td></tr>
+                                <tr><th scope="row"><code>tts</code></th><td>elevenlabs, gTTS, edge-tts</td><td>cloud text-to-speech, falling back to system TTS</td></tr>
+                                <tr><th scope="row"><code>search</code></th><td>duckduckgo-search</td><td>web search as a tool</td></tr>
+                                <tr><th scope="row"><code>vector</code></th><td>chromadb, hnswlib</td><td>the vector stores behind retrieval</td></tr>
+                                <tr><th scope="row"><code>rag</code></th><td>sentence-transformers</td><td>local embedding model instead of an API round-trip</td></tr>
+                                <tr><th scope="row"><code>ml</code></th><td>torch, transformers, peft, datasets</td><td>fine-tuning</td></tr>
+                                <tr><th scope="row"><code>browser</code></th><td>playwright</td><td>the browser tools and screenshots</td></tr>
+                                <tr><th scope="row"><code>discord</code></th><td>discord.py</td><td>the Discord adapter</td></tr>
+                                <tr><th scope="row"><code>slack</code></th><td>slack-sdk</td><td>the Slack adapter</td></tr>
+                                <tr><th scope="row"><code>email</code></th><td>aiosmtplib, aioimaplib</td><td>the email adapter: IMAP polling and SMTP replies</td></tr>
+                                <tr><th scope="row"><code>docker</code></th><td>docker</td><td>running tools inside a container</td></tr>
+                                <tr><th scope="row"><code>secrets</code></th><td>cryptography</td><td>encrypted at-rest storage of stored secrets</td></tr>
+                                <tr><th scope="row"><code>postgres</code></th><td>asyncpg</td><td>the Postgres backend instead of SQLite</td></tr>
+                                <tr><th scope="row"><code>metrics</code></th><td>prometheus-client</td><td>the metrics endpoint</td></tr>
+                                <tr><th scope="row"><code>tui</code></th><td>textual</td><td>the terminal interface</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+
+                <p class="spec-note">
+                    There are 32 optional groups in <code>pyproject.toml</code>; the ones above are those
+                    that change what the assistant can do. A control that cannot run now says so instead of
+                    passing quietly: <code>voice_verify</code> answers
+                    <code>Anti-spoof: NOT evaluated</code> and <code>/api/voice/verify</code> returns
+                    <code>anti_spoof_checked: false</code> when <code>speaker</code> is missing, and a build
+                    that ships an import no group declares fails
+                    <code>tests/test_dependency_declarations.py</code>.
+                </p>
+
                 <h2 class="block-title">Run the gateway</h2>
                 <p class="section-desc">
                     The same install also starts the gateway — the process that holds the channel

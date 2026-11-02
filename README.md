@@ -2,12 +2,6 @@
 
 # Raven
 
-[![CI](https://github.com/ssrjkk/raven/actions/workflows/ci.yml/badge.svg)](https://github.com/ssrjkk/raven/actions/workflows/ci.yml)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-
-
 **by [@ssrjkk](https://github.com/ssrjkk)**
 
 A self-hosted AI assistant that lives on your own server: a persistent gateway with 15 messaging
@@ -50,7 +44,7 @@ raven onboard               # interactive setup wizard
 raven start                 # gateway + web UI on http://localhost:18888
 ```
 
-The three entry points:
+Five commands are installed with the package:
 
 | Command | What it runs |
 |---|---|
@@ -58,6 +52,7 @@ The three entry points:
 | `ravencode tui` | The coding agent in a terminal session |
 | `ravenflow` | The workflow daemon on port 18789 |
 | `raven-mcp` | MCP server (stdio) for Claude Desktop, Qoder, opencode, Cursor |
+| `ravencode-mcp` | the coding agent's own MCP server (stdio), a separate tool registry |
 
 Or with Docker:
 
