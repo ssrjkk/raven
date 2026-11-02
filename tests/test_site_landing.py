@@ -33,7 +33,7 @@ import json
 import re
 import struct
 import tomllib
-from datetime import date
+from datetime import UTC, date, datetime, timezone
 from html.parser import HTMLParser
 from itertools import pairwise
 from pathlib import Path
@@ -1010,15 +1010,22 @@ def test_the_404_is_not_indexed_and_has_no_canonical() -> None:
     assert '<meta name="description" content="' in html
 
 
+def _utc_today() -> date:
+    return datetime.now(UTC).date()
+
+
 def test_the_sitemap_lists_every_content_page_and_no_404() -> None:
     xml = read(SITE / "sitemap.xml")
     assert sitemap_locations() == [page_url(name) for name in CONTENT_PAGES]
     assert "404" not in xml
     dates = [date.fromisoformat(stamp) for stamp in re.findall(r"<lastmod>([^<]+)</lastmod>", xml)]
     assert len(dates) == len(CONTENT_PAGES), "a listed page has no lastmod"
-    # A date the crawler cannot have seen yet is a claim about the future: it teaches the
-    # search engine to ignore the file, so the ceiling is today, not a round number.
-    assert all(stamp <= date.today() for stamp in dates), max(dates)
+    # A date the crawler cannot have seen yet is a claim about the future: it teaches the search
+    # engine to ignore the file. The ceiling is today in UTC, because that is the clock the
+    # published site and CI both run on - a developer's local date is ahead of it and would let
+    # a page be dated before the world has seen that day (this is exactly what the first version
+    # of this guard caught, on a machine at UTC+3).
+    assert all(stamp <= _utc_today() for stamp in dates), max(dates)
 
 
 def test_robots_points_at_the_sitemap() -> None:

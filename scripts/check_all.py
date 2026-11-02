@@ -468,19 +468,28 @@ def check_frontend() -> CheckResult:
 
     t0 = time.time()
 
-    # Measured on this box with nothing else running: npm ci 43s, tsc ~25s, build ~50s. The
-    # machine shares up to eight concurrent sessions, so each step gets a multiple of its idle
-    # cost rather than a cap that a loaded machine blows through and reports as a code failure.
+    # Measured on this box with nothing else running: npm ci 43s, tsc 9s, eslint 2s, vitest 12s,
+    # build 11s. The machine shares up to eight concurrent sessions, so each step gets a multiple
+    # of its idle cost rather than a cap that a loaded machine blows through and reports as a code
+    # failure. The five steps are the five the `frontend` job in ci.yml runs, in that order: the
+    # stage used to stop at tsc and build, so an eslint error added by a translated string landed on
+    # main green locally and red in CI (simple-import-sort in command-keywords.test.ts).
     r = _run(["npm", "ci"], timeout=600, env={"CI": "true"}, cwd=web_dir)
     if r.returncode != 0:
         return CheckResult("frontend npm ci", "fail", time.time() - t0, r.stderr[:500])
 
-    # TypeScript check
     r = _run(["npx", "tsc", "--noEmit"], timeout=300, cwd=web_dir)
     if r.returncode != 0:
         return CheckResult("frontend tsc", "fail", time.time() - t0, r.stderr[:500])
 
-    # Build
+    r = _run(["npx", "eslint", "src"], timeout=300, cwd=web_dir)
+    if r.returncode != 0:
+        return CheckResult("frontend eslint", "fail", time.time() - t0, (r.stdout + r.stderr)[:500])
+
+    r = _run(["npm", "test", "--", "--run"], timeout=600, cwd=web_dir)
+    if r.returncode != 0:
+        return CheckResult("frontend vitest", "fail", time.time() - t0, (r.stdout + r.stderr)[:500])
+
     r = _run(["npm", "run", "build"], timeout=300, cwd=web_dir)
     dt = time.time() - t0
     if r.returncode != 0:

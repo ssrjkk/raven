@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { COMMAND_KEYWORDS } from "./command-keywords";
 import { rankCommands } from "../lib/command-search";
+import { COMMAND_KEYWORDS } from "./command-keywords";
 
 const commands = [
   { id: "toggle-theme", label: "Toggle theme", keywords: COMMAND_KEYWORDS["toggle-theme"] },
