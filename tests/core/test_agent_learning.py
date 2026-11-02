@@ -179,6 +179,33 @@ class TestFeedbackLoop:
         assert "coder" in status
         assert status["coder"]["successes"] == 1
 
+    def test_pattern_scores_stay_bounded_under_distinct_phrasings(self) -> None:
+        """Every distinct phrasing is a new key. Uncapped, the table grows with everything
+        anyone ever typed into a gateway that stays up for a month."""
+        fb = FeedbackLoop()
+        for i in range(fb.MAX_PATTERNS + 60):
+            fb.record(f"alpha{i} beta{i} gamma{i} delta{i}", "coder", True)
+        assert len(fb._pattern_scores) == fb.MAX_PATTERNS
+
+    def test_eviction_drops_the_least_recently_used_pattern(self) -> None:
+        fb = FeedbackLoop()
+        keeper = fb._extract_pattern("first phrase keeps coming back")
+        fb.record("first phrase keeps coming back", "coder", True)
+        for i in range(fb.MAX_PATTERNS - 1):
+            fb.record(f"filler{i} words{i} here{i} now{i}", "coder", True)
+        fb.record("first phrase keeps coming back", "coder", True)
+        for i in range(fb.MAX_PATTERNS - 1, fb.MAX_PATTERNS + 20):
+            fb.record(f"filler{i} words{i} here{i} now{i}", "coder", True)
+        assert keeper in fb._pattern_scores
+
+    def test_a_dropped_pattern_degrades_to_the_profile_rate(self) -> None:
+        fb = FeedbackLoop()
+        for _ in range(3):
+            fb.record("write code here", "coder", True)
+        gone = "alpha99999 beta99999 gamma99999 delta99999"
+        assert fb._extract_pattern(gone) not in fb._pattern_scores
+        assert fb.get_adjusted_confidence("coder", 0.6, gone) > 0.6
+
 
 class TestClassificationResult:
     @pytest.mark.asyncio

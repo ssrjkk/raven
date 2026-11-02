@@ -468,18 +468,20 @@ def check_frontend() -> CheckResult:
 
     t0 = time.time()
 
-    # Check npm ci
-    r = _run(["npm", "ci"], timeout=120, env={"CI": "true"}, cwd=web_dir)
+    # Measured on this box with nothing else running: npm ci 43s, tsc ~25s, build ~50s. The
+    # machine shares up to eight concurrent sessions, so each step gets a multiple of its idle
+    # cost rather than a cap that a loaded machine blows through and reports as a code failure.
+    r = _run(["npm", "ci"], timeout=600, env={"CI": "true"}, cwd=web_dir)
     if r.returncode != 0:
         return CheckResult("frontend npm ci", "fail", time.time() - t0, r.stderr[:500])
 
     # TypeScript check
-    r = _run(["npx", "tsc", "--noEmit"], timeout=120, cwd=web_dir)
+    r = _run(["npx", "tsc", "--noEmit"], timeout=300, cwd=web_dir)
     if r.returncode != 0:
         return CheckResult("frontend tsc", "fail", time.time() - t0, r.stderr[:500])
 
     # Build
-    r = _run(["npm", "run", "build"], timeout=120, cwd=web_dir)
+    r = _run(["npm", "run", "build"], timeout=300, cwd=web_dir)
     dt = time.time() - t0
     if r.returncode != 0:
         return CheckResult("frontend build", "fail", dt, r.stderr[:500])

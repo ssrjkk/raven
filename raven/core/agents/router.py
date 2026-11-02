@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import time
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -72,9 +72,14 @@ class ProfileOutcome:
 
 
 class FeedbackLoop:
+    MAX_PATTERNS = 256
+    """Pattern keys come from the words of a user query, so every distinct phrasing adds one:
+    without a cap a gateway that has been up for a month carries a score table for everything
+    anyone ever typed."""
+
     def __init__(self) -> None:
         self._outcomes: dict[str, ProfileOutcome] = defaultdict(ProfileOutcome)
-        self._pattern_scores: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+        self._pattern_scores: OrderedDict[str, dict[str, float]] = OrderedDict()
 
     def record(self, query: str, profile: str, success: bool) -> None:
         key = profile
@@ -82,13 +87,24 @@ class FeedbackLoop:
         pattern = self._extract_pattern(query)
         if pattern:
             delta = 0.15 if success else -0.15
-            self._pattern_scores[pattern][profile] = max(
-                -0.5, min(1.0, self._pattern_scores[pattern].get(profile, 0.0) + delta)
-            )
+            scores = self._pattern_scores.get(pattern)
+            if scores is None:
+                scores = self._pattern_scores[pattern] = defaultdict(float)
+                while len(self._pattern_scores) > self.MAX_PATTERNS:
+                    self._pattern_scores.popitem(last=False)
+            scores[profile] = max(-0.5, min(1.0, scores.get(profile, 0.0) + delta))
+            self._pattern_scores.move_to_end(pattern)
         logger.debug(
             "FeedbackLoop: profile={} success={} rate={:.2f}",
             profile, success, self._outcomes[key].success_rate,
         )
+
+    def _scores_for(self, pattern: str) -> dict[str, float]:
+        scores = self._pattern_scores.get(pattern)
+        if scores is None:
+            return {}
+        self._pattern_scores.move_to_end(pattern)
+        return scores
 
     def get_adjusted_confidence(self, profile: str, base_confidence: float, query: str = "") -> float:
         outcome = self._outcomes.get(profile)
@@ -99,7 +115,7 @@ class FeedbackLoop:
         if query:
             pattern = self._extract_pattern(query)
             if pattern:
-                pattern_adj = self._pattern_scores.get(pattern, {}).get(profile, 0.0)
+                pattern_adj = self._scores_for(pattern).get(profile, 0.0)
                 adjustment += pattern_adj * 0.1
         return max(0.1, min(1.0, base_confidence + adjustment))
 
@@ -107,7 +123,7 @@ class FeedbackLoop:
         pattern = self._extract_pattern(query)
         if not pattern:
             return None
-        scores = self._pattern_scores.get(pattern, {})
+        scores = self._scores_for(pattern)
         candidates = [(p, s) for p, s in scores.items() if p != failed_profile and s > 0.2]
         if candidates:
             candidates.sort(key=lambda x: x[1], reverse=True)
