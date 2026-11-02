@@ -1,37 +1,38 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from raven.core.gateway.commands.base import CommandContext, CommandHandler
+
+if TYPE_CHECKING:
+    from raven.core.gateway.commands.registry import CommandRegistry
+
+# Pairing is approved inside the gateway's allowlist check, before the registry is consulted, so
+# it has no handler that could list itself. The guard in tests/core/test_gateway_commands.py fails
+# if a line here stops being dispatched.
+EXTERNAL_COMMANDS = (("/pair <code>", "Authorize with pairing code"),)
+
+
+def command_entries(registry: CommandRegistry) -> list[tuple[str, str]]:
+    """One entry per command the gateway will actually accept, taken from the handlers themselves."""
+    entries = [
+        ("/" + handler.name + (f" {handler.usage}" if handler.usage else ""), handler.description)
+        for handler in sorted(registry.list_commands(), key=lambda h: h.name)
+    ]
+    return entries + list(EXTERNAL_COMMANDS)
+
+
+def help_body(registry: CommandRegistry) -> str:
+    """What /help sends: the header, then one line per command."""
+    lines = [f"{call} - {description}" for call, description in command_entries(registry)]
+    return "\n".join(["Commands:", *lines])
 
 
 class HelpCommand(CommandHandler):
     name = "help"
-    description = "Show help message"
+    description = "Show this help"
 
     async def execute(self, ctx: CommandContext) -> bool:
         gateway = self.gateway
-        await gateway._send(
-            ctx.event.channel,
-            ctx.event.session_id,
-            "Commands:\n"
-            "/status - Show bot status\n"
-            "/new - Start fresh conversation\n"
-            "/reset - Reset session\n"
-            "/task <goal> - Plan and execute a task\n"
-            "/monitor list - List your monitors\n"
-            "/monitor add <type> <target> - Add monitor\n"
-            "/code index [path] - Index codebase\n"
-            "/code search <query> - Search code\n"
-            "/code review <file> - Review file\n"
-            "/code start <goal> - Start coding session\n"
-            "/routine list - List routines\n"
-            "/routine add <action> <sched> - Add routine\n"
-            "/voice tts <text> - Text-to-speech synthesis\n"
-            "/voice providers - List TTS providers\n"
-            "/compact - Summarize conversation\n"
-            "/think <low|medium|high> - Set thinking level\n"
-            "/mcp - List connected MCP servers\n"
-            "/skills - List loaded skills\n"
-            "/help - Show this help\n"
-            "/pair <code> - Authorize with pairing code",
-        )
+        await gateway._send(ctx.event.channel, ctx.event.session_id, help_body(gateway.commands))
         return True

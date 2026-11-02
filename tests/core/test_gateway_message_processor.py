@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from raven.core.gateway.message_processor import MessageProcessor, _mask_tool_args
+from raven.core.gateway.message_processor import MessageProcessor, _mask_tool_args, usage_line
 
 
 class _Policy:
@@ -30,6 +30,7 @@ def _processor(
     channel_obj: Any = None,
     ctxmgr: Any = None,
     msgs: list[Any] | None = None,
+    prefs: dict[str, str] | None = None,
 ) -> tuple[MessageProcessor, AsyncMock, MagicMock]:
     db = MagicMock()
     db.get_or_create_session = AsyncMock(return_value=SimpleNamespace(sandbox_policy=None))
@@ -42,7 +43,14 @@ def _processor(
     metrics.inc = MagicMock()
     metrics.observe = MagicMock()
     send = AsyncMock()
-    proc = MessageProcessor(db, registry, channels, ctxmgr, metrics, send)
+    get_pref = None
+    if prefs is not None:
+
+        async def _get_pref(channel: str, user_id: str, key: str, default: str = "") -> str:
+            return prefs.get(key, default)
+
+        get_pref = AsyncMock(side_effect=_get_pref)
+    proc = MessageProcessor(db, registry, channels, ctxmgr, metrics, send, get_pref_fn=get_pref)
     return proc, send, metrics
 
 
@@ -60,6 +68,11 @@ def _gen(tokens: list[str], *, confirm: Any = None, raise_exc: Exception | None 
 
 def _agent(factory: Any) -> MagicMock:
     agent = MagicMock()
+    # the shape a finished Agent.run leaves behind, so the processor is read against real counters
+    agent.usage_totals = {"prompt": 40, "completion": 12, "rounds": 2}
+    agent.show_tool_progress = True
+    agent.trace = False
+    agent.think_level = "high"
     agent.run = MagicMock(
         side_effect=lambda text, confirm_fn=None, history=None: factory(confirm_fn=confirm_fn, history=history)
     )
@@ -298,3 +311,84 @@ async def test_manage_context_zero_max_tokens() -> None:
     # ratio is 0 with zero max_tokens -> below threshold, returns dict form untouched
     metrics.observe.assert_any_call("context_window_pct", 0.0, {"session_id": "sid"})
     assert out[0]["content"] == "a"
+
+
+# ── usage_mode ────────────────────────────────────────────────────
+
+
+def test_usage_line_off_says_nothing() -> None:
+    assert usage_line("off", {"prompt": 40, "completion": 12, "rounds": 2}) == ""
+
+
+def test_usage_line_tokens_adds_up() -> None:
+    assert usage_line("tokens", {"prompt": 40, "completion": 12, "rounds": 2}) == (
+        "[tokens: 40 in / 12 out / 52 total]"
+    )
+
+
+def test_usage_line_full_counts_the_model_calls() -> None:
+    line = usage_line("full", {"prompt": 40, "completion": 12, "rounds": 2})
+    assert line.startswith("[tokens: 40 in / 12 out / 52 total]")
+    assert "model calls: 2" in line
+
+
+async def test_process_sends_the_usage_line_the_pref_asked_for(monkeypatch: pytest.MonkeyPatch) -> None:
+    proc, send, _m = _processor(prefs={'usage_mode': 'tokens'})
+    monkeypatch.setattr(proc.registry, "create_agent", lambda s: _agent(_gen(["Hel", "lo"])))
+    await proc.process(_event(), "sid")
+    assert send.await_args_list[-1].args[2] == "[tokens: 40 in / 12 out / 52 total]"
+    prefs: Any = proc._get_pref
+    assert [c.args[2] for c in prefs.await_args_list] == ["verbose", "trace", "think_level", "usage_mode"]
+
+
+async def test_usage_line_is_a_separate_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The reply is what gets stored as assistant history; a meter reading glued onto it would be
+    re-read by the model as part of its own answer."""
+    proc, send, _m = _processor(prefs={'usage_mode': 'full'})
+    monkeypatch.setattr(proc.registry, "create_agent", lambda s: _agent(_gen(["Hel", "lo"])))
+    await proc.process(_event(), "sid")
+    sent = [c for c in send.await_args_list if c.kwargs.get("streaming") is False]
+    assert sent[0].args[2] == "Hello"
+    assert sent[1].args[2].startswith("[tokens:")
+    assert sent[1].args[2] != sent[0].args[2]
+
+
+async def test_process_stays_quiet_when_the_usage_pref_is_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    proc, send, _m = _processor(prefs={})
+    monkeypatch.setattr(proc.registry, "create_agent", lambda s: _agent(_gen(["Hel", "lo"])))
+    await proc.process(_event(), "sid")
+    assert [c.args[2] for c in send.await_args_list] == ["Hello"]
+
+
+async def test_the_three_channel_prefs_land_on_the_agent_before_the_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`/verbose`, `/trace` and `/think` write preferences; the agent is what acts on them, so a
+    run started with the defaults must not be able to keep the previous chatter."""
+    proc, _send, _m = _processor(prefs={"verbose": "on", "trace": "on", "think_level": "low"})
+    agent = _agent(_gen(["ok"]))
+    monkeypatch.setattr(proc.registry, "create_agent", lambda s: agent)
+    await proc.process(_event(), "sid")
+    assert agent.show_tool_progress is True
+    assert agent.trace is True
+    assert agent.think_level == "low"
+
+
+async def test_unset_prefs_keep_the_modes_the_commands_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    proc, _send, _m = _processor(prefs={})
+    agent = _agent(_gen(["ok"]))
+    monkeypatch.setattr(proc.registry, "create_agent", lambda s: agent)
+    await proc.process(_event(), "sid")
+    assert agent.show_tool_progress is False
+    assert agent.trace is False
+    assert agent.think_level == "high"
+
+
+async def test_a_processor_without_a_pref_store_leaves_the_agent_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ravencode and the CLI build agents directly; nothing there reads the gateway's prefs."""
+    proc, send, _m = _processor()
+    agent = _agent(_gen(["Hel", "lo"]))
+    monkeypatch.setattr(proc.registry, "create_agent", lambda s: agent)
+    await proc.process(_event(), "sid")
+    assert agent.show_tool_progress is True
+    assert send.await_args_list[-1].args[2] == "Hello"

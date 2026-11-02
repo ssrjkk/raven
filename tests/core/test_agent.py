@@ -84,6 +84,108 @@ class TestAgent:
         async for _ in agent.run("ping"):
             pass
 
+    async def test_usage_totals_accumulate_across_model_calls(self, session, tools, mock_db):
+        """`/usage tokens` prints these counters, so a run that saw two model calls must not
+        report one."""
+        from raven.core.llm import LLMResponse, ToolCall
+
+        llm = AsyncMock()
+        llm.complete = AsyncMock(
+            side_effect=[
+                LLMResponse(
+                    content="",
+                    tool_calls=[ToolCall(id="call1", name="ping", arguments={})],
+                    finish_reason="tool_calls",
+                    usage={"prompt_tokens": 100, "completion_tokens": 20},
+                ),
+                LLMResponse(
+                    content="done",
+                    finish_reason="stop",
+                    usage={"prompt_tokens": 120, "completion_tokens": 30},
+                ),
+            ]
+        )
+        agent = Agent(session=session, tools=tools, db=mock_db, llm=llm, config=AgentConfig(max_tool_rounds=3, use_memory=False))
+        out = [t async for t in agent.run("ping")]
+        assert "done" in "".join(out)  # the tool line is denied by policy, the counters are not
+        assert agent.usage_totals == {"prompt": 220, "completion": 50, "rounds": 2}
+
+    async def test_usage_totals_reset_between_runs(self, agent):
+        async for _ in agent.run("hello"):
+            pass
+        assert agent.usage_totals["rounds"] == 1
+        async for _ in agent.run("hello again"):
+            pass
+        assert agent.usage_totals["rounds"] == 1
+
+    @staticmethod
+    def _two_round_llm():
+        from raven.core.llm import LLMResponse, ToolCall
+
+        llm = AsyncMock()
+        llm.complete = AsyncMock(
+            side_effect=[
+                LLMResponse(
+                    content="",
+                    tool_calls=[ToolCall(id="call1", name="ping", arguments={})],
+                    finish_reason="tool_calls",
+                ),
+                LLMResponse(content="done", finish_reason="stop"),
+            ]
+        )
+        return llm
+
+    def _agent(self, session, tools, mock_db, llm):
+        return Agent(
+            session=session, tools=tools, db=mock_db, llm=llm, config=AgentConfig(max_tool_rounds=3, use_memory=False)
+        )
+
+    async def test_tool_progress_lines_are_what_verbose_switches(self, session, tools, mock_db):
+        shown = self._agent(session, tools, mock_db, self._two_round_llm())
+        quiet = self._agent(session, tools, mock_db, self._two_round_llm())
+        quiet.show_tool_progress = False
+        loud_out = "".join([t async for t in shown.run("ping")])
+        quiet_out = "".join([t async for t in quiet.run("ping")])
+        assert "ping" in loud_out
+        assert "ping" not in quiet_out
+        assert "done" in quiet_out
+
+    async def test_trace_lines_name_the_round_they_came_from(self, session, tools, mock_db):
+        agent = self._agent(session, tools, mock_db, self._two_round_llm())
+        agent.trace = True
+        out = "".join([t async for t in agent.run("ping")])
+        assert "[trace 1/3:" in out
+        assert "[trace 2/3:" in out
+
+    async def test_an_untouched_run_emits_no_trace_lines(self, session, tools, mock_db):
+        agent = self._agent(session, tools, mock_db, self._two_round_llm())
+        out = "".join([t async for t in agent.run("ping")])
+        assert "[trace" not in out
+
+    @pytest.mark.parametrize(
+        "level,wanted",
+        [
+            ("low", ""),
+            ("medium", "Plan briefly before you answer."),
+            ("high", "Work through the problem step by step before you answer, then give the answer."),
+        ],
+    )
+    async def test_think_level_is_a_prompt_the_model_actually_gets(self, session, mock_db, mock_llm, level, wanted):
+        from raven.core.agent.agent import THINK_INSTRUCTIONS
+
+        agent = Agent(
+            session=session, tools=[], db=mock_db, llm=mock_llm, config=AgentConfig(max_tool_rounds=1, use_memory=False)
+        )
+        agent.think_level = level
+        async for _ in agent.run("hello"):
+            pass
+        prompt = mock_llm.complete.await_args.args[0][0]["content"]
+        for text in THINK_INSTRUCTIONS.values():
+            if text and text != wanted:
+                assert text not in prompt
+        if wanted:
+            assert prompt.endswith(wanted)
+
     async def test_tool_execution(self, agent, session, tools, mock_db, mock_llm):
         from raven.core.llm import ToolCall
         from raven.core.security.tool_policy import ToolPolicyEvaluator

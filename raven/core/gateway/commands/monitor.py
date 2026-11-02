@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 class MonitorCommand(CommandHandler):
     name = "monitor"
     description = "Monitor management"
+    usage = "list | add <type> <target> | remove <id> | pause <id> | resume <id>"
 
     async def execute(self, ctx: CommandContext) -> bool:
         gateway = self.gateway

@@ -36,6 +36,22 @@ if TYPE_CHECKING:
     from raven.core.models import IncomingMessage, Message
 
 
+def usage_line(mode: str, totals: dict[str, int], rounds: int | None = None) -> str:
+    """The `/usage` line the operator asked for, from the counters the run actually kept.
+
+    `rounds` defaults to what the run recorded: a call that reuses the model five times says so
+    rather than sounding like one request."""
+    if mode not in ("tokens", "full"):
+        return ""
+    prompt = totals.get("prompt", 0)
+    completion = totals.get("completion", 0)
+    used = rounds if rounds is not None else totals.get("rounds", 0)
+    line = f"[tokens: {prompt} in / {completion} out / {prompt + completion} total]"
+    if mode == "full":
+        line += f" · model calls: {used}"
+    return line
+
+
 class MessageProcessor:
     def __init__(
         self,
@@ -45,6 +61,7 @@ class MessageProcessor:
         ctxmgr: ContextWindowManager | None,
         metrics: MetricsCollector,
         send_fn: Callable[..., Any],
+        get_pref_fn: Callable[[str, str, str, str], Any] | None = None,
     ):
         self.db = db
         self.registry = registry
@@ -52,6 +69,7 @@ class MessageProcessor:
         self._ctxmgr = ctxmgr
         self.metrics = metrics
         self._send = send_fn
+        self._get_pref = get_pref_fn
 
     async def process(self, event: IncomingMessage, session_id: str) -> None:
         session = await self.db.get_or_create_session(session_id, event.channel, event.user_id)
@@ -62,8 +80,9 @@ class MessageProcessor:
         managed = await self._manage_context(session_id, msgs)
         history = [{"role": m["role"], "content": m["content"]} for m in managed]
 
-        agent = self.registry.create_agent(session)
+        self._last_agent = agent = self.registry.create_agent(session)
         agent.priority = event.priority
+        await self._apply_prefs(agent, event)
 
         channel_obj = await self.channels.get(event.channel)
         supports_stream = hasattr(channel_obj, "send_stream") if channel_obj else False
@@ -125,6 +144,29 @@ class MessageProcessor:
                 await self._send(event.channel, session_id, full_response, streaming=False)
             self.metrics.inc("messages_sent", {"channel": event.channel})
             self.metrics.observe("response_length", len(full_response), {"channel": event.channel})
+            line = await self._usage_line(event)
+            if line:
+                await self._send(event.channel, session_id, line, streaming=False)
+
+    async def _apply_prefs(self, agent: Any, event: IncomingMessage) -> None:
+        """`/verbose`, `/trace` and `/think` are read by the run, so they have to be on the agent
+        before the first token is asked for. Defaults match what the commands report."""
+        if self._get_pref is None:
+            return
+        verbose = await self._get_pref(event.channel, event.user_id, "verbose", "off")
+        trace = await self._get_pref(event.channel, event.user_id, "trace", "off")
+        agent.show_tool_progress = verbose == "on"
+        agent.trace = trace == "on"
+        agent.think_level = await self._get_pref(event.channel, event.user_id, "think_level", "high")
+
+    async def _usage_line(self, event: IncomingMessage) -> str:
+        """`/usage` is per user and per channel; the run had the numbers, the pref says whether
+        to show them. Sent as its own message so the stored history keeps the model's answer."""
+        if self._get_pref is None:
+            return ""
+        mode = await self._get_pref(event.channel, event.user_id, "usage_mode", "off")
+        totals = getattr(self._last_agent, "usage_totals", {}) if hasattr(self, "_last_agent") else {}
+        return usage_line(mode, totals)
 
     async def _manage_context(self, session_id: str, msgs: list[Message]) -> list[dict[str, Any]]:
         if self._ctxmgr is None:

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 class RoutineCommand(CommandHandler):
     name = "routine"
     description = "Routine management"
+    usage = "list | add <action> <schedule> | remove <id> | pause <id> | resume <id>"
 
     async def execute(self, ctx: CommandContext) -> bool:
         gateway = self.gateway

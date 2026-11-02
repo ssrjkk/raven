@@ -44,6 +44,7 @@ class TaskOrchestrator:
         self._bg_tasks: set[asyncio.Task[None]] = set()
         self._retention_task: asyncio.Task[None] | None = None
 
+
     async def start(self) -> None:
         self._store = TaskStore(self._db.db_path)
         tools = create_task_tool_registry(self._mcp_pool)
@@ -224,6 +225,13 @@ class TaskOrchestrator:
 
     def get_task(self, task_id: str) -> Task | None:
         return self._tasks.get(task_id)
+
+    async def stored_tasks(self, user_id: str | None = None, limit: int = 20) -> list[Task]:
+        """Tasks read back from the store, unlike `list_tasks`, which reports only the ones
+        this process is running right now."""
+        if self._store is None:
+            return []
+        return await self._store.list_tasks(user_id=user_id, limit=limit)
 
     async def list_tasks(self) -> list[Task]:
         async with self._lock:

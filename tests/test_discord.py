@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -255,3 +256,155 @@ async def test_disconnect(channel):
     channel._bot = mock_bot
     await channel.disconnect()
     mock_bot.close.assert_awaited_once()
+
+
+class _TreeContract:
+    """discord.py 2.7.1 binds exactly one CommandTree per client: `CommandTree.__init__` raises
+    when the connection already owns a tree (app_commands/tree.py:149-150), and only that tree is
+    consulted when an interaction arrives. A MagicMock never raised, so the channel's own tree was
+    built against a contract nothing here could break."""
+
+    def __init__(self, client):
+        state = client._connection
+        if getattr(state, "_command_tree", None) is not None:
+            raise RuntimeError("This client already has an associated command tree.")
+        state._command_tree = self
+        self.command = MagicMock()
+
+
+def _bot_with_tree():
+    bot = MagicMock()
+    bot._connection = SimpleNamespace(_command_tree=None)
+    bot.tree = _TreeContract(bot)
+    bot.start = AsyncMock()
+    bot.commands = [SimpleNamespace(name="chat", aliases=[]), SimpleNamespace(name="reset", aliases=["r"])]
+    bot.process_commands = AsyncMock()
+    bot.user = SimpleNamespace(id=1234, mention="")
+    return bot
+
+
+def _install_contract_discord(monkeypatch, bot):
+    intents = MagicMock()
+    intents.default.return_value = intents
+    dm_channel = type("DMChannel", (), {})
+    monkeypatch.setattr(discord_channel_mod, "HAS_DISCORD", True)
+    monkeypatch.setattr(
+        discord_channel_mod,
+        "discord",
+        SimpleNamespace(Intents=intents, Embed=MagicMock(), Game=MagicMock(), DMChannel=dm_channel),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        discord_channel_mod, "commands", SimpleNamespace(Bot=MagicMock(return_value=bot)), raising=False
+    )
+    monkeypatch.setattr(
+        discord_channel_mod,
+        "app_commands",
+        SimpleNamespace(CommandTree=_TreeContract, describe=lambda **kwargs: (lambda fn: fn)),
+        raising=False,
+    )
+
+
+async def test_start_registers_on_the_bots_own_tree(channel, monkeypatch):
+    """Building a second tree for the same bot raised out of `start()` before the bot logged in,
+    so Discord never connected and its four slash commands were never reachable."""
+    bot = _bot_with_tree()
+    _install_contract_discord(monkeypatch, bot)
+    channel._token = "fake_token"
+    await channel.start()
+    assert channel._tree is bot.tree
+    assert bot._connection._command_tree is bot.tree
+
+
+def _message_events(bot):
+    registry = {}
+
+    def _event(fn):
+        registry[fn.__name__] = fn
+        return fn
+
+    bot.event = _event
+    return registry
+
+
+
+class _TextChannel:
+    def __init__(self, id=555):
+        self.id = id
+
+    def typing(self):
+        outer = self
+
+        class _CM:
+            async def __aenter__(self):
+                return outer
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _CM()
+
+
+def _msg(content, channel_obj=None, mentions=None):
+    return SimpleNamespace(
+        author=SimpleNamespace(id=99),
+        content=content,
+        channel=channel_obj or _TextChannel(),
+        mentions=mentions or [],
+    )
+
+
+async def test_a_command_reaches_the_gateway_even_unmentioned(channel, monkeypatch):
+    """Typing /usage in a group means it. The gateway applies the mention rule itself, after
+    commands and intents, so the adapter must not be the one swallowing the text."""
+    bot = _bot_with_tree()
+    _install_contract_discord(monkeypatch, bot)
+    channel._token = "fake_token"
+    handler = AsyncMock()
+    await channel.on_message(handler)
+    events = _message_events(bot)
+    await channel.start()
+    await events["on_message"](_msg("/verbose on"))
+    sent: Any = handler.await_args
+    assert sent.args[0].text == "/verbose on"
+    meta = sent.args[0].metadata
+    assert meta["chat_type"] == "group" and meta["mentioned"] is False
+
+
+async def test_a_discord_prefix_command_is_not_run_twice(channel, monkeypatch):
+    """/chat belongs to discord.py; forwarding it to the gateway as well would answer it twice."""
+    bot = _bot_with_tree()
+    _install_contract_discord(monkeypatch, bot)
+    channel._token = "fake_token"
+    handler = AsyncMock()
+    await channel.on_message(handler)
+    events = _message_events(bot)
+    await channel.start()
+    await events["on_message"](_msg("/chat hello there"))
+    handler.assert_not_awaited()
+    bot.process_commands.assert_awaited()
+
+
+async def test_an_unaddressed_group_reply_is_still_ignored(channel, monkeypatch):
+    bot = _bot_with_tree()
+    _install_contract_discord(monkeypatch, bot)
+    channel._token = "fake_token"
+    handler = AsyncMock()
+    await channel.on_message(handler)
+    events = _message_events(bot)
+    await channel.start()
+    await events["on_message"](_msg("anyone seen my keys?"))
+    handler.assert_not_awaited()
+
+
+async def test_a_mentioned_group_reply_still_reaches_the_gateway(channel, monkeypatch):
+    bot = _bot_with_tree()
+    _install_contract_discord(monkeypatch, bot)
+    channel._token = "fake_token"
+    handler = AsyncMock()
+    await channel.on_message(handler)
+    events = _message_events(bot)
+    await channel.start()
+    await events["on_message"](_msg("what is the time?", mentions=[bot.user]))
+    mentioned: Any = handler.await_args
+    assert mentioned.args[0].metadata["mentioned"] is True

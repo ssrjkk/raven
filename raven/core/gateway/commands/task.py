@@ -7,7 +7,8 @@ from raven.core.security.sandbox_policy import MAIN_SESSION_POLICY, check_tool_a
 
 class TaskCommand(CommandHandler):
     name = "task"
-    description = "Run a task in background"
+    description = "Run a task in background, or list the ones you have"
+    usage = "<goal> | list"
 
     async def execute(self, ctx: CommandContext) -> bool:
         gateway = self.gateway
@@ -20,6 +21,18 @@ class TaskCommand(CommandHandler):
         if not gateway._check_permission(ctx.user, Permission.TASK_RUN):
             await gateway._send(ctx.event.channel, ctx.event.session_id, "Access denied: insufficient permissions")
             return True
+        if ctx.args and ctx.args[0].lower() == "list":
+            tasks = await gateway.tasks.stored_tasks(ctx.event.user_id)
+            if not tasks:
+                await gateway._send(
+                    ctx.event.channel, ctx.event.session_id, "No tasks yet. Start one with /task <goal>."
+                )
+                return True
+            lines = [f"  {task.id} [{task.status.value}] {task.goal[:60]}" for task in tasks[:10]]
+            await gateway._send(ctx.event.channel, ctx.event.session_id, "Your tasks:" + "\n\n".join(lines))
+            return True
+
+
         goal = " ".join(ctx.args)
         if not goal:
             await gateway._send(ctx.event.channel, ctx.event.session_id, "Usage: /task <goal description>")

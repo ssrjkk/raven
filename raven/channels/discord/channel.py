@@ -42,6 +42,12 @@ def build_embed(
     return embed
 
 
+def _is_prefix_command(bot: commands.Bot, content: str) -> bool:
+    """True when discord.py owns this text itself. Handing it to the gateway as well would run
+    the same command twice."""
+    name = content[1:].split(maxsplit=1)[0].lower()
+    return any(name in {command.name, *command.aliases} for command in bot.commands)
+
 class DiscordChannel(BaseChannel):
     channel_id = "discord"
 
@@ -63,7 +69,12 @@ class DiscordChannel(BaseChannel):
         intents = discord.Intents.default()
         intents.message_content = True
         self._bot = commands.Bot(command_prefix="/", intents=intents)
-        self._tree = app_commands.CommandTree(self._bot)
+        # discord.py binds one CommandTree per client and refuses a second one for the same
+        # bot (app_commands/tree.py raises 'This client already has an associated command
+        # tree'), and only `bot.tree` is consulted when an interaction arrives. Building a
+        # private tree here synced four commands to Discord that could never execute, and
+        # raised out of start() before the bot even logged in.
+        self._tree = self._bot.tree
 
         @self._bot.event
         async def on_ready():
@@ -83,12 +94,17 @@ class DiscordChannel(BaseChannel):
                 return
             if msg.author == bot.user:
                 return
-            if msg.content.startswith("/"):
-                await bot.process_commands(msg)
-                return
             is_dm = isinstance(msg.channel, discord.DMChannel)
             is_mention = bot.user in msg.mentions if bot.user else False
-            if is_dm or is_mention:
+            is_command = msg.content.startswith("/")
+            if is_command:
+                await bot.process_commands(msg)
+                if _is_prefix_command(bot, msg.content):
+                    return
+            # Commands go to the gateway whether or not the bot was addressed: a group
+            # member typing /usage means it, and the gateway itself decides what still
+            # needs a mention.
+            if is_dm or is_mention or is_command:
                 user_id = str(msg.author.id)
                 channel_id = str(msg.channel.id) if not is_dm else f"dm_{user_id}"
                 if self._handler:
@@ -99,7 +115,12 @@ class DiscordChannel(BaseChannel):
                             user_id=user_id,
                             session_id=f"discord:{channel_id}:default",
                             text=clean_text or msg.content,
-                            metadata={"channel_id": channel_id, "username": str(msg.author)},
+                            metadata={
+                                "channel_id": channel_id,
+                                "username": str(msg.author),
+                                "chat_type": "dm" if is_dm else "group",
+                                "mentioned": is_mention,
+                            },
                         )
                         await self._handler(event)
 
@@ -114,7 +135,12 @@ class DiscordChannel(BaseChannel):
                         user_id=user_id,
                         session_id=f"discord:{channel_id}:default",
                         text=text,
-                        metadata={"channel_id": channel_id, "username": str(ctx.author)},
+                        metadata={
+                            "channel_id": channel_id,
+                            "username": str(ctx.author),
+                            "chat_type": "group",
+                            "mentioned": True,
+                        },
                     )
                     await self._handler(event)
 

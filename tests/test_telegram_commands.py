@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import re
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -43,17 +45,48 @@ class TestCmdStart:
         assert kwargs.get("reply_markup") is not None
 
 
-class TestCmdHelp:
-    async def test_cmd_help_sends_help(self, channel):
-        update, context = _make_update("/help")
-        await channel._cmd_help(update, context)
-        update.message.reply_text.assert_awaited_once()
+class TestCommandListIsNotDuplicated:
+    """The adapter used to keep its own list of commands and hand it out from /help and the
+    menu button, so the two drifted from the registry the gateway actually dispatches."""
 
-    async def test_cmd_help_includes_menu_keyboard(self, channel):
-        update, context = _make_update("/help")
-        await channel._cmd_help(update, context)
-        kwargs = update.message.reply_text.await_args[1]
-        assert kwargs.get("reply_markup") is not None
+    def test_the_welcome_text_points_at_help_instead_of_reciting_commands(self):
+        from raven.channels.telegram.channel import TELEGRAM_HELP
+
+        assert "/help" in TELEGRAM_HELP
+        named = set(re.findall(r"/([a-z_]+)", TELEGRAM_HELP))
+        assert named == {"help"}, named
+
+    @staticmethod
+    def _query_update(data: str) -> tuple[Any, Any]:
+        query = MagicMock()
+        query.data = data
+        query.message = MagicMock()
+        query.message.chat_id = 12345
+        query.answer = AsyncMock()
+        query.edit_message_text = AsyncMock()
+        update = MagicMock()
+        update.callback_query = query
+        update.message = MagicMock()
+        update.message.chat_id = 12345
+        return update, query
+
+    async def test_menu_help_forwards_to_the_gateway(self, channel):
+        handler = AsyncMock()
+        channel._handler = handler
+        update, query = self._query_update("menu_help")
+        await channel._on_callback(update, MagicMock())
+        sent: Any = handler.await_args
+        assert sent.args[0].text == "/help"
+        query.edit_message_text.assert_not_awaited()
+
+    async def test_menu_code_forwards_to_the_gateway(self, channel):
+        handler = AsyncMock()
+        channel._handler = handler
+        update, query = self._query_update("menu_code")
+        await channel._on_callback(update, MagicMock())
+        sent: Any = handler.await_args
+        assert sent.args[0].text == "/code"
+        query.edit_message_text.assert_not_awaited()
 
 
 class TestCmdNew:

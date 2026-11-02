@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 class VoiceCommand(CommandHandler):
     name = "voice"
     description = "Voice/TTS commands"
+    usage = "tts <text> | providers"
 
     async def execute(self, ctx: CommandContext) -> bool:
         gateway = self.gateway

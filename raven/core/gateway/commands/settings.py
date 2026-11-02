@@ -7,16 +7,17 @@ _PREF_KEYS = ("think_level", "verbose", "trace", "usage_mode", "activation_mode"
 
 class ThinkCommand(CommandHandler):
     name = "think"
-    description = "Set thinking level"
+    description = "Set how much the model deliberates before it answers"
+    usage = "<low|medium|high>"
 
     async def execute(self, ctx: CommandContext) -> bool:
         gateway = self.gateway
         level = ctx.args[0] if ctx.args else ""
         if level in ("low", "medium", "high"):
-            gateway.set_pref(ctx.event.channel, ctx.event.user_id, "think_level", level)
+            await gateway.set_pref(ctx.event.channel, ctx.event.user_id, "think_level", level)
             await gateway._send(ctx.event.channel, ctx.event.session_id, f"Thinking level set to: {level}.")
         else:
-            current = gateway.get_pref(ctx.event.channel, ctx.event.user_id, "think_level", "high")
+            current = await gateway.get_pref(ctx.event.channel, ctx.event.user_id, "think_level", "high")
             await gateway._send(
                 ctx.event.channel,
                 ctx.event.session_id,
@@ -27,16 +28,17 @@ class ThinkCommand(CommandHandler):
 
 class VerboseCommand(CommandHandler):
     name = "verbose"
-    description = "Toggle verbose mode"
+    description = "Show each tool call as the answer is built"
+    usage = "<on|off>"
 
     async def execute(self, ctx: CommandContext) -> bool:
         gateway = self.gateway
         setting = ctx.args[0] if ctx.args else ""
         if setting in ("on", "off"):
-            gateway.set_pref(ctx.event.channel, ctx.event.user_id, "verbose", setting)
+            await gateway.set_pref(ctx.event.channel, ctx.event.user_id, "verbose", setting)
             await gateway._send(ctx.event.channel, ctx.event.session_id, f"Verbose mode: {setting}.")
         else:
-            current = gateway.get_pref(ctx.event.channel, ctx.event.user_id, "verbose", "off")
+            current = await gateway.get_pref(ctx.event.channel, ctx.event.user_id, "verbose", "off")
             await gateway._send(
                 ctx.event.channel,
                 ctx.event.session_id,
@@ -47,16 +49,17 @@ class VerboseCommand(CommandHandler):
 
 class TraceCommand(CommandHandler):
     name = "trace"
-    description = "Toggle trace mode"
+    description = "Show timing and tokens for every model call"
+    usage = "<on|off>"
 
     async def execute(self, ctx: CommandContext) -> bool:
         gateway = self.gateway
         setting = ctx.args[0] if ctx.args else ""
         if setting in ("on", "off"):
-            gateway.set_pref(ctx.event.channel, ctx.event.user_id, "trace", setting)
+            await gateway.set_pref(ctx.event.channel, ctx.event.user_id, "trace", setting)
             await gateway._send(ctx.event.channel, ctx.event.session_id, f"Trace mode: {setting}.")
         else:
-            current = gateway.get_pref(ctx.event.channel, ctx.event.user_id, "trace", "off")
+            current = await gateway.get_pref(ctx.event.channel, ctx.event.user_id, "trace", "off")
             await gateway._send(
                 ctx.event.channel,
                 ctx.event.session_id,
@@ -67,16 +70,17 @@ class TraceCommand(CommandHandler):
 
 class UsageCommand(CommandHandler):
     name = "usage"
-    description = "Show usage stats"
+    description = "Report token usage after each answer"
+    usage = "<off|tokens|full>"
 
     async def execute(self, ctx: CommandContext) -> bool:
         gateway = self.gateway
         mode = ctx.args[0] if ctx.args else ""
         if mode in ("off", "tokens", "full"):
-            gateway.set_pref(ctx.event.channel, ctx.event.user_id, "usage_mode", mode)
+            await gateway.set_pref(ctx.event.channel, ctx.event.user_id, "usage_mode", mode)
             await gateway._send(ctx.event.channel, ctx.event.session_id, f"Usage mode: {mode}.")
         else:
-            current = gateway.get_pref(ctx.event.channel, ctx.event.user_id, "usage_mode", "off")
+            current = await gateway.get_pref(ctx.event.channel, ctx.event.user_id, "usage_mode", "off")
             await gateway._send(
                 ctx.event.channel,
                 ctx.event.session_id,
@@ -99,16 +103,17 @@ class RestartCommand(CommandHandler):
 
 class ActivationCommand(CommandHandler):
     name = "activation"
-    description = "Show activation info"
+    description = "Answer in group chats only when the bot is addressed"
+    usage = "<mention|always>"
 
     async def execute(self, ctx: CommandContext) -> bool:
         gateway = self.gateway
         mode = ctx.args[0] if ctx.args else ""
         if mode in ("mention", "always"):
-            gateway.set_pref(ctx.event.channel, ctx.event.user_id, "activation_mode", mode)
+            await gateway.set_pref(ctx.event.channel, ctx.event.user_id, "activation_mode", mode)
             await gateway._send(ctx.event.channel, ctx.event.session_id, f"Activation mode: {mode}.")
         else:
-            current = gateway.get_pref(ctx.event.channel, ctx.event.user_id, "activation_mode", "mention")
+            current = await gateway.get_pref(ctx.event.channel, ctx.event.user_id, "activation_mode", "mention")
             await gateway._send(
                 ctx.event.channel,
                 ctx.event.session_id,

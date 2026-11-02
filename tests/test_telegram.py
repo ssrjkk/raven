@@ -226,3 +226,77 @@ async def test_edit_message_fallback(channel):
 @pytest.mark.asyncio
 async def test_edit_message_no_app(channel):
     await channel.edit_message(12345, 678, "text")
+
+
+def _update(chat_type="group", text="hi", entities=None, reply_from=None):
+    from datetime import UTC, datetime
+
+    from telegram import Chat, Message, Update, User
+
+    chat = Chat(id=-100, type=chat_type)
+    author = User(id=1, is_bot=False, first_name="someone", username="someone")
+    reply = (
+        Message(message_id=0, date=datetime.now(UTC), chat=chat, from_user=reply_from, text="earlier")
+        if reply_from is not None
+        else None
+    )
+    msg = Message(
+        message_id=1,
+        date=datetime.now(UTC),
+        chat=chat,
+        from_user=author,
+        text=text,
+        entities=entities,
+        reply_to_message=reply,
+    )
+    return Update(update_id=1, message=msg)
+
+
+def _bot(channel, bot_id=7, username="raven_bot"):
+    app = MagicMock()
+    app.bot.id = bot_id
+    app.bot.username = username
+    channel._app = app
+    return channel
+
+
+def test_activation_meta_records_a_private_chat(channel):
+    _bot(channel)
+    assert channel._activation_meta(_update(chat_type="private")) == {"chat_type": "private", "mentioned": False}
+
+
+def test_activation_meta_records_a_text_mention(channel):
+    from telegram import MessageEntity, User
+
+    _bot(channel)
+    bot_user = User(id=7, is_bot=True, first_name="raven", username="raven_bot")
+    entities = [MessageEntity(type=MessageEntity.TEXT_MENTION, offset=0, length=6, user=bot_user)]
+    assert channel._activation_meta(_update(text="@raven hi", entities=entities))["mentioned"] is True
+
+
+def test_activation_meta_records_a_plain_username_mention(channel):
+    _bot(channel)
+    assert channel._activation_meta(_update(text="@RAVEN_BOT are you there"))["mentioned"] is True
+
+
+def test_activation_meta_records_a_reply_to_the_bot(channel):
+    from telegram import User
+
+    _bot(channel)
+    bot_user = User(id=7, is_bot=True, first_name="raven", username="raven_bot")
+    assert channel._activation_meta(_update(reply_from=bot_user))["mentioned"] is True
+
+
+def test_activation_meta_records_an_unaddressed_group_message(channel):
+    _bot(channel)
+    assert channel._activation_meta(_update(text="anyone know the time?")) == {
+        "chat_type": "group",
+        "mentioned": False,
+    }
+
+
+def test_activation_meta_records_nothing_without_a_bot_identity(channel):
+    """Before the bot reports who it is, 'mentioned' is unknowable; recording False here would
+    make the gateway drop every group message the moment the app is rebuilt."""
+    channel._app = None
+    assert channel._activation_meta(_update()) == {}

@@ -64,22 +64,22 @@ class TestBasicCommands:
     async def test_think_command_stores_pref(self, gateway: Gateway, user: dict[str, Any]):
         result = await gateway._handle_command(_event("/think high"), user)
         assert result is True
-        assert gateway.get_pref("mock", "U1", "think_level") == "high"
+        assert await gateway.get_pref("mock", "U1", "think_level") == "high"
 
     async def test_think_command_invalid_usage(self, gateway: Gateway, user: dict[str, Any]):
         result = await gateway._handle_command(_event("/think insane"), user)
         assert result is True
-        assert gateway.get_pref("mock", "U1", "think_level", "high") == "high"
+        assert await gateway.get_pref("mock", "U1", "think_level", "high") == "high"
 
     async def test_verbose_command_stores_pref(self, gateway: Gateway, user: dict[str, Any]):
         result = await gateway._handle_command(_event("/verbose on"), user)
         assert result is True
-        assert gateway.get_pref("mock", "U1", "verbose") == "on"
+        assert await gateway.get_pref("mock", "U1", "verbose") == "on"
 
     async def test_activation_command_stores_pref(self, gateway: Gateway, user: dict[str, Any]):
         result = await gateway._handle_command(_event("/activation always"), user)
         assert result is True
-        assert gateway.get_pref("mock", "U1", "activation_mode") == "always"
+        assert await gateway.get_pref("mock", "U1", "activation_mode") == "always"
 
     async def test_help_command(self, gateway: Gateway, user: dict[str, Any]):
         result = await gateway._handle_command(_event("/help"), user)

@@ -149,13 +149,6 @@ class Settings(BaseSettings):
     gitlab_token: SafeSecretStr = SafeSecretStr("")
     gitlab_url: str = "https://gitlab.com"
     gitlab_webhook_secret: SafeSecretStr = SafeSecretStr("")
-    jenkins_url: str = ""
-    jenkins_user: str = ""
-    jenkins_token: SafeSecretStr = SafeSecretStr("")
-
-    # --- Media Generation ---
-    replicate_api_token: SafeSecretStr = SafeSecretStr("")
-
     # --- OAuth / SSO ---
     oauth_redirect_base: str = "http://localhost:5173"
     oauth_google_client_id: SafeSecretStr = SafeSecretStr("")

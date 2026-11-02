@@ -7,7 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from loguru import logger
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, filters
 from telegram.ext import MessageHandler as TGMessageHandler
 
@@ -18,12 +18,8 @@ from raven.core.models import IncomingMessage, Message
 
 TELEGRAM_HELP = (
     "Hello! I'm your Raven AI assistant.\n"
-    "Commands:\n"
-    "/new - Start fresh conversation\n"
-    "/reset - Reset session\n"
-    "/help - Show this help\n"
-    "/pair <code> - Authorize with pairing code\n\n"
-    "Send voice messages — I'll transcribe them!"
+    "Send /help for the command list, or use the buttons below.\n"
+    "Voice messages are transcribed automatically."
 )
 
 
@@ -60,20 +56,30 @@ class TelegramChannel(BaseChannel):
     def _build_test_app(token: str) -> Application[Any, Any, Any, Any, Any, Any]:
         return Application.builder().token(token).build()
 
+    def _register_handlers(self, app: Application[Any, Any, Any, Any, Any, Any]) -> None:
+        """Route every message the bot can receive to something that acts on it.
+
+        python-telegram-bot runs at most one handler per group, and the plain-text handler
+        excludes commands, so a slash message with no CommandHandler above it used to be
+        swallowed: /task, /code, /monitor, /status, /verbose, /usage and the rest of the
+        gateway registry were typed into a void. The COMMAND catch-all hands those over."""
+        app.add_handler(CommandHandler("start", self._cmd_start))
+        app.add_handler(CommandHandler("new", self._cmd_new))
+        app.add_handler(CommandHandler("reset", self._cmd_reset))
+        app.add_handler(CommandHandler("pair", self._cmd_pair))
+        app.add_handler(CommandHandler("menu", self._cmd_menu))
+        app.add_handler(TGMessageHandler(filters.TEXT & ~filters.COMMAND, self._on_text))
+        app.add_handler(TGMessageHandler(filters.COMMAND, self._on_command))
+        app.add_handler(TGMessageHandler(filters.VOICE, self._on_voice))
+        app.add_handler(CallbackQueryHandler(self._on_callback))
+
+
     async def start(self):
         if not self._token:
             logger.warning("Telegram token not configured, skipping")
             return
         self._app = Application.builder().token(self._token).build()
-        self._app.add_handler(CommandHandler("start", self._cmd_start))
-        self._app.add_handler(CommandHandler("new", self._cmd_new))
-        self._app.add_handler(CommandHandler("reset", self._cmd_reset))
-        self._app.add_handler(CommandHandler("pair", self._cmd_pair))
-        self._app.add_handler(CommandHandler("help", self._cmd_help))
-        self._app.add_handler(CommandHandler("menu", self._cmd_menu))
-        self._app.add_handler(TGMessageHandler(filters.TEXT & ~filters.COMMAND, self._on_text))
-        self._app.add_handler(TGMessageHandler(filters.VOICE, self._on_voice))
-        self._app.add_handler(CallbackQueryHandler(self._on_callback))
+        self._register_handlers(self._app)
         await self._app.initialize()
         await self._app.start()
         updater = self._app.updater
@@ -208,6 +214,34 @@ class TelegramChannel(BaseChannel):
             except Exception as e:
                 logger.error("Telegram edit failed: {}", e)
 
+    def _activation_meta(self, update: Update) -> dict[str, Any]:
+        """What `/activation` needs to decide an answer: is this a group, and was the bot addressed.
+
+        With no bot identity there is nothing to compare against, so no keys are recorded and the
+        gateway leaves the message alone instead of guessing it was not for it."""
+        chat = update.effective_chat
+        msg = update.effective_message
+        if chat is None or msg is None:
+            return {}
+        if self._app is None:
+            return {}
+        bot = self._app.bot
+        try:
+            bot_id, username = bot.id, (bot.username or "").lower()
+        except RuntimeError:
+            # python-telegram-bot raises until get_me has answered who the bot is
+            return {}
+        if not bot_id and not username:
+            return {}
+        body = (msg.text or msg.caption or "").lower()
+        text_mention = any(
+            e.type == MessageEntity.TEXT_MENTION and e.user and e.user.id == bot_id for e in msg.entities or []
+        )
+        reply = msg.reply_to_message
+        replied_to_bot = bool(reply and reply.from_user and reply.from_user.id == bot_id)
+        mentioned = bool((username and "@" + username in body) or text_mention or replied_to_bot)
+        return {"chat_type": chat.type, "mentioned": mentioned}
+
     def _chat_id(self, update: Update) -> str:
         return str(update.effective_chat.id) if update.effective_chat else "0"
 
@@ -224,6 +258,7 @@ class TelegramChannel(BaseChannel):
         meta = {"chat_id": chat_id, "username": ""}
         if update.message and update.message.from_user:
             meta["username"] = update.message.from_user.username or ""
+        meta.update(self._activation_meta(update))
         if extra_meta:
             meta.update(extra_meta)
         event = IncomingMessage(
@@ -234,6 +269,12 @@ class TelegramChannel(BaseChannel):
             metadata=meta,
         )
         await self._handler(event)
+
+    async def _on_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        msg = update.effective_message
+        if msg is None or not msg.text:
+            return
+        await self._incoming(update, msg.text)
 
     async def _on_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.message or not update.message.text:
@@ -291,7 +332,7 @@ class TelegramChannel(BaseChannel):
         if data == "menu_new":
             await self._incoming(update, "/new", extra_meta={"callback": data})
         elif data == "menu_help":
-            await query.edit_message_text(TELEGRAM_HELP, reply_markup=build_menu_keyboard())
+            await self._incoming(update, "/help", extra_meta={"callback": data})
         elif data == "menu_tasks":
             await self._incoming(update, "/task list", extra_meta={"callback": data})
         elif data == "menu_monitors":
@@ -299,14 +340,7 @@ class TelegramChannel(BaseChannel):
         elif data == "menu_routines":
             await self._incoming(update, "/routine list", extra_meta={"callback": data})
         elif data == "menu_code":
-            await query.edit_message_text(
-                "💻 Code commands:\n"
-                "/code index - Index codebase\n"
-                "/code search <q> - Search\n"
-                "/code review <f> - Review file\n"
-                "/code start <g> - Start session",
-                reply_markup=build_menu_keyboard(),
-            )
+            await self._incoming(update, "/code", extra_meta={"callback": data})
         else:
             await query.edit_message_text(f"Unknown action: {data}")
 
@@ -330,8 +364,3 @@ class TelegramChannel(BaseChannel):
             return
         await self._incoming(update, "/reset")
         await update.message.reply_text("Session reset.")
-
-    async def _cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if update.message is None:
-            return
-        await update.message.reply_text(TELEGRAM_HELP, reply_markup=build_menu_keyboard())

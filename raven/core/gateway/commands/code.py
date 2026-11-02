@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 class CodeCommand(CommandHandler):
     name = "code"
     description = "Code management"
+    usage = "index [path] | search <query> | review <file> | start <goal> | status <id> | end <id>"
 
     async def execute(self, ctx: CommandContext) -> bool:
         gateway = self.gateway

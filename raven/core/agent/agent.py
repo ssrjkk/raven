@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from enum import Enum, auto
 from pathlib import Path
@@ -64,6 +65,15 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 
 
+# What /think <level> tells the model to do before it answers. Every provider receives these
+# words in the system prompt, so the level is not a parameter a provider is free to drop.
+THINK_INSTRUCTIONS = {
+    "low": "",
+    "medium": "Plan briefly before you answer.",
+    "high": "Work through the problem step by step before you answer, then give the answer.",
+}
+
+
 class Agent:
     def __init__(
         self,
@@ -76,6 +86,10 @@ class Agent:
         confirm_fn: Callable[[str, dict[str, Any]], Awaitable[bool]] | None = None,
     ):
         self.session = session
+        self.usage_totals: dict[str, int] = {"prompt": 0, "completion": 0, "rounds": 0}
+        self.think_level = "high"
+        self.show_tool_progress = True
+        self.trace = False
         self.tools = tools
         self.db = db
         self.llm = llm
@@ -124,6 +138,9 @@ class Agent:
         artifact_blocks = await self._artifact_blocks(ws)
         if artifact_blocks:
             base += artifact_blocks
+        instruction = THINK_INSTRUCTIONS.get(self.think_level, "")
+        if instruction:
+            base += "\n\n" + instruction
         return base
 
     async def _artifact_blocks(self, workspace: Path | None) -> str:
@@ -320,6 +337,7 @@ class Agent:
         history: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[str]:
         state = AgentState.INIT
+        self.usage_totals = {"prompt": 0, "completion": 0, "rounds": 0}
         messages: list[dict[str, Any]] = [{"role": "system", "content": await self._build_system_prompt()}]
         if confirm_fn is not None:
             # a run() without a confirmer must not erase the one the agent was built with
@@ -378,6 +396,7 @@ class Agent:
                     state = AgentState.DONE
                     break
 
+                _round_started = time.perf_counter()
                 resp = await self.llm.complete(messages, tools=schemas, priority=self.priority)
                 consecutive_errors = 0
                 delay = 0.5
@@ -386,6 +405,15 @@ class Agent:
                 actual_output = resp.completion_tokens or estimate_tokens(content)
                 # input tokens were already accounted for by check_budget above
                 await _budget_tracker.record_usage(self.session.user_id, actual_output, _budget_limit, 3600)
+                self.usage_totals["prompt"] += resp.prompt_tokens or input_tokens
+                self.usage_totals["completion"] += actual_output
+                self.usage_totals["rounds"] += 1
+                if self.trace:
+                    yield (
+                        f"[trace {round_i + 1}/{self.config.max_tool_rounds}: "
+                        f"{time.perf_counter() - _round_started:.1f}s | "
+                        f"{resp.prompt_tokens or input_tokens} in / {actual_output} out]\n"
+                    )
 
                 if resp.tool_calls:
                     state = AgentState.TOOL_CALL
@@ -416,7 +444,8 @@ class Agent:
                                 "content": json.dumps(tool_result, default=str),
                             }
                         )
-                        yield f"[{tc.name} → ok]\n"
+                        if self.show_tool_progress:
+                            yield f"[{tc.name} → ok]\n"
                     state = AgentState.THINK
                     continue
 

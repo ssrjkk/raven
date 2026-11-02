@@ -27,5 +27,8 @@ class CommandHandler(ABC):
     @abstractmethod
     def description(self) -> str: ...
 
+    usage: str = ""
+    """The arguments the handler accepts, as the operator has to type them in /help."""
+
     @abstractmethod
     async def execute(self, ctx: CommandContext) -> bool: ...

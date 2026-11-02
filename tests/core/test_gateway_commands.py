@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import importlib
+import re
 from collections.abc import AsyncIterator
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -9,10 +12,11 @@ import pytest
 
 from raven.core.agents import PROFILES
 from raven.core.auth import Permission
+from raven.core.gateway import commands as commands_package
 from raven.core.gateway.commands.agent import AgentCommand, AgentStatusCommand
 from raven.core.gateway.commands.base import CommandContext, CommandHandler
 from raven.core.gateway.commands.compact import CompactCommand
-from raven.core.gateway.commands.help import HelpCommand
+from raven.core.gateway.commands.help import EXTERNAL_COMMANDS, HelpCommand, command_entries, help_body
 from raven.core.gateway.commands.mcp import MCPCommand
 from raven.core.gateway.commands.new_session import NewSessionCommand
 from raven.core.gateway.commands.registry import CommandRegistry
@@ -40,11 +44,15 @@ class _FakeGateway:
         self.registry = SimpleNamespace(list_agents=lambda: [])
         self.mcp = SimpleNamespace(connected_count=0, list_servers_info=lambda: [])
         self._artifact_root: str | None = None
-        self.set_pref = MagicMock()
-        self.get_pref = MagicMock(return_value="off")
+        self.set_pref = AsyncMock()
+        self.get_pref = AsyncMock(return_value="off")
         self._check_permission = MagicMock(return_value=True)
         self._bg_task = AsyncMock()
-        self.tasks = SimpleNamespace(create_and_run=MagicMock(return_value="coro"))
+        self.tasks = SimpleNamespace(
+            create_and_run=MagicMock(return_value="coro"),
+            stored_tasks=AsyncMock(return_value=[]),
+        )
+        self.commands = production_registry(self)
 
 
 def _ctx(
@@ -52,6 +60,30 @@ def _ctx(
 ) -> CommandContext:
     event = IncomingMessage(channel=channel, user_id=user_id, session_id=session_id, text="/cmd")
     return CommandContext(event=event, user={}, args=args or [])
+
+
+COMMANDS_DIR = Path(commands_package.__file__).resolve().parent
+_REGISTERED = re.findall(
+    r"self\.commands\.register\((\w+)\(self\)\)",
+    (COMMANDS_DIR.parent / "gateway.py").read_text(encoding="utf-8"),
+)
+
+
+def _handler_class(name: str) -> type[CommandHandler]:
+    for path in sorted(COMMANDS_DIR.glob("*.py")):
+        if re.search(rf"^class {name}\(", path.read_text(encoding="utf-8"), re.MULTILINE):
+            module = importlib.import_module(f"raven.core.gateway.commands.{path.stem}")
+            handler: type[CommandHandler] = getattr(module, name)
+            return handler
+    raise AssertionError(f"{name} is registered in gateway.py but no command module defines it")
+
+
+def production_registry(gateway: Any) -> CommandRegistry:
+    """The same handlers, in the same order, that `Gateway._register_commands` installs."""
+    registry = CommandRegistry()
+    for class_name in _REGISTERED:
+        registry.register(_handler_class(class_name)(gateway))
+    return registry
 
 
 def _sent(gw: _FakeGateway) -> tuple[str, str, str]:
@@ -237,7 +269,7 @@ async def test_think_valid() -> None:
 
 async def test_think_invalid_shows_current() -> None:
     gw = _FakeGateway()
-    gw.get_pref = MagicMock(return_value="medium")
+    gw.get_pref = AsyncMock(return_value="medium")
     assert await ThinkCommand(gw).execute(_ctx(args=["bogus"])) is True
     gw.set_pref.assert_not_called()
     assert _sent(gw)[2] == "Thinking level: medium.\nUsage: /think <low|medium|high>"
@@ -492,3 +524,94 @@ async def test_task_without_a_known_role_attests_nothing(monkeypatch: pytest.Mon
     ctx = _ctx(args=["do a thing"])
     await TaskCommand(gw).execute(ctx)
     assert gw.tasks.create_and_run.call_args.kwargs["role"] is None
+
+
+# ---------------------------------------------------------------------------
+# /help is generated from the registry the gateway builds, not typed out by hand
+# ---------------------------------------------------------------------------
+
+
+def test_the_gateway_registers_the_commands_this_suite_covers() -> None:
+    assert len(_REGISTERED) == 20, _REGISTERED
+
+
+async def test_help_lists_every_command_the_gateway_registers() -> None:
+    """A command missing from /help is a command nobody finds: /verbose, /trace, /usage,
+    /activation, /restart, /agent and /agent_status were all registered and none was listed."""
+    registry = production_registry(MagicMock())
+    entries = command_entries(registry)
+    listed = {call.split(" ")[0].lstrip("/") for call, _ in entries}
+    names = {handler.name for handler in registry.list_commands()}
+    assert len(names) >= 20, names
+    assert listed == names | {call.split(" ")[0].lstrip("/") for call, _ in EXTERNAL_COMMANDS}
+    assert {"think", "verbose", "trace", "usage", "activation", "restart", "agent", "agent_status"} <= names
+
+
+async def test_help_shows_the_arguments_the_handler_accepts() -> None:
+    text = help_body(production_registry(MagicMock()))
+    assert "Commands:" in text
+    assert "/voice tts <text> | providers" in text
+    assert "/code index [path] | search <query>" in text
+    assert "/usage <off|tokens|full>" in text
+
+
+async def test_pair_is_listed_because_the_gateway_dispatches_it() -> None:
+    """`/pair` has no handler: the allowlist check answers it. If that branch ever stops matching
+    the text, the help line becomes a lie and this test has to fail."""
+    source = (COMMANDS_DIR.parent / "gateway.py").read_text(encoding="utf-8")
+    for call, _description in EXTERNAL_COMMANDS:
+        name = call.split(" ")[0]
+        assert f'startswith("{name}")' in source, name
+
+
+async def test_task_list_shows_the_stored_tasks_and_plans_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Telegram menu's Tasks button sends /task list; until the command answered it, that
+    button planned a task whose goal was the word 'list'."""
+    from raven.core.security.sandbox_policy import MAIN_SESSION_POLICY
+    from raven.core.task_engine.models import Task, TaskStatus
+
+    monkeypatch.setattr(
+        "raven.core.gateway.commands.task.get_policy_for_channel", lambda ch: MAIN_SESSION_POLICY
+    )
+    gw = _task_gw()
+    gw.tasks.stored_tasks = AsyncMock(
+        return_value=[
+            Task(id="abc123", user_id="u1", goal="index the repo", status=TaskStatus.COMPLETED),
+            Task(id="def456", user_id="u1", goal="watch the build", status=TaskStatus.RUNNING),
+        ]
+    )
+    assert await TaskCommand(gw).execute(_ctx(args=["list"])) is True
+    msg = _sent(gw)[2]
+    assert "abc123" in msg and "completed" in msg
+    assert "def456" in msg and "running" in msg
+    gw.tasks.stored_tasks.assert_awaited_once_with("u1")
+    gw.tasks.create_and_run.assert_not_called()
+
+
+async def test_task_list_names_the_way_to_start_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    from raven.core.security.sandbox_policy import MAIN_SESSION_POLICY
+
+    monkeypatch.setattr(
+        "raven.core.gateway.commands.task.get_policy_for_channel", lambda ch: MAIN_SESSION_POLICY
+    )
+    gw = _task_gw()
+    assert await TaskCommand(gw).execute(_ctx(args=["list"])) is True
+    assert "No tasks yet" in _sent(gw)[2]
+
+
+async def test_task_list_still_needs_the_task_permission(monkeypatch: pytest.MonkeyPatch) -> None:
+    from raven.core.security.sandbox_policy import MAIN_SESSION_POLICY
+
+    monkeypatch.setattr(
+        "raven.core.gateway.commands.task.get_policy_for_channel", lambda ch: MAIN_SESSION_POLICY
+    )
+    gw = _task_gw(perm=False)
+    assert await TaskCommand(gw).execute(_ctx(args=["list"])) is True
+    assert _sent(gw)[2] == "Access denied: insufficient permissions"
+    gw.tasks.stored_tasks.assert_not_awaited()
+
+
+def test_the_task_command_help_names_the_subcommand_it_answers() -> None:
+    registry = production_registry(MagicMock())
+    task = next(handler for handler in registry.list_commands() if handler.name == "task")
+    assert task.usage == "<goal> | list"

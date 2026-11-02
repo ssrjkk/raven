@@ -7,6 +7,7 @@ import secrets
 import string
 import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -58,6 +59,9 @@ from raven.core.skills import Skill, skills_registry
 from raven.core.task_engine.store import TaskStore
 from raven.core.tracing import TracingManager, get_tracer
 
+PREFS_PLUGIN_ID = "gateway:prefs"
+PREF_CACHE_MAX = 2048
+
 
 class Gateway:
     def __init__(self, db: Any, plugin_loader: PluginLoader, redis_url: str | None = None):
@@ -89,7 +93,7 @@ class Gateway:
         self._outbox = Outbox(self._outbox_path(), self._send_now)
         self._send_semaphores: dict[str, asyncio.Semaphore] = {}
         self._send_cbs: dict[str, CircuitBreaker] = {}
-        self._prefs: dict[str, dict[str, str]] = {}
+        self._prefs: OrderedDict[str, dict[str, str]] = OrderedDict()
         self._send_state_lock = asyncio.Lock()
         self._prefs_lock = threading.Lock()
 
@@ -144,15 +148,35 @@ class Gateway:
             ctxmgr=self._ctxmgr,
             metrics=metrics,
             send_fn=self._send,
+            get_pref_fn=self.get_pref,
         )
 
-    def set_pref(self, channel: str, user_id: str, key: str, value: str) -> None:
-        with self._prefs_lock:
-            self._prefs.setdefault(f"{channel}:{user_id}", {})[key] = value
+    async def set_pref(self, channel: str, user_id: str, key: str, value: str) -> None:
+        """A preference has to outlive the process and stay bounded: this dict used to grow one
+        entry per user with nothing evicting it, and a restart quietly reset everyone."""
+        await self.db.save_plugin_state(PREFS_PLUGIN_ID, f"{channel}:{user_id}:{key}", value)
+        self._cache_pref(channel, user_id, key, value)
 
-    def get_pref(self, channel: str, user_id: str, key: str, default: str = "") -> str:
+    def _cache_pref(self, channel: str, user_id: str, key: str, value: str) -> None:
         with self._prefs_lock:
-            return self._prefs.get(f"{channel}:{user_id}", {}).get(key, default)
+            entry = self._prefs.setdefault(f"{channel}:{user_id}", {})
+            entry[key] = value
+            self._prefs.move_to_end(f"{channel}:{user_id}")
+            while len(self._prefs) > PREF_CACHE_MAX:
+                self._prefs.popitem(last=False)
+
+    async def get_pref(self, channel: str, user_id: str, key: str, default: str = "") -> str:
+        holder = f"{channel}:{user_id}"
+        with self._prefs_lock:
+            cached = self._prefs.get(holder)
+            if cached is not None and key in cached:
+                self._prefs.move_to_end(holder)
+                return cached[key]
+        stored = await self.db.get_plugin_state(PREFS_PLUGIN_ID, f"{holder}:{key}")
+        if stored is None:
+            return default
+        self._cache_pref(channel, user_id, key, str(stored))
+        return str(stored)
 
     def _outbox_path(self) -> str:
         db_path: Any = getattr(self.db, "db_path", None)
@@ -589,6 +613,10 @@ class Gateway:
             if intent_handled:
                 return
 
+            if not await self._is_activated(event):
+                metrics.inc("messages_activation_skipped", {"channel": event.channel})
+                return
+
             session_id = event.session_id or f"{event.channel}:{event.user_id}:default"
             agent_profile = user.get("agent_profile", "") if isinstance(user, dict) else ""
             if agent_profile in ("architect", "planner", "coder", "reviewer", "debugger", "qa"):
@@ -599,6 +627,21 @@ class Gateway:
             clear_context()
 
         _t = await self._bg_task(self._extract_and_store(event.text, event.channel, event.user_id))
+
+    async def _is_activated(self, event: IncomingMessage) -> bool:
+        """`/activation mention` (the default the command reports) means the agent answers when the
+        bot is addressed; `/activation always` answers in a group whatever the addressee. Commands
+        and intents are already handled by the time this runs, so nobody loses `/help`.
+
+        A channel that records neither the chat type nor a mention is left alone: inventing an
+        answer here would silence chats that used to be answered."""
+        mode = await self.get_pref(event.channel, event.user_id, "activation_mode", "mention")
+        if mode == "always":
+            return True
+        meta = event.metadata or {}
+        if meta.get("chat_type") not in ("group", "supergroup", "channel"):
+            return True
+        return bool(meta.get("mentioned"))
 
     async def _handle_with_orchestrator(self, event: IncomingMessage, session_id: str, profile: str) -> None:
         from raven.core.agents.orchestrator import StatusEmitter

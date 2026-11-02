@@ -144,6 +144,26 @@ class TestSettingsFieldConsumers:
         )
         assert orphans == [], f"Settings fields nothing reads (wire them or delete them): {orphans}"
 
+    def test_no_setting_is_only_writeable(self) -> None:
+        """The scan above accepts the env name, which let a field sit unread as long as some code
+        read the same variable straight out of os.environ: Settings.jenkins_url and
+        Settings.replicate_api_token were exactly that, a second knob for a knob that already
+        worked. Here a field counts as consumed only when something reaches it through Settings
+        (or config.py itself, which derives resolved_* paths) or maps it in config_store."""
+        files, source = self._production_source()
+        assert len(files) > 500, f"scan covered only {len(files)} files - it is vacuous"
+        assert not re.search(r"settings\.the_setting_nobody_reads", source), "the pattern is matching everything"
+        declarations = (ROOT / "raven" / "core" / "config.py").read_text(encoding="utf-8")
+        alias_map = (ROOT / "raven" / "core" / "config_store.py").read_text(encoding="utf-8")
+        orphans = sorted(
+            name
+            for name in _settings_env_candidates()
+            if f'"{name}"' not in alias_map
+            and not re.search(rf"settings\.{name}([^A-Za-z0-9_]|$)", source)
+            and not re.search(rf"self\.{name}([^A-Za-z0-9_]|$)", declarations)
+        )
+        assert orphans == [], f"Settings fields nothing reads through Settings: {orphans}"
+
     def test_a_field_without_a_consumer_is_caught(self) -> None:
         _, source = self._production_source()
         assert not re.search(r"\bthe_field_nobody_reads\b", source)
