@@ -91,7 +91,7 @@ ml = [
     "peft>=0.10,<1.0",
     "datasets>=2.20,<3.0",
 ]
-ner = ["spacy>=3.7,<4.0"]
+ner = ["spacy>=3.8.18,<4.0"]
 postgres = ["asyncpg>=0.29"]
 crdt = ["y-py>=0.6.2,<1.0"]
 profiling = ["py-spy>=0.4.2,<1.0"]
