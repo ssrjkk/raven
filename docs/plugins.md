@@ -1,3 +1,7 @@
+---
+description: "Writing a plugin: the supported types, the manifest, skills, and how a plugin registers tools the gateway will run."
+---
+
 # Plugin Development Guide
 
 _by [@ssrjkk](https://github.com/ssrjkk)_

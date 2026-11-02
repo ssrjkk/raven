@@ -1,3 +1,7 @@
+---
+description: "Every host the server can call out to, grouped by purpose: providers, search tools, channel APIs, repository hosting and monitors."
+---
+
 # Network egress map
 
 Every destination a Raven process can be reached at, named in the source that calls it. The landing

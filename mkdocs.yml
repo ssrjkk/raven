@@ -2,7 +2,7 @@ site_name: Raven AI
 site_author: ssrjkk
 copyright: Copyright &copy; 2026 by <a href="https://github.com/ssrjkk">ssrjkk</a>
 site_url: https://ssrjkk.github.io/raven/docs/
-site_description: Personal AI Assistant — Any Channel. Any Platform.
+site_description: "Self-hosted MCP server and channel gateway: tools, transports, policies and setup."
 repo_url: https://github.com/ssrjkk/raven
 repo_name: ssrjkk/raven
 

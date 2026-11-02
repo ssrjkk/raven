@@ -1,3 +1,7 @@
+---
+description: "DM pairing policy, tool execution levels, workspace confinement, context visibility and PII redaction, and sandboxing."
+---
+
 # Security Overview
 
 _by [@ssrjkk](https://github.com/ssrjkk)_

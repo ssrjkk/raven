@@ -1,3 +1,7 @@
+---
+description: "Install with pipx or Docker, start the gateway, add the MCP server to a client, and set the variables it reads."
+---
+
 # Getting Started
 
 _by [@ssrjkk](https://github.com/ssrjkk)_

@@ -1,3 +1,7 @@
+---
+description: "Every environment variable Raven reads, grouped by provider, channel, security, rate limits and paths, plus the config file."
+---
+
 # Configuration
 
 _by [@ssrjkk](https://github.com/ssrjkk)_

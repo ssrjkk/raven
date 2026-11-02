@@ -1,3 +1,7 @@
+---
+description: "The development loop: environment setup, the quick and full validation gates in scripts/check_all.py, test layout and the frontend workflow."
+---
+
 # Development
 
 _by [@ssrjkk](https://github.com/ssrjkk)_

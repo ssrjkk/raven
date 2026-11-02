@@ -1,3 +1,7 @@
+---
+description: "The channel adapters that ship, the inbound verification each one performs, and the optional dependencies and variables per platform."
+---
+
 # Channels Overview
 
 _by [@ssrjkk](https://github.com/ssrjkk)_

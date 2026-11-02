@@ -1,3 +1,7 @@
+---
+description: "What raven-mcp and ravencode-mcp expose over stdio and HTTP, and how to add them to Claude Desktop, Qoder, opencode or Cursor."
+---
+
 # MCP integration
 
 _by [@ssrjkk](https://github.com/ssrjkk)_

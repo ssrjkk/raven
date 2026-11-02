@@ -1,3 +1,7 @@
+---
+description: "Reference for the raven command tree: start, status, doctor, deploy, agent, backup, models and the coding agent CLI."
+---
+
 # CLI Reference
 
 _by [@ssrjkk](https://github.com/ssrjkk)_

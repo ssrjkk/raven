@@ -1,3 +1,7 @@
+---
+description: "What Raven is: a self-hosted MCP server and channel gateway, its features, the quick start and the channels it speaks."
+---
+
 # Raven AI
 
 _by [@ssrjkk](https://github.com/ssrjkk)_

@@ -1,3 +1,7 @@
+---
+description: "How a message travels: channel adapter to gateway, session and memory, tool policy, the LLM router and the way back."
+---
+
 # Architecture
 
 _by [@ssrjkk](https://github.com/ssrjkk)_

@@ -958,6 +958,36 @@ def test_each_inner_page_publishes_its_breadcrumb() -> None:
         assert trail == [(1, "Home", PUBLISHED_URL), (2, label, page_url(name))], name
 
 
+DESCRIPTION_TAG = re.compile(r'<meta name="description" content="([^"]+)">')
+CARD_TAG = re.compile(r'<meta property="og:description" content="([^"]+)">')
+
+
+def description_of(name: str) -> str:
+    found = DESCRIPTION_TAG.search(page(name))
+    assert found is not None, name
+    return found.group(1)
+
+
+def test_every_snippet_fits_the_room_a_search_result_gives_it() -> None:
+    """A description longer than ~155 characters is cut with an ellipsis, and a page without
+    one gets a sentence lifted out of its own body text. Neither is visible in a browser, so
+    the band is measured from the files: 50 characters is the floor below which a snippet
+    stops being a reason to click, 155 the ceiling above which the sentence stops being whole."""
+    for name in CONTENT_PAGES:
+        length = len(description_of(name))
+        assert 50 <= length <= 155, (name, length)
+        html = page(name)
+        card = CARD_TAG.search(html)
+        twitter = re.search(r'<meta name="twitter:description" content="([^"]+)">', html)
+        assert card is not None and twitter is not None, name
+        assert card.group(1) == twitter.group(1), name
+        assert len(card.group(1)) <= 200, (name, len(card.group(1)))
+
+
+def test_the_snippet_guard_detects_the_truncation_it_forbids() -> None:
+    synthetic = '<meta name="description" content="' + "word " * 40 + '">'
+    assert len(DESCRIPTION_TAG.search(synthetic).group(1)) > 155  # type: ignore[union-attr]
+
 def test_the_software_application_claim_matches_the_project() -> None:
     blocks = [json.loads(block) for block in LD_JSON.findall(page("index.html"))]
     app = next(item for item in blocks if item.get("@type") == "SoftwareApplication")
@@ -966,6 +996,10 @@ def test_the_software_application_claim_matches_the_project() -> None:
     assert app["codeRepository"] == "https://github.com/ssrjkk/raven"
     assert app["softwareVersion"] == project_version()
     assert app["license"] == "https://opensource.org/licenses/MIT"
+    assert app["@id"] == PUBLISHED_URL + "#raven", "the entities on the page cannot be linked"
+    assert app["operatingSystem"] == "Linux, macOS, Windows", app["operatingSystem"]
+    assert app["description"] == description_of("index.html"), "the schema and the snippet describe different software"
+    assert app["offers"]["priceCurrency"] == "USD"
 
 
 def test_the_404_is_not_indexed_and_has_no_canonical() -> None:
@@ -980,8 +1014,11 @@ def test_the_sitemap_lists_every_content_page_and_no_404() -> None:
     xml = read(SITE / "sitemap.xml")
     assert sitemap_locations() == [page_url(name) for name in CONTENT_PAGES]
     assert "404" not in xml
-    for lastmod in re.findall(r"<lastmod>([^<]+)</lastmod>", xml):
-        date.fromisoformat(lastmod)
+    dates = [date.fromisoformat(stamp) for stamp in re.findall(r"<lastmod>([^<]+)</lastmod>", xml)]
+    assert len(dates) == len(CONTENT_PAGES), "a listed page has no lastmod"
+    # A date the crawler cannot have seen yet is a claim about the future: it teaches the
+    # search engine to ignore the file, so the ceiling is today, not a round number.
+    assert all(stamp <= date.today() for stamp in dates), max(dates)
 
 
 def test_robots_points_at_the_sitemap() -> None:
