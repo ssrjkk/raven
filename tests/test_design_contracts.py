@@ -150,6 +150,42 @@ def _used_tokens() -> dict[str, list[str]]:
 # ── tokens resolve ─────────────────────────────────────────────────
 
 
+def tables_without_row_labels(html: str) -> list[str]:
+    """Captions of tables that contain a data row starting with <td>.
+
+    Below 520px the site hides <thead> and turns every row into a labelled block -- a sideways
+    scroller that gives no hint it scrolls is worse than a second line -- so the row header is
+    the only thing that keeps a phone reader knowing what a block describes."""
+    offenders: list[str] = []
+    for table in re.findall(r"<table>(.*?)</table>", html, re.S):
+        match = re.search(r"<caption>(.*?)</caption>", table, re.S)
+        caption = match.group(1).strip()[:40] if match else "(no caption)"
+        for row in re.findall(r"<tr>\s*(.*?)</tr>", table, re.S):
+            if row.lstrip().startswith("<td"):
+                offenders.append(caption)
+    return offenders
+
+
+def test_every_data_table_carries_row_labels_the_mobile_layout_needs() -> None:
+    offenders: list[str] = []
+    for path in sorted((ROOT / "site").glob("*.html")):
+        if "404" in path.name:
+            continue
+        for caption in tables_without_row_labels(path.read_text(encoding="utf-8")):
+            offenders.append(f"{path.name}: {caption!r}")
+    assert offenders == [], offenders
+
+
+def test_the_row_label_guard_detects_the_layout_it_protects() -> None:
+    broken = (
+        "<table><caption>Example</caption><thead><tr><th scope=\"col\">A</th>"
+        "<th scope=\"col\">B</th></tr></thead><tbody><tr><td>one</td><td>two</td></tr></tbody></table>"
+    )
+    assert tables_without_row_labels(broken) == ["Example"]
+    labelled = broken.replace("<tr><td>one</td>", '<tr><th scope="row">one</th><td>')
+    assert tables_without_row_labels(labelled) == []
+
+
 def test_no_component_asks_for_a_token_the_theme_never_defines() -> None:
     declared = _css_declared_tokens()
     unresolved: dict[str, list[str]] = {}
