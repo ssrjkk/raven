@@ -150,7 +150,7 @@ export default function AgentConsole() {
           <div className="flex-1 space-y-2 overflow-y-auto p-3">
             {traces.length === 0 && (
               <p className="py-8 text-center text-sm text-tertiary">
-                Отправьте промпт — сюда будут стримиться события step/tool/message
+                Send a prompt — step/tool/message events stream here
               </p>
             )}
             {traces.map((t) => (

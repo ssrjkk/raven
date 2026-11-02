@@ -32,28 +32,28 @@ interface EventMeta {
 }
 
 const PROFILE_LABELS: Record<string, string> = {
-  planner: "Планировщик",
-  architect: "Архитектор",
-  coder: "Исполнитель",
-  reviewer: "Ревьюер",
-  debugger: "Отладчик",
+  planner: "Planner",
+  architect: "Architect",
+  coder: "Coder",
+  reviewer: "Reviewer",
+  debugger: "Debugger",
   qa: "QA",
-  researcher: "Исследователь",
+  researcher: "Researcher",
   security: "Security",
 };
 
 const EVENT_META: Record<string, EventMeta> = {
-  agent_started: { label: "Агент запущен", tone: "accent", icon: <Bot className="w-4 h-4" /> },
-  agent_completed: { label: "Задача завершена", tone: "success", icon: <CheckCircle2 className="w-4 h-4" /> },
-  planning: { label: "Анализ запроса", tone: "accent", icon: <BrainCircuit className="w-4 h-4" /> },
-  plan_created: { label: "План создан", tone: "accent", icon: <ListChecks className="w-4 h-4" /> },
-  step_started: { label: "Шаг выполняется", tone: "accent", icon: <TerminalSquare className="w-4 h-4" /> },
-  tool_call: { label: "Вызов инструмента", tone: "default", icon: <Wrench className="w-4 h-4" /> },
-  tool_result: { label: "Результат инструмента", tone: "default", icon: <CheckCircle2 className="w-4 h-4" /> },
-  thinking: { label: "Размышление", tone: "default", icon: <BrainCircuit className="w-4 h-4" /> },
-  critic_started: { label: "Критик ревьюит", tone: "accent", icon: <ShieldAlert className="w-4 h-4" /> },
-  handoff: { label: "Передача агенту", tone: "accent", icon: <GitBranch className="w-4 h-4" /> },
-  error: { label: "Ошибка", tone: "error", icon: <XCircle className="w-4 h-4" /> },
+  agent_started: { label: "Agent started", tone: "accent", icon: <Bot className="w-4 h-4" /> },
+  agent_completed: { label: "Task completed", tone: "success", icon: <CheckCircle2 className="w-4 h-4" /> },
+  planning: { label: "Analyzing request", tone: "accent", icon: <BrainCircuit className="w-4 h-4" /> },
+  plan_created: { label: "Plan created", tone: "accent", icon: <ListChecks className="w-4 h-4" /> },
+  step_started: { label: "Step running", tone: "accent", icon: <TerminalSquare className="w-4 h-4" /> },
+  tool_call: { label: "Tool call", tone: "default", icon: <Wrench className="w-4 h-4" /> },
+  tool_result: { label: "Tool result", tone: "default", icon: <CheckCircle2 className="w-4 h-4" /> },
+  thinking: { label: "Thinking", tone: "default", icon: <BrainCircuit className="w-4 h-4" /> },
+  critic_started: { label: "Critic review", tone: "accent", icon: <ShieldAlert className="w-4 h-4" /> },
+  handoff: { label: "Handed to agent", tone: "accent", icon: <GitBranch className="w-4 h-4" /> },
+  error: { label: "Error", tone: "error", icon: <XCircle className="w-4 h-4" /> },
 };
 
 const PHASE_ORDER: Record<Phase, number> = { plan: 0, execute: 1, critic: 2, done: 3, error: 4 };
@@ -172,11 +172,11 @@ function PhaseTracker({ events }: { events: AgentEvent[] }) {
   }
 
   const labels: Record<Phase, string> = {
-    plan: "План",
-    execute: "Исполнение",
-    critic: "Ревью",
-    done: "Готово",
-    error: "Ошибка",
+    plan: "Plan",
+    execute: "Execute",
+    critic: "Review",
+    done: "Done",
+    error: "Error",
   };
 
   return (
@@ -204,7 +204,7 @@ export function AgentStream({ events }: { events: AgentEvent[] }) {
     return (
       <div className="flex flex-col items-center gap-3 py-10 text-center text-tertiary">
         <Bot className="w-8 h-8 text-tertiary" />
-        <p className="text-sm">Агент пока бездействует. Отправьте запрос — здесь появится живой поток работы.</p>
+        <p className="text-sm">The agent is idle. Send a request and its live work stream appears here.</p>
       </div>
     );
   }
@@ -237,7 +237,7 @@ export function AgentStream({ events }: { events: AgentEvent[] }) {
       {isRunning && (
         <div className="mt-2 flex items-center gap-2 text-xs text-accent">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Агенты работают...
+          Agents are working...
         </div>
       )}
     </div>

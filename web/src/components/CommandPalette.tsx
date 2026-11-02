@@ -3,8 +3,8 @@ import { Search, Sparkles } from "lucide-react";
 import { useEffect, useMemo,useRef, useState } from "react";
 
 import { useTheme } from "../design/ThemeContext";
-import { CommandItem, useCommands } from "../hooks/useCommands";
-import { fuzzyMatch,FuzzyResult } from "../lib/fuzzy";
+import { useCommands } from "../hooks/useCommands";
+import { rankCommands } from "../lib/command-search";
 
 interface Props {
   isOpen: boolean;
@@ -18,15 +18,7 @@ export const CommandPalette = ({ isOpen, onClose }: Props) => {
   const { commands, isLoading } = useCommands(toggleTheme);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const filteredCommands = useMemo(() => {
-    const q = query.toLowerCase().trim();
-    if (!q) return commands.map((cmd) => ({ cmd, indices: [] as number[] }));
-    return commands
-      .map((cmd) => ({ cmd, match: fuzzyMatch(q, cmd.label) }))
-      .filter((entry): entry is { cmd: CommandItem; match: FuzzyResult } => entry.match !== null)
-      .sort((a, b) => b.match.score - a.match.score)
-      .map(({ cmd, match }) => ({ cmd, indices: match.indices }));
-  }, [commands, query]);
+  const filteredCommands = useMemo(() => rankCommands(query, commands), [commands, query]);
 
   const highlight = (text: string, indices: number[]) => {
     const marks = new Set(indices);
@@ -104,7 +96,7 @@ export const CommandPalette = ({ isOpen, onClose }: Props) => {
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Введите команду или опишите действие..."
+                  placeholder="Type a command or describe what you want to do..."
                   className="flex-1 bg-transparent text-primary placeholder:text-[var(--dt-colors-text-tertiary)] outline-none text-lg"
                 />
                 {isLoading && (
@@ -115,7 +107,7 @@ export const CommandPalette = ({ isOpen, onClose }: Props) => {
               <div className="max-h-[60vh] overflow-y-auto p-2 space-y-1">
                 {filteredCommands.length === 0 ? (
                   <div className="px-4 py-8 text-center text-tertiary">
-                    Ничего не найдено. Попробуйте описать задачу иначе.
+                    Nothing matched. Try describing the task differently.
                   </div>
                 ) : (
                   filteredCommands.map(({ cmd, indices }, index) => (
@@ -148,13 +140,13 @@ export const CommandPalette = ({ isOpen, onClose }: Props) => {
 
               <div className="px-4 py-2 bg-primary border-t border-default flex items-center justify-between text-xs text-tertiary">
                 <div className="flex gap-4">
-                  <span><kbd className="bg-tertiary px-1.5 py-0.5 rounded">↑↓</kbd> навигация</span>
-                  <span><kbd className="bg-tertiary px-1.5 py-0.5 rounded">↵</kbd> выбор</span>
-                  <span><kbd className="bg-tertiary px-1.5 py-0.5 rounded">esc</kbd> закрыть</span>
+                  <span><kbd className="bg-tertiary px-1.5 py-0.5 rounded">↑↓</kbd> navigate</span>
+                  <span><kbd className="bg-tertiary px-1.5 py-0.5 rounded">↵</kbd> select</span>
+                  <span><kbd className="bg-tertiary px-1.5 py-0.5 rounded">esc</kbd> close</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <Sparkles className="w-3 h-3 text-accent" />
-                  <span>AI-контекст активен</span>
+                  <span>AI context active</span>
                 </div>
               </div>
             </div>

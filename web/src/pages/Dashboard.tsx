@@ -17,9 +17,9 @@ export default function Dashboard() {
   const flowSessions = useSessionEvents();
 
   const quickActions = [
-    { label: "Новый чат", icon: MessageSquare, to: "/chat" },
-    { label: "Создать задачу", icon: ListTodo, to: "/tasks" },
-    { label: "Git-статус", icon: GitBranch, to: "/git" },
+    { label: "New chat", icon: MessageSquare, to: "/chat" },
+    { label: "Create a task", icon: ListTodo, to: "/tasks" },
+    { label: "Git status", icon: GitBranch, to: "/git" },
   ];
 
   const metricCards = [
@@ -74,10 +74,10 @@ export default function Dashboard() {
               <h2 className="text-xl font-bold tracking-tight gradient-text">Welcome back</h2>
             </div>
             <p className="text-sm" style={{ color: "var(--dt-colors-text-tertiary)" }}>
-              Raven в сети
-              {sys?.channels ? ` — активно каналов: ${sys.channels}` : ""}
-              {status?.agents?.length ? `, агентов: ${status.agents.length}` : ""}
-              {status?.plugins ? `, плагинов: ${status.plugins}` : ""}.
+              Raven is online
+              {sys?.channels ? ` — active channels: ${sys.channels}` : ""}
+              {status?.agents?.length ? `, agents: ${status.agents.length}` : ""}
+              {status?.plugins ? `, plugins: ${status.plugins}` : ""}.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

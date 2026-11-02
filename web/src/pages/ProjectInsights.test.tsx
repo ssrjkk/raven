@@ -30,7 +30,7 @@ describe("ProjectInsights", () => {
   it("renders stat cards with formatted values", async () => {
     renderWithProviders(<ProjectInsights />);
     await waitFor(() => {
-      expect(screen.getByText("1 ч 30 мин")).toBeInTheDocument();
+      expect(screen.getByText("1 h 30 min")).toBeInTheDocument();
     });
     expect(screen.getByText("62.5%")).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
@@ -48,14 +48,14 @@ describe("ProjectInsights", () => {
   it("renders chart section", async () => {
     renderWithProviders(<ProjectInsights />);
     await waitFor(() => {
-      expect(screen.getByText("Коммиты по дням")).toBeInTheDocument();
+      expect(screen.getByText("Commits by day")).toBeInTheDocument();
     });
   });
 
   it("renders generated_at timestamp", async () => {
     renderWithProviders(<ProjectInsights />);
     await waitFor(() => {
-      expect(screen.getByText(/Обновлено:/)).toBeInTheDocument();
+      expect(screen.getByText(/Updated:/)).toBeInTheDocument();
     });
   });
 });

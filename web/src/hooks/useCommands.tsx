@@ -3,6 +3,7 @@ import { useEffect,useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { getToken } from "../api/client";
+import { COMMAND_KEYWORDS } from "./command-keywords";
 
 export interface CommandItem {
   id: string;
@@ -12,6 +13,12 @@ export interface CommandItem {
   category: "action" | "navigation" | "ai";
   action: () => void;
   shortcut?: string;
+  keywords?: string[];
+}
+
+function keywordsFor(id: string, provided?: unknown): string[] {
+  if (Array.isArray(provided)) return provided.map(String);
+  return COMMAND_KEYWORDS[id] ?? [];
 }
 
 function parseCategory(raw: unknown): CommandItem["category"] {
@@ -47,21 +54,23 @@ export function useCommands(onToggleTheme?: () => void) {
         const baseCommands: CommandItem[] = [
           {
             id: "new-project",
-            label: "Создать новый проект",
-            description: "Запустить мастер создания проекта с AI",
+            label: "Create a new project",
+            description: "Open the AI-guided project wizard",
             icon: <Sparkles className="w-5 h-5 text-accent" />,
             category: "ai",
             action: () => navigate("/scaffold"),
             shortcut: "⌘N",
+            keywords: keywordsFor("new-project"),
           },
           {
             id: "toggle-theme",
-            label: "Переключить тему",
-            description: "Светлая / Тёмная / Midnight",
+            label: "Toggle theme",
+            description: "Light / Dark / Midnight",
             icon: <Settings className="w-5 h-5 text-secondary" />,
             category: "action",
             action: onToggleTheme ?? (() => {}),
             shortcut: "⌘T",
+            keywords: keywordsFor("toggle-theme"),
           },
           ...(Array.isArray(dynamicCommands) ? dynamicCommands.map((cmd: Record<string, unknown>) => ({
             id: String(cmd.id ?? ""),
@@ -73,6 +82,7 @@ export function useCommands(onToggleTheme?: () => void) {
             category: parseCategory(cmd.category),
             action: () => {},
             shortcut: cmd.shortcut ? String(cmd.shortcut) : undefined,
+            keywords: keywordsFor(String(cmd.id ?? ""), cmd.keywords),
           })) : []),
         ];
         setCommands(baseCommands);

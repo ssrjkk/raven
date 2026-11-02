@@ -9,10 +9,10 @@ import PageHeader from "./PageHeader";
 import { useToast } from "./Toast";
 
 const SUGGESTIONS = [
-  { icon: Sparkles, label: "Спланировать фичу", prompt: "Составь детальный план реализации новой фичи в проекте" },
-  { icon: FileCode2, label: "Рефакторинг", prompt: "Проанализируй код и предложи рефакторинг проблемных мест" },
-  { icon: Wrench, label: "Диагностика", prompt: "Проверь проект на ошибки и предложи исправления" },
-  { icon: RefreshCw, label: "Git-статус", prompt: "Покажи git-статус и последние изменения в репозитории" },
+  { icon: Sparkles, label: "Plan a feature", prompt: "Write a detailed plan for implementing a new feature in this project" },
+  { icon: FileCode2, label: "Refactor", prompt: "Analyse the code and propose refactors for the problem spots" },
+  { icon: Wrench, label: "Diagnose", prompt: "Check the project for errors and propose fixes" },
+  { icon: RefreshCw, label: "Git status", prompt: "Show git status and the latest changes in the repository" },
 ];
 
 function sessionLabel(s: Session): string {
@@ -162,7 +162,7 @@ export default function Chat() {
     <div className="flex flex-col h-[calc(100vh-6rem)]">
       <PageHeader
         title="Chat"
-        subtitle="Разговоры с агентами Raven"
+        subtitle="Conversations with the Raven agents"
         actions={
           <>
             <span className={connected ? "badge badge-success" : "badge badge-error"}>
@@ -200,7 +200,7 @@ export default function Chat() {
                 onClick={() => setStreamVisible(false)}
                 className="text-xs text-tertiary hover:text-secondary transition"
               >
-                Свернуть поток
+                Collapse stream
               </button>
             </div>
             <AgentStream events={agentEvents} />
@@ -240,9 +240,9 @@ export default function Chat() {
           >
             R
           </div>
-          <h2 className="text-2xl font-bold tracking-tight gradient-text">Чем помочь сегодня?</h2>
+          <h2 className="text-2xl font-bold tracking-tight gradient-text">What can I help with today?</h2>
           <p className="text-sm mt-2 mb-7" style={{ color: "var(--dt-colors-text-tertiary)" }}>
-            Начните разговор с агентами или выберите быстрый сценарий
+            Start a conversation with an agent or pick a quick scenario
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-xl">
             {SUGGESTIONS.map(({ icon: Icon, label, prompt }) => (
@@ -281,13 +281,13 @@ export default function Chat() {
           onKeyDown={onComposerKeyDown}
           rows={1}
           disabled={!connected}
-          placeholder={connected ? "Сообщение… (Enter — отправить, Shift+Enter — новая строка)" : "Подключение к серверу…"}
+          placeholder={connected ? "Message… (Enter to send, Shift+Enter for a new line)" : "Connecting to the server…"}
           className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm outline-none text-primary placeholder:text-[var(--dt-colors-text-tertiary)] disabled:opacity-60"
           style={{ maxHeight: 160 }}
         />
         <div className="flex items-center justify-between gap-2 px-3 pb-2.5">
           <span className="text-[11px]" style={{ color: "var(--dt-colors-text-tertiary)" }}>
-            {connected ? "Enter — отправить · Shift+Enter — новая строка" : "Ожидание соединения…"}
+            {connected ? "Enter to send · Shift+Enter for a new line" : "Waiting for the connection…"}
           </span>
           <button
             type="submit"

@@ -116,3 +116,50 @@ def test_this_file_holds_no_non_ascii_bytes() -> None:
     raw = pathlib.Path(__file__).read_bytes()
     bad = [i for i, byte in enumerate(raw) if byte > 127]
     assert bad == [], f"first stray byte at offset {bad[0]}"
+
+
+CYRILLIC = re.compile(r"[\u0400-\u04ff]")
+ALIAS_TABLE = "web/src/hooks/command-keywords.ts"
+UI_SOURCE_SUFFIXES = {".ts", ".tsx"}
+
+
+def ui_chrome_files() -> list[pathlib.Path]:
+    """Shipped SPA source: rendered text lives here, so it must be in one language."""
+    base = ROOT / "web" / "src"
+    return sorted(
+        path for path in base.rglob("*")
+        if path.is_file() and path.suffix in UI_SOURCE_SUFFIXES
+        and ".test." not in path.name
+        and path.relative_to(ROOT).as_posix() != ALIAS_TABLE
+    )
+
+
+def test_the_ui_chrome_speaks_one_language() -> None:
+    """Eight of the sixty-six shipped SPA files carried Russian labels while the rest were
+    English, so one screen could show "Commits" next to the Russian word for "Files". The
+    palette is typed into in whatever language the operator thinks in, which is what the alias
+    table below is for."""
+    files = ui_chrome_files()
+    assert len(files) > 50, f"walker found only {len(files)} shipped SPA files"
+    offenders = [
+        path.relative_to(ROOT).as_posix() for path in files
+        if CYRILLIC.search(path.read_text(encoding="utf-8"))
+    ]
+    assert offenders == [], "rendered UI text must be English (aliases belong in the alias table)"
+    commands = (ROOT / "raven" / "core" / "commands_api.py").read_text(encoding="utf-8")
+    assert not CYRILLIC.search(commands), "command labels from the API render in the palette"
+
+
+def test_the_alias_table_is_search_only_and_never_rendered() -> None:
+    """Translating the palette would otherwise break Russian typing, which is the whole point of
+    the table -- so it stays the single sanctioned exception, and it may not be imported by a
+    component that would put it on screen."""
+    alias = (ROOT / ALIAS_TABLE).read_text(encoding="utf-8")
+    assert CYRILLIC.search(alias), "the aliases are what keep a Russian query finding a command"
+    importers = [
+        path.name for path in (ROOT / "web" / "src").rglob("*")
+        if path.is_file() and path.suffix in UI_SOURCE_SUFFIXES
+        and ".test." not in path.name
+        and "command-keywords" in path.read_text(encoding="utf-8")
+    ]
+    assert importers == ["useCommands.tsx"], "only the command source may read the alias table"

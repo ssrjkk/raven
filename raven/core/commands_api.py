@@ -278,8 +278,8 @@ def create_commands_router(data_dir: str | None = None) -> APIRouter:
             commands.append(
                 CommandResponse(
                     id="scaffold-api",
-                    label="Создать FastAPI структуру",
-                    description="Сгенерировать boilerplate для нового API",
+                    label="Create a FastAPI layout",
+                    description="Generate the boilerplate for a new API",
                     icon="code",
                     category="ai",
                     action_endpoint="/api/v1/ai/scaffold",
@@ -289,8 +289,8 @@ def create_commands_router(data_dir: str | None = None) -> APIRouter:
         commands.append(
             CommandResponse(
                 id="generate-tests",
-                label="Сгенерировать тесты",
-                description="AI напишет unit-тесты для текущих модулей",
+                label="Generate tests",
+                description="AI writes unit tests for the current modules",
                 icon="code",
                 category="ai",
                 action_endpoint="/api/v1/ai/generate-tests",

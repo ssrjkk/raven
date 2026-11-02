@@ -52,7 +52,7 @@ function ArtifactBody({ artifact }: { artifact: AgentArtifact }) {
   if (type === "mermaid") {
     return (
       <div className="text-xs text-secondary">
-        <p className="mb-2">Диаграмма: подключите Mermaid-рендер для живого превью. Исходник:</p>
+        <p className="mb-2">Diagram: attach a Mermaid renderer for a live preview. Source:</p>
         <pre className="whitespace-pre-wrap rounded border border-default bg-tertiary p-2 font-mono text-xs text-secondary">
           {artifact.content}
         </pre>
@@ -154,7 +154,7 @@ export default function AgentArtifactPanel({
         <div className="flex-1 space-y-3 overflow-y-auto p-3">
           {artifacts.length === 0 && (
             <p className="py-8 text-center text-sm text-tertiary">
-              Артефакты появятся здесь, когда агент вызовет create_artifact
+              Artifacts will show up here once the agent calls create_artifact
             </p>
           )}
           {artifacts.map((a) => (

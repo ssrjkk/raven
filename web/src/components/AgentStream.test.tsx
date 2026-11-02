@@ -6,7 +6,7 @@ import { AgentEvent,AgentStream } from "./AgentStream";
 describe("AgentStream", () => {
   it("shows empty state when no events", () => {
     render(<AgentStream events={[]} />);
-    expect(screen.getByText(/Агент пока бездействует/)).toBeInTheDocument();
+    expect(screen.getByText(/The agent is idle/)).toBeInTheDocument();
   });
 
   it("renders flow header", () => {
@@ -22,8 +22,8 @@ describe("AgentStream", () => {
       { type: "agent_status", event: "agent_started", profile: "coder", detail: "coder started" },
     ];
     render(<AgentStream events={events} />);
-    expect(screen.getByText("Агент запущен")).toBeInTheDocument();
-    expect(screen.getByText("Исполнитель")).toBeInTheDocument();
+    expect(screen.getByText("Agent started")).toBeInTheDocument();
+    expect(screen.getByText("Coder")).toBeInTheDocument();
   });
 
   it("renders plan steps from data", () => {
@@ -55,7 +55,7 @@ describe("AgentStream", () => {
       { type: "agent_status", event: "agent_completed", profile: "coder", detail: "all done" },
     ];
     render(<AgentStream events={events} />);
-    expect(screen.getByText("Задача завершена")).toBeInTheDocument();
+    expect(screen.getByText("Task completed")).toBeInTheDocument();
   });
 
   it("shows running indicator while not finished", () => {
@@ -63,6 +63,6 @@ describe("AgentStream", () => {
       { type: "agent_status", event: "agent_started", profile: "coder" },
     ];
     render(<AgentStream events={events} />);
-    expect(screen.getByText("Агенты работают...")).toBeInTheDocument();
+    expect(screen.getByText("Agents are working...")).toBeInTheDocument();
   });
 });
