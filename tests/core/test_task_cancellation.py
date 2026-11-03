@@ -48,10 +48,15 @@ def one_step_task(store: TaskStore) -> Task:
 async def test_a_cancel_from_another_runner_stops_the_owner(store: TaskStore) -> None:
     """The CLI and POST /api/task/{id}/cancel each build their own TaskRunner."""
     entered = threading.Event()
+    release = threading.Event()
 
     def blocking_handler() -> str:
         entered.set()
-        time.sleep(30)
+        # Waits to be told, rather than sleeping a fixed 30s: the step has to still be in
+        # flight when the cancel arrives, and a wall-clock sleep is what put this file past the
+        # per-test timeout twice on this box: once 727s into the unit stage (120s cap) and once
+        # under a 30s diagnostic cap, while the same tests passed inside the 941s full stage.
+        release.wait(10)
         return "finished anyway"
 
     owner = TaskRunner(store, registry_with(blocking_handler))
@@ -60,12 +65,15 @@ async def test_a_cancel_from_another_runner_stops_the_owner(store: TaskStore) ->
 
     await owner.submit(task)
     await asyncio.to_thread(entered.wait, 5)
-    assert await asker.cancel(task.id) is True
+    try:
+        assert await asker.cancel(task.id) is True
 
-    settled = await owner.wait(task.id, timeout=15)
-    assert settled is not None
-    assert settled.status == TaskStatus.CANCELLED, "the owner overwrote the cancellation"
-    assert settled.steps[0].status != TaskStatus.RUNNING, "a step is left in flight under a cancelled task"
+        settled = await owner.wait(task.id, timeout=15)
+        assert settled is not None
+        assert settled.status == TaskStatus.CANCELLED, "the owner overwrote the cancellation"
+        assert settled.steps[0].status != TaskStatus.RUNNING, "a step is left in flight under a cancelled task"
+    finally:
+        release.set()
     assert task.id not in owner._running
 
 

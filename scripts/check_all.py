@@ -362,6 +362,22 @@ COMPONENTS: dict[str, dict[str, Any]] = {
 }
 
 
+def _failure_detail(summary: str, output: str, returncode: int, stderr: str) -> str:
+    """What a failed stage prints when it never printed a summary line.
+
+    A pytest run that dies in its own reporting phase produces no `N passed, M failed` line at
+    all - measured on this box when pytest-benchmark computed medians over the full suite on an
+    8 GB machine and raised MemoryError after 7000 tests. The stage used to report a bare [FAIL]
+    with an empty detail, which is a red gate with nothing to read, so the tail of the run's own
+    output stands in."""
+    if returncode == TIMEOUT_RETURNCODE:
+        return stderr
+    if summary:
+        return summary
+    tail = [line for line in output.splitlines() if line.strip()]
+    return "\n".join(tail[-12:]) or f"exit code {returncode}, no output captured"
+
+
 def check_component(name: str) -> CheckResult:
     cfg = COMPONENTS[name]
     _print_section(f"Tests: {name} -- {cfg['desc']}")
@@ -411,14 +427,12 @@ def check_component(name: str) -> CheckResult:
     detail = summary
     if r.returncode != 0:
         status = "fail"
-        if r.returncode == TIMEOUT_RETURNCODE:
-            detail = r.stderr
-        elif failed:
+        if failed:
             detail = f"{failed} FAILED -- {summary}"
         elif errors:
             detail = f"{errors} ERRORS -- {summary}"
         else:
-            detail = summary or f"exit code {r.returncode}"
+            detail = _failure_detail(summary, output, r.returncode, r.stderr)
 
     return CheckResult(f"tests/{name}", status, dt, detail, counts)
 
@@ -427,6 +441,11 @@ def check_full_tests() -> CheckResult:
     _print_section("Tests: Full Suite")
     t0 = time.time()
 
+    # pytest-benchmark keeps every round of every @pytest.mark.benchmark test and computes its
+    # stats when the session ends; on this box that reporting phase raised MemoryError after 7000
+    # tests and failed the stage with no assertion behind it. The same tests are timed in full by
+    # the `unit` stage (tests/benchmarks is inside its path set), so what is switched off here is
+    # measuring the same benchmark twice in one gate run - not benchmarking itself.
     cov_flag = "--cov=raven" if _USE_COV else "--no-cov"
     cmd = [
         sys.executable, "-m", "pytest",
@@ -434,6 +453,7 @@ def check_full_tests() -> CheckResult:
         "-q", "--tb=short", "--timeout=120",
         "--ignore=tests/core/test_sandbox.py",
         "-p", "no:schemathesis",
+        "--benchmark-disable",
         cov_flag,
         "-W", "ignore::RuntimeWarning",
     ]
@@ -456,7 +476,7 @@ def check_full_tests() -> CheckResult:
     _print_pytest_output(output, r.returncode)
 
     status: Status = "pass" if r.returncode == 0 else "fail"
-    detail = r.stderr if r.returncode == TIMEOUT_RETURNCODE else summary
+    detail = summary if r.returncode == 0 else _failure_detail(summary, output, r.returncode, r.stderr)
     return CheckResult("tests/full", status, dt, detail, counts)
 
 

@@ -37,11 +37,24 @@ def _stub_run(
     captured: dict[str, Any],
 ) -> None:
     def _inner(cmd: list[str], timeout: int = 0, env: dict[str, str] | None = None, cwd: Any = None) -> Any:
+        captured["cmd"] = cmd
         captured["timeout"] = timeout
         return subprocess.CompletedProcess(cmd, returncode, stdout=stdout, stderr=stderr)
 
     monkeypatch.setattr(ca, "_run", _inner)
 
+
+def _full_stage_command(monkeypatch: pytest.MonkeyPatch, captured: dict[str, Any]) -> list[str]:
+    def _inner(cmd: list[str], timeout: int = 0, env: dict[str, str] | None = None, cwd: object = None) -> object:
+        captured["cmd"] = cmd
+        captured["timeout"] = timeout
+        import subprocess
+
+        return subprocess.CompletedProcess(cmd, 0, stdout="7020 passed in 900s", stderr="")
+
+    monkeypatch.setattr(ca, "_run", _inner)
+    ca.check_full_tests()
+    return list(captured["cmd"])
 
 class TestRunTimeout:
     def test_timeout_returns_a_failed_result_instead_of_raising(self) -> None:
@@ -126,3 +139,48 @@ class TestStageReporting:
         result = ca.check_ruff()
         assert result.status == "fail"
         assert "TIMED OUT after 120s" in result.detail
+
+class TestStageFailureDetail:
+    """A stage that dies without printing a pytest summary used to report an empty detail."""
+
+    def test_the_tail_of_the_run_stands_in_for_a_missing_summary(self) -> None:
+        output = "collected 7020 items" + chr(10) + "    return statistics.median(self.data)" + chr(10) + "MemoryError"
+        detail = ca._failure_detail("", output, 1, "")
+        assert "MemoryError" in detail, detail
+        assert "median" in detail, detail
+
+    def test_a_real_summary_line_is_still_the_detail(self) -> None:
+        assert ca._failure_detail("1 failed, 7019 passed in 9s", "noise", 1, "") == "1 failed, 7019 passed in 9s"
+
+    def test_a_timeout_reports_stderr_rather_than_output(self) -> None:
+        assert ca._failure_detail("", "some output", ca.TIMEOUT_RETURNCODE, "TIMED OUT after 1800s") == (
+            "TIMED OUT after 1800s"
+        )
+
+    def test_no_output_at_all_is_still_explained(self) -> None:
+        assert ca._failure_detail("", "", 3, "") == "exit code 3, no output captured"
+
+
+class TestBenchmarkIsMeasuredOnce:
+    """pytest-benchmark keeps every round of every benchmarked test and computes its stats when
+    the session ends; doing that twice in one gate run is what raised MemoryError on an 8 GB box.
+    The timing belongs to the `unit` stage, which runs tests/benchmarks for real."""
+
+    def test_the_full_stage_disables_the_benchmark_harness(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, object] = {}
+        _stub_run(monkeypatch, 0, "7020 passed in 900s" + chr(10), "", captured)
+        cmd = _full_stage_command(monkeypatch, captured)
+        assert "--benchmark-disable" in cmd, cmd
+
+    def test_the_unit_stage_still_times_the_benchmarks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, Any] = {}
+        _stub_run(monkeypatch, 0, "6984 passed in 700s" + chr(10), "", captured)
+        result = ca.check_component("unit")
+        assert result.status == "pass"
+        cmd = captured["cmd"]
+        assert "--benchmark-disable" not in cmd, cmd
+        assert "tests/" in cmd, cmd
