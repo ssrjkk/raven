@@ -20,7 +20,12 @@ class CommandResponse(BaseModel):
     description: str
     icon: str  # 'code', 'db', 'file'
     category: str
-    action_endpoint: str | None = None
+    route: str | None = None
+    """The console screen that performs the command.
+
+    The palette navigates to it and leaves out a command without one: an entry that goes
+    nowhere is a button that lies, which is what `action_endpoint` had become - it named
+    /api/v1/ai/* routes that exist in no router, and the client dropped the field anyway."""
 
 
 class ThemePrefs(BaseModel):
@@ -282,7 +287,7 @@ def create_commands_router(data_dir: str | None = None) -> APIRouter:
                     description="Generate the boilerplate for a new API",
                     icon="code",
                     category="ai",
-                    action_endpoint="/api/v1/ai/scaffold",
+                    route="/scaffold",
                 )
             )
 
@@ -293,7 +298,7 @@ def create_commands_router(data_dir: str | None = None) -> APIRouter:
                 description="AI writes unit tests for the current modules",
                 icon="code",
                 category="ai",
-                action_endpoint="/api/v1/ai/generate-tests",
+                route="/tests",
             )
         )
 

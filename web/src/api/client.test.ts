@@ -43,7 +43,6 @@ describe("request abort deadlines", () => {
   it.each([
     ["tests run", () => api.testsRun("tests/", "unit")],
     ["fine-tune", () => api.finetuneStartTraining()],
-    ["agent run", () => api.ideAgentRun("do the thing", "build", "/app")],
     ["video transcribe", () => api.mediaVideoTranscribe("clip.mp4")],
     ["github clone", () => api.githubCloneRepo("ssrjkk", "raven")],
   ])("gives %s the long timeout", async (_label, call) => {

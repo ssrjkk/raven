@@ -72,18 +72,25 @@ export function useCommands(onToggleTheme?: () => void) {
             shortcut: "⌘T",
             keywords: keywordsFor("toggle-theme"),
           },
-          ...(Array.isArray(dynamicCommands) ? dynamicCommands.map((cmd: Record<string, unknown>) => ({
-            id: String(cmd.id ?? ""),
-            label: String(cmd.label ?? ""),
-            description: String(cmd.description ?? ""),
-            icon: cmd.icon === "code" ? <Code className="w-5 h-5 text-success" /> :
-                  cmd.icon === "db" ? <Database className="w-5 h-5 text-info" /> :
-                  <FileText className="w-5 h-5 text-secondary" />,
-            category: parseCategory(cmd.category),
-            action: () => {},
-            shortcut: cmd.shortcut ? String(cmd.shortcut) : undefined,
-            keywords: keywordsFor(String(cmd.id ?? ""), cmd.keywords),
-          })) : []),
+          ...(Array.isArray(dynamicCommands)
+            ? dynamicCommands
+                // A command the server gives no screen for cannot be run, so it is not
+                // listed at all rather than listed and inert.
+                .filter((cmd): cmd is Record<string, unknown> =>
+                  typeof cmd === "object" && cmd !== null && typeof (cmd as Record<string, unknown>).route === "string")
+                .map((cmd) => ({
+                  id: String(cmd.id ?? ""),
+                  label: String(cmd.label ?? ""),
+                  description: String(cmd.description ?? ""),
+                  icon: cmd.icon === "code" ? <Code className="w-5 h-5 text-success" /> :
+                        cmd.icon === "db" ? <Database className="w-5 h-5 text-info" /> :
+                        <FileText className="w-5 h-5 text-secondary" />,
+                  category: parseCategory(cmd.category),
+                  action: () => navigate(String(cmd.route)),
+                  shortcut: cmd.shortcut ? String(cmd.shortcut) : undefined,
+                  keywords: keywordsFor(String(cmd.id ?? ""), cmd.keywords),
+                }))
+            : []),
         ];
         setCommands(baseCommands);
       } catch (err) {

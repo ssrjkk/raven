@@ -386,19 +386,18 @@ export const api = {
   insightsWorkspace: () =>
     request<{ total_files: number; total_dirs: number; by_extension: Record<string, number>; largest_files: { path: string; size_bytes: number }[]; recently_modified: { path: string; modified_at: string }[] }>("/api/insights/workspace"),
 
-  ideAgentRun: (task: string, mode: string, workspace: string) =>
-    request<{ response?: string }>("/api/v1/agent/run", { method: "POST", body: JSON.stringify({ task, mode, workspace }) }, LONG_REQUEST_TIMEOUT_MS),
   truthfulAgent: (prompt: string, context = "", model?: string) =>
     request<TruthfulResult>("/aios/agent/truthful", {
       method: "POST",
       body: JSON.stringify({ prompt, context, model: model ?? null }),
     }),
-  ideContextIndex: (workspace: string) =>
-    request<{ indexed: number }>("/api/v1/context/index", { method: "POST", body: JSON.stringify({ workspace }) }, LONG_REQUEST_TIMEOUT_MS),
   ideContextSearch: (query: string, topK = 5) =>
-    request<{ results: { content: string; file: string; score: number }[] }>("/api/v1/context/search", { method: "POST", body: JSON.stringify({ query, top_k: topK }) }),
-  ideAgentExecute: (command: string, context: string) =>
-    request<{ output?: string; error?: string }>("/api/v1/agent/execute", { method: "POST", body: JSON.stringify({ command, context }) }, LONG_REQUEST_TIMEOUT_MS),
+    request<{ results: { file: string; range?: string; text: string }[]; count?: number; error?: string }>(
+      "/aios/search/semantic",
+      { method: "POST", body: JSON.stringify({ query, path: ".", top_k: topK }) },
+    ),
+  ideAgentExecute: (command: string) =>
+    request<{ output?: string; error?: string }>("/aios/exec", { method: "POST", body: JSON.stringify({ command }) }, LONG_REQUEST_TIMEOUT_MS),
 
   workspaceTree: (path = ".") =>
     request<{ root: string; tree: { type: "file" | "directory"; name: string; path: string; children?: unknown[] } | null }>("/aios/workspace/tree?path=" + encodeURIComponent(path)),

@@ -84,7 +84,6 @@ export default function IDEPage() {
   const [agentMode, setAgentMode] = useState<AgentMode>("build")
   const [terminalInput, setTerminalInput] = useState("")
   const [terminalHistory, setTerminalHistory] = useState<TerminalLine[]>([])
-  const [indexStatus, setIndexStatus] = useState<string>("")
   const [sidebarTab, setSidebarTab] = useState<"ai" | "debug" | "search">("ai")
   const [truthfulMode, setTruthfulMode] = useState(false)
   const [truthfulStatus, setTruthfulStatus] = useState<string>("")
@@ -417,7 +416,7 @@ export default function IDEPage() {
       try {
         const data = await api.ideContextSearch(aiPrompt, 5)
         const results = data.results || []
-        streamRef.current = results.map(r => `[${r.score.toFixed(2)}] ${r.file}\n${r.content.slice(0, 200)}`).join("\n\n")
+        streamRef.current = results.map(r => `[${r.file}${r.range ? ":" + r.range : ""}]\n${r.text.slice(0, 200)}`).join("\n\n")
         setOutput(streamRef.current)
       } catch (e) {
         console.error("Search failed:", e);
@@ -428,16 +427,6 @@ export default function IDEPage() {
     runAgent()
   }
 
-  async function indexCodebase() {
-    setIndexStatus("Indexing...")
-    try {
-      const data = await api.ideContextIndex(".")
-      setIndexStatus(`Indexed ${data.indexed} files`)
-    } catch (e) {
-      console.error("Indexing failed:", e);
-      setIndexStatus("Indexing failed")
-    }
-  }
 
   function submitPrompt() {
     runAI()
@@ -464,7 +453,7 @@ export default function IDEPage() {
     setTerminalHistory(h => [...h, { input: cmd, output: "Processing..." }])
     scrollTerminal()
     try {
-      const data = await api.ideAgentExecute(cmd, "ide-terminal")
+      const data = await api.ideAgentExecute(cmd)
       setTerminalHistory(h => {
         const copy = [...h]
         copy[copy.length - 1] = { input: cmd, output: data.output || data.error || JSON.stringify(data) }
@@ -792,9 +781,6 @@ export default function IDEPage() {
                   <pre className="text-xs text-tertiary whitespace-pre-wrap mt-2 font-mono">{thinkingProcess}</pre>
                 </details>
               )}
-              {indexStatus && (
-                <div className="text-xs text-tertiary">{indexStatus}</div>
-              )}
             </div>
 
             <div className="p-3 border-t border-default flex flex-col gap-2">
@@ -829,12 +815,7 @@ export default function IDEPage() {
               {speech.error && (
                 <div className="text-[10px] text-warning">Voice input error: {speech.error}</div>
               )}
-              <div className="flex gap-1">
-                <button onClick={indexCodebase}
-                  className="btn-outline" style={{ padding: "0.25rem 0.75rem", fontSize: "0.75rem" }}>
-                  Index
-                </button>
-              </div>
+
             </div>
           </>
         ) : sidebarTab === "search" ? (
