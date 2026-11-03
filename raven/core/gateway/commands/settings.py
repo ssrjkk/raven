@@ -28,7 +28,7 @@ class ThinkCommand(CommandHandler):
 
 class VerboseCommand(CommandHandler):
     name = "verbose"
-    description = "Show each tool call as the answer is built"
+    description = "List the tool calls the answer used"
     usage = "<on|off>"
 
     async def execute(self, ctx: CommandContext) -> bool:
@@ -49,7 +49,7 @@ class VerboseCommand(CommandHandler):
 
 class TraceCommand(CommandHandler):
     name = "trace"
-    description = "Show timing and tokens for every model call"
+    description = "Report the run's iterations, seconds and token cost"
     usage = "<on|off>"
 
     async def execute(self, ctx: CommandContext) -> bool:

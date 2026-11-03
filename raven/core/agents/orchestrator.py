@@ -106,6 +106,11 @@ class StatusEmitter:
         self._send = send_fn
         self._events: list[dict[str, Any]] = []
 
+    @property
+    def events(self) -> list[dict[str, Any]]:
+        """What the run emitted, for whoever decides what the chat should also see."""
+        return self._events
+
     async def emit(self, event_type: str, profile: str, detail: str = "", data: dict[str, Any] | None = None) -> None:
         payload: dict[str, Any] = {
             "type": "agent_status",

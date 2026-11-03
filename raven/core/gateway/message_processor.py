@@ -40,17 +40,21 @@ def usage_line(mode: str, totals: dict[str, int], rounds: int | None = None) -> 
     """The `/usage` line the operator asked for, from the counters the run actually kept.
 
     `rounds` defaults to what the run recorded: a call that reuses the model five times says so
-    rather than sounding like one request."""
+    rather than sounding like one request. A run that counts one total figure - the orchestrator
+    reports tokens used, not a request/response split - prints that figure rather than a split of
+    zeros, which would read as a request that cost nothing."""
     if mode not in ("tokens", "full"):
         return ""
     prompt = totals.get("prompt", 0)
     completion = totals.get("completion", 0)
     used = rounds if rounds is not None else totals.get("rounds", 0)
-    line = f"[tokens: {prompt} in / {completion} out / {prompt + completion} total]"
+    if not prompt and not completion:
+        line = f"[tokens: {totals.get('total', 0)} total]"
+    else:
+        line = f"[tokens: {prompt} in / {completion} out / {prompt + completion} total]"
     if mode == "full":
         line += f" · model calls: {used}"
     return line
-
 
 class MessageProcessor:
     def __init__(

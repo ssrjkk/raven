@@ -30,7 +30,7 @@ from raven.core.gateway.commands.base import CommandContext
 from raven.core.gateway.commands.registry import CommandRegistry
 from raven.core.gateway.health_monitor import HealthMonitor
 from raven.core.gateway.mcp_bridge import MCPBridge
-from raven.core.gateway.message_processor import MessageProcessor
+from raven.core.gateway.message_processor import MessageProcessor, usage_line
 from raven.core.gateway.task_orchestrator import TaskOrchestrator
 from raven.core.services import Chunker, EntityExtractor
 from raven.core.services.persister import get_persister
@@ -62,6 +62,33 @@ from raven.core.tracing import TracingManager, get_tracer
 PREFS_PLUGIN_ID = "gateway:prefs"
 PREF_CACHE_MAX = 2048
 
+
+def orchestrator_report(
+    emitter: Any,
+    result: Any,
+    *,
+    verbose: bool,
+    trace: bool,
+    usage_mode: str,
+) -> str:
+    """What `/verbose`, `/trace` and `/usage` add to a profile run, from what it recorded.
+
+    The status stream itself is left alone: the console renders it over the websocket, and the
+    preference is about the chat text. Sent after the answer, in its own message, so the stored
+    history keeps only what the model said."""
+    lines: list[str] = []
+    if verbose:
+        for entry in emitter.events:
+            if entry.get("event") in ("tool_call", "tool_result"):
+                profile = entry.get("profile", "")
+                detail = entry.get("detail", "")
+                lines.append(f"[{profile}] {detail}")
+    if trace:
+        lines.append(f"[trace {result.iterations} iterations | {result.duration:.1f}s | {result.tokens_used} tokens]")
+    usage = usage_line(usage_mode, {"total": result.tokens_used}, rounds=result.iterations)
+    if usage:
+        lines.append(usage)
+    return "\n".join(lines)
 
 class Gateway:
     def __init__(self, db: Any, plugin_loader: PluginLoader, redis_url: str | None = None):
@@ -644,10 +671,19 @@ class Gateway:
         return bool(meta.get("mentioned"))
 
     async def _handle_with_orchestrator(self, event: IncomingMessage, session_id: str, profile: str) -> None:
+        from raven.core.agent.agent import THINK_INSTRUCTIONS
         from raven.core.agents.orchestrator import StatusEmitter
 
         channel_obj = await self.channels.get(event.channel)
         send_stream = getattr(channel_obj, "send_stream", None) if channel_obj else None
+        verbose = await self.get_pref(event.channel, event.user_id, "verbose", "off") == "on"
+        trace = await self.get_pref(event.channel, event.user_id, "trace", "off") == "on"
+        usage_mode = await self.get_pref(event.channel, event.user_id, "usage_mode", "off")
+        think_level = await self.get_pref(event.channel, event.user_id, "think_level", "high")
+        context = {"additional_context": f"Channel: {event.channel}, User: {event.user_id}"}
+        instruction = THINK_INSTRUCTIONS.get(think_level, "")
+        if instruction:
+            context["additional_context"] += "\n\n" + instruction
 
         async def send_status(data: str) -> None:
             if send_stream is not None:
@@ -665,7 +701,7 @@ class Gateway:
         try:
             result = await self._agent_orchestrator.execute(
                 query=event.text,
-                context={"additional_context": f"Channel: {event.channel}, User: {event.user_id}"},
+                context=context,
                 profile_override=profile,
                 on_token=on_token,
                 status_emitter=emitter,
@@ -676,6 +712,15 @@ class Gateway:
             elif response_text:
                 await self._send(event.channel, session_id, response_text)
             self._message_processor.metrics.inc("messages_sent", {"channel": event.channel})
+            report = orchestrator_report(
+                emitter,
+                result,
+                verbose=verbose,
+                trace=trace,
+                usage_mode=usage_mode,
+            )
+            if report:
+                await self._send(event.channel, session_id, report)
         except Exception as e:
             logger.error("Orchestrator error for {}[{}]: {}", event.channel, event.user_id, e)
             await self._send(event.channel, session_id, "An error occurred while processing your request.")
