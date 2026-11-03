@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine, Iterator, MutableMapping
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -705,3 +706,84 @@ class TestAuthRoutes:
     def test_sse_push(self, auth_client) -> None:
         resp = auth_client.post("/api/stream/push", json={"event": "test", "data": {"n": 1}})
         assert resp.status_code == 200
+
+
+class TestSecurityAuditAndWorkflowRuns:
+    def test_the_panel_gets_every_check_the_audit_engine_defines(self, gateway, registry, channels) -> None:
+        from raven.core.security.security_audit import SecurityAudit
+
+        expected = SecurityAudit().run_all()
+        body = _make_client(gateway, registry, channels).get("/api/admin/security/audit").json()
+        assert len(expected) > 10
+        assert len(body["checks"]) == len(expected)
+        assert {c["check"] for c in body["checks"]} == {c.name for c in expected}
+
+    def test_a_check_is_named_the_way_the_panel_reads_it(self, gateway, registry, channels, monkeypatch) -> None:
+        from raven.core.security.security_audit import AuditCheck, SecurityAudit
+
+        def _one(self, deep: bool = False) -> list[AuditCheck]:
+            check = AuditCheck("dm_policy", "Direct messages are limited", "high")
+            check.fail("everyone can start a chat", fix_hint="set RAVEN_DM_POLICY=allowlist")
+            return [check]
+
+        monkeypatch.setattr(SecurityAudit, "run_all", _one)
+        body = _make_client(gateway, registry, channels).get("/api/admin/security/audit").json()
+        assert body["checks"] == [
+            {
+                "name": "dm_policy",
+                "check": "dm_policy",
+                "description": "Direct messages are limited",
+                "severity": "high",
+                "passed": False,
+                "message": "everyone can start a chat",
+                "fix_hint": "set RAVEN_DM_POLICY=allowlist",
+            }
+        ]
+
+    def test_deep_is_the_callers_choice(self, gateway, registry, channels, monkeypatch) -> None:
+        from raven.core.security.security_audit import AuditCheck, SecurityAudit
+
+        seen: list[bool] = []
+
+        def _spy(self, deep: bool = False) -> list[AuditCheck]:
+            seen.append(deep)
+            return []
+
+        monkeypatch.setattr(SecurityAudit, "run_all", _spy)
+        client = _make_client(gateway, registry, channels)
+        assert client.get("/api/admin/security/audit").json() == {"checks": []}
+        client.get("/api/admin/security/audit?deep=true")
+        assert seen == [False, True]
+
+    def test_runs_lists_only_tasks_that_came_from_a_template(
+        self, gateway, registry, channels, tmp_path, monkeypatch
+    ) -> None:
+        import time
+
+        from raven.core.config import settings
+        from raven.core.task_engine.models import Task, TaskStatus
+        from raven.core.task_engine.store import TaskStore
+
+        db = tmp_path / "runs.db"
+        monkeypatch.setattr(settings, "db_path", str(db))
+        created = time.time() - 3600
+
+        async def _seed() -> None:
+            store = TaskStore(db)
+            run = Task(id="run1", user_id="u1", channel="web", goal="report", status=TaskStatus.COMPLETED)
+            run.created_at = created
+            run.metadata = {"template_id": "daily-report", "template_name": "Daily report"}
+            plain = Task(id="plain1", user_id="u1", channel="web", goal="ad hoc", status=TaskStatus.PENDING)
+            plain.created_at = created + 60
+            await store.save_task(run)
+            await store.save_task(plain)
+            await store.close()
+
+        asyncio.run(_seed())
+        body = _make_client(gateway, registry, channels).get("/api/admin/workflow-runs").json()
+        assert [run["id"] for run in body["runs"]] == ["run1"]
+        run = body["runs"][0]
+        assert run["template_id"] == "daily-report"
+        assert run["template_name"] == "Daily report"
+        assert run["status"] == "completed"
+        assert run["started_at"] == datetime.fromtimestamp(created).strftime("%Y-%m-%d %H:%M")

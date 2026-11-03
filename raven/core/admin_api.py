@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import AsyncIterator
 from dataclasses import replace
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
@@ -290,6 +291,40 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         sessions = await gateway.db.get_sessions()
         page = sessions[offset : offset + limit]
         return [{"id": s.id, "channel": s.channel, "user_id": s.user_id} for s in page]
+
+    @router.get("/security/audit")
+    def admin_security_audit(deep: bool = False):
+        from raven.core.security.security_audit import SecurityAudit
+
+        checks = SecurityAudit().run_all(deep=deep)
+        return {"checks": [{**c.to_dict(), "check": c.name} for c in checks]}
+
+    @router.get("/workflow-runs")
+    async def admin_workflow_runs(limit: int = 20):
+        from raven.core.task_engine.store import TaskStore
+
+        limit = max(1, min(limit, 200))
+        store = TaskStore(settings.resolved_db_path)
+        try:
+            tasks = await store.list_tasks(limit=limit)
+        finally:
+            await store.close()
+        runs = []
+        for task in tasks:
+            template_id = task.metadata.get("template_id")
+            if not template_id:
+                continue
+            started = datetime.fromtimestamp(task.created_at).strftime("%Y-%m-%d %H:%M")
+            runs.append(
+                {
+                    "id": task.id,
+                    "template_id": template_id,
+                    "template_name": task.metadata.get("template_name", template_id),
+                    "status": task.status.value,
+                    "started_at": started,
+                }
+            )
+        return {"runs": runs}
 
     @router.get("/audit")
     def admin_audit(limit: int = 50):
