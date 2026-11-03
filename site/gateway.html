@@ -241,6 +241,125 @@ raven doctor</code></pre>
                     </div>
                 </div>
 
+                <h2 class="block-title" id="commands">What you can type to it</h2>
+                <p class="section-desc">
+                    A slash message from any adapter reaches the same registry, and <code>/help</code>
+                    answers from the handlers that are actually installed. The table below is generated
+                    from those handlers by <code>scripts/record_site_commands.py</code> rather than typed
+                    out a second time— a hand-written copy is how this page once hid seven commands
+                    that already worked.
+                </p>
+                <!-- commands:start -->
+                <details class="matrix">
+                    <summary>The 21 commands you can type on any channel, by name</summary>
+                    <div class="table-wrap">
+                        <table>
+                            <caption>The 21 chat commands the gateway dispatches</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col">You type</th>
+                                    <th scope="col">What the gateway does</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <th scope="row"><code>/activation &lt;mention|always&gt;</code></th>
+                                    <td>Answer in group chats only when the bot is addressed</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/agent</code></th>
+                                    <td>Switch agent profile: /agent &lt;profile&gt;  (available: architect, planner, coder, reviewer, debugger, qa, researcher, security)</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/agent_status</code></th>
+                                    <td>Show current agent profile and status</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/code index [path] | search &lt;query&gt; | review &lt;file&gt; | start &lt;goal&gt; | status &lt;id&gt; | end &lt;id&gt;</code></th>
+                                    <td>Code management</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/compact</code></th>
+                                    <td>Compact memory into summary</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/help</code></th>
+                                    <td>Show this help</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/mcp</code></th>
+                                    <td>MCP server management</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/monitor list | add &lt;type&gt; &lt;target&gt; | remove &lt;id&gt; | pause &lt;id&gt; | resume &lt;id&gt;</code></th>
+                                    <td>Monitor management</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/new</code></th>
+                                    <td>Start a new session</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/reset</code></th>
+                                    <td>Reset session history</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/restart</code></th>
+                                    <td>Restart the agent</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/routine list | add &lt;action&gt; &lt;schedule&gt; | remove &lt;id&gt; | pause &lt;id&gt; | resume &lt;id&gt;</code></th>
+                                    <td>Routine management</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/skills</code></th>
+                                    <td>List available skills</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/status</code></th>
+                                    <td>Show system status</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/task &lt;goal&gt; | list</code></th>
+                                    <td>Run a task in background, or list the ones you have</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/think &lt;low|medium|high&gt;</code></th>
+                                    <td>Set how much the model deliberates before it answers</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/trace &lt;on|off&gt;</code></th>
+                                    <td>Show timing and tokens for every model call</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/usage &lt;off|tokens|full&gt;</code></th>
+                                    <td>Report token usage after each answer</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/verbose &lt;on|off&gt;</code></th>
+                                    <td>Show each tool call as the answer is built</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/voice tts &lt;text&gt; | providers</code></th>
+                                    <td>Voice/TTS commands</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><code>/pair &lt;code&gt;</code></th>
+                                    <td>Authorize with pairing code</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+                <!-- commands:end -->
+                <p class="step-note">
+                    <code>/think</code>, <code>/verbose</code>, <code>/trace</code>, <code>/usage</code>
+                    and <code>/activation</code> are preferences kept per user and per channel in the
+                    state store, so they survive a restart. <code>/activation mention</code> is the
+                    default: in a group the agent answers when the bot is addressed, while commands are
+                    always answered. Regenerate this table after changing a handler's <code>usage</code>
+                    or <code>description</code>; the test suite fails if the page and the registry drift.
+                </p>
+
                 <h2 class="block-title">The console the same process serves</h2>
                 <p class="section-desc">
                     <code>raven start</code> mounts the built React console on the API it already runs —

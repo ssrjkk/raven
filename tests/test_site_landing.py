@@ -28,6 +28,7 @@ landing page.
 
 from __future__ import annotations
 
+import html
 import importlib.util
 import json
 import re
@@ -44,6 +45,7 @@ import yaml
 
 from raven.core.channel_config import _LEGACY_ENV
 from raven.core.config import Settings
+from raven.core.gateway.commands.help import command_entries
 from raven.core.mcp.server import _to_mcp_tool
 from raven.core.webhooks import create_webhook_router
 from ravencode.runtime.tools import get_tool_definitions
@@ -126,7 +128,7 @@ OWNED_MARKUP: dict[str, tuple[str, ...]] = {
     # `class="matrix"` is a component, not content: gateway.html and install.html both use it for
     # a wide disclosure table. What must stay unique is the table itself, so the ownership marker
     # is the caption.
-    "gateway.html": ("<caption>How each adapter receives a message</caption>",),
+    "gateway.html": ("<caption>How each adapter receives a message</caption>", 'id="commands"'),
     "architecture.html": ('class="arch-stack"', 'class="spec-sheet"'),
     "security.html": ('class="rule"', 'class="never-list"'),
     "install.html": (
@@ -1274,3 +1276,99 @@ def test_documentation_build_is_pinned() -> None:
     install = next(step for step in steps if "mkdocs-material" in str(step.get("run", "")))
     assert "mkdocs-material==" in install["run"]
     assert "mkdocstrings[python]==" in install["run"]
+
+# ---------------------------------------------------------------------------
+# The gateway page publishes the command registry instead of a copy of it
+# ---------------------------------------------------------------------------
+
+COMMANDS_START = "                <!-- commands:start -->"
+COMMANDS_END = "                <!-- commands:end -->"
+
+
+def _load_record_site_commands() -> Any:
+    spec = importlib.util.spec_from_file_location(
+        "record_site_commands", ROOT / "scripts" / "record_site_commands.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_command_table_is_what_the_generator_writes() -> None:
+    """The page has to contain the block the generator writes from the handlers, byte for byte,
+    so a command added, renamed or re-described cannot appear on one side only. Run
+    `python scripts/record_site_commands.py` after changing a handler."""
+    recorder = _load_record_site_commands()
+    entries = command_entries(recorder.listed_registry())
+    assert len(entries) >= 20, entries
+    text = page("gateway.html")
+    assert text.count(COMMANDS_START) == 1 and text.count(COMMANDS_END) == 1
+    assert recorder.block(entries) in text, "gateway.html is stale against the command registry"
+
+
+def test_the_command_count_the_page_claims_is_the_registry_size() -> None:
+    recorder = _load_record_site_commands()
+    count = len(command_entries(recorder.listed_registry()))
+    text = page("gateway.html")
+    assert f"<caption>The {count} chat commands the gateway dispatches</caption>" in text
+    assert f"<summary>The {count} commands you can type on any channel, by name</summary>" in text
+    assert text.count('<th scope="row"><code>/') == count
+
+
+def test_argument_shapes_are_escaped_not_interpreted() -> None:
+    """A usage string like <on|off> is text the operator types, not markup: unescaped, the
+    browser drops it as an unknown element and the table loses the angle brackets."""
+    recorder = _load_record_site_commands()
+    region = recorder.block(command_entries(recorder.listed_registry()))
+    for call, _description in command_entries(recorder.listed_registry()):
+        if "<" in call:
+            assert html.escape(call) in region, call
+            assert call not in region, call
+
+
+def test_the_registered_handler_set_matches_the_gateway_source() -> None:
+    """The page lists handlers; the gateway installs a specific set. They must be the same set,"""
+    recorder = _load_record_site_commands()
+    found = {type(handler).__name__ for handler in recorder.listed_registry().list_commands()}
+    assert found == recorder.registered_class_names()
+    assert len(found) == 20, sorted(found)
+
+
+def test_the_generator_refuses_a_registration_it_cannot_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-vacuity for the check above: invent a command the gateway registers and the writer
+    must refuse to publish a page that would then be wrong."""
+    recorder = _load_record_site_commands()
+    monkeypatch.setattr(recorder, "registered_class_names", lambda: {"NoSuchCommand"})
+    assert recorder.main() == 1
+    assert page("gateway.html").count(COMMANDS_START) == 1
+
+def spa_routes() -> set[str]:
+    """Every path the SPA router answers, minus the sign-in gate and the wildcard page."""
+    source = (ROOT / "web" / "src" / "App.tsx").read_text(encoding="utf-8")
+    paths = set(re.findall(r'<Route[^>]*?\bpath="([^"]*)"', source, re.DOTALL))
+    return {path for path in paths if path not in ("*", "/login", "login")}
+
+
+def console_screen_chips() -> set[str]:
+    section = re.split(r"<caption>The \d+ screens the console serves</caption>", page("gateway.html"))[1]
+    cells = re.findall(r'<th scope="row">([^<]+)</th>\s*<td>(.*?)</td>', section.split("</table>")[0], re.DOTALL)
+    chips: set[str] = set()
+    for _group, body in cells:
+        chips.update(re.findall(r"<code>([^<]+)</code>", body))
+    return chips
+
+
+def test_the_console_screen_list_is_the_route_table() -> None:
+    """The disclosure that lists the console's screens by group was a hand-typed copy of the
+    router. The count happened to be right (measured: 38 routes answering, 40 `path=` attributes plus
+    an index route and the wildcard), but nothing kept it right - a route added to App.tsx would
+    simply be missing from the published page."""
+    screens = spa_routes()
+    chips = console_screen_chips()
+    assert len(screens) >= 30, sorted(screens)
+    assert chips == screens, {"only on the page": sorted(chips - screens), "only in the router": sorted(screens - chips)}
+    assert f"<caption>The {len(screens)} screens the console serves</caption>" in page("gateway.html")
+    assert f"<summary>The {len(screens)} screens the console serves, by group</summary>" in page("gateway.html")
