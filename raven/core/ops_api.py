@@ -154,26 +154,29 @@ def create_ops_router(gateway: Gateway, features: FeatureFlags) -> APIRouter:
 
             store = TaskStore(settings.resolved_db_path)
             limit = min(limit, 1000)
-            items = [
-                {
-                    "id": t.id,
-                    "goal": t.goal,
-                    "status": t.status.value,
-                    "steps": [
-                        {"order": s.order, "description": s.description, "tool": s.tool, "status": s.status.value}
-                        for s in t.steps
-                    ],
-                    "created_at": t.created_at,
+            try:
+                items = [
+                    {
+                        "id": t.id,
+                        "goal": t.goal,
+                        "status": t.status.value,
+                        "steps": [
+                            {"order": s.order, "description": s.description, "tool": s.tool, "status": s.status.value}
+                            for s in t.steps
+                        ],
+                        "created_at": t.created_at,
+                    }
+                    for t in await store.list_tasks(limit=limit, offset=offset)
+                ]
+                return {
+                    "items": items,
+                    "total": await store.count_tasks(),
+                    "limit": limit,
+                    "offset": offset,
+                    "version": 1,
                 }
-                for t in await store.list_tasks(limit=limit, offset=offset)
-            ]
-            return {
-                "items": items,
-                "total": await store.count_tasks(),
-                "limit": limit,
-                "offset": offset,
-                "version": 1,
-            }
+            finally:
+                await store.close()
 
         @router.post("/api/task/run")
         async def api_task_run(body: dict[str, Any]):
@@ -208,16 +211,19 @@ def create_ops_router(gateway: Gateway, features: FeatureFlags) -> APIRouter:
 
         mgr = CodingSessionManager(settings.resolved_db_path)
         limit = min(limit, 1000)
-        items = [
-            {
-                "id": s.id,
-                "goal": s.goal,
-                "status": s.status.value,
-                "project_path": s.project_path,
-                "files": len(s.files),
-            }
-            for s in await mgr.list_sessions(limit=limit, offset=offset)
-        ]
-        return {"items": items, "total": await mgr.count_sessions(), "limit": limit, "offset": offset, "version": 1}
+        try:
+            items = [
+                {
+                    "id": s.id,
+                    "goal": s.goal,
+                    "status": s.status.value,
+                    "project_path": s.project_path,
+                    "files": len(s.files),
+                }
+                for s in await mgr.list_sessions(limit=limit, offset=offset)
+            ]
+            return {"items": items, "total": await mgr.count_sessions(), "limit": limit, "offset": offset, "version": 1}
+        finally:
+            await mgr.close()
 
     return router
