@@ -370,9 +370,12 @@ class TestSentenceTransformerInit:
 
 
 class TestClipInitAndEmbeddings:
-    def test_init_with_clip(self, monkeypatch: pytest.MonkeyPatch):
+    def test_the_clip_model_waits_until_an_image_path_needs_it(self, monkeypatch: pytest.MonkeyPatch):
         rag = _make_rag_with_clip(monkeypatch)
+        assert rag._clip_model is None
+        rag._ensure_clip()
         assert rag._clip_model is not None
+        assert rag._clip_processor is not None
         assert rag._clip_dim == 16
         assert rag.get_stats()["clip_available"] is True
 
@@ -387,7 +390,9 @@ class TestClipInitAndEmbeddings:
         monkeypatch.setattr(mmr, "CLIPProcessor", _FakeClipProcessor)
         monkeypatch.setattr(mmr, "CLIPModel", _Failing)
         rag = MultiModalRAG(dimension=32)
+        rag._ensure_clip()
         assert rag._clip_model is None
+        assert rag._clip_ready() is False
 
     def test_embed_text_clip(self, monkeypatch: pytest.MonkeyPatch):
         rag = _make_rag_with_clip(monkeypatch)

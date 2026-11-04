@@ -12,6 +12,7 @@ from rich.table import Table
 
 from raven.core.config import settings
 from raven.core.logging import setup_logging
+from raven.core.security.context_filter import ContextVisibility
 
 console = Console()
 
@@ -45,49 +46,46 @@ RAVEN_JSON_TEMPLATE = """\
 
 ENV_EXAMPLE_TEMPLATE = """\
 # Raven AI Configuration
-# Copy this file to .env and fill in your values.
+# Copy this file to .env and fill in your values. Every name below is one the
+# application reads; `raven doctor` reports what it actually resolved.
 
-# LLM Provider
-# Choose one: OPENROUTER, ANTHROPIC, OPENAI, OLLAMA
-RAVEN_LLM_PROVIDER={provider}
+# Model - the prefix picks the provider, so this line is also the provider switch:
+# openrouter/... | anthropic/... | openai/... | ollama/... | groq/...
+DEFAULT_MODEL={default_model}
 
-# API Keys (required for cloud providers)
+# API keys (required for cloud providers)
 {api_key_lines}
 
-# Default model to use
-RAVEN_DEFAULT_MODEL={default_model}
-
-# Channels (optional — uncomment to enable)
+# Channels (optional - uncomment to enable)
 {channel_lines}
 
 # Security
-{security_lines}
+DM_POLICY={dm_policy}
+# WEB_SECRET_KEY=            # set to sign web sessions; auto-generated if left empty
+# CONTEXT_VISIBILITY={visibility}   # {visibility_choices} - what a session may read
+
+# Web UI (a container image listens on 18888; the host mapping is RAVEN_WEB_PORT
+# in the compose files, which is a docker-compose variable, not an app setting)
+WEB_PORT={web_port}
 
 # Paths
-# RAVEN_WORKSPACE=workspace
-# RAVEN_PLUGINS_DIR=plugins
-# RAVEN_SKILLS_DIR=workspace/skills
-# RAVEN_COMMANDS_DIR=.raven/commands
-# RAVEN_RULES_DIR=.raven/rules
-# RAVEN_AGENTS_DIR=.raven/agents
-# RAVEN_HOOKS_DIR=.raven/hooks
-
-# Web UI
-# RAVEN_WEB_PORT={web_port}
-# RAVEN_WEB_SECRET_KEY=
+# DB_PATH=data/raven.db
+# WORKSPACE_PATH=workspace
+# Artifact directories (skills, commands, rules, agents, plugins, hooks) are
+# configured in raven.json under `paths`, not here.
 
 # Logging
-# RAVEN_LOG_LEVEL=INFO
+# LOG_LEVEL=INFO
+# JSON_LOG=false
 
-# Monitoring
-# RAVEN_MONITOR_DB_PATH=data/monitors.db
+# Rate limiting
+# RATE_LIMIT_MAX={rate_limit_max}
+# RATE_LIMIT_WINDOW={rate_limit_window}
 
-# Rate Limiting
-# RAVEN_CHANNEL_RATE_LIMIT=10
-# RAVEN_USER_RATE_LIMIT=5
-
-# DM Policy: open, closed, pairing
-# RAVEN_DM_POLICY=pairing
+# Model tiers the router can route to
+# MODEL_FAST=
+# MODEL_BALANCED=
+# MODEL_QUALITY=
 """
 
 
@@ -215,27 +213,22 @@ def _write_env_example(llm: dict[str, str], channels: dict[str, Any], security: 
             channel_lines_parts.append(f"# {token_var}=your_bot_token_here")
     channel_lines = "\n".join(channel_lines_parts)
 
-    security_lines = "\n".join(
-        [
-            f"RAVEN_DM_POLICY={security['dm_policy']}",
-            f"# RAVEN_WEB_PORT={security['web_port']}",
-        ]
-    )
-
     content = ENV_EXAMPLE_TEMPLATE.format(
-        provider=llm["provider"],
-        provider_upper=provider_upper,
         default_model=llm.get("default_model", ""),
         api_key_lines=api_key_lines,
         channel_lines=channel_lines,
-        security_lines=security_lines,
-        web_port=settings.web_port,
+        dm_policy=security["dm_policy"],
+        web_port=security["web_port"],
+        rate_limit_max=settings.rate_limit_max,
+        rate_limit_window=settings.rate_limit_window,
+        visibility=settings.context_visibility,
+        visibility_choices=" | ".join(v.value for v in ContextVisibility),
     )
     path.write_text(content, encoding="utf-8")
     console.print(f"[green]Written {path}[/green]")
 
 
-def _write_real_env(llm: dict[str, str], channels: dict[str, Any], path: Path) -> None:
+def _write_real_env(llm: dict[str, str], channels: dict[str, Any], security: dict[str, Any], path: Path) -> None:
     lines: list[str] = []
     provider_upper = llm["provider"].upper()
     if llm["provider"] == "ollama":
@@ -249,6 +242,10 @@ def _write_real_env(llm: dict[str, str], channels: dict[str, Any], path: Path) -
             token = cfg.get("token", "")
             if token:
                 lines.append(f"{cid.upper()}_BOT_TOKEN={token}")
+    if llm.get("default_model"):
+        lines.append(f"DEFAULT_MODEL={llm['default_model']}")
+    lines.append(f"DM_POLICY={security['dm_policy']}")
+    lines.append(f"WEB_PORT={security['web_port']}")
     content = "\n".join(lines) + ("\n" if lines else "")
     if lines:
         path.write_text(content, encoding="utf-8")
@@ -277,7 +274,7 @@ def init() -> None:
 
     _write_raven_json(llm, channels, security, root / "raven.json")
     _write_env_example(llm, channels, security, root / ".env.example")
-    _write_real_env(llm, channels, root / ".env")
+    _write_real_env(llm, channels, security, root / ".env")
 
     (root / "workspace").mkdir(exist_ok=True)
     (root / "workspace" / "skills").mkdir(exist_ok=True)

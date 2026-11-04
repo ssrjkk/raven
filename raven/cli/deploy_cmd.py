@@ -7,7 +7,6 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
-from raven.core.config import settings
 from raven.core.logging import setup_logging
 
 console = Console()
@@ -25,9 +24,8 @@ services:
     ports:
       - "${RAVEN_WEB_PORT:-18888}:18888"
     environment:
-      - RAVEN_LLM_PROVIDER=${RAVEN_LLM_PROVIDER:-openrouter}
-      - RAVEN_DEFAULT_MODEL=${RAVEN_DEFAULT_MODEL:-openrouter/google/gemini-2.0-flash-001}
-      - RAVEN_DM_POLICY=${RAVEN_DM_POLICY:-pairing}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-openrouter/google/gemini-2.0-flash-001}
+      - DM_POLICY=${DM_POLICY:-pairing}
     volumes:
       - ./data:/app/data
       - ./workspace:/app/workspace
@@ -49,36 +47,17 @@ services:
     ports:
       - "${RAVEN_WEB_PORT:-18888}:18888"
     environment:
-      - RAVEN_LLM_PROVIDER=${RAVEN_LLM_PROVIDER:-openrouter}
-      - RAVEN_DEFAULT_MODEL=${RAVEN_DEFAULT_MODEL:-openrouter/google/gemini-2.0-flash-001}
-      - RAVEN_DM_POLICY=${RAVEN_DM_POLICY:-pairing}
-      - NATS_URL=nats://nats:4222
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-openrouter/google/gemini-2.0-flash-001}
+      - DM_POLICY=${DM_POLICY:-pairing}
     volumes:
       - ./data:/app/data
       - ./workspace:/app/workspace
       - ./plugins:/app/plugins
       - ./.env:/app/.env:ro
-    depends_on:
-      nats:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:18888/api/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-
-  nats:
-    image: nats:latest
-    container_name: raven-nats
-    restart: unless-stopped
-    ports:
-      - "4222:4222"
-      - "8222:8222"
-    command: ["-js", "-m", "8222"]
-    healthcheck:
-      test: ["CMD", "nats", "ping", "-c", "1"]
-      interval: 30s
-      timeout: 5s
       retries: 3
 
   grafana:
@@ -107,18 +86,11 @@ volumes:
   prometheus-data:
 """
 
-    # Substitute port in healthcheck URLs
-    for key in COMPOSE_CONTENT:
-        COMPOSE_CONTENT[key] = COMPOSE_CONTENT[key].replace(
-            "http://localhost:18888",
-            f"http://localhost:{settings.web_port}",
-        )
-
 
 def _show_deploy_table(mode: str) -> None:
     details = {
         "minimal": "Raven only, no dependencies",
-        "full": "Raven + NATS + Grafana + Prometheus",
+        "full": "Raven + Grafana + Prometheus",
     }
     table = Table(show_header=False)
     table.add_column("Setting", style="cyan")

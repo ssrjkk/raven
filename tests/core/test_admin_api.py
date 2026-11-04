@@ -723,7 +723,7 @@ class TestSecurityAuditAndWorkflowRuns:
 
         def _one(self, deep: bool = False) -> list[AuditCheck]:
             check = AuditCheck("dm_policy", "Direct messages are limited", "high")
-            check.fail("everyone can start a chat", fix_hint="set RAVEN_DM_POLICY=allowlist")
+            check.fail("everyone can start a chat", fix_hint="set DM_POLICY=allowlist")
             return [check]
 
         monkeypatch.setattr(SecurityAudit, "run_all", _one)
@@ -736,7 +736,7 @@ class TestSecurityAuditAndWorkflowRuns:
                 "severity": "high",
                 "passed": False,
                 "message": "everyone can start a chat",
-                "fix_hint": "set RAVEN_DM_POLICY=allowlist",
+                "fix_hint": "set DM_POLICY=allowlist",
             }
         ]
 

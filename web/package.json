@@ -15,12 +15,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "cap:sync": "npx cap sync",
-    "cap:open:ios": "npx cap open ios",
-    "cap:open:android": "npx cap open android",
-    "cap:build:ios": "npm run build && npx cap sync ios && npx cap open ios",
-    "cap:build:android": "npm run build && npx cap sync android && npx cap open android"
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

@@ -20,16 +20,6 @@ services:
       - minimal
       - full
 
-  nats:
-    image: nats:2-alpine
-    command: ["-js", "-sd", "/data"]
-    ports:
-      - "4222:4222"
-    volumes:
-      - nats_data:/data
-    profiles:
-      - full
-
   grafana:
     image: grafana/grafana:latest
     ports:
@@ -52,7 +42,6 @@ services:
       - full
 
 volumes:
-  nats_data:
   grafana_data:
   prometheus_data:
 

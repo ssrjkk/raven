@@ -92,7 +92,6 @@ class SecurityAudit:
         self._check_workspace_path()
         self._check_pii_redaction()
         self._check_audit_chain()
-        self._check_plugin_isolation()
         self._check_tool_overrides()
         self._check_web_cors()
         self._check_https_enabled()
@@ -253,24 +252,6 @@ class SecurityAudit:
             c.fail(f"Audit log chain errors: {len(errors)}")
         else:
             c.ok("Audit log chain intact")
-
-    def _check_plugin_isolation(self):
-        c = self._add("plugin_isolation", "Plugin sandbox has capability restrictions", "high")
-        try:
-            from raven.core.plugin_sandbox import plugin_sandbox
-
-            denied = plugin_sandbox._global_deny
-            if denied:
-                c.ok(f"Global deny active: {', '.join(denied)}")
-            else:
-                rs = plugin_sandbox.to_dict()
-                if rs.get("per_plugin"):
-                    c.ok(f"Per-plugin capabilities: {len(rs['per_plugin'])} plugins")
-                else:
-                    c.ok("No plugin capability restrictions configured (set for production)")
-                    c._fix_hint = "Configure plugin_sandbox capabilities in raven.json"
-        except ImportError:
-            c.fail("Plugin sandbox module not available")
 
     def _check_tool_overrides(self):
         c = self._add("tool_overrides", "Tool allow/deny lists are not both set", "low")

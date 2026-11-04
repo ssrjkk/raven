@@ -281,30 +281,6 @@ class TestDependencyImportBranches:
         assert not check.passed
         assert "chain errors" in check.message
 
-    def test_plugin_isolation_global_deny_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from raven.core import plugin_sandbox as ps_mod
-
-        monkeypatch.setattr(ps_mod.plugin_sandbox, "_global_deny", {"fs.write"})
-        check = _run("_check_plugin_isolation")
-        assert check.passed
-        assert "fs.write" in check.message
-
-    def test_plugin_isolation_per_plugin_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from raven.core import plugin_sandbox as ps_mod
-
-        monkeypatch.setattr(ps_mod.plugin_sandbox, "_global_deny", set())
-        monkeypatch.setattr(ps_mod.plugin_sandbox, "to_dict", lambda: {"per_plugin": {"p1": {}}})
-        check = _run("_check_plugin_isolation")
-        assert check.passed
-        assert "Per-plugin" in check.message
-
-    def test_plugin_isolation_import_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setitem(sys.modules, "raven.core.plugin_sandbox", None)
-        check = _run("_check_plugin_isolation")
-        assert not check.passed
-        assert "not available" in check.message
-
-
 class _FakeDockerClient:
     def __init__(self, *, reachable: bool) -> None:
         self._reachable = reachable
@@ -618,15 +594,6 @@ class TestRemainingBranches:
         assert check.passed
         assert "patterns" in check.message
 
-    def test_plugin_isolation_none_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from raven.core import plugin_sandbox as ps_mod
-
-        monkeypatch.setattr(ps_mod.plugin_sandbox, "_global_deny", set())
-        monkeypatch.setattr(ps_mod.plugin_sandbox, "to_dict", lambda: {"per_plugin": {}})
-        check = _run("_check_plugin_isolation")
-        assert check.passed
-        assert check.fix_hint() is not None
-
     def test_tool_overrides_unambiguous_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(config_module.settings, "tools_deny", "")
         assert _run("_check_tool_overrides").passed
@@ -695,3 +662,43 @@ class TestRemainingBranches:
         check = _run("_check_audit_chain")
         assert check.passed
         assert "intact" in check.message
+
+
+def test_the_documented_audit_counts_are_the_ones_the_code_runs() -> None:
+    import ast
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    source = (root / "raven" / "core" / "security" / "security_audit.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    run_all = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "run_all")
+
+    def _own_checks(body: list[ast.stmt]) -> int:
+        return sum(
+            1
+            for stmt in body
+            if isinstance(stmt, ast.Expr)
+            and isinstance(stmt.value, ast.Call)
+            and isinstance(stmt.value.func, ast.Attribute)
+            and isinstance(stmt.value.func.value, ast.Name)
+            and stmt.value.func.value.id == "self"
+            and str(stmt.value.func.attr).startswith("_check_")
+        )
+
+    deep = 0
+    for stmt in run_all.body:
+        if isinstance(stmt, ast.If) and getattr(stmt.test, "id", "") == "deep":
+            deep = _own_checks(stmt.body)
+            break
+    shallow = _own_checks(run_all.body)  # the deep calls live inside the If, not alongside these
+
+    doc = (root / "docs" / "security" / "overview.md").read_text(encoding="utf-8")
+
+    def _stated(pattern: str) -> int:
+        found = re.search(pattern, doc)
+        assert found is not None, pattern
+        return int(found.group(1))
+
+    numbers = (_stated(r"runs (\d+) configuration checks"), _stated(r"`--deep` adds (\d+) more"))
+    assert numbers == (shallow, deep), (numbers, (shallow, deep))

@@ -15,21 +15,37 @@ from raven.unique.multi_modal_rag import Document, MultiModalRAG
 
 _RAG_PATH = Path(__file__).parent.parent / "data" / "rag_index.json"
 
+# One engine per process. Constructing it loads the embedding models, and every route
+# used to build a fresh one, so each request paid for a model it already had.
+_rag_engine: MultiModalRAG | None = None
+_rag_path: Path | None = None
+_rag_mtime: float | None = None
+
 
 def _get_rag() -> MultiModalRAG:
-    rag = MultiModalRAG()
-    rag.set_index_path(str(_RAG_PATH))
-    if _RAG_PATH.exists():
-        try:
-            rag.load_index()
-        except Exception as e:
-            logger.warning("Failed to load RAG index: {}", e)
-    return rag
+    global _rag_engine, _rag_path, _rag_mtime
+    if _rag_engine is None or _rag_path != _RAG_PATH:
+        _rag_engine = MultiModalRAG()
+        _rag_engine.set_index_path(str(_RAG_PATH))
+        _rag_path = _RAG_PATH
+        _rag_mtime = None
+    mtime = _RAG_PATH.stat().st_mtime if _RAG_PATH.exists() else None
+    if mtime != _rag_mtime:
+        _rag_mtime = mtime
+        if mtime is not None:
+            try:
+                _rag_engine.load_index()
+            except Exception as e:
+                logger.warning("Failed to load RAG index: {}", e)
+    return _rag_engine
 
 
 def _save_rag(rag: MultiModalRAG) -> None:
+    global _rag_mtime
     _RAG_PATH.parent.mkdir(parents=True, exist_ok=True)
     rag.save_index()
+    # The engine in memory is the one that was just written; do not reload it.
+    _rag_mtime = _RAG_PATH.stat().st_mtime if _RAG_PATH.exists() else None
 
 
 class IndexTextRequest(BaseModel):

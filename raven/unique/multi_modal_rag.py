@@ -163,21 +163,13 @@ class MultiModalRAG:
             except Exception:
                 logger.warning("Failed to load SentenceTransformer '{}', using hash fallback", model_name)
 
-        # CLIP embedder for cross-modal search
+        # CLIP embedder for cross-modal search, loaded on first image use: it costs
+        # seconds, and a text-only query must not pay for it.
         self._clip_processor: CLIPProcessor | None = None
         self._clip_model: CLIPModel | None = None
         self._clip_dim: int = 512
         self._clip_max_tokens: int = 77
-        if _CLIP_AVAILABLE:
-            try:
-                self._clip_processor = CLIPProcessor.from_pretrained(clip_model_name)
-                self._clip_model = CLIPModel.from_pretrained(clip_model_name)
-                self._clip_dim = getattr(self._clip_model.config, "projection_dim", 512)
-                # the text encoder has a hard positional limit; longer input raises inside forward()
-                self._clip_max_tokens = int(getattr(self._clip_model.config, "max_position_embeddings", 77))
-                logger.info("Loaded CLIP model: {}", clip_model_name)
-            except Exception:
-                logger.warning("Failed to load CLIP model '{}'", clip_model_name)
+        self._clip_attempted = False
 
         # Unique instance ID to isolate ChromaDB collections per instance
         self._instance_id = uuid.uuid4().hex[:8]
@@ -234,6 +226,32 @@ class MultiModalRAG:
             self._chroma_text_collection = None
             self._chroma_clip_collection = None
 
+    def _ensure_clip(self) -> None:
+        if self._clip_attempted:
+            return
+        self._clip_attempted = True
+        if not _CLIP_AVAILABLE:
+            return
+        try:
+            self._clip_processor = CLIPProcessor.from_pretrained(self._clip_model_name)
+            self._clip_model = CLIPModel.from_pretrained(self._clip_model_name)
+            self._clip_dim = getattr(self._clip_model.config, "projection_dim", 512)
+            # the text encoder has a hard positional limit; longer input raises inside forward()
+            self._clip_max_tokens = int(getattr(self._clip_model.config, "max_position_embeddings", 77))
+            logger.info("Loaded CLIP model: {}", self._clip_model_name)
+        except Exception:
+            logger.warning("Failed to load CLIP model '{}'", self._clip_model_name)
+
+    def _clip_ready(self) -> bool:
+        return self._clip_pair() is not None
+
+    def _clip_pair(self) -> tuple[CLIPModel, CLIPProcessor] | None:
+        """The loaded model and processor, or None when either could not be loaded."""
+        self._ensure_clip()
+        if self._clip_model is None or self._clip_processor is None:
+            return None
+        return self._clip_processor, self._clip_model
+
     # -- Embedding helpers ---------------------------------------------------
 
     def _embed_text(self, text: str) -> list[float]:
@@ -243,18 +261,22 @@ class MultiModalRAG:
         return _text_to_embedding(text, self._dimension)
 
     def _embed_text_clip(self, text: str) -> list[float]:
-        if self._clip_model is None or self._clip_processor is None:
+        pair = self._clip_pair()
+        if pair is None:
             return []
-        inputs = self._clip_processor(
+        processor, model = pair
+        inputs = processor(
             text=[text], return_tensors="pt", padding=True, truncation=True, max_length=self._clip_max_tokens
         )
         with torch.no_grad():
-            emb = self._clip_model.get_text_features(**inputs)
+            emb = model.get_text_features(**inputs)
         return list(emb[0])
 
     def _embed_image(self, image_path: str) -> list[float]:
-        if self._clip_model is None or self._clip_processor is None:
+        pair = self._clip_pair()
+        if pair is None:
             return []
+        processor, model = pair
         from PIL import Image as PILImage
 
         try:
@@ -266,9 +288,9 @@ class MultiModalRAG:
         except Exception:
             logger.warning("Failed to open image: {}", image_path)
             return []
-        inputs = self._clip_processor(images=image, return_tensors="pt")
+        inputs = processor(images=image, return_tensors="pt")
         with torch.no_grad():
-            emb = self._clip_model.get_image_features(**inputs)
+            emb = model.get_image_features(**inputs)
         return list(emb[0])
 
     # -- Document indexing ---------------------------------------------------
@@ -580,7 +602,7 @@ class MultiModalRAG:
             text_results = self._to_results(scored, top_k)
 
         # Cross-modal: CLIP text query → CLIP image & text embeddings
-        if include_images and self._clip_model is not None:
+        if include_images and self._clip_ready():
             clip_query_emb = self._embed_text_clip(query)
             if clip_query_emb and self._chroma_clip_collection is not None:
                 image_results = self._chroma_search(self._chroma_clip_collection, clip_query_emb, top_k)
@@ -728,6 +750,6 @@ class MultiModalRAG:
             "total_chars": sum(len(d.text) for d in self._documents.values()),
             "total_images": sum(len(d.images) for d in self._documents.values()),
             "sentence_transformer": self._text_model is not None,
-            "clip_available": _CLIP_AVAILABLE and self._clip_model is not None,
+            "clip_available": _CLIP_AVAILABLE,
             "chroma_available": _CHROMA_AVAILABLE and self._chroma_client is not None,
         }

@@ -224,8 +224,11 @@ that read `coverage.xml`.
 
 ## 13. Self-Audit and CI
 
-`security_audit.py` runs 31 configuration checks against the live deployment (sandbox mode,
-workspace confinement, secrets, CORS, TLS, dependency versions) and returns fix hints.
+`security_audit.py` runs 22 configuration checks against the live deployment (sandbox mode,
+workspace confinement, secrets, CORS, TLS) and returns fix hints; `--deep` adds 8 more that
+touch the network or the filesystem - dependency versions through `pip-audit`, the env-file,
+log and signing-key permissions, the Docker sandbox, network exposure, token expiry and the
+session timeout.
 The `deep` dependency check shells out to `pip-audit` with a 60 s ceiling, so a blocked
 PyPI mirror reports a timeout instead of hanging the run.
 
