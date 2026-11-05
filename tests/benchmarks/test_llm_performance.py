@@ -13,10 +13,8 @@ def test_feature_flags_instantiation(benchmark: BenchmarkFixture) -> None:
 
     result = benchmark(create)
     flags = result.all_flags()
-    assert "new_planner_v2" in flags
-    assert "claude_3_opus" in flags
-    assert "bitbucket_webhooks" in flags
-    assert flags["claude_3_opus"] is True
+    assert set(flags) == {"redis_rate_limiter"}
+    assert flags["redis_rate_limiter"] is False
 
 
 @pytest.mark.benchmark
@@ -24,9 +22,10 @@ def test_feature_flags_is_enabled(benchmark: BenchmarkFixture) -> None:
     from ravencode.core.feature_flags import FeatureFlags
 
     ff = FeatureFlags()
+    ff.set("redis_rate_limiter", True)
 
     def check() -> bool:
-        return ff.is_enabled("claude_3_opus")
+        return ff.is_enabled("redis_rate_limiter")
 
     result = benchmark(check)
     assert result is True

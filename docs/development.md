@@ -186,3 +186,12 @@ python scripts/make_extension_icons.py      # extension/icons/*.png + extension/
 pip install build
 python -m build
 ```
+
+
+## Alert relay
+
+`scripts/telegram_alert_webhook.py` turns a build or deploy webhook into a Telegram
+message. It reads `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (the destination chat) and
+listens on `PORT`, 9094 by default. It is a standalone process; the gateway never
+imports it.
+

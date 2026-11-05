@@ -252,6 +252,21 @@ def _write_real_env(llm: dict[str, str], channels: dict[str, Any], security: dic
         console.print(f"[green]Written {path} with your secrets (gitignored)[/green]")
 
 
+
+def _write_features_yaml(team_dir: Path) -> None:
+    """State the toggles the scaffold created, using only the names the loader accepts."""
+    from raven.core.features import FeatureFlags, env_flag_names
+
+    flags = FeatureFlags()
+    lines = [
+        "# Feature toggles read by the gateway at startup.",
+        "# RAVEN_FEATURE_<NAME> in the environment overrides anything written here.",
+        "features:",
+    ]
+    for name in env_flag_names():
+        lines.append(f"  {name}: {str(getattr(flags, name)).lower()}")
+    (team_dir / "features.yaml").write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
+
 def init() -> None:
     console.print()
     console.print(Panel.fit("[bold cyan]raven init — Project Scaffolding[/bold cyan]", border_style="cyan"))
@@ -285,6 +300,7 @@ def init() -> None:
     team = root / ".raven"
     for sub in artifact_dirs:
         (team / sub).mkdir(parents=True, exist_ok=True)
+    _write_features_yaml(team)
     personal = root / ".raven.local"
     for sub in artifact_dirs:
         (personal / sub).mkdir(parents=True, exist_ok=True)

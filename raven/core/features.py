@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -11,12 +12,12 @@ _FALLBACK_PATH = Path("raven.yaml")
 
 
 class FeatureFlags:
-    """Config-driven feature toggles. Loaded from yaml, env, or defaults."""
+    """Feature toggles read from `raven.yaml` / `.raven/features.yaml`, then overridden by
+    the `RAVEN_FEATURE_*` variables listed in `_ENV_FLAGS`."""
 
     _instance: FeatureFlags | None = None
 
     def __init__(self) -> None:
-        self.memory: bool = True
         self.skills: bool = True
         self.dreaming: bool = False
         self.planner: bool = True
@@ -34,9 +35,11 @@ class FeatureFlags:
                 raw: dict[str, Any] = yaml.safe_load(source.read_text(encoding="utf-8"))
                 features = raw.get("features", {}) if isinstance(raw, dict) else raw
                 if isinstance(features, dict):
-                    for key in [f for f in dir(flags) if not f.startswith("_")]:
-                        if key in features:
-                            setattr(flags, key, bool(features[key]))
+                    for key, value in features.items():
+                        if key not in _ALL_FEATURES:
+                            logger.warning("Unknown feature flag {} in {}, ignored", key, source)
+                            continue
+                        setattr(flags, key, bool(value))
                     logger.info("Feature flags loaded from {}", source)
                 else:
                     logger.warning("'features' block in {} is not a dict, using defaults", source)
@@ -44,8 +47,22 @@ class FeatureFlags:
                 logger.opt(exception=True).warning("Failed to load feature flags from {}", source)
         else:
             logger.debug("No feature config found, using defaults")
+        flags.apply_env()
         cls._instance = flags
         return flags
+
+    def apply_env(self) -> None:
+        """Override every flag named in the environment; the environment has the last word."""
+        for name, env_var in _ENV_FLAGS.items():
+            raw = os.environ.get(env_var, "").strip().lower()
+            if not raw:
+                continue
+            if raw in _TRUTHY:
+                setattr(self, name, True)
+            elif raw in _FALSY:
+                setattr(self, name, False)
+            else:
+                logger.warning("{}={} is not an on/off value, keeping {}", env_var, raw, getattr(self, name))
 
     @classmethod
     def get(cls) -> FeatureFlags:
@@ -63,10 +80,28 @@ class FeatureFlags:
         return {k: getattr(self, k, False) for k in _ALL_FEATURES}
 
 
-_ALL_FEATURES = [
-    "memory", "skills", "dreaming", "planner",
-    "browser", "delegation", "voice", "telemetry",
-]
+# One environment name per flag, so the list of toggles and the list of switches an operator
+# can set cannot drift apart. Every name here is consulted somewhere in the code - the guard
+# in tests/test_feature_flags.py fails the build if one ever stops being.
+_ENV_FLAGS: dict[str, str] = {
+    "skills": "RAVEN_FEATURE_SKILLS",
+    "dreaming": "RAVEN_FEATURE_DREAMING",
+    "planner": "RAVEN_FEATURE_PLANNER",
+    "browser": "RAVEN_FEATURE_BROWSER",
+    "delegation": "RAVEN_FEATURE_DELEGATION",
+    "voice": "RAVEN_FEATURE_VOICE",
+    "telemetry": "RAVEN_FEATURE_TELEMETRY",
+}
+
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+_FALSY = frozenset({"0", "false", "no", "off"})
+
+_ALL_FEATURES = list(_ENV_FLAGS)
+
+
+def env_flag_names() -> dict[str, str]:
+    """The environment variable that overrides each flag."""
+    return dict(_ENV_FLAGS)
 
 
 def _find_config() -> Path | None:

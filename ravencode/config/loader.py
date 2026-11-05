@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import json
 import os
 import re
@@ -81,12 +80,15 @@ def _add_source(name: str, path: Path) -> None:
     _CONFIG_PATHS.append((name, path))
 
 
+def _loads_jsonc(text: str) -> dict[str, Any]:
+    cleaned = strip_jsonc(text)
+    return cast(dict[str, Any], json.loads(cleaned))
+
+
 def _load_jsonc(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
-    text = path.read_text(encoding="utf-8")
-    cleaned = strip_jsonc(text)
-    return cast(dict[str, Any], json.loads(cleaned))
+    return _loads_jsonc(path.read_text(encoding="utf-8"))
 
 
 def _default_config_paths(project_dir: str | Path) -> list[tuple[str, Path]]:
@@ -112,15 +114,6 @@ def _default_config_paths(project_dir: str | Path) -> list[tuple[str, Path]]:
         if dot_dir.is_dir() and (dot_dir / "config.json").exists():
             paths.append((f"dot_{name.lstrip('.')}", dot_dir / "config.json"))
             break
-
-    inline = os.environ.get("RAVENCODE_CONFIG_CONTENT")
-    if inline:
-        import tempfile
-
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            f.write(inline)
-            tmp_path = Path(f.name)
-        paths.append(("inline", tmp_path))
 
     return paths
 
@@ -282,6 +275,15 @@ class ConfigLoader:
             except Exception as e:
                 logger.warning("Failed to load config from {} ({}): {}", name, path, e)
 
+        inline = os.environ.get("RAVENCODE_CONFIG_CONTENT")
+        if inline:
+            try:
+                sources.append(resolve_vars_in_dict(_loads_jsonc(inline)))
+                source_names.append("inline")
+                logger.debug("Loaded config from RAVENCODE_CONFIG_CONTENT")
+            except (json.JSONDecodeError, TypeError, ValueError) as e:
+                logger.warning("RAVENCODE_CONFIG_CONTENT is not valid JSON, ignored: {}", e)
+
         merged: dict[str, Any] = {}
         for name, data in zip(source_names, sources, strict=False):
             merged = deep_merge(merged, data)
@@ -306,12 +308,20 @@ class ConfigLoader:
             overrides["model"] = model
         temperature = os.environ.get("RAVENCODE_TEMPERATURE")
         if temperature:
-            with contextlib.suppress(ValueError):
+            try:
                 overrides["temperature"] = float(temperature)
+            except ValueError:
+                logger.warning(
+                    "RAVENCODE_TEMPERATURE={} is not a number, keeping the configured value", temperature
+                )
         max_steps = os.environ.get("RAVENCODE_MAX_STEPS")
         if max_steps:
-            with contextlib.suppress(ValueError):
+            try:
                 overrides["max_steps"] = int(max_steps)
+            except ValueError:
+                logger.warning(
+                    "RAVENCODE_MAX_STEPS={} is not an integer, keeping the configured value", max_steps
+                )
         theme = os.environ.get("RAVENCODE_THEME")
         if theme:
             overrides["theme"] = theme

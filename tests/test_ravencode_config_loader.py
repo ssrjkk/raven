@@ -147,17 +147,67 @@ class TestDefaultConfigPaths:
         paths = loader._default_config_paths(tmp_path)
         assert ("dot_ravencode", dot / "config.json") in paths
 
-    def test_inline_config(self, monkeypatch) -> None:
+    def test_inline_config_is_not_turned_into_a_file(self, monkeypatch) -> None:
         monkeypatch.setenv("RAVENCODE_CONFIG_CONTENT", '{"model": "inline-model"}')
         paths = loader._default_config_paths(Path.cwd())
-        inline = [p for name, p in paths if name == "inline"]
-        assert len(inline) == 1
-        assert Path(inline[0]).read_text(encoding="utf-8") == '{"model": "inline-model"}'
+        assert [name for name, _path in paths if name == "inline"] == []
 
     def test_add_source(self) -> None:
         loader._add_source("name", Path("p"))
         assert ("name", Path("p")) in loader._CONFIG_PATHS
 
+
+
+class TestInlineConfig:
+    """`RAVENCODE_CONFIG_CONTENT` exists so a configuration with secrets in it stays off the disk."""
+
+    def test_the_inline_value_is_merged_without_touching_the_filesystem(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import tempfile
+
+        def _forbidden(*args: object, **kwargs: object) -> object:
+            msg = "RAVENCODE_CONFIG_CONTENT must be parsed in memory, not written to a temp file"
+            raise AssertionError(msg)
+
+        monkeypatch.setattr(tempfile, "NamedTemporaryFile", _forbidden)
+        monkeypatch.setenv("RAVENCODE_CONFIG_CONTENT", '{"model": "inline-model"}')
+        cfg = ConfigLoader(tmp_path).load_all()
+        assert cfg.model == "inline-model"
+        assert "inline" in cfg._source
+
+    def test_an_unparsable_inline_body_is_reported_and_skipped(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from loguru import logger
+
+        warnings: list[str] = []
+        sink_id = logger.add(lambda record: warnings.append(str(record)), level="WARNING")
+        try:
+            monkeypatch.setenv("RAVENCODE_CONFIG_CONTENT", "{not json at all")
+            cfg = ConfigLoader(tmp_path).load_all()
+        finally:
+            logger.remove(sink_id)
+        assert "inline" not in cfg._source
+        assert any("RAVENCODE_CONFIG_CONTENT" in line for line in warnings), warnings
+
+    def test_a_number_that_is_not_a_number_says_so(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from loguru import logger
+
+        warnings: list[str] = []
+        sink_id = logger.add(lambda record: warnings.append(str(record)), level="WARNING")
+        try:
+            monkeypatch.setenv("RAVENCODE_MAX_STEPS", "thirty")
+            monkeypatch.setenv("RAVENCODE_TEMPERATURE", "hot")
+            cfg = ConfigLoader(tmp_path).load_all()
+        finally:
+            logger.remove(sink_id)
+        assert cfg.max_steps == 30
+        assert cfg.temperature == 0.7
+        assert any("RAVENCODE_MAX_STEPS" in line for line in warnings), warnings
+        assert any("RAVENCODE_TEMPERATURE" in line for line in warnings), warnings
 
 class TestRavenConfig:
     def test_from_dict_defaults(self) -> None:

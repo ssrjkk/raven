@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import functools
 import pathlib
 import re
@@ -23,6 +24,11 @@ _READ = re.compile(r"(?:getenv|environ\.get|environ\[|env\.get)\s*\(?\s*[\"']([A
 _MEMBERSHIP = re.compile(r"[\"']([A-Z][A-Z0-9_]{2,})[\"']\s+in\s+os\.environ")
 # Vite reads build-time names as properties of import.meta.env, not through os.environ.
 _VITE_READ = re.compile(r"import\.meta\.env\.([A-Z][A-Z0-9_]{2,})")
+# Env names also live in lookup tables (features.py maps each flag to RAVEN_FEATURE_*). Only a
+# module-level dict whose own name mentions the environment counts: a bare list of names, like
+# the config watcher's protected set, is not a switch anyone reads.
+_ENV_TABLE = re.compile(r"ENV|FLAG", re.IGNORECASE)
+_ENV_LIKE = re.compile(r"^[A-Z][A-Z0-9_]{2,}$")
 # A switch read through a module constant: WEB_DIST_ENV_VAR = "RAVEN_WEB_DIST".
 _BOUND = re.compile(r"^([A-Z0-9_]+)\s*=\s*[\"']([A-Z][A-Z0-9_]{2,})[\"']", re.M)
 
@@ -36,6 +42,29 @@ def _python_blob() -> str:
     return "\n".join(parts)
 
 
+def _table_env_names(source: str) -> set[str]:
+    """Env names a module keeps in a lookup table instead of reading inline."""
+    found: set[str] = set()
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return found
+    for node in tree.body:
+        pairs: list[tuple[ast.expr, ast.expr | None]] = []
+        if isinstance(node, ast.AnnAssign):
+            pairs.append((node.target, node.value))
+        elif isinstance(node, ast.Assign):
+            pairs.extend((target, node.value) for target in node.targets)
+        for target, table in pairs:
+            if not isinstance(target, ast.Name) or not _ENV_TABLE.search(target.id):
+                    continue
+            if not isinstance(table, ast.Dict):
+                continue
+            for entry in table.values:
+                if isinstance(entry, ast.Constant) and isinstance(entry.value, str) and _ENV_LIKE.match(entry.value):
+                    found.add(entry.value)
+    return found
+
 @functools.lru_cache(maxsize=1)
 def _consumed() -> frozenset[str]:
     """Every environment name the application can read for itself."""
@@ -47,6 +76,9 @@ def _consumed() -> frozenset[str]:
     for mapping in _LEGACY_ENV.values():
         names.update(mapping)
     blob = _python_blob()
+    for directory in ("raven", "ravencode", "aios", "scripts"):
+        for path in sorted((ROOT / directory).rglob("*.py")):
+            names.update(_table_env_names(path.read_text(encoding="utf-8", errors="ignore")))
     names.update(_READ.findall(blob))
     names.update(_MEMBERSHIP.findall(blob))
     for constant, value in _BOUND.findall(blob):
@@ -159,3 +191,42 @@ def test_the_web_bundle_advertises_only_variables_it_reads() -> None:
     assert declared, "the bundle's example file vanished"
     assert read, "no import.meta.env read anywhere in web/src"
     assert sorted(declared - read) == []
+
+
+def _owned_reads() -> set[str]:
+    """Names the project defines for itself, as opposed to ones an SDK or the OS owns."""
+    from raven.core.features import env_flag_names
+
+    owned = {name.upper() for name in Settings.model_fields}
+    owned.update(var for mapping in _LEGACY_ENV.values() for var in mapping)
+    owned.update(env_flag_names().values())
+    owned.update(name for name in _consumed() if name.startswith(("RAVEN_", "RAVENCODE_")))
+    return owned & set(_consumed())
+
+
+def _documented() -> set[str]:
+    texts = [(ROOT / ".env.example").read_text(encoding="utf-8")]
+    for path in sorted((ROOT / "docs").rglob("*.md")):
+        if "archive" in path.parts:
+            continue
+        texts.append(path.read_text(encoding="utf-8", errors="ignore"))
+    for name in ("README.md", "README.ru.md"):
+        texts.append((ROOT / name).read_text(encoding="utf-8", errors="ignore"))
+    found: set[str] = set()
+    for text in texts:
+        found.update(re.findall(r"\b([A-Z][A-Z0-9_]{2,})\b", text))
+    return found
+
+
+def test_every_switch_the_project_reads_is_documented_somewhere_an_operator_looks() -> None:
+    owned = _owned_reads()
+    assert len(owned) > 100, len(owned)
+    assert sorted(owned - _documented()) == []
+
+
+def test_the_documentation_rule_reads_the_pages_it_claims_to() -> None:
+    documented = _documented()
+    for name in ("RAVENCODE_MODEL", "RAVEN_DATA_DIR", "TELEGRAM_CHAT_ID", "RAVEN_FEATURE_PLANNER"):
+        assert name in documented, name
+    assert "RAVEN_NO_SUCH_SWITCH" not in documented
+    assert sorted({"RAVENCODE_MODEL", "RAVEN_NO_SUCH_SWITCH"} - documented) == ["RAVEN_NO_SUCH_SWITCH"]

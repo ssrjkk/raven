@@ -110,3 +110,37 @@ Persistent configuration is stored in `~/.raven/config.json`:
 ```
 
 Use `config_store.set(key, value)` to update at runtime.
+
+### Data and Workspace Overrides
+
+Two variables move directories the settings model already resolves:
+
+| Variable | Effect | Read by |
+| --- | --- | --- |
+| `RAVEN_DATA_DIR` | directory for runtime artefacts such as `theme_prefs.json`, in place of `DB_PATH`'s parent | `raven/core/commands_api.py:58` |
+| `RAVEN_WORKSPACE` | workspace root the command, debugger and project-metrics surfaces operate on | `raven/core/commands_api.py:254` |
+| `RAVEN_CONFIG` | the file the artifact layer takes `paths` from, searched before `./raven.json` | `raven/core/artifacts/paths.py:143` |
+
+Both are inherited by plugin processes (`raven/plugins/code/plugin.py:17`).
+
+## Feature Flags
+
+Seven toggles decide which surfaces the gateway builds. They are read from
+`raven/core/features.py`, taken from `.raven/features.yaml` (or `raven.yaml`) under a
+`features:` key, and then overridden by the environment, which has the last word.
+`raven init` writes the file with the defaults below and `raven doctor` prints the set that
+is on. The last column names the exact place the flag is consulted.
+
+| Flag | Default | Switch | With the flag off |
+| --- | --- | --- | --- |
+| `skills` | on | `RAVEN_FEATURE_SKILLS` | only built-in skills load - `raven/core/skills.py:160` |
+| `planner` | on | `RAVEN_FEATURE_PLANNER` | `/api/task/*` is not registered - `raven/core/ops_api.py:149` |
+| `delegation` | on | `RAVEN_FEATURE_DELEGATION` | delegated work always routes to `coder` - `raven/core/agents/multi.py:49` |
+| `dreaming` | off | `RAVEN_FEATURE_DREAMING` | the dreaming engine refuses to run - `raven/core/dreaming/engine.py:49` |
+| `browser` | off | `RAVEN_FEATURE_BROWSER` | the browser router is not mounted - `raven/cli/gateway_runner.py:301` |
+| `voice` | off | `RAVEN_FEATURE_VOICE` | the voice router is not mounted - `raven/cli/gateway_runner.py:266` |
+| `telemetry` | off | `RAVEN_FEATURE_TELEMETRY` | the analytics and A/B-testing routers are not mounted - `raven/cli/gateway_runner.py:287` |
+
+ravencode keeps its own set in `ravencode/core/feature_flags.py`, switched with the `FF_`
+prefix; after the unconsumed flags were removed one remains: `FF_REDIS_RATE_LIMITER`, read by
+`ravencode/core/rate_limiter.py:46`.
