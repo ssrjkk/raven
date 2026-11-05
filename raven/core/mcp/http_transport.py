@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from raven.core.mcp.auth import authorize_request
 from raven.core.mcp.server import MCPServer
 from raven.core.mcp.sse_transport import SSETransport
-from ravencode.runtime.tools import execute_tool_public, get_tool_definitions
+from ravencode.runtime.tools import execute_tool_public, get_mcp_tool_definitions
 
 _mcp_server = MCPServer()
 _sse_transport = SSETransport()
@@ -42,19 +42,18 @@ def create_mcp_router() -> APIRouter:
     async def list_tools(request: Request) -> JSONResponse:
         if not await authorize_request(request):
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
-        defs = get_tool_definitions()
-        result = []
-        for d in defs:
-            fn = d.get("function", d)
-            if isinstance(fn, dict):
-                result.append(
-                    {
-                        "name": fn.get("name", ""),
-                        "description": fn.get("description", ""),
-                        "parameters": fn.get("parameters", {}),
-                    }
-                )
-        return JSONResponse(result)
+        defs = get_mcp_tool_definitions()
+        return JSONResponse(
+            [
+                {
+                    "name": tool["name"],
+                    "description": tool["description"],
+                    "parameters": tool["inputSchema"],
+                    "annotations": tool["annotations"],
+                }
+                for tool in defs
+            ]
+        )
 
     @router.post("/tools/{name}")
     async def call_tool(name: str, request: Request) -> JSONResponse:

@@ -31,7 +31,7 @@ class TestMCPServer:
         result = await self.server.handle_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
         assert result is not None
         tool = result["result"]["tools"][0]
-        assert set(tool) == {"name", "description", "inputSchema"}
+        assert set(tool) == {"name", "description", "inputSchema", "annotations"}
 
     @pytest.mark.asyncio
     async def test_handle_notification_returns_none(self) -> None:

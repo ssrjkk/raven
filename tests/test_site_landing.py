@@ -46,9 +46,8 @@ import yaml
 from raven.core.channel_config import _LEGACY_ENV
 from raven.core.config import Settings
 from raven.core.gateway.commands.help import command_entries
-from raven.core.mcp.server import _to_mcp_tool
 from raven.core.webhooks import create_webhook_router
-from ravencode.runtime.tools import get_tool_definitions
+from ravencode.runtime.tools import get_mcp_tool_definitions
 
 ROOT = Path(__file__).resolve().parent.parent
 SITE = ROOT / "site"
@@ -365,12 +364,17 @@ def frames() -> list[dict[str, Any]]:
 
 def registry_tools() -> list[dict[str, Any]]:
     """The list the stdio server returns for ``tools/list``, in registry order."""
-    return [_to_mcp_tool(defn) for defn in get_tool_definitions()]
+    return get_mcp_tool_definitions()
 
 
 def build_entries() -> Any:
     return load_module("record_site_frames", GENERATOR).build_entries
 
+
+# Frames the local server answers again identically: protocol-level calls whose reply depends
+# on nothing but the code, plus the recorded rejections. Frames carrying file content are
+# covered by the shape assertions instead, so editing README.md cannot break the landing page.
+_STABLE_METHODS = frozenset({"initialize", "tools/list", "ping", "logging/setLevel"})
 
 def signature(frame: dict[str, Any]) -> str:
     """Request identity as the browser computes it: method + params, ids ignored."""
@@ -1372,3 +1376,25 @@ def test_the_console_screen_list_is_the_route_table() -> None:
     assert chips == screens, {"only on the page": sorted(chips - screens), "only in the router": sorted(screens - chips)}
     assert f"<caption>The {len(screens)} screens the console serves</caption>" in page("gateway.html")
     assert f"<summary>The {len(screens)} screens the console serves, by group</summary>" in page("gateway.html")
+
+
+def test_the_replayed_frames_are_what_the_server_still_answers() -> None:
+    """The demo promises it shows real recordings, so a recording that no longer matches the
+    server has to fail the build rather than replay a stale answer."""
+    import asyncio
+
+    from raven.core.mcp.server import MCPServer
+
+    server = MCPServer()
+    stale: list[str] = []
+    for pair in frames():
+        request = pair["request"]
+        recorded = pair["response"]
+        method = request.get("method")
+        replayable = method in _STABLE_METHODS or (isinstance(recorded, dict) and "error" in recorded)
+        if not replayable or "params" not in request:
+            continue
+        live = asyncio.run(server.handle_request(dict(request)))
+        if json.dumps(pair["response"], sort_keys=True) != json.dumps(live, sort_keys=True):
+            stale.append(str(request.get("method")))
+    assert stale == []

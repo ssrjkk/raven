@@ -5,16 +5,7 @@ import json
 import sys
 from typing import Any
 
-from ravencode.runtime.tools import execute_tool_public, get_tool_definitions
-
-
-def _to_mcp_tool(defn: dict[str, Any]) -> dict[str, Any]:
-    fn = defn.get("function", defn)
-    return {
-        "name": fn.get("name", ""),
-        "description": fn.get("description", ""),
-        "inputSchema": fn.get("parameters", {"type": "object", "properties": {}}),
-    }
+from ravencode.runtime.tools import execute_tool_public, get_mcp_tool_definitions
 
 
 def _error(req_id: Any, code: int, message: str) -> dict[str, Any]:
@@ -57,7 +48,7 @@ class MCPServer:
         if method == "logging/setLevel":
             return {"jsonrpc": "2.0", "id": req_id, "result": {}}
         if method == "tools/list":
-            tools = [_to_mcp_tool(d) for d in get_tool_definitions()]
+            tools = get_mcp_tool_definitions()
             return {"jsonrpc": "2.0", "id": req_id, "result": {"tools": tools}}
         if method == "tools/call":
             name = params.get("name", "")

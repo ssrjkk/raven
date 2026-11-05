@@ -45,8 +45,15 @@ class TestMCPHttp:
                 return
 
     async def test_tools_endpoint(self, router, authed) -> None:
-        defs = [{"function": {"name": "read_file", "description": "Read a file", "parameters": {}}}]
-        with patch("raven.core.mcp.http_transport.get_tool_definitions", return_value=defs):
+        defs = [
+            {
+                "name": "read_file",
+                "description": "Read a file",
+                "inputSchema": {},
+                "annotations": {"destructiveHint": False, "openWorldHint": False},
+            }
+        ]
+        with patch("raven.core.mcp.http_transport.get_mcp_tool_definitions", return_value=defs):
             for route in router.routes:
                 if getattr(route, "path", "") == "/mcp/tools" and "GET" in route.methods:
                     resp = await route.endpoint(request=_auth_req())
@@ -56,14 +63,23 @@ class TestMCPHttp:
                     return
 
     async def test_tools_endpoint_no_function_wrapper(self, router, authed) -> None:
-        defs = [{"name": "write_file", "description": "Write a file", "parameters": {}}]
-        with patch("raven.core.mcp.http_transport.get_tool_definitions", return_value=defs):
+        defs = [
+            {
+                "name": "write_file",
+                "description": "Write a file",
+                "inputSchema": {},
+                "annotations": {"destructiveHint": True, "openWorldHint": False},
+            }
+        ]
+        with patch("raven.core.mcp.http_transport.get_mcp_tool_definitions", return_value=defs):
             for route in router.routes:
                 if getattr(route, "path", "") == "/mcp/tools" and "GET" in route.methods:
                     resp = await route.endpoint(request=_auth_req())
                     body = json.loads(resp.body)
                     assert len(body) == 1
                     assert body[0]["name"] == "write_file"
+                    assert body[0]["annotations"] == {"destructiveHint": True, "openWorldHint": False}
+                    assert body[0]["parameters"] == {}
                     return
 
     async def test_rpc_valid(self, router, authed) -> None:

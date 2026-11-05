@@ -24,7 +24,7 @@ that is not an object with `-32600`; none of them end the session.
 | `initialize` | Handshake; reports protocol `2025-03-26`, server name `raven-mcp` / `ravencode` |
 | `notifications/initialized` | Acknowledged silently (no response, per JSON-RPC) |
 | `ping`, `logging/setLevel` | Answered with an empty result |
-| `tools/list` | All 66 tools as `{name, description, inputSchema}` |
+| `tools/list` | All 66 tools as `{name, description, inputSchema, annotations}` - the hints come from the same table the execution policy reads, so `destructiveHint` is true for exactly the 28 tools a call is gated on and `openWorldHint` for the 15 that leave the machine |
 | `tools/call` | Executes the tool and returns `{content: [{type: "text", text: ...}]}` |
 
 ## Claude Desktop
@@ -148,5 +148,6 @@ python scripts/mcp_smoke.py
 ```
 
 Expected output: `initialize` succeeds, `tools/list` returns 66 tools with
-`name`/`description`/`inputSchema` keys, a `read` call returns file content, and a
+`name`/`description`/`inputSchema`/`annotations` keys, a `read` call returns file
+content, and a
 path outside the workspace returns `[execution_error] tool failed`.

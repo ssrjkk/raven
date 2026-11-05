@@ -18,12 +18,25 @@ class TestMCPServer:
     async def test_handle_tools_list(self) -> None:
         server = MCPServer()
         with patch(
-            "raven.core.mcp.server.get_tool_definitions",
-            return_value=[{"function": {"name": "test", "description": "d", "parameters": {"type": "object"}}}],
+            "raven.core.mcp.server.get_mcp_tool_definitions",
+            return_value=[
+                {
+                    "name": "test",
+                    "description": "d",
+                    "inputSchema": {"type": "object"},
+                    "annotations": {"destructiveHint": True, "openWorldHint": False},
+                }
+            ],
         ):
             resp = await server.handle_request({"method": "tools/list", "id": 2, "params": {}})
-            assert resp is not None and resp["result"]["tools"] == [
-                {"name": "test", "description": "d", "inputSchema": {"type": "object"}}
+            assert resp is not None
+            assert resp["result"]["tools"] == [
+                {
+                    "name": "test",
+                    "description": "d",
+                    "inputSchema": {"type": "object"},
+                    "annotations": {"destructiveHint": True, "openWorldHint": False},
+                }
             ]
 
     async def test_handle_notification_returns_none(self) -> None:

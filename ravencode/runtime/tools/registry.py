@@ -14,7 +14,7 @@ from .definitions import (
     _PLAN_MODE_DENIED,
     MODULE_TOOLS,
 )
-from .sandbox_policy import _sandbox_deny_reason
+from .sandbox_policy import _WEB_BROWSING_TOOLS, _sandbox_deny_reason
 
 _plugin_tools_loaded = False
 
@@ -63,6 +63,31 @@ def _build_tool_definitions(plan_mode: bool) -> tuple[dict[str, Any], ...]:
 
 
 
+def tool_annotations(name: str) -> dict[str, bool]:
+    """MCP tool annotations, derived from the same table the execution policy consults."""
+    spec = MODULE_TOOLS.get(name) or {}
+    return {
+        "destructiveHint": bool(spec.get("dangerous", False)),
+        "openWorldHint": name in _WEB_BROWSING_TOOLS,
+    }
+
+
+def get_mcp_tool_definitions(plan_mode: bool = False) -> list[dict[str, Any]]:
+    """The served tool list in MCP shape, with the hazard hints a client can act on."""
+    _ensure_plugin_tools()
+    tools: list[dict[str, Any]] = []
+    for definition in _build_tool_definitions(plan_mode):
+        fn = definition["function"]
+        name = str(fn.get("name", ""))
+        tools.append(
+            {
+                "name": name,
+                "description": fn.get("description", ""),
+                "inputSchema": fn.get("parameters", {"type": "object", "properties": {}}),
+                "annotations": tool_annotations(name),
+            }
+        )
+    return tools
 def is_dangerous(name: str) -> bool:
     t = MODULE_TOOLS.get(name)
     return bool(t.get("dangerous")) if t else False

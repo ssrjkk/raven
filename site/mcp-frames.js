@@ -70,6 +70,10 @@ const MCP_FRAMES = {
         "required": [
          "path"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true
        }
       },
       {
@@ -91,6 +95,10 @@ const MCP_FRAMES = {
          "path",
          "content"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -122,6 +130,10 @@ const MCP_FRAMES = {
          "old_string",
          "new_string"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -138,6 +150,10 @@ const MCP_FRAMES = {
         "required": [
          "path"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -159,6 +175,10 @@ const MCP_FRAMES = {
         "required": [
          "pattern"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true
        }
       },
       {
@@ -190,6 +210,10 @@ const MCP_FRAMES = {
         "required": [
          "pattern"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true
        }
       },
       {
@@ -211,6 +235,10 @@ const MCP_FRAMES = {
         "required": [
          "command"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -232,6 +260,10 @@ const MCP_FRAMES = {
         "required": [
          "query"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true
        }
       },
       {
@@ -248,6 +280,10 @@ const MCP_FRAMES = {
         "required": [
          "url"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true
        }
       },
       {
@@ -264,6 +300,10 @@ const MCP_FRAMES = {
         "required": [
          "reasoning"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true
        }
       },
       {
@@ -285,6 +325,10 @@ const MCP_FRAMES = {
         "required": [
          "description"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -309,6 +353,10 @@ const MCP_FRAMES = {
         "required": [
          "tasks"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -324,6 +372,10 @@ const MCP_FRAMES = {
          }
         },
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -344,6 +396,10 @@ const MCP_FRAMES = {
          }
         },
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -364,6 +420,10 @@ const MCP_FRAMES = {
          }
         },
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -384,6 +444,10 @@ const MCP_FRAMES = {
          }
         },
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -405,6 +469,10 @@ const MCP_FRAMES = {
         "required": [
          "message"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -426,6 +494,10 @@ const MCP_FRAMES = {
         "required": [
          "files"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -442,6 +514,10 @@ const MCP_FRAMES = {
         "required": [
          "path"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -481,6 +557,10 @@ const MCP_FRAMES = {
          "artifact_type",
          "content"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -490,6 +570,10 @@ const MCP_FRAMES = {
         "type": "object",
         "properties": {},
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -499,6 +583,10 @@ const MCP_FRAMES = {
         "type": "object",
         "properties": {},
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -514,6 +602,10 @@ const MCP_FRAMES = {
          }
         },
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -530,6 +622,10 @@ const MCP_FRAMES = {
         "required": [
          "cid"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -539,6 +635,10 @@ const MCP_FRAMES = {
         "type": "object",
         "properties": {},
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -548,6 +648,10 @@ const MCP_FRAMES = {
         "type": "object",
         "properties": {},
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -574,6 +678,10 @@ const MCP_FRAMES = {
          "line",
          "col"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -600,6 +708,10 @@ const MCP_FRAMES = {
          "line",
          "col"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -626,6 +738,10 @@ const MCP_FRAMES = {
          "line",
          "col"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -652,6 +768,10 @@ const MCP_FRAMES = {
          "line",
          "col"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -668,6 +788,10 @@ const MCP_FRAMES = {
         "required": [
          "path"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -689,6 +813,10 @@ const MCP_FRAMES = {
         "required": [
          "code"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -730,6 +858,10 @@ const MCP_FRAMES = {
         "required": [
          "path"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -751,6 +883,10 @@ const MCP_FRAMES = {
          "path",
          "diff_text"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -767,6 +903,10 @@ const MCP_FRAMES = {
         "required": [
          "path"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -786,6 +926,10 @@ const MCP_FRAMES = {
         "required": [
          "paths"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -806,6 +950,10 @@ const MCP_FRAMES = {
          }
         },
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -822,6 +970,10 @@ const MCP_FRAMES = {
         "required": [
          "name"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -838,6 +990,10 @@ const MCP_FRAMES = {
         "required": [
          "name"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -854,6 +1010,10 @@ const MCP_FRAMES = {
         "required": [
          "url"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -891,6 +1051,10 @@ const MCP_FRAMES = {
         "required": [
          "tasks"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -906,6 +1070,10 @@ const MCP_FRAMES = {
          }
         },
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -927,6 +1095,10 @@ const MCP_FRAMES = {
          "tid",
          "status"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -936,6 +1108,10 @@ const MCP_FRAMES = {
         "type": "object",
         "properties": {},
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -984,6 +1160,10 @@ const MCP_FRAMES = {
         "required": [
          "question"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true
        }
       },
       {
@@ -993,6 +1173,10 @@ const MCP_FRAMES = {
         "type": "object",
         "properties": {},
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -1009,6 +1193,10 @@ const MCP_FRAMES = {
         "required": [
          "text"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -1025,6 +1213,10 @@ const MCP_FRAMES = {
         "required": [
          "text"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -1034,6 +1226,10 @@ const MCP_FRAMES = {
         "type": "object",
         "properties": {},
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -1050,6 +1246,10 @@ const MCP_FRAMES = {
         "required": [
          "url"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": true
        }
       },
       {
@@ -1066,6 +1266,10 @@ const MCP_FRAMES = {
         "required": [
          "selector"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": true
        }
       },
       {
@@ -1087,6 +1291,10 @@ const MCP_FRAMES = {
          "selector",
          "text"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": true
        }
       },
       {
@@ -1102,6 +1310,10 @@ const MCP_FRAMES = {
          }
         },
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true
        }
       },
       {
@@ -1117,6 +1329,10 @@ const MCP_FRAMES = {
          }
         },
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true
        }
       },
       {
@@ -1133,6 +1349,10 @@ const MCP_FRAMES = {
         "required": [
          "script"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": true
        }
       },
       {
@@ -1142,6 +1362,10 @@ const MCP_FRAMES = {
         "type": "object",
         "properties": {},
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true
        }
       },
       {
@@ -1161,6 +1385,10 @@ const MCP_FRAMES = {
         "required": [
          "components"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -1170,6 +1398,10 @@ const MCP_FRAMES = {
         "type": "object",
         "properties": {},
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -1195,6 +1427,10 @@ const MCP_FRAMES = {
          "cron",
          "task"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -1204,6 +1440,10 @@ const MCP_FRAMES = {
         "type": "object",
         "properties": {},
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -1220,6 +1460,10 @@ const MCP_FRAMES = {
         "required": [
          "task_id"
         ]
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": false
        }
       },
       {
@@ -1234,6 +1478,10 @@ const MCP_FRAMES = {
          }
         },
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": true
        }
       },
       {
@@ -1258,6 +1506,10 @@ const MCP_FRAMES = {
         "required": [
          "text"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -1278,6 +1530,10 @@ const MCP_FRAMES = {
         "required": [
          "fact"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -1292,6 +1548,10 @@ const MCP_FRAMES = {
          }
         },
         "required": []
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       },
       {
@@ -1312,6 +1572,10 @@ const MCP_FRAMES = {
         "required": [
          "query"
         ]
+       },
+       "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": false
        }
       }
      ]
@@ -1351,7 +1615,7 @@ const MCP_FRAMES = {
      "content": [
       {
        "type": "text",
-       "text": "<div align=\"center\">\n\n# Raven\n\n**by [@ssrjkk](https://github.com/ssrjkk)**\n\nA self-hosted AI assista\n... (truncated, 8892 total chars)"
+       "text": "<div align=\"center\">\n\n# Raven\n\n**by [@ssrjkk](https://github.com/ssrjkk)**\n\nA self-hosted AI assista\n... (truncated, 8720 total chars)"
       }
      ]
     }
@@ -1377,7 +1641,7 @@ const MCP_FRAMES = {
      "content": [
       {
        "type": "text",
-       "text": "docs/archive/AUDIT.md\ndocs/archive/AUDIT_PLAN.md\ndocs/archive/CONTEXT.md\ndocs/archive/STATS.md\ndocs/archive/changelog-pre-0.4.8-unreleased.md\ndocs/archive/fixes-history.md\ndocs/archive/sprint-1.md\ndocs/channels/overview.md\ndocs/cli.md\ndocs/concepts/architecture.md\ndocs/configuration.md\ndocs/development.md\ndocs/getting-started.md\ndocs/index.md\ndocs/mcp.md\ndocs/plugins.md\ndocs/security/overview.md"
+       "text": "docs/archive/AUDIT.md\ndocs/archive/AUDIT_PLAN.md\ndocs/archive/CONTEXT.md\ndocs/archive/STATS.md\ndocs/archive/changelog-pre-0.4.8-unreleased.md\ndocs/archive/fixes-history.md\ndocs/archive/sprint-1.md\ndocs/channels/overview.md\ndocs/cli.md\ndocs/concepts/architecture.md\ndocs/configuration.md\ndocs/development.md\ndocs/getting-started.md\ndocs/index.md\ndocs/mcp.md\ndocs/plugins.md\ndocs/security/egress.md\ndocs/security/overview.md"
       }
      ]
     }

@@ -158,11 +158,25 @@ class TestMCPServer:
 
     async def test_tools_list(self) -> None:
         server = MCPServer()
-        defs = [{"function": {"name": "a", "description": "d", "parameters": {"type": "object"}}}]
-        with patch("raven.core.mcp.server.get_tool_definitions", return_value=defs):
+        defs = [
+            {
+                "name": "a",
+                "description": "d",
+                "inputSchema": {"type": "object"},
+                "annotations": {"destructiveHint": False, "openWorldHint": False},
+            }
+        ]
+        with patch("raven.core.mcp.server.get_mcp_tool_definitions", return_value=defs):
             result = await server.handle_request({"method": "tools/list", "id": 2, "params": {}})
         assert result is not None
-        assert result["result"]["tools"] == [{"name": "a", "description": "d", "inputSchema": {"type": "object"}}]
+        assert result["result"]["tools"] == [
+            {
+                "name": "a",
+                "description": "d",
+                "inputSchema": {"type": "object"},
+                "annotations": {"destructiveHint": False, "openWorldHint": False},
+            }
+        ]
 
     async def test_notification_yields_no_response(self) -> None:
         server = MCPServer()
