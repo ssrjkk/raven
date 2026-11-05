@@ -113,6 +113,29 @@ current directory. Absolute paths outside it (and symlink escapes) are rejected 
 permission error. Pass `--workspace D:\my-project` (or the POSIX equivalent) to scope
 each client to its own project.
 
+## What the MCP surface enforces
+
+A client that can reach the server can call any tool the operator has not refused. Three
+settings apply to MCP exactly as they do to the agent inside the gateway, and both come from
+the same builder (`raven/core/security/tool_policy.py:policy_from_settings`):
+
+- `TOOLS_DENY` / `TOOLS_ALLOW` - the deny list is applied by default, and `TOOLS_ALLOW`
+  restricts the surface to the names it lists;
+  Of the 66 tools served here the default `TOOLS_DENY` touches exactly one, `nodes_list`;
+  the rest of that list names gateway tools this registry does not serve.
+- `EXEC_SECURITY` / `EXEC_ASK` - the 8 exec-class tools (`git_commit` and the seven
+  `browser_*`) follow it, so with the default `EXEC_SECURITY=deny` an MCP client cannot run
+  them either;
+Path containment is not duplicated here: these tools are confined by
+`ravencode/runtime/workspace.py:confine` against the root the server was given with
+`--workspace` (or `RAVEN_WORKSPACE`), which is a different root from the gateway's
+`WORKSPACE_PATH`; a path outside it raises `PermissionError` inside the tool.
+
+A refused call answers `[denied] ...` with `isError: true` over JSON-RPC and HTTP 403 on
+`POST /mcp/tools/{name}`. The one thing MCP does not inherit is `TOOLS_PROFILE`: that
+allow-list is the trust boundary of the messaging agent, and an MCP client is the operator's
+own tool surface.
+
 ## HTTP transport (advanced)
 
 The gateway also exposes the same protocol over HTTP when `raven start` is running:

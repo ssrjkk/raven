@@ -187,14 +187,31 @@ class TestMCPServer:
         result = await server.handle_request({"jsonrpc": "2.0", "id": 9, "method": "ping"})
         assert result == {"jsonrpc": "2.0", "id": 9, "result": {}}
 
-    async def test_tools_call(self) -> None:
+    async def test_tools_call_delegates_when_the_policy_allows_it(self) -> None:
         server = MCPServer()
-        with patch("raven.core.mcp.server.execute_tool_public", new_callable=AsyncMock, return_value="out"):
+        with patch(
+            "raven.core.mcp.server.execute_tool_public", new_callable=AsyncMock, return_value="out"
+        ) as executor:
+            result = await server.handle_request(
+                {"method": "tools/call", "id": 3, "params": {"name": "read", "arguments": {"path": "README.md"}}}
+            )
+        assert result is not None
+        assert result["result"]["content"] == [{"type": "text", "text": "out"}]
+        executor.assert_awaited_once()
+
+    async def test_tools_call_refuses_a_denied_tool_without_reaching_the_executor(self) -> None:
+        server = MCPServer()
+        with patch(
+            "raven.core.mcp.server.execute_tool_public", new_callable=AsyncMock, return_value="out"
+        ) as executor:
             result = await server.handle_request(
                 {"method": "tools/call", "id": 3, "params": {"name": "shell", "arguments": {"cmd": "x"}}}
             )
         assert result is not None
-        assert result["result"]["content"] == [{"type": "text", "text": "out"}]
+        text = result["result"]["content"][0]["text"]
+        assert text.startswith("[denied]") and "TOOLS_DENY" in text, text
+        assert result["result"]["isError"] is True
+        executor.assert_not_awaited()
 
     async def test_unknown_method(self) -> None:
         server = MCPServer()

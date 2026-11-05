@@ -225,3 +225,42 @@ class ToolPolicyEvaluator:
             "workspace_only": self.workspace_only,
             "workspace_root": str(self._workspace_root) if self._workspace_root else None,
         }
+
+
+def policy_from_settings(profile: str | None = None, workspace_only: bool | None = None) -> ToolPolicyEvaluator:
+    """Build the operator's tool policy the one way, so no surface invents its own defaults."""
+    from raven.core.config import _DEFAULT_TOOLS_DENY, settings
+
+    deny_raw = settings.tools_deny
+    deny_list = [d.strip() for d in deny_raw.split(",") if d.strip()] if deny_raw else list(_DEFAULT_TOOLS_DENY)
+    allow_raw = settings.tools_allow
+    allow_list = [a.strip() for a in allow_raw.split(",") if a.strip()] if allow_raw else []
+    ws_path = settings.resolved_workspace
+    return ToolPolicyEvaluator(
+        profile=profile or settings.tools_profile,
+        deny=deny_list,
+        allow=allow_list,
+        exec_security=ExecSecurity(settings.exec_security),
+        exec_ask=ExecAskMode(settings.exec_ask_mode),
+        workspace_only=settings.workspace_only if workspace_only is None else workspace_only,
+        workspace_root=str(ws_path) if ws_path else None,
+    )
+
+
+async def mcp_deny_reason(tool_name: str, arguments: dict[str, Any] | None) -> str:
+    """Why the MCP surface has to refuse this call; empty means it may proceed.
+
+    The profile allow-list is the messaging agent's trust boundary, not a server's - an MCP
+    client is the operator's own tool surface - so profile filtering is lifted here, and so is
+    path containment: these tools are confined by `ravencode/runtime/workspace.py:confine`,
+    against the root the server was given with `--workspace`, while `WORKSPACE_PATH` is the
+    gateway's own root. Applying both would refuse paths the tool layer accepts.
+    """
+    policy = policy_from_settings(profile="full", workspace_only=False)
+    if not policy.is_tool_allowed(tool_name):
+        return f"'{tool_name}' is denied by policy (TOOLS_DENY)"
+    if is_exec_class(tool_name):
+        allowed, reason = await policy.check_exec(tool_name, arguments or {}, confirm_fn=None)
+        if not allowed:
+            return f"'{tool_name}' is denied by policy - {reason}"
+    return ""

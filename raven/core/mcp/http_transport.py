@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from raven.core.mcp.auth import authorize_request
 from raven.core.mcp.server import MCPServer
 from raven.core.mcp.sse_transport import SSETransport
+from raven.core.security.tool_policy import mcp_deny_reason
 from ravencode.runtime.tools import execute_tool_public, get_mcp_tool_definitions
 
 _mcp_server = MCPServer()
@@ -61,6 +62,9 @@ def create_mcp_router() -> APIRouter:
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
         body: Any = await request.json() or {}
         args = body.get("arguments", body) if isinstance(body, dict) else {}
+        denial = await mcp_deny_reason(name, args)
+        if denial:
+            return JSONResponse({"error": denial, "denied": True}, status_code=403)
         result = await execute_tool_public(name, args)
         return JSONResponse({"result": result})
 

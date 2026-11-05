@@ -100,24 +100,9 @@ class Agent:
         self._confirm_fn: Callable[[str, dict[str, Any]], Awaitable[bool]] | None = confirm_fn
 
     def _init_tool_policy(self) -> ToolPolicyEvaluator:
-        from raven.core.config import _DEFAULT_TOOLS_DENY, settings
-        from raven.core.security.tool_policy import ExecAskMode, ExecSecurity, ToolPolicyEvaluator
+        from raven.core.security.tool_policy import policy_from_settings
 
-        deny_raw = settings.tools_deny
-        deny_list = [d.strip() for d in deny_raw.split(",") if d.strip()] if deny_raw else list(_DEFAULT_TOOLS_DENY)
-        allow_raw = settings.tools_allow
-        allow_list = [a.strip() for a in allow_raw.split(",") if a.strip()] if allow_raw else []
-        ws_path = settings.resolved_workspace
-        ws_root = str(ws_path) if ws_path else None
-        return ToolPolicyEvaluator(
-            profile=settings.tools_profile,
-            deny=deny_list,
-            allow=allow_list,
-            exec_security=ExecSecurity(settings.exec_security),
-            exec_ask=ExecAskMode(settings.exec_ask_mode),
-            workspace_only=settings.workspace_only,
-            workspace_root=ws_root,
-        )
+        return policy_from_settings()
 
     async def _build_system_prompt(self) -> str:
         base = self.config.system_prompt or DEFAULT_SYSTEM_PROMPT

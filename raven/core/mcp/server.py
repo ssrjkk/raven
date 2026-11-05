@@ -5,6 +5,9 @@ import json
 import sys
 from typing import Any
 
+from loguru import logger
+
+from raven.core.security.tool_policy import mcp_deny_reason
 from ravencode.runtime.tools import execute_tool_public, get_mcp_tool_definitions
 
 
@@ -53,8 +56,21 @@ class MCPServer:
         if method == "tools/call":
             name = params.get("name", "")
             args = params.get("arguments", {})
+            if not isinstance(args, dict):
+                args = {}
             if not name:
                 return _error(req_id, -32602, "Missing tool name")
+            denial = await mcp_deny_reason(name, args)
+            if denial:
+                logger.warning("MCP tools/call refused: {}", denial)
+                return {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {
+                        "content": [{"type": "text", "text": f"[denied] {denial}"}],
+                        "isError": True,
+                    },
+                }
             result = await execute_tool_public(name, args)
             return {"jsonrpc": "2.0", "id": req_id, "result": {"content": [{"type": "text", "text": result}]}}
         return _error(req_id, -32601, f"Method not found: {method}")
