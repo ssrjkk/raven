@@ -590,7 +590,9 @@ class TestSubjectRole:
     """A task step runs as the role its creator attested, and an unattested task gets least
     privilege: the registry denies restricted tools instead of running them anonymously."""
 
-    async def test_unattested_task_denies_a_restricted_tool(self, store: TaskStore, registry: ToolRegistry):
+    async def test_unattested_task_denies_a_restricted_tool(
+        self, store: TaskStore, registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch
+    ):
         registry.register(
             ToolSpec(
                 name="db_query",
@@ -607,8 +609,12 @@ class TestSubjectRole:
         for s in t.steps:
             s.task_id = t.id
 
+        from raven.core.config import settings
         from raven.core.task_engine.runner import TaskRunner
 
+        # EXEC_SECURITY=deny refuses db_query before the registry ever sees a role, so the
+        # operator's exec level is opened here to keep this pair about the subject-role gate.
+        monkeypatch.setattr(settings, "exec_security", "full")
         runner = TaskRunner(store, registry)
         await runner.submit(t)
         done = await runner.wait(t.id, timeout=10)
@@ -616,7 +622,9 @@ class TestSubjectRole:
         assert done.status is TaskStatus.FAILED
         assert "no subject role" in (done.error or "")
 
-    async def test_attested_admin_task_runs_a_restricted_tool(self, store: TaskStore, registry: ToolRegistry):
+    async def test_attested_admin_task_runs_a_restricted_tool(
+        self, store: TaskStore, registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch
+    ):
         registry.register(
             ToolSpec(
                 name="db_query",
@@ -634,8 +642,12 @@ class TestSubjectRole:
         for s in t.steps:
             s.task_id = t.id
 
+        from raven.core.config import settings
         from raven.core.task_engine.runner import TaskRunner
 
+        # EXEC_SECURITY=deny refuses db_query before the registry ever sees a role, so the
+        # operator's exec level is opened here to keep this pair about the subject-role gate.
+        monkeypatch.setattr(settings, "exec_security", "full")
         runner = TaskRunner(store, registry)
         await runner.submit(t)
         done = await runner.wait(t.id, timeout=10)

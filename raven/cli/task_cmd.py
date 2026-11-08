@@ -106,6 +106,7 @@ def task_show(task_id: str):
 def task_run(goal: str, user: str, channel: str):
     """Plan and execute a goal as a task"""
     from raven.core.llm import LLMRouter
+    from raven.core.security.confirm import terminal_confirm
     from raven.core.task_engine.planner import TaskPlanner
     from raven.core.task_engine.runner import TaskRunner
     from raven.core.task_engine.store import TaskStore
@@ -116,7 +117,7 @@ def task_run(goal: str, user: str, channel: str):
         llm = LLMRouter()
         store = TaskStore(settings.resolved_db_path)
         planner = TaskPlanner(tools)
-        runner = TaskRunner(store, tools)
+        runner = TaskRunner(store, tools, confirm_fn=terminal_confirm)
 
         with console.status("[bold]Planning...", spinner="dots"):
             task = await planner.plan(goal, llm, user_id=user, channel=channel)
@@ -180,6 +181,7 @@ def task_retry(task_id: str):
     """Retry a failed task"""
 
     async def _retry():
+        from raven.core.security.confirm import terminal_confirm
         from raven.core.task_engine.models import TaskStatus
         from raven.core.task_engine.runner import TaskRunner
         from raven.core.task_engine.store import TaskStore
@@ -187,7 +189,7 @@ def task_retry(task_id: str):
 
         tools = create_tool_registry()
         store = TaskStore(settings.resolved_db_path)
-        runner = TaskRunner(store, tools)
+        runner = TaskRunner(store, tools, confirm_fn=terminal_confirm)
         task = await store.load_task(task_id)
         if not task:
             console.print(f"[red]Task not found: {task_id}[/red]")

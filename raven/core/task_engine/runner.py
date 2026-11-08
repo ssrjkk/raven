@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from loguru import logger
 
 from raven.core.metrics import metrics
+from raven.core.security.tool_policy import ToolPolicyEvaluator, is_exec_class, policy_from_settings
 from raven.core.task_engine.models import Task, TaskStatus, TaskStep
 from raven.core.task_engine.store import TaskStore
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
@@ -64,9 +65,22 @@ class TaskRunner:
     CANCEL_POLL_SECONDS = 1.0
     """How often a running task checks the persisted status for a cancel it was not signalled about."""
 
-    def __init__(self, store: TaskStore, tools: ToolRegistry, max_concurrent: int | None = None):
+    def __init__(
+        self,
+        store: TaskStore,
+        tools: ToolRegistry,
+        max_concurrent: int | None = None,
+        *,
+        tool_policy: ToolPolicyEvaluator | None = None,
+        confirm_fn: Callable[[str, dict[str, Any]], Awaitable[bool]] | None = None,
+    ):
         self._store = store
         self._tools = tools
+        # TOOLS_DENY / TOOLS_ALLOW / EXEC_SECURITY, from the same builder the agent path,
+        # the orchestrator and the MCP transports use. profile="full": the named profiles list
+        # plugin tool names, not these registry names.
+        self._tool_policy = tool_policy if tool_policy is not None else policy_from_settings(profile="full")
+        self._confirm_fn = confirm_fn
         self.MAX_CONCURRENT = max_concurrent or self.MAX_CONCURRENT
         self._sem = asyncio.Semaphore(self.MAX_CONCURRENT)
         self._running: dict[str, asyncio.Task[None]] = {}
@@ -227,6 +241,18 @@ class TaskRunner:
             logger.warning("Reconciled {} stale task(s) after restart", len(processed))
         return processed
 
+    async def _policy_denial(self, step: TaskStep) -> str | None:
+        """The operator's switches, decided once: a refusal is not a transient error."""
+        if not self._tool_policy.is_tool_allowed(step.tool):
+            return f"Denied by operator policy (TOOLS_DENY): {step.tool}"
+        if is_exec_class(step.tool):
+            allowed, reason = await self._tool_policy.check_exec(
+                step.tool, step.params, confirm_fn=self._confirm_fn
+            )
+            if not allowed:
+                return f"Blocked by operator policy: {reason}"
+        return None
+
     async def _call_tool_with_retries(
         self, task_id: str, step: TaskStep, spec: ToolSpec, cancel_ev: asyncio.Event, *, role: str | None = None
     ) -> tuple[Any, str | None]:
@@ -238,6 +264,9 @@ class TaskRunner:
         successful results. Transient errors (timeouts, network, rate limits)
         are retried with exponential backoff; permanent errors fail fast.
         """
+        denial = await self._policy_denial(step)
+        if denial is not None:
+            return None, denial
         timeout = float(spec.timeout)
         attempt = 0
         while True:

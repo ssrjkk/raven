@@ -132,9 +132,10 @@ Path containment is not duplicated here: these tools are confined by
 `WORKSPACE_PATH`; a path outside it raises `PermissionError` inside the tool.
 
 A refused call answers `[denied] ...` with `isError: true` over JSON-RPC and HTTP 403 on
-`POST /mcp/tools/{name}`. The one thing MCP does not inherit is `TOOLS_PROFILE`: that
-allow-list is the trust boundary of the messaging agent, and an MCP client is the operator's
-own tool surface.
+`POST /mcp/tools/{name}`. The one thing MCP does not inherit is `TOOLS_PROFILE`: the named
+profiles list plugin tool names (`files.read`, `api.http_get`), this registry serves `read`
+and `http_get`, and an allow-list of names that can never match reads as a blanket refuse.
+ The orchestrator builds the same policy with `profile="full"` for the same reason.
 
 ## HTTP transport (advanced)
 

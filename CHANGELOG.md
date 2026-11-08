@@ -250,6 +250,57 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
 - The chaos tools were the only fault-injecting surface with no role gate. `chaos_inject` kills real processes and services through `psutil` and, for `disk_fill`, takes an arbitrary `target` directory, creates it if missing and writes up to 100 MB into it; `chaos_run_experiment` injects a whole list of them. Both were registered with the default policy while `shell` and `db_query` — less destructive than either — are admin-only for role-aware callers, so an agent step running under any role could reach them and the task runner would retry them on failure. Both specs are marked `dangerous` now, which makes the effective allowlist `["admin"]` and stops the runner's automatic retry; read-only chaos tools stay open to every role. Callers that pass no role (the MCP tool surface, which does not carry one) are unchanged — the gate applies wherever roles are known
 - `ravencode session export --sanitize` masked only three exact key names at the top level of a dict, so live credentials survived inside header dicts, lists, non-string values and message text. It matches key *shapes* now (`api_key`/`apikey`/`api-keys`, `token`, `password`, `authorization`, `credentials`, `private_key`, `secret` — separators required, so `tokenizer`, `monkey` and `keyboard` stay intact), recurses into lists, and masks secret *values* wherever they appear: `sk-`/`sk-ant-`, `ghp_`/`github_pat_`, `AIza`, `xoxb-`, `AKIA`, `npm_`, `Bearer <token>` and PEM private-key headers
 - The tamper-evident audit chain declared tampering on its own untouched entries wherever the machine locale was not UTF-8. `AuditLogger` writes `audit.log` through `open(..., encoding="utf-8")` and serialises with `raven/core/_json.py` (orjson, which puts raw UTF-8 bytes on disk rather than `\uXXXX` escapes), but five readers of that same file — `recent()`, `query()`, `stats()`, `verify_chain()` and `verify_signatures()` in `raven/core/audit.py` — opened it with no `encoding=` and so decoded it with `locale.getpreferredencoding()`. Measured on a cp1251 host: after a single entry with `actor="@ключ"` and text `привет ёж 内容 🚀`, the bytes on disk were right (`"actor":"@\xd0\xba\xd0\xbb\xd1\x8e\xd1\x87"`), `recent()` returned `@РєР»СЋС‡`, `verify_chain()` answered `{'line': 1, 'error': 'hash_mismatch'}` and `verify_signatures()` answered `signature_mismatch` — a log nothing had touched reported as forged, and the next `start()` logs `Audit log chain integrity check FAILED` at ERROR. Under a POSIX `C` locale the same five reads raise `UnicodeDecodeError` instead. It stayed invisible here because `data/audit.log` holds nine entries, all `system.startup`, zero non-ASCII bytes; and `_last_entry_hash()` already read the file in binary and decoded it as UTF-8, which is the convention the other five now follow explicitly. The same writer/reader mismatch was open at 35 more text-file IO sites: `raven/core/plugin_loader.py` SKILL.md reads, `raven/core/config_watcher.py` `.env`, `raven/channels/webchat/channel.py` console HTML, the RAG vector and metadata caches, `raven/core/secrets.py` and `raven/core/llm/providers/base.py` (both of which also serialise through `_json`), the plugin marketplace manifests and registry, and the compose/systemd/launchd/scaffold files the CLI writes. For the stdlib-`json` writers the exposure is on the read side — a hand-edited `.env`, a plugin manifest with a Cyrillic description, or anything this host wrote that the UTF-8 container then reads. `tests/test_file_encoding.py` is the guard: an AST scan of `raven/`, `ravencode/`, `aios/` and `scripts/` that rejects text-mode `open`/`Path.open`/`read_text`/`write_text` without an encoding, plus the audit case replayed in a child interpreter started with `-X utf8=0`, `PYTHONUTF8=0`, `PYTHONCOERCECLOCALE=0` and `LC_ALL=C` so it fails on a UTF-8 runner too (3 of its 6 checks fail without the fix)
+- The orchestrator answered to a different security rulebook than the agent.
+  `raven/core/agents/orchestrator.py:_execute_tool_safe` gated a call on `AgentProfile.denied_tools`,
+  `AgentContext.permissions`, argument validation, path containment and the registry's own role RBAC,
+  and never consulted `TOOLS_DENY`, `TOOLS_ALLOW` or `EXEC_SECURITY` - while `raven/core/agent/agent.py:492`
+  and both MCP transports do. This is the surface web chat answers on: `RavenGateway._handle_with_orchestrator`
+  (`raven/core/gateway/gateway.py:673`) is the gateway's only caller of `AgentOrchestrator.execute`, built at
+  `:164` over `create_tool_registry()`. It is the widest of the three surfaces: 197 tools, 10 of them
+  restricted by role, 24 of the 31 default deny
+  names reaching this registry and 54 exec-class tools callable with no subject role, so under the shipped
+  `EXEC_SECURITY=deny` the `debugger` profile could reach `git_push`, `git_commit`, `process_kill`,
+  `email_send`, `plugin_install` and `chaos_recover`, and the `reviewer` profile names `shell` in its own
+  allow-list. `AgentOrchestrator` now takes `tool_policy=`, defaulting to
+  `policy_from_settings(profile="full")` - `full`, because the named profiles list plugin tool names
+  (`files.read`) while this registry serves `file_read`, the same mismatch already written down for MCP -
+  and applies deny/allow and then `check_exec` before the handler, both in `_execute_tool_safe` and in the
+  `_recall_memory` shortcut that used to reach the registry directly. `docs/configuration.md` names the
+  three surfaces instead of one. `.env.example` no longer ships
+  `TOOLS_DENY=group:automation,group:runtime,sessions_spawn,shell.exec,browser.control`: five names that
+  match no tool on any surface, in a variable whose value *replaces* the built-in list, so copying the
+  sample un-denied everything the defaults protect. The tool-overrides audit hint said the opposite of the
+  code (measured: `is_tool_allowed` tests deny first, so a name in both lists never runs); and
+  `docs/security/overview.md` claimed a messaging agent "cannot reach filesystem tools at all" while the
+  `messaging` profile allows `files.read` - it now states what the profile actually allows, in code order.
+  `tests/test_orchestrator_policy.py` (13 tests) drives probe tools through the gate and through the public
+  `execute()` so nothing real runs: a denied name never reaches its handler, exec-class follows
+  `EXEC_SECURITY` in both directions, a plain tool still runs under defaults, the orchestrator's policy
+  object equals the one the agent builds, the MCP surface refuses what the orchestrator refuses,
+  auto-memory recall stops when its tool is denied, the refusal is what the model is shown on the next
+  turn, every default deny name resolves to a real plugin or registry tool, the example line stays honest,
+  and the documented profile set and surface list are recomputed from the code each run.
+- The task path ran the two tools its own default deny list names.
+  `TaskRunner` passed only a subject role to `ToolRegistry.call`, while `raven/cli/task_cmd.py` builds the
+  full 197-tool registry and `_DEFAULT_TOOLS_DENY` contains `shell` and `python`, so `raven task run`
+  executed a planner step that the same configuration refuses over MCP and, since the entry above, in web
+  chat; the role gate only covers the 10 tools that declare roles or `dangerous`, and 54 exec-class tools
+  carry neither. `TaskRunner` now takes `tool_policy=` (again `policy_from_settings(profile="full")`) and
+  `confirm_fn=`, and decides the refusal once before the retry loop, because a policy denial is not a
+  transient error worth backing off three times. `raven task run` and `raven task retry` pass
+  `terminal_confirm`, so `EXEC_SECURITY=ask` asks on the controlling terminal (and denies when there is
+  none) instead of silently denying; `raven task cancel`, which runs nothing, is unchanged. The web and
+  Telegram `/task` path keeps its own control - `create_task_tool_registry()` registers no exec-class tool
+  at all - and now also answers to `TOOLS_DENY` for the non-exec names it does carry.
+  `docs/configuration.md` and `.env.example` list four surfaces instead of one.
+  `tests/test_task_policy.py` (11 tests): a default-denied step never reaches its handler, `git_push`
+  (exec-class, not denied by name) is refused where no confirmer is wired, a yes and a no each decide
+  `EXEC_SECURITY=ask`, `full` never prompts, a plain step still runs under the shipped defaults, the
+  refusal is recorded once rather than retried, the runner's policy object equals the shared builder,
+  `create_task_tool_registry()` is re-measured to hold no exec-class tool, the CLI's two executing runners
+  carry a `confirm_fn` and the third provably does not, and the documented surface list is read back out
+  of the docs. `TestSubjectRole` in `tests/core/test_task_engine.py` opens `EXEC_SECURITY=full` before it
+  asserts, because the control under the operator's exec level is role RBAC and that pair is about the role.
 
 ### Removed
 - `ravencode web` promised a "server with web interface" on top of a server that serves no static files: nothing under `ravencode/` answers `/` or `/api/*`, and the dashboard belongs to the Raven gateway (`raven start`, port 18888). The command is gone along with its `--port 0` "random port" option, which never opened a random port

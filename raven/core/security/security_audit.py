@@ -257,7 +257,8 @@ class SecurityAudit:
         c = self._add("tool_overrides", "Tool allow/deny lists are not both set", "low")
         if settings.tools_deny and settings.tools_allow:
             c.fail(
-                "Both TOOLS_DENY and TOOLS_ALLOW set — allow has priority, deny may be bypassed",
+                "Both TOOLS_DENY and TOOLS_ALLOW set — deny is evaluated first, "
+                "so a name in both never runs and TOOLS_ALLOW only narrows the surface",
                 fix_hint="Remove one of TOOLS_DENY or TOOLS_ALLOW",
             )
         else:

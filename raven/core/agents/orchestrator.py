@@ -18,6 +18,7 @@ from raven.core.audit import AuditEventType, audit_logger
 from raven.core.config import settings
 from raven.core.metrics import metrics
 from raven.core.security.context_filter import redact_pii, sanitize_external_content
+from raven.core.security.tool_policy import ToolPolicyEvaluator, is_exec_class, policy_from_settings
 
 if TYPE_CHECKING:
     from raven.core.llm import LLMResponse, LLMRouter, ToolCall
@@ -394,6 +395,7 @@ class AgentOrchestrator:
         tool_retry_backoff: float = 0.5,
         max_total_tokens: int = 100_000,
         auto_memory: bool = True,
+        tool_policy: ToolPolicyEvaluator | None = None,
     ):
         self._llm = llm
         self._tool_registry = tool_registry
@@ -410,6 +412,10 @@ class AgentOrchestrator:
         self._tool_retry_backoff = tool_retry_backoff
         self._max_total_tokens = max_total_tokens
         self._auto_memory = auto_memory
+        # TOOLS_DENY / TOOLS_ALLOW / EXEC_SECURITY are the operator's switches, and the
+        # agent path and both MCP transports already consult them. profile="full" because
+        # the named profiles list plugin tool names, not these registry names.
+        self._tool_policy = tool_policy if tool_policy is not None else policy_from_settings(profile="full")
         self._outcome_tracker = TaskOutcomeTracker()
         self._profile_memory = ProfileMemory()
 
@@ -730,6 +736,9 @@ class AgentOrchestrator:
             tool_name = "search_memory"
         if self._tool_registry.get(tool_name) is None:
             return ""
+        if not self._tool_policy.is_tool_allowed(tool_name):
+            logger.debug("AgentOrchestrator: memory recall tool '{}' denied by operator policy", tool_name)
+            return ""
         try:
             result = await self._tool_registry.call(tool_name, query=query)
             text = str(result.get("result", "") if isinstance(result, dict) else result)
@@ -905,6 +914,14 @@ class AgentOrchestrator:
             return {"error": f"Tool '{tc.name}' not allowed by context permissions"}
 
         args = tc.arguments or {}
+        if not self._tool_policy.is_tool_allowed(tc.name):
+            logger.warning("Orchestrator tool '{}' denied by operator policy", tc.name)
+            return {"error": f"Tool '{tc.name}' is denied by operator policy (TOOLS_DENY)"}
+        if is_exec_class(tc.name):
+            exec_allowed, exec_reason = await self._tool_policy.check_exec(tc.name, args, confirm_fn=None)
+            if not exec_allowed:
+                logger.warning("Orchestrator exec tool '{}' blocked: {}", tc.name, exec_reason)
+                return {"error": f"Tool '{tc.name}' is blocked by operator policy: {exec_reason}"}
         validation_error = validate_tool_arguments(tc.name, tool_spec.parameters, args)
         if validation_error is not None:
             logger.warning("AgentOrchestrator: {} — handler not invoked", validation_error)

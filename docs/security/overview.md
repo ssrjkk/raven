@@ -57,8 +57,10 @@ An invalid value is a startup error, not a silent fallback (`Settings.model_post
   (`raven/core/security/confirm.py`), and a channel that has not implemented
   `ask_confirmation()` — thirteen of the fifteen adapters, including webchat — denies instead of
   answering for the user
-- **tool profiles** (`messaging` / `minimal` / `full`) — per-agent surface area, so a
-  messaging agent cannot reach filesystem tools at all
+- **tool profiles** (`messaging` / `minimal` / `full`) — an allow-list over the plugin
+  tools on the agent path. `messaging` allows exactly `files.read`, `api.http_get`,
+  `memory.recall` and `browser.search`: it can read a file in the workspace, cannot write one,
+  and no exec-class tool is in any named profile. `full` ignores the list
 
 Arguments that name a filesystem location (key in `PATH_ARG_KEYS`, or suffixed `_path`, `_file`,
 `_dir`, `_root`, `_cwd`) are additionally resolved against the workspace root, and paths deeper
