@@ -222,8 +222,8 @@ class TestToolRegistryIntegration:
         assert registry.count >= 15  # at least 15 tools registered
 
     async def test_registry_call_file_read(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        # monkeypatch, а не os.environ напрямую: env сильнее settings.workspace_path
-        # в workspace_root(), и без автоочистки протекает в соседние тесты.
+        # monkeypatch instead of a bare os.environ assignment: env beats
+        # settings.workspace_path inside workspace_root() and leaks across tests.
         monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
         registry = create_tool_registry()
         f = tmp_path / "test.txt"
