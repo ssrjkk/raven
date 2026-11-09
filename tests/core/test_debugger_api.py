@@ -42,7 +42,7 @@ def dbg(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, Pa
     (ws / "pause.py").write_text("x = 1\ny = 2\n", encoding="utf-8")
     (ws / "notes.txt").write_text("hi", encoding="utf-8")
     (ws / "big.py").write_text("# " + "x" * 600_000, encoding="utf-8")
-    monkeypatch.setattr(dba, "_WORKSPACE", ws)
+    monkeypatch.setenv("RAVEN_WORKSPACE", str(ws))
     app = FastAPI()
     app.include_router(dba.create_debugger_router())
     app.dependency_overrides[dba._require_admin] = lambda: {"role": "admin"}
