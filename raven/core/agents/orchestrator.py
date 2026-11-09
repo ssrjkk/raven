@@ -11,14 +11,14 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 from loguru import logger
 
-from raven.core.agents.profiles import AgentProfile, resolve_profile
+from raven.core.agents.profiles import PROFILES, AgentProfile, resolve_profile
 from raven.core.agents.router import IntentRouter
 from raven.core.agents.validation import validate_tool_arguments
 from raven.core.audit import AuditEventType, audit_logger
 from raven.core.config import settings
 from raven.core.metrics import metrics
 from raven.core.security.context_filter import redact_pii, sanitize_external_content
-from raven.core.security.tool_policy import ToolPolicyEvaluator, is_exec_class, policy_from_settings
+from raven.core.security.tool_policy import ExecSecurity, ToolPolicyEvaluator, is_exec_class, policy_from_settings
 
 if TYPE_CHECKING:
     from raven.core.llm import LLMResponse, LLMRouter, ToolCall
@@ -26,12 +26,12 @@ if TYPE_CHECKING:
 
 AgentStatus = Literal["success", "error", "max_steps", "max_tokens"]
 
-_VALID_HANDOFF_PROFILES = frozenset(
-    {"architect", "planner", "coder", "reviewer", "debugger", "qa", "researcher", "security", "done"}
-)
+# Derived from the registry of profiles: a profile added to PROFILES was invisible here,
+# and an unknown name the coordinator answered fell through to resolve_profile's coder.
+_VALID_HANDOFF_PROFILES = frozenset(PROFILES) | {"done"}
 
 _IMPLEMENT_TOOLS = frozenset(
-    {"file_write", "file_edit", "file_append", "shell", "python", "git_commit", "git_add"}
+    {"file_write", "file_edit", "file_append", "shell", "python", "git_commit"}
 )
 
 _TRANSIENT_MARKERS = (
@@ -783,22 +783,29 @@ class AgentOrchestrator:
         next_name = await self._decide_next_agent(messages, current_profile.name)
         if not next_name or next_name == "done" or next_name == current_profile.name:
             return None
+        if next_name not in current_profile.handoff_profiles:
+            logger.debug(
+                "Handoff to '{}' refused: not a target declared by profile '{}'", next_name, current_profile.name
+            )
+            return None
         return resolve_profile(next_name)
 
     def _build_tool_schemas(self, profile: AgentProfile) -> list[dict[str, Any]] | None:
         all_specs = self._tool_registry.list()
         if not all_specs:
             return None
-        allowed_specs = profile.allowed_tools
-        denied_specs = profile.denied_tools
-        if "*" in allowed_specs and "*" not in denied_specs:
-            filtered = [s for s in all_specs if s.name not in denied_specs]
-        elif "*" in allowed_specs:
-            filtered = all_specs
-        else:
-            allowed = set(allowed_specs)
-            denied = set(denied_specs)
-            filtered = [s for s in all_specs if s.name in allowed and s.name not in denied]
+        # The same name rule the call site applies, plus TOOLS_DENY: an offer the operator has
+        # refused is a tool the model spends a turn calling and then reads an error from. Ask-mode is
+        # still a per-call question, so only deny mode — which refuses unconditionally — pulls a tool
+        # out of the offer.
+        deny_exec = self._tool_policy.exec_security is ExecSecurity.DENY
+        filtered = [
+            s
+            for s in all_specs
+            if profile.allows_tool(s.name)
+            and self._tool_policy.is_tool_allowed(s.name)
+            and not (deny_exec and is_exec_class(s.name))
+        ]
         if not filtered:
             return None
         return [s.to_llm_tool() for s in filtered]
@@ -908,8 +915,8 @@ class AgentOrchestrator:
         tool_spec = self._tool_registry.get(tc.name)
         if not tool_spec:
             return {"error": f"Unknown tool: {tc.name}"}
-        if tc.name in profile.denied_tools:
-            return {"error": f"Tool '{tc.name}' denied by profile '{profile.name}'"}
+        if not profile.allows_tool(tc.name):
+            return {"error": f"Tool '{tc.name}' not allowed by profile '{profile.name}'"}
         if agent_ctx.permissions and tc.name not in agent_ctx.permissions:
             return {"error": f"Tool '{tc.name}' not allowed by context permissions"}
 

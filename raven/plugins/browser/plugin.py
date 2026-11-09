@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from urllib.parse import quote_plus
 
-import httpx
 from bs4 import BeautifulSoup
 from loguru import logger
 
@@ -47,7 +46,11 @@ async def _cleanup():
 
 
 async def browse(url: str) -> str:
-    """Fetch and extract text content from a URL. Args: url (str): Full URL to visit"""
+    """Open a page and return its visible text, up to 4000 characters.
+
+    url: Page to read. A missing scheme is treated as https. Loopback, private and link-local addresses are refused
+        before the request and again after any redirect.
+    """
     error = validate_url(url)
     if error:
         return f"Blocked: {error}"
@@ -81,7 +84,11 @@ async def browse(url: str) -> str:
 
 
 async def screenshot(url: str) -> str:
-    """Take a screenshot of a URL and return as base64. Args: url (str): Full URL to screenshot"""
+    """Render a page in headless Chromium at 1280x720 and return the visible area as a markdown image with base64 PNG.
+
+    url: Page to render. A missing scheme is treated as https. Loopback, private and link-local addresses are
+        refused before the request and again after any redirect. Needs Playwright with Chromium installed.
+    """
     error = validate_url(url)
     if error:
         return f"Blocked: {error}"
@@ -111,25 +118,28 @@ async def screenshot(url: str) -> str:
 
 
 async def search(query: str, max_results: int = 5) -> str:
-    """Search the internet using DuckDuckGo. Args: query (str): Search query, max_results (int): Max results to return"""
+    """Query DuckDuckGo's HTML endpoint and return titles, links and snippets as markdown.
+
+    query: Search text, percent-encoded into the DuckDuckGo URL.
+    max_results: How many hits to keep, counted over the results page; DuckDuckGo itself decides the order.
+    """
     try:
         url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
-        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
-            resp.raise_for_status()
-            soup = BeautifulSoup(resp.text, "lxml")
-            results = []
-            for result in soup.select(".result")[:max_results]:
-                title_el = result.select_one(".result__title a")
-                snippet_el = result.select_one(".result__snippet")
-                if title_el:
-                    title = title_el.get_text(strip=True)
-                    link = title_el.get("href", "")
-                    snippet = snippet_el.get_text(strip=True) if snippet_el else ""
-                    results.append(f"- [{title}]({link})\n  {snippet[:200]}")
-            if results:
-                return f"Search results for '{query}':\n" + "\n".join(results)
-            return f"No results found for '{query}'."
+        resp = await safe_fetch_async(url, timeout=10.0, headers={"User-Agent": "Mozilla/5.0"})
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "lxml")
+        results = []
+        for result in soup.select(".result")[:max_results]:
+            title_el = result.select_one(".result__title a")
+            snippet_el = result.select_one(".result__snippet")
+            if title_el:
+                title = title_el.get_text(strip=True)
+                link = title_el.get("href", "")
+                snippet = snippet_el.get_text(strip=True) if snippet_el else ""
+                results.append(f"- [{title}]({link})\n  {snippet[:200]}")
+        if results:
+            return f"Search results for '{query}':\n" + "\n".join(results)
+        return f"No results found for '{query}'."
     except Exception as e:
         logger.error("Search failed: {}", e)
         return f"Error searching: {e}"

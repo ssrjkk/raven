@@ -35,6 +35,11 @@ _fallback: dict[str, list[dict[str, Any]]] = {}
 
 
 async def remember(key: str, value: str) -> str:
+    """Store a text under a key so later turns can recall it.
+
+    key: Identifier to recall or forget this value by; storing the same key again replaces the old value.
+    value: The text to keep. Only the first 2000 characters come back from recall.
+    """
     collection = await _ensure_db()
     if collection:
         try:
@@ -47,6 +52,11 @@ async def remember(key: str, value: str) -> str:
 
 
 async def recall(key: str) -> str:
+    """Return the text stored under one exact key, or say that nothing is stored there.
+
+    key: The identifier passed to remember or store_knowledge. Recall does not search, so a partly correct key
+        returns 'Nothing found'.
+    """
     collection = await _ensure_db()
     if collection:
         try:
@@ -65,17 +75,34 @@ async def recall(key: str) -> str:
 
 
 async def forget(key: str) -> str:
+    """Delete the text stored under one key from both the vector store and the in-process fallback.
+
+    key: The identifier to drop. A key holding nothing is reported as such, so the answer says whether anything was
+        actually removed.
+    """
     collection = await _ensure_db()
+    removed = False
     if collection:
         try:
-            await asyncio.to_thread(collection.delete, ids=[key])
+            existing = await asyncio.to_thread(collection.get, ids=[key])
+            if existing.get("ids", []):
+                await asyncio.to_thread(collection.delete, ids=[key])
+                removed = True
         except Exception as e:
             logger.warning("[memory] ChromaDB delete failed: {}", e)
-    _fallback.pop(key, None)
-    return f"Forgot '{key}'"
+    if key in _fallback:
+        _fallback.pop(key, None)
+        removed = True
+    return f"Forgot '{key}'" if removed else f"Nothing stored under '{key}'"
 
 
 async def search_memory(query: str, n_results: int = 5) -> str:
+    """Search stored memories by meaning and return the closest ones with their keys.
+
+    query: What to look for; the match is on the sense of the text, not an exact key.
+    n_results: How many hits to return, clamped to 1..50. Each hit is cut to 200 characters, so use recall for the
+        full text.
+    """
     collection = await _ensure_db()
     n = max(1, min(int(n_results), 50))
     if collection:
@@ -92,6 +119,10 @@ async def search_memory(query: str, n_results: int = 5) -> str:
 
 
 async def list_keys() -> str:
+    """List every key currently in memory, one per line.
+
+    The keys are shown in whatever order the store returns; an empty memory reports 'No memories stored.'.
+    """
     collection = await _ensure_db()
     if collection:
         try:
@@ -107,16 +138,31 @@ async def list_keys() -> str:
 
 
 async def store_knowledge(topic: str, content: str) -> str:
+    """Store a markdown document about one topic under the key 'knowledge:<topic>'.
+
+    topic: What the document is about; it becomes part of the key, so reuse the same wording to find it again.
+    content: Document body, written below a '# <topic>' heading.
+    """
     doc = f"# {topic}\n{content}"
     await remember(f"knowledge:{topic}", doc)
     return f"Stored knowledge about '{topic}'"
 
 
 async def retrieve_knowledge(topic: str) -> str:
+    """Return the document stored by store_knowledge for one exact topic.
+
+    topic: The topic passed to store_knowledge; the lookup is on the key 'knowledge:<topic>', not a search.
+    """
     return await recall(f"knowledge:{topic}")
 
 
 async def run_code_and_remember(code: str, key: str) -> str:
+    """Run Python code and store whatever it printed and returned under a memory key.
+
+    code: Source for the code plugin's sandboxed runner; the last expression's value is part of the result. Refused
+        by the code sandbox stays refused here.
+    key: Memory key the result is stored under, so recall can read it in a later turn.
+    """
     result = await code_run_python(code)
     await remember(key, result)
     return f"Stored result under '{key}':\n{result[:500]}"

@@ -6,8 +6,9 @@ import re
 import tempfile
 from pathlib import Path
 
-import httpx
 from loguru import logger
+
+from raven.core.security.ssrf import safe_fetch_async, validate_url
 
 PLUGIN_NAME = "ocr"
 PLUGIN_DESCRIPTION = "Extract text from images using OCR (Tesseract)"
@@ -43,7 +44,13 @@ def _check_language(language: str) -> str | None:
 
 
 async def ocr_image(image_path: str, language: str = "eng+rus") -> str:
-    """Extract text from an image file using Tesseract OCR. Args: image_path (str): Path to image file, language (str): OCR language(s) like 'eng' or 'eng+rus'"""
+    """Read the text out of one image file with Tesseract and return up to 4000 characters.
+
+    image_path: Image readable by Tesseract, inside RAVEN_WORKSPACE or the system temp directory; anywhere else is
+        refused.
+    language: Tesseract language pack names joined with '+', e.g. 'eng' or 'eng+rus'. Anything outside letters,
+        digits, '_' and '+' is refused.
+    """
     try:
         p = _check_image_path(image_path)
         lang = _check_language(language)
@@ -81,16 +88,18 @@ async def ocr_image(image_path: str, language: str = "eng+rus") -> str:
 
 
 async def ocr_url(url: str, language: str = "eng+rus") -> str:
-    """Download image from URL and extract text via OCR. Args: url (str): Image URL, language (str): OCR language(s)"""
-    from raven.core.security.ssrf import validate_url
+    """Download an image and run Tesseract over it, returning the recognised text up to 4000 characters.
 
+    url: Image address. Loopback, private and link-local targets are refused before the request and again on every
+        redirect.
+    language: Tesseract language pack names joined with '+', e.g. 'eng' or 'eng+rus'.
+    """
     if validate_url(url):
         return "Invalid or blocked URL (SSRF guard)"
     tmp = None
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
+        resp = await safe_fetch_async(url, timeout=30.0)
+        resp.raise_for_status()
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
             tmp.write(resp.content)
             tmp_path = tmp.name

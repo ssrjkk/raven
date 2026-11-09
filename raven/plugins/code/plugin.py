@@ -19,7 +19,12 @@ _ENV_SAFELIST = frozenset({
 
 
 async def run_python(code: str, timeout: int = 30) -> str:
-    """Execute Python code in a restricted sandbox (limited builtins, no secrets) and return output."""
+    """Execute Python code in a restricted sandbox (limited builtins, no secrets) and return output.
+
+    code: Module-level source, sent to the runner over stdin. The AST gate refuses dunder access and denied
+        builtins as '[denied]' before anything runs, and the last expression's value is returned as the result.
+    timeout: Seconds before the interpreter is killed and the run reported as timed out.
+    """
     env = {k: v for k, v in os.environ.items() if k in _ENV_SAFELIST}
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONDONTWRITEBYTECODE"] = "1"

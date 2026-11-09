@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 
 @dataclass
@@ -10,15 +9,21 @@ class AgentProfile:
     display_name: str
     role: str
     system_prompt: str
-    allowed_tool_categories: list[str] = field(default_factory=lambda: ["*"])
     allowed_tools: list[str] = field(default_factory=lambda: ["*"])
     denied_tools: list[str] = field(default_factory=list)
     max_iterations: int = 15
     temperature: float = 0.3
-    model_preference: str | None = None
-    context_limit: int = 128_000
     can_handoff: bool = True
     handoff_profiles: list[str] = field(default_factory=list)
+
+    def allows_tool(self, name: str) -> bool:
+        # Deny wins over allow, so "*" in denied_tools is a blanket refuse rather than a no-op.
+        # One rule for both surfaces: what the model is offered and what it is allowed to call.
+        if "*" in self.denied_tools or name in self.denied_tools:
+            return False
+        if "*" in self.allowed_tools:
+            return True
+        return name in self.allowed_tools
 
 
 ARCHITECT_PROMPT = """You are the **Architect** — a senior systems architect who NEVER writes code directly.
@@ -205,9 +210,8 @@ PROFILES: dict[str, AgentProfile] = {
         display_name="Architect",
         role="architect",
         system_prompt=ARCHITECT_PROMPT,
-        allowed_tool_categories=["file", "search", "code_analysis", "git"],
-        allowed_tools=["file_read", "file_list", "file_grep", "file_search", "git_log", "git_diff", "git_show",
-                       "code_analysis_deps", "code_analysis_metrics", "web_search", "knowledge_search"],
+        allowed_tools=["file_read", "file_list", "file_read_relevant", "git_log", "git_diff", "git_status",
+                       "analyze_code", "explain_code", "rag_search", "web_search", "knowledge_search"],
         denied_tools=["file_write", "file_edit", "file_delete", "shell", "python", "db_query", "http_post"],
         max_iterations=10,
         temperature=0.2,
@@ -218,8 +222,8 @@ PROFILES: dict[str, AgentProfile] = {
         display_name="Planner",
         role="planner",
         system_prompt=PLANNER_PROMPT,
-        allowed_tool_categories=["file", "search", "code_analysis", "git"],
-        allowed_tools=["file_read", "file_list", "file_grep", "knowledge_search", "web_search"],
+        allowed_tools=["file_read", "file_list", "file_read_relevant", "rag_search",
+                       "knowledge_search", "web_search"],
         denied_tools=["file_write", "file_edit", "file_delete", "shell", "python", "db_query"],
         max_iterations=8,
         temperature=0.3,
@@ -230,7 +234,6 @@ PROFILES: dict[str, AgentProfile] = {
         display_name="Coder",
         role="coder",
         system_prompt=CODER_PROMPT,
-        allowed_tool_categories=["file", "git", "search", "code_analysis"],
         allowed_tools=["*"],
         denied_tools=["shell", "python", "db_query", "process_kill"],  # restricted; use process_list instead
         max_iterations=20,
@@ -242,10 +245,8 @@ PROFILES: dict[str, AgentProfile] = {
         display_name="Reviewer",
         role="reviewer",
         system_prompt=REVIEWER_PROMPT,
-        allowed_tool_categories=["file", "git", "test", "code_analysis"],
-        allowed_tools=["file_read", "file_list", "file_grep", "file_diff", "git_diff", "git_log",
-                       "run_tests", "code_analysis_complexity", "code_analysis_deps",
-                       "shell"],
+        allowed_tools=["file_read", "file_list", "file_read_relevant", "git_diff", "git_log", "git_status",
+                       "run_tests", "analyze_code", "rag_search", "shell"],
         denied_tools=["file_write", "file_edit", "file_delete"],
         max_iterations=15,
         temperature=0.1,
@@ -256,7 +257,6 @@ PROFILES: dict[str, AgentProfile] = {
         display_name="Debugger",
         role="debugger",
         system_prompt=DEBUGGER_PROMPT,
-        allowed_tool_categories=["file", "git", "test", "shell", "search", "http"],
         allowed_tools=["*"],
         denied_tools=[],
         max_iterations=20,
@@ -268,9 +268,8 @@ PROFILES: dict[str, AgentProfile] = {
         display_name="QA",
         role="qa",
         system_prompt=QA_PROMPT,
-        allowed_tool_categories=["file", "test", "shell", "code_analysis"],
-        allowed_tools=["file_read", "file_list", "file_grep", "run_tests", "test_coverage",
-                       "shell", "code_analysis_complexity"],
+        allowed_tools=["file_read", "file_list", "file_read_relevant", "run_tests", "test_coverage",
+                       "rag_search", "shell"],
         denied_tools=["file_write", "file_edit", "file_delete"],
         max_iterations=15,
         temperature=0.1,
@@ -281,10 +280,9 @@ PROFILES: dict[str, AgentProfile] = {
         display_name="Researcher",
         role="researcher",
         system_prompt=RESEARCHER_PROMPT,
-        allowed_tool_categories=["file", "search", "git", "http"],
-        allowed_tools=["file_read", "file_list", "file_grep", "file_search",
-                       "git_log", "git_diff", "git_show",
-                       "web_search", "http_get", "knowledge_search"],
+        allowed_tools=["file_read", "file_list", "file_read_relevant", "git_log", "git_diff",
+                       "web_search", "web_search_structured", "http_get",
+                       "rag_search", "knowledge_search"],
         denied_tools=["file_write", "file_edit", "file_delete", "shell", "python", "db_query"],
         max_iterations=15,
         temperature=0.3,
@@ -295,11 +293,8 @@ PROFILES: dict[str, AgentProfile] = {
         display_name="Security Engineer",
         role="security",
         system_prompt=SECURITY_PROMPT,
-        allowed_tool_categories=["file", "git", "search", "shell", "code_analysis"],
-        allowed_tools=["file_read", "file_list", "file_grep", "file_diff",
-                       "git_diff", "git_log",
-                       "run_tests", "shell",
-                       "code_analysis_complexity", "code_analysis_deps"],
+        allowed_tools=["file_read", "file_list", "file_read_relevant", "git_diff", "git_log", "git_status",
+                       "run_tests", "analyze_code", "rag_search", "shell"],
         denied_tools=["file_write", "file_edit", "file_delete"],
         max_iterations=20,
         temperature=0.1,
@@ -313,13 +308,3 @@ def resolve_profile(name: str) -> AgentProfile:
     if profile is None:
         return PROFILES["coder"]
     return profile
-
-
-def get_tools_for_profile(profile: AgentProfile, all_tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    if "*" in profile.allowed_tools and "*" not in profile.denied_tools:
-        return [t for t in all_tools if t["name"] not in profile.denied_tools]
-    if "*" in profile.allowed_tools:
-        return all_tools
-    allowed = set(profile.allowed_tools)
-    denied = set(profile.denied_tools)
-    return [t for t in all_tools if t["name"] in allowed and t["name"] not in denied]

@@ -25,12 +25,22 @@ def _get_scheduler() -> AsyncIOScheduler:
     return _scheduler
 
 
-async def register_callback(name: str, callback) -> None:
+def register_callback(name: str, callback) -> None:
+    """Bind a host-side callable to cron triggers.
+
+    Not a coroutine on purpose: a tool call carries JSON, so a model could only pass a string, and a
+    string awaited as a callback breaks every later trigger. Host code registers a real coroutine.
+    """
     _callbacks[name] = callback
 
 
 async def schedule(cron: str, task: str, task_id: str | None = None) -> str:
-    """Schedule a task to run on a cron schedule. Args: cron (str): Cron expression (e.g. '0 9 * * *'), task (str): Description of task to run, task_id (str): Optional unique task ID"""
+    """Add a recurring job to this process's scheduler; the job only runs while the process stays up.
+
+    cron: Five-field crontab expression, e.g. '0 9 * * *' for 09:00 every day.
+    task: Text handed to the registered trigger callbacks; nothing happens if none is registered.
+    task_id: Id to cancel this job under later. Empty derives one from the text, so the same schedule and task reuse it.
+    """
     async with _lock:
         scheduler = _get_scheduler()
     tid = task_id or f"cron_{hash(cron + task) % 100000}"
@@ -73,7 +83,10 @@ async def list_schedules() -> str:
 
 
 async def cancel_schedule(task_id: str) -> str:
-    """Cancel a scheduled task by its ID. Args: task_id (str): ID of the task to cancel"""
+    """Remove a recurring job from this process's scheduler.
+
+    task_id: The id shown by list_schedules or passed to schedule. An unknown id is reported as a failure.
+    """
     async with _lock:
         scheduler = _get_scheduler()
     try:

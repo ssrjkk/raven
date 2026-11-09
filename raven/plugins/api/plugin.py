@@ -37,10 +37,23 @@ async def _request(method: str, url: str, **kwargs) -> str:
 
 
 async def http_get(url: str, headers: str = "{}", timeout: int = 30) -> str:
+    """Read a URL with HTTP GET and return the status line plus the first 4000 characters of the body.
+
+    url: Absolute http or https URL. Loopback, private and link-local targets are refused before the request is sent.
+    headers: JSON object of request headers, sent as given.
+    timeout: Seconds to wait for the response.
+    """
     return await _request("GET", url, headers=headers, timeout=timeout)
 
 
 async def http_post(url: str, data: str = "{}", headers: str = "{}", timeout: int = 30) -> str:
+    """Send a JSON body with HTTP POST and return the status line plus the first 4000 characters of the response.
+
+    url: Absolute http or https URL. Loopback, private and link-local targets are refused before the request is sent.
+    data: Request body, serialised as JSON. Invalid JSON is reported instead of sent.
+    headers: JSON object of request headers, sent as given.
+    timeout: Seconds to wait for the response.
+    """
     body = _parse_body(data)
     if isinstance(body, str):
         return body
@@ -48,6 +61,13 @@ async def http_post(url: str, data: str = "{}", headers: str = "{}", timeout: in
 
 
 async def http_put(url: str, data: str = "{}", headers: str = "{}", timeout: int = 30) -> str:
+    """Replace a resource with HTTP PUT and return the status line plus the first 4000 characters of the response.
+
+    url: Absolute http or https URL. Loopback, private and link-local targets are refused before the request is sent.
+    data: Request body, serialised as JSON. Invalid JSON is reported instead of sent.
+    headers: JSON object of request headers, sent as given.
+    timeout: Seconds to wait for the response.
+    """
     body = _parse_body(data)
     if isinstance(body, str):
         return body
@@ -55,6 +75,12 @@ async def http_put(url: str, data: str = "{}", headers: str = "{}", timeout: int
 
 
 async def http_delete(url: str, headers: str = "{}", timeout: int = 30) -> str:
+    """Delete a resource with HTTP DELETE and return the status line plus the first 4000 characters of the response.
+
+    url: Absolute http or https URL. Loopback, private and link-local targets are refused before the request is sent.
+    headers: JSON object of request headers, sent as given.
+    timeout: Seconds to wait for the response.
+    """
     return await _request("DELETE", url, headers=headers, timeout=timeout)
 
 

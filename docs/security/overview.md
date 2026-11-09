@@ -45,10 +45,15 @@ An invalid value is a startup error, not a silent fallback (`Settings.model_post
 
 - **exec security level** (`exec_security`, default `deny`) — applies to the *exec class* of
   tools, one shared list (`EXEC_CLASS_TOKENS`: shell, python, `process_*`, `browser_*`, `mcp_*`,
-  `node_*`, `chaos_*`, `db_query`, `http_post`, `email_send`, the git mutating verbs and
+  `*_exec`, `*trigger*`, `ci_run_workflow`, `ci_jenkins_job`, `run_code`, `http_put`,
+  `http_delete`, `chaos_*`, `db_query`, `http_post`, `email_send`, the git mutating verbs and
   `plugin_*`). `deny` refuses them, `ask` routes them through confirmation, `full` permits
-  everything. `Agent._execute_tool()` consults it for every exec-class call, and
-  `create_task_tool_registry()` strips exactly this set from planner-driven tasks
+  everything. Matching is separator-insensitive, so a namespaced plugin tool and the registry name
+  of the same capability are one tool to the gate — matching the raw string let the gated one be
+  walked around by calling the dotted twin. `Agent._execute_tool()` consults it for
+  every exec-class call, `create_task_tool_registry()` strips exactly this set from
+  planner-driven tasks, and with `deny` the offer drops these names too — a tool the model is
+  handed and then reads a refusal from is a wasted turn, not a choice
 - **exec ask mode** (`exec_ask_mode`, default `always`) — only read when the level is
   `ask`: `always` confirms every exec, `on-miss` confirms tools that are not already in
   the profile or allowlist, `off` skips confirmation. **A confirmation that cannot be asked is a
@@ -59,8 +64,11 @@ An invalid value is a startup error, not a silent fallback (`Settings.model_post
   answering for the user
 - **tool profiles** (`messaging` / `minimal` / `full`) — an allow-list over the plugin
   tools on the agent path. `messaging` allows exactly `files.read`, `api.http_get`,
-  `memory.recall` and `browser.search`: it can read a file in the workspace, cannot write one,
-  and no exec-class tool is in any named profile. `full` ignores the list
+  `memory.recall` and `browser.search`: it can read a file in the workspace and cannot write one.
+  `browser.search` is exec-class, so with the shipped `EXEC_SECURITY=deny` the offer drops it and
+  the messaging deployment keeps three tools; raising the level to `ask` or `full` is the operator
+  decision that gives search back. `minimal` and the `full` profile contain no exec-class tool.
+  `full` ignores the list
 
 Arguments that name a filesystem location (key in `PATH_ARG_KEYS`, or suffixed `_path`, `_file`,
 `_dir`, `_root`, `_cwd`) are additionally resolved against the workspace root, and paths deeper
@@ -187,8 +195,12 @@ fixed, an unconfigured deployment executed self-heal and QA actions on unsigned 
 
 ## 10. SSRF Guard
 
-Outbound fetches go through `safe_fetch_async` (`raven/core/security/ssrf.py`) instead of
-a bare `httpx.get`:
+Every fetch whose URL a model can supply — the plugin tools — goes through
+`safe_fetch_async` (`raven/core/security/ssrf.py`) instead of a bare `httpx.get`; the gate
+`tests/test_plugin_surface_integrity.py::test_no_plugin_fetches_through_an_unpinned_client`
+fails if a published `plugin.py` constructs an `httpx.AsyncClient` itself. Code that talks to a
+configured endpoint rather than a caller-supplied address (42 `httpx.AsyncClient(` sites under
+`raven/`, 5 under `ravencode/`) is not covered by that guarantee:
 
 - scheme allowlist (`http` / `https`)
 - the address that is actually connected to is checked, not only the URL: the hostname is

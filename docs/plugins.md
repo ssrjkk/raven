@@ -20,7 +20,16 @@ plugins/my_plugin/
 
 ## Writing a Plugin
 
-Each `async` function in `plugin.py` becomes a tool the agent can call. Function parameters become the tool's JSON schema using Python type hints.
+### What becomes a tool
+
+Only a coroutine **defined in that `plugin.py`, under its own name** is published:
+
+- imported coroutines are skipped, so a helper you brought in from another module does not appear as a second tool with a name nobody wrote down
+- aliases are skipped, for the same reason (`fetch = browse` publishes nothing new)
+- names starting with `_` are skipped
+- ordinary (non-`async`) functions are never published — that is how you keep a host-side hook, such as a callback registrar that needs a real Python object, out of the tool surface
+
+Function parameters become the tool's JSON schema from the type hints. A `*args` or `**kwargs` slot stays listed but is never required: a JSON tool call cannot fill it by name.
 
 ```python
 """Weather plugin for Raven AI."""
@@ -28,15 +37,27 @@ Each `async` function in `plugin.py` becomes a tool the agent can call. Function
 async def get_weather(city: str, units: str = "celsius") -> str:
     """Get current weather for a city.
 
-    Args:
-        city: City name (e.g. "London")
-        units: Temperature units — celsius or fahrenheit
+    city: City name (e.g. "London")
+    units (str): Temperature units — celsius or fahrenheit.
+        A description may continue on the next, more indented line.
     """
-    # Your logic here
     return f"Weather in {city}: 22°{units[0].upper()}"
 ```
 
-The function name becomes the tool name (`get_weather`), the docstring becomes the description, and type hints become parameter schema.
+The function name becomes the tool name, prefixed with the plugin directory (`my_plugin.get_weather`).
+
+### Descriptions
+
+The first line of the docstring is the description the model sees. **Without a docstring it is the bare function name** (`get_weather`), which tells the model nothing; the loader logs a `WARNING` naming the tool so this is visible at startup, and `tests/test_plugin_surface_integrity.py` fails if a shipped tool is left that way.
+
+Each parameter is described by a line that starts with its name:
+
+```
+name: text
+name (type): text
+```
+
+The text continues on the following more-indented lines until a blank line or a section header such as `Args:` or `Returns:`. A prose sentence that merely happens to begin with the parameter word is not read as a description, so write the colon.
 
 ## Supported Types
 
@@ -54,11 +75,13 @@ Python type → JSON schema mapping:
 
 ## Best Practices
 
-1. **Always add a docstring** — it becomes the tool description shown to the LLM
-2. **Use descriptive parameter names** — the LLM uses them to understand what to pass
-3. **Return strings** — tool results are displayed to the LLM as text
-4. **Handle errors gracefully** — return error messages instead of raising exceptions
-5. **Keep functions focused** — one tool, one responsibility
+1. **Always add a docstring** — the first line is the tool description; without it the model sees only the bare function name (see [Descriptions](#descriptions))
+2. **Describe each parameter on its own line** — `name: text`; the schema field is otherwise empty
+3. **Use descriptive parameter names** — the LLM uses them to understand what to pass
+4. **Return strings** — tool results are displayed to the LLM as text
+5. **Handle errors gracefully** — return error messages instead of raising exceptions
+6. **Say what the tool actually does** — a description that promises delivery, persistence or a schedule the code does not perform is a bug, not a flavour of wording
+7. **Keep functions focused** — one tool, one responsibility
 
 ## Skills
 

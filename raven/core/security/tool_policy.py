@@ -32,7 +32,13 @@ EXEC_CLASS_TOKENS: tuple[str, ...] = (
     "process_",
     "browser_",
     "mcp_",
-    "node_",
+    "_exec",
+    "trigger",
+    "ci_run_workflow",
+    "ci_jenkins_job",
+    "run_code",
+    "http_put",
+    "http_delete",
     "chaos_",
     "db_query",
     "email_send",
@@ -48,7 +54,11 @@ EXEC_CLASS_TOKENS: tuple[str, ...] = (
 
 
 def is_exec_class(tool_name: str) -> bool:
-    return any(token in tool_name for token in EXEC_CLASS_TOKENS)
+    # Plugin tools arrive namespaced (`process.run`), registry tools bare (`process_kill`). Matching
+    # the raw string meant the same capability was gated under one name and free under the other, so
+    # EXEC_SECURITY could be walked past by calling the dotted twin. Separators are equal here.
+    normalized = tool_name.replace(".", "_")
+    return any(token in normalized for token in EXEC_CLASS_TOKENS)
 
 
 # Argument keys that carry a filesystem location. Containment is only meaningful for these: a

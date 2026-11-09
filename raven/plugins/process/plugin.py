@@ -28,6 +28,12 @@ _ALLOWED = _WIN_ALLOWLIST if platform.system() == "Windows" else _UNIX_ALLOWLIST
 
 
 async def run(command: str, timeout: int = 30) -> str:
+    """Run one allow-listed command in a subprocess and return its stdout, stderr and non-zero exit code.
+
+    command: Command line, split with shlex. Only the first word is checked, and only against the allow list for
+        this OS, so anything not listed there is refused without being run.
+    timeout: Seconds before the process is killed and the run reported as timed out.
+    """
     try:
         import shlex
 
@@ -65,6 +71,12 @@ async def run(command: str, timeout: int = 30) -> str:
 
 
 async def run_python(code: str, timeout: int = 60) -> str:
+    """Run Python code in a separate interpreter and return its stdout, stderr and non-zero exit code.
+
+    code: Module-level source, fed to the runner on stdin. The AST gate refuses dunder access and denied builtins
+        as '[denied]' before anything runs; the value of the last expression, if any, is the result.
+    timeout: Seconds before the interpreter is killed and the run reported as timed out.
+    """
     try:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
@@ -97,6 +109,11 @@ async def run_python(code: str, timeout: int = 60) -> str:
 
 
 async def list_processes(filter: str = "") -> str:
+    """List the running processes of this machine, sorted by memory use on Unix.
+
+    filter: Keep only the lines containing this text, case-insensitively; empty lists every process. The output is
+        one line per process and can be long.
+    """
     if sys.platform == "win32":
         proc = await asyncio.create_subprocess_exec(
             "tasklist",
@@ -146,6 +163,13 @@ def _is_self_or_ancestor(pid: int) -> bool:
 
 
 async def kill(pid: int, force: bool = False) -> str:
+    """Send a termination signal to one process by its PID and report what happened.
+
+    pid: Process id to signal. Refusing the gateway's own pid and, on Linux, its ancestors keeps a task from
+        killing the process serving it; use list_processes to find the pid first.
+    force: Ask for SIGKILL where the platform has it; otherwise SIGTERM, which the process can handle and shut down
+        cleanly.
+    """
     try:
         if _is_self_or_ancestor(pid):
             return f"Error: refusing to kill process {pid} (gateway or ancestor)"

@@ -9,6 +9,7 @@ import re
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 from loguru import logger
@@ -186,12 +187,54 @@ def _type_to_json_schema(tp: Any) -> dict[str, Any]:
     return {"type": "string"}
 
 
+def _published_by_this_plugin(mod: ModuleType, attr_name: str, func: Callable[..., Any]) -> bool:
+    """True only for a coroutine defined by this plugin.py, under its own name.
+
+    ``inspect.getmembers`` also returns coroutines the module imported, and plugin modules import
+    helpers freely: api and browser both import ``safe_fetch_async`` from the SSRF layer, memory
+    imports ``run_python`` from the code plugin. Every one of those became a callable tool on the
+    model surface, under a name no operator had written down and no policy rule addressed.
+    """
+    return getattr(func, "__module__", None) == mod.__name__ and attr_name == func.__name__
+
+
+_PARAM_DOC = re.compile(r"^(?P<name>\w+)\s*(?:\([^)]*\))?\s*:\s*(?P<text>.*)$")
+_SECTION_BREAK = re.compile(r"^[A-Za-z][A-Za-z ]*:$")
+
+
+def _param_docs(lines: list[str], names: list[str]) -> dict[str, str]:
+    """Collect the 'name: text' lines of a docstring, joining the wrapped continuation of each.
+
+    Reading only the line that starts with the parameter name cut every description that a plugin
+    author wrapped onto a second line down to its first clause, and matched any sentence that merely
+    began with that word.
+    """
+    wanted = set(names)
+    docs: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in lines:
+        text = line.strip()
+        if not text or _SECTION_BREAK.match(text):
+            current = None
+            continue
+        match = _PARAM_DOC.match(text)
+        if match and match.group("name") in wanted:
+            current = match.group("name")
+            docs.setdefault(current, []).append(match.group("text").strip())
+            continue
+        if current is not None:
+            docs[current].append(text)
+    return {name: " ".join(part for part in parts if part) for name, parts in docs.items()}
+
+
 def func_to_tool(func: Callable[..., Any]) -> PluginTool:
     sig = inspect.signature(func)
     doc = inspect.getdoc(func) or ""
     desc_lines = doc.strip().split("\n") if doc.strip() else []
     first = desc_lines[0] if desc_lines else func.__name__
     description = re.split(r"\s*(?:Args|Returns|Example):", first, maxsplit=1)[0].strip() or first
+    arg_names = [name for name in sig.parameters if name not in ("self", "cls")]
+    param_docs = _param_docs(desc_lines[1:], arg_names)
 
     parameters: dict[str, Any] = {"type": "object", "properties": {}, "required": []}
     for name, param in sig.parameters.items():
@@ -199,16 +242,15 @@ def func_to_tool(func: Callable[..., Any]) -> PluginTool:
             continue
         tp = param.annotation if param.annotation is not inspect.Parameter.empty else str
         schema = _type_to_json_schema(tp)
-        param_doc = ""
-        for line in desc_lines:
-            match = re.match(rf"\s*{re.escape(name)}\s*\(?\s*:?\s*(.*)", line, re.IGNORECASE)
-            if match:
-                param_doc = match.group(1).strip()
-                break
+        param_doc = param_docs.get(name, "")
         if param_doc:
             schema["description"] = param_doc
         parameters["properties"][name] = schema
-        if param.default is inspect.Parameter.empty:
+        # a *args/**kwargs slot can never be supplied by name in a JSON tool call, so it is never required
+        if param.default is inspect.Parameter.empty and param.kind not in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
             parameters["required"].append(name)
 
     return PluginTool(
@@ -284,7 +326,14 @@ class PluginLoader:
         for name, obj in inspect.getmembers(mod, inspect.iscoroutinefunction):
             if name.startswith("_"):
                 continue
+            if not _published_by_this_plugin(mod, name, obj):
+                logger.debug("Skipped {} in plugin {}: imported, not defined here", name, path.name)
+                continue
             tool = func_to_tool(obj)
+            if tool.description == obj.__name__:
+                logger.warning(
+                    "Plugin tool {}.{} has no docstring: the model sees only the bare name", namespace, tool.name
+                )
             tool.name = f"{namespace}.{tool.name}"
             self._tools[tool.name] = tool
             tools.append(tool)

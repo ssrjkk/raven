@@ -198,7 +198,7 @@ class TestTaskStore:
 
 class TestTaskPlanner:
     @patch("raven.core.task_engine.planner.LLMRouter")
-    async def test_plan_parses_response(self, mock_llm_cls):
+    async def test_plan_parses_response(self, mock_llm_cls, registry: ToolRegistry):
         mock_llm = MagicMock()
         mock_llm.complete_stream = lambda messages, model=None, tools=None: _async_gen(
             [
@@ -207,7 +207,7 @@ class TestTaskPlanner:
         )
         from raven.core.task_engine.planner import TaskPlanner
 
-        planner = TaskPlanner(ToolRegistry())
+        planner = TaskPlanner(registry)
         task = await planner.plan("test goal", mock_llm)
         assert task.goal == "test goal"
         assert task.plan_summary == "test plan"
@@ -238,27 +238,27 @@ class TestTaskPlanner:
         assert task.plan_summary == "s"
 
     @patch("raven.core.task_engine.planner.LLMRouter")
-    async def test_plan_skips_non_object_steps(self, mock_llm_cls):
+    async def test_plan_skips_non_object_steps(self, mock_llm_cls, registry: ToolRegistry):
         mock_llm = MagicMock()
         mock_llm.complete_stream = lambda messages, model=None, tools=None: _async_gen(
             ['{"summary": "s", "steps": ["do thing", {"description": "ok", "tool": "web_search", "params": {}}]}']
         )
         from raven.core.task_engine.planner import TaskPlanner
 
-        planner = TaskPlanner(ToolRegistry())
+        planner = TaskPlanner(registry)
         task = await planner.plan("test", mock_llm)
         assert len(task.steps) == 1
         assert task.steps[0].tool == "web_search"
 
     @patch("raven.core.task_engine.planner.LLMRouter")
-    async def test_plan_coerces_non_object_params(self, mock_llm_cls):
+    async def test_plan_coerces_non_object_params(self, mock_llm_cls, registry: ToolRegistry):
         mock_llm = MagicMock()
         mock_llm.complete_stream = lambda messages, model=None, tools=None: _async_gen(
             ['{"summary": "s", "steps": [{"description": "d", "tool": "web_search", "params": "a=1"}]}']
         )
         from raven.core.task_engine.planner import TaskPlanner
 
-        planner = TaskPlanner(ToolRegistry())
+        planner = TaskPlanner(registry)
         task = await planner.plan("test", mock_llm)
         assert len(task.steps) == 1
         assert task.steps[0].params == {}

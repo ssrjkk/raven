@@ -123,9 +123,11 @@ the same builder (`raven/core/security/tool_policy.py:policy_from_settings`):
   restricts the surface to the names it lists;
   Of the 66 tools served here the default `TOOLS_DENY` touches exactly one, `nodes_list`;
   the rest of that list names gateway tools this registry does not serve.
-- `EXEC_SECURITY` / `EXEC_ASK` - the 8 exec-class tools (`git_commit` and the seven
+- `EXEC_SECURITY` / `EXEC_ASK` - the 9 exec-class tools (`git_commit`, `sandbox_exec` and the seven
   `browser_*`) follow it, so with the default `EXEC_SECURITY=deny` an MCP client cannot run
-  them either;
+  them either; `sandbox_exec` is on that list because it runs code, sandboxed or not - set
+  `EXEC_SECURITY=full` to let an MCP client use it (`ask` cannot: there is no confirmer on a
+  JSON-RPC call, and an unaskable confirmation is a denial);
 Path containment is not duplicated here: these tools are confined by
 `ravencode/runtime/workspace.py:confine` against the root the server was given with
 `--workspace` (or `RAVEN_WORKSPACE`), which is a different root from the gateway's

@@ -17,7 +17,7 @@ from raven.core.llm import LLMRouter, ToolCall
 from raven.core.llm.queue import PRIORITY_LOW, PRIORITY_NORMAL
 from raven.core.models import Message, PluginTool, Session
 from raven.core.security.context_filter import sanitize_external_content
-from raven.core.security.tool_policy import ToolPolicyEvaluator, is_exec_class, path_args
+from raven.core.security.tool_policy import ExecSecurity, ToolPolicyEvaluator, is_exec_class, path_args
 
 
 class AgentState(Enum):
@@ -165,6 +165,15 @@ class Agent:
             return ""
 
     def _tool_schemas(self) -> list[dict[str, Any]]:
+        # Offer exactly what the call site (see _execute: is_tool_allowed + check_exec) will let
+        # through. A tool the operator's policy refuses is a turn the model spends and then reads an
+        # error from; deny mode is unconditional, so those names leave the offer with it.
+        deny_exec = self._tool_policy.exec_security is ExecSecurity.DENY
+        callable_tools = [
+            t
+            for t in self.tools
+            if self._tool_policy.is_tool_allowed(t.name) and not (deny_exec and is_exec_class(t.name))
+        ]
         return [
             {
                 "type": "function",
@@ -174,7 +183,7 @@ class Agent:
                     "parameters": t.parameters,
                 },
             }
-            for t in self.tools
+            for t in callable_tools
         ]
 
     async def _load_history(self) -> list[dict[str, Any]]:
@@ -351,7 +360,7 @@ class Agent:
         _budget_tracker = TokenBudgetTracker()
         _budget_limit = settings.token_budget_per_hour
 
-        schemas = self._tool_schemas() if self.tools else None
+        schemas = (self._tool_schemas() or None) if self.tools else None
         state = AgentState.THINK
 
         for round_i in range(self.config.max_tool_rounds):

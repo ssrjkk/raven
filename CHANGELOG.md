@@ -216,6 +216,7 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
 - `extension/src/popup/popup.css` animated its typing indicator with no `prefers-reduced-motion` rule
 - Horizontal overflow measured in real Chrome (headless, its own profile, CDP `Emulation` viewport) rather than inferred: the extension popup pinned `body { width: 380px }` for the action-popup case, so docked in a narrower side panel it scrolled sideways — `scrollWidth` 380 at `innerWidth` 360, with the header, `main#messages`, the footer, the composer and the Send button all reading 380. `max-width: 100%` keeps both surfaces honest and the measurement is clean at 360 and 300; the webchat key row needed `flex-wrap: wrap` to clear its 2px overhang at 280. After the fixes: SPA `/login`, the landing page, the webchat fallback and the popup all report `scrollWidth <= innerWidth` at 360/320/280, and `tests/test_design_contracts.py` now forbids the pattern statically — a rule setting `width: ≥320px` without a `max-width` fails, with a self-check that the detector still catches the shape it bans (the runtime measurement stays a harness: CI installs no browser); added
 - `raven doctor` reported configuration without saying what it decided. It now adds a posture block: the exec class `EXEC_SECURITY` refuses, `ask` combined with `EXEC_ASK_MODE=off` flagged as running without asking anyone, an impossible `EXEC_SECURITY` value named as the crash it is, workspace confinement (the first run on this machine caught `WORKSPACE_ONLY=true` with `WORKSPACE_PATH` unset — a control with nothing to confine to), whether `tool_policy.json` overrides exist, and the enabled feature list with telemetry's state
+- The plugin loader published `inspect.getmembers(mod, iscoroutinefunction)`, which returns the coroutines a `plugin.py` merely *imported*: the SSRF helper reached the model as `api.safe_fetch_async` and `browser.safe_fetch_async`, and the code plugin's runner appeared a second time as `memory.run_python` — three tools whose names no operator had written down and no policy rule addressed. The loader now publishes only a coroutine defined in that `plugin.py`, under its own name, and `cron.register_callback` became an ordinary function because its one argument is a Python callable a JSON tool call cannot supply. Surface: 46 tools → 42. 23 of the 46 had no docstring, so their description was the bare function name; all 42 now carry a sentence and every parameter a description (19 had none), `**kwargs` is no longer listed as required (2 of 46 did), and the extractor keeps a description wrapped onto a continuation line instead of cutting it. Three texts that claimed more than the code does were corrected: `memory.forget` said "Forgot" when nothing was stored under the key, `sessions.sessions_send` read as delivery, `files.glob` reported the matches it truncated. `tests/test_plugin_surface_integrity.py` (21 gates) holds the count, the provenance of every handler and the description floor, and four loader mutations — publish imports, drop the bare-name warning, rerequire `**kwargs`, restore the old parameter parser — fail 7, 1, 1 and 3 tests
 
 ### Security
 - IP pinning disabled the TLS it was supposed to sit behind: `SSRFSafeTransport` replaced the request URL host with the resolved address, and httpx derives both the `Host` header and the TLS SNI from that URL — so an `https` fetch presented the IP's certificate and reached the IP's default virtual host, and a plain-HTTP request lost the name the server routes on. The transport now rewrites only the connect target and keeps the original `Host` (including a non-default port and a caller-supplied override) plus `extensions["sni_hostname"]`, then restores the URL once the response arrives — `response.url` is what callers join a relative `Location` against, and a pin left in place sent redirects to the bare address; `tests/core/test_ssrf_async.py` asserts the request the base transport receives for `https://example.com:8443/status`, for a caller's `Host`, and that the caller gets its hostname back.
@@ -301,6 +302,84 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   carry a `confirm_fn` and the third provably does not, and the documented surface list is read back out
   of the docs. `TestSubjectRole` in `tests/core/test_task_engine.py` opens `EXEC_SECURITY=full` before it
   asserts, because the control under the operator's exec level is role RBAC and that pair is about the role.
+- An agent profile's tool list was an offer, not a gate. `_build_tool_schemas` filtered what the model was
+  shown (`raven/core/agents/orchestrator.py:788`) while `_execute_tool_safe` tested only `denied_tools` (:911),
+  so `allowed_tools` bound nothing: `planner` declares 5 tools and 111 of the 197 registered ones were callable
+  under the shipped defaults, `architect` declares 11 and 109 were reachable — and that gap is exactly what a
+  prompt injection in a fetched page or a tool result works with, since it needs one named call, no schema.
+  Both surfaces now ask one rule, `AgentProfile.allows_tool()`: deny wins over allow (the branch it replaces
+  treated `"*" in denied_tools` as "allow everything instead"), and the offer additionally drops the names
+  `TOOLS_DENY` refuses, so the model is not shown a tool the operator has already blocked. `EXEC_SECURITY`
+  stays a call-time decision, because `ask` needs the confirmer only a call has. Fixing the lists on the way:
+  7 of the 19 distinct names the profiles declared matched no tool in the registry (`file_grep`, `file_search`,
+  `file_diff`, `git_show`, `code_analysis_deps`, `code_analysis_metrics`, `code_analysis_complexity`), and
+  `git_add` was unreachable in `_IMPLEMENT_TOOLS` the same way — a name from the ravencode surface, not this
+  registry — so the six lists now name real tools (`analyze_code`, `rag_search`, `file_read_relevant`,
+  `git_status`, `web_search_structured`) and a guard recomputes every declared name against the registry.
+  Four more declarations were never read: `allowed_tool_categories` (0 consumers, and 6 of its 7 tokens —
+  `search`, `code_analysis`, `git`, `test`, `shell`, `http` — are not among the registry's 26 categories),
+  `model_preference`, `context_limit`, and `get_tools_for_profile`, which duplicated the schema filter without
+  ever being called. All four are gone, with a tree-wide scan that fails if a reference to any survives.
+  `handoff_profiles` was declared on all 8 profiles and consulted nowhere: `_maybe_handoff` handed the
+  conversation to any name the coordinator returned, so `qa` (declared: `coder`) could be redirected to
+  `security`, and `_VALID_HANDOFF_PROFILES` was a hand-written copy of the profile table that a 9th profile
+  would have silently missed — it is `frozenset(PROFILES) | {"done"}` now, and an undeclared or unknown handoff
+  is refused instead of reaching `resolve_profile`'s coder fallback.
+  `tests/test_profile_tool_gate.py` (33 tests) walks all 197 real names against inert handlers, one pass per
+  profile, and asserts the offered set is exactly the set that reaches a handler: offer/call agreement ×8, an
+  undeclared name refused before its handler, a declared one running, the coder deny list honoured, a blanket
+  `"*"` deny refusing everything, a declared handoff taken and an undeclared or empty one refused,
+  `_IMPLEMENT_TOOLS` and the handoff prompt re-derived from the registry, and the dead-field scan with its own
+  non-vacuity control. Measured after the change: callable-but-not-offered is 0 for all eight profiles, ghost
+  names 0; four mutations — deny-only call gate, offer without `TOOLS_DENY`, no handoff check, the old `"*"`
+  branch — fail 10, 1, 2 and 1 tests.
+- A plan that named a tool the registry does not serve was stored, reported to the user as a ready plan and
+  then died at that step with "Unknown tool" (`runner.py:378`): `TaskPlanner.plan` took `s.get("tool", "")`
+  from the model's JSON and never looked at `self._tools`. It now validates every step against the registry it
+  was handed and raises `PlanValidationError` naming the step number and the tool before anything is stored, so
+  a ghost tool is a rejected plan rather than a task that fails mid-run; `raven task` prints
+  `Plan rejected: …` instead of tracebacking, and the four gateway/multi-agent/ops callers already caught and
+  reported planning errors, so no other path changed. The three `TestTaskPlanner` cases that scripted a
+  `web_search` step against an empty `ToolRegistry()` now use the fixture registry that actually serves it.
+  The same `_build_prompt` was pasting `json.dumps(t.parameters)` per tool — measured at 54,087 characters for
+  the 197-tool task registry — which is now one `name: description (params: type!)` line per tool at 21,838
+  characters (59.6% smaller) while keeping every parameter name, its type and the required flag, and dropping
+  only the per-parameter prose the model does not need to write `params`. `tests/test_task_plan_validation.py`
+  (14 tests) covers ghost and empty tool names, the message naming step and tool, a valid plan unchanged, the
+  gate following the given registry rather than a hard-coded list, the compact prompt listing every registered
+  tool, and the size measured against the real task registry; two mutations — gate disabled, `json.dumps`
+  restored — fail 4 and 4 tests.
+- `EXEC_SECURITY` could be walked past by calling the dotted twin of a gated capability. `is_exec_class`
+  matched an underscore-token list against the raw tool name, while plugin tools arrive namespaced
+  (`plugin_loader.py:288` builds `<plugin_dir>.<tool>`), so the same handler was gated under one name and
+  free under the other: `process_kill` was exec-class and `process.kill` was not, `http_post` was and
+  `api.http_put`/`api.http_delete` were not, `code.run_python` was and `memory.run_python` — the code
+  plugin's sandboxed runner imported into the memory plugin, which the loader publishes as a tool — was
+  not. Measured across the 243-name space the two surfaces actually serve: 59 of 197 registry names and 9
+  of 46 plugin names were exec-class; now 64 and 17. Five remote-execution tools fell through both the
+  exec gate and the task-registry strip — `nodes_exec`, `ci_run_workflow`, `ci_trigger_pipeline`,
+  `ci_jenkins_job`, `github_trigger_workflow` — and the last is not in `_DEFAULT_TOOLS_DENY` either, so it
+  ran as a planner step under shipped defaults; `github_trigger_workflow` and friends are now stripped, which
+  takes the task registry from 138 tools to 133. One token, `node_`, matched 0 of the 243 names, so
+  `nodes_exec` was never in the class the docs said was stripped; it is gone and a guard recomputes every
+  token against the live name space, so no token can be dead again. Separators are equal in the classifier,
+  with an AST guard on the normalization itself and an explicit check that the MCP bridge's
+  `f"mcp_{name}_{raw_name}"` still builds a name the `mcp_` token covers.
+  The offer now agrees with the gate: `EXEC_SECURITY=deny` removes exec-class tools from what the model is
+  shown on the orchestrator (webchat) and agent paths, not only at the call — measured on the agent path,
+  the shipped `messaging` profile keeps 3 of its 4 declared tools, because `browser.search` is exec-class,
+  and raising the level to `ask`/`full` gives it back. `ask` keeps offering them, since there the decision is
+  a per-call question. Three docs were wrong about this and are corrected: `docs/security/overview.md` claimed
+  "no exec-class tool is in any named profile" (token list also now names `*_exec`, `*trigger*`,
+  `ci_run_workflow`, `ci_jenkins_job`, `run_code`, `http_put`, `http_delete` and drops `node_*`),
+  `docs/configuration.md` named the surfaces the switch covers, and `docs/mcp.md`'s count of MCP exec-class
+  tools is read back out of `MODULE_TOOLS`. `tests/test_exec_class_coverage.py` (46 tests) covers separator
+  invariance over all 243 names, the six dotted twins, the five triggers in both the full and task registry,
+  a call refused under `deny` and run under `full`, the offer under all three levels, both offer builders'
+  source, the description sweep of every real tool with its six reviewed exemptions named, and the three docs;
+  five mutations — normalization removed, `node_` restored, either offer filter dropped, the call-site exec
+  check dropped — fail 11, 3, 2, 2 and 1 tests.
+- Two plugin tools fetched through a bare `httpx.AsyncClient`, so `docs/security/overview.md`'s claim that every outbound fetch is validated and IP-pinned was false for them: `browser.search` followed redirects to whatever the redirect chain chose, and `ocr.ocr_url` validated the URL and then re-resolved it, leaving the window the pinning exists to close. Both go through `safe_fetch_async` now, and `tests/test_plugin_surface_integrity.py` fails if a published `plugin.py` constructs an unpinned client or if `ocr_url` reaches the transport for `127.0.0.1` or the metadata address.
 
 ### Removed
 - `ravencode web` promised a "server with web interface" on top of a server that serves no static files: nothing under `ravencode/` answers `/` or `/api/*`, and the dashboard belongs to the Raven gateway (`raven start`, port 18888). The command is gone along with its `--port 0` "random port" option, which never opened a random port

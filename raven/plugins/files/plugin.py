@@ -36,6 +36,13 @@ def _check_path(path: str) -> Path:
 
 
 async def read(path: str, encoding: str = "utf-8", limit: int | None = None) -> str:
+    """Read a text file from the workspace or the temp directory and return its contents.
+
+    path: File to read. Anything outside RAVEN_WORKSPACE and the system temp directory raises PermissionError.
+    encoding: Text encoding used to decode the file.
+    limit: Maximum number of characters to return; the rest is cut and the cut is reported. Unset returns the whole
+        file.
+    """
     p = _check_path(path)
     content = await asyncio.to_thread(lambda: p.read_text(encoding=encoding))
     if limit and len(content) > limit:
@@ -44,6 +51,12 @@ async def read(path: str, encoding: str = "utf-8", limit: int | None = None) -> 
 
 
 async def write(path: str, content: str, encoding: str = "utf-8") -> str:
+    """Create or replace a text file, making parent directories as needed, and report the bytes written.
+
+    path: File to write, inside the workspace or the temp directory.
+    content: Full new contents; anything already at this path is discarded.
+    encoding: Text encoding used to write the file.
+    """
     p = _check_path(path)
     await asyncio.to_thread(p.parent.mkdir, parents=True, exist_ok=True)
     await asyncio.to_thread(lambda: p.write_text(content, encoding=encoding))
@@ -51,6 +64,13 @@ async def write(path: str, content: str, encoding: str = "utf-8") -> str:
 
 
 async def append(path: str, content: str, encoding: str = "utf-8") -> str:
+    """Add text to the end of a file, creating it when missing, and report the bytes appended.
+
+    path: File to extend, inside the workspace or the temp directory.
+    content: Text to append; nothing is written before it, so a trailing newline in an earlier write is not added
+        for you.
+    encoding: Text encoding of the file.
+    """
     p = _check_path(path)
 
     def _append():
@@ -62,6 +82,11 @@ async def append(path: str, content: str, encoding: str = "utf-8") -> str:
 
 
 async def ls(path: str = ".", pattern: str = "*") -> str:
+    """List the entries of a directory with a type marker and size, one per line.
+
+    path: Directory to list, inside the workspace or the temp directory.
+    pattern: Glob pattern the entry names are matched against, relative to this directory.
+    """
     p = _check_path(path)
     is_dir = await asyncio.to_thread(p.is_dir)
     if not is_dir:
@@ -80,16 +105,28 @@ async def ls(path: str = ".", pattern: str = "*") -> str:
 
 
 async def glob(pattern: str, root: str = ".") -> str:
+    """Find files matching a glob pattern under a directory and return their paths, sorted.
+
+    pattern: Glob pattern, e.g. '**/*.py'. Recursion is up to this pattern, so a leading '**' is needed for
+        subdirectories.
+    root: Directory to search from, inside the workspace or the temp directory. At most 100 matches are listed.
+    """
     p = _check_path(root)
     matches = await asyncio.to_thread(lambda: sorted(p.glob(pattern)))
     if not matches:
         return f"No matches for '{pattern}' in {root}"
     lines = [str(m.relative_to(p)) for m in matches[:100]]
     total = len(lines)
-    return f"Found {total} file(s):\n" + "\n".join(lines)
+    shown = f" (showing {total})" if total < len(matches) else ""
+    return f"Found {len(matches)} file(s){shown}:\n" + "\n".join(lines)
 
 
 async def info(path: str) -> str:
+    """Report the type, size, modification time and permission bits of one path.
+
+    path: File or directory to describe, inside the workspace or the temp directory. A path that does not exist is
+        reported as such rather than raised.
+    """
     p = _check_path(path)
     exists = await asyncio.to_thread(p.exists)
     if not exists:

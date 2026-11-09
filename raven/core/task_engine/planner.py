@@ -8,7 +8,11 @@ from loguru import logger
 from raven.core._json import json
 from raven.core.llm import LLMRouter
 from raven.core.task_engine.models import Task, TaskStep
-from raven.core.task_engine.tool_registry import ToolRegistry
+from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+
+
+class PlanValidationError(ValueError):
+    """The plan names a tool this registry does not serve, so running it would fail at that step."""
 
 PLANNER_PROMPT = """\
 You are a task planner for the Raven AI assistant.
@@ -42,6 +46,16 @@ Output format:
 ```"""
 
 
+def _tool_line(spec: ToolSpec) -> str:
+    # Name, type and required flag for each parameter — enough to write params against, without
+    # the per-parameter description prose that made this prompt 54,087 characters for 197 tools.
+    params = ", ".join(
+        f"{name}:{schema.get('type', 'any')}{'!' if schema.get('required') else ''}"
+        for name, schema in spec.parameters.items()
+    )
+    return f"- {spec.name}: {spec.description} (params: {params})"
+
+
 class TaskPlanner:
     def __init__(self, tools: ToolRegistry):
         self._tools = tools
@@ -58,21 +72,29 @@ class TaskPlanner:
             plan_data = {"summary": response[:100], "steps": []}
 
         steps: list[TaskStep] = []
+        known = {t.name for t in self._tools.list()}
+        unknown: list[str] = []
         for i, s in enumerate(plan_data.get("steps") or []):
             if not isinstance(s, dict):
                 continue
             params = s.get("params")
             if not isinstance(params, dict):
                 params = {}
+            tool = str(s.get("tool") or "")
+            if tool not in known:
+                unknown.append(f"step {i + 1}: {tool or '<no tool named>'}")
+                continue
             steps.append(
                 TaskStep(
                     task_id=task_id,
                     order=i,
                     description=s.get("description", ""),
-                    tool=s.get("tool", ""),
+                    tool=tool,
                     params=params,
                 )
             )
+        if unknown:
+            raise PlanValidationError("the plan names tools this registry does not serve — " + "; ".join(unknown))
 
         return Task(
             id=task_id,
@@ -86,9 +108,7 @@ class TaskPlanner:
         )
 
     def _build_prompt(self, goal: str) -> str:
-        tools_list = "\n".join(
-            f"- {t.name}: {t.description} (params: {json.dumps(t.parameters)})" for t in self._tools.list()
-        )
+        tools_list = "\n".join(_tool_line(t) for t in self._tools.list())
         return PLANNER_PROMPT.format(tools_list=tools_list, goal=goal)
 
     def _parse_response(self, text: str) -> dict[str, Any]:

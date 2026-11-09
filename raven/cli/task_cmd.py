@@ -107,7 +107,7 @@ def task_run(goal: str, user: str, channel: str):
     """Plan and execute a goal as a task"""
     from raven.core.llm import LLMRouter
     from raven.core.security.confirm import terminal_confirm
-    from raven.core.task_engine.planner import TaskPlanner
+    from raven.core.task_engine.planner import PlanValidationError, TaskPlanner
     from raven.core.task_engine.runner import TaskRunner
     from raven.core.task_engine.store import TaskStore
     from raven.tools.register_all import create_tool_registry
@@ -120,7 +120,11 @@ def task_run(goal: str, user: str, channel: str):
         runner = TaskRunner(store, tools, confirm_fn=terminal_confirm)
 
         with console.status("[bold]Planning...", spinner="dots"):
-            task = await planner.plan(goal, llm, user_id=user, channel=channel)
+            try:
+                task = await planner.plan(goal, llm, user_id=user, channel=channel)
+            except PlanValidationError as e:
+                console.print(f"[red]Plan rejected:[/red] {e}")
+                return
 
         # a terminal invocation is an authenticated operator action, so the subject here is the
         # owner of this gateway rather than an unattributed caller

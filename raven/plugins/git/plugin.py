@@ -29,17 +29,29 @@ def _check_repo_path(repo_path: str) -> Path:
 
 
 async def git_status(path: str = ".") -> str:
-    """Show git status. Args: path (str): Repository path"""
+    """Report changed, staged and untracked files in a repository.
+
+    path: Repository directory, resolved inside the current working directory, the temp directory or
+        RAVEN_WORKSPACE; anywhere else is refused.
+    """
     return await _run_git(["status"], path)
 
 
 async def git_log(path: str = ".", count: int = 10) -> str:
-    """Show recent commit log. Args: path (str): Repository path, count (int): Number of commits"""
+    """List recent commits on one line each, newest first.
+
+    path: Repository directory, inside the allowed roots.
+    count: How many commits to show.
+    """
     return await _run_git(["log", "--oneline", f"-{count}"], path)
 
 
 async def git_diff(path: str = ".", staged: bool = False) -> str:
-    """Show uncommitted diff. Args: path (str): Repository path, staged (bool): Show staged diff only"""
+    """Show the patch of work that has not been committed yet, up to 3000 characters.
+
+    path: Repository directory, inside the allowed roots.
+    staged: Compare the index against HEAD instead of the working tree against the index.
+    """
     args = ["diff"]
     if staged:
         args.append("--cached")
@@ -47,7 +59,12 @@ async def git_diff(path: str = ".", staged: bool = False) -> str:
 
 
 async def git_commit(path: str = ".", message: str = "") -> str:
-    """Stage all and commit. Args: path (str): Repository path, message (str): Commit message"""
+    """Run git add -A on the whole repository, then commit with the given message.
+
+    path: Repository directory, inside the allowed roots. Every untracked file the repository can see is staged, so
+        check git_status first.
+    message: Commit message, cut to 200 characters. Empty is refused before anything is staged.
+    """
     if not message:
         return "Commit message is required"
     await _run_git(["add", "-A"], path)
@@ -55,7 +72,11 @@ async def git_commit(path: str = ".", message: str = "") -> str:
 
 
 async def git_branch(path: str = ".", create: str = "") -> str:
-    """List or create branches. Args: path (str): Repository path, create (str): Branch name to create (empty = list)"""
+    """List every local and remote branch, or create one and switch to it.
+
+    path: Repository directory, inside the allowed roots.
+    create: Branch name to create and check out. Empty just lists the branches.
+    """
     if create:
         return await _run_git(["checkout", "-b", create], path)
     return await _run_git(["branch", "-a"], path)
@@ -75,7 +96,12 @@ def _validate_remote(remote: str) -> str | None:
 
 
 async def git_push(path: str = ".", remote: str = "origin", branch: str = "") -> str:
-    """Push to remote. Args: path (str): Repository path, remote (str): Remote name, branch (str): Branch name"""
+    """Publish commits to a remote repository.
+
+    path: Repository directory, inside the allowed roots.
+    remote: Remote name, limited to origin, upstream, main, master and production; a URL is refused.
+    branch: Branch to push. Empty pushes the current branch as the remote has it configured.
+    """
     err = _validate_remote(remote)
     if err:
         return f"Error: {err}"
@@ -85,7 +111,12 @@ async def git_push(path: str = ".", remote: str = "origin", branch: str = "") ->
 
 
 async def git_pull(path: str = ".", remote: str = "origin", branch: str = "") -> str:
-    """Pull from remote. Args: path (str): Repository path, remote (str): Remote name, branch (str): Branch name"""
+    """Fetch and merge commits from a remote repository into the working tree.
+
+    path: Repository directory, inside the allowed roots.
+    remote: Remote name, limited to origin, upstream, main, master and production; a URL is refused.
+    branch: Remote branch to merge. Empty uses the branch the current one tracks.
+    """
     err = _validate_remote(remote)
     if err:
         return f"Error: {err}"
