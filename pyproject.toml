@@ -64,7 +64,7 @@ discord = ["discord.py>=2.3"]
 slack = ["slack-sdk>=3.27"]
 email = ["aiosmtplib>=2.0,<6.0", "aioimaplib>=2.0.3,<3.0"]
 docker = ["docker>=7.0"]
-secrets = ["cryptography>=50.0.0"]  # security floor: PYSEC-2026-3552 is only patched in 50.0.0
+secrets = ["cryptography>=50.0.2"]  # security floor: PYSEC-2026-3552 is only patched in 50.0.0
 service-win = ["pywin32>=312"]
 tui = ["textual>=1.0"]
 tracing = ["opentelemetry-api>=1.25", "opentelemetry-sdk>=1.45.2"]
@@ -117,7 +117,7 @@ dev = [
     "coverage>=7.17.0,<8.0",
     # >=50.0.0 is the first release with no open advisories (pip-audit clean); the old
     # <45.0 cap pinned a version with 10 known vulnerabilities
-    "cryptography>=50.0.0,<51.0",
+    "cryptography>=50.0.2,<51.0",
     "ruff>=0.5,<1.0",
     "mypy>=2.4.0,<3.0",
     "pre-commit>=4.7.0,<5.0",
