@@ -11,10 +11,10 @@ from loguru import logger
 from ravencode.runtime.fs_walk import iter_files
 from ravencode.runtime.undo import get_undo_manager
 from ravencode.runtime.workspace import (
-    _get_workspace,
+    confine as _confine,
 )
 from ravencode.runtime.workspace import (
-    confine as _confine,
+    workspace_root,
 )
 
 from ._common import (
@@ -190,7 +190,7 @@ async def verify_file(path: str) -> str:
 
 
 async def glob_files(pattern: str, path: str | None = None) -> list[str]:
-    search_root = _get_workspace() if path is None else _confine(path)
+    search_root = workspace_root() if path is None else _confine(path)
     if not search_root.is_dir():
         return [f"[error] directory not found: {path or search_root}"]
     return await asyncio.to_thread(_glob_scan, search_root, pattern)
@@ -214,7 +214,7 @@ async def grep_files(
 ) -> list[dict[str, Any]]:
     import re
 
-    search_root = _get_workspace() if path is None else _confine(path)
+    search_root = workspace_root() if path is None else _confine(path)
     if not search_root.is_dir():
         return [{"error": f"directory not found: {path or search_root}"}]
     try:

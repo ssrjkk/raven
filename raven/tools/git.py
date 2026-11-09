@@ -7,6 +7,7 @@ from typing import Any
 
 from raven.coding.git_integration import GitIntegration
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+from raven.core.workspace import workspace_root
 
 
 def _get_git() -> GitIntegration:
@@ -15,12 +16,7 @@ def _get_git() -> GitIntegration:
 
 def _confined_workspace(workspace: str) -> Path:
     """Resolve a tool-supplied repo path, clamping it to the configured workspace."""
-    from raven.core.config import settings
-
-    base = settings.resolved_workspace
-    if base is None:
-        return Path(workspace).expanduser().resolve()
-    base = base.resolve()
+    base = workspace_root()
     target = Path(workspace).expanduser().resolve()
     try:
         target.relative_to(base)

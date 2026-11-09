@@ -1,49 +1,22 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import tempfile
-from pathlib import Path
+
+from raven.core.workspace import confine
 
 PLUGIN_NAME = "files"
 PLUGIN_DESCRIPTION = "Read, write, list, and manage files on the local filesystem"
 
 
-def _allowed_roots() -> tuple[str, ...]:
-    workspace = os.environ.get("RAVEN_WORKSPACE")
-    roots: list[str] = []
-    if workspace:
-        roots.append(str(Path(workspace).expanduser().resolve()))
-    roots.append(tempfile.gettempdir())
-    return tuple(roots)
-
-
-ALLOWED_ROOTS = _allowed_roots()
-
-
-def _check_path(path: str) -> Path:
-    p = Path(path).expanduser().resolve()
-    allowed = False
-    for root in ALLOWED_ROOTS:
-        r = Path(root).resolve()
-        if r in p.parents or p == r:
-            allowed = True
-            break
-    if not allowed:
-        msg = f"Access denied: {path} (allowed: workspace, tmp)"
-        raise PermissionError(msg)
-    return p
-
-
 async def read(path: str, encoding: str = "utf-8", limit: int | None = None) -> str:
     """Read a text file from the workspace or the temp directory and return its contents.
 
-    path: File to read. Anything outside RAVEN_WORKSPACE and the system temp directory raises PermissionError.
+    path: File to read, inside the workspace or the temp directory; anywhere else raises PermissionError.
     encoding: Text encoding used to decode the file.
     limit: Maximum number of characters to return; the rest is cut and the cut is reported. Unset returns the whole
         file.
     """
-    p = _check_path(path)
+    p = confine(path)
     content = await asyncio.to_thread(lambda: p.read_text(encoding=encoding))
     if limit and len(content) > limit:
         content = content[:limit] + f"\n... [truncated to {limit} chars]"
@@ -57,10 +30,10 @@ async def write(path: str, content: str, encoding: str = "utf-8") -> str:
     content: Full new contents; anything already at this path is discarded.
     encoding: Text encoding used to write the file.
     """
-    p = _check_path(path)
+    p = confine(path)
     await asyncio.to_thread(p.parent.mkdir, parents=True, exist_ok=True)
     await asyncio.to_thread(lambda: p.write_text(content, encoding=encoding))
-    return f"Written {len(content)} bytes to {path}"
+    return f"Written {len(content.encode(encoding))} bytes to {path}"
 
 
 async def append(path: str, content: str, encoding: str = "utf-8") -> str:
@@ -71,14 +44,14 @@ async def append(path: str, content: str, encoding: str = "utf-8") -> str:
         for you.
     encoding: Text encoding of the file.
     """
-    p = _check_path(path)
+    p = confine(path)
 
     def _append():
         with p.open("a", encoding=encoding) as f:
             f.write(content)
 
     await asyncio.to_thread(_append)
-    return f"Appended {len(content)} bytes to {path}"
+    return f"Appended {len(content.encode(encoding))} bytes to {path}"
 
 
 async def ls(path: str = ".", pattern: str = "*") -> str:
@@ -87,7 +60,7 @@ async def ls(path: str = ".", pattern: str = "*") -> str:
     path: Directory to list, inside the workspace or the temp directory.
     pattern: Glob pattern the entry names are matched against, relative to this directory.
     """
-    p = _check_path(path)
+    p = confine(path)
     is_dir = await asyncio.to_thread(p.is_dir)
     if not is_dir:
         return f"Error: {path} is not a directory"
@@ -111,7 +84,7 @@ async def glob(pattern: str, root: str = ".") -> str:
         subdirectories.
     root: Directory to search from, inside the workspace or the temp directory. At most 100 matches are listed.
     """
-    p = _check_path(root)
+    p = confine(root)
     matches = await asyncio.to_thread(lambda: sorted(p.glob(pattern)))
     if not matches:
         return f"No matches for '{pattern}' in {root}"
@@ -127,7 +100,7 @@ async def info(path: str) -> str:
     path: File or directory to describe, inside the workspace or the temp directory. A path that does not exist is
         reported as such rather than raised.
     """
-    p = _check_path(path)
+    p = confine(path)
     exists = await asyncio.to_thread(p.exists)
     if not exists:
         return f"Path does not exist: {path}"

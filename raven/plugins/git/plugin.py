@@ -1,38 +1,19 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import tempfile
-from pathlib import Path
 
 from loguru import logger
+
+from raven.core.workspace import confine
 
 PLUGIN_NAME = "git"
 PLUGIN_DESCRIPTION = "Git operations: status, log, diff, commit, branch, PR"
 
 
-def _allowed_roots() -> tuple[Path, ...]:
-    workspace = os.environ.get("RAVEN_WORKSPACE")
-    roots = [Path.cwd().resolve(), Path(tempfile.gettempdir()).resolve()]
-    if workspace:
-        roots.append(Path(workspace).expanduser().resolve())
-    return tuple(roots)
-
-
-def _check_repo_path(repo_path: str) -> Path:
-    p = Path(repo_path).expanduser().resolve()
-    for root in _allowed_roots():
-        if p == root or root in p.parents:
-            return p
-    msg = f"Access denied: {repo_path} (git repo outside allowed roots)"
-    raise PermissionError(msg)
-
-
 async def git_status(path: str = ".") -> str:
     """Report changed, staged and untracked files in a repository.
 
-    path: Repository directory, resolved inside the current working directory, the temp directory or
-        RAVEN_WORKSPACE; anywhere else is refused.
+    path: Repository directory, inside the workspace or the temp directory; anywhere else is refused.
     """
     return await _run_git(["status"], path)
 
@@ -127,7 +108,7 @@ async def git_pull(path: str = ".", remote: str = "origin", branch: str = "") ->
 
 async def _run_git(args: list[str], repo_path: str) -> str:
     try:
-        cwd = _check_repo_path(repo_path) if repo_path != "." else None
+        cwd = confine(repo_path) if repo_path != "." else None
         proc = await asyncio.create_subprocess_exec(
             "git",
             *args,

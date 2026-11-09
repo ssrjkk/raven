@@ -1,12 +1,12 @@
 """RavenCode agent tool registry (split from the former tools.py module)."""
 
 from ravencode.runtime.workspace import (
-    _get_workspace,
-    _workspace_var,
-    set_workspace_root,
+    confine as _confine,
 )
 from ravencode.runtime.workspace import (
-    confine as _confine,
+    reset_workspace_root,
+    set_workspace_root,
+    workspace_root,
 )
 
 from ._common import (
@@ -169,7 +169,6 @@ __all__ = [
     "_ensure_plugin_tools",
     "_fuzzy_find",
     "_get_permission_for_tool",
-    "_get_workspace",
     "_git_cmd",
     "_glob_scan",
     "_httpx_search",
@@ -184,7 +183,6 @@ __all__ = [
     "_talk_handler",
     "_task_depth",
     "_urlencode",
-    "_workspace_var",
     "anchored_summary_append",
     "anchored_summary_clear",
     "anchored_summary_read",
@@ -231,6 +229,7 @@ __all__ = [
     "read_file",
     "read_image",
     "redo_action",
+    "reset_workspace_root",
     "run_tests",
     "sandbox_exec_tool",
     "set_agent_memory",
@@ -252,5 +251,6 @@ __all__ = [
     "verify_file",
     "web_fetch",
     "web_search",
+    "workspace_root",
     "write_file",
 ]

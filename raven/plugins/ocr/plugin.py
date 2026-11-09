@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 import tempfile
 from pathlib import Path
@@ -9,32 +8,12 @@ from pathlib import Path
 from loguru import logger
 
 from raven.core.security.ssrf import safe_fetch_async, validate_url
+from raven.core.workspace import confine
 
 PLUGIN_NAME = "ocr"
 PLUGIN_DESCRIPTION = "Extract text from images using OCR (Tesseract)"
 
 _LANGUAGE_RE = re.compile(r"^[A-Za-z0-9_+]+$")
-
-
-def _allowed_roots() -> tuple[str, ...]:
-    workspace = os.environ.get("RAVEN_WORKSPACE")
-    roots = [tempfile.gettempdir()]
-    if workspace:
-        roots.append(str(Path(workspace).expanduser().resolve()))
-    return tuple(roots)
-
-
-ALLOWED_ROOTS = _allowed_roots()
-
-
-def _check_image_path(path: str) -> Path:
-    p = Path(path).expanduser().resolve()
-    for root in ALLOWED_ROOTS:
-        r = Path(root).resolve()
-        if r in p.parents or p == r:
-            return p
-    msg = f"Access denied: {path} (allowed: workspace, tmp)"
-    raise PermissionError(msg)
 
 
 def _check_language(language: str) -> str | None:
@@ -46,13 +25,13 @@ def _check_language(language: str) -> str | None:
 async def ocr_image(image_path: str, language: str = "eng+rus") -> str:
     """Read the text out of one image file with Tesseract and return up to 4000 characters.
 
-    image_path: Image readable by Tesseract, inside RAVEN_WORKSPACE or the system temp directory; anywhere else is
+    image_path: Image readable by Tesseract, inside the workspace or the system temp directory; anywhere else is
         refused.
     language: Tesseract language pack names joined with '+', e.g. 'eng' or 'eng+rus'. Anything outside letters,
         digits, '_' and '+' is refused.
     """
     try:
-        p = _check_image_path(image_path)
+        p = confine(image_path)
         lang = _check_language(language)
         if lang is None:
             return f"Invalid OCR language: {language}"

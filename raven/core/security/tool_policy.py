@@ -6,6 +6,8 @@ from typing import Any
 
 from loguru import logger
 
+from raven.core.workspace import allowed_roots
+
 ALLOWED_PROFILES = frozenset({"messaging", "minimal", "full"})
 
 MAX_PATH_DEPTH = 20
@@ -161,16 +163,16 @@ class ToolPolicyEvaluator:
         return True
 
     def check_path(self, path: str) -> bool:
-        if not self.workspace_only or not self._workspace_root:
+        if not self.workspace_only:
             return True
-        resolved = resolve_within_root(path, self._workspace_root)
-        if resolved is None:
-            return False
-        try:
-            resolved.relative_to(self._workspace_root)
-            return True
-        except ValueError:
-            return False
+        return self._confined(path)
+
+    def _roots(self) -> tuple[Path, ...]:
+        """The directories a path argument may resolve into — the pinned root, or the one the deployment resolves."""
+        return (self._workspace_root,) if self._workspace_root is not None else allowed_roots()
+
+    def _confined(self, path_str: str) -> bool:
+        return any(resolve_within_root(path_str, root) is not None for root in self._roots())
 
     async def check_exec(
         self,
@@ -195,9 +197,9 @@ class ToolPolicyEvaluator:
         if self.exec_security == ExecSecurity.DENY:
             return False, "exec denied by policy (security=deny)"
 
-        if self.workspace_only and self._workspace_root is not None:
+        if self.workspace_only:
             for key, value in path_args(args):
-                if resolve_within_root(value, self._workspace_root) is None:
+                if not self._confined(value):
                     return False, f"argument '{key}'='{value}' is outside the workspace root"
 
         if self.exec_security == ExecSecurity.FULL:
@@ -262,9 +264,9 @@ async def mcp_deny_reason(tool_name: str, arguments: dict[str, Any] | None) -> s
 
     The profile allow-list is the messaging agent's trust boundary, not a server's - an MCP
     client is the operator's own tool surface - so profile filtering is lifted here, and so is
-    path containment: these tools are confined by `ravencode/runtime/workspace.py:confine`,
-    against the root the server was given with `--workspace`, while `WORKSPACE_PATH` is the
-    gateway's own root. Applying both would refuse paths the tool layer accepts.
+    path containment: these tools are already confined by `ravencode/runtime/workspace.py:confine`
+    against the same root this policy resolves (`raven/core/workspace.py`), so checking it here as
+    well would only add a second way to refuse the same path.
     """
     policy = policy_from_settings(profile="full", workspace_only=False)
     if not policy.is_tool_allowed(tool_name):

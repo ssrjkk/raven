@@ -13,6 +13,7 @@ from loguru import logger
 
 from raven.core.audit import AUDIT_KEY_FILE, AUDIT_SIGNING_KEY_ENV, audit_logger
 from raven.core.config import _DEFAULT_TOOLS_DENY, _ENV_FILE_CANDIDATES, settings
+from raven.core.workspace import workspace_root
 
 # pip-audit resolves the whole environment over the network; without a ceiling a slow
 # mirror blocks the audit (and the 120s per-test limit in check_all.py) indefinitely.
@@ -224,11 +225,12 @@ class SecurityAudit:
 
     def _check_workspace_path(self):
         c = self._add("workspace_path", "Workspace path is isolated", "low")
-        ws = settings.resolved_workspace
-        if ws:
+        configured = bool(settings.workspace_path.strip() or os.environ.get("RAVEN_WORKSPACE", "").strip())
+        ws = workspace_root()
+        if configured:
             c.ok(f"Workspace: {ws}")
         else:
-            c.ok("WORKSPACE_PATH not set — FS operations use default (set for production)")
+            c.ok(f"Workspace: {ws} — the working directory; every file tool is confined to it")
             c._fix_hint = "Set WORKSPACE_PATH to a dedicated directory"
 
     def _check_pii_redaction(self):

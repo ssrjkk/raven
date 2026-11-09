@@ -1,35 +1,30 @@
+"""The coding agent's view of the one workspace root — containment here is the workspace alone."""
+
 from __future__ import annotations
 
-import contextvars
-import os
 from pathlib import Path
 
-_workspace_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "raven_workspace_var", default=None
+from raven.core.workspace import (
+    get_workspace_root,
+    reset_workspace_root,
+    set_workspace_root,
+    workspace_root,
 )
 
-
-def set_workspace_root(root: str | Path | None) -> None:
-    _workspace_var.set(str(root) if root is not None else None)
-
-
-def get_workspace_root() -> str | None:
-    return _workspace_var.get()
-
-
-def _get_workspace() -> Path:
-    override = _workspace_var.get()
-    root = override if override is not None else os.environ.get("RAVEN_WORKSPACE", "workspace")
-    return Path(root).expanduser().resolve()
+__all__ = [
+    "confine",
+    "get_workspace_root",
+    "reset_workspace_root",
+    "set_workspace_root",
+    "workspace_root",
+]
 
 
 def confine(path: str) -> Path:
-    ws = _get_workspace()
-    p = Path(path)
-    if p.is_absolute():
-        p = p.expanduser().resolve()
-    else:
-        p = (ws / p).resolve()
+    """Resolve a tool path inside the workspace; relative names are taken from its root."""
+    ws = workspace_root()
+    p = Path(path).expanduser()
+    p = p.resolve() if p.is_absolute() else (ws / p).resolve()
     try:
         p.relative_to(ws)
     except ValueError as exc:

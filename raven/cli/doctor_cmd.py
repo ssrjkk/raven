@@ -12,6 +12,7 @@ from rich.table import Table
 
 from raven.core.config import Settings, settings
 from raven.core.config_store import config_store
+from raven.core.workspace import workspace_root, workspace_source
 
 console = Console()
 
@@ -46,10 +47,8 @@ def security_posture_checks() -> list[tuple[str, str]]:
 
     if not state.workspace_only:
         rows.append(("Workspace Confinement", "[!] WORKSPACE_ONLY=false — path arguments are not confined"))
-    elif state.resolved_workspace is None:
-        rows.append(("Workspace Confinement", "[!] WORKSPACE_PATH is not set — workspace_only has no root to confine to"))
     else:
-        rows.append(("Workspace Confinement", f"[OK] {state.resolved_workspace}"))
+        rows.append(("Workspace Confinement", f"[OK] {workspace_root()} — decided by {workspace_source()}"))
 
     overrides = data_path("tool_policy.json")
     rows.append(

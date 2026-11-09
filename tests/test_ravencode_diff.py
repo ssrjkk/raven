@@ -12,9 +12,9 @@ from ravencode.runtime.diff import apply_patch, compute_patch, smart_edit
 def _set_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
     from ravencode.runtime import workspace as _ws
 
-    token = _ws._workspace_var.set(str(tmp_path))
+    token = _ws.set_workspace_root(tmp_path)
     yield
-    _ws._workspace_var.reset(token)
+    _ws.reset_workspace_root(token)
 
 
 class TestComputePatch:

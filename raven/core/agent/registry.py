@@ -6,10 +6,10 @@ from typing import Any
 from loguru import logger
 
 from raven.core.agent.agent import DEFAULT_SYSTEM_PROMPT, Agent, AgentConfig
-from raven.core.config import settings
 from raven.core.db import Database
 from raven.core.llm import LLMRouter
 from raven.core.models import PluginTool, Session
+from raven.core.workspace import workspace_root
 
 
 class AgentRegistry:
@@ -53,7 +53,7 @@ class AgentRegistry:
         )
 
     def setup_defaults(self):
-        ws = settings.workspace_path if hasattr(settings, "workspace_path") else None
+        ws = str(workspace_root())
         default = AgentConfig(
             agent_id="default",
             system_prompt=DEFAULT_SYSTEM_PROMPT,

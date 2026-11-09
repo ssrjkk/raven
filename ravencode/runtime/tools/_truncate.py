@@ -6,14 +6,14 @@ import time
 from loguru import logger
 
 from ravencode.runtime.workspace import (
-    _get_workspace,
+    workspace_root,
 )
 
 
 def _spill_output(text: str) -> str | None:
     """Persist a large tool result inside the workspace; returns path or None."""
     try:
-        d = _get_workspace() / ".raven" / "spill"
+        d = workspace_root() / ".raven" / "spill"
         d.mkdir(parents=True, exist_ok=True)
         digest = hashlib.sha1(text.encode("utf-8", errors="replace")).hexdigest()[:10]  # noqa: S324
         path = d / f"tool_{int(time.time())}_{digest}.txt"

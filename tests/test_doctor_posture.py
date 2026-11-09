@@ -66,16 +66,28 @@ def test_an_impossible_exec_mode_says_what_breaks() -> None:
     assert "every agent build raises" in row
 
 
-def test_workspace_only_without_a_root_is_reported() -> None:
-    row = _posture(workspace_only=True, workspace_path="")[WORKSPACE_ROW]
-    assert row.startswith("[!]")
-    assert "no root" in row
+def test_the_unconfigured_workspace_still_confines_something(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unset WORKSPACE_PATH no longer means an unset root: the guard is always armed, and doctor
+    says which directory it is armed with and which setting decided it."""
+    from raven.core import config as config_module
 
-
-def test_workspace_confinement_names_the_root(tmp_path: Path) -> None:
-    row = _posture(workspace_only=True, workspace_path=str(tmp_path))[WORKSPACE_ROW]
+    monkeypatch.delenv("RAVEN_WORKSPACE", raising=False)
+    monkeypatch.delenv("WORKSPACE_PATH", raising=False)
+    monkeypatch.setattr(config_module.settings, "workspace_path", "")
+    row = _posture(workspace_only=True)[WORKSPACE_ROW]
     assert row.startswith("[OK]")
-    assert str(tmp_path) in row
+    assert str(Path.cwd().resolve()) in row
+    assert "working directory" in row
+
+
+def test_workspace_confinement_names_the_root_and_who_decided_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+    row = _posture(workspace_only=True)[WORKSPACE_ROW]
+    assert row.startswith("[OK]")
+    assert str(tmp_path.resolve()) in row
+    assert "RAVEN_WORKSPACE" in row
 
 
 def test_disabling_confinement_is_a_warning() -> None:

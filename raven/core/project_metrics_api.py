@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import os
 import re
 import sys
 from collections import Counter
@@ -14,6 +13,8 @@ else:
     from typing_extensions import TypedDict
 
 from fastapi import APIRouter
+
+from raven.core.workspace import workspace_root
 
 
 class LangStats(TypedDict):
@@ -48,8 +49,7 @@ def set_workspace(path: str) -> None:
 
 
 def _get_workspace() -> Path:
-    ws = _workspace or os.getenv("RAVEN_WORKSPACE", "workspace") or "workspace"
-    return Path(ws)
+    return Path(_workspace).expanduser().resolve() if _workspace else workspace_root()
 
 
 _FILE_PATTERNS: list[tuple[str, str]] = [

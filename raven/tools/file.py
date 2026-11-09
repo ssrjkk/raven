@@ -8,6 +8,7 @@ from pathlib import Path
 
 from raven.core.security.path_guard import confine_path
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+from raven.core.workspace import workspace_root
 
 _MAX_LIST_ITEMS = 1000
 
@@ -18,7 +19,7 @@ else:
 
 
 def _workspace() -> Path:
-    return Path(os.environ.get("RAVEN_WORKSPACE", "data")).resolve()
+    return workspace_root()
 
 
 def _check_no_symlinks_in_path(p: Path, ws: Path) -> None:

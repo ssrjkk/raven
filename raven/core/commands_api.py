@@ -12,6 +12,7 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 from raven.core.config import data_path
+from raven.core.workspace import workspace_root
 
 
 class CommandResponse(BaseModel):
@@ -251,7 +252,7 @@ async def generate_theme_scheme(prompt: str, seed: str | None = None, use_llm: b
 
 
 def _detect_project_state() -> str:
-    workspace = Path(os.getenv("RAVEN_WORKSPACE", "workspace"))
+    workspace = workspace_root()
     if not workspace.is_dir():
         return "empty"
     try:

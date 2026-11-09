@@ -17,12 +17,12 @@ from ravencode.runtime.undo import UndoManager
 
 @pytest.fixture(autouse=True)
 def _reset_state() -> Generator[None, None, None]:
-    ws_token = tools._workspace_var.set(None)
+    ws_token = tools.set_workspace_root(None)
     depth_token = tools._task_depth.set(0)
     tools.set_permission_checker(None)
     tools._current_sandbox_policy.set("main")
     yield
-    tools._workspace_var.reset(ws_token)
+    tools.reset_workspace_root(ws_token)
     tools._task_depth.reset(depth_token)
     tools.set_permission_checker(None)
     tools._current_sandbox_policy.set("main")
@@ -64,15 +64,18 @@ async def _wait_for_then_timeout(coro: object, timeout: object = None) -> None:
 
 def test_get_workspace_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
-    assert tools._get_workspace() == tmp_path.resolve()
+    assert tools.workspace_root() == tmp_path.resolve()
 
 
-def test_set_workspace_root_overrides_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_pinned_root_beats_the_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("RAVEN_WORKSPACE", "other")
-    tools.set_workspace_root(tmp_path)
-    assert tools._get_workspace() == tmp_path.resolve()
-    tools.set_workspace_root(str(tmp_path))
-    assert tools._get_workspace() == tmp_path.resolve()
+    token = tools.set_workspace_root(tmp_path)
+    try:
+        assert tools.workspace_root() == tmp_path.resolve()
+        tools.set_workspace_root(str(tmp_path))
+        assert tools.workspace_root() == tmp_path.resolve()
+    finally:
+        tools.reset_workspace_root(token)
 
 
 def test_confine_within(ws: Path) -> None:

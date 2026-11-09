@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
 
@@ -10,6 +9,7 @@ from loguru import logger
 
 from raven.core.asyncdb import postgres_dsn
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+from raven.core.workspace import workspace_root
 
 
 def _mask_sql_quotes(sql: str) -> str:
@@ -98,7 +98,7 @@ async def db_query(query: str, db_path: str = "data/raven.db") -> str:
     from raven.core.config import settings
 
     data_dir = settings.resolved_db_path.parent.resolve()
-    ws = Path(os.environ.get("RAVEN_WORKSPACE", "data")).resolve()
+    ws = workspace_root()
 
     p = Path(db_path)
     if p.is_absolute() or p.drive or p.root:

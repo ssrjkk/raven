@@ -14,6 +14,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from raven.core.security.path_guard import confine_path
+from raven.core.workspace import workspace_root
 from raven.tools.file import _check_no_symlinks_in_path
 
 _SANITIZE_PATTERNS: list[re.Pattern[str]] = [
@@ -22,14 +23,8 @@ _SANITIZE_PATTERNS: list[re.Pattern[str]] = [
 ]
 _MAX_FILE_SIZE = 512_000  # 500 KB — debug only, not arbitrary file read
 _ALLOWED_EXTENSIONS = frozenset({".py", ".pyw"})
-_WORKSPACE: Path | None = None
-
-
 def _get_workspace() -> Path:
-    global _WORKSPACE
-    if _WORKSPACE is None:
-        _WORKSPACE = Path(os.environ.get("RAVEN_WORKSPACE", Path(__file__).parent.parent.parent / "workspace")).resolve()
-    return _WORKSPACE
+    return workspace_root()
 
 
 def _confine_path(file_path: str) -> Path:

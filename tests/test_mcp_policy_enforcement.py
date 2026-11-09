@@ -97,7 +97,7 @@ async def test_the_mcp_layer_does_not_confine_paths_the_tool_layer_allows(
     gateway_root.mkdir()
     monkeypatch.setattr("raven.core.config.settings.workspace_only", True)
     monkeypatch.setattr("raven.core.config.settings.workspace_path", str(gateway_root))
-    monkeypatch.setattr(rav_workspace, "_get_workspace", lambda: ravencode_root)
+    monkeypatch.setattr(rav_workspace, "workspace_root", lambda: ravencode_root)
 
     inside = ravencode_root / "notes.md"
     inside.write_text("hello", encoding="utf-8")

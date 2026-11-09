@@ -269,11 +269,8 @@ class Settings(BaseSettings):
     def resolved_workspace(self) -> Path | None:
         if not self.workspace_path:
             return None
-        p = Path(self.workspace_path)
-        if not p.is_absolute():
-            base = Path(__file__).parent.parent.parent
-            return base / p
-        return p
+        p = Path(self.workspace_path).expanduser()
+        return p.resolve() if p.is_absolute() else (Path.cwd() / p).resolve()
 
     @property
     def resolved_db_path(self) -> Path:

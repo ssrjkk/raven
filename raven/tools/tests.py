@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 import sys
 from pathlib import Path
@@ -9,6 +8,7 @@ from pathlib import Path
 from loguru import logger
 
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+from raven.core.workspace import workspace_root
 
 _SAFE_ARGS_PREFIXES = (
     "-q",
@@ -31,7 +31,7 @@ _SAFE_ARGS_PREFIXES = (
 
 
 def _workspace() -> Path:
-    return Path(os.environ.get("RAVEN_WORKSPACE", "data")).resolve()
+    return workspace_root()
 
 
 def _confine(path: str) -> Path:

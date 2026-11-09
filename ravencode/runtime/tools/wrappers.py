@@ -10,10 +10,10 @@ from loguru import logger
 
 from ravencode.runtime.undo import get_undo_manager
 from ravencode.runtime.workspace import (
-    _get_workspace,
+    confine as _confine,
 )
 from ravencode.runtime.workspace import (
-    confine as _confine,
+    workspace_root,
 )
 
 # ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ async def read_image(path: str) -> str:
 async def create_artifact(title: str, artifact_type: str, content: str, path: str | None = None) -> str:
     """Create an interactive artifact and persist it to the workspace when possible."""
     try:
-        ws = _get_workspace()
+        ws = workspace_root()
         file_path: str | None = None
         if path and artifact_type in ("react", "html", "python", "markdown", "typescript", "javascript"):
             try:

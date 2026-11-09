@@ -320,20 +320,27 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     metrics_router = create_project_metrics_router()
     api_app.include_router(metrics_router)
 
-    project_insights_router = create_project_insights_router(workspace=str(settings.resolved_workspace))
+    from raven.core.workspace import workspace_root
+
+    # One root for the whole process: the routers, the tool policy, the plugin tools and the
+    # coding agent's confine() all resolve through this, and plugin subprocesses inherit it.
+    root = workspace_root()
+    os.environ["RAVEN_WORKSPACE"] = str(root)
+
+    project_insights_router = create_project_insights_router(workspace=str(root))
     api_app.include_router(project_insights_router)
 
-    insights_router = create_insights_router(workspace=str(settings.resolved_workspace))
+    insights_router = create_insights_router(workspace=str(root))
     api_app.include_router(insights_router)
 
     set_chat_database(gateway.db)
     chat_router = create_chat_router()
     api_app.include_router(chat_router)
 
-    scaffold_router = create_scaffold_router(workspace=str(settings.resolved_workspace))
+    scaffold_router = create_scaffold_router(workspace=str(root))
     api_app.include_router(scaffold_router)
 
-    pattern_checker_router = create_pattern_checker_router(workspace=str(settings.resolved_workspace))
+    pattern_checker_router = create_pattern_checker_router(workspace=str(root))
     api_app.include_router(pattern_checker_router)
 
     from raven.core.sse import sse_stream
@@ -349,7 +356,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     from ravencode.runtime.workspace import set_workspace_root
 
-    set_workspace_root(settings.resolved_workspace or Path.cwd())
+    set_workspace_root(root)
 
     status_router = create_status_router(gateway, plugin_loader, stop_event)
     api_app.include_router(status_router)
@@ -387,7 +394,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     set_tool_analytics(analytics_engine)
 
-    memory_manager = _MemoryManager(db=gateway.db, workspace=settings.resolved_workspace)
+    memory_manager = _MemoryManager(db=gateway.db, workspace=root)
     dream_engine = _DreamEngine(memory=memory_manager, event_bus=gateway.event_bus)
     api_app.state.dream_engine = dream_engine
 
@@ -397,9 +404,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     mount_spa(api_app, web_dist)
 
-    ws = settings.resolved_workspace
-    if ws:
-        set_metrics_workspace(str(ws))
+    set_metrics_workspace(str(root))
 
     async def run_all():
         await gateway.start()
