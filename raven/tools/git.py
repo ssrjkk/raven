@@ -7,7 +7,7 @@ from typing import Any
 
 from raven.coding.git_integration import GitIntegration
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
-from raven.core.workspace import workspace_root
+from raven.core.workspace import is_within, workspace_root
 
 
 def _get_git() -> GitIntegration:
@@ -19,11 +19,15 @@ def _confined_workspace(workspace: str) -> Path:
     base = workspace_root()
     target = Path(workspace).expanduser().resolve()
     try:
-        target.relative_to(base)
+        rel = target.relative_to(base)
     except ValueError:
+        # Same allowance as the core confine(): the system temp dir is a valid
+        # workspace for tool runs; everything else clamps to the workspace root.
+        if is_within(str(target)):
+            return target
         return base
     current = base
-    for part in target.relative_to(base).parts:
+    for part in rel.parts:
         current = current / part
         if current.is_symlink():
             msg = f"Symlink detected in path: {current}"
