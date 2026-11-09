@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from raven.core.config import settings
 from raven.core.task_engine.tool_registry import ToolRegistry
 from raven.tools.file import (
     _confine,
@@ -40,7 +41,10 @@ def tmp_workspace(tmp_path: Path) -> Generator[Path, None, None]:
 class TestWorkspace:
     def test_default_workspace(self, monkeypatch) -> None:
         monkeypatch.delenv("RAVEN_WORKSPACE", raising=False)
-        assert _workspace() == Path("data").resolve()
+        # Новый дизайн (raven.core.workspace): env -> settings.workspace_path -> cwd.
+        # Закрепляем настройки, чтобы конфиг из соседних шагов не менял дефолт.
+        monkeypatch.setattr(settings, "workspace_path", "")
+        assert _workspace() == Path.cwd().resolve()
 
     def test_workspace_from_env(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
