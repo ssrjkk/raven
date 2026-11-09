@@ -45,10 +45,11 @@ class RoutineCommand(CommandHandler):
                 lines.append(f"  {icon} {rt.id[:8]} {rt.name} [{rt.action.value}] {rt.schedule}{last}")
             await gateway._send(ctx.event.channel, ctx.event.session_id, "\n".join(lines))
 
-        elif sub in ("add", "remove", "pause", "resume"):
-            if not gateway._check_permission(ctx.user, Permission.ROUTINE_WRITE):
-                await gateway._send(ctx.event.channel, ctx.event.session_id, "Access denied: insufficient permissions")
-                return True
+        elif sub in ("add", "remove", "pause", "resume") and not gateway._check_permission(
+            ctx.user, Permission.ROUTINE_WRITE
+        ):
+            await gateway._send(ctx.event.channel, ctx.event.session_id, "Access denied: insufficient permissions")
+            return True
 
         if sub == "add":
             if len(sub_args) < 2:

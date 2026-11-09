@@ -62,7 +62,7 @@ dependencies = [
 [project.optional-dependencies]
 discord = ["discord.py>=2.3"]
 slack = ["slack-sdk>=3.27"]
-email = ["aiosmtplib>=2.0,<6.0", "aioimaplib>=1.0,<3.0"]
+email = ["aiosmtplib>=2.0,<6.0", "aioimaplib>=2.0.3,<3.0"]
 docker = ["docker>=7.0"]
 secrets = ["cryptography>=50.0.0"]  # security floor: PYSEC-2026-3552 is only patched in 50.0.0
 service-win = ["pywin32>=312"]
@@ -97,7 +97,7 @@ ml = [
     "peft>=0.10,<1.0",
     "datasets>=2.20,<3.0",
 ]
-ner = ["spacy>=3.7,<4.0"]
+ner = ["spacy>=3.8.18,<4.0"]
 postgres = ["asyncpg>=0.29"]
 crdt = ["y-py>=0.6.2,<1.0"]
 profiling = ["py-spy>=0.4.2,<1.0"]
@@ -114,7 +114,7 @@ dev = [
     "pytest-github-actions-annotate-failures>=0.2,<1.0",
     "pytest-benchmark>=4.0,<6.0",
     "allure-pytest>=2.16.2,<3.0",
-    "coverage>=7.5,<8.0",
+    "coverage>=7.17.0,<8.0",
     # >=50.0.0 is the first release with no open advisories (pip-audit clean); the old
     # <45.0 cap pinned a version with 10 known vulnerabilities
     "cryptography>=50.0.0,<51.0",
@@ -126,7 +126,7 @@ dev = [
     "playwright>=1.44,<2.0",
 ]
 media = ["ffmpeg-python>=0.2.0,<1.0"]
-re = ["capstone>=5.0,<6.0", "pyelftools>=0.31,<1.0", "pefile>=2023,<2024"]
+re = ["capstone>=5.0.9,<6.0", "pyelftools>=0.33,<1.0", "pefile>=2023,<2024"]
 all = ["raven-agent[discord,slack,email,docker,secrets,service-win,tui,tracing,voice,tts,search,logging,dev,browser,vector,numba,crdt,profiling,chaos,postgres,media]"]
 # Deliberately outside `all`, like `ml`: these pull torch, spacy or vendor SDK wheels.
 # stt, speaker, nlp, tracking.

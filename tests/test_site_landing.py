@@ -1231,7 +1231,10 @@ def test_the_offsite_audit_fails_on_a_page_asset(
         '<script src="https://cdn.example.com/app.js"></script>', encoding="utf-8"
     )
     assert audit_module().main(["audit", str(tmp_path)]) == 1
-    assert "cdn.example.com" in capsys.readouterr().err
+    assert capsys.readouterr().err == (
+        "::error::built documentation fetches from another host: "
+        "['https://cdn.example.com/app.js']\n"
+    )
 
 
 def test_the_offsite_audit_fails_on_a_stylesheet_url(
@@ -1242,7 +1245,10 @@ def test_the_offsite_audit_fails_on_a_stylesheet_url(
         "@import url('https://fonts.googleapis.com/css?family=Roboto');", encoding="utf-8"
     )
     assert audit_module().main(["audit", str(tmp_path)]) == 1
-    assert "fonts.googleapis.com" in capsys.readouterr().err
+    assert capsys.readouterr().err == (
+        "::error::built documentation fetches from another host: "
+        "['https://fonts.googleapis.com/css?family=Roboto']\n"
+    )
 
 
 def test_documentation_loads_no_third_party_font() -> None:
