@@ -78,17 +78,19 @@ class TestGitTools:
 
 
 class TestConfinedWorkspace:
-    def test_no_workspace_base_clamps_to_cwd(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_tmp_workspace_honored_without_base(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(settings, "workspace_path", "")
         target = tmp_path / "some" / "repo"
-        # No explicit base: the workspace root is the process cwd, paths outside it clamp.
-        assert _confined_workspace(str(target)) == Path.cwd().resolve()
+        # /tmp is an always-allowed root (workspace.allowed_roots): no clamping for it.
+        assert _confined_workspace(str(target)) == target.resolve()
 
-    def test_path_outside_base_clamps_to_base(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_path_outside_all_roots_clamps_to_base(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         base = tmp_path / "base"
         base.mkdir()
         monkeypatch.setattr(settings, "workspace_path", str(base))
-        assert _confined_workspace(str(tmp_path)) == base.resolve()
+        # cwd is neither the configured base nor under /tmp: it must clamp to base.
+        outside = Path.cwd() / "outside-clamp-probe"
+        assert _confined_workspace(str(outside)) == base.resolve()
 
     def test_path_inside_base_returns_target(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         base = tmp_path / "base"
