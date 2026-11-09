@@ -78,10 +78,11 @@ class TestGitTools:
 
 
 class TestConfinedWorkspace:
-    def test_no_workspace_base_returns_expanded(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_workspace_base_clamps_to_cwd(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(settings, "workspace_path", "")
         target = tmp_path / "some" / "repo"
-        assert _confined_workspace(str(target)) == target.resolve()
+        # No explicit base: the workspace root is the process cwd, paths outside it clamp.
+        assert _confined_workspace(str(target)) == Path.cwd().resolve()
 
     def test_path_outside_base_clamps_to_base(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         base = tmp_path / "base"

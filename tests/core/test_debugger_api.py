@@ -14,8 +14,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import raven.core.debugger_api as dba
+from raven.core.config import settings
 from raven.core.debugger_api import BreakpointRequest, _DebugSession
 from raven.core.security.path_guard import confine_path
+from raven.core.workspace import reset_workspace_root, set_workspace_root
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
@@ -64,26 +66,33 @@ def _wait_until(session: _DebugSession, status: str, timeout: float = 5.0) -> bo
 
 
 def test_get_workspace_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(dba, "_WORKSPACE", None)
     monkeypatch.delenv("RAVEN_WORKSPACE", raising=False)
-    assert dba._get_workspace() == (PROJECT_ROOT / "workspace").resolve()
+    monkeypatch.setattr(settings, "workspace_path", "")
+    # Новый дизайн: без override, env и настроек корнем становится cwd процесса.
+    assert dba._get_workspace() == Path.cwd().resolve()
 
 
 def test_get_workspace_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(dba, "_WORKSPACE", None)
     monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
     assert dba._get_workspace() == tmp_path.resolve()
 
 
-def test_get_workspace_cached(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(dba, "_WORKSPACE", tmp_path)
+def test_get_workspace_pinned_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path / "other"))
-    assert dba._get_workspace() == tmp_path.resolve()
+    token = set_workspace_root(tmp_path)
+    try:
+        # Пиновский override сильнее env.
+        assert dba._get_workspace() == tmp_path.resolve()
+    finally:
+        reset_workspace_root(token)
 
 
 def test_confine_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(dba, "_WORKSPACE", tmp_path)
-    assert dba._confine_path(str(tmp_path / "a.py")) == (tmp_path / "a.py").resolve()
+    token = set_workspace_root(tmp_path)
+    try:
+        assert dba._confine_path(str(tmp_path / "a.py")) == (tmp_path / "a.py").resolve()
+    finally:
+        reset_workspace_root(token)
 
 
 def test_confine_path_blocks_symlink_escape(tmp_path: Path) -> None:
