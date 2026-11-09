@@ -122,20 +122,9 @@ class TestFilesPlugin:
     _PATCH_ROOTS = ()
 
     def _allow(self, tmp_path):
-        from pathlib import Path
-
-        from raven.plugins.files import plugin as p
-
-        return patch.object(
-            p,
-            "ALLOWED_ROOTS",
-            [
-                str(Path.home()),
-                str(Path.cwd()),
-                "/tmp",
-                str(tmp_path.resolve()),
-            ],
-        )
+        # confine() already allows the system temp dir, and tmp_path lives there:
+        # no roots patching needed under the central workspace design.
+        return contextlib.nullcontext()
 
     @pytest.mark.asyncio
     async def test_write_and_read(self, tmp_path):
