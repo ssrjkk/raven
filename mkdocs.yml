@@ -44,6 +44,7 @@ extra_css:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
+  - Free Offline Model: local-models.md
   - Channels:
     - Overview: channels/overview.md
   - Core Concepts:

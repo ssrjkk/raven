@@ -1428,3 +1428,21 @@ def test_get_permission_for_tool_default() -> None:
 def test_get_permission_for_tool_tuple_result() -> None:
     tools.set_permission_checker(lambda name, args: (0, "nope"))
     assert tools._get_permission_for_tool("read", {}) == (False, "nope")
+
+
+async def test_git_cmd_refuses_a_directory_outside_the_workspace(ws, monkeypatch) -> None:
+    """`git status|diff|log|commit` take a directory from the model, so it is confined before spawn."""
+    spawn = AsyncMock(return_value=_FakeProc(out=b"clean"))
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
+    outside = Path(Path.cwd().anchor) / "wave94-foreign-repo"
+    refused = await tools._git_cmd("commit", "-m", "x", cwd=str(outside))
+    assert "outside workspace" in refused
+    spawn.assert_not_awaited()
+
+
+async def test_git_cmd_without_a_directory_runs_at_the_workspace_root(ws, monkeypatch) -> None:
+    spawn = AsyncMock(return_value=_FakeProc(out=b"clean"))
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
+    assert await tools._git_cmd("status") == "clean"
+    assert spawn.await_args is not None
+    assert spawn.await_args.kwargs["cwd"] == str(ws.resolve())

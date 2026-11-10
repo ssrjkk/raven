@@ -141,10 +141,26 @@ class TestCheckExecWorkspace:
         allowed, _reason = await p.check_exec("shell_execute", {"command": "ls", "cwd": ""})
         assert allowed is True
 
-    async def test_no_root_configured_skips_containment(self):
-        p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL, workspace_only=True, workspace_root=None)
-        allowed, _reason = await p.check_exec("t", {"path": "C:\\Windows\\System32\\config\\SAM"})
-        assert allowed is True
+    async def test_no_explicit_root_confines_to_the_resolved_workspace_instead_of_opening_every_path(
+        self, tmp_path: Path
+    ):
+        """`workspace_root=None` used to mean "no containment at all", which let SAM through.
+
+        The policy now asks the one resolver at call time, so an unconfigured policy is confined to the
+        root the process was given rather than fail-open.
+        """
+        from raven.core.workspace import reset_workspace_root, set_workspace_root
+
+        token = set_workspace_root(tmp_path)
+        try:
+            p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL, workspace_only=True, workspace_root=None)
+            allowed, reason = await p.check_exec("t", {"path": "C:\\Windows\\System32\\config\\SAM"})
+            assert allowed is False
+            assert "outside the workspace root" in (reason or "")
+            inside, _ = await p.check_exec("t", {"path": str(tmp_path / "ok.txt")})
+            assert inside is True, "the resolved root is a boundary, not a blanket denial"
+        finally:
+            reset_workspace_root(token)
 
     async def test_workspace_only_off_skips_containment(self, tmp_path: Path):
         p = ToolPolicyEvaluator(

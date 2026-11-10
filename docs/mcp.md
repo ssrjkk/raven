@@ -108,10 +108,13 @@ The `ravencode.mcp` module works identically (`python -m ravencode.mcp`).
 
 ## Workspace isolation
 
-The `--workspace` argument is the only directory tools may touch — it defaults to the
-current directory. Absolute paths outside it (and symlink escapes) are rejected with a
+The `--workspace` argument is the only directory tools may touch. Left unset, the server takes the
+root the deployment resolves — `RAVEN_WORKSPACE`, then `WORKSPACE_PATH`, then the current directory
+(`raven/core/workspace.py:_decide`) — so a gateway configured with a root and an MCP server started
+beside it agree on one. Absolute paths outside it (and symlink escapes) are rejected with a
 permission error. Pass `--workspace D:\my-project` (or the POSIX equivalent) to scope
-each client to its own project.
+each client to its own project. These tools confine to the workspace alone: the system temp
+directory the gateway's plugin tools also accept is not open here.
 
 ## What the MCP surface enforces
 
@@ -129,9 +132,11 @@ the same builder (`raven/core/security/tool_policy.py:policy_from_settings`):
   `EXEC_SECURITY=full` to let an MCP client use it (`ask` cannot: there is no confirmer on a
   JSON-RPC call, and an unaskable confirmation is a denial);
 Path containment is not duplicated here: these tools are confined by
-`ravencode/runtime/workspace.py:confine` against the root the server was given with
-`--workspace` (or `RAVEN_WORKSPACE`), which is a different root from the gateway's
-`WORKSPACE_PATH`; a path outside it raises `PermissionError` inside the tool.
+`ravencode/runtime/workspace.py:confine` against the root the process resolves — the `--workspace`
+the server was given, else the deployment's root — and the policy that gates the call resolves the
+same directory, so it never refuses a path the tool would have accepted. The tool is the stricter of
+the two: it does not open the system temp directory. A path outside the root raises
+`PermissionError` inside the tool.
 
 A refused call answers `[denied] ...` with `isError: true` over JSON-RPC and HTTP 403 on
 `POST /mcp/tools/{name}`. The one thing MCP does not inherit is `TOOLS_PROFILE`: the named

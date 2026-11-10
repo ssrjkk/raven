@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 from ravencode.runtime.autogit import (
@@ -45,6 +46,22 @@ class TestGit:
             AsyncMock(return_value=_proc(returncode=1)),
         )
         assert await _git("status") == "[exit code: 1]"
+
+    async def test_a_directory_outside_the_workspace_never_reaches_git(self, monkeypatch) -> None:
+        spawn = AsyncMock(return_value=_proc(b"out"))
+        monkeypatch.setattr("ravencode.runtime.autogit.asyncio.create_subprocess_exec", spawn)
+        outside = Path(Path.cwd().anchor) / "wave94-foreign-repo"
+        refused = await _git("add", "-A", cwd=str(outside))
+        assert "outside workspace" in refused
+        spawn.assert_not_awaited()
+
+    async def test_the_default_directory_is_the_workspace_root(self, monkeypatch, tmp_path) -> None:
+        spawn = AsyncMock(return_value=_proc(b""))
+        monkeypatch.setattr("ravencode.runtime.autogit.asyncio.create_subprocess_exec", spawn)
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+        await _git("status")
+        assert spawn.await_args is not None
+        assert spawn.await_args.kwargs["cwd"] == str(tmp_path.resolve())
 
 
 class TestGuessCommitType:

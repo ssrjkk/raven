@@ -68,6 +68,32 @@ def security_posture_checks() -> list[tuple[str, str]]:
     return rows
 
 
+def experimental_model_checks() -> list[tuple[str, str]]:
+    """What the bundled free model costs this machine, whether it is live, and what still leaks.
+
+    The state row answers "can I press this and get a free local model": in use, pullable, or refused
+    with the numbers behind the refusal. The notes explain the ways a switched-on free model still
+    bills a hosted provider or still is not the model a new process reads.
+    """
+    from raven.core.heretic_model import status as experimental_status
+
+    try:
+        st = experimental_status(settings.ollama_base_url)
+    except Exception as exc:  # a broken probe must not blank the whole report
+        return [("Bundled Free Model", f"[ERR] could not be measured: {type(exc).__name__}: {exc}")]
+    if st.is_default:
+        state = f"[OK] in use — {st.hardware.summary()}"
+    elif st.blockers:
+        state = "[!] " + "; ".join(st.blockers)
+    elif st.present:
+        state = "[!] pulled, not in use — raven models enable-heretic"
+    else:
+        state = f"[!] not pulled ({st.size_gb:.2f} GB) — raven models enable-heretic"
+    rows: list[tuple[str, str]] = [("Bundled Free Model", state)]
+    rows.extend(("Model Note", f"[!] {warning}") for warning in st.warnings)
+    return rows
+
+
 def _cors_posture_row() -> tuple[str, str]:
     """Who may call the API from a browser, and whether those calls carry the session."""
     origins = settings.cors_origin_list
@@ -193,6 +219,7 @@ def doctor():
             sb_status = "[!] Invalid JSON"
         checks.append(("Channel Sandbox Policy", sb_status))
 
+    checks.extend(experimental_model_checks())
     checks.extend(security_posture_checks())
 
     table = Table(show_header=False)

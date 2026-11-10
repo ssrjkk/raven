@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -315,6 +316,28 @@ class Settings(BaseSettings):
         return True
 
 
+def sanitize_no_proxy_env() -> None:
+    """Rewrite the no-proxy lists so one bracketed IPv6 entry cannot break every client in the process.
+
+    httpx turns each NO_PROXY entry into a URL pattern, and the pattern ``all://[::1]`` reads ``:1]``
+    as a port and raises ``InvalidURL`` inside ``httpx.Client()`` — so a machine-level
+    ``NO_PROXY=localhost,[::1]`` fails every provider call before a request is sent. Brackets are the
+    URL form of an IPv6 literal, not the list form, so dropping them bypasses the same hosts.
+    """
+    for name in ("NO_PROXY", "no_proxy"):
+        raw = os.environ.get(name)
+        if raw is None:
+            continue
+        entries: list[str] = []
+        for entry in raw.split(","):
+            host = entry.strip().strip("[]")
+            if host and host not in entries:
+                entries.append(host)
+        os.environ[name] = ",".join(entries)
+
+
+sanitize_no_proxy_env()
+
 settings = Settings()
 
 # ── Honeytoken watermark check ────────────────────────────────
@@ -346,12 +369,197 @@ def data_path(*parts: str) -> Path:
     return settings.resolved_data_dir.joinpath(*parts)
 
 
+def _ghost_fallback_model(base_url: str) -> str:
+    """A model Ollama actually serves, preferring the bundled free one, for a hosted name in ghost mode."""
+    from raven.core.heretic_model import is_bundled_model, list_ollama_models
+
+    try:
+        names = list_ollama_models(base_url, timeout=3.0)
+    except Exception:
+        names = []
+    for name in names:
+        if is_bundled_model(f"ollama/{name}"):
+            return f"ollama/{name}"
+    if names:
+        return f"ollama/{names[0]}"
+    logger.warning("Ghost mode: Ollama at {} serves nothing to fall back to; keeping ollama/llama3", base_url)
+    return "ollama/llama3"
+
+
 def apply_ghost_mode(overrides: dict[str, Any] | None = None) -> None:
+    """Ghost mode means no external API call, not "forget the model the operator configured".
+
+    The router routes every ghost-mode call to Ollama, so an ``ollama/`` model — the bundled free one
+    included — is kept exactly as configured. Only a hosted name has to be replaced, and then with
+    something the local runtime answers to instead of a hardcoded guess that was never pulled.
+    """
     s = get_settings()
     s.ghost_mode = True
-    s.default_model = "ollama/llama3"
+    if not s.default_model.startswith("ollama/"):
+        s.default_model = _ghost_fallback_model(s.ollama_base_url)
     if overrides:
         for k, v in overrides.items():
             if hasattr(s, k):
                 setattr(s, k, v)
     logger.info("Ghost mode activated — LLM: {}, voice: local-only", s.default_model)
+
+
+_USER_ENV_FILE = Path.home() / ".raven" / ".env"
+
+# Env names a running gateway is expected to honour without a restart. Anything secret, port-shaped
+# or storage-shaped stays out: those need a fresh process because their consumers cache connections.
+_RUNTIME_SWITCHABLE: dict[str, str] = {
+    "DEFAULT_MODEL": "default_model",
+    "MODEL_FAST": "model_fast",
+    "MODEL_BALANCED": "model_balanced",
+    "MODEL_QUALITY": "model_quality",
+    "OLLAMA_BASE_URL": "ollama_base_url",
+}
+
+
+def env_file_candidates() -> list[Path]:
+    """Every file :class:`Settings` reads, in ascending precedence — the last one wins.
+
+    De-duplicated by real path: run from the install root, ``<root>/.env`` and ``./.env`` are the same
+    file listed twice, and a reader that walks the tail of this list would report the file as shadowing
+    itself.
+    """
+    paths: list[Path] = []
+    seen: set[str] = set()
+    for candidate in _ENV_FILE_CANDIDATES:
+        path = Path(candidate)
+        path = path if path.is_absolute() else Path.cwd() / path
+        try:
+            key = str(path.resolve())
+        except OSError:
+            key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        paths.append(path)
+    return paths
+
+
+def effective_env_file() -> Path:
+    """The env file a runtime switch has to write for :class:`Settings` to obey it.
+
+    Precedence is decided by position in ``_ENV_FILE_CANDIDATES`` (pydantic-settings lets the later
+    file win), so a value written to a lower-precedence file is silently overridden. The last existing
+    candidate is therefore the only honest target; when none exists yet the user-level file is created,
+    because unlike ``./.env`` it is found from every working directory.
+    """
+    for path in reversed(env_file_candidates()):
+        if path.is_file():
+            return path
+    return _USER_ENV_FILE
+
+
+def overshadowing_env_value(env_name: str) -> str | None:
+    """A value for ``env_name`` that came from outside the env files and therefore outranks them.
+
+    Measured on this install (2026-11-10): with ``DEFAULT_MODEL=file/model`` in ``./.env`` and
+    ``DEFAULT_MODEL=shell/model`` in the process environment, ``Settings`` resolves ``shell/model`` —
+    pydantic-settings applies the real environment after every dotenv file. A service unit, a Windows
+    service environment or a shell profile that exports the name therefore keeps beating whatever a
+    runtime switch writes, which is how a switch looks dead. None means the switch wins: the name is
+    unset in the environment, or the environment already agrees with the file.
+    """
+    value = os.environ.get(env_name, "").strip()
+    if not value:
+        return None
+    return None if value == (read_env_value(env_name) or "").strip() else value
+
+
+def refresh_settings_from_env() -> list[str]:
+    """Copy the runtime-switchable env names onto the live settings object and name what moved.
+
+    ``Settings`` reads the environment once, at import, so editing ``DEFAULT_MODEL`` in ``.env`` used to
+    change only the next process while the running gateway kept answering from the old model.
+    ``ConfigWatcher`` keeps ``os.environ`` current and calls this. An empty value is skipped: an unset
+    name must not wipe an auto-discovered model.
+    """
+    changed: list[str] = []
+    s = get_settings()
+    for env_name, attr in _RUNTIME_SWITCHABLE.items():
+        value = os.environ.get(env_name, "").strip()
+        if not value or getattr(s, attr, None) == value:
+            continue
+        setattr(s, attr, value)
+        changed.append(env_name)
+    if changed:
+        logger.info("[config] runtime switch applied: {}", ", ".join(changed))
+    return changed
+
+
+def _env_lines(path: Path) -> tuple[list[str], str]:
+    if not path.is_file():
+        return [], "\n"
+    # newline="" keeps CRLF visible: read_text() translates it, and a translated read makes every
+    # Windows-authored .env look like an LF file, so the first write would rewrite all its lines.
+    with path.open("r", encoding="utf-8", errors="replace", newline="") as handle:
+        raw = handle.read()
+    return raw.splitlines(), ("\r\n" if "\r\n" in raw else "\n")
+
+
+def _write_env_lines(path: Path, lines: list[str], newline: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    created = not path.exists()
+    path.write_text(newline.join(lines) + newline, encoding="utf-8", newline="")
+    if created:
+        with contextlib.suppress(OSError):
+            path.chmod(0o600)
+
+
+def _line_key(line: str) -> str:
+    stripped = line.strip()
+    if stripped.startswith("#") or "=" not in stripped:
+        return ""
+    return stripped.split("=", 1)[0].strip()
+
+
+def read_env_value(key: str, env_path: Path | None = None) -> str | None:
+    """The value ``key`` has in the env file Settings obeys, or None when that file does not set it."""
+    path = env_path or effective_env_file()
+    value: str | None = None
+    for line in _env_lines(path)[0]:
+        if _line_key(line) == key:
+            value = line.strip().split("=", 1)[1].strip()
+    return value
+
+
+def write_env_value(key: str, value: str, env_path: Path | None = None) -> str | None:
+    """Set ``key`` in the env file Settings obeys and return the value it replaced.
+
+    Only matching lines are touched and the original line endings are kept: this file carries API keys,
+    and re-rendering it through a parser would reorder or drop whatever is not modelled here. Duplicate
+    assignments collapse into one, keeping the last value that was in force.
+    """
+    path = env_path or effective_env_file()
+    lines, newline = _env_lines(path)
+    previous: str | None = None
+    out: list[str] = []
+    written = False
+    for line in lines:
+        if _line_key(line) == key:
+            previous = line.strip().split("=", 1)[1].strip()
+            if not written:
+                out.append(f"{key}={value}")
+                written = True
+            continue
+        out.append(line)
+    if not written:
+        out.append(f"{key}={value}")
+    _write_env_lines(path, out, newline)
+    os.environ[key] = value
+    return previous
+
+
+def drop_env_value(key: str, env_path: Path | None = None) -> None:
+    """Remove every assignment of ``key`` from the env file Settings obeys."""
+    path = env_path or effective_env_file()
+    lines, newline = _env_lines(path)
+    kept = [line for line in lines if _line_key(line) != key]
+    if len(kept) == len(lines):
+        return
+    _write_env_lines(path, kept, newline)
+    os.environ.pop(key, None)

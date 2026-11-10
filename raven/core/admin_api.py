@@ -17,6 +17,7 @@ from raven.core.admin.models import (
     AuthUpdateRoleRequest,
     AuthVerifyEmailRequest,
     ConfigUpdateRequest,
+    ModelSwitchRequest,
     MonitorCreateRequest,
     MonitorUpdateRequest,
     SecretRequest,
@@ -61,6 +62,8 @@ class WorkflowStepsRequest(BaseModel):
 
 def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> APIRouter:
     router = APIRouter(prefix="/api/admin", tags=["admin"])
+    # One model switch at a time. The handle is kept so the task cannot be garbage-collected mid-pull.
+    _model_switch: dict[str, Any] = {"busy": False, "error": "", "task": None}
 
     # -- Monitor CRUD --
 
@@ -549,6 +552,61 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         config_store.save()
         await audit_logger.log(AuditEventType.COMMAND, "admin", "config.update", detail={"key": body.key})
         return {"ok": True}
+
+    @router.get("/models/experimental")
+    async def admin_experimental_model() -> dict[str, Any]:
+        """The bundled free model: reference, size, whether this box can run it, whether it is live."""
+        from raven.core.heretic_model import status
+
+        payload: dict[str, Any] = status(settings.ollama_base_url).to_dict()
+        payload["busy"] = _model_switch["busy"]
+        if _model_switch["error"]:
+            payload["error"] = _model_switch["error"]
+        return payload
+
+    @router.post("/models/experimental")
+    async def admin_switch_experimental_model(body: ModelSwitchRequest, request: Request) -> dict[str, Any]:
+        import asyncio
+
+        from raven.core.heretic_model import disable, enable
+
+        user_role = getattr(request.state, "user_role", None)
+        if user_role not in ("admin", "superadmin"):
+            raise HTTPException(403, "Model switch requires admin role")
+
+        if body.action == "disable":
+            result = await asyncio.to_thread(disable)
+        else:
+            if _model_switch["busy"]:
+                raise HTTPException(409, "a model switch is already running")
+            # The weights are gigabytes: the pull runs off the loop and the screen polls the GET above.
+            _model_switch.update(busy=True, error="")
+
+            def _done(task: asyncio.Task[Any]) -> None:
+                _model_switch["busy"] = False
+                _model_switch["task"] = None
+                exc = task.exception() if not task.cancelled() else None
+                if exc is not None:
+                    _model_switch["error"] = f"{type(exc).__name__}: {exc}"
+                    return
+                outcome = task.result()
+                _model_switch["error"] = "" if outcome.ok else outcome.detail
+
+            running = asyncio.create_task(
+                asyncio.to_thread(enable, settings.ollama_base_url, pull=True, force=body.force)
+            )
+            _model_switch["task"] = running
+            running.add_done_callback(_done)
+            result = None
+
+        await audit_logger.log(
+            AuditEventType.COMMAND, "admin", f"model.experimental.{body.action}", detail={"force": body.force}
+        )
+        if result is not None:
+            if not result.ok:
+                raise HTTPException(409, result.detail)
+            return {"ok": True, "detail": result.detail, "busy": False}
+        return {"ok": True, "detail": "switch started; poll /api/admin/models/experimental", "busy": True}
 
     return router
 

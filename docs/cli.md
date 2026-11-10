@@ -38,6 +38,24 @@ Interactive setup wizard.
 
 Generate a `raven.json` project scaffold.
 
+### `raven setup`
+
+Build the completely free, offline stack: Ollama, the model this machine can run, and the three
+configuration files.
+
+```bash
+raven setup --free [--model NAME] [--experimental] [--yes]
+```
+
+The model is picked from measured hardware — `GlobalMemoryStatusEx` for RAM, `nvidia-smi` for VRAM and
+`shutil.disk_usage` for the volume the weights land on (`raven/core/hardware.py`; `wmic` was removed
+from Windows 11 24H2 and answers zero, so nothing here uses it). `--free` writes `raven.json`,
+`opencode.json` and `.env`, updating the keys it owns and leaving the operator's own sections and API
+keys in place. `--model NAME` overrides the pick. `--experimental` selects the bundled free model
+below and asks before downloading its 5.63 GB; without a terminal it does not download and configures
+the auto-picked model instead, so the switch is never written for weights that are not on the box.
+`--yes` accepts the download for scripted runs.
+
 ### `raven deploy`
 
 Generate a docker-compose file (minimal/full).
@@ -91,9 +109,28 @@ raven security audit [--deep]
 
 Launch the Textual TUI dashboard.
 
-### `raven models list`
+### `raven models`
 
-List configured LLM models.
+```bash
+raven models list
+raven models enable-heretic [--base-url URL] [--yes] [--no-pull] [--force]
+raven models disable-heretic
+```
+
+`list` shows every configured provider and the state of the bundled free experimental model: its
+reference, the weight size, whether Ollama is reachable, whether the weights are pulled, whether
+`DEFAULT_MODEL` points at it, and what this machine measured.
+
+`enable-heretic` pulls `hf.co/mradermacher/DeepSeek-V4-Pro-Qwen3.5-9B-UNCENSORED-heretic-GGUF:Q4_K_M`
+(5.63 GB, apache-2.0) into Ollama and writes `DEFAULT_MODEL` into the env file the gateway reads; a
+running gateway reloads it within 5 s, so no restart is needed. It refuses when the hardware preflight
+says this box cannot run it — that answer is in numbers (free disk, total and free RAM, VRAM available
+to offload to) — and `--force` overrides. `--no-pull` only writes the switch, for a box where the
+weights already exist. Without `--yes` the download is confirmed on a terminal and refused on a pipe.
+`disable-heretic` puts back the value `DEFAULT_MODEL` had before, read from
+`HERETIC_PREVIOUS_DEFAULT_MODEL`. The same switch is a card on the Admin screen, and `raven doctor`
+reports it as `Bundled Free Model`. Hardware thresholds, the air-gapped import and the failure modes
+are on one page: [Free Offline Model](local-models.md).
 
 ### `raven plugins list`
 

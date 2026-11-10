@@ -95,13 +95,14 @@ class FakeProc:
 
 @pytest.fixture()
 def env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[TestClient, FakeClient, FakeSecrets]:
+    """The clone endpoint confines to the workspace root, so the fixture decides that root the way
+    an operator does -- an environment name, not a settings attribute the endpoint never reads."""
     fake = FakeClient()
     secrets = FakeSecrets()
     monkeypatch.setattr(gh, "_client", lambda: fake)
-    monkeypatch.setattr(
-        gh, "settings", SimpleNamespace(github_token=FakeSecret("ghp_test"), resolved_workspace=str(tmp_path))
-    )
+    monkeypatch.setattr(gh, "settings", SimpleNamespace(github_token=FakeSecret("ghp_test")))
     monkeypatch.setattr(gh, "secrets", secrets)
+    monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
     app = FastAPI()
     app.include_router(gh.create_github_router())
     client = TestClient(app, raise_server_exceptions=False)
@@ -110,9 +111,8 @@ def env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[TestClient, Fa
 
 def _no_token(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
     monkeypatch.setattr(gh, "_client", lambda: FakeClient())
-    monkeypatch.setattr(
-        gh, "settings", SimpleNamespace(github_token=FakeSecret(""), resolved_workspace=str(tmp_path))
-    )
+    monkeypatch.setattr(gh, "settings", SimpleNamespace(github_token=FakeSecret("")))
+    monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
     monkeypatch.setattr(gh, "secrets", FakeSecrets())
     app = FastAPI()
     app.include_router(gh.create_github_router())

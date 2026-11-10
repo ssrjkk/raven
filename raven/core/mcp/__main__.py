@@ -12,12 +12,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="raven-mcp", description="Raven MCP server (stdio)")
     parser.add_argument(
         "--workspace",
-        default=".",
-        help="Root directory tools may access (default: current directory)",
+        default=None,
+        help="Root directory tools may access (default: the workspace root the deployment resolves)",
     )
     args = parser.parse_args()
     use_utf8_stdio()
-    set_workspace_root(args.workspace)
+    if args.workspace:
+        set_workspace_root(args.workspace)
     asyncio.run(run_mcp_server())
 
 

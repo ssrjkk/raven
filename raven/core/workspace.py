@@ -7,6 +7,8 @@ import os
 import tempfile
 from pathlib import Path
 
+WORKING_DIRECTORY = "the working directory"
+
 _override: contextvars.ContextVar[str | None] = contextvars.ContextVar("raven_workspace_root", default=None)
 
 
@@ -28,37 +30,42 @@ def _anchor(value: str | os.PathLike[str]) -> Path:
     return p.resolve() if p.is_absolute() else (Path.cwd() / p).resolve()
 
 
-def workspace_root() -> Path:
-    """The directory every file, git, OCR and exec path is confined to.
+def _configured_path() -> str:
+    from raven.core.config import settings
 
-    Precedence: the root the process was given, then RAVEN_WORKSPACE, then WORKSPACE_PATH,
-    then the working directory the process was started in.
+    return settings.workspace_path.strip()
+
+
+def _decide() -> tuple[Path, str]:
+    """The root and the one setting that decided it, from a single chain that cannot disagree with itself.
+
+    Precedence: the root the process was given (`--workspace`, gateway startup, a test), then
+    RAVEN_WORKSPACE, then WORKSPACE_PATH, then the working directory the process was started in.
     """
     pinned = _override.get()
     if pinned:
-        return _anchor(pinned)
+        return _anchor(pinned), "the root this process was given"
     env = os.environ.get("RAVEN_WORKSPACE")
     if env and env.strip():
-        return _anchor(env)
-    from raven.core.config import settings
+        return _anchor(env), "RAVEN_WORKSPACE"
+    configured = _configured_path()
+    if configured:
+        return _anchor(configured), "WORKSPACE_PATH"
+    return Path.cwd().resolve(), WORKING_DIRECTORY
 
-    if settings.workspace_path.strip():
-        return _anchor(settings.workspace_path)
-    return Path.cwd().resolve()
+
+def workspace_root() -> Path:
+    return _decide()[0]
 
 
 def workspace_source() -> str:
     """Which setting decided the root, so `raven doctor` can name it."""
-    if _override.get():
-        return "the root this process was given"
-    env = os.environ.get("RAVEN_WORKSPACE")
-    if env and env.strip():
-        return "RAVEN_WORKSPACE"
-    from raven.core.config import settings
+    return _decide()[1]
 
-    if settings.workspace_path.strip():
-        return "WORKSPACE_PATH"
-    return "the working directory"
+
+def is_configured() -> bool:
+    """Whether an operator decided the root rather than leaving it on the working directory."""
+    return workspace_source() != WORKING_DIRECTORY
 
 
 def allowed_roots() -> tuple[Path, ...]:
@@ -72,8 +79,8 @@ def resolve(path: str) -> Path:
 
 
 def is_within(path: str) -> bool:
-    p = resolve(path)
-    return any(p == root or root in p.parents for root in allowed_roots())
+    resolved = resolve(path)
+    return any(resolved == root or root in resolved.parents for root in allowed_roots())
 
 
 def confine(path: str) -> Path:

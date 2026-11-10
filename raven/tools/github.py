@@ -6,6 +6,7 @@ from loguru import logger
 
 from raven.core.config import settings
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+from raven.core.workspace import workspace_root
 
 
 async def _github_api(method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any] | list[Any]:
@@ -197,7 +198,6 @@ async def github_search_code(
 async def github_clone_repo(owner: str, repo: str, branch: str = "main") -> dict[str, Any] | list[Any]:
     """Clone a GitHub repository locally"""
     import asyncio
-    from pathlib import Path
 
     token = settings.github_token.get_secret_value() or ""
     if not token:
@@ -215,14 +215,7 @@ async def github_clone_repo(owner: str, repo: str, branch: str = "main") -> dict
         or repo in (".", "..")
     ):
         return {"error": "Invalid repository name"}
-    ws_root = (Path.cwd() / "workspace").resolve()
-    target = Path("workspace") / "cloned" / owner / repo
-    try:
-        resolved = target.resolve()
-    except OSError:
-        resolved = target.absolute()
-    if resolved != ws_root and not resolved.is_relative_to(ws_root):
-        return {"error": "Invalid repository name"}
+    target = workspace_root() / "cloned" / owner / repo
     if target.exists():
         return {"ok": True, "path": str(target), "existing": True}
     target.mkdir(parents=True, exist_ok=True)

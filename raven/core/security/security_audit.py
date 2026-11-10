@@ -13,7 +13,7 @@ from loguru import logger
 
 from raven.core.audit import AUDIT_KEY_FILE, AUDIT_SIGNING_KEY_ENV, audit_logger
 from raven.core.config import _DEFAULT_TOOLS_DENY, _ENV_FILE_CANDIDATES, settings
-from raven.core.workspace import workspace_root
+from raven.core.workspace import is_configured, workspace_root
 
 # pip-audit resolves the whole environment over the network; without a ceiling a slow
 # mirror blocks the audit (and the 120s per-test limit in check_all.py) indefinitely.
@@ -225,7 +225,7 @@ class SecurityAudit:
 
     def _check_workspace_path(self):
         c = self._add("workspace_path", "Workspace path is isolated", "low")
-        configured = bool(settings.workspace_path.strip() or os.environ.get("RAVEN_WORKSPACE", "").strip())
+        configured = is_configured()
         ws = workspace_root()
         if configured:
             c.ok(f"Workspace: {ws}")

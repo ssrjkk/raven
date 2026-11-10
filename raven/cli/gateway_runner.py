@@ -38,7 +38,7 @@ from raven.core.chat_api import set_database as set_chat_database
 from raven.core.cicd_api import create_cicd_router
 from raven.core.collab_api import create_collab_router
 from raven.core.commands_api import create_commands_router
-from raven.core.config import settings
+from raven.core.config import refresh_settings_from_env, settings
 from raven.core.config_watcher import ConfigWatcher
 from raven.core.connection_api import create_connection_router
 from raven.core.cost_management_api import create_cost_management_router
@@ -120,6 +120,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     audit_logger.start()
     config_watcher = ConfigWatcher()
+    config_watcher.add_listener(refresh_settings_from_env)
+    logger.info("[config] watching {} for runtime switches", config_watcher.env_path)
     await config_watcher.start()
     await gateway.db.connect()
     from raven.core.secrets import secrets as _secrets

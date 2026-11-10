@@ -221,8 +221,8 @@ class TestToolRegistryIntegration:
         registry = create_tool_registry()
         assert registry.count >= 15  # at least 15 tools registered
 
-    async def test_registry_call_file_read(self, tmp_path: Path) -> None:
-        os.environ["RAVEN_WORKSPACE"] = str(tmp_path)
+    async def test_registry_call_file_read(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
         registry = create_tool_registry()
         f = tmp_path / "test.txt"
         f.write_text("content", encoding="utf-8")

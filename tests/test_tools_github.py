@@ -392,7 +392,7 @@ class TestGithubCloneRepo:
     async def test_existing_target(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         _set_token(monkeypatch)
         monkeypatch.chdir(tmp_path)
-        target = tmp_path / "workspace" / "cloned" / "o" / "r"
+        target = tmp_path / "cloned" / "o" / "r"
         target.mkdir(parents=True)
         result = await github_clone_repo("o", "r")
         assert isinstance(result, dict)
@@ -404,7 +404,7 @@ class TestGithubCloneRepo:
         _set_token(monkeypatch, "")
         monkeypatch.setattr(github, "_resolve_oauth_token", lambda: "oauth-token")
         monkeypatch.chdir(tmp_path)
-        target = tmp_path / "workspace" / "cloned" / "o" / "r"
+        target = tmp_path / "cloned" / "o" / "r"
         target.mkdir(parents=True)
         result = await github_clone_repo("o", "r")
         assert isinstance(result, dict)
@@ -417,7 +417,7 @@ class TestGithubCloneRepo:
         result = await github_clone_repo("o", "r", branch="dev")
         assert isinstance(result, dict)
         assert result["ok"] is True
-        assert "workspace" in result["path"]
+        assert "cloned" in result["path"]
 
     async def test_clone_failure(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         _set_token(monkeypatch)

@@ -28,7 +28,8 @@ Both are driven by the same gateway: 15 messaging channels, a task planner, a RA
 
 ## Requirements
 
-- Python 3.11+ and at least one LLM API key (or a local Ollama/vLLM server)
+- Python 3.11+ and at least one LLM API key — or no key at all: `raven setup --free` builds a local
+  Ollama stack, and `--experimental` adds the bundled uncensored Qwen3.5-9B (5.63 GB, 8 GB of RAM)
 - Node.js 22+ only if you want to rebuild the web dashboard from source
 - Docker optional — the whole system runs as a single process
 
@@ -44,6 +45,19 @@ raven onboard               # interactive setup wizard
 raven start                 # gateway + web UI on http://localhost:18888
 ```
 
+No API key and no per-token cost: the bundled uncensored Qwen3.5-9B runs on local Ollama. One download
+of 5.63 GB, and the machine needs 8 GB of RAM with 6 GB of it free (or 8 GB of VRAM to offload to):
+
+```bash
+raven setup --free --experimental --yes   # Ollama, the weights and the three config files
+raven start
+```
+
+`raven models list` says whether it is pulled and in use, `raven doctor` reports it as
+`Bundled Free Model`, and the Admin screen has the same switch as a card.
+`raven models disable-heretic` puts the previous model back. Thresholds, the air-gapped import,
+Docker and the failure modes: [Free Offline Model](docs/local-models.md).
+
 Five commands are installed with the package:
 
 | Command | What it runs |
@@ -52,7 +66,7 @@ Five commands are installed with the package:
 | `ravencode tui` | The coding agent in a terminal session |
 | `ravenflow` | The workflow daemon on port 18789 |
 | `raven-mcp` | MCP server (stdio) for Claude Desktop, Qoder, opencode, Cursor |
-| `ravencode-mcp` | the coding agent's own MCP server (stdio), a separate tool registry |
+| `ravencode-mcp` | the same tools and protocol over stdio; only the server identity differs (`ravencode`) |
 
 Or with Docker:
 

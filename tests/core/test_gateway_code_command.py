@@ -88,10 +88,10 @@ def _no_policy(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _no_workspace(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "raven.core.gateway.commands.code.settings", SimpleNamespace(resolved_workspace=None)
-    )
+def _workspace(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """`/code` indexes and reviews the workspace root, so every test is given its own: left to the
+    real root the command walks and reviews the operator's repository."""
+    monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
 
 
 def test_code_name_and_description() -> None:
@@ -127,7 +127,9 @@ async def test_code_help_default(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "Code commands:" in _sent(gw)[2]
 
 
-async def test_code_index_no_workspace(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_code_index_without_a_path_indexes_the_workspace_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     holder: dict[str, _FakeIndexer] = {}
 
     def _factory(root: str) -> _FakeIndexer:
@@ -138,44 +140,40 @@ async def test_code_index_no_workspace(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("raven.core.coder.indexer.CodeIndexer", _factory)
     monkeypatch.setattr("raven.core.coder.session.CodingSessionManager", _FakeMgr)
     gw = _FakeGateway()
-    assert await CodeCommand(gw).execute(_ctx(args=["index", "/some/path"])) is True
+    assert await CodeCommand(gw).execute(_ctx(args=["index"])) is True
     msgs = [c.args[2] for c in gw._send.await_args_list]
-    assert msgs[0] == "Indexing /some/path..."
+    assert msgs[0] == f"Indexing {tmp_path}..."
+    assert holder["last"].root == str(tmp_path)
     assert "Indexed 3 files" in msgs[1]
     assert "python:3" in msgs[1]
     assert holder["last"].index_calls == [2000]
 
 
-async def test_code_index_with_workspace_confines(monkeypatch: pytest.MonkeyPatch) -> None:
-    ws = Path("/workspace")
-    monkeypatch.setattr(
-        "raven.core.gateway.commands.code.settings", SimpleNamespace(resolved_workspace=ws)
-    )
-    monkeypatch.setattr(
-        "raven.core.gateway.commands.code.confine_path",
-        lambda path, base: "/workspace/confined",
-    )
-    monkeypatch.setattr("raven.core.coder.indexer.CodeIndexer", _FakeIndexer)
+async def test_code_index_confines_a_relative_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "src").mkdir()
+    holder: dict[str, _FakeIndexer] = {}
+
+    def _factory(root: str) -> _FakeIndexer:
+        inst = _FakeIndexer(root)
+        holder["last"] = inst
+        return inst
+
+    monkeypatch.setattr("raven.core.coder.indexer.CodeIndexer", _factory)
     monkeypatch.setattr("raven.core.coder.session.CodingSessionManager", _FakeMgr)
     gw = _FakeGateway()
     assert await CodeCommand(gw).execute(_ctx(args=["index", "src"])) is True
-    assert gw._send.await_args_list[0].args[2] == "Indexing /workspace/confined..."
+    assert holder["last"].root == str(tmp_path / "src")
 
 
-async def test_code_index_workspace_escape_denied(monkeypatch: pytest.MonkeyPatch) -> None:
-    ws = Path("/workspace")
-    monkeypatch.setattr(
-        "raven.core.gateway.commands.code.settings", SimpleNamespace(resolved_workspace=ws)
-    )
-
-    def _boom(path: str, base: Path) -> Path:
-        raise PermissionError("outside workspace")
-
-    monkeypatch.setattr("raven.core.gateway.commands.code.confine_path", _boom)
+async def test_code_index_workspace_escape_denied(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr("raven.core.coder.session.CodingSessionManager", _FakeMgr)
     gw = _FakeGateway()
-    assert await CodeCommand(gw).execute(_ctx(args=["index", "../etc"])) is True
-    assert _sent(gw)[2] == "Access denied: outside workspace"
+    assert await CodeCommand(gw).execute(_ctx(args=["index", str(tmp_path.parent.parent)])) is True
+    msgs = [c.args[2] for c in gw._send.await_args_list]
+    assert msgs[0].startswith("Access denied: path outside")
+    assert len(msgs) == 1
 
 
 async def test_code_search_no_args_falls_through(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -224,24 +222,15 @@ async def test_code_search_with_results(monkeypatch: pytest.MonkeyPatch) -> None
 async def test_code_review_file_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("raven.core.coder.session.CodingSessionManager", _FakeMgr)
     gw = _FakeGateway()
-    assert await CodeCommand(gw).execute(_ctx(args=["review", "/no/such/file.py"])) is True
+    assert await CodeCommand(gw).execute(_ctx(args=["review", "no_such_file.py"])) is True
     assert _sent(gw)[2].startswith("File not found:")
 
 
-async def test_code_review_confine_denied(monkeypatch: pytest.MonkeyPatch) -> None:
-    ws = Path("/workspace")
-    monkeypatch.setattr(
-        "raven.core.gateway.commands.code.settings", SimpleNamespace(resolved_workspace=ws)
-    )
-
-    def _boom(path: str, base: Path) -> Path:
-        raise PermissionError("escape")
-
-    monkeypatch.setattr("raven.core.gateway.commands.code.confine_path", _boom)
+async def test_code_review_confine_denied(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr("raven.core.coder.session.CodingSessionManager", _FakeMgr)
     gw = _FakeGateway()
-    assert await CodeCommand(gw).execute(_ctx(args=["review", "../etc/passwd"])) is True
-    assert _sent(gw)[2] == "Access denied: escape"
+    assert await CodeCommand(gw).execute(_ctx(args=["review", str(tmp_path.parent.parent / "passwd")])) is True
+    assert _sent(gw)[2].startswith("Access denied: path outside")
 
 
 async def test_code_review_no_issues(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

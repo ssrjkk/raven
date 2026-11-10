@@ -18,6 +18,7 @@ from raven.core.llm.queue import PRIORITY_LOW, PRIORITY_NORMAL
 from raven.core.models import Message, PluginTool, Session
 from raven.core.security.context_filter import sanitize_external_content
 from raven.core.security.tool_policy import ExecSecurity, ToolPolicyEvaluator, is_exec_class, path_args
+from raven.core.workspace import workspace_root
 
 
 class AgentState(Enum):
@@ -132,9 +133,7 @@ class Agent:
         try:
             from raven.core.artifacts import get_artifact_manager
 
-            root = workspace if workspace is not None else settings.resolved_workspace
-            if root is None:
-                return ""
+            root = workspace if workspace is not None else workspace_root()
             manager = get_artifact_manager(cwd=root)
             ctx = manager.context(
                 agent_id=self.config.agent_id,

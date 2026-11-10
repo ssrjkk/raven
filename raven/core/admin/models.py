@@ -66,6 +66,13 @@ class ConfigUpdateRequest(BaseModel):
     value: str = Field(..., min_length=1, max_length=5000)
 
 
+class ModelSwitchRequest(BaseModel):
+    """``enable`` starts the download of the bundled weights unless they are already in Ollama."""
+
+    action: str = Field(..., pattern=r"^(enable|disable)$")
+    force: bool = False
+
+
 class SecretRequest(BaseModel):
     value: str = Field(..., min_length=1, max_length=10000)
 

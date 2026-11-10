@@ -20,3 +20,6 @@ extension/
 tests/
 scripts/
 resources/
+# Bundled model weights are lazy-pulled at runtime, never shipped in the image
+models/*.gguf
+*.gguf

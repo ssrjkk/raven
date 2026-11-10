@@ -15,7 +15,6 @@ from raven.core.agents.profiles import PROFILES, AgentProfile, resolve_profile
 from raven.core.agents.router import IntentRouter
 from raven.core.agents.validation import validate_tool_arguments
 from raven.core.audit import AuditEventType, audit_logger
-from raven.core.config import settings
 from raven.core.metrics import metrics
 from raven.core.security.context_filter import redact_pii, sanitize_external_content
 from raven.core.security.tool_policy import ExecSecurity, ToolPolicyEvaluator, is_exec_class, policy_from_settings
@@ -981,14 +980,21 @@ class AgentOrchestrator:
         from raven.core.security.ssrf import validate_url
         from raven.core.security.tool_policy import path_args, resolve_within_root
 
-        ws = workspace or settings.resolved_workspace
         for _key, value in path_args(tc.arguments or {}):
             if value.startswith(("http://", "https://")):
                 block_reason = validate_url(value)
                 if block_reason is not None:
                     raise ValueError(f"SSRF blocked: {block_reason}")
                 continue
-            if ws is not None and not value.startswith(("data:", "file:")) and resolve_within_root(value, ws) is None:
+            if value.startswith(("data:", "file:")):
+                continue
+            # An agent context may name its own directory; otherwise the policy answers, and it
+            # resolves the one root — so this gate never refuses a path the tool would accept.
+            if workspace:
+                confined = resolve_within_root(value, workspace) is not None
+            else:
+                confined = self._tool_policy.check_path(value)
+            if not confined:
                 raise ValueError(f"Path '{value}' is outside workspace or invalid")
 
     async def _create_plan(self, query: str, profile: AgentProfile, workspace_hint: str = "") -> list[str]:

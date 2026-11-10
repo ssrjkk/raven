@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 import time
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -11,6 +13,32 @@ from raven.core.audit import AuditEventType, audit_logger
 from raven.core.periodic_engine import PeriodicEngine
 from raven.core.routine.models import Routine, RoutineAction, RoutineLog, RoutineStatus, RoutineTrigger
 from raven.core.routine.store import RoutineStore
+from raven.core.workspace import workspace_root
+
+
+def _repository_owned_names(root: Path) -> set[str]:
+    """File names the VCS tracks at the root of ``root``.
+
+    An organize routine that relocates a tracked file breaks every link, spec and docs build that
+    names it, so the version control index, not the extension, decides what may be moved.
+    """
+    try:
+        listed = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=str(root),
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return set()
+    if listed.returncode != 0:
+        return set()
+    return {
+        name.decode("utf-8", "replace")
+        for name in listed.stdout.split(b"\0")
+        if name and b"/" not in name
+    }
 
 
 def _day_matches(
@@ -342,18 +370,9 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
             return f"Email check failed: {e}"
 
     async def _execute_file_organization(self, routine: Routine) -> str:
-        import asyncio
         import shutil
-        from pathlib import Path
 
-        try:
-            from raven.core.config import get_settings
-
-            configured = get_settings()
-        except ImportError:
-            configured = None
-        resolved = configured.resolved_workspace if configured is not None else None
-        workspace = resolved if resolved is not None else Path("workspace")
+        workspace = workspace_root()
         organized = 0
 
         rules = {
@@ -384,8 +403,11 @@ class RoutineEngine(PeriodicEngine[Routine, RoutineStatus, RoutineStore]):
 
         def _organize() -> int:
             moved = 0
+            owned = _repository_owned_names(workspace)
             for item in sorted(workspace.iterdir()):
                 if not item.is_file():
+                    continue
+                if item.name in owned:
                     continue
                 ext = item.suffix.lower()
                 folder_name = rules.get(ext)

@@ -75,3 +75,7 @@ data/connections.json
 .benchmarks/
 Python/
 htmlcov/
+
+# Bundled model weights are lazy-pulled, never committed (~5.7 GB each)
+models/*.gguf
+*.gguf

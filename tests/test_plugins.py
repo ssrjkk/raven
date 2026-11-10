@@ -119,23 +119,10 @@ class TestCronPlugin:
 
 
 class TestFilesPlugin:
-    _PATCH_ROOTS = ()
-
     def _allow(self, tmp_path):
-        from pathlib import Path
+        import os
 
-        from raven.plugins.files import plugin as p
-
-        return patch.object(
-            p,
-            "ALLOWED_ROOTS",
-            [
-                str(Path.home()),
-                str(Path.cwd()),
-                "/tmp",
-                str(tmp_path.resolve()),
-            ],
-        )
+        return patch.dict(os.environ, {"RAVEN_WORKSPACE": str(tmp_path)})
 
     @pytest.mark.asyncio
     async def test_write_and_read(self, tmp_path):

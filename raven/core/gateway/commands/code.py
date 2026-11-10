@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from raven.core.auth import Permission
-from raven.core.config import settings
 from raven.core.gateway.commands.base import CommandContext, CommandHandler
 from raven.core.security.path_guard import confine_path
 from raven.core.security.sandbox_policy import check_tool_allowed, get_policy_for_channel
+from raven.core.workspace import resolve as workspace_resolve
+from raven.core.workspace import workspace_root
 
 if TYPE_CHECKING:
     pass
@@ -41,16 +41,13 @@ class CodeCommand(CommandHandler):
         sub_args = ctx.args[1:] if len(ctx.args) > 1 else []
 
         if sub == "index":
-            ws = settings.resolved_workspace
-            root_arg = sub_args[0] if sub_args else str(Path.cwd())
-            if ws:
-                try:
-                    root = str(confine_path(root_arg, ws))
-                except PermissionError as exc:
-                    await gateway._send(ctx.event.channel, ctx.event.session_id, f"Access denied: {exc}")
-                    return True
-            else:
-                root = root_arg
+            ws = workspace_root()
+            root_arg = sub_args[0] if sub_args else str(ws)
+            try:
+                root = str(confine_path(str(workspace_resolve(root_arg)), ws))
+            except PermissionError as exc:
+                await gateway._send(ctx.event.channel, ctx.event.session_id, str(exc))
+                return True
             await gateway._send(ctx.event.channel, ctx.event.session_id, f"Indexing {root}...")
             indexer = CodeIndexer(root)
             await asyncio.to_thread(indexer.index, max_files=2000)
@@ -62,7 +59,7 @@ class CodeCommand(CommandHandler):
 
         elif sub == "search" and sub_args:
             query = " ".join(sub_args)
-            root = str(Path.cwd())
+            root = str(workspace_root())
             indexer = CodeIndexer(root)
             await asyncio.to_thread(indexer.index, max_files=2000)
             results = indexer.search(query)
@@ -77,17 +74,11 @@ class CodeCommand(CommandHandler):
 
         elif sub == "review" and sub_args:
             path = " ".join(sub_args)
-            p = Path(path).expanduser()
-            ws = settings.resolved_workspace
-            if ws:
-                p = p if p.is_absolute() else ws / p
-                try:
-                    p = confine_path(str(p), ws)
-                except PermissionError as exc:
-                    await gateway._send(ctx.event.channel, ctx.event.session_id, f"Access denied: {exc}")
-                    return True
-            else:
-                p = p.resolve()
+            try:
+                p = confine_path(str(workspace_resolve(path)), workspace_root())
+            except PermissionError as exc:
+                await gateway._send(ctx.event.channel, ctx.event.session_id, str(exc))
+                return True
             is_file = await asyncio.to_thread(p.is_file)
             if not is_file:
                 await gateway._send(ctx.event.channel, ctx.event.session_id, f"File not found: {p}")
@@ -108,7 +99,7 @@ class CodeCommand(CommandHandler):
 
         elif sub == "start" and sub_args:
             goal = " ".join(sub_args)
-            project = str(Path.cwd())
+            project = str(workspace_root())
             new_session = CodingSession(
                 user_id=ctx.event.user_id, channel=ctx.event.channel, goal=goal, project_path=project
             )

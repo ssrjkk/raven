@@ -12,6 +12,7 @@ from raven.core.db import DatabaseFactory
 from raven.core.dreaming.engine import DreamEngine
 from raven.core.features import FeatureFlags
 from raven.core.memory.manager import MemoryManager
+from raven.core.workspace import workspace_root
 
 console = Console()
 
@@ -81,7 +82,7 @@ def cycle() -> None:
     async def _local_cycle():
         db = DatabaseFactory.create()
         await db.connect()
-        memory = MemoryManager(db=db, workspace=settings.resolved_workspace)
+        memory = MemoryManager(db=db, workspace=workspace_root())
         engine = DreamEngine(memory=memory)
         stats = await engine.cycle_once()
         await db.disconnect()

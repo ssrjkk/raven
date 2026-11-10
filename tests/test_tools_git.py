@@ -29,7 +29,8 @@ from raven.tools.git import (
 
 
 @pytest.fixture
-def tmp_git_repo(tmp_path: Path) -> Path:
+def tmp_git_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
     subprocess.run(["git", "init"], cwd=str(tmp_path), capture_output=True, check=True)
     subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=str(tmp_path), capture_output=True, check=True)
     subprocess.run(["git", "config", "user.name", "Test"], cwd=str(tmp_path), capture_output=True, check=True)
@@ -78,16 +79,21 @@ class TestGitTools:
 
 
 class TestConfinedWorkspace:
-    def test_no_workspace_base_returns_expanded(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_the_root_is_the_working_directory_when_nothing_is_configured(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("RAVEN_WORKSPACE", raising=False)
         monkeypatch.setattr(settings, "workspace_path", "")
-        target = tmp_path / "some" / "repo"
-        assert _confined_workspace(str(target)) == target.resolve()
+        inside = Path.cwd() / "some" / "repo"
+        assert _confined_workspace("some/repo") == inside.resolve()
 
-    def test_path_outside_base_clamps_to_base(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_a_repo_outside_the_root_is_refused_not_redirected(self, tmp_path: Path) -> None:
+        """Returning the workspace log instead of the refused repo's would be a false success."""
         base = tmp_path / "base"
         base.mkdir()
-        monkeypatch.setattr(settings, "workspace_path", str(base))
-        assert _confined_workspace(str(tmp_path)) == base.resolve()
+        outside = tmp_path / "other" / "repo"
+        with pytest.raises(PermissionError, match="outside the workspace root"):
+            _confined_workspace(str(outside))
 
     def test_path_inside_base_returns_target(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         base = tmp_path / "base"

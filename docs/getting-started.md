@@ -66,7 +66,17 @@ gh attestation verify Raven.exe --repo ssrjkk/raven
 That statement ties the binary to this repository, the commit the tag points at and the
 `Build EXE` workflow run — it says where a file was produced, not that it is safe to run.
 
+It is also not a code-signing certificate. Windows 11 with Smart App Control in enforcement mode
+blocks an unsigned executable, so a verified release can still refuse to start on such a machine, and
+self-signing does not satisfy the policy either. Run from source instead (`pip install -e .`, then
+`python -m raven`), or turn Smart App Control off under Windows Security → App & browser control.
+Turning it off cannot be undone without reinstalling Windows, so that is the operator's decision —
+nothing in the installer or the startup path makes it for them.
+
 ## Quick Start
+
+No API key at all? `raven setup --free --experimental --yes` builds a local Ollama stack with the
+bundled uncensored Qwen3.5-9B instead of asking for one: [Free Offline Model](local-models.md).
 
 ### 1. Onboard
 

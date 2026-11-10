@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import ClassVar
 
@@ -212,3 +215,123 @@ class TestCriticalModelEnvAliases:
         monkeypatch.setenv("CRITICAL_MODEL", "canonical/model")
         monkeypatch.setenv("RAVEN_CRITICAL_MODEL", "legacy/model")
         assert _settings_without_env_file().critical_model == "canonical/model"
+
+
+class TestNoProxyEnv:
+    """A bracketed IPv6 literal in NO_PROXY used to kill every HTTP client the process builds."""
+
+    def test_brackets_are_dropped_and_duplicates_removed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.core.config import sanitize_no_proxy_env
+
+        monkeypatch.setenv("NO_PROXY", "localhost, .localhost ,127.0.0.1,127.0.0.0/8,[::1],::1,")
+        sanitize_no_proxy_env()
+        assert os.environ["NO_PROXY"] == "localhost,.localhost,127.0.0.1,127.0.0.0/8,::1"
+
+    def test_an_empty_list_stays_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.core.config import sanitize_no_proxy_env
+
+        monkeypatch.setenv("no_proxy", "  ")
+        sanitize_no_proxy_env()
+        assert os.environ["no_proxy"] == ""
+
+    async def test_a_client_constructs_after_the_rewrite(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import httpx
+
+        from raven.core.config import sanitize_no_proxy_env
+
+        monkeypatch.setenv("NO_PROXY", "localhost,[::1],::1")
+        sanitize_no_proxy_env()
+        with httpx.Client():
+            pass
+        async with httpx.AsyncClient():
+            pass
+
+    def test_importing_the_config_layer_rewrites_the_environment_of_a_real_process(self, tmp_path: Path) -> None:
+        env = dict(os.environ, NO_PROXY="localhost,.localhost,127.0.0.1,[::1],::1")
+        code = (
+            "import os; import raven.core.config; import httpx; "
+            "httpx.Client(); print(os.environ['NO_PROXY'])"
+        )
+        run = subprocess.run(
+            [sys.executable, "-c", code], env=env, capture_output=True, text=True, cwd=str(tmp_path), timeout=120
+        )
+        assert run.returncode == 0, run.stderr
+        assert "[::1]" not in run.stdout
+        assert "::1" in run.stdout
+
+
+class TestGhostMode:
+    """`raven setup --free` ends by telling the operator to run `raven start --ghost`, so ghost mode
+    may not throw away the model that command just downloaded and configured."""
+
+    @pytest.fixture(autouse=True)
+    def _restore(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(settings, "ghost_mode", settings.ghost_mode)
+        monkeypatch.setattr(settings, "default_model", settings.default_model)
+        monkeypatch.setattr(settings, "ollama_base_url", "http://127.0.0.1:11434")
+
+    def _serves(self, monkeypatch: pytest.MonkeyPatch, names: list[str]) -> None:
+        from raven.core import heretic_model
+
+        monkeypatch.setattr(heretic_model, "list_ollama_models", lambda *_a, **_k: names)
+
+    def test_the_bundled_model_survives_the_switch_to_ghost(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.core.config import apply_ghost_mode
+        from raven.core.heretic_model import HERETIC_RAVEN_MODEL
+
+        monkeypatch.setattr(settings, "default_model", HERETIC_RAVEN_MODEL)
+        self._serves(monkeypatch, [])
+        apply_ghost_mode()
+        assert settings.ghost_mode is True
+        assert settings.default_model == HERETIC_RAVEN_MODEL
+
+    def test_any_ollama_model_the_operator_configured_is_kept(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.core.config import apply_ghost_mode
+
+        monkeypatch.setattr(settings, "default_model", "ollama/qwen2.5:32b")
+        self._serves(monkeypatch, [])
+        apply_ghost_mode()
+        assert settings.default_model == "ollama/qwen2.5:32b"
+
+    def test_a_hosted_name_is_replaced_by_a_model_the_runtime_actually_serves(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from raven.core.config import apply_ghost_mode
+
+        monkeypatch.setattr(settings, "default_model", "groq/openai/gpt-oss-120b")
+        self._serves(monkeypatch, ["llama3.1:8b", "qwen2.5:14b"])
+        apply_ghost_mode()
+        assert settings.default_model == "ollama/llama3.1:8b"
+
+    def test_the_bundled_model_is_preferred_over_whatever_else_is_installed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from raven.core.config import apply_ghost_mode
+        from raven.core.heretic_model import HERETIC_HF_REF
+
+        monkeypatch.setattr(settings, "default_model", "openrouter/openai/gpt-4o")
+        self._serves(monkeypatch, ["llama3", HERETIC_HF_REF])
+        apply_ghost_mode()
+        assert settings.default_model == f"ollama/{HERETIC_HF_REF}"
+
+    def test_an_unreachable_ollama_is_a_warning_and_a_fallback_not_a_crash(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from raven.core import heretic_model
+        from raven.core.config import apply_ghost_mode
+
+        def _down(*_a: object, **_k: object) -> list[str]:
+            raise OSError("connection refused")
+
+        monkeypatch.setattr(heretic_model, "list_ollama_models", _down)
+        monkeypatch.setattr(settings, "default_model", "anthropic/claude-sonnet-4-5")
+        apply_ghost_mode()
+        assert settings.default_model == "ollama/llama3"
+
+    def test_explicit_overrides_still_win(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.core.config import apply_ghost_mode
+
+        monkeypatch.setattr(settings, "default_model", "ollama/qwen2.5:32b")
+        self._serves(monkeypatch, [])
+        apply_ghost_mode({"default_model": "ollama/custom"})
+        assert settings.default_model == "ollama/custom"

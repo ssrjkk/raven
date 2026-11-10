@@ -17,8 +17,6 @@ import raven.core.debugger_api as dba
 from raven.core.debugger_api import BreakpointRequest, _DebugSession
 from raven.core.security.path_guard import confine_path
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-
 
 @pytest.fixture(autouse=True)
 def _reset_debugger() -> Iterator[None]:
@@ -40,7 +38,7 @@ def dbg(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, Pa
     (ws / "pause.py").write_text("x = 1\ny = 2\n", encoding="utf-8")
     (ws / "notes.txt").write_text("hi", encoding="utf-8")
     (ws / "big.py").write_text("# " + "x" * 600_000, encoding="utf-8")
-    monkeypatch.setattr(dba, "_WORKSPACE", ws)
+    monkeypatch.setenv("RAVEN_WORKSPACE", str(ws))
     app = FastAPI()
     app.include_router(dba.create_debugger_router())
     app.dependency_overrides[dba._require_admin] = lambda: {"role": "admin"}
@@ -63,26 +61,32 @@ def _wait_until(session: _DebugSession, status: str, timeout: float = 5.0) -> bo
 # --- _get_workspace / _confine_path / _sanitize_traceback / _require_admin ---
 
 
-def test_get_workspace_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(dba, "_WORKSPACE", None)
+def test_the_root_is_the_process_default_when_nothing_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from raven.core import config as config_module
+
     monkeypatch.delenv("RAVEN_WORKSPACE", raising=False)
-    assert dba._get_workspace() == (PROJECT_ROOT / "workspace").resolve()
+    monkeypatch.setattr(config_module.settings, "workspace_path", "")
+    assert dba._get_workspace() == Path.cwd().resolve()
 
 
 def test_get_workspace_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(dba, "_WORKSPACE", None)
     monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
     assert dba._get_workspace() == tmp_path.resolve()
 
 
-def test_get_workspace_cached(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(dba, "_WORKSPACE", tmp_path)
-    monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path / "other"))
-    assert dba._get_workspace() == tmp_path.resolve()
+def test_the_root_is_read_at_call_time_not_at_import(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A debugger that decided its root at import time would ignore whatever the operator set later."""
+    first, second = tmp_path / "first", tmp_path / "second"
+    monkeypatch.setenv("RAVEN_WORKSPACE", str(first))
+    assert dba._get_workspace() == first.resolve()
+    monkeypatch.setenv("RAVEN_WORKSPACE", str(second))
+    assert dba._get_workspace() == second.resolve()
 
 
 def test_confine_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(dba, "_WORKSPACE", tmp_path)
+    monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
     assert dba._confine_path(str(tmp_path / "a.py")) == (tmp_path / "a.py").resolve()
 
 

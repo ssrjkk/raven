@@ -45,7 +45,6 @@ _PROVIDER_MODEL_HINTS: dict[str, str] = {
     "openai": "openai/gpt-4o-mini",
     "anthropic": "anthropic/claude-3-5-sonnet-latest",
     "openrouter": "openrouter/openai/o3-mini",
-    "ollama": "ollama/llama3",
     "vllm": "vllm/llama3",
     "groq": "groq/openai/gpt-oss-120b",
 }
@@ -171,6 +170,25 @@ def _validate_base_url_scheme(url: str) -> None:
         raise HTTPException(400, f"Unsupported URL scheme: {parsed.scheme!r}. Only http/https allowed.")
 
 
+def _first_ollama_model(base_url: str) -> str:
+    """The first model an Ollama server actually serves, as ``ollama/<name>``, or "" when it has none.
+
+    A test has to call something that exists. Hard-coding a name — including the bundled experimental
+    one, which is 5.63 GB and pulled only on request — makes "Test connection" fail on a healthy
+    server and teaches the operator that the provider is broken when it is only the name.
+    """
+    import httpx
+
+    try:
+        resp = httpx.get(f"{base_url.rstrip('/')}/api/tags", timeout=5)
+        resp.raise_for_status()
+        names = [str(m.get("name") or "") for m in resp.json().get("models", [])]
+    except Exception as exc:
+        logger.debug("[connections] ollama tag probe failed: {}", exc)
+        return ""
+    return f"ollama/{names[0]}" if names else ""
+
+
 def _require_admin(request: Request) -> None:
     """Mutations change which LLM endpoint receives OTHER (admin) API keys,
     so provider/context/agent management is restricted to admins."""
@@ -288,7 +306,18 @@ def create_connection_router(dependencies: list[Any] | None = None) -> APIRouter
             raise HTTPException(400, f"Unknown provider type '{body.type}'")
         _validate_base_url_scheme(body.base_url)
         model = body.model
-        if not model and body.type in _PROVIDER_MODEL_HINTS:
+        if not model and body.type == "ollama":
+            from raven.core.config import settings
+
+            url = body.base_url or settings.ollama_base_url
+            model = _first_ollama_model(url)
+            if not model:
+                raise HTTPException(
+                    400,
+                    f"Ollama at {url} serves no model to test; pull one with `raven setup --free` "
+                    f"or name it in the request",
+                )
+        elif not model and body.type in _PROVIDER_MODEL_HINTS:
             model = _PROVIDER_MODEL_HINTS[body.type]
         if not model:
             raise HTTPException(400, "A model is required to test the provider")

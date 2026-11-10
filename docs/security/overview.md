@@ -83,12 +83,31 @@ by the planner.
 
 ## 3. Workspace Isolation
 
-`workspace_only` defaults to `True`. All path-bearing tools resolve through
-`confine_path(path, base)`, which calls `os.path.realpath` on **both** the base and the
-target before comparing. A symlink planted inside the workspace that points outside
-(`/workspace/link -> C:\Users\...`) is therefore rejected — the check runs on the
-resolved location, not the lexical one. `ravencode/runtime/tools/git_tests.py` and the
-`raven` file/shell tools additionally confine any subprocess `cwd` to the workspace root.
+One directory is the boundary. `raven/core/workspace.py:workspace_root` decides it per call:
+the root the process pinned (`--workspace` on an MCP server, gateway startup), then
+`RAVEN_WORKSPACE`, then `WORKSPACE_PATH`, then the working directory. `raven doctor` prints the
+result and who decided it.
+
+`workspace_only` defaults to `True`, and every surface that confines a path takes its base from
+that one root:
+
+- `raven/core/security/path_guard.py:confine_path(path, base)` — the registry file tools, the
+  debugger, the git console and the `/code` command. It calls `os.path.realpath` on **both** the
+  base and the target before comparing, so a symlink planted inside the workspace that points out
+  (`/workspace/link -> C:\Users\...`) is rejected: the check runs on the resolved location, not the
+  lexical one.
+- `raven/core/workspace.py:confine` — the plugin tools (`files`, `ocr`, `git`). Workspace plus the
+  system temp directory, and a refusal names both.
+- `ravencode/runtime/workspace.py:confine` — the coding agent's own tools: workspace only, no temp
+  directory, deliberately the strictest of the three.
+
+Where a tool names a directory, that directory is confined before the process starts:
+`raven/tools/tests.py:run_tests` and `test_coverage` collect from the workspace root rather than
+wherever the gateway happened to launch, and `raven/plugins/git/plugin.py:_run_git`, the coding
+agent's git tools and `ravencode/runtime/autogit.py` run `git` inside the confined root. A tool with
+no directory argument (`raven/tools/shell.py`) inherits the process's own working directory.
+`WORKSPACE_ONLY=false` switches the policy-layer check off, which `raven doctor` reports as a
+warning; it does not change the tools' own confinement above.
 
 ## 4. Context Visibility and PII Redaction
 

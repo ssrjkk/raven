@@ -16,6 +16,7 @@ from pydantic import SecretStr
 from rich.console import Console
 from rich.table import Table
 
+from raven.core.workspace import reset_workspace_root, set_workspace_root, workspace_root
 from raven.tools.db import db_query
 from raven.tools.file import file_read, file_write
 from raven.tools.shell import shell_command
@@ -95,7 +96,7 @@ async def _bench_file_read(iterations: int) -> list[float]:
     try:
         return await _measure(lambda: file_read("bench_1mb.txt", max_size=2 * 1024 * 1024), iterations)
     finally:
-        (Path(os.environ.get("RAVEN_WORKSPACE", "data")) / "bench_1mb.txt").unlink(missing_ok=True)
+        (workspace_root() / "bench_1mb.txt").unlink(missing_ok=True)
 
 
 async def _bench_shell(iterations: int) -> list[float]:
@@ -135,10 +136,9 @@ async def _bench_llm(iterations: int) -> tuple[list[float], str]:
 
 async def run_benchmark(iterations: int) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
-    old_ws = os.environ.get("RAVEN_WORKSPACE")
     old_cwd = str(Path.cwd())
     with tempfile.TemporaryDirectory(prefix="raven-bench-") as tmp:
-        os.environ["RAVEN_WORKSPACE"] = tmp
+        root_token = set_workspace_root(tmp)
         os.chdir(tmp)
         try:
             results.append(summarize("file_read (1MB)", await _bench_file_read(iterations)))
@@ -148,10 +148,7 @@ async def run_benchmark(iterations: int) -> list[dict[str, Any]]:
             results.append(summarize("llm complete", llm_samples, note=llm_note))
         finally:
             os.chdir(old_cwd)
-            if old_ws is None:
-                os.environ.pop("RAVEN_WORKSPACE", None)
-            else:
-                os.environ["RAVEN_WORKSPACE"] = old_ws
+            reset_workspace_root(root_token)
     return results
 
 

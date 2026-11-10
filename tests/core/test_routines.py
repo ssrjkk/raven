@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import subprocess
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -506,15 +507,38 @@ class TestRoutineActions:
         engine = RoutineEngine(store)
         r = Routine(name="org", action=RoutineAction.ORGANIZE_FILES, trigger=RoutineTrigger.MANUAL)
         engine._gateway_ref = SimpleNamespace(_send=AsyncMock(return_value=None))
-        monkeypatch.setattr(
-            "raven.core.config.get_settings",
-            lambda: SimpleNamespace(resolved_workspace=workspace),
-        )
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(workspace))
         result = await engine._execute_file_organization(r)
         assert "2" in result
         assert (workspace / "text" / "notes.txt").exists()
         assert (workspace / "code" / "main.py").exists()
         assert (workspace / "archive.zip").exists()
+
+    async def test_the_organizer_leaves_files_the_repository_tracks_in_place(
+        self, tmp_path: Path, store: RoutineStore, monkeypatch: pytest.MonkeyPatch
+    ):
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        tracked = workspace / "README.md"
+        tracked.write_text("# project\n")
+        loose = workspace / "report.md"
+        loose.write_text("notes\n")
+        for cmd in (["-c", "core.fsmonitor=false", "init", "-q"], ["add", "README.md"]):
+            subprocess.run(
+                ["git", *cmd],
+                cwd=str(workspace),
+                check=True,
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+            )
+        engine = RoutineEngine(store)
+        r = Routine(name="org", action=RoutineAction.ORGANIZE_FILES, trigger=RoutineTrigger.MANUAL)
+        engine._gateway_ref = SimpleNamespace(_send=AsyncMock(return_value=None))
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(workspace))
+        result = await engine._execute_file_organization(r)
+        assert result == "File organization complete: 1 files organized"
+        assert tracked.exists()
+        assert (workspace / "docs" / "report.md").exists()
 
 
 class TestEmailCheckAction:

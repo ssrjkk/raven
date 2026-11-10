@@ -58,8 +58,17 @@ def front_matter(page: str, text: str | None = None) -> dict[str, str]:
 
 
 def test_the_nav_is_the_page_list_this_guard_reads() -> None:
+    """Both directions, without a hand-written page count that goes stale on every new page."""
     pages = nav_pages()
-    assert len(pages) == 11, pages
+    published = {
+        path.relative_to(DOCS_DIR).as_posix()
+        for path in DOCS_DIR.rglob("*.md")
+        if "archive" not in path.relative_to(DOCS_DIR).parts
+    }
+    assert set(pages) == published, {
+        "published_but_not_in_nav": sorted(published - set(pages)),
+        "in_nav_but_not_published": sorted(set(pages) - published),
+    }
     assert "archive/fixes-history.md" not in pages, "the archive is not published, so it is not gated"
     for page in pages:
         assert (DOCS_DIR / page).exists(), page

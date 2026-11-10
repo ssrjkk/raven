@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 from loguru import logger
+
+from ravencode.runtime.workspace import confine, workspace_root
 
 
 async def _git(*args: str, cwd: str | None = None) -> str:
     cmd = ["git", *list(args)]
+    # `auto_commit` stages and commits, so its directory is confined to the workspace and defaults
+    # to the root the agent's file tools write into, not wherever the process happened to start.
+    try:
+        root = str(confine(cwd)) if cwd else str(workspace_root())
+    except PermissionError as exc:
+        return f"[error] {exc}"
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
-            cwd=cwd or Path.cwd(),
+            cwd=root,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

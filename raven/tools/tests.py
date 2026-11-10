@@ -73,7 +73,7 @@ def _pytest_summary(output: str) -> str:
 
 async def run_tests(path: str = "", marker: str = "", timeout: int = 120, extra_args: str = "") -> str:
     try:
-        root = _confine(path) if path else Path.cwd()
+        root = _confine(path) if path else _workspace()
     except PermissionError:
         return "Access denied: invalid path"
     if not root.is_dir():
@@ -108,7 +108,7 @@ async def run_tests(path: str = "", marker: str = "", timeout: int = 120, extra_
 
 async def test_coverage(path: str = "", timeout: int = 180) -> str:
     try:
-        root = _confine(path) if path else Path.cwd()
+        root = _confine(path) if path else _workspace()
     except PermissionError:
         return "Access denied: invalid path"
     if not root.is_dir():

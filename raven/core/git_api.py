@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import re
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter
 
 from raven.coding.git_integration import GitIntegration
-from raven.core.config import settings
 from raven.core.security.path_guard import confine_path
+from raven.core.workspace import workspace_root
 
 
 def create_git_router() -> APIRouter:
@@ -18,7 +17,7 @@ def create_git_router() -> APIRouter:
     def _git(repo: str = "") -> GitIntegration:
         git = GitIntegration()
         if repo:
-            base = settings.resolved_workspace or Path.cwd()
+            base = workspace_root()
             git._repo = confine_path(repo, base)
         return git
 

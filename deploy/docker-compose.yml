@@ -7,6 +7,19 @@ services:
         - RAVEN_VERSION=${RAVEN_VERSION:-0.4.8}
     env_file:
       - ../.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DB_PATH=/app/data/raven.db
+      - LOG_FILE=/app/data/raven.log
+      - WORKSPACE_PATH=/app/workspace
+      - TZ=${TZ:-UTC}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      # DEFAULT_MODEL is deliberately absent: env_file (../.env) supplies it, and a value here would
+      # silently outrank whatever the operator configured. `raven models enable-heretic` is what puts
+      # the bundled model into Ollama and writes that line.
+    depends_on:
+      ollama:
+        condition: service_started
     volumes:
       - raven_data:/app/data
       - raven_workspace:/app/workspace
@@ -21,12 +34,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    environment:
-      - PYTHONUNBUFFERED=1
-      - DB_PATH=/app/data/raven.db
-      - LOG_FILE=/app/data/raven.log
-      - WORKSPACE_PATH=/app/workspace
-      - TZ=${TZ:-UTC}
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -55,6 +62,53 @@ services:
     networks:
       - raven_internal
 
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - target: 11434
+        published: ${OLLAMA_PORT:-11434}
+        protocol: tcp
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - raven_internal
+    # CPU-only by default. For NVIDIA GPUs uncomment:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # `docker compose --profile heretic up -d` pulls the bundled experimental model into the ollama
+  # volume. It is a profile rather than a startup dependency because it moves 5.63 GB over the network:
+  # an ordinary `up` must not fail, or wait, on a download nobody asked for.
+  heretic-init:
+    image: curlimages/curl:latest
+    profiles:
+      - heretic
+    depends_on:
+      ollama:
+        condition: service_started
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - HERETIC_REF=${HERETIC_REF:-hf.co/mradermacher/DeepSeek-V4-Pro-Qwen3.5-9B-UNCENSORED-heretic-GGUF:Q4_K_M}
+    command:
+      - sh
+      - -c
+      - |
+        for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+          if curl -fsS http://ollama:11434/api/tags >/dev/null 2>&1; then break; fi
+          sleep 5;
+        done
+        curl -fsS -m 3600 -X POST http://ollama:11434/api/pull \
+          -H 'Content-Type: application/json' \
+          -d "{\"model\": \"$${HERETIC_REF}\", \"stream\": false}" || exit 1
+    networks:
+      - raven_internal
+
 networks:
   raven_internal:
     driver: bridge
@@ -66,4 +120,6 @@ volumes:
   raven_data:
     driver: local
   raven_workspace:
+    driver: local
+  ollama_data:
     driver: local

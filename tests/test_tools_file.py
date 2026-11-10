@@ -38,12 +38,24 @@ def tmp_workspace(tmp_path: Path) -> Generator[Path, None, None]:
 
 
 class TestWorkspace:
-    def test_default_workspace(self, monkeypatch) -> None:
+    def test_the_default_root_is_the_working_directory(self, monkeypatch) -> None:
+        """The file tools used to default to ``data/``, a directory no other surface called the
+        workspace; one root means the working directory unless the operator says otherwise."""
+        from raven.core import config as config_module
+
         monkeypatch.delenv("RAVEN_WORKSPACE", raising=False)
-        assert _workspace() == Path("data").resolve()
+        monkeypatch.setattr(config_module.settings, "workspace_path", "")
+        assert _workspace() == Path.cwd().resolve()
 
     def test_workspace_from_env(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+        assert _workspace() == tmp_path.resolve()
+
+    def test_workspace_from_the_configured_path(self, tmp_path: Path, monkeypatch) -> None:
+        from raven.core import config as config_module
+
+        monkeypatch.delenv("RAVEN_WORKSPACE", raising=False)
+        monkeypatch.setattr(config_module.settings, "workspace_path", str(tmp_path))
         assert _workspace() == tmp_path.resolve()
 
 

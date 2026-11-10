@@ -34,6 +34,7 @@ from raven.core.gateway.message_processor import MessageProcessor, usage_line
 from raven.core.gateway.task_orchestrator import TaskOrchestrator
 from raven.core.services import Chunker, EntityExtractor
 from raven.core.services.persister import get_persister
+from raven.core.workspace import workspace_root
 
 if TYPE_CHECKING:
     from raven.channels.base import BaseChannel
@@ -311,7 +312,7 @@ class Gateway:
         from raven.core.artifacts import get_artifact_manager
         from raven.core.artifacts.commands import BundleCommandHandler
 
-        root = settings.resolved_workspace or Path.cwd()
+        root = workspace_root()
         try:
             self._artifact_root = root
             manager = get_artifact_manager(cwd=root)

@@ -32,7 +32,8 @@
 
 ## Требования
 
-- Python 3.11+ и хотя бы один API-ключ LLM — или локальный Ollama/vLLM
+- Python 3.11+ и хотя бы один API-ключ LLM — или вообще без ключа: `raven setup --free` поднимает
+  локальный Ollama, а `--experimental` добавляет встроенный uncensored Qwen3.5-9B (5.63 GB, 8 GB RAM)
 - Node.js 22+ только если пересобираете веб-дашборд из исходников
 - Docker опционален — вся система работает одним процессом
 
@@ -48,6 +49,19 @@ raven onboard               # интерактивный мастер настр
 raven start                 # шлюз + веб-интерфейс на http://localhost:18888
 ```
 
+Без API-ключа и без оплаты за токены: встроенный uncensored Qwen3.5-9B работает на локальном Ollama.
+Одно скачивание на 5.63 GB, машине нужно 8 GB RAM и 6 GB свободными из них (или 8 GB VRAM для выгрузки):
+
+```bash
+raven setup --free --experimental --yes   # Ollama, веса и три файла конфигурации
+raven start
+```
+
+`raven models list` показывает, скачана ли модель и используется ли она, `raven doctor` выводит её
+строкой `Bundled Free Model`, а на экране Admin тот же переключатель сделан карточкой.
+`raven models disable-heretic` возвращает прежнюю модель. Пороги, офлайн-импорт, Docker и разбор
+отказов: [Free Offline Model](docs/local-models.md).
+
 Пять команд ставятся вместе с пакетом:
 
 | Команда | Что запускает |
@@ -56,7 +70,7 @@ raven start                 # шлюз + веб-интерфейс на http://l
 | `ravencode tui` | Coding-агент в терминале |
 | `ravenflow` | Workflow-демон на порту 18789 |
 | `raven-mcp` | MCP-сервер (stdio) для Claude Desktop, Qoder, opencode, Cursor |
-| `ravencode-mcp` | отдельный MCP-сервер coding-агента (stdio), со своим реестром инструментов |
+| `ravencode-mcp` | те же инструменты и протокол по stdio; отличается только имя сервера (`ravencode`) |
 
 Или через Docker:
 

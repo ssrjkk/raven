@@ -8,9 +8,8 @@ from pathlib import Path
 
 from loguru import logger
 
-from ravencode.runtime.workspace import (
-    confine as _confine,
-)
+from ravencode.runtime.workspace import confine as _confine
+from ravencode.runtime.workspace import workspace_root
 
 from ._truncate import smart_truncate
 
@@ -21,10 +20,16 @@ from ._truncate import smart_truncate
 
 async def _git_cmd(*args: str, cwd: str | None = None) -> str:
     cmd = ["git", *list(args)]
+    # Git runs at the root the agent's file tools act on: `git status`/`commit` at the process's
+    # own directory, or at a directory argument, would reach a repo outside the workspace.
+    try:
+        root = str(_confine(cwd)) if cwd else str(workspace_root())
+    except PermissionError as exc:
+        return f"[error] {exc}"
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
-            cwd=cwd or str(Path.cwd()),
+            cwd=root,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

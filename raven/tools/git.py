@@ -15,15 +15,16 @@ def _get_git() -> GitIntegration:
 
 
 def _confined_workspace(workspace: str) -> Path:
-    """Resolve a tool-supplied repo path, clamping it to the configured workspace."""
+    """Resolve a tool-supplied repo path; a repo outside the workspace root is refused, not redirected."""
     base = workspace_root()
     target = Path(workspace).expanduser().resolve()
     try:
-        target.relative_to(base)
-    except ValueError:
-        return base
+        relative = target.relative_to(base)
+    except ValueError as exc:
+        msg = f"Access denied: {workspace} is outside the workspace root {base}"
+        raise PermissionError(msg) from exc
     current = base
-    for part in target.relative_to(base).parts:
+    for part in relative.parts:
         current = current / part
         if current.is_symlink():
             msg = f"Symlink detected in path: {current}"

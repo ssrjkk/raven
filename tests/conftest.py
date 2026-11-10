@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import os
+import subprocess
 import threading
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
@@ -99,6 +101,57 @@ def _isolate_token_manager() -> Iterator[None]:
     yield
     token_manager.bind(None)
     token_manager._tokens.clear()
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _tracked_top_level_entries() -> frozenset[str]:
+    """Top-level names the version control index owns, or an empty set when the tree is not a repository."""
+    try:
+        listed = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=str(_REPO_ROOT),
+            capture_output=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return frozenset()
+    if listed.returncode != 0:
+        return frozenset()
+    names = (name.decode("utf-8", "replace") for name in listed.stdout.split(b"\0") if name)
+    return frozenset({name.partition("/")[0] for name in names})
+
+
+_TRACKED_TOP_LEVEL = _tracked_top_level_entries()
+
+
+def _root_entries() -> set[str]:
+    with os.scandir(_REPO_ROOT) as handle:
+        return {entry.name for entry in handle}
+
+
+@pytest.fixture(autouse=True)
+def _repository_files_stay_put() -> Iterator[None]:
+    """Fail the test that moved a tracked file out of the repository.
+
+    Code that resolves the workspace root reaches this real tree, so a test whose patch no longer
+    matches what that code reads relocates the operator's files for good; the ORGANIZE_FILES routine
+    did exactly that to 17 root files from inside the gate.
+    """
+    if not _TRACKED_TOP_LEVEL:
+        yield
+        return
+    before = _root_entries()
+    yield
+    after = _root_entries()
+    if after == before:
+        return
+    missing = sorted(name for name in _TRACKED_TOP_LEVEL if not (_REPO_ROOT / name).exists())
+    if missing:
+        shown = ", ".join(missing[:5])
+        pytest.fail(f"{len(missing)} tracked path(s) left the repository root: {shown}")
 
 
 @pytest.fixture

@@ -1,0 +1,19 @@
+# Bundled free experimental model — uncensored Qwen3.5-9B, Q4_K_M, 5.63 GB, apache-2.0.
+# The weights are not vendored in git. The normal path needs no file like this one:
+#   raven models enable-heretic --yes     # pulls hf.co/... into Ollama and writes DEFAULT_MODEL
+#   raven setup --free --experimental --yes   # same, plus Ollama itself and the three config files
+# `raven start` only checks that the weights are present; it never downloads them.
+#
+# This Modelfile is the air-gapped path: the GGUF was copied onto the machine by hand.
+#   1. put DeepSeek-V4-Pro-Qwen3.5-9B-UNCENSORED-heretic.Q4_K_M.gguf next to this file
+#   2. ollama create deepseek-v4-heretic -f models/Modelfile.heretic
+#   3. raven models enable-heretic --no-pull
+# Step 3 writes DEFAULT_MODEL=ollama/deepseek-v4-heretic, because that is the name Ollama answers
+# under after step 2 — the switch reads /api/tags and uses the name it finds there.
+#
+# NOTE: no TEMPLATE block on purpose — Ollama reads the chat template from the GGUF metadata.
+# A hand-written template would override it and can break thinking and tool-calls.
+FROM ./DeepSeek-V4-Pro-Qwen3.5-9B-UNCENSORED-heretic.Q4_K_M.gguf
+PARAMETER num_ctx 8192
+PARAMETER temperature 0.7
+PARAMETER top_p 0.8

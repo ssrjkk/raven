@@ -19,17 +19,56 @@ interface AuditResult {
   fix_hint: string;
 }
 
+interface ExperimentalModelStatus {
+  ref: string;
+  model: string;
+  size_gb: number;
+  ollama_reachable: boolean;
+  present: boolean;
+  is_default: boolean;
+  default_model: string;
+  env_file: string;
+  hardware: { ram_total_gb: number; ram_free_gb: number; disk_free_gb: number; vram_mb: number };
+  blockers: string[];
+  warnings: string[];
+  busy: boolean;
+  error?: string;
+}
+
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = getToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
+
+async function fetchExperimentalModel(): Promise<ExperimentalModelStatus> {
+  const res = await fetch("/api/admin/models/experimental", { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export default function Admin() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [audit, setAudit] = useState<AuditResult[]>([]);
   const [runningAudit, setRunningAudit] = useState(false);
   const [modelKey, setModelKey] = useState("");
   const [keyFeedback, setKeyFeedback] = useState<{ok: boolean; msg: string} | null>(null);
+  const [modelFeedback, setModelFeedback] = useState<{ok: boolean; msg: string} | null>(null);
   const logEnd = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   const { data: channelsData, isLoading: channelsLoading } = useApiQuery<ChannelInfo[]>(["adminChannels"], () => api.channels(), { refetchInterval: 10000 });
   const channels = channelsData ?? [];
+
+  const {
+    data: model,
+    refetch: refetchModel,
+  } = useApiQuery<ExperimentalModelStatus>(["experimentalModel"], fetchExperimentalModel, {
+    retry: false,
+    // The pull is gigabytes and runs off the request loop; the screen follows it until it lands.
+    refetchInterval: (q) => (q.state.data?.busy ? 2000 : false),
+  });
 
   useEffect(() => {
     logEnd.current?.scrollIntoView({ behavior: "smooth" });
@@ -57,11 +96,8 @@ export default function Admin() {
   async function runAudit() {
     setRunningAudit(true);
     setAudit([]);
-    const token = getToken();
-    const authHeaders: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) authHeaders["Authorization"] = `Bearer ${token}`;
     try {
-      const res = await fetch("/api/admin/security/audit", { headers: authHeaders });
+      const res = await fetch("/api/admin/security/audit", { headers: authHeaders() });
       if (res.ok) {
         const data = await res.json();
         setAudit(data.checks || []);
@@ -76,14 +112,11 @@ export default function Admin() {
   }
 
   async function updateModelKey() {
-    const token = getToken();
-    const authHeaders: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) authHeaders["Authorization"] = `Bearer ${token}`;
     setKeyFeedback(null);
     try {
       const res = await fetch("/api/admin/config/key", {
         method: "POST",
-        headers: authHeaders,
+        headers: authHeaders(),
         body: JSON.stringify({ key: "openrouter_api_key", value: modelKey }),
       });
       if (res.ok) {
@@ -96,6 +129,29 @@ export default function Admin() {
     } catch (e) {
       setKeyFeedback({ ok: false, msg: `Network error: ${e}` });
       toast("Failed to update key", "error");
+    }
+  }
+
+  async function switchModel(action: "enable" | "disable", force = false) {
+    setModelFeedback(null);
+    try {
+      const res = await fetch("/api/admin/models/experimental", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ action, force }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setModelFeedback({ ok: false, msg: String(body.detail || body.error || `HTTP ${res.status}`) });
+        toast(action === "enable" ? "Model switch refused" : "Revert failed", "error");
+        return;
+      }
+      setModelFeedback({ ok: true, msg: String(body.detail || "") });
+      toast(body.busy ? "Download started" : "Model switched", "success");
+      await refetchModel();
+    } catch (e) {
+      setModelFeedback({ ok: false, msg: `Network error: ${e}` });
+      toast("Model switch request failed", "error");
     }
   }
 
@@ -153,6 +209,106 @@ export default function Admin() {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="card p-4">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 className="text-sm font-semibold text-primary">Bundled free experimental model</h2>
+            <p className="text-xs text-tertiary">
+              Uncensored 9B served locally by Ollama — no API key, no hosted credit. Experimental: answers and refusal
+              behaviour differ from the configured model.
+            </p>
+          </div>
+          {model && (
+            <span className={`badge shrink-0 ${model.is_default ? "badge-success" : "badge-warning"}`}>
+              {model.busy ? "downloading" : model.is_default ? "in use" : "not in use"}
+            </span>
+          )}
+        </div>
+
+        {!model ? (
+          <Skeleton height={140} rounded="lg" />
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div className="bg-tertiary rounded-lg px-3 py-2">
+                <div className="text-tertiary mb-0.5">Ollama</div>
+                <div className="text-primary">
+                  {model.ollama_reachable ? "reachable" : "not reachable — start Ollama, then switch on"}
+                </div>
+              </div>
+              <div className="bg-tertiary rounded-lg px-3 py-2">
+                <div className="text-tertiary mb-0.5">Weights in Ollama</div>
+                <div className="text-primary">
+                  {model.present ? "pulled" : `not pulled (${model.size_gb.toFixed(2)} GB download)`}
+                </div>
+              </div>
+              <div className="bg-tertiary rounded-lg px-3 py-2 min-w-0">
+                <div className="text-tertiary mb-0.5">Default model</div>
+                <div className="text-primary font-mono break-all">{model.default_model}</div>
+              </div>
+              <div className="bg-tertiary rounded-lg px-3 py-2 min-w-0">
+                <div className="text-tertiary mb-0.5">This machine</div>
+                <div className="text-primary">
+                  {model.hardware.ram_free_gb.toFixed(1)} of {model.hardware.ram_total_gb.toFixed(1)} GB RAM free ·{" "}
+                  {model.hardware.disk_free_gb.toFixed(1)} GB disk free ·{" "}
+                  {model.hardware.vram_mb > 0 ? `${model.hardware.vram_mb} MB VRAM` : "no GPU (CPU inference)"}
+                </div>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-tertiary font-mono break-all">{model.ref}</p>
+
+            {model.blockers.map((b, i) => (
+              <p key={`b${i}`} className="text-xs bg-danger-muted text-danger rounded-lg px-3 py-2">
+                {b}
+              </p>
+            ))}
+            {model.warnings.map((w, i) => (
+              <p key={`w${i}`} className="text-xs bg-warning-muted text-warning rounded-lg px-3 py-2">
+                {w}
+              </p>
+            ))}
+            {model.error && (
+              <p className="text-xs bg-danger-muted text-danger rounded-lg px-3 py-2">{model.error}</p>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2">
+              {!model.is_default && (
+                <button
+                  onClick={() => switchModel("enable")}
+                  disabled={model.busy || model.blockers.length > 0}
+                  className="btn-primary disabled:opacity-40"
+                >
+                  {model.busy ? "Downloading…" : `Switch on (${model.size_gb.toFixed(2)} GB first run)`}
+                </button>
+              )}
+              {model.blockers.length > 0 && !model.busy && (
+                <button
+                  onClick={() => switchModel("enable", true)}
+                  className="btn-outline disabled:opacity-40"
+                  style={{ color: "var(--dt-colors-status-warning)", borderColor: "var(--dt-colors-status-warning)" }}
+                >
+                  Switch on anyway
+                </button>
+              )}
+              {model.is_default && (
+                <button onClick={() => switchModel("disable")} disabled={model.busy} className="btn-outline disabled:opacity-40">
+                  Revert to previous model
+                </button>
+              )}
+              <button onClick={() => refetchModel()} disabled={model.busy} className="btn-outline disabled:opacity-40">
+                Refresh
+              </button>
+            </div>
+
+            {modelFeedback && (
+              <p className={`text-xs ${modelFeedback.ok ? "text-success" : "text-danger"}`}>{modelFeedback.msg}</p>
+            )}
+            <p className="text-[10px] text-tertiary">Written to {model.env_file}; a running gateway picks it up within 5 s.</p>
+          </div>
+        )}
       </div>
 
       <div className="card p-4">

@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from raven.core.config import settings
 from raven.core.secrets import secrets
+from raven.core.workspace import workspace_root
 
 
 class CreatePRRequest(BaseModel):
@@ -258,8 +259,8 @@ def create_github_router() -> APIRouter:
         if not token:
             raise HTTPException(401, "GitHub token not configured")
         repo_url = f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
-        base_dir = Path(body.target_dir) if body.target_dir else Path("workspace") / "cloned"
-        base = settings.resolved_workspace or Path.cwd()
+        base = workspace_root()
+        base_dir = Path(body.target_dir) if body.target_dir else base / "cloned"
         base_str = os.path.abspath(str(base))  # noqa: PTH100
         combined = str(base_dir / owner / repo)
         resolved = os.path.abspath(os.path.normpath(os.path.expanduser(combined)))  # noqa: PTH100, PTH111

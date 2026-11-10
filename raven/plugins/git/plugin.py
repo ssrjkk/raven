@@ -108,7 +108,7 @@ async def git_pull(path: str = ".", remote: str = "origin", branch: str = "") ->
 
 async def _run_git(args: list[str], repo_path: str) -> str:
     try:
-        cwd = confine(repo_path) if repo_path != "." else None
+        cwd = str(confine(repo_path))
         proc = await asyncio.create_subprocess_exec(
             "git",
             *args,

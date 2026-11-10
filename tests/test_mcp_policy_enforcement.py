@@ -83,25 +83,23 @@ async def test_exec_class_tools_follow_exec_security(probes: None, monkeypatch: 
 async def test_the_mcp_layer_does_not_confine_paths_the_tool_layer_allows(
     probes: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Two roots exist: WORKSPACE_PATH belongs to the gateway, --workspace to these tools.
+    """One root means the MCP layer needs no exemption of its own.
 
-    Confining MCP arguments against the gateway's root would refuse paths that
-    `ravencode/runtime/workspace.py:confine` accepts, so the MCP policy layer stays out of
-    paths and the tool layer remains the single confinement point.
+    The gateway used to confine against `WORKSPACE_PATH` while these tools confined against
+    `--workspace`, so one path could be refused by the gate and accepted by the tool, or the other
+    way round. Both now resolve `raven/core/workspace.py`: what the agent's `confine` takes is never
+    refused on the way in, and what it refuses is refused by the tool itself.
     """
     from ravencode.runtime import workspace as rav_workspace
 
-    ravencode_root = tmp_path / "ravencode-ws"
-    ravencode_root.mkdir()
-    gateway_root = tmp_path / "gateway-ws"
-    gateway_root.mkdir()
+    root = tmp_path / "ws"
+    root.mkdir()
+    monkeypatch.setenv("RAVEN_WORKSPACE", str(root))
     monkeypatch.setattr("raven.core.config.settings.workspace_only", True)
-    monkeypatch.setattr("raven.core.config.settings.workspace_path", str(gateway_root))
-    monkeypatch.setattr(rav_workspace, "workspace_root", lambda: ravencode_root)
 
-    inside = ravencode_root / "notes.md"
+    inside = root / "notes.md"
     inside.write_text("hello", encoding="utf-8")
-    assert str(rav_workspace.confine(str(inside))) == str(inside)
+    assert rav_workspace.confine(str(inside)) == inside.resolve()
 
     response = await _call("policy_probe", {"path": str(inside)})
     assert response["result"]["content"][0]["text"] == "handler ran", response

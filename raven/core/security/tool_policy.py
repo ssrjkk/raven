@@ -247,7 +247,6 @@ def policy_from_settings(profile: str | None = None, workspace_only: bool | None
     deny_list = [d.strip() for d in deny_raw.split(",") if d.strip()] if deny_raw else list(_DEFAULT_TOOLS_DENY)
     allow_raw = settings.tools_allow
     allow_list = [a.strip() for a in allow_raw.split(",") if a.strip()] if allow_raw else []
-    ws_path = settings.resolved_workspace
     return ToolPolicyEvaluator(
         profile=profile or settings.tools_profile,
         deny=deny_list,
@@ -255,7 +254,10 @@ def policy_from_settings(profile: str | None = None, workspace_only: bool | None
         exec_security=ExecSecurity(settings.exec_security),
         exec_ask=ExecAskMode(settings.exec_ask_mode),
         workspace_only=settings.workspace_only if workspace_only is None else workspace_only,
-        workspace_root=str(ws_path) if ws_path else None,
+        # No root is pinned here on purpose: `settings.resolved_workspace` was a second source of
+        # truth that ignored `--workspace` and `RAVEN_WORKSPACE`, so the gate and the tool could
+        # answer differently for one path. `_roots()` resolves the one root instead.
+        workspace_root=None,
     )
 
 

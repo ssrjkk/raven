@@ -7,6 +7,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from raven.core.workspace import workspace_root
+
 TEMPLATES: dict[str, dict[str, Any]] = {
     "fastapi-react": {
         "name": "FastAPI + React",
@@ -90,7 +92,7 @@ class GenerateResponse(BaseModel):
 
 def create_scaffold_router(workspace: str = "") -> APIRouter:
     router = APIRouter(prefix="/api/v1/scaffold", tags=["scaffold"])
-    ws_root = Path(workspace).resolve() if workspace else Path.cwd().resolve()
+    ws_root = Path(workspace).resolve() if workspace else workspace_root()
 
     @router.get("/plans")
     def list_plans() -> list[ScaffoldPlan]:

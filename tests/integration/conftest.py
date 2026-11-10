@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -9,9 +8,9 @@ import pytest
 
 
 @pytest.fixture
-def db_path(tmp_path: Path) -> Path:
+def db_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "test.db"
-    os.environ["DB_PATH"] = str(path)
+    monkeypatch.setenv("DB_PATH", str(path))
     return path
 
 

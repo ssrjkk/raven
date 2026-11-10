@@ -5,14 +5,19 @@ import os
 import platform
 import shutil
 import subprocess
+import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import click
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.rule import Rule
 from rich.table import Table
+
+from raven.core.hardware import Hardware, detect
+from raven.core.heretic_model import HERETIC_HF_REF, HERETIC_SIZE_GB, preflight
 
 console = Console()
 
@@ -26,51 +31,6 @@ _MODEL_TIER: list[tuple[int, str, str]] = [
 ]
 
 _GUIDE_URL = "https://ollama.com/download"
-
-
-def _detect_vram_mb() -> int:
-    try:
-        result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10, check=False,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            vrams = [int(x.strip()) for x in result.stdout.strip().splitlines() if x.strip().isdigit()]
-            if vrams:
-                return max(vrams)
-    except (FileNotFoundError, ValueError, subprocess.TimeoutExpired):
-        pass
-    try:
-        if platform.system() == "Windows":
-            result = subprocess.run(
-                ["wmic", "path", "win32_videocontroller", "get", "adapterram"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10, check=False,
-            )
-            if result.returncode == 0:
-                for line in result.stdout.splitlines():
-                    line = line.strip()
-                    if line.isdigit():
-                        return int(line) // (1024 * 1024)
-    except (FileNotFoundError, ValueError, subprocess.TimeoutExpired):
-        pass
-    return 0
-
-
-def _detect_ram_gb() -> int:
-    try:
-        if platform.system() == "Windows":
-            result = subprocess.run(
-                ["wmic", "OS", "get", "TotalVisibleMemorySize"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5, check=False,
-            )
-            if result.returncode == 0:
-                for line in result.stdout.splitlines():
-                    line = line.strip()
-                    if line.isdigit():
-                        return int(line) // (1024 * 1024)
-    except (FileNotFoundError, ValueError, subprocess.TimeoutExpired):
-        pass
-    return 0
 
 
 def _pick_model(vram_mb: int, ram_gb: int) -> str:
@@ -152,26 +112,24 @@ def _install_ollama() -> bool:
 
 
 def _pull_model(model: str) -> bool:
+    """Pull with Ollama's own progress on the terminal — 5.63 GB behind a spinner reads as a hang."""
     ollama = _find_ollama()
     if not ollama:
         return False
     console.print(f"\nPulling [bold]{model}[/bold] (this may take a while)...")
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeElapsedColumn(),
-        console=console,
-    ) as progress:
-        task = progress.add_task(f"Downloading {model}...", total=None)
-        result = subprocess.run(
-            [ollama, "pull", model],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800,
+    try:
+        result = subprocess.run([ollama, "pull", model], timeout=1800, check=False)
+    except subprocess.TimeoutExpired:
+        console.print(
+            f"[red]The pull passed 30 min and was stopped.[/red] "
+            f"Ollama keeps what it downloaded; resume with: ollama pull {model}"
         )
-        progress.update(task, completed=1)
+        return False
+    except OSError as exc:
+        console.print(f"[red]Could not run {ollama}: {exc}[/red]")
+        return False
     if result.returncode != 0:
-        console.print(f"[red]Failed to pull {model}: {result.stderr.strip()}[/red]")
+        console.print(f"[red]Failed to pull {model} (exit {result.returncode}).[/red] Retry with: ollama pull {model}")
         return False
     return True
 
@@ -189,94 +147,126 @@ def _tier_models_for(primary: str) -> dict[str, str]:
     return known.get(primary, {"fast": primary, "balanced": primary, "quality": primary})
 
 
-def _write_raven_json(model: str) -> Path:
-    config_dir = Path.cwd()
-    tiers = _tier_models_for(model)
-    cfg = {
-        "version": "0.4.8",
-        "llm": {
-            "provider": "ollama",
-            "default_model": f"ollama/{model}",
-            "model_fast": f"ollama/{tiers['fast']}",
-            "model_balanced": f"ollama/{tiers['balanced']}",
-            "model_quality": f"ollama/{tiers['quality']}",
-        },
-        "features": {
-            "dreaming": True,
-            "delegation": True,
-            "planner": True,
-            "skills": True,
-        },
-        "security": {
-            "dm_policy": "open",
-            "web_port": 18888,
-        },
-        "workspace": "workspace",
-        "plugins_dir": "plugins",
-        "skills_dir": "workspace/skills",
-    }
-    path = config_dir / "raven.json"
+def _write_json_config(path: Path, fresh: dict[str, Any], owned: Callable[[dict[str, Any]], None]) -> Path:
+    """Create a config file, or update only the keys this command owns in the one that exists.
+
+    Both files used to be overwritten wholesale, which deleted the channel tokens kept in ``raven.json``
+    and the providers, agents and MCP servers an operator added to ``opencode.json`` — and left
+    ``opencode.json`` naming the previous model after a switch, so ravencode kept calling it. A file
+    that does not parse as plain JSON is left alone: ravencode also reads JSONC, and comments and
+    trailing commas do not survive a round trip through :mod:`json`.
+    """
+    if path.exists():
+        try:
+            cfg = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            cfg = None
+        if not isinstance(cfg, dict):
+            console.print(f"[yellow]  ![/yellow] {path} is not plain JSON — left untouched, edit it to change the model")
+            return path
+        owned(cfg)
+    else:
+        cfg = fresh
     path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     console.print(f"[green]  ✓[/green] {path}")
     return path
+
+
+def _write_raven_json(model: str) -> Path:
+    tiers = _tier_models_for(model)
+    llm = {
+        "provider": "ollama",
+        "default_model": f"ollama/{model}",
+        "model_fast": f"ollama/{tiers['fast']}",
+        "model_balanced": f"ollama/{tiers['balanced']}",
+        "model_quality": f"ollama/{tiers['quality']}",
+    }
+    features = {"dreaming": True, "delegation": True, "planner": True, "skills": True}
+
+    def owned(cfg: dict[str, Any]) -> None:
+        cfg.setdefault("llm", {}).update(llm)
+        cfg.setdefault("features", {}).update(features)
+
+    return _write_json_config(
+        Path.cwd() / "raven.json",
+        {
+            "version": "0.4.8",
+            "llm": llm,
+            "features": features,
+            "security": {"dm_policy": "open", "web_port": 18888},
+            "workspace": "workspace",
+            "plugins_dir": "plugins",
+            "skills_dir": "workspace/skills",
+        },
+        owned,
+    )
 
 
 def _write_opencode_json(model: str) -> Path:
-    config_dir = Path.cwd()
-    cfg = {
-        "model": f"ollama/{model}",
-        "small_model": "ollama/llama3.2:3b",
-        "temperature": 0.3,
-        "max_tokens": 8192,
-        "max_steps": 50,
-        "providers": [
-            {
-                "id": "ollama",
-                "name": "Ollama",
-                "models": [f"ollama/{model}", "ollama/llama3.2:3b"],
-            },
-        ],
-        "experimental": {
-            "dreaming": True,
-            "delegation": True,
+    """Point the coding agent at the chosen model; ravencode reads ``opencode.json`` first and stops.
+
+    No ``ravencode.json`` is written: ravencode's resolver takes the first of ``opencode.json``,
+    ``opencode.jsonc``, ``ravencode.json``, ``ravencode.jsonc`` it finds (ravencode/config/loader.py),
+    so a copy made next to an existing ``opencode.json`` is a file nothing ever reads.
+    """
+    tiers = _tier_models_for(model)
+    default = f"ollama/{model}"
+    small = f"ollama/{tiers['fast']}"
+
+    def owned(cfg: dict[str, Any]) -> None:
+        cfg["model"] = default
+        cfg["small_model"] = small
+        providers = cfg.setdefault("providers", [])
+        if isinstance(providers, list):
+            for entry in providers:
+                if isinstance(entry, dict) and entry.get("id") == "ollama":
+                    entry["models"] = [default, small]
+                    break
+            else:
+                providers.append({"id": "ollama", "name": "Ollama", "models": [default, small]})
+
+    return _write_json_config(
+        Path.cwd() / "opencode.json",
+        {
+            "model": default,
+            "small_model": small,
+            "temperature": 0.3,
+            "max_tokens": 8192,
+            "max_steps": 50,
+            "providers": [{"id": "ollama", "name": "Ollama", "models": [default, small]}],
+            "experimental": {"dreaming": True, "delegation": True},
         },
-    }
-    for name in ("opencode.json", "ravencode.json"):
-        path = config_dir / name
-        if not path.exists():
-            path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-            console.print(f"[green]  ✓[/green] {path}")
-            return path
-    for name in ("opencode.json", "ravencode.json"):
-        path = config_dir / name
-        if path.exists():
-            return path
-    path = config_dir / "opencode.json"
-    path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+        owned,
+    )
+
+
+def _write_env(model: str, env_path: Path | None = None) -> Path:
+    """Point the env file at the local tiers, leaving every other line in it alone.
+
+    The file carries the operator's keys: rewriting it wholesale used to drop them and to rotate
+    ``WEB_SECRET_KEY`` on every run, which logs out every session and invalidates every stored token.
+    """
+    from raven.core.config import read_env_value, write_env_value
+
+    path = env_path or Path.cwd() / ".env"
+    tiers = _tier_models_for(model)
+    if not path.exists():
+        path.write_text(
+            "# Raven AI — local configuration.\n"
+            "# The ollama/ prefix on a model name is what selects the provider; there is no separate switch.\n",
+            encoding="utf-8",
+        )
+    write_env_value("DEFAULT_MODEL", f"ollama/{model}", path)
+    write_env_value("MODEL_FAST", f"ollama/{tiers['fast']}", path)
+    write_env_value("MODEL_BALANCED", f"ollama/{tiers['balanced']}", path)
+    write_env_value("MODEL_QUALITY", f"ollama/{tiers['quality']}", path)
+    write_env_value("OLLAMA_BASE_URL", "http://localhost:11434", path)
+    if read_env_value("WEB_SECRET_KEY", path) is None:
+        import secrets
+
+        write_env_value("WEB_SECRET_KEY", secrets.token_urlsafe(32), path)
     console.print(f"[green]  ✓[/green] {path}")
     return path
-
-
-def _write_env(model: str) -> Path:
-    env_path = Path.cwd() / ".env"
-    tiers = _tier_models_for(model)
-    content = f"""# Raven AI — Free Local Setup
-# Auto-generated by `raven setup --free`
-
-# LLM: Ollama (local, no API key required). The ollama/ prefix on the model is
-# what selects the provider - there is no separate provider switch.
-DEFAULT_MODEL=ollama/{model}
-MODEL_FAST=ollama/{tiers['fast']}
-MODEL_BALANCED=ollama/{tiers['balanced']}
-MODEL_QUALITY=ollama/{tiers['quality']}
-OLLAMA_BASE_URL=http://localhost:11434
-
-# Security
-WEB_SECRET_KEY={__import__('secrets').token_urlsafe(32)}
-"""
-    env_path.write_text(content, encoding="utf-8")
-    console.print(f"[green]  ✓[/green] {env_path}")
-    return env_path
 
 
 def _ensure_dirs() -> None:
@@ -285,14 +275,16 @@ def _ensure_dirs() -> None:
         console.print(f"[green]  ✓[/green] {Path(d).resolve()}")
 
 
-def _print_summary(model: str, ollama_path: str | None) -> None:
+def _print_summary(model: str, ollama_path: str | None, pulled: bool) -> None:
     desc = _model_description(model)
     tiers = _tier_models_for(model)
-    table = Table(title="Free Local AI Stack — Ready", border_style="green")
+    title = "Free Local AI Stack — Ready" if pulled else "Free Local AI Stack — configured, weights missing"
+    table = Table(title=title, border_style="green" if pulled else "yellow")
     table.add_column("Component", style="cyan")
     table.add_column("Value")
     table.add_row("LLM Provider", "Ollama (100% offline, no API key)")
     table.add_row("Model", f"ollama/{model}")
+    table.add_row("Weights", "pulled" if pulled else f"NOT pulled — run: ollama pull {model}")
     table.add_row("Quality", desc or "Auto-selected")
     table.add_row("Fast Tier", f"ollama/{tiers['fast']}")
     table.add_row("Balanced Tier", f"ollama/{tiers['balanced']}")
@@ -337,16 +329,57 @@ def _ollama_serve() -> bool:
         return False
 
 
+def _experimental_choice(hw: Hardware, confirmed: bool, vram_mb: int, ram_gb: int) -> str:
+    """Return the model ``--experimental`` asked for, but only once the download is actually agreed to.
+
+    The switch and the weights have to land together: pointing ``DEFAULT_MODEL`` at a 5.63 GB model that
+    was never pulled leaves a freshly set-up box calling a model Ollama does not have. So a decline —
+    interactive or scripted — falls back to the model this hardware runs and pulls that one, which is
+    what ``setup --free`` does by default, and says so before the download starts. The experimental one
+    stays available through ``raven models enable-heretic``.
+    """
+    if confirmed:
+        return HERETIC_HF_REF
+    console.print(f"[bold]{HERETIC_HF_REF}[/bold] — {HERETIC_SIZE_GB:.2f} GB\n{hw.summary()}")
+    if not sys.stdin.isatty():
+        console.print(
+            f"[red]Not downloading {HERETIC_SIZE_GB:.2f} GB without a yes[/red] — "
+            f"re-run with --yes, or later: raven models enable-heretic"
+        )
+    elif not click.confirm(f"Download {HERETIC_SIZE_GB:.2f} GB into Ollama?", default=False):
+        console.print("[yellow]Download declined.[/yellow]")
+    else:
+        return HERETIC_HF_REF
+    fallback = _pick_model(vram_mb, ram_gb)
+    console.print(
+        f"[yellow]Configuring {fallback}, which this hardware runs, and pulling it instead.[/yellow] "
+        "Switch the experimental one on later: raven models enable-heretic"
+    )
+    return fallback
+
+
 @click.command()
 @click.option("--free", is_flag=True, help="Set up completely free local AI (no API keys)")
 @click.option("--model", default=None, help="Force a specific Ollama model (e.g. qwen2.5:32b)")
-def setup(free: bool, model: str | None) -> None:
+@click.option(
+    "--experimental",
+    is_flag=True,
+    help=f"Use the bundled free experimental model instead of the auto-picked one (~{HERETIC_SIZE_GB:.2f} GB)",
+)
+@click.option(
+    "--yes",
+    "confirmed",
+    is_flag=True,
+    help="Accept the model download instead of being asked (for scripted runs)",
+)
+def setup(free: bool, model: str | None, experimental: bool, confirmed: bool) -> None:
     """Configure Raven for completely free, offline AI with local LLMs"""
     if not free:
         console.print(Panel.fit(
             "[bold]Usage:[/bold]  [green]raven setup --free[/green]\n\n"
             "Sets up the entire stack with local Ollama models — no API keys needed.\n"
-            "Auto-detects your GPU and picks the best model for your hardware.",
+            "Auto-detects your GPU and picks the best model for your hardware.\n"
+            "Add [green]--experimental[/green] for the bundled uncensored 9B, [green]--model NAME[/green] to pick one.",
             border_style="yellow",
         ))
         return
@@ -363,11 +396,21 @@ def setup(free: bool, model: str | None) -> None:
         border_style="green",
     ))
 
-    vram = _detect_vram_mb()
-    ram = _detect_ram_gb()
+    hw = detect()
+    vram = hw.vram_mb
+    ram = int(hw.ram_total_gb)
 
     if model:
         chosen = model
+    elif experimental:
+        blockers = preflight(hw)
+        if blockers:
+            console.print(f"[red]--experimental refused:[/red] {HERETIC_HF_REF} needs more than this box has")
+            for blocker in blockers:
+                console.print(f"  [red]x[/red] {blocker}")
+            console.print("[dim]Re-run without --experimental for the model this hardware can run.[/dim]")
+            raise SystemExit(1)
+        chosen = _experimental_choice(hw, confirmed, vram, ram)
     else:
         chosen = _pick_model(vram, ram)
 
@@ -375,7 +418,8 @@ def setup(free: bool, model: str | None) -> None:
     hw_table.add_column("Resource", style="cyan")
     hw_table.add_column("Value")
     hw_table.add_row("GPU VRAM", f"{vram} MB" if vram else "Not detected (CPU mode)")
-    hw_table.add_row("System RAM", f"{ram} GB")
+    hw_table.add_row("System RAM", f"{ram} GB ({hw.ram_free_gb:.1f} GB free now)")
+    hw_table.add_row("Disk for models", f"{hw.disk_free_gb:.1f} GB free")
     hw_table.add_row("Selected Model", f"[bold]{chosen}[/bold]")
     hw_table.add_row("Platform", platform.system())
     console.print(hw_table)
@@ -393,8 +437,9 @@ def setup(free: bool, model: str | None) -> None:
 
     _ollama_serve()
     console.print()
-    if not _pull_model(chosen):
-        console.print(f"[yellow]Model pull may have failed. You can run later: ollama pull {chosen}[/yellow]")
+    pulled = _pull_model(chosen)
+    if not pulled:
+        console.print(f"[yellow]The weights are not on this machine yet. Finish with: ollama pull {chosen}[/yellow]")
 
     console.print("\n[bold]Generating configuration files...[/bold]")
     _write_raven_json(chosen)
@@ -403,4 +448,6 @@ def setup(free: bool, model: str | None) -> None:
     _ensure_dirs()
 
     console.print()
-    _print_summary(chosen, ollama_path)
+    _print_summary(chosen, ollama_path, pulled)
+    if not pulled:
+        raise SystemExit(1)

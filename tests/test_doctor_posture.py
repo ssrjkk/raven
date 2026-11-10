@@ -96,3 +96,68 @@ def test_disabling_confinement_is_a_warning() -> None:
 
 def test_telemetry_is_reported_as_off_by_default() -> None:
     assert "(telemetry off)" in _posture()["Features"]
+
+
+MODEL_ROW = "Bundled Free Model"
+NOTE_ROW = "Model Note"
+
+
+def _model_status(monkeypatch: pytest.MonkeyPatch, **fields: Any) -> dict[str, str]:
+    from types import SimpleNamespace
+
+    from raven.core import heretic_model
+
+    defaults: dict[str, Any] = {
+        "ref": heretic_model.HERETIC_HF_REF,
+        "raven_model": heretic_model.HERETIC_RAVEN_MODEL,
+        "size_gb": heretic_model.HERETIC_SIZE_GB,
+        "ollama_reachable": True,
+        "present": False,
+        "is_default": False,
+        "default_model": "groq/openai/gpt-oss-120b",
+        "hardware": SimpleNamespace(summary=lambda: "24.0 of 32.0 GB RAM free, 500.0 GB disk free, 24576 MB VRAM"),
+        "blockers": [],
+        "warnings": [],
+    }
+    defaults.update(fields)
+    monkeypatch.setattr(heretic_model, "status", lambda *_a, **_k: SimpleNamespace(**defaults))
+    return {label: result for label, result in doctor_cmd.experimental_model_checks()}
+
+
+def test_the_row_uses_the_hardware_it_measured_when_the_model_is_live(monkeypatch: pytest.MonkeyPatch) -> None:
+    row = _model_status(monkeypatch, is_default=True)[MODEL_ROW]
+    assert row.startswith("[OK]")
+    assert "24.0 of 32.0 GB RAM free" in row
+
+
+def test_a_refusing_preflight_is_said_with_its_numbers(monkeypatch: pytest.MonkeyPatch) -> None:
+    row = _model_status(monkeypatch, blockers=["0.9 GB RAM free with 0 MB of VRAM to offload to"])[MODEL_ROW]
+    assert row.startswith("[!]") and "0.9 GB RAM free" in row
+
+
+def test_weights_already_in_ollama_only_need_the_switch(monkeypatch: pytest.MonkeyPatch) -> None:
+    row = _model_status(monkeypatch, present=True)[MODEL_ROW]
+    assert "pulled, not in use" in row and "raven models enable-heretic" in row
+
+
+def test_the_download_is_costed_before_it_is_offered(monkeypatch: pytest.MonkeyPatch) -> None:
+    from raven.core.heretic_model import HERETIC_SIZE_GB
+
+    row = _model_status(monkeypatch)[MODEL_ROW]
+    assert f"{HERETIC_SIZE_GB:.2f} GB" in row and "raven models enable-heretic" in row
+
+
+def test_a_tier_that_still_bills_appears_as_a_note(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = _model_status(monkeypatch, warnings=["MODEL_FAST=groq/openai/gpt-oss-120b still bills a hosted provider"])
+    assert rows[NOTE_ROW].startswith("[!]") and "MODEL_FAST" in rows[NOTE_ROW]
+
+
+def test_a_probe_that_throws_does_not_blank_the_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    from raven.core import heretic_model
+
+    def _boom(*_a: Any, **_k: Any) -> None:
+        raise RuntimeError("no disk here")
+
+    monkeypatch.setattr(heretic_model, "status", _boom)
+    row = doctor_cmd.experimental_model_checks()[0]
+    assert row[0] == MODEL_ROW and row[1].startswith("[ERR]") and "no disk here" in row[1]

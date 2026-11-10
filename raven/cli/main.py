@@ -131,6 +131,21 @@ def start(daemon: bool, port: int | None, stateless: bool, ghost: bool):
         apply_ghost_mode()
         console.print("[dim]Ghost mode: 100% offline, local LLM only[/dim]")
 
+    from raven.core.heretic_model import ensure_heretic_model, is_bundled_model
+
+    if is_bundled_model(settings.default_model):
+        try:
+            # Presence only: a gateway must not stall on a 5.63 GB download. `raven models
+            # enable-heretic` and the compose heretic-init service are the two places that pull.
+            res = ensure_heretic_model(settings.ollama_base_url, pull=False)
+            if res.ok:
+                console.print(f"[dim]Bundled model ready: {res.detail}[/dim]")
+            else:
+                console.print(f"[yellow]Bundled model not ready: {res.detail}[/yellow]")
+                console.print("[dim]Run: raven models enable-heretic[/dim]")
+        except Exception as e:
+            console.print(f"[yellow]Bundled model check skipped: {e}[/yellow]")
+
     web_port = port or settings.web_port
     gateway = create_gateway()
     if stateless:

@@ -126,3 +126,46 @@ async def test_watch_loop_survives_stat_error(tmp_path: Path) -> None:
         assert w._task is not None and not w._task.done()
     finally:
         await w.stop()
+
+
+def test_with_no_path_it_watches_the_file_settings_actually_reads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The gateway starts a watcher with no argument, so the default must be the obeyed file.
+
+    Before this, a switch written into ``~/.raven/.env`` was watched while the operator's ``./.env``
+    decided the value, and the two disagreed in silence.
+    """
+    from raven.core import config
+
+    target = tmp_path / ".env"
+    monkeypatch.setattr(config, "effective_env_file", lambda: target)
+    assert ConfigWatcher().env_path == target
+
+
+@pytest.mark.asyncio
+async def test_a_written_switch_reaches_the_live_settings_without_a_restart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The whole promise of the switch in one test: write the file, the running process follows."""
+    from raven.core.config import refresh_settings_from_env, settings
+
+    env = tmp_path / ".env"
+    env.write_text("DEFAULT_MODEL=before\n", encoding="utf-8")
+    monkeypatch.delenv("DEFAULT_MODEL", raising=False)
+    monkeypatch.setattr(settings, "default_model", "before")
+
+    w = ConfigWatcher(str(env), check_interval=0.01)
+    w.add_listener(refresh_settings_from_env)
+    await w.start()
+    try:
+        await asyncio.sleep(0.05)
+        env.write_text("DEFAULT_MODEL=ollama/hf.co/mradermacher/x:Q4_K_M\n", encoding="utf-8")
+        deadline = asyncio.get_event_loop().time() + 5.0
+        while settings.default_model == "before" and asyncio.get_event_loop().time() < deadline:
+            await asyncio.sleep(0.05)
+        assert os.environ["DEFAULT_MODEL"] == "ollama/hf.co/mradermacher/x:Q4_K_M"
+        assert settings.default_model == "ollama/hf.co/mradermacher/x:Q4_K_M", (
+            "the env reached the process but not the settings the router reads"
+        )
+    finally:
+        await w.stop()
+        _cleanup_env()

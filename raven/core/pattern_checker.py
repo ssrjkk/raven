@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, Query
 from loguru import logger
 
+from raven.core.workspace import workspace_root
 from raven.tools.file import _check_no_symlinks_in_path
 
 _PATTERN_LIST = [
@@ -100,7 +101,7 @@ def _get_patterns() -> list[dict[str, Any]]:
 
 def create_pattern_checker_router(workspace: str = "") -> APIRouter:
     router = APIRouter(prefix="/api/v1/patterns", tags=["patterns"])
-    ws_root = Path(workspace).resolve() if workspace else Path.cwd().resolve()
+    ws_root = Path(workspace).resolve() if workspace else workspace_root()
 
     @router.get("/checks")
     def list_checks() -> list[dict[str, Any]]:
