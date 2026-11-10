@@ -19,6 +19,9 @@ for _mod in ("aios", "ravencode"):
 datas: list[tuple[str, str]] = [
     (str(ROOT / "web" / "dist"), "web/dist"),
     (str(ROOT / "plugins"), "plugins"),
+    # policy_engine resolves its ruleset against the bundle root (parents[3] of the module), so a
+    # bundle without `policy/` would run with zero rules while the documented deny list sat outside.
+    (str(ROOT / "policy"), "policy"),
 ]
 # gateway_runner loads plugins from Path(__file__).parent.parent / "plugins",
 # which in the onefile bundle resolves to <tmp>/raven/plugins. Ship the plugin

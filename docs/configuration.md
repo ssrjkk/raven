@@ -114,6 +114,7 @@ say so instead of letting the switch appear not to hold.
 | `LOG_LEVEL` | Console level; the file sinks always keep `DEBUG` and `WARNING` regardless | `INFO` |
 | `JSON_LOG` | Write the log files as JSON lines (`raven logs` renders both shapes) | `true` |
 | `WORKSPACE_PATH` | The workspace root — see [The workspace root](#the-workspace-root) | unset, so the working directory |
+| `RAVEN_POLICY_DIR` | Directory holding the tool ruleset (`tools.json`) — read from the **process** environment (`export`, `docker run -e`), not from the env file, because the policy engine is deliberately free of the config stack. Unset, the engine reads `policy/` next to the source tree, or `raven/policy/` inside an installed wheel | the directory the package ships |
 
 ## Config File
 

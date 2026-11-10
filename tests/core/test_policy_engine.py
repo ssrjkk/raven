@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import tempfile
@@ -12,6 +13,7 @@ from raven.core.security.policy_engine import (
     ConditionNode,
     Op,
     PolicyEngine,
+    PolicyLoadError,
     Rule,
     RuleSet,
 )
@@ -507,11 +509,37 @@ class TestAdversarialToolPolicyDenyByDefault:
         )
         assert not p.is_tool_allowed("process.kill")
         assert not p.is_tool_allowed("sessions.sessions_spawn")
-        assert p.is_tool_allowed("process.run")
+        assert p.is_tool_allowed("files.write")
+
+    def test_the_shipped_ruleset_denies_under_profile_full(self):
+        """`profile="full"` is the operator's widest switch, not a bypass of the shipped file."""
+        from raven.core.security.tool_policy import ExecSecurity, ToolPolicyEvaluator
+
+        p = ToolPolicyEvaluator(profile="full", exec_security=ExecSecurity.FULL)
+        for tool in ["api.http_post", "sessions.sessions_spawn", "process.kill", "process.run"]:
+            assert not p.is_tool_allowed(tool), tool
+            assert "policy ruleset" in (p.denial_reason(tool) or ""), tool
+
+    @pytest.mark.asyncio
+    async def test_the_shipped_ruleset_denies_exec_without_reaching_the_confirmer(self):
+        from unittest.mock import AsyncMock
+
+        from raven.core.security.tool_policy import ExecAskMode, ExecSecurity, ToolPolicyEvaluator
+
+        confirm_fn = AsyncMock(return_value=True)
+        p = ToolPolicyEvaluator(exec_security=ExecSecurity.ASK, exec_ask=ExecAskMode.ALWAYS)
+        allowed, reason = await p.check_exec("process.run", {}, confirm_fn=confirm_fn)
+        assert not allowed
+        assert "deny-dangerous-tools" in (reason or "")
+        confirm_fn.assert_not_awaited()
 
 
 class TestAdversarialConfirmationBlocksExecution:
-    """Шаг 2: prove confirm=True blocks tool execution when user declines."""
+    """Шаг 2: prove confirm=True blocks tool execution when user declines.
+
+    The tool is one the shipped ruleset leaves to the operator: `process.kill` is refused by the
+    file before anybody is asked, which the test above pins.
+    """
 
     @pytest.mark.asyncio
     async def test_confirm_blocks_when_user_declines(self):
@@ -521,7 +549,7 @@ class TestAdversarialConfirmationBlocksExecution:
 
         confirm_fn = AsyncMock(return_value=False)
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.ASK, exec_ask=ExecAskMode.ALWAYS)
-        allowed, reason = await p.check_exec("process.kill", {}, confirm_fn=confirm_fn)
+        allowed, reason = await p.check_exec("shell.exec", {}, confirm_fn=confirm_fn)
         assert not allowed
         assert "cancelled" in (reason or "").lower()
         confirm_fn.assert_called_once()
@@ -534,7 +562,7 @@ class TestAdversarialConfirmationBlocksExecution:
 
         confirm_fn = AsyncMock(return_value=True)
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.ASK, exec_ask=ExecAskMode.ALWAYS)
-        allowed, _reason = await p.check_exec("process.kill", {}, confirm_fn=confirm_fn)
+        allowed, _reason = await p.check_exec("shell.exec", {}, confirm_fn=confirm_fn)
         assert allowed
         confirm_fn.assert_called_once()
 
@@ -811,3 +839,162 @@ def test_evaluate_missing_ruleset_returns_none(tmp_path):
     engine = PolicyEngine(rules_dir=str(tmp_path))
     effect, name = engine.evaluate("ghost", {"a": 1})
     assert effect is None and name is None
+
+
+# ─── where the shipped ruleset is found (A1) ─────────────────────────
+
+
+@pytest.fixture
+def singleton_ruleset():
+    """The process-wide engine, with the cache dropped afterwards.
+
+    `RAVEN_POLICY_DIR` tests write a different `tools` ruleset into that cache; left in place it
+    would decide every later test in this process, which is the opposite of what a guard is for.
+    """
+    from raven.core.security.policy_engine import policy_engine
+
+    yield policy_engine
+    policy_engine.reload("tools")
+
+
+def test_the_ruleset_is_anchored_to_the_install_not_the_working_directory(tmp_path, monkeypatch):
+    """`raven start` from elsewhere used to resolve the default `policy` against CWD and load nothing."""
+    from raven.core.security.policy_engine import _install_root
+
+    monkeypatch.chdir(tmp_path)
+    engine = PolicyEngine()
+    assert engine.rules_dir() == _install_root() / "policy"
+    assert (engine.rules_dir() / "tools.json").is_file()
+    effect, rule = engine.evaluate("tools", {"tool": "process.run", "profile": "full", "action": "call"})
+    assert (effect, rule) == ("deny", "deny-dangerous-tools")
+
+
+def test_policy_dir_points_the_engine_at_a_ruleset_the_deployment_owns(tmp_path, monkeypatch):
+    (tmp_path / "tools.json").write_text(
+        json.dumps({"rules": [{"name": "mine", "condition": {"tool": "marker.tool"}, "effect": "deny"}]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("RAVEN_POLICY_DIR", str(tmp_path))
+    effect, rule = PolicyEngine().evaluate("tools", {"tool": "marker.tool"})
+    assert (effect, rule) == ("deny", "mine")
+
+
+def test_a_ruleset_the_deployment_owns_reaches_the_evaluator(tmp_path, monkeypatch, singleton_ruleset):
+    (tmp_path / "tools.json").write_text(
+        json.dumps({"rules": [{"name": "mine", "condition": {"tool": "marker.tool"}, "effect": "deny"}]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("RAVEN_POLICY_DIR", str(tmp_path))
+    singleton_ruleset.reload("tools")
+    from raven.core.security.tool_policy import ToolPolicyEvaluator
+
+    p = ToolPolicyEvaluator(profile="full")
+    assert not p.is_tool_allowed("marker.tool")
+    assert p.is_tool_allowed("process.run")
+
+
+def test_a_ruleset_that_cannot_be_read_refuses_rather_than_permits(tmp_path, monkeypatch, singleton_ruleset):
+    (tmp_path / "tools.json").write_text("{ not json", encoding="utf-8")
+    monkeypatch.setenv("RAVEN_POLICY_DIR", str(tmp_path))
+    with pytest.raises(PolicyLoadError):
+        PolicyEngine(rules_dir=str(tmp_path)).load_ruleset("tools")
+
+    singleton_ruleset.reload("tools")
+    from raven.core.security.tool_policy import ToolPolicyEvaluator
+
+    p = ToolPolicyEvaluator(profile="full")
+    assert not p.is_tool_allowed("anything")
+    assert "unreadable" in (p.denial_reason("anything") or "")
+
+
+def test_a_rule_that_is_not_an_object_refuses(tmp_path):
+    (tmp_path / "tools.json").write_text(json.dumps({"rules": ["process.run"]}), encoding="utf-8")
+    with pytest.raises(PolicyLoadError, match="not an object"):
+        PolicyEngine(rules_dir=str(tmp_path)).load_ruleset("tools")
+
+
+def test_the_shipped_ruleset_leaves_exec_security_full_intact():
+    """A file may tighten the operator's switches; it may not switch the box off."""
+    from raven.core.security.tool_policy import ExecSecurity, ToolPolicyEvaluator
+
+    p = ToolPolicyEvaluator(profile="full", exec_security=ExecSecurity.FULL)
+    allowed, reason = asyncio.run(p.check_exec("files.write", {}))
+    assert allowed, reason
+
+
+def test_the_wheel_ships_the_ruleset_the_fallback_looks_for():
+    """`pipx install raven-agent` and the Docker image have no checkout next to the code.
+
+    Three facts have to agree or the packaged deny list is decoration again: pyproject stages the
+    folder, the wheel layout puts it inside `raven`, and the resolver's parent level points there.
+    """
+    import tomllib
+
+    from raven.core.security.policy_engine import _install_root, _packaged_dir
+
+    root = _install_root()
+    pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    staged = pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+    assert staged.get("policy/tools.json") == "raven/policy/tools.json", staged
+    assert _packaged_dir() / "tools.json" == root / "raven" / "policy" / "tools.json", _packaged_dir()
+
+
+def test_the_exe_bundle_ships_the_ruleset():
+    """The onefile build resolves the ruleset against the bundle root, so it has to travel."""
+    from raven.core.security.policy_engine import _install_root
+
+    spec = (_install_root() / "scripts" / "raven.spec").read_text(encoding="utf-8")
+    assert '(str(ROOT / "policy"), "policy")' in spec
+
+
+def test_the_documentation_names_the_tools_the_shipped_rules_actually_denies():
+    """`docs/security/overview.md` lists the refused tools one by one, so the list is checked."""
+    from raven.core.security.policy_engine import _install_root
+
+    root = _install_root()
+    rules = json.loads((root / "policy" / "tools.json").read_text(encoding="utf-8"))["rules"]
+    denied = {
+        entry["tool"]
+        for rule in rules
+        if rule.get("effect") == "deny"
+        for entry in rule.get("condition", {}).get("or", [])
+        if "tool" in entry
+    }
+    assert denied, "the shipped ruleset denies no tool by name"
+    doc = (root / "docs" / "security" / "overview.md").read_text(encoding="utf-8")
+    missing = sorted(tool for tool in denied if f"`{tool}`" not in doc)
+    assert missing == [], missing
+
+
+def test_the_ruleset_an_operator_points_at_is_the_one_doctor_reports(tmp_path, monkeypatch, singleton_ruleset):
+    from raven.cli import doctor_cmd
+
+    (tmp_path / "tools.json").write_text(
+        json.dumps({"rules": [{"name": "one", "condition": {"tool": "x"}, "effect": "deny"}]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("RAVEN_POLICY_DIR", str(tmp_path))
+    singleton_ruleset.reload("tools")
+    row = dict(doctor_cmd.security_posture_checks())["Tool Ruleset"]
+    assert row.startswith("[OK] 1 rules, 1 deny"), row
+    assert tmp_path.name in row, row
+
+
+def test_a_missing_ruleset_is_reported_as_one_that_enforces_nothing(tmp_path, monkeypatch, singleton_ruleset):
+    from raven.cli import doctor_cmd
+
+    monkeypatch.setenv("RAVEN_POLICY_DIR", str(tmp_path))
+    singleton_ruleset.reload("tools")
+    row = dict(doctor_cmd.security_posture_checks())["Tool Ruleset"]
+    assert row.startswith("[!]"), row
+    assert "enforces nothing" in row, row
+
+
+def test_a_ruleset_that_does_not_parse_is_reported_as_a_refusal(tmp_path, monkeypatch, singleton_ruleset):
+    from raven.cli import doctor_cmd
+
+    (tmp_path / "tools.json").write_text("{ nope", encoding="utf-8")
+    monkeypatch.setenv("RAVEN_POLICY_DIR", str(tmp_path))
+    singleton_ruleset.reload("tools")
+    row = dict(doctor_cmd.security_posture_checks())["Tool Ruleset"]
+    assert row.startswith("[ERR]"), row

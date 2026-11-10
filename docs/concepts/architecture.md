@@ -55,8 +55,11 @@ The `ToolRegistry` (`raven/core/task_engine/tool_registry.py`) maintains a catal
 ### Security
 
 The security layer (`raven/core/security/`) provides:
-- `PolicyEngine` — rule-based policy evaluation
-- `ToolPolicyEvaluator` — tool-level access control
+- `PolicyEngine` — rule-based policy evaluation. It reads `policy/tools.json` on the first tool
+  decision of the process, from the checkout or from `raven/policy/` inside an installed wheel, and
+  `RAVEN_POLICY_DIR` overrides both
+- `ToolPolicyEvaluator` — tool-level access control; asks `PolicyEngine` for a veto on every call,
+  and treats a ruleset it cannot read as a refusal
 - `SecurityAudit` — configuration and runtime auditing
 - `PIIEngine` — PII detection and redaction
 - `ContextFilter` — content visibility control

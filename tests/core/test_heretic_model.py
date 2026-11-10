@@ -7,6 +7,7 @@ The switch is the point of the whole module, so these tests drive the real env-f
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -281,6 +282,19 @@ class TestThePageMatchesTheCode:
         assert f"ollama create {HERETIC_OLLAMA_NAME} -f models/Modelfile.heretic" in page
         assert f"ollama create {HERETIC_OLLAMA_NAME} -f models/Modelfile.heretic" in modelfile
         assert "raven models enable-heretic --no-pull" in page
+
+    def test_no_shipped_file_repeats_the_retired_lazy_pull_claim(self) -> None:
+        """`raven start` never downloads, and the size is the measured one — not an earlier rounding.
+
+        Both claims were retired by this wave, and they had already crept back into the ignore files,
+        which no prose page is checked against.
+        """
+        root = Path(__file__).resolve().parents[2]
+        for rel in (".gitignore", ".dockerignore", ".env.example", "models/Modelfile.heretic"):
+            text = (root / rel).read_text(encoding="utf-8")
+            assert "lazy" not in text.lower(), rel
+            for figure in re.findall(r"(\d+(?:\.\d+)?)\s*GB", text):
+                assert abs(float(figure) - HERETIC_SIZE_GB) < 0.005, (rel, figure)
 
 
 class TestOllamaCalls:

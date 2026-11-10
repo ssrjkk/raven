@@ -920,9 +920,10 @@ class AgentOrchestrator:
             return {"error": f"Tool '{tc.name}' not allowed by context permissions"}
 
         args = tc.arguments or {}
-        if not self._tool_policy.is_tool_allowed(tc.name):
-            logger.warning("Orchestrator tool '{}' denied by operator policy", tc.name)
-            return {"error": f"Tool '{tc.name}' is denied by operator policy (TOOLS_DENY)"}
+        denial = self._tool_policy.denial_reason(tc.name)
+        if denial is not None:
+            logger.warning("Orchestrator tool '{}' denied by operator policy: {}", tc.name, denial)
+            return {"error": f"Tool '{tc.name}' is denied by operator policy: {denial}"}
         if is_exec_class(tc.name):
             exec_allowed, exec_reason = await self._tool_policy.check_exec(tc.name, args, confirm_fn=None)
             if not exec_allowed:

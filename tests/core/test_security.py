@@ -341,7 +341,7 @@ class TestConfirmationFailsClosed:
     @pytest.mark.asyncio
     async def test_always_without_a_confirmer_denies(self) -> None:
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.ASK, exec_ask=ExecAskMode.ALWAYS)
-        allowed, reason = await p.check_exec("process.kill", {})
+        allowed, reason = await p.check_exec("shell.exec", {})
         assert not allowed
         assert "confirmer" in (reason or "")
 
@@ -358,5 +358,13 @@ class TestConfirmationFailsClosed:
     @pytest.mark.asyncio
     async def test_ask_off_needs_no_confirmer(self) -> None:
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.ASK, exec_ask=ExecAskMode.OFF)
-        allowed, _reason = await p.check_exec("process.kill", {})
+        allowed, _reason = await p.check_exec("shell.exec", {})
         assert allowed
+
+    @pytest.mark.asyncio
+    async def test_ask_off_does_not_unlock_a_tool_the_ruleset_names(self) -> None:
+        """EXEC_ASK=off silences the prompt; it cannot overrule `policy/tools.json`."""
+        p = ToolPolicyEvaluator(exec_security=ExecSecurity.ASK, exec_ask=ExecAskMode.OFF)
+        allowed, reason = await p.check_exec("process.kill", {})
+        assert not allowed
+        assert "deny-dangerous-tools" in (reason or "")

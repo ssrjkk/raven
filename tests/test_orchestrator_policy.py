@@ -225,11 +225,22 @@ def test_the_example_deny_line_names_only_real_tools(surfaces: set[str]) -> None
     assert {name for name in surfaces if name.startswith("group:")} == set(), "group:* is a rule name, not a tool"
 
 
+def _bullet(text: str, marker: str) -> str:
+    """One `- **marker** …` list item, and not the list it lives in.
+
+    The items of a markdown list arrive as a single block when the page is split on blank lines, so
+    reading the block would let the tool names of a sibling bullet — the ruleset's deny list, say —
+    be asserted as part of the profile's allow-list.
+    """
+    block = next(b for b in text.split(LF + LF) if marker in b)
+    lines = block.split(LF)
+    start = next(i for i, line in enumerate(lines) if marker in line)
+    end = next((i for i, line in enumerate(lines[start + 1 :], start + 1) if line.startswith("- ")), len(lines))
+    return LF.join(lines[start:end])
+
+
 def test_the_documented_messaging_profile_lists_the_real_plugin_tools(surfaces: set[str]) -> None:
-    bullet = next(
-        block for block in Path("docs/security/overview.md").read_text(encoding="utf-8").split(LF + LF)
-        if "**tool profiles**" in block
-    )
+    bullet = _bullet(Path("docs/security/overview.md").read_text(encoding="utf-8"), "**tool profiles**")
     documented = {token for token in _backticked(bullet) if "." in token}
     declared = ToolPolicyEvaluator(profile="messaging")._profiles["messaging"]
     assert documented == declared, (documented, declared)

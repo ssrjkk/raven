@@ -20,6 +20,6 @@ extension/
 tests/
 scripts/
 resources/
-# Bundled model weights are lazy-pulled at runtime, never shipped in the image
+# Pulled by `raven models enable-heretic` before the image is built, never shipped in it
 models/*.gguf
 *.gguf

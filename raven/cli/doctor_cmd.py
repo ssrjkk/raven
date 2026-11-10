@@ -12,6 +12,7 @@ from rich.table import Table
 
 from raven.core.config import Settings, settings
 from raven.core.config_store import config_store
+from raven.core.security.policy_engine import PolicyLoadError, policy_engine
 from raven.core.workspace import workspace_root, workspace_source
 
 console = Console()
@@ -49,6 +50,8 @@ def security_posture_checks() -> list[tuple[str, str]]:
         rows.append(("Workspace Confinement", "[!] WORKSPACE_ONLY=false — path arguments are not confined"))
     else:
         rows.append(("Workspace Confinement", f"[OK] {workspace_root()} — decided by {workspace_source()}"))
+
+    rows.append(_ruleset_posture_row())
 
     overrides = data_path("tool_policy.json")
     rows.append(
@@ -106,6 +109,23 @@ def _cors_posture_row() -> tuple[str, str]:
         f"{'[OK]' if settings.web_cors_allow_credentials else '[i]'} {', '.join(origins)} "
         f"(credentials {'on' if settings.web_cors_allow_credentials else 'off'})",
     )
+
+
+def _ruleset_posture_row() -> tuple[str, str]:
+    """The file-shaped gate, reported as the count that actually bites.
+
+    `policy/tools.json` spent its life unlit: nothing loaded it, so the deny list the documentation
+    described enforced nothing and `doctor` had no row that could say so.
+    """
+    directory = policy_engine.rules_dir()
+    try:
+        ruleset = policy_engine.load_ruleset("tools")
+    except PolicyLoadError as exc:
+        return ("Tool Ruleset", f"[ERR] {exc} — every tool call is refused until it parses")
+    if not ruleset.rules:
+        return ("Tool Ruleset", f"[!] no ruleset under {directory} — the documented deny list enforces nothing")
+    denies = sum(1 for rule in ruleset.rules if rule.effect == "deny")
+    return ("Tool Ruleset", f"[OK] {len(ruleset.rules)} rules, {denies} deny, from {directory}")
 
 
 def _training_posture_row() -> tuple[str, str]:

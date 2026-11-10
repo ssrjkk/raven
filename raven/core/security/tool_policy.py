@@ -141,26 +141,54 @@ class ToolPolicyEvaluator:
     def _profile_tools(self) -> set[str]:
         return self._profiles.get(self.profile, set())
 
-    def is_tool_allowed(self, tool_name: str) -> bool:
+    def _ruleset_denial(self, input_data: dict[str, Any]) -> str | None:
+        """Why the shipped ruleset refuses this call, or None when it does not.
+
+        Only a ``deny`` effect is acted on: a file can tighten what the operator configured, never
+        widen it, so an ``allow`` effect falls through to the layers below. An unreadable ruleset
+        refuses too — a policy that cannot be read is not a policy that permits everything.
+        """
         try:
-            from raven.core.security.policy_engine import policy_engine
+            from raven.core.security.policy_engine import PolicyLoadError, policy_engine
+        except ImportError as exc:
+            logger.debug("policy_engine not available: {}", exc)
+            return None
 
-            rs = policy_engine.get_ruleset("tools")
-            if rs is not None and len(rs.rules) > 0:
-                effect, _ = policy_engine.evaluate("tools", {"tool": tool_name, "profile": self.profile, "action": "call"})
-                if effect == "deny":
-                    return False
-        except ImportError as e:
-            logger.debug("policy_engine not available: {}", e)
+        try:
+            effect, rule_name = policy_engine.evaluate("tools", input_data)
+        except PolicyLoadError as exc:
+            logger.error("Tool policy ruleset unreadable, refusing: {}", exc)
+            return f"policy ruleset unreadable ({exc})"
 
+        if effect == "deny":
+            return f"denied by policy rule '{rule_name}'"
+        return None
+
+    def denial_reason(self, tool_name: str) -> str | None:
+        """Which layer refuses this call, in the words an operator can act on. None means it may run.
+
+        Callers used to say `TOOLS_DENY` for every refusal this method returns, which became wrong
+        the moment the ruleset gained a voice: a tool named only in `policy/tools.json` was reported
+        as if the `TOOLS_DENY` switch had named it.
+        """
         if tool_name in self._deny:
-            return False
+            return f"'{tool_name}' is in TOOLS_DENY"
+
+        ruleset = self._ruleset_denial({"tool": tool_name, "profile": self.profile, "action": "call"})
+        if ruleset is not None:
+            return f"denied by the policy ruleset ({ruleset})"
+
         if self._allow:
-            return tool_name in self._allow
+            if tool_name not in self._allow:
+                return f"'{tool_name}' is not in TOOLS_ALLOW"
+            return None
         profile_set = self._profile_tools()
-        if profile_set:
-            return tool_name in profile_set
-        return True
+        if profile_set and tool_name not in profile_set:
+            return f"'{tool_name}' is not offered to the '{self.profile}' profile"
+        return None
+
+    def is_tool_allowed(self, tool_name: str) -> bool:
+        return self.denial_reason(tool_name) is None
 
     def check_path(self, path: str) -> bool:
         if not self.workspace_only:
@@ -182,20 +210,23 @@ class ToolPolicyEvaluator:
     ) -> tuple[bool, str | None]:
         args = args or {}
 
-        try:
-            from raven.core.security.policy_engine import policy_engine
-
-            rs = policy_engine.get_ruleset("exec")
-            if rs is not None and len(rs.rules) > 0 and not policy_engine.check(
-                "exec",
-                {"tool": tool_name, "args": args, "exec_security": self.exec_security.value},
-            ):
-                return False, "exec denied by policy engine"
-        except ImportError as e:
-            logger.debug("policy_engine not available: {}", e)
-
         if self.exec_security == ExecSecurity.DENY:
             return False, "exec denied by policy (security=deny)"
+
+        # After the operator's own switch, before anything that could run or ask: a tool the
+        # ruleset names must not reach the prompt, and a refusal that says `security=deny` when
+        # the file is the one refusing would send the operator to the wrong switch.
+        denial = self._ruleset_denial(
+            {
+                "tool": tool_name,
+                "args": args,
+                "profile": self.profile,
+                "action": "exec",
+                "exec_security": self.exec_security.value,
+            }
+        )
+        if denial is not None:
+            return False, f"exec refused by policy engine ({denial})"
 
         if self.workspace_only:
             for key, value in path_args(args):
@@ -271,8 +302,9 @@ async def mcp_deny_reason(tool_name: str, arguments: dict[str, Any] | None) -> s
     well would only add a second way to refuse the same path.
     """
     policy = policy_from_settings(profile="full", workspace_only=False)
-    if not policy.is_tool_allowed(tool_name):
-        return f"'{tool_name}' is denied by policy (TOOLS_DENY)"
+    reason = policy.denial_reason(tool_name)
+    if reason is not None:
+        return f"'{tool_name}' is denied by policy - {reason}"
     if is_exec_class(tool_name):
         allowed, reason = await policy.check_exec(tool_name, arguments or {}, confirm_fn=None)
         if not allowed:

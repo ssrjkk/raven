@@ -151,6 +151,14 @@ packages = ["raven", "aios", "ravencode"]
 # so wheel builds still succeed when the SPA was not built.
 artifacts = ["raven/web/dist/**"]
 
+# The tool ruleset travels the same way: `policy/tools.json` is the deny list the evaluator
+# enforces, so a wheel (Docker, `pipx install raven-agent`) that left it in the repository would
+# install a Raven whose shipped policy is decoration. `raven.core.security.policy_engine` looks for
+# `policy/` next to the source tree first and for this packaged copy after that. Only the ruleset
+# travels: `policy/openclaw_compat.yaml` is a config template, not a ruleset, and nothing loads it.
+[tool.hatch.build.targets.wheel.force-include]
+"policy/tools.json" = "raven/policy/tools.json"
+
 [tool.hatch.build.targets.sdist]
 artifacts = ["raven/web/dist/**"]
 

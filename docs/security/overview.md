@@ -69,6 +69,24 @@ An invalid value is a startup error, not a silent fallback (`Settings.model_post
   the messaging deployment keeps three tools; raising the level to `ask` or `full` is the operator
   decision that gives search back. `minimal` and the `full` profile contain no exec-class tool.
   `full` ignores the list
+- **the tool ruleset** (`policy/tools.json`) — the file-shaped gate the two lists above are
+  enforced through. `ToolPolicyEvaluator` asks `PolicyEngine` on every tool call and every exec
+  check, so a tool the file denies is refused even with an empty `TOOLS_DENY` and `profile=full`,
+  and refused before the operator is asked to confirm — the prompt never offers what the file has
+  already ruled out. It is a veto and nothing more: a `deny` tightens what the switches
+  above decided, an `allow` never widens it, so `EXEC_SECURITY=full` stays meaningful with the file
+  in place. The shipped rules refuse `api.http_post`, `sessions.sessions_spawn`, `process.kill`,
+  `process.run`, `process.run_python`, `git.git_push`, `git.git_pull` and any tool of the
+  `automation` group
+
+`policy/` is looked for next to the source tree and, for an installed wheel, inside the package at
+`raven/policy/`; `RAVEN_POLICY_DIR` names another directory. The first tool decision of the process
+reads the file and a running gateway keeps that copy, so an edit needs a restart.
+
+A ruleset that is absent enforces nothing, and the gateway says so once per name:
+`Policy ruleset 'tools' not found under …` names the directory it looked in. A ruleset that is
+present but cannot be read or parsed refuses every tool call until it can be read again — a policy
+the program cannot open is not a policy that permits everything.
 
 Arguments that name a filesystem location (key in `PATH_ARG_KEYS`, or suffixed `_path`, `_file`,
 `_dir`, `_root`, `_cwd`) are additionally resolved against the workspace root, and paths deeper

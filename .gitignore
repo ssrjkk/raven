@@ -76,6 +76,6 @@ data/connections.json
 Python/
 htmlcov/
 
-# Bundled model weights are lazy-pulled, never committed (~5.7 GB each)
+# Pulled by `raven models enable-heretic`, never committed (5.63 GB each)
 models/*.gguf
 *.gguf

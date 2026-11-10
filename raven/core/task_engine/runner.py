@@ -243,8 +243,9 @@ class TaskRunner:
 
     async def _policy_denial(self, step: TaskStep) -> str | None:
         """The operator's switches, decided once: a refusal is not a transient error."""
-        if not self._tool_policy.is_tool_allowed(step.tool):
-            return f"Denied by operator policy (TOOLS_DENY): {step.tool}"
+        reason = self._tool_policy.denial_reason(step.tool)
+        if reason is not None:
+            return f"Denied by operator policy: {reason}"
         if is_exec_class(step.tool):
             allowed, reason = await self._tool_policy.check_exec(
                 step.tool, step.params, confirm_fn=self._confirm_fn

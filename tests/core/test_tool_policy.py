@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import ClassVar
 from unittest.mock import AsyncMock
 
 import pytest
@@ -70,44 +69,61 @@ class TestImportFailureFallback:
 
 
 class TestPolicyEngineDeny:
-    async def test_check_exec_denied_by_policy_engine(self, monkeypatch: pytest.MonkeyPatch):
-        class _RS:
-            rules: ClassVar[list[object]] = [object()]
+    """The ruleset is a veto: a ``deny`` from it refuses, anything else falls through."""
 
-        monkeypatch.setattr(type(policy_engine), "get_ruleset", lambda self, name: _RS())
-        monkeypatch.setattr(type(policy_engine), "check", lambda self, *a, **k: False)
+    async def test_check_exec_denied_by_policy_engine(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, name, data: ("deny", "no-evil"))
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL)
         allowed, reason = await p.check_exec("evil")
         assert allowed is False
         assert "policy engine" in (reason or "")
+        assert "no-evil" in (reason or "")
 
     async def test_check_exec_allowed_by_policy_engine(self, monkeypatch: pytest.MonkeyPatch):
-        class _RS:
-            rules: ClassVar[list[object]] = [object()]
-
-        monkeypatch.setattr(type(policy_engine), "get_ruleset", lambda self, name: _RS())
-        monkeypatch.setattr(type(policy_engine), "check", lambda self, *a, **k: True)
+        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, name, data: ("allow", "any-rule"))
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL)
         allowed, _reason = await p.check_exec("good")
         assert allowed is True
 
-    def test_is_tool_allowed_denied_by_policy_engine(self, monkeypatch: pytest.MonkeyPatch):
-        class _RS:
-            rules: ClassVar[list[object]] = [object()]
+    async def test_check_exec_unmatched_by_policy_engine_falls_through(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, name, data: (None, None))
+        p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL)
+        allowed, _reason = await p.check_exec("good")
+        assert allowed is True
 
-        monkeypatch.setattr(type(policy_engine), "get_ruleset", lambda self, name: _RS())
-        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, *a, **k: ("deny", None))
+    async def test_an_unreadable_ruleset_refuses_instead_of_permitting(self, monkeypatch: pytest.MonkeyPatch):
+        from raven.core.security.policy_engine import PolicyLoadError
+
+        def boom(self, name, data):
+            raise PolicyLoadError(f"{name}.json is not a readable ruleset")
+
+        monkeypatch.setattr(type(policy_engine), "evaluate", boom)
+        p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL)
+        allowed, reason = await p.check_exec("anything")
+        assert allowed is False
+        assert "unreadable" in (reason or "")
+
+    def test_is_tool_allowed_denied_by_policy_engine(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, name, data: ("deny", "no-anything"))
         p = ToolPolicyEvaluator(profile="full")
         assert p.is_tool_allowed("anything") is False
 
     def test_is_tool_allowed_policy_engine_allows(self, monkeypatch: pytest.MonkeyPatch):
-        class _RS:
-            rules: ClassVar[list[object]] = [object()]
-
-        monkeypatch.setattr(type(policy_engine), "get_ruleset", lambda self, name: _RS())
-        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, *a, **k: ("allow", None))
+        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, name, data: ("allow", "any-rule"))
         p = ToolPolicyEvaluator(profile="full")
         assert p.is_tool_allowed("anything") is True
+
+    def test_an_allow_rule_cannot_widen_the_operators_deny_list(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, name, data: ("allow", "anything-goes"))
+        p = ToolPolicyEvaluator(profile="full", deny=["marked"])
+        assert p.is_tool_allowed("marked") is False
+
+    def test_the_refusal_names_the_layer_that_refused(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, name, data: ("deny", "deny-by-file"))
+        p = ToolPolicyEvaluator(profile="full")
+        reason = p.denial_reason("filed-away")
+        assert "deny-by-file" in (reason or "")
+        assert "TOOLS_DENY" not in (reason or "")
 
 
 class TestCheckExecWorkspace:
