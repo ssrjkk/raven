@@ -79,3 +79,7 @@ htmlcov/
 # Pulled by `raven models enable-heretic`, never committed (5.63 GB each)
 models/*.gguf
 *.gguf
+
+# Local stale snapshots of this repo, untracked on purpose: they are a pre-0.4.8 copy whose
+# commit is already in main's history, and 125k files here must never reach `git add -A`.
+raven_old*/
