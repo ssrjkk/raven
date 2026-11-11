@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 from typing import ClassVar
 from unittest.mock import AsyncMock
@@ -36,6 +37,25 @@ class TestResolveSafe:
 
     def test_outside_root_returns_none(self, tmp_path: Path):
         assert resolve_within_root(str(tmp_path.parent / "escape"), tmp_path) is None
+
+    def test_traversal_that_stays_inside_root_returns_the_normalized_path(self, tmp_path: Path):
+        (tmp_path / "sub").mkdir()
+        expected = (tmp_path / "notes.txt").resolve()
+        assert resolve_within_root(str(tmp_path / "sub" / ".." / "notes.txt"), tmp_path) == expected
+
+    def test_traversal_out_of_root_returns_none(self, tmp_path: Path):
+        # The string begins with the root; only the resolved form shows it leaves the root.
+        assert resolve_within_root(str(tmp_path / "sub" / ".." / ".." / "escape"), tmp_path) is None
+
+    def test_symlink_out_of_root_returns_none(self, tmp_path: Path):
+        real = tmp_path.parent / "real_outside"
+        real.mkdir(exist_ok=True)
+        link = tmp_path / "link"
+        try:
+            link.symlink_to(real)
+        except (OSError, NotImplementedError):
+            pytest.skip("symlinks not supported on this platform")
+        assert resolve_within_root(str(link / "secret.txt"), tmp_path) is None
 
 
 class TestSetWorkspaceRoot:
@@ -111,7 +131,7 @@ class TestPolicyEngineDeny:
 
 
 class TestCheckExecWorkspace:
-    """Containment applies to arguments that name a location, and only when a root is configured."""
+    """Containment applies to arguments that name a location; the root is the pinned one or the deployed one."""
 
     async def test_path_outside_workspace_rejected(self, tmp_path: Path):
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL, workspace_root=str(tmp_path))
@@ -141,10 +161,22 @@ class TestCheckExecWorkspace:
         allowed, _reason = await p.check_exec("shell_execute", {"command": "ls", "cwd": ""})
         assert allowed is True
 
-    async def test_no_root_configured_skips_containment(self):
+    async def test_no_pinned_root_confines_to_the_deployment_roots(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # allowed_roots() is the fallback: the resolved workspace plus the system temp dir, so an
+        # evaluator without a pinned root is still contained. The probe must be a path this platform
+        # reads as absolute — a Windows-style string is relative on Linux and would slip through.
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(ws))
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL, workspace_only=True, workspace_root=None)
-        allowed, _reason = await p.check_exec("t", {"path": "C:\\Windows\\System32\\config\\SAM"})
+        allowed, _reason = await p.check_exec("t", {"path": str(ws / "notes.txt")})
         assert allowed is True
+        outside = Path(tempfile.gettempdir()).parent / "raven-outside-roots" / "notes.txt"
+        denied, reason = await p.check_exec("t", {"path": str(outside)})
+        assert denied is False
+        assert "outside the workspace root" in (reason or "")
 
     async def test_workspace_only_off_skips_containment(self, tmp_path: Path):
         p = ToolPolicyEvaluator(
