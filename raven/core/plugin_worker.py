@@ -150,7 +150,7 @@ def _plugin_api_module() -> ModuleType:
     global _plugin_api
     if _plugin_api is None:
         namespace: dict[str, Any] = {}
-        exec(_PLUGIN_API_SOURCE, namespace)
+        exec(_PLUGIN_API_SOURCE, namespace)  # compiles a source constant kept in this file, never code that came from a plugin  # nosec B102
         # swapped in after the class exists: defining a class needs `__build_class__`, but what a plugin
         # can reach is this dict as it is later, through `Plugin.__init__.__globals__`.
         namespace["__builtins__"] = _restricted_builtins()

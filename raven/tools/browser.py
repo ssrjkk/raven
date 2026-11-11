@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from loguru import logger
 
 from raven.core.browser_agent import BrowserAgent
+from raven.core.security.ssrf import PRIVATE_NETS, names_this_machine
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 _browser_instance = None
@@ -23,21 +24,6 @@ class _SSRFError(ValueError):
     pass
 
 
-# Mirrors raven.core.security.ssrf.PRIVATE_NETS (includes link-local, cloud-metadata).
-_PRIVATE_RANGES = [
-    "127.0.0.0/8",
-    "10.0.0.0/8",
-    "172.16.0.0/12",
-    "192.168.0.0/16",
-    "169.254.0.0/16",
-    "::1/128",
-    "fc00::/7",
-    "fe80::/10",
-]
-
-_PRIVATE_NETWORKS = [ipaddress.ip_network(r, strict=False) for r in _PRIVATE_RANGES]
-
-
 def _validate_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
@@ -45,11 +31,11 @@ def _validate_url(url: str) -> None:
     host = parsed.hostname
     if not host:
         raise _SSRFError("URL missing hostname")
-    if host in ("localhost", "localhost.localdomain", "0.0.0.0"):
+    if names_this_machine(host):
         raise _SSRFError(f"hostname {host}")
     try:
         ip = ipaddress.ip_address(host)
-        for net in _PRIVATE_NETWORKS:
+        for net in PRIVATE_NETS:
             if ip in net:
                 raise _SSRFError(f"private IP {host}")
     except ValueError:
@@ -61,7 +47,7 @@ def _validate_url(url: str) -> None:
         for _family, _type, _proto, _cname, sockaddr in addrs:
             addr = str(sockaddr[0])
             ip = ipaddress.ip_address(addr)
-            for net in _PRIVATE_NETWORKS:
+            for net in PRIVATE_NETS:
                 if ip in net:
                     raise _SSRFError(f"hostname {host} resolves to private IP {addr}")
     except _SSRFError:

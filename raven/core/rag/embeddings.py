@@ -10,8 +10,7 @@ from loguru import logger
 
 
 def _cache_key(text: str) -> str:
-    # md5 is fine for a content cache key (not security-sensitive)
-    return hashlib.md5(text.encode("utf-8")).hexdigest()  # noqa: S324
+    return hashlib.md5(text.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 class EmbeddingEngine:

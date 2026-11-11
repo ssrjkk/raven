@@ -9,6 +9,7 @@ network, deterministic output.
 from __future__ import annotations
 
 import ast
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -48,9 +49,12 @@ _FOCUS_PARTNERS = 2  # co-change partners injected into the pre-read per task
 
 def _git_commit_files(root: str | Path) -> list[list[str]]:
     """File lists of recent commits, newest first; [] when git unavailable."""
+    git = shutil.which("git")
+    if git is None:
+        return []
     try:
         proc = subprocess.run(
-            ["git", "log", f"-{_GIT_HISTORY_COMMITS}", "--name-only", "--format=%x01"],
+            [git, "log", f"-{_GIT_HISTORY_COMMITS}", "--name-only", "--format=%x01"],
             cwd=str(root),
             capture_output=True,
             text=True,

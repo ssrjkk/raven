@@ -91,8 +91,12 @@ def _install_ollama() -> bool:
                 resp = httpx.get("https://ollama.com/install.sh", timeout=60)
                 resp.raise_for_status()
                 script_path.write_bytes(resp.content)
+                sh = shutil.which("sh")
+                if sh is None:
+                    console.print("[red]No sh on PATH; install Ollama from https://ollama.com/download[/red]")
+                    return False
                 result = subprocess.run(
-                    ["sh", str(script_path)],
+                    [sh, str(script_path)],
                     capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
                 )
                 if result.returncode == 0:

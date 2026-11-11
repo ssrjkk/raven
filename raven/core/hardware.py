@@ -72,9 +72,12 @@ def _physical_memory_bytes() -> tuple[int, int]:
 
 
 def _vram_mb() -> int:
+    nvidia_smi = shutil.which("nvidia-smi")
+    if nvidia_smi is None:
+        return 0
     try:
         result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+            [nvidia_smi, "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
             capture_output=True,
             text=True,
             encoding="utf-8",

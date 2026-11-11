@@ -28,6 +28,25 @@ PRIVATE_NETS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
     ipaddress.ip_network("fe80::/10"),
 ]
 
+# The spellings a config file or a CLI flag can hold that mean "this server is reachable through
+# every interface the machine has". One definition, so a surface that warns about it cannot disagree
+# with a surface that refuses it.
+_ALL_INTERFACES = frozenset({"0.0.0.0", "::", "[::]", ""})  # names the wildcard to warn about; never bound from here  # nosec B104
+# Hostnames that never name something outside this machine, so a request to one is a request to the
+# machine itself. The wildcard addresses belong here: resolving them gets you back to this host.
+_BLOCKED_HOSTNAMES = frozenset({"localhost", "localhost.localdomain", "127.0.0.1", "::1"}) | _ALL_INTERFACES
+
+
+def binds_every_interface(host: str) -> bool:
+    """True when `host` puts a server on every interface the machine has."""
+    return host in _ALL_INTERFACES
+
+
+def names_this_machine(host: str) -> bool:
+    """True when a request to `host` would reach the machine making it, not the internet."""
+    return host in _BLOCKED_HOSTNAMES
+
+
 _HTTP_URL_PATTERN = re.compile(r"^https?://[^\s\\]+$")
 
 
@@ -90,7 +109,7 @@ def is_private_url(url: str) -> bool:
     if parsed.scheme not in ("http", "https"):
         return True
     host = parsed.hostname or ""
-    if host in ("localhost", "localhost.localdomain", "127.0.0.1", "::1", "0.0.0.0"):
+    if names_this_machine(host):
         return True
     try:
         ips = _resolve_host(host)

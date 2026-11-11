@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -21,8 +22,12 @@ def upgrade():
     console.print("[bold]Raven Upgrade[/bold]\n")
     if (repo / ".git").is_dir():
         console.print("[*] Pulling latest code...")
+        git = shutil.which("git")
+        if git is None:
+            console.print("[red]git is not on PATH — cannot pull[/red]")
+            raise SystemExit(1)
         r = subprocess.run(
-            ["git", "pull", "--rebase"],
+            [git, "pull", "--rebase"],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -54,16 +59,20 @@ def upgrade():
     web_dir = repo / "web"
     if web_dir.is_dir() and (web_dir / "package.json").is_file():
         console.print("[*] Updating web frontend...")
-        r = subprocess.run(
-            ["npm", "install"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            cwd=str(web_dir),
-            timeout=120,
-            check=False,
-        )
-        if r.returncode == 0:
-            console.print("[green]  OK[/green]")
+        npm = shutil.which("npm")
+        if npm is None:
+            console.print("[yellow]npm is not on PATH — frontend not updated[/yellow]")
+        else:
+            r = subprocess.run(
+                [npm, "install"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=str(web_dir),
+                timeout=120,
+                check=False,
+            )
+            if r.returncode == 0:
+                console.print("[green]  OK[/green]")
     console.print("\n[green]Upgrade complete! Run 'raven start' to apply.[/green]")

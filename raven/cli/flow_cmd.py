@@ -18,12 +18,14 @@ def flow_group():
 
 @flow_group.command()
 @click.option("--port", default=18789, type=int, help="RavenFlow gateway port")
-def serve(port: int):
+@click.option("--host", default=None, help="Bind address. Defaults to RAVENFLOW_HOST (loopback); 0.0.0.0 needs a firewall.")
+def serve(port: int, host: str | None):
     """Start the RavenFlow gateway daemon"""
     from raven.gateway.daemon import RavenFlowDaemon
 
-    console.print(f"[bold]RavenFlow Gateway[/bold] starting on port {port}")
-    daemon = RavenFlowDaemon(port=port)
+    bind = host if host is not None else settings.ravenflow_host
+    console.print(f"[bold]RavenFlow Gateway[/bold] starting on {bind}:{port}")
+    daemon = RavenFlowDaemon(port=port, host=bind)
     asyncio.run(daemon.start())
 
 

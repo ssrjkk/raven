@@ -611,8 +611,8 @@ def hash_binary(path: str) -> str:
     p = Path(path)
     if not p.exists():
         return f"[error] File not found: {path}"
-    md5 = hashlib.md5()  # noqa: S324 - fingerprinting, not crypto
-    sha1 = hashlib.sha1()  # noqa: S324 - fingerprinting, not crypto
+    md5 = hashlib.md5(usedforsecurity=False)
+    sha1 = hashlib.sha1(usedforsecurity=False)
     sha256 = hashlib.sha256()
     with p.open("rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import subprocess
 import time
 from datetime import UTC, datetime, timedelta
@@ -22,9 +23,12 @@ def _repository_owned_names(root: Path) -> set[str]:
     An organize routine that relocates a tracked file breaks every link, spec and docs build that
     names it, so the version control index, not the extension, decides what may be moved.
     """
+    git = shutil.which("git")
+    if git is None:
+        return set()
     try:
         listed = subprocess.run(
-            ["git", "ls-files", "-z"],
+            [git, "ls-files", "-z"],
             cwd=str(root),
             capture_output=True,
             timeout=30,

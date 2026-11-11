@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -65,8 +66,12 @@ class GitIntegration:
         self._llm = llm_provider
 
     def _run(self, *args: str) -> tuple[str, str]:
+        git = shutil.which("git")
+        if git is None:
+            msg = "git is not on PATH"
+            raise FileNotFoundError(msg)
         result = subprocess.run(
-            ["git", "-C", str(self._repo), *args],
+            [git, "-C", str(self._repo), *args],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -97,7 +102,7 @@ class GitIntegration:
         try:
             stdout, _ = self._run("rev-parse", "--git-dir")
             return bool(stdout)
-        except subprocess.CalledProcessError:
+        except (subprocess.CalledProcessError, FileNotFoundError):
             return False
 
     def get_branch(self) -> str:

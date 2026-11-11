@@ -15,7 +15,7 @@ def _spill_output(text: str) -> str | None:
     try:
         d = workspace_root() / ".raven" / "spill"
         d.mkdir(parents=True, exist_ok=True)
-        digest = hashlib.sha1(text.encode("utf-8", errors="replace")).hexdigest()[:10]  # noqa: S324
+        digest = hashlib.sha1(text.encode("utf-8", errors="replace"), usedforsecurity=False).hexdigest()[:10]
         path = d / f"tool_{int(time.time())}_{digest}.txt"
         path.write_text(text, encoding="utf-8")
         return str(path)

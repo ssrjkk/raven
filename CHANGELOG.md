@@ -630,6 +630,47 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
 - The plugin loader published `inspect.getmembers(mod, iscoroutinefunction)`, which returns the coroutines a `plugin.py` merely *imported*: the SSRF helper reached the model as `api.safe_fetch_async` and `browser.safe_fetch_async`, and the code plugin's runner appeared a second time as `memory.run_python` — three tools whose names no operator had written down and no policy rule addressed. The loader now publishes only a coroutine defined in that `plugin.py`, under its own name, and `cron.register_callback` became an ordinary function because its one argument is a Python callable a JSON tool call cannot supply. Surface: 46 tools → 42. 23 of the 46 had no docstring, so their description was the bare function name; all 42 now carry a sentence and every parameter a description (19 had none), `**kwargs` is no longer listed as required (2 of 46 did), and the extractor keeps a description wrapped onto a continuation line instead of cutting it. Three texts that claimed more than the code does were corrected: `memory.forget` said "Forgot" when nothing was stored under the key, `sessions.sessions_send` read as delivery, `files.glob` reported the matches it truncated. `tests/test_plugin_surface_integrity.py` (21 gates) holds the count, the provenance of every handler and the description floor, and four loader mutations — publish imports, drop the bare-name warning, rerequire `**kwargs`, restore the old parameter parser — fail 7, 1, 1 and 3 tests
 
 ### Security
+- The project selected ruff's `S` family and then ignored nine of its rules (`S101 S102 S104 S106 S307
+  S311 S603 S607 S608`, `pyproject.toml:232`) while nothing ran bandit at all — so the `# noqa: S324`
+  comments in the tree were silencing switched-off rules, and the checks that read `# nosec` had never
+  started. `scripts/check_all.py::check_bandit` is the stage now: two bandit runs over `raven ravencode
+  aios plugins` (69 576 loc, 7.1 s warm), failing on any High or Medium, on a report bandit did not
+  produce, and on the annotations themselves. An annotation counts as a control: an id bandit does not
+  recognise suppresses nothing (bandit parses the tail of `# nosec` as ids, so prose written after the
+  token — `# nosec B608 - because…` — reads as a suppression to a human and as nothing to bandit), and an
+  id that fires nowhere in its file is a suppression left behind by the fix that made it unnecessary,
+  measured against `--ignore-nosec`. Baseline before → after: HIGH 4 → 0, MEDIUM 26 → 0, LOW 101 → 90,
+  `errors: []`, 14 `# nosec` with all 14 erasing a real finding. Verified by mutation: an unannotated
+  `hashlib.md5` fails as High, an unannotated `eval` fails as Medium, prose after `# nosec` fails, a dead
+  id fails, and a tree without bandit fails rather than skipping
+  (`tests/test_check_all_gates.py::TestBanditStage`, 9).
+- Half the Medium column was a server on every interface with no way to say otherwise:
+  `raven/gateway/daemon.py` hard-coded `0.0.0.0`, `raven flow serve` had no host flag at all, and
+  `ravencode/integrations/github_webhook.py`'s library default disagreed with its own CLI, which already
+  said loopback. `settings.ravenflow_host` (`RAVENFLOW_HOST`, default `127.0.0.1`) plus `--host` on both
+  commands is the switch now, and the wildcard spellings live in one definition
+  (`ssrf.binds_every_interface`) so the surface that warns about `0.0.0.0` cannot disagree with the
+  surface that refuses it — and it warns before uvicorn starts, not after.
+- The other half was two holes, not two lint nits. `raven/core/browser_agent.py` kept its own private
+  range table, missing `169.254.0.0/16`, `100.64.0.0/10` and `fe80::/10`, so a browser tool told to fetch
+  a page could reach a cloud metadata endpoint; `raven/tools/browser.py` carried a second copy with the
+  same gap under a comment claiming it mirrored `ssrf.PRIVATE_NETS`. Both now import that one table, and
+  `http://[::]:8080` is refused where it previously passed. The four Highs and three of the
+  `exec`/`eval` Mediums are the code fixed rather than annotated: `usedforsecurity=False` on the md5 and
+  sha1 that are cache keys and binary fingerprints, and a pinned revision on all six `from_pretrained`
+  calls that tracked a branch (`LLM_LOCAL_REVISION`, `TrainingConfig.model_revision`). The remaining
+  eight Mediums are `exec` in the debugger, the sandbox, the plugin worker and the python tool, and seven
+  f-string SQL statements — annotated, and argued below.
+- The Low column is the PATH search: eleven `subprocess.run` sites handed a bare program name to the
+  shell (`systemctl`, `launchctl`, the `sh` that installs Ollama, `git`, `npm`, `icacls`, `nvidia-smi`,
+  macOS `say`), and each now resolves through `shutil.which` and reports the missing tool instead of
+  raising `FileNotFoundError` from inside a voice call or a git query. 101 → 90 is exactly those eleven.
+- The seven `# nosec B608` sites interpolate SQL, so the claim is measured rather than asserted:
+  `tests/test_stored_query_injection.py` (8) records the statement text each store hands the driver and
+  asserts a hostile `user_id` never appears in it, that a clause outside `_ALLOWED_CLAUSES` /
+  `_ALLOWED_WHERE` is refused before the statement is built, and that `purge_finished` binds ids shaped
+  like `'); DROP TABLE tasks; --` as parameters. Five mutations of the two stores — allowlist guard
+  removed, value interpolated, placeholders replaced by quoted ids — each fail at least one of them.
 - The plugin sandbox escaped through the class it teaches plugins to import. `ravencode.runtime.plugins`
   was on the import allowlist, so `Plugin.__init__.__globals__` — reachable from any registered tool
   handler, in an interpreter that has the host's filesystem — was that module's real namespace, which

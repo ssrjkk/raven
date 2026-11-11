@@ -80,6 +80,7 @@ from raven.core.rag_api import create_rag_router
 from raven.core.routine.engine import RoutineEngine, register_routine_engine
 from raven.core.routine.store import RoutineStore
 from raven.core.scaffold_api import create_scaffold_router
+from raven.core.security.ssrf import binds_every_interface
 from raven.core.spa import mount_spa, resolve_web_dist
 from raven.core.status_api import create_status_router
 from raven.core.tests_api import create_tests_router
@@ -447,7 +448,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         await analytics_engine.start()
         await dream_engine.start()
         sse_stream.start_cleanup()
-        if settings.web_host in ("0.0.0.0", "::", ""):
+        if binds_every_interface(settings.web_host):
             logger.warning("Binding to {}:{}. Ensure firewall/reverse proxy is configured.", settings.web_host, web_port)
         config = _server_config(api_app, settings.web_host, web_port)
         server = uvicorn.Server(config)

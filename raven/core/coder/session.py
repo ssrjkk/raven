@@ -95,7 +95,7 @@ class CodingSessionManager(BaseStore):
             msg = f"Disallowed WHERE clause: {where}"
             raise ValueError(msg)
         rows = await self._fetchall(
-            f"SELECT * FROM coding_sessions WHERE {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            f"SELECT * FROM coding_sessions WHERE {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",  # the only interpolated text is a clause spelled in _ALLOWED_WHERE; every value travels as a bound parameter  # nosec B608
             (*params, limit, offset),
         )
         return [self._row_to_session(r) for r in rows]
@@ -111,7 +111,7 @@ class CodingSessionManager(BaseStore):
             msg = f"Disallowed WHERE clause: {where}"
             raise ValueError(msg)
         row = await self._fetchone(
-            f"SELECT COUNT(*) as cnt FROM coding_sessions WHERE {where}",
+            f"SELECT COUNT(*) as cnt FROM coding_sessions WHERE {where}",  # the only interpolated text is a clause spelled in _ALLOWED_WHERE; every value travels as a bound parameter  # nosec B608
             params,
         )
         return int(row["cnt"]) if row else 0

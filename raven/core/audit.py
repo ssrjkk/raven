@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import io
 import os
+import shutil
 import time
 import uuid
 from dataclasses import dataclass
@@ -105,9 +106,10 @@ def _restrict_key_file(path: Path):
 
         if os.name == "nt":
             username = os.environ.get("USERNAME") or os.environ.get("USER", "")
-            if username:
+            icacls = shutil.which("icacls")
+            if username and icacls:
                 subprocess.run(
-                    ["icacls", str(path), "/inheritance:r", "/grant", f"{username}:F"],
+                    [icacls, str(path), "/inheritance:r", "/grant", f"{username}:F"],
                     capture_output=True,
                     check=False,
                 )

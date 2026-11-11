@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 from loguru import logger
 
-_PRIVATE_RANGES = ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7"]
+from raven.core.security.ssrf import PRIVATE_NETS, names_this_machine
 
 
 def validate_url(url: str) -> None:
@@ -25,11 +25,11 @@ def validate_url(url: str) -> None:
         host_is_ip = False
     else:
         host_is_ip = True
-        for r in _PRIVATE_RANGES:
-            if ip in ipaddress.ip_network(r, strict=False):
+        for net in PRIVATE_NETS:
+            if ip in net:
                 msg = f"SSRF blocked: private IP {host}"
                 raise ValueError(msg)
-    if host in ("localhost", "0.0.0.0"):
+    if names_this_machine(host):
         msg = f"SSRF blocked: hostname {host}"
         raise ValueError(msg) from None
     if host_is_ip:
@@ -45,8 +45,8 @@ def validate_url(url: str) -> None:
             ip = ipaddress.ip_address(addr)
         except ValueError:
             continue
-        for r in _PRIVATE_RANGES:
-            if ip in ipaddress.ip_network(r, strict=False):
+        for net in PRIVATE_NETS:
+            if ip in net:
                 msg = f"SSRF blocked: hostname {host} resolves to private IP {addr}"
                 raise ValueError(msg)
 

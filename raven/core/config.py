@@ -88,6 +88,8 @@ class Settings(BaseSettings):
     llm_local_base_model: str = ""
     llm_local_adapter_path: str = ""
     llm_local_max_new_tokens: int = 256
+    llm_local_revision: str = "main"
+    """Hugging Face revision the local provider downloads. A commit id, not a branch, is what makes a load reproducible."""
     default_model: str = ""  # auto-discovered if empty
     model_fast: str = ""
     model_balanced: str = ""
@@ -112,6 +114,8 @@ class Settings(BaseSettings):
     web_host: str = "127.0.0.1"
     """Bind address for the web API. Use 0.0.0.0 only when a firewall/reverse proxy guards it."""
     ravenflow_port: int = 18789
+    ravenflow_host: str = "127.0.0.1"
+    """Bind address for the RavenFlow gateway. Use 0.0.0.0 only when a firewall/reverse proxy guards it."""
     web_secret_key: SafeSecretStr = SafeSecretStr("")
     web_cors_origins: str = "http://localhost:5173,http://localhost:3000,http://localhost:18888"
     web_cors_allow_credentials: bool = True

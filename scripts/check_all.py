@@ -18,12 +18,14 @@ from __future__ import annotations
 import argparse
 import contextlib
 import importlib
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -32,6 +34,8 @@ ROOT = Path(__file__).resolve().parent.parent
 os.chdir(ROOT)
 
 CHECK_DIRS = ["raven/", "aios/", "ravencode/", "plugins/", "tests/", "scripts/"]
+# The shipped code, not the test code: a test that plants a fake secret is a test doing its job.
+BANDIT_DIRS = ["raven", "ravencode", "aios", "plugins"]
 _USE_COV = False
 
 # -- Colors ------------------------------------------------------------------
@@ -215,6 +219,101 @@ def check_mypy() -> CheckResult:
         return CheckResult("mypy", "fail", dt, r.stderr)
     errors = [line for line in (r.stdout + r.stderr).splitlines() if line.strip() and ":" in line]
     return CheckResult("mypy", "fail", dt, "\n".join(errors[:20]))
+
+
+# Bandit reads the ids of a `# nosec` out of the comment with these two expressions (core/manager.py).
+# Anything that is not an id still lands inside the same capture, which is why prose written after the
+# `# nosec` token reads as a suppression to a human and as nothing at all to bandit.
+_NOSEC_COMMENT = re.compile(r"#\s*nosec:?\s*(?P<tests>[^#]+)?#?")
+_NOSEC_ID = re.compile(r"(B\d+|[a-z\d_]+)", re.IGNORECASE)
+
+
+def _bandit_cmd(targets: list[str], *flags: str) -> list[str]:
+    return [sys.executable, "-m", "bandit", "--quiet", *flags, "-r", *targets, "-f", "json"]
+
+
+def _nosec_annotations(targets: list[str]) -> Counter[tuple[str, str]]:
+    """How many times each `(file, test id)` in the scanned source asks bandit to skip a finding."""
+    counts: Counter[tuple[str, str]] = Counter()
+    for name in targets:
+        for py in sorted((ROOT / name).rglob("*.py")):
+            key = str(py.resolve())
+            for line in py.read_text(encoding="utf-8-sig").splitlines():
+                match = _NOSEC_COMMENT.search(line)
+                if match and match.group("tests"):
+                    counts.update((key, test_id.upper()) for test_id in _NOSEC_ID.findall(match.group("tests")))
+    return counts
+
+
+def _suppressed_findings(unannotated: dict[str, Any], annotated: dict[str, Any]) -> Counter[tuple[str, str]]:
+    """The findings that exist only when the `# nosec` comments are ignored — what they actually erase.
+
+    Counted per file rather than per line: bandit reads a nosec on the line above a statement too, and
+    a call that spans lines reports at the start of the expression, so a line-by-line pairing would
+    call correct annotations dead.
+    """
+    kept = Counter((str(Path(f["filename"]).resolve()), f["test_id"].upper()) for f in annotated.get("results", []))
+    every = Counter((str(Path(f["filename"]).resolve()), f["test_id"].upper()) for f in unannotated.get("results", []))
+    return Counter({key: count - kept[key] for key, count in every.items() if count > kept.get(key, 0)})
+
+
+def check_bandit() -> CheckResult:
+    """Security lint. High or Medium findings fail the stage outright: the tree carries neither.
+
+    A `# nosec` is a control, so it is checked like one. Bandit says on stderr when an id in one is
+    not a test it knows — that annotation suppresses nothing, and the line it covers is unchecked.
+    And every annotation has to erase a finding that bandit would otherwise report, measured against a
+    second run with `--ignore-nosec`; an id that fires nowhere is a suppression left behind by the fix
+    that made it unnecessary.
+    """
+    _print_section("Security lint (bandit)")
+    t0 = time.time()
+    targets = [d for d in BANDIT_DIRS if (ROOT / d).is_dir()]
+    r = _run(_bandit_cmd(targets), timeout=240)
+    dt = time.time() - t0
+    try:
+        report = json.loads(r.stdout)
+    except ValueError:
+        # The report is the measurement. A tree where bandit is not installed, or died on the way,
+        # has not been checked — so this is a failure, not a skip.
+        return CheckResult("bandit", "fail", dt, (r.stderr.strip() or r.stdout.strip() or "no report")[:1200])
+    totals = report.get("metrics", {}).get("_totals", {})
+    findings = [f for f in report.get("results", []) if f.get("issue_severity") in ("HIGH", "MEDIUM")]
+    counts = {
+        "high": sum(1 for f in findings if f.get("issue_severity") == "HIGH"),
+        "medium": sum(1 for f in findings if f.get("issue_severity") == "MEDIUM"),
+        "low": int(totals.get("SEVERITY.LOW", 0)),
+    }
+    errors = report.get("errors") or []
+    if errors:
+        return CheckResult("bandit", "fail", dt, f"bandit could not parse: {json.dumps(errors)[:1200]}", counts)
+    inert = [line for line in r.stderr.splitlines() if "is not a test name or id" in line]
+    if inert:
+        detail = "\n".join(line.strip() for line in inert[:20])
+        return CheckResult(
+            "bandit", "fail", dt, f"nosec ids bandit does not know (they suppress nothing):\n{detail}", counts
+        )
+    annotations = _nosec_annotations(targets)
+    if annotations:
+        again = _run(_bandit_cmd(targets, "--ignore-nosec"), timeout=240)
+        try:
+            unpinned = json.loads(again.stdout)
+        except ValueError:
+            return CheckResult("bandit", "fail", dt, (again.stderr.strip() or "no report")[:1200], counts)
+        erased = _suppressed_findings(unpinned, report)
+        dead = sorted(
+            f"{Path(name).relative_to(ROOT)} {test_id}"
+            for (name, test_id), count in annotations.items()
+            if not count <= erased.get((name, test_id), 0)
+        )
+        if dead:
+            detail = "\n".join(dead[:20])
+            return CheckResult("bandit", "fail", dt, f"nosec annotations that suppress nothing:\n{detail}", counts)
+    counts["nosec"] = sum(annotations.values())
+    if not findings:
+        return CheckResult("bandit", "pass", dt, f"{counts['low']} low-severity notes", counts)
+    detail = "\n".join(f"{f['filename']}:{f['line_number']} {f['test_id']} {f['issue_text']}" for f in findings[:20])
+    return CheckResult("bandit", "fail", dt, detail, counts)
 
 
 def check_imports() -> CheckResult:
@@ -546,6 +645,7 @@ def main() -> int:
     if run_all or args.lint or args.quick:
         results.append(check_ruff())
         results.append(check_mypy())
+        results.append(check_bandit())
 
     if run_all or args.quick:
         results.append(check_imports())

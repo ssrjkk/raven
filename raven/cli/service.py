@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -262,8 +263,12 @@ def _run_python(module: str, *args: str) -> bool:
 
 
 def _run_systemctl(action: str):
+    systemctl = shutil.which("systemctl")
+    if systemctl is None:
+        console.print("[red]systemctl is not on PATH here[/red]")
+        return
     result = subprocess.run(
-        ["systemctl", action, "raven.service"],
+        [systemctl, action, "raven.service"],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -276,8 +281,12 @@ def _run_systemctl(action: str):
 
 
 def _run_launchctl(action: str, target: str = "com.raven.ai"):
+    launchctl = shutil.which("launchctl")
+    if launchctl is None:
+        console.print("[red]launchctl is not on PATH here[/red]")
+        return
     result = subprocess.run(
-        ["launchctl", action, target],
+        [launchctl, action, target],
         capture_output=True,
         text=True,
         encoding="utf-8",

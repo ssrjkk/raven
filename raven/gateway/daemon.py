@@ -19,6 +19,7 @@ from raven.core.channel_guardian import TokenBucket
 from raven.core.config import settings
 from raven.core.llm import LLMRouter
 from raven.core.logging import setup_logging
+from raven.core.security.ssrf import binds_every_interface
 from raven.core.sse import sse_stream
 from raven.gateway.routing import RoutingEngine
 from raven.gateway.session_store import SessionStore
@@ -104,8 +105,9 @@ async def _validate_token(token: str) -> dict[str, Any] | None:
 
 
 class RavenFlowDaemon:
-    def __init__(self, port: int = 18789, data_dir: Path | None = None):
+    def __init__(self, port: int = 18789, data_dir: Path | None = None, host: str | None = None):
         self.port = port
+        self.host = settings.ravenflow_host if host is None else host
         self.app = FastAPI(
             title="RavenFlow Gateway",
             version="0.4.8",
@@ -373,10 +375,11 @@ class RavenFlowDaemon:
         # is never registered here is invisible in RavenFlow chat. This loop is the one that later runs
         # the plugin tools, so registration has to happen on it.
         await ensure_plugin_tools(watch=True)
-        logger.warning("Binding to 0.0.0.0:{}. Ensure firewall/reverse proxy is configured.", self.port)
-        config = uvicorn.Config(self.app, host="0.0.0.0", port=self.port, log_level="info")
+        if binds_every_interface(self.host):
+            logger.warning("Binding to {}:{}. Ensure firewall/reverse proxy is configured.", self.host, self.port)
+        config = uvicorn.Config(self.app, host=self.host, port=self.port, log_level="info")
         server = uvicorn.Server(config)
-        logger.info("RavenFlow Gateway starting on port {}", self.port)
+        logger.info("RavenFlow Gateway starting on {}:{}", self.host, self.port)
         self._flush_task = asyncio.create_task(self._flush_loop())
         try:
             await server.serve()
@@ -406,9 +409,10 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="RavenFlow Gateway daemon")
     parser.add_argument("--port", type=int, default=18789, help="Gateway port")
+    parser.add_argument("--host", default=settings.ravenflow_host, help="Bind address (default: the loopback interface)")
     args = parser.parse_args()
 
-    daemon = RavenFlowDaemon(port=args.port)
+    daemon = RavenFlowDaemon(port=args.port, host=args.host)
     asyncio.run(daemon.start())
 
 

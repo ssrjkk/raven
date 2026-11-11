@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -184,3 +186,124 @@ class TestBenchmarkIsMeasuredOnce:
         cmd = captured["cmd"]
         assert "--benchmark-disable" not in cmd, cmd
         assert "tests/" in cmd, cmd
+
+
+class TestBanditStage:
+    """The security-lint stage reads a report, so every shape of a report that cannot certify the tree
+    clean has to fail it — including a tree where bandit never ran to produce one."""
+
+    @staticmethod
+    def _report(results: list[dict[str, Any]], errors: list[Any] | None = None) -> str:
+        totals = {"SEVERITY.LOW": sum(1 for r in results if r["issue_severity"] == "LOW")}
+        return json.dumps({"errors": errors or [], "results": results, "metrics": {"_totals": totals}})
+
+    @staticmethod
+    def _finding(test_id: str = "B324", severity: str = "HIGH", line: int = 5) -> dict[str, Any]:
+        return {
+            "filename": "raven\\core\\rag\\embeddings.py",
+            "line_number": line,
+            "test_id": test_id,
+            "issue_severity": severity,
+            "issue_text": "Use of weak MD5 hash for security.",
+        }
+
+    def _stub(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        stdout: str,
+        stderr: str = "",
+        unannotated_stdout: str | None = None,
+        annotations: Counter[tuple[str, str]] | None = None,
+    ) -> list[list[str]]:
+        calls: list[list[str]] = []
+
+        def _inner(cmd: list[str], timeout: int = 0, env: dict[str, str] | None = None, cwd: Any = None) -> Any:
+            calls.append(cmd)
+            out = unannotated_stdout if "--ignore-nosec" in cmd and unannotated_stdout is not None else stdout
+            return subprocess.CompletedProcess(cmd, 1, stdout=out, stderr=stderr)
+
+        monkeypatch.setattr(ca, "_run", _inner)
+        monkeypatch.setattr(ca, "_nosec_annotations", lambda targets: Counter() if annotations is None else annotations)
+        return calls
+
+    def test_a_high_finding_fails_the_stage_by_file_line_and_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub(monkeypatch, self._report([self._finding()]))
+        result = ca.check_bandit()
+        assert result.status == "fail"
+        assert result.counts["high"] == 1
+        assert "embeddings.py:5 B324" in result.detail
+
+    def test_a_medium_finding_fails_the_stage_too(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub(monkeypatch, self._report([self._finding("B307", "MEDIUM", 2)]))
+        result = ca.check_bandit()
+        assert result.status == "fail"
+        assert result.counts["medium"] == 1
+
+    def test_a_tree_of_only_low_findings_passes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        low = [self._finding("B404", "LOW", 1), self._finding("B603", "LOW", 4)]
+        self._stub(monkeypatch, self._report(low))
+        result = ca.check_bandit()
+        assert result.status == "pass"
+        assert result.detail == "2 low-severity notes"
+
+    def test_the_shipped_code_is_scanned_and_the_test_code_is_not(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = self._stub(monkeypatch, self._report([]))
+        ca.check_bandit()
+        assert calls[0][:4] == [sys.executable, "-m", "bandit", "--quiet"]
+        assert set(ca.BANDIT_DIRS) <= set(calls[0]), calls[0]
+        assert "tests/" not in calls[0] and "tests" not in calls[0]
+
+    def test_no_report_is_a_failure_and_not_a_skip(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub(monkeypatch, "", stderr="No module named bandit")
+        result = ca.check_bandit()
+        assert result.status == "fail"
+        assert "No module named bandit" in result.detail
+
+    def test_bandit_cannot_parsing_the_tree_is_a_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub(monkeypatch, self._report([], errors=[{"filename": "raven/x.py", "reason": "syntax error"}]))
+        result = ca.check_bandit()
+        assert result.status == "fail"
+        assert "could not parse" in result.detail
+
+    def test_a_nosec_id_bandit_does_not_recognise_fails_the_stage(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Written as `# nosec B608 - the reason`, the reason is read as a list of test ids, so the
+        annotation suppresses nothing and the line it covers is never checked."""
+        warn = "[manager]\tWARNING\tTest in comment: reason is not a test name or id, ignoring"
+        self._stub(monkeypatch, self._report([]), stderr=warn)
+        result = ca.check_bandit()
+        assert result.status == "fail"
+        assert "does not know" in result.detail
+        assert "reason" in result.detail
+
+    def test_an_annotation_that_suppresses_nothing_fails_the_stage(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The tree was fixed under the comment and the comment stayed: a control that controls nothing."""
+        key = str(ca.ROOT / "raven" / "core" / "sandbox.py")
+        self._stub(
+            monkeypatch,
+            self._report([]),
+            unannotated_stdout=self._report([]),
+            annotations=Counter({(key, "B102"): 1}),
+        )
+        result = ca.check_bandit()
+        assert result.status == "fail"
+        assert "suppress nothing" in result.detail
+        assert "B102" in result.detail
+
+    def test_an_annotation_that_erases_a_real_finding_is_counted_and_passes(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        key = str(ca.ROOT / "raven" / "core" / "sandbox.py")
+        annotated = self._report([])
+        unannotated = self._report([{"filename": key, "line_number": 191, "test_id": "B102",
+                                     "issue_severity": "MEDIUM", "issue_text": "Use of exec detected."}])
+        self._stub(
+            monkeypatch,
+            annotated,
+            unannotated_stdout=unannotated,
+            annotations=Counter({(key, "B102"): 1}),
+        )
+        result = ca.check_bandit()
+        assert result.status == "pass"
+        assert result.counts["nosec"] == 1

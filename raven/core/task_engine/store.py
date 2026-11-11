@@ -201,7 +201,7 @@ class TaskStore(BaseStore):
             msg = f"Disallowed WHERE clause: {clause}"
             raise ValueError(msg)
         rows = await self._fetchall(
-            f"SELECT * FROM tasks WHERE {clause} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            f"SELECT * FROM tasks WHERE {clause} ORDER BY created_at DESC LIMIT ? OFFSET ?",  # the only interpolated text is a clause spelled in _ALLOWED_CLAUSES; every value travels as a bound parameter  # nosec B608
             (*params, limit, offset),
         )
         return [self._row_to_task(r) for r in rows]
@@ -273,15 +273,15 @@ class TaskStore(BaseStore):
         db = await self._conn()
         async with db.transaction():
             rows = await db.fetchall(
-                f"SELECT id FROM tasks WHERE status IN ({placeholders}) AND created_at < ?",
+                f"SELECT id FROM tasks WHERE status IN ({placeholders}) AND created_at < ?",  # the only interpolated text is the run of '?' markers itself; the values travel bound  # nosec B608
                 (*terminal, cutoff),
             )
             ids = [row["id"] for row in rows]
             if not ids:
                 return 0
             id_placeholders = ", ".join("?" for _ in ids)
-            await db.execute(f"DELETE FROM task_steps WHERE task_id IN ({id_placeholders})", ids)
-            await db.execute(f"DELETE FROM tasks WHERE id IN ({id_placeholders})", ids)
+            await db.execute(f"DELETE FROM task_steps WHERE task_id IN ({id_placeholders})", ids)  # the only interpolated text is the run of '?' markers itself; the values travel bound  # nosec B608
+            await db.execute(f"DELETE FROM tasks WHERE id IN ({id_placeholders})", ids)  # the only interpolated text is the run of '?' markers itself; the values travel bound  # nosec B608
         return len(ids)
 
     @measure_latency()
@@ -299,7 +299,7 @@ class TaskStore(BaseStore):
             msg = f"Disallowed WHERE clause: {clause}"
             raise ValueError(msg)
         row = await self._fetchone(
-            f"SELECT COUNT(*) as cnt FROM tasks WHERE {clause}",
+            f"SELECT COUNT(*) as cnt FROM tasks WHERE {clause}",  # the only interpolated text is a clause spelled in _ALLOWED_CLAUSES; every value travels as a bound parameter  # nosec B608
             params,
         )
         return int(row["cnt"]) if row else 0

@@ -17,7 +17,7 @@ import json
 import sys
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -162,7 +162,8 @@ class TestAgentProgressLine:
         """The progress lines the operator saw, and the tool messages the model was given."""
         tokens = [t async for t in agent.run("go")]
         lines = [t for t in tokens if t.startswith("[") and "→" in t]
-        rounds = [list(call.args[0]) for call in agent.llm.complete.await_args_list]
+        llm = cast("AsyncMock", agent.llm)
+        rounds = [list(call.args[0]) for call in llm.complete.await_args_list]
         payloads = [json.loads(m["content"]) for round_ in rounds for m in round_ if m.get("role") == "tool"]
         return lines, payloads
 

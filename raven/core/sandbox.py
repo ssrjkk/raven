@@ -188,7 +188,7 @@ class Sandbox:
             restricted_globals: dict[str, object] = {"__builtins__": safe_builtins}
             try:
                 with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-                    exec(code, restricted_globals)
+                    exec(code, restricted_globals)  # the sandbox executes submitted code by design: separate process, restricted builtins, network policy  # nosec B102
                 result = stdout_capture.getvalue()
                 stderr_val = stderr_capture.getvalue()
                 if stderr_val.strip():

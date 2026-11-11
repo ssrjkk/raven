@@ -7,6 +7,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from loguru import logger
 
+from raven.core.security.ssrf import binds_every_interface
 from ravencode.integrations.github import GitHubIntegration, parse_github_webhook_request
 from ravencode.integrations.vcs.webhook import WebhookEventType, webhook_event_to_context
 
@@ -49,7 +50,7 @@ async def health() -> dict[str, str]:
 
 
 def run_webhook_server(
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8080,
     token: str | None = None,
     secret: str | None = None,
@@ -57,7 +58,7 @@ def run_webhook_server(
     global _integration, _webhook_secret
     _integration = GitHubIntegration(token=token)
     _webhook_secret = secret if secret is not None else os.getenv("GITHUB_WEBHOOK_SECRET", "")
-    if host == "0.0.0.0":
-        logger.warning("Binding to 0.0.0.0:{}. Ensure firewall/reverse proxy is configured.", port)
+    if binds_every_interface(host):
+        logger.warning("Binding to {}:{}. Ensure firewall/reverse proxy is configured.", host, port)
     logger.info("Starting GitHub webhook server on {}:{}", host, port)
     uvicorn.run(app, host=host, port=port, log_level="info")

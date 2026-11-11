@@ -128,6 +128,8 @@ class TrainingConfig:
     bnb_4bit_use_double_quant: bool = True
     model_type: str = "llama"
     model_name_or_path: str = ""
+    model_revision: str = "main"
+    """Hugging Face revision to download. A commit id, not a branch, is what makes a run reproducible."""
     load_in_8bit: bool = False
     load_in_4bit: bool = False
     deepspeed: str = ""
@@ -437,12 +439,13 @@ class FineTuningPipeline:
         elif self._config.load_in_8bit:
             quantization_kwargs["load_in_8bit"] = True
 
-        self._tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+        self._tokenizer = AutoTokenizer.from_pretrained(model_id, revision=self._config.model_revision, trust_remote_code=True)
         if self._tokenizer.pad_token is None:
             self._tokenizer.pad_token = self._tokenizer.eos_token
 
         self._model = AutoModelForCausalLM.from_pretrained(
             model_id,
+            revision=self._config.model_revision,
             dtype=torch.bfloat16 if _TORCH_AVAILABLE else None,
             device_map="auto",
             trust_remote_code=True,
@@ -663,9 +666,10 @@ class FineTuningPipeline:
 
         if _TRANSFORMERS_AVAILABLE and _PEFT_AVAILABLE:
             model_id = self._resolve_model_name()
-            self._tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+            self._tokenizer = AutoTokenizer.from_pretrained(model_id, revision=self._config.model_revision, trust_remote_code=True)
             base_model = AutoModelForCausalLM.from_pretrained(
                 model_id,
+                revision=self._config.model_revision,
                 dtype=torch.bfloat16,
                 device_map="auto",
                 trust_remote_code=True,

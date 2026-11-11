@@ -336,20 +336,37 @@ class TestSynthesizeWindowsSapi:
 
 class TestSynthesizeMacosSay:
     def test_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The command is named by its resolved path, not by the bare `say` the PATH would have to find."""
         calls: dict[str, Any] = {}
+        say = str(tmp_path / "say")
 
         def fake_run(args: list[str], *a: object, **kw: object) -> subprocess.CompletedProcess[bytes]:
             calls["args"] = args
             return subprocess.CompletedProcess(args, 0)
 
         monkeypatch.setattr(subprocess, "run", fake_run)
+        monkeypatch.setattr("raven.voice.tts.shutil.which", lambda name: say if name == "say" else None)
         out = tmp_path / "speech.aiff"
         tts_obj = TextToSpeech(TTSConfig())
         tts_obj._synthesize_macos_say("hello", str(out))
-        assert calls["args"][0] == "say"
+        assert calls["args"][0] == say
         assert calls["args"][1:3] == ["-o", str(out)]
         tmp_txt = calls["args"][4]
         assert not Path(tmp_txt).exists()
+
+    def test_no_say_on_path_writes_nothing_and_shells_out_once(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A name `shutil.which` cannot resolve is not a command line; running it would be a
+        FileNotFoundError out of a voice call, and the temp file would be left behind."""
+        runs: list[list[str]] = []
+        monkeypatch.setattr("raven.voice.tts.subprocess.run", lambda args, *a, **kw: runs.append(args))
+        monkeypatch.setattr("raven.voice.tts.shutil.which", lambda name: None)
+        out = tmp_path / "speech.aiff"
+        TextToSpeech(TTSConfig())._synthesize_macos_say("hello", str(out))
+        assert runs == []
+        assert not out.exists()
+        assert list(tmp_path.iterdir()) == []
 
 
 class TestSynthesizeEdge:

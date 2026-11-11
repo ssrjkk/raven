@@ -297,7 +297,7 @@ class _DebugSession:
                 "__file__": str(self._file_path),
                 "__builtins__": safe_builtins,
             }
-            exec(compiled, ns)
+            exec(compiled, ns)  # running the file under debug is what a debugger does; this namespace ships no unsafe builtins  # nosec B102
             with self._lock:
                 if self._status not in ("stopped", "error"):
                     self._status = "running"

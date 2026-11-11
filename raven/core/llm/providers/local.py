@@ -32,6 +32,7 @@ class LocalAdapterProvider(LLMProvider):
         self.top_p = float(overrides.get("top_p", 0.9))
         self.device_map = str(overrides.get("device_map", "auto"))
         self._base_model = str(overrides.get("base_model") or settings.llm_local_base_model or "")
+        self._revision = str(overrides.get("revision") or settings.llm_local_revision or "main")
         self._model: Any = None
         self._tokenizer: Any = None
         self._loaded_base = ""
@@ -141,12 +142,13 @@ class LocalAdapterProvider(LLMProvider):
         from peft import PeftModel
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        logger.info("Loading local adapter {} over {}", self.adapter_path, base_model)
-        tokenizer = AutoTokenizer.from_pretrained(base_model, trust_remote_code=True)
+        logger.info("Loading local adapter {} over {} at revision {}", self.adapter_path, base_model, self._revision)
+        tokenizer = AutoTokenizer.from_pretrained(base_model, revision=self._revision, trust_remote_code=True)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         base = AutoModelForCausalLM.from_pretrained(
             base_model,
+            revision=self._revision,
             dtype=torch.bfloat16,
             device_map=self.device_map,
             trust_remote_code=True,

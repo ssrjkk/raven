@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 import subprocess
 import tempfile
 from enum import StrEnum
@@ -142,12 +143,16 @@ class TextToSpeech:
     def _synthesize_macos_say(self, text: str, output_path: str):
         import tempfile
 
+        say = shutil.which("say")
+        if say is None:
+            logger.warning("macOS `say` is not on PATH; no audio written to {}", output_path)
+            return
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write(text)
             tmp = f.name
         try:
             subprocess.run(
-                ["say", "-o", output_path, "-f", tmp],
+                [say, "-o", output_path, "-f", tmp],
                 capture_output=True,
                 timeout=30,
                 check=False,
