@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import builtins
 import inspect
 import json
 import sys
+import threading
+from types import ModuleType
 from typing import Any
 
 from loguru import logger
@@ -74,18 +77,123 @@ _BUILTINS_ALLOWLIST = frozenset(
     }
 )
 
+# Modules a plugin may import. Everything that can reach a file, a socket or a process is absent on
+# purpose — a plugin that needs those asks the host for a capability instead. The plugin API is on the
+# list because `register()` has to name the class the protocol expects, but it is answered by the shim
+# below rather than by the host module. `__future__` is a compile-time directive over the plugin's own
+# file and imports no capability; without it the example the guide tells an operator to copy
+# (`plugins/example-http`, which starts `from __future__ import annotations`) was refused at registration.
+_SAFE_IMPORTS = frozenset(
+    {
+        "ravencode.runtime.plugins",
+        "__future__",
+        "base64",
+        "binascii",
+        "collections",
+        "dataclasses",
+        "datetime",
+        "decimal",
+        "enum",
+        "functools",
+        "hashlib",
+        "hmac",
+        "itertools",
+        "json",
+        "math",
+        "re",
+        "statistics",
+        "string",
+        "textwrap",
+        "time",
+        "typing",
+        "unicodedata",
+        "uuid",
+        "urllib.parse",
+        "zoneinfo",
+    }
+)
+
+_REAL_IMPORT = builtins.__import__
+
+
+# The plugin-facing API, served to plugin code as `ravencode.runtime.plugins`. It cannot be the real
+# module: `Plugin.__init__.__globals__` is the host module's namespace, and that one attribute gave a
+# plugin `Path`, `asyncio` and `logger` — measured on the tree, a 10-line plugin read
+# `data/web_secret_key` through it without importing anything. Here the class is exec'd into a
+# namespace this file builds, so the only names reachable from it are the restricted builtins.
+_PLUGIN_API_SOURCE = '''
+class Plugin:
+    """What `register()` returns: a name, a version and the tools this plugin publishes."""
+
+    def __init__(self, name, version="0.1.0", tools=None, on_load=None, on_unload=None, _source_path=None):
+        self.name = name
+        self.version = version
+        self.tools = tools or {}
+        self._on_load = on_load
+        self._on_unload = on_unload
+        self._source_path = _source_path
+
+    def load(self):
+        if self._on_load:
+            self._on_load()
+
+    def unload(self):
+        if self._on_unload:
+            self._on_unload()
+'''
+
+_PLUGIN_API_NAME = "ravencode.runtime.plugins"
+_plugin_api: ModuleType | None = None
+
+
+def _plugin_api_module() -> ModuleType:
+    global _plugin_api
+    if _plugin_api is None:
+        namespace: dict[str, Any] = {}
+        exec(_PLUGIN_API_SOURCE, namespace)
+        # swapped in after the class exists: defining a class needs `__build_class__`, but what a plugin
+        # can reach is this dict as it is later, through `Plugin.__init__.__globals__`.
+        namespace["__builtins__"] = _restricted_builtins()
+        module = ModuleType(_PLUGIN_API_NAME)
+        module.__dict__.update({k: v for k, v in namespace.items() if not k.startswith("__")})
+        _plugin_api = module
+    return _plugin_api
+
+
+def _guarded_import(
+    name: str,
+    globals: dict[str, Any] | None = None,
+    locals: dict[str, Any] | None = None,
+    fromlist: tuple[str, ...] = (),
+    level: int = 0,
+) -> Any:
+    if level:
+        msg = f"plugin import of {name!r} is blocked: relative imports have no package to resolve against"
+        raise ImportError(msg)
+    if name == _PLUGIN_API_NAME:
+        return _plugin_api_module()
+    if name not in _SAFE_IMPORTS:
+        msg = f"plugin import of {name!r} is blocked - a plugin may import only {', '.join(sorted(_SAFE_IMPORTS))}"
+        raise ImportError(msg)
+    return _REAL_IMPORT(name, globals, locals, fromlist, level)
+
+
 # Per-plugin restricted builtins namespace. Injected into each plugin module's
 # __builtins__ (NOT the process-global builtins) so untrusted plugin code cannot
-# reach open()/__import__/exec/eval/getattr etc. while leaving the worker's own
+# reach open()/exec/eval/getattr etc. while leaving the worker's own
 # runtime completely intact. Mutating the global builtins module here would
 # corrupt the worker's own lazy imports (importlib.util, pathlib, ...).
+# `__import__` is present but guarded, because with no import at all a plugin cannot name Plugin.
 def _restricted_builtins() -> dict[str, Any]:
     try:
         import builtins as _b
     except Exception:
         logger.debug("[plugin_worker] failed to import builtins")
-        return {}
-    return {name: getattr(_b, name) for name in _BUILTINS_ALLOWLIST if hasattr(_b, name)}
+        return {"__import__": _guarded_import}
+    allowed = {name: getattr(_b, name) for name in _BUILTINS_ALLOWLIST if hasattr(_b, name)}
+    allowed["__import__"] = _guarded_import
+    return allowed
+
 
 
 def _apply_module_sandbox(mod: Any) -> None:
@@ -101,7 +209,8 @@ class PluginContext:
         self._plugin_name = plugin_name
 
     async def _request_capability(self, capability: str, **args: Any) -> Any:
-        fut: asyncio.Future[Any] = asyncio.get_event_loop().create_future()
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future[Any] = loop.create_future()
         cid = f"cap_{id(fut)}"
         _cap_futures[cid] = fut
         try:
@@ -154,31 +263,34 @@ def _deliver_capability_response(raw: str) -> None:
         fut.set_result(msg.get("result"))
 
 
-async def _background_stdin_reader() -> None:
-    loop = asyncio.get_event_loop()
-    reader = asyncio.StreamReader()
-    protocol = asyncio.StreamReaderProtocol(reader)
-    await loop.connect_read_pipe(lambda: protocol, sys.stdin)
-    while True:
-        try:
-            line = await reader.readline()
-        except EOFError:
-            break
-        if not line:
-            break
-        raw = line.decode("utf-8").strip()
+def _pump_stdin(loop: asyncio.AbstractEventLoop) -> None:
+    """Read one JSON command per line and hand it to the loop, from a thread.
+
+    `loop.connect_read_pipe(sys.stdin)` cannot be used here: `sys.stdin` is a text wrapper, and on
+    Windows the proactor read pipe transport dies with an internal AttributeError before any command
+    is answered, so every plugin registration failed with a closed connection. A blocking read in a
+    daemon thread needs no event-loop support at all, and the loop stays free to await capability
+    round-trips that arrive on the very same pipe.
+    """
+    for line in sys.stdin:
+        raw = line.strip()
         if not raw:
             continue
         try:
-            cmd = json.loads(raw)
+            msg = json.loads(raw)
         except json.JSONDecodeError:
             continue
-        if cmd.get("type") == "capability_response":
-            _deliver_capability_response(raw)
+        if msg.get("type") == "capability_response":
+            loop.call_soon_threadsafe(_deliver_capability_response, raw)
         else:
-            bg_task = asyncio.create_task(_handle_command(cmd))
-            _bg_tasks.add(bg_task)
-            bg_task.add_done_callback(_bg_tasks.discard)
+            loop.call_soon_threadsafe(_start_command, loop, msg)
+    loop.call_soon_threadsafe(loop.stop)
+
+
+def _start_command(loop: asyncio.AbstractEventLoop, cmd: dict[str, Any]) -> None:
+    task = loop.create_task(_handle_command(cmd))
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
 
 
 async def _handle_command(cmd: dict[str, Any]) -> None:
@@ -220,7 +332,7 @@ async def _do_register(cmd: dict[str, Any]) -> dict[str, Any]:
     with_timeout = cmd.get("register_timeout", 2.0)
     try:
         plugin = await asyncio.wait_for(
-            asyncio.get_event_loop().run_in_executor(
+            asyncio.get_running_loop().run_in_executor(
                 None,
                 _call_register,
                 mod,
@@ -285,7 +397,16 @@ async def _do_call_tool(cmd: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> None:
-    asyncio.run(_background_stdin_reader())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    threading.Thread(target=_pump_stdin, args=(loop,), daemon=True).start()
+    try:
+        loop.run_forever()
+    finally:
+        pending = [t for t in _bg_tasks if not t.done()]
+        for task in pending:
+            task.cancel()
+        loop.close()
 
 
 if __name__ == "__main__":

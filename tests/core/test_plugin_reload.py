@@ -1,352 +1,306 @@
+"""Hot reload of a user plugin, end to end: real worker, real edited file, no mocks.
+
+The unit suite (`tests/test_ravencode_runtime_plugins.py`) patches `_load_untrusted_plugin`, which
+cannot prove the part that matters: that editing a plugin file while the gateway runs swaps the
+interpreter that answers the tool, that the namespaced tool name survives the swap, and that the
+replaced worker is actually reaped rather than left running. Measured before this wave none of it
+could happen at all — `watch()` was started by nothing, `stop_watch()` and `stop_untrusted_plugins()`
+had zero callers, and a reload notification hook (`set_on_reload`) had no subscriber, so tool-surface
+invalidation had to move to the mutation site.
+"""
+
 from __future__ import annotations
 
 import asyncio
+import os
+import sys
+import threading
+from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+import ravencode.runtime.plugins as plugins_mod
+import ravencode.runtime.tools.registry as registry_mod
+from raven.core.plugin_loader import _WORKER_POOL
 from ravencode.runtime.plugins import (
-    Plugin,
-    PluginRegistry,
-    _load_plugin_from_file,
     discover_plugins,
-    get_plugin_registry,
     register_all_plugins,
-    register_internal_plugins,
+    shutdown_plugins,
 )
+from ravencode.runtime.tools.definitions import MODULE_TOOLS
+
+API_IMPORT = "from ravencode.runtime.plugins import Plugin\n\n"
+
+
+def _source(greeting: str, description: str) -> str:
+    return (
+        API_IMPORT
+        + f"""
+def register(ctx=None):
+    async def hello(name: str) -> str:
+        return "{greeting} " + name
+    return Plugin(name="greeter", tools={{"hello": {{"name": "hello", "description": "{description}",
+        "parameters": {{"type": "object", "properties": {{"name": {{"type": "string"}}}}}},
+        "handler": hello}}}})
+"""
+    )
 
 
 @pytest.fixture
-def registry():
-    r = PluginRegistry()
-    yield r
+def plugin_file(tmp_path: Path) -> Path:
+    plugin_dir = tmp_path / "greeter"
+    plugin_dir.mkdir()
+    f = plugin_dir / "plugin.py"
+    f.write_text(_source("hi", "Greet once."), encoding="utf-8")
+    return f
 
 
-class TestPluginRegistryWatch:
-    def test_track_file(self, registry, tmp_path):
-        f = tmp_path / "test.py"
-        f.write_text("# test")
-        registry._track_file(str(f))
-        assert str(f) in registry._file_mtimes
+@pytest.fixture(autouse=True)
+async def _clean_and_reap() -> AsyncIterator[None]:
+    def reset() -> None:
+        plugins_mod._plugin_registry = None
+        plugins_mod._plugins_attempted = False
+        plugins_mod._plugins_loop = None
+        registry_mod.invalidate_plugin_tools()
 
-    def test_track_nonexistent(self, registry):
-        registry._track_file("/nonexistent/file.py")
-        assert len(registry._file_mtimes) == 0
-
-    def test_find_plugin_by_source(self, registry):
-        p = Plugin(name="test", _source_path="/path/to/plugin.py")
-        registry.register(p)
-        found = registry._find_plugin_by_source("/path/to/plugin.py")
-        assert found == "test"
-
-    def test_find_plugin_by_source_not_found(self, registry):
-        assert registry._find_plugin_by_source("/nonexistent.py") is None
-
-    def test_set_on_reload(self, registry):
-        calls: list[str] = []
-        registry.set_on_reload(lambda name: calls.append(name))
-        assert registry._on_reload is not None
-
-    def test_watch_start_stop(self, registry):
-        asyncio.run(self._do_watch_test(registry))
-
-    async def _do_watch_test(self, registry):
-        await registry.watch(interval=0.5)
-        assert registry._watch_task is not None
-        assert not registry._watch_task.done()
-        await registry.stop_watch()
-        assert registry._watch_task is None
-
-    def test_watch_idempotent(self, registry):
-        async def go():
-            await registry.watch(interval=0.5)
-            await registry.watch(interval=0.5)
-            t = registry._watch_task
-            await registry.stop_watch()
-            assert t is not None
-        asyncio.run(go())
+    reset()
+    yield
+    await shutdown_plugins()
+    reset()
 
 
-class TestPluginRegistryReloadSuccess:
-    def test_reload_with_valid_file(self, tmp_path):
-        async def go():
-            src = tmp_path / "reloadable.py"
-            src.write_text("""
-from ravencode.runtime.plugins import Plugin
-def register():
-    return Plugin(name="reloadable", version="1.0")
-""")
-            reg = PluginRegistry()
-            p = Plugin(name="reloadable", _source_path=str(src))
-            reg.register(p)
-            # change file content
-            src.write_text("""
-from ravencode.runtime.plugins import Plugin
-def register():
-    return Plugin(name="reloadable", version="2.0")
-""")
-            reg._file_mtimes[str(src)] = src.stat().st_mtime - 1
+def _touch_newer(f: Path) -> None:
+    """NTFS can hand back an identical mtime for two writes in the same millisecond; make it newer."""
+    stat = f.stat()
+    os.utime(f, (stat.st_atime, stat.st_mtime + 2.0))
+
+
+async def _registered(plugin_file: Path) -> Any:
+    assert await register_all_plugins(plugin_file.parent.parent) == 1
+    return plugins_mod.get_plugin_registry()
+
+
+class TestReloadPicksUpAnEditedPlugin:
+    async def test_the_edited_tool_answers_differently_after_a_reload(self, plugin_file: Path) -> None:
+        reg = await _registered(plugin_file)
+        tool_name = "greeter.hello"
+        assert await reg.get_plugin("greeter").tools[tool_name]["handler"](name="bob") == "hi bob"
+
+        plugin_file.write_text(_source("yo", "Greet twice."), encoding="utf-8")
+        _touch_newer(plugin_file)
+        await reg._check_reload()
+
+        assert await reg.get_plugin("greeter").tools[tool_name]["handler"](name="bob") == "yo bob"
+
+    async def test_the_tool_surface_and_its_metadata_follow_the_reload(self, plugin_file: Path) -> None:
+        reg = await _registered(plugin_file)
+
+        def surface() -> dict[str, str]:
+            return {
+                d["function"]["name"]: d["function"]["description"]
+                for d in registry_mod.get_tool_definitions()
+                if d["function"]["name"].startswith("greeter.")
+            }
+
+        assert surface() == {"greeter.hello": "Greet once."}
+        plugin_file.write_text(_source("yo", "Greet twice."), encoding="utf-8")
+        _touch_newer(plugin_file)
+        await reg._check_reload()
+        assert surface() == {"greeter.hello": "Greet twice."}
+
+    async def test_the_replaced_worker_is_reaped_not_orphaned(self, plugin_file: Path) -> None:
+        reg = await _registered(plugin_file)
+        key = str(plugin_file)
+        first = _WORKER_POOL[key]._process
+        assert first is not None and first.returncode is None
+
+        plugin_file.write_text(_source("yo", "Greet twice."), encoding="utf-8")
+        _touch_newer(plugin_file)
+        await reg._check_reload()
+
+        second = _WORKER_POOL[key]._process
+        assert second is not None
+        assert second.pid != first.pid
+        # the child the reload replaced is gone: this is the leak `shutdown_plugins()` cannot cover
+        assert first.returncode is not None
+
+    async def test_an_unrelated_change_is_not_a_reload(self, plugin_file: Path) -> None:
+        reg = await _registered(plugin_file)
+        recorded = dict(reg._file_mtimes)
+        await reg._check_reload()
+        assert reg._file_mtimes == recorded
+        assert reg.get_plugin("greeter") is not None
+
+    async def test_a_file_that_stops_parsing_drops_the_plugin(self, plugin_file: Path) -> None:
+        reg = await _registered(plugin_file)
+        names = {d["function"]["name"] for d in registry_mod.get_tool_definitions()}
+        assert "greeter.hello" in names
+
+        plugin_file.write_text("def :\n", encoding="utf-8")
+        _touch_newer(plugin_file)
+        await reg._check_reload()
+        assert reg.get_plugin("greeter") is None
+        assert "greeter.hello" not in MODULE_TOOLS
+        assert "greeter.hello" not in {d["function"]["name"] for d in registry_mod.get_tool_definitions()}
+
+
+class TestWatcherDrivenReload:
+    async def test_the_watcher_applies_the_edit_on_its_own(self, plugin_file: Path) -> None:
+        reg = await _registered(plugin_file)
+        await reg.watch(interval=0.05)
+        try:
+            plugin_file.write_text(_source("ho", "Greet thrice."), encoding="utf-8")
+            _touch_newer(plugin_file)
+            description = ""
+            for _ in range(60):
+                await asyncio.sleep(0.05)
+                plugin = reg.get_plugin("greeter")
+                description = plugin.tools["greeter.hello"]["description"] if plugin else ""
+                if description == "Greet thrice.":
+                    break
+            assert description == "Greet thrice."
+        finally:
+            await reg.stop_watch()
+
+    async def test_the_reload_keeps_one_worker_per_plugin_file(self, plugin_file: Path) -> None:
+        reg = await _registered(plugin_file)
+        for greeting in ("a", "b", "c"):
+            plugin_file.write_text(_source(greeting, "d"), encoding="utf-8")
+            _touch_newer(plugin_file)
             await reg._check_reload()
-            # verify reloaded version (just check it still exists)
-            assert reg.get_plugin("reloadable") is not None
-        asyncio.run(go())
+        assert len(_WORKER_POOL) == 1
+        alive = [w for w in _WORKER_POOL.values() if w._process and w._process.returncode is None]
+        assert len(alive) == 1
+
+    async def test_shutdown_reaps_every_worker_and_the_watcher(self, plugin_file: Path) -> None:
+        reg = await _registered(plugin_file)
+        await reg.watch(interval=30.0)
+        assert reg._watch_task is not None
+        await shutdown_plugins()
+        assert reg._watch_task is None
+        assert _WORKER_POOL == {}
 
 
-class TestPluginRegistryReload:
-    def test_reload_nonexistent(self, registry):
-        async def go():
-            p = Plugin(name="test", _source_path="/nonexistent.py")
-            registry.register(p)
-            await registry._reload_plugin("test")
-            assert registry.get_plugin("test") is p  # still registered, file not found = no reload
-        asyncio.run(go())
-
-    def test_reload_no_source_path(self, registry):
-        async def go():
-            p = Plugin(name="test")
-            registry.register(p)
-            await registry._reload_plugin("test")
-            assert registry.get_plugin("test") is not None
-        asyncio.run(go())
-
-    def test_reload_plugin_file_not_found(self, registry):
-        async def go():
-            p = Plugin(name="test", _source_path="/tmp/nonexistent_plugin.py")
-            registry.register(p)
-            await registry._reload_plugin("test")
-            assert registry.get_plugin("test") is p
-        asyncio.run(go())
-
-    def test_reload_with_callback(self, registry):
-        async def go():
-            calls: list[str] = []
-            registry.set_on_reload(lambda name: calls.append(name))
-            p = Plugin(name="test", _source_path="/tmp/missing.py")
-            registry.register(p)
-            await registry._reload_plugin("test")
-            assert len(calls) == 0
-        asyncio.run(go())
+class TestDiscoveryOfTheRealTree:
+    async def test_discovering_the_shipped_example_plugin(self, tmp_path: Path) -> None:
+        """`plugins/example-http` is what the guide tells an operator to copy; it has to load."""
+        src = Path(__file__).resolve().parents[2] / "plugins" / "example-http"
+        if not (src / "plugin.py").exists():
+            pytest.skip("the example plugin is not in this checkout")
+        target = tmp_path / "example-http"
+        target.mkdir()
+        (target / "plugin.py").write_text((src / "plugin.py").read_text(encoding="utf-8"), encoding="utf-8")
+        found = await discover_plugins(tmp_path)
+        assert [p.name for p in found] == ["example-http"]
+        names = sorted(found[0].tools)
+        assert names == ["example-http.http_get", "example-http.http_post"]
+        assert found[0].tools["example-http.http_post"]["dangerous"] is True
 
 
-class TestPlugin:
-    def test_plugin_init(self):
-        p = Plugin(name="p1", version="1.0.0", tools={"tool1": {"name": "tool1"}})
-        assert p.name == "p1"
-        assert p.version == "1.0.0"
-        assert "tool1" in p.tools
+def _child_running(pid: int) -> bool:
+    """Whether a pid is still executing; an exited child nobody reaped does not count as running."""
+    if sys.platform == "win32":
+        import ctypes
 
-    def test_plugin_load_unload(self):
-        calls: list[str] = []
-        p = Plugin(name="p", on_load=lambda: calls.append("load"), on_unload=lambda: calls.append("unload"))
-        p.load()
-        assert "load" in calls
-        p.unload()
-        assert "unload" in calls
-
-
-class TestPluginRegistryBasics:
-    def test_register(self, registry):
-        p = Plugin(name="test")
-        registry.register(p)
-        assert registry.get_plugin("test") is p
-
-    def test_register_duplicate(self, registry):
-        p1 = Plugin(name="dup")
-        p2 = Plugin(name="dup")
-        registry.register(p1)
-        registry.register(p2)
-        assert registry.get_plugin("dup") is p1
-
-    def test_unregister(self, registry):
-        p = Plugin(name="test", tools={"t1": {}})
-        registry.register(p)
-        registry.unregister("test")
-        assert registry.get_plugin("test") is None
-        assert registry.get_tool_owner("t1") is None
-
-    def test_all_tools(self, registry):
-        p1 = Plugin(name="p1", tools={"a": {"name": "a"}})
-        p2 = Plugin(name="p2", tools={"b": {"name": "b"}})
-        registry.register(p1)
-        registry.register(p2)
-        tools = registry.all_tools()
-        assert "a" in tools
-        assert "b" in tools
-        assert len(tools) == 2
-
-    def test_plugins_property(self, registry):
-        p = Plugin(name="p")
-        registry.register(p)
-        assert registry.plugins == {"p": p}
-
-    def test_get_tool_owner(self, registry):
-        p = Plugin(name="p", tools={"t1": {}})
-        registry.register(p)
-        assert registry.get_tool_owner("t1") == "p"
-        assert registry.get_tool_owner("nonexistent") is None
-
-    def test_unregister_non_existent(self, registry):
-        registry.unregister("nonexistent")
-
-    def test_plugin_source_path(self, registry):
-        p = Plugin(name="with_path", _source_path="/tmp/some_plugin.py")
-        registry.register(p)
-        assert registry._find_plugin_by_source("/tmp/some_plugin.py") == "with_path"
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return False
+            return code.value == 259  # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    try:
+        return Path(f"/proc/{pid}/stat").read_text(encoding="utf-8").rsplit(")", 1)[1].split()[0] != "Z"
+    except (FileNotFoundError, IndexError):
+        return True
 
 
-class TestPluginRegistryAdvanced:
-    def test_track_file_oserror(self, registry):
-        registry._track_file("//invalid//path//")
-        assert len(registry._file_mtimes) == 0
-
-    def test_check_reload_oserror(self, registry):
-        async def go():
-            f = "/nonexistent/file.py"
-            registry._file_mtimes[f] = 123.0
-            await registry._check_reload()
-            assert f in registry._file_mtimes
-        asyncio.run(go())
-
-    def test_watch_double_start_stop(self, registry):
-        async def go():
-            await registry.watch(interval=0.5)
-            t1 = registry._watch_task
-            await registry.watch(interval=0.5)
-            t2 = registry._watch_task
-            assert t1 is t2
-            await registry.stop_watch()
-        asyncio.run(go())
-
-    def test_stop_watch_noop(self, registry):
-        async def go():
-            await registry.stop_watch()
-        asyncio.run(go())
-
-    def test_reload_success_path(self, registry, tmp_path):
-        async def go():
-            src = tmp_path / "good_plugin.py"
-            src.write_text("""
-from ravencode.runtime.plugins import Plugin
-def register():
-    return Plugin(name="good", version="1.0")
-""")
-            p = Plugin(name="good", _source_path=str(src))
-            registry.register(p)
-            calls: list[str] = []
-            registry.set_on_reload(lambda n: calls.append(n))
-            src.write_text("""
-from ravencode.runtime.plugins import Plugin
-def register():
-    return Plugin(name="good", version="2.0")
-""")
-            await asyncio.sleep(0.3)
-            # trigger reload by modifying mtime
-            src.touch()
-            await registry._check_reload()
-            await asyncio.sleep(0.1)
-        asyncio.run(go())
-
-    def test_discover_plugins_empty(self, tmp_path):
-        plugins = discover_plugins(tmp_path)
-        assert len(plugins) == 0
-
-    def test_discover_plugins_with_plugin(self, tmp_path):
-        from ravencode.runtime.plugins import discover_plugins as _dp
-        _dp(tmp_path / "nonexistent")
-        plugin_dir = tmp_path / "myplugin"
-        plugin_dir.mkdir()
-        (plugin_dir / "plugin.py").write_text("""
-from ravencode.runtime.plugins import Plugin
-def register():
-    return Plugin(name="myplugin", tools={"t1": {"name": "t1"}})
-""")
-        plugins = discover_plugins(tmp_path)
-        assert isinstance(plugins, list)
-        assert all(isinstance(p, Plugin) for p in plugins)
-
-    def test_register_all_plugins(self, tmp_path):
-        count = register_all_plugins(tmp_path, watch=False)
-        assert count >= 0
-
-    def test_get_plugin_registry_singleton(self):
-        assert get_plugin_registry() is not None
-
-    def test_register_internal_plugins_empty(self, tmp_path):
-        count = register_internal_plugins(tmp_path)
-        assert count == 0
-
-    def test_register_internal_plugins_with_coroutine(self, tmp_path):
-        plugin_dir = tmp_path / "test_int"
-        plugin_dir.mkdir()
-        (plugin_dir / "plugin.py").write_text("""
-async def my_tool(param: str = "") -> str:
-    return f"hello {param}"
-""")
-        count = register_internal_plugins(tmp_path)
-        assert count >= 1
-        plugin = get_plugin_registry().get_plugin("test_int")
-        assert plugin is not None
-        assert "test_int.my_tool" in plugin.tools
-
-    def test_discover_plugins_with_invalid(self, tmp_path):
-        from ravencode.runtime.plugins import discover_plugins
-        plugin_dir = tmp_path / "badplugin"
-        plugin_dir.mkdir()
-        f = plugin_dir / "plugin.py"
-        f.write_text("this is not valid python !!!")
-        plugins = discover_plugins(tmp_path)
-        assert len(plugins) == 0  # malformed, skipped gracefully
+async def _wait_until_dead(pid: int, attempts: int = 40) -> bool:
+    for _ in range(attempts):
+        if not _child_running(pid):
+            return True
+        await asyncio.sleep(0.05)
+    return False
 
 
-class TestLoadPluginFromFile:
-    def test_load_from_nonexistent(self, tmp_path):
-        p = _load_plugin_from_file(tmp_path / "nonexistent.py")
-        assert p is None
+def _on_a_dying_loop(plugin_file: Path) -> tuple[int, Any]:
+    """Register a plugin on its own event loop in a thread, and let that loop close.
 
-    def test_load_malformed(self, tmp_path):
-        f = tmp_path / "bad_plugin.py"
-        f.write_text("this is not valid python !!!")
-        p = _load_plugin_from_file(f)
-        assert p is None
+    This is the shape the process-global state cannot survive on its own: a surface that came and went
+    (`asyncio.run`, a TUI session, the next request cycle) leaves its worker in the pool with an owner
+    loop that no longer runs. Doing it in a thread is what lets the test then act on a second live loop.
+    """
 
-    def test_load_empty_spec(self, tmp_path):
-        f = tmp_path / "empty.py"
-        f.write_text("")
-        p = _load_plugin_from_file(f)
-        assert p is None  # no register function
+    def run() -> tuple[int, Any]:
+        async def body() -> tuple[int, Any]:
+            assert await register_all_plugins(plugin_file.parent.parent) == 1
+            worker = _WORKER_POOL[str(plugin_file)]
+            assert worker._process is not None
+            return worker._process.pid, worker
 
-    def test_load_with_register(self, tmp_path):
-        f = tmp_path / "working_plugin.py"
-        f.write_text("""
-from ravencode.runtime.plugins import Plugin
-def register():
-    return Plugin(name="test_plugin", version="1.0", tools={"tool_x": {"name": "tool_x"}})
-""")
-        p = _load_plugin_from_file(f)
-        assert p is not None
-        assert p.name == "test_plugin"
-        assert "tool_x" in p.tools
+        return asyncio.run(body())
+
+    result: dict[str, Any] = {}
+
+    def target() -> None:
+        try:
+            result["value"] = run()
+        except BaseException as exc:
+            result["error"] = exc
+
+    thread = threading.Thread(target=target)
+    thread.start()
+    thread.join(timeout=30.0)
+    assert not thread.is_alive(), "the first loop never finished"
+    if "error" in result:
+        raise result["error"]
+    value: tuple[int, Any] = result["value"]
+    return value
 
 
-class TestPluginRegistryConcurrency:
-    def test_register_unregister_race(self, registry):
-        async def go():
-            p = Plugin(name="race")
-            registry.register(p)
-            registry.unregister("race")
-            registry.register(p)
-            assert registry.get_plugin("race") is p
-        asyncio.run(go())
+class TestAWorkerFromAClosedLoop:
+    """The pool is process-global; the pipes are not. Both facts have to survive each other.
 
-    def test_watch_detects_mtime_change(self, registry, tmp_path):
-        async def go():
-            plugin_file = tmp_path / "test_plugin.py"
-            plugin_file.write_text("")
-            p = Plugin(name="watch_test", _source_path=str(plugin_file))
-            registry.register(p)
-            old_mtime = registry._file_mtimes.get(str(plugin_file))
-            await asyncio.sleep(0.1)
-            plugin_file.write_text("# changed")
-            await registry._check_reload()
-            assert old_mtime is not None
-        asyncio.run(go())
+    Measured, 8 tests failing in the full suite: a surface that started its worker on an
+    `asyncio.run` that had since ended still held the pool entry and the registry entry, so the next
+    surface offered a tool nobody could answer, and its own shutdown awaited a future attached to the
+    closed loop — `RuntimeError: got Future attached to a different loop`, out of the exit path, with
+    the child left running.
+    """
+
+    async def test_shutting_down_a_worker_another_loop_started_does_not_raise(self, plugin_file: Path) -> None:
+        pid, orphan = _on_a_dying_loop(plugin_file)
+        assert len(_WORKER_POOL) == 1
+        await shutdown_plugins()
+        assert _WORKER_POOL == {}
+        assert await _wait_until_dead(pid), f"worker pid {pid} outlived the shutdown"
+        with pytest.raises(RuntimeError, match="another event loop"):
+            await orphan.send_command({"type": "ping"})
+
+    async def test_the_next_loop_gets_a_worker_it_can_actually_call(self, plugin_file: Path) -> None:
+        _on_a_dying_loop(plugin_file)
+        stale = plugins_mod.get_plugin_registry().get_plugin("greeter")
+        assert stale is not None
+        assert await register_all_plugins(plugin_file.parent.parent) == 1
+        fresh = plugins_mod.get_plugin_registry().get_plugin("greeter")
+        assert fresh is not None and fresh is not stale
+        answer = await asyncio.wait_for(fresh.tools["greeter.hello"]["handler"](name="bob"), timeout=10.0)
+        assert answer == "hi bob"
+
+    async def test_a_worker_this_loop_started_is_not_spawned_twice(self, plugin_file: Path) -> None:
+        assert await register_all_plugins(plugin_file.parent.parent) == 1
+        first = _WORKER_POOL[str(plugin_file)]
+        assert await register_all_plugins(plugin_file.parent.parent) == 1
+        assert _WORKER_POOL[str(plugin_file)] is first

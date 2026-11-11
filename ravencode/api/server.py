@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from ravencode.runtime.agent_core import AgentConfig, AgentEvent, EventEmitter, ReActAgent
 from ravencode.runtime.context import Conversation
 from ravencode.runtime.mcp_tools import ensure_mcp_tools
+from ravencode.runtime.plugins import ensure_plugin_tools, shutdown_plugins
 from ravencode.runtime.tools import get_tool_definitions
 
 
@@ -109,11 +110,13 @@ def _check_auth(authorization: str = "") -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    await ensure_plugin_tools(watch=True)
     try:
         await ensure_mcp_tools()
     except Exception as exc:  # MCP is optional; never block the server
         logger.warning("MCP tools unavailable: {}", exc)
     yield
+    await shutdown_plugins()
 
 
 app = FastAPI(

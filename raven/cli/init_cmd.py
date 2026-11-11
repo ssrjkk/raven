@@ -31,8 +31,6 @@ RAVEN_JSON_TEMPLATE = """\
     "web_port": {web_port}
   }},
   "workspace": "workspace",
-  "plugins_dir": "plugins",
-  "skills_dir": "workspace/skills",
   "paths": {{
     "skills": ["workspace/skills"],
     "commands": [".raven/commands"],
@@ -183,8 +181,6 @@ def _write_raven_json(llm: dict[str, str], channels: dict[str, Any], security: d
         "channels": channels_json,
         "security": security,
         "workspace": "workspace",
-        "plugins_dir": "plugins",
-        "skills_dir": "workspace/skills",
         "paths": {
             "skills": ["workspace/skills"],
             "commands": [".raven/commands"],

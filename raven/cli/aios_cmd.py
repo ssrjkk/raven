@@ -1,12 +1,29 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import click
 import uvicorn
 from fastapi import FastAPI
 
 from raven.core.logging import setup_logging
+from ravencode.runtime.plugins import ensure_plugin_tools, running_plugin_tools, shutdown_plugins
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Register user plugins on the loop this server will run their tools on, and clean them up.
+
+    `raven aios gateway` is the command README and AGENTS.md tell an operator to run; without this the
+    bridge's WebSocket path registered plugins per connection and every HTTP path answered without them.
+    """
+    await ensure_plugin_tools(watch=True)
+    try:
+        yield
+    finally:
+        await shutdown_plugins()
 
 
 def create_aios_app() -> FastAPI:
@@ -23,7 +40,7 @@ def create_aios_app() -> FastAPI:
     )
     from raven.core.watermark import install_fastapi_watermark
 
-    app = FastAPI(title="AI-OS-MVP Gateway")
+    app = FastAPI(title="AI-OS-MVP Gateway", lifespan=_lifespan)
     install_fastapi_watermark(app)
     app.middleware("http")(request_id_middleware)
     app.middleware("http")(rate_limit_middleware)
@@ -60,9 +77,10 @@ def run(task: str, agent: str):
     from raven.core.gateway.aios_adapter import get_aios_adapter
 
     async def _run():
-        result = await get_aios_adapter().run_agent(task, agent)
-        click.echo(f"Agent: {agent}")
-        click.echo(f"Result: {result}")
+        async with running_plugin_tools():
+            result = await get_aios_adapter().run_agent(task, agent)
+            click.echo(f"Agent: {agent}")
+            click.echo(f"Result: {result}")
 
     asyncio.run(_run())
 

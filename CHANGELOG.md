@@ -82,6 +82,43 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
 ### Fixed
+- User plugins loaded nowhere. `docs/plugins.md` described a sandboxed `register(ctx) -> Plugin`
+  contract, and the code behind it exists — but loading is async (the worker's stdio pipes belong to the
+  loop that started it) and every surface that builds a tool surface called only the sync path, which
+  did nothing: `ensure_plugin_tools` had 0 entry points, so a `plugins/` directory on disk contributed
+  0 tools to 0 model calls. 7 modules now hand the surface its plugins and shut the workers down on
+  exit — the aios bridge, the ravencode TUI and HTTP server, the RavenFlow daemon, `raven start`,
+  `raven code` (including `--parallel`) and `raven aios`. The tool-surface cache had a second bug in
+  front of it: invalidation lived in a hook nobody called, so a reloaded plugin kept its old schema
+  (or its removed tool stayed offered) for the life of the process; it now happens at the mutation
+  site, in `register`/`unregister`, and a reload that replaces its worker reaps the old one.
+- That shutdown then found the other half of the loop-affinity problem. The pool and the registry are
+  process globals while a worker's pipes belong to the loop that spawned it, so the next surface in the
+  same process — the next `asyncio.run` — inherited an entry whose owner loop had closed: it offered the
+  tool, every call to it would wait the full timeout, and `stop_untrusted_plugins()` raised
+  `got Future attached to a different loop` out of the exit path with the child still running. 8 tests
+  hit this. A worker now records the loop that started it, shutdown terminates a foreign worker without
+  awaiting its future, a command that cannot reach its worker fails in the message rather than in the
+  timeout, and `register_all_plugins` re-registers on the loop that is asking — so the tool answers
+  again instead of hanging. Proven both ways: the previous `stop()` re-run on a second loop raises, the
+  current one returns with the pool empty and the child dead.
+- Two names for the plugin directory, one of them a lie. `settings.plugins_dir` was written by
+  `raven init`/`raven setup` and read by nothing, while the resolver that actually answers 6 layers
+  (`PLUGINS_DIR`/`RAVEN_PLUGINS_DIR` → `raven.json paths.plugins` → `.raven.local/plugins` →
+  `.raven/plugins` → `~/.config/raven/plugins` → legacy `plugins/`) had zero consumers for the
+  `plugins` kind. `plugins_dir`/`skills_dir` are gone from `raven.json`, the onboarding writes the key
+  the resolver reads, `raven doctor` prints the resolved list under *User Plugins*, and a test pins the
+  JSON `raven init` emits to the schema the resolver parses, so the two cannot drift again.
+- The shipped example plugin could not load. `plugins/example-http` opens with
+  `from __future__ import annotations`, and the sandbox allowlist did not name `__future__`, so the one
+  plugin the repository hands an operator failed at registration with `plugin import of '__future__' is
+  blocked` — visible only in a log line, on a surface that never asked. A host-side capability that
+  raised (a denied file write, a bad path) was worse: the exception escaped the protocol loop, broke
+  the in-flight command and left the worker waiting 60 s for a reply that could not arrive. Both are
+  fixed and both are covered by tests that run the real child interpreter end to end. `raven/__init__.py`,
+  `raven/core/__init__.py` and `ravencode/__init__.py` were eager barrels, so each worker launch
+  imported the gateway, every LLM provider and the database before importing one plugin; they resolve
+  on first attribute access now and a worker starts in ~0.17 s.
 - `policy/tools.json` shipped 5 rules — 3 of them deny lists — that no line of production code ever
   opened. `ToolPolicyEvaluator` read only `TOOLS_DENY`/`TOOLS_ALLOW`/the profile, so `docs/concepts/architecture.md`
   listed `PolicyEngine` as a security-layer control while the code that gates every tool call never
@@ -334,6 +371,16 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
 - The plugin loader published `inspect.getmembers(mod, iscoroutinefunction)`, which returns the coroutines a `plugin.py` merely *imported*: the SSRF helper reached the model as `api.safe_fetch_async` and `browser.safe_fetch_async`, and the code plugin's runner appeared a second time as `memory.run_python` — three tools whose names no operator had written down and no policy rule addressed. The loader now publishes only a coroutine defined in that `plugin.py`, under its own name, and `cron.register_callback` became an ordinary function because its one argument is a Python callable a JSON tool call cannot supply. Surface: 46 tools → 42. 23 of the 46 had no docstring, so their description was the bare function name; all 42 now carry a sentence and every parameter a description (19 had none), `**kwargs` is no longer listed as required (2 of 46 did), and the extractor keeps a description wrapped onto a continuation line instead of cutting it. Three texts that claimed more than the code does were corrected: `memory.forget` said "Forgot" when nothing was stored under the key, `sessions.sessions_send` read as delivery, `files.glob` reported the matches it truncated. `tests/test_plugin_surface_integrity.py` (21 gates) holds the count, the provenance of every handler and the description floor, and four loader mutations — publish imports, drop the bare-name warning, rerequire `**kwargs`, restore the old parameter parser — fail 7, 1, 1 and 3 tests
 
 ### Security
+- The plugin sandbox escaped through the class it teaches plugins to import. `ravencode.runtime.plugins`
+  was on the import allowlist, so `Plugin.__init__.__globals__` — reachable from any registered tool
+  handler, in an interpreter that has the host's filesystem — was that module's real namespace, which
+  held `Path`. Proved before fixing: a 12-line plugin read `data/web_secret_key` and returned the live
+  64-character key. The import is now answered inside the worker by a stand-in `Plugin` whose namespace
+  holds the class and the restricted builtins and nothing else (`['Plugin', '__builtins__']`), and the
+  second layer is that the child holds nothing worth taking: it starts from a filtered environment
+  (15 variables against the parent's 107, none credential-named) with the checkout off `PYTHONPATH`,
+  because no builtins allowlist stops an `object.__subclasses__()` walk. `docs/plugins.md` says exactly
+  this, including the limit.
 - The workspace boundary had two names, and neither was the root a deployment configured.
   `raven/core/workspace.py:workspace_root` decides it per call (process pin from `--workspace` or
   gateway startup → `RAVEN_WORKSPACE` → `WORKSPACE_PATH` → the working directory), but

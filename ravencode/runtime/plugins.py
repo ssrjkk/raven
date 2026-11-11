@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import importlib.util
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -46,7 +45,6 @@ class PluginRegistry:
         self._tool_map: dict[str, str] = {}
         self._file_mtimes: dict[str, float] = {}
         self._watch_task: asyncio.Task[None] | None = None
-        self._on_reload: Callable[[str], None] | None = None
 
     def register(self, plugin: Plugin) -> None:
         if plugin.name in self._plugins:
@@ -58,6 +56,7 @@ class PluginRegistry:
             self._tool_map[tool_name] = plugin.name
         if plugin._source_path:
             self._track_file(plugin._source_path)
+        _invalidate_tool_surface()
         logger.info("Plugin registered: {} ({} tools)", plugin.name, len(plugin.tools))
 
     def unregister(self, name: str) -> None:
@@ -66,9 +65,17 @@ class PluginRegistry:
             for tool_name in list(plugin.tools):
                 self._tool_map.pop(tool_name, None)
             plugin.unload()
+            _invalidate_tool_surface()
 
     def get_plugin(self, name: str) -> Plugin | None:
         return self._plugins.get(name)
+
+    def plugin_by_source(self, source_path: str) -> Plugin | None:
+        """The plugin loaded from this file, if any — a reload reuses the worker rather than forking one."""
+        for plugin in self._plugins.values():
+            if plugin._source_path == source_path:
+                return plugin
+        return None
 
     def get_tool_owner(self, tool_name: str) -> str | None:
         return self._tool_map.get(tool_name)
@@ -83,9 +90,6 @@ class PluginRegistry:
     def plugins(self) -> dict[str, Plugin]:
         return dict(self._plugins)
 
-    def set_on_reload(self, callback: Callable[[str], None] | None) -> None:
-        self._on_reload = callback
-
     def _track_file(self, path: str) -> None:
         try:
             p = Path(path)
@@ -95,8 +99,14 @@ class PluginRegistry:
             pass
 
     async def watch(self, interval: float = 3.0) -> None:
-        if self._watch_task is not None:
-            return
+        if self._watch_task is not None and not self._watch_task.done():
+            if self._watch_task.get_loop() is asyncio.get_running_loop():
+                return
+            # A task in another loop cannot be awaited or cancelled from here, and it will never run
+            # again if that loop has closed. Drop it and poll from the loop that is asking.
+            logger.debug("[plugins] reload watcher belonged to another loop, replacing it")
+            self._watch_task = None
+
         async def _poll() -> None:
             while True:
                 await asyncio.sleep(interval)
@@ -105,11 +115,15 @@ class PluginRegistry:
         logger.debug("[plugins] watch started (interval={}s)", interval)
 
     async def stop_watch(self) -> None:
-        if self._watch_task:
-            self._watch_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._watch_task
-            self._watch_task = None
+        task, self._watch_task = self._watch_task, None
+        if task is None:
+            return
+        if task.get_loop() is not asyncio.get_running_loop():
+            logger.debug("[plugins] reload watcher belongs to another loop, reference dropped")
+            return
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
         logger.debug("[plugins] watch stopped")
 
     async def _check_reload(self) -> None:
@@ -142,15 +156,53 @@ class PluginRegistry:
             return
         self.unregister(name)
         try:
-            new_plugin = _load_plugin_from_file(source)
+            new_plugin = await _load_untrusted_plugin(source.parent)
             if new_plugin:
-                new_plugin._source_path = str(source)
                 self.register(new_plugin)
-                if self._on_reload:
-                    self._on_reload(name)
                 logger.info("[plugins] reloaded: {}", name)
         except Exception as exc:
             logger.error("[plugins] reload failed for {}: {}", name, exc)
+
+
+def _invalidate_tool_surface() -> None:
+    """Drop the cached tool definitions so the next model call sees the registry as it is now.
+
+    Called from register/unregister rather than from the loading entry points: a plugin retracted by a
+    reload would otherwise stay on the surface and the model would keep calling a tool the worker no
+    longer has.
+    """
+    from ravencode.runtime.tools.registry import invalidate_plugin_tools
+
+    invalidate_plugin_tools()
+
+
+async def shutdown_plugins() -> None:
+    """Stop the reload watcher and every sandbox interpreter this process started.
+
+    Each user plugin runs in its own interpreter with an open stdin pipe; a server that exits without
+    this leaves those children behind, and the operator sees orphan `python -P plugin_worker.py`
+    processes after the app is gone.
+    """
+    from raven.core.plugin_loader import stop_untrusted_plugins
+
+    await get_plugin_registry().stop_watch()
+    await stop_untrusted_plugins()
+
+
+@contextlib.asynccontextmanager
+async def running_plugin_tools(*, watch: bool = False) -> AsyncIterator[None]:
+    """Hold the user-plugin tool surface open for one async flow.
+
+    Registration and the tool calls it enables must share a loop: a sandbox worker's pipes belong to the
+    loop that started it, so a flow that registered in one `asyncio.run` and called tools in the next
+    would reach a worker whose loop had already closed. Servers whose loop outlives a request can also
+    call `ensure_plugin_tools` and `shutdown_plugins` at their own start and stop.
+    """
+    await ensure_plugin_tools(watch=watch)
+    try:
+        yield
+    finally:
+        await shutdown_plugins()
 
 
 _plugin_registry: PluginRegistry | None = None
@@ -163,167 +215,155 @@ def get_plugin_registry() -> PluginRegistry:
     return _plugin_registry
 
 
-def discover_plugins(plugins_dir: str | Path | None = None) -> list[Plugin]:
-    """Scan directories for plugin.py files and load them (untrusted → subprocess worker).
+def plugin_directories(plugins_dir: str | Path | None = None) -> list[Path]:
+    """The directories user plugins are read from, in precedence order.
 
-    Search order:
-    1. Explicit plugins_dir parameter
-    2. `plugins/` at project root
-    3. `~/.config/raven/plugins/`
+    The artifact resolver owns this list — env (`PLUGINS_DIR`/`RAVEN_PLUGINS_DIR`), `raven.json`
+    `paths.plugins`, `.raven.local/plugins`, `.raven/plugins`, `~/.config/raven/plugins` and the
+    legacy `plugins/` next to the checkout. Naming two of them here instead would have given the
+    same operator setting two answers, and the resolver already filters to directories that exist.
     """
-    candidates = []
-    if plugins_dir:
-        candidates.append(Path(plugins_dir).expanduser().resolve())
-    candidates.append(Path.cwd() / "plugins")
-    candidates.append(Path.home() / ".config" / "raven" / "plugins")
+    if plugins_dir is not None:
+        return [Path(plugins_dir).expanduser().resolve()]
+    from raven.core.artifacts.paths import ArtifactPaths
 
-    found: list[Plugin] = []
+    return ArtifactPaths.resolve().plugins
+
+
+def _plugin_files(directories: list[Path]) -> list[Path]:
+    found: list[Path] = []
     seen: set[str] = set()
-
-    for base in candidates:
+    for base in directories:
         if not base.is_dir():
             continue
         for entry in sorted(base.iterdir()):
             if not entry.is_dir():
                 continue
             plugin_file = entry / "plugin.py"
-            if not plugin_file.is_file():
+            if not plugin_file.is_file() or entry.name in seen:
                 continue
-            if entry.name in seen:
+            seen.add(entry.name)
+            found.append(plugin_file)
+    return found
+
+
+def plugin_files(plugins_dir: str | Path | None = None) -> list[Path]:
+    """Every user plugin source this process can load, in the order the resolver prefers.
+
+    Read-only, so a surface that reports the state of plugins (doctor) does not have to start a sandbox
+    interpreter just to count what is on disk.
+    """
+    return _plugin_files(plugin_directories(plugins_dir))
+
+
+async def discover_plugins(plugins_dir: str | Path | None = None) -> list[Plugin]:
+    """Load every user plugin on disk through the untrusted worker.
+
+    Async because the worker is a subprocess whose pipes belong to the loop that started it: a sync
+    wrapper had to own the loop, and a loop closed after registration left the pooled worker
+    unreachable for the one call that mattered — running a tool.
+    """
+    registry = get_plugin_registry()
+    from raven.core.plugin_loader import worker_state
+
+    found: list[Plugin] = []
+    for plugin_file in plugin_files(plugins_dir):
+        source = str(plugin_file)
+        try:
+            if (live := registry.plugin_by_source(source)) is not None and worker_state(source) != "gone":
+                found.append(live)
                 continue
-            try:
-                plugin = _load_untrusted_plugin_via_worker(plugin_file)
-                if plugin:
-                    plugin._source_path = str(plugin_file)
-                    found.append(plugin)
-                    seen.add(entry.name)
-            except Exception as exc:
-                logger.error("Failed to load plugin from {}: {}", plugin_file, exc)
+            plugin = await _load_untrusted_plugin(plugin_file.parent)
+        except Exception as exc:
+            logger.error("Failed to load plugin from {}: {}", plugin_file, exc)
+            continue
+        if plugin:
+            found.append(plugin)
 
     logger.info("Discovered {} plugin(s)", len(found))
     return found
 
 
-def _load_untrusted_plugin_via_worker(path: Path) -> Plugin | None:
+async def _load_untrusted_plugin(plugin_dir: Path) -> Plugin | None:
+    """Register one plugin directory and wrap its tools for this process's loop.
+
+    Tools are namespaced by the plugin directory (`weather.get_forecast`), which is what the plugin
+    guide documents for the bundled stack and what keeps two plugins from publishing one name. It
+    also gives every tool a policy-addressable identity: a bare `http_post` from a plugin would have
+    been a different string from the `api.http_post` the ruleset denies.
+    """
     from raven.core.plugin_loader import call_untrusted_tool, register_untrusted_plugin
 
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        result = asyncio.run(register_untrusted_plugin(path))
-    else:
-        result = loop.run_until_complete(register_untrusted_plugin(path))
+    result = await register_untrusted_plugin(plugin_dir)
     if result is None:
         return None
 
-    name = result["name"]
-    tools_meta = result.get("tools", [])
-    plugin_file = str(path)
+    plugin_file = str(plugin_dir / "plugin.py")
+    namespace = plugin_dir.name
 
-    def _make_handler(tool_name: str) -> Callable[..., Awaitable[str]]:
+    def _make_handler(worker_tool: str) -> Callable[..., Awaitable[str]]:
         async def _handler(**kwargs: Any) -> str:
-            return await call_untrusted_tool(plugin_file, tool_name, kwargs)
+            return await call_untrusted_tool(plugin_file, worker_tool, kwargs)
 
         return _handler
 
     tools: dict[str, dict[str, Any]] = {}
-    for t in tools_meta:
-        tname = t["name"]
-        tools[tname] = {
-            "name": tname,
+    for t in result.get("tools", []):
+        tool_name = f"{namespace}.{t['name']}"
+        tools[tool_name] = {
+            "name": tool_name,
             "dangerous": t.get("dangerous", False),
             "description": t.get("description", ""),
             "parameters": t.get("parameters", {}),
-            "handler": _make_handler(tname),
+            "handler": _make_handler(t["name"]),
         }
 
-    return Plugin(name=name, tools=tools)
+    return Plugin(name=result["name"], tools=tools, _source_path=plugin_file)
 
 
-def _load_plugin_from_file(path: Path) -> Plugin | None:
-    try:
-        spec = importlib.util.spec_from_file_location(f"plugin_{path.parent.name}", str(path))
-        if not spec or not spec.loader:
-            logger.warning("Cannot load plugin spec: {}", path)
-            return None
+async def register_all_plugins(plugins_dir: str | Path | None = None, watch: bool = False) -> int:
+    """Load every user plugin into the registry the tool surface drains.
 
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
+    Call this from an async entry point; `watch` then keeps it hot-reloading on that same loop. A plugin
+    whose worker was started by a loop that has since closed is dropped and re-registered here, so a
+    second surface in one process gets a worker it can actually talk to instead of a tool that times out.
+    """
+    from raven.core.plugin_loader import worker_state
 
-        if not hasattr(mod, "register"):
-            logger.warning("Plugin {} has no register() function", path.parent.name)
-            return None
-
-        plugin = mod.register()
-        if not isinstance(plugin, Plugin):
-            logger.warning("Plugin {} register() did not return a Plugin instance", path.parent.name)
-            return None
-
-        plugin._source_path = str(path)
-        return plugin
-    except SyntaxError as exc:
-        logger.warning("Plugin {} has syntax error: {}", path.parent.name, exc)
-        return None
-    except FileNotFoundError:
-        logger.warning("Plugin file not found: {}", path)
-        return None
-    except Exception as exc:
-        logger.warning("Failed to load plugin {}: {}", path.parent.name, exc)
-        return None
-
-
-def register_all_plugins(plugins_dir: str | Path | None = None, watch: bool = True) -> int:
     registry = get_plugin_registry()
-    plugins = discover_plugins(plugins_dir)
+    for name, plugin in list(registry.plugins.items()):
+        if plugin._source_path and worker_state(plugin._source_path) == "gone":
+            logger.debug("[plugins] {} has no worker on this loop, re-registering", name)
+            registry.unregister(name)
+    plugins = await discover_plugins(plugins_dir)
     for p in plugins:
-        registry.register(p)
+        if registry.get_plugin(p.name) is not p:
+            registry.register(p)
     if watch:
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(registry.watch(interval=3.0))  # noqa: RUF006
-        except RuntimeError:
-            pass
+        await registry.watch()
     return len(plugins)
 
 
-def register_internal_plugins(internal_plugins_dir: str | Path | None = None) -> int:
-    """Bridge: discover internal Raven plugins (raven/plugins/) and register them
-    as external Plugin objects. Returns the number of plugins registered."""
-    from raven.core.plugin_loader import PluginLoader
+_plugins_attempted = False
+_plugins_loop: asyncio.AbstractEventLoop | None = None
 
-    loader = PluginLoader()
-    if internal_plugins_dir:
-        base = Path(internal_plugins_dir)
-    else:
-        base = Path(__file__).resolve().parent.parent.parent / "raven" / "plugins"
 
-    count = 0
-    registry = get_plugin_registry()
-    for entry in sorted(base.iterdir()):
-        if not entry.is_dir():
-            continue
-        plugin_file = entry / "plugin.py"
-        if not plugin_file.is_file():
-            continue
-        try:
-            tools_from_dir = loader.load_from_dir(entry)
-            if not tools_from_dir:
-                continue
-            name = entry.name
-            tools: dict[str, dict[str, Any]] = {}
-            for t in tools_from_dir:
-                tools[t.name] = {
-                    "name": t.name,
-                    "dangerous": False,
-                    "description": t.description,
-                    "parameters": t.parameters,
-                    "handler": t.handler,
-                }
-            plugin = Plugin(name=name, tools=tools)
-            registry.register(plugin)
-            count += 1
-            logger.info("Registered internal plugin via bridge: {} ({} tool(s))", name, len(tools))
-        except Exception as exc:
-            logger.warning("Failed to bridge internal plugin {}: {}", entry.name, exc)
-    logger.info("Bridged {} internal plugin(s)", count)
-    return count
+async def ensure_plugin_tools(*, watch: bool = False, force: bool = False) -> int:
+    """Register user plugins once per loop, from an async entry point.
+
+    Every surface that builds a tool list reaches this beside `ensure_mcp_tools`: the loading is
+    async, so it cannot happen inside the synchronous first call of `get_tool_definitions`, and a
+    surface that simply did not call it would report a plugin-free agent. "Once" is per event loop,
+    not per process — a worker started by a loop that has ended answers nothing on the next one.
+    """
+    global _plugins_attempted, _plugins_loop
+    loop = asyncio.get_running_loop()
+    if _plugins_attempted and _plugins_loop is loop and not force:
+        return 0
+    _plugins_attempted = True
+    _plugins_loop = loop
+    try:
+        return await register_all_plugins(watch=watch)
+    except Exception as exc:
+        logger.warning("Plugin discovery unavailable: {}", exc)
+        return 0

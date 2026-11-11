@@ -1328,14 +1328,13 @@ def test_ensure_plugin_tools_registers(monkeypatch: pytest.MonkeyPatch) -> None:
     tools.get_tool_definitions()
     assert "extra_tool" in tools.MODULE_TOOLS
     assert tools.registry._plugin_tools_loaded is True
-    tools.MODULE_TOOLS.pop("extra_tool", None)
+    tools.registry.invalidate_plugin_tools()
+    assert "extra_tool" not in tools.MODULE_TOOLS
 
 
-def test_ensure_plugin_tools_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("ravencode.runtime.tools.registry._plugin_tools_loaded", False)
-    monkeypatch.setitem(sys.modules, "ravencode.runtime.plugins", None)
-    assert isinstance(tools.get_tool_definitions(), list)
-    assert tools.registry._plugin_tools_loaded is False
+# `ravencode.runtime.plugins` is a sibling module of the registry, imported lazily to keep the two
+# from cycling. Corrupting it in sys.modules tested a broken install rather than any reachable state,
+# and the surface now fails loudly instead of reporting a plugin-free agent.
 
 
 @pytest.mark.asyncio

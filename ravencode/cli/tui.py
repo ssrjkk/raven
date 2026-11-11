@@ -17,6 +17,7 @@ from ravencode.runtime.commands import CustomCommand, discover_commands
 from ravencode.runtime.context import Conversation
 from ravencode.runtime.mcp_tools import ensure_mcp_tools
 from ravencode.runtime.permissions import PermissionManager
+from ravencode.runtime.plugins import ensure_plugin_tools, shutdown_plugins
 from ravencode.runtime.question import set_question_callback, stdin_question_callback
 from ravencode.runtime.tools import get_tool_definitions
 
@@ -167,6 +168,7 @@ async def run_custom_command(cmd: CustomCommand, args: str) -> None:
 async def main_loop(session_id: str | None = None) -> None:
     global _session_agent
     set_question_callback(stdin_question_callback)
+    await ensure_plugin_tools(watch=True)
     try:
         await ensure_mcp_tools()
     except Exception as exc:  # MCP is optional; never block the TUI
@@ -322,6 +324,8 @@ async def main_loop(session_id: str | None = None) -> None:
             continue
 
         console.print(f"[red]Unknown command: {cmd}. Type /help for available commands.[/red]")
+
+    await shutdown_plugins()
 
 
 def tui_run(session_id: str | None = None) -> None:

@@ -65,7 +65,11 @@ class ArtifactPaths:
         env = env if env is not None else os.environ
         cwd = Path(cwd or Path.cwd())
         home = home or Path.home()
-        cfg_paths = _read_raven_json(cwd, env).get("paths", {})
+        # A caller that already read raven.json (ArtifactManager does this on every refresh) must not
+        # have its config ignored: `paths.<kind>` is precedence layer 2, so silently re-reading the
+        # file from disk would answer a different question than the one the caller asked.
+        cfg = config if config is not None else _read_raven_json(cwd, env)
+        cfg_paths = cfg.get("paths", {})
         out: dict[str, list[Path]] = {}
         for kind in KINDS:
             dirs: list[Path] = []

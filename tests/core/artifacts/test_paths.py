@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
-from raven.core.artifacts.paths import ArtifactPaths, _read_raven_json
+from raven.core.artifacts.paths import KINDS, ArtifactPaths, _read_raven_json
 
 
 def _touch(base: Path, kind: str) -> None:
@@ -86,3 +87,25 @@ def test_plain_env_var_supported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 def test_read_raven_json_invalid(tmp_path: Path) -> None:
     (tmp_path / "raven.json").write_text("not json", encoding="utf-8")
     assert _read_raven_json(tmp_path, {}) == {}
+
+
+def test_the_raven_json_the_onboarding_clis_write_is_the_one_the_resolver_reads(tmp_path: Path) -> None:
+    """`raven init` used to emit `plugins_dir` and `skills_dir` beside `paths`, and nothing read them.
+
+    An operator who set them got a second, inert answer to a question the resolver had already asked, so
+    the onboarding output is checked against the layers this module actually resolves.
+    """
+    from raven.cli.init_cmd import _write_raven_json
+
+    _write_raven_json(
+        {"provider": "openrouter", "default_model": "openrouter/openai/gpt-4o"},
+        {"telegram": {"enabled": True, "token": "t"}},
+        {"dm_policy": "pairing"},
+        tmp_path / "raven.json",
+    )
+    data = json.loads((tmp_path / "raven.json").read_text(encoding="utf-8"))
+    assert "plugins_dir" not in data and "skills_dir" not in data
+    assert set(data["paths"]) == set(KINDS)
+    (tmp_path / "plugins").mkdir()
+    paths = ArtifactPaths.resolve(cwd=tmp_path, env={})
+    assert paths.plugins[0] == (tmp_path / "plugins").resolve()

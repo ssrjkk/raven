@@ -21,6 +21,7 @@ from ravencode.agents.multi import MultiAgentOrchestrator, SubTask
 from ravencode.agents.orchestrator import AgentType, Orchestrator
 from ravencode.api.client import AIOSClient
 from ravencode.runtime.agent_core import AgentConfig, AgentEvent, EventEmitter, ReActAgent
+from ravencode.runtime.plugins import ensure_plugin_tools
 from ravencode.runtime.session import SessionStore, validate_session_id
 from ravencode.runtime.workspace import confine
 
@@ -350,6 +351,7 @@ async def aios_agent_ws(ws: WebSocket):
     if await _require_ws_auth(ws) is None:
         return
     await ws.accept()
+    await ensure_plugin_tools()  # idempotent; a plugin that fails to load is logged, not fatal
     try:
         from ravencode.runtime.mcp_tools import ensure_mcp_tools
 

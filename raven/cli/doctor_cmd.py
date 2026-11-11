@@ -142,6 +142,28 @@ def _training_posture_row() -> tuple[str, str]:
     return ("Finetune Tracking", "[OK] off — training publishes nothing; corpus rows need consented=true and are PII-redacted")
 
 
+def _plugin_posture_row() -> tuple[str, str]:
+    """Which directory a user plugin has to be dropped in to load, and what is waiting there.
+
+    `raven setup` used to write a `plugins_dir` key into a file nothing read, so the only honest answer
+    was the resolver's own list — the same one the loading entry points walk.
+    """
+    from ravencode.runtime.plugins import plugin_directories, plugin_files
+
+    dirs = plugin_directories()
+    if not dirs:
+        return (
+            "User Plugins",
+            "[!] no plugin directory exists — put a folder with plugin.py in .raven/plugins or set PLUGINS_DIR",
+        )
+    found = plugin_files()
+    where = ", ".join(str(d) for d in dirs)
+    if not found:
+        return ("User Plugins", f"[OK] none found in {where}")
+    names = ", ".join(sorted(p.parent.name for p in found))
+    return ("User Plugins", f"[OK] {len(found)} on disk ({names}) in {where} — each runs sandboxed")
+
+
 @click.command()
 def doctor():
     """Diagnose configuration, dependencies, and service health"""
@@ -239,6 +261,7 @@ def doctor():
             sb_status = "[!] Invalid JSON"
         checks.append(("Channel Sandbox Policy", sb_status))
 
+    checks.append(_plugin_posture_row())
     checks.extend(experimental_model_checks())
     checks.extend(security_posture_checks())
 

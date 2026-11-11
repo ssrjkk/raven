@@ -12,7 +12,8 @@ __author__ = "ssrjkk"
 import importlib
 from typing import TYPE_CHECKING
 
-from raven.core.version import __version__
+if TYPE_CHECKING:
+    from raven.core.version import __version__
 
 if TYPE_CHECKING:
     from ravencode.agents.custom_agents import CustomAgentDef
@@ -129,6 +130,7 @@ def __getattr__(name: str):
         "session_save": "ravencode.runtime.session",
         "session_load": "ravencode.runtime.session",
         "run_openai_server": "ravencode.api.server",
+        "__version__": "raven.core.version",
     }
     entry = _lazy_map.get(name)
     if entry is None:

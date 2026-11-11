@@ -17,32 +17,66 @@ from .definitions import (
 from .sandbox_policy import _WEB_BROWSING_TOOLS, _sandbox_deny_reason
 
 _plugin_tools_loaded = False
+_plugin_tool_names: set[str] = set()
 
 
+def _unregistered_plugins_on_disk() -> list[str]:
+    """Plugin files on disk that no async entry point registered, by name.
+
+    Loading is async (the worker's pipes belong to the loop that started it), so the surface is
+    filled by an entry point calling `register_all_plugins`. Without this check a surface that never
+    did would answer "no plugins" silently, which is how the whole subsystem stayed invisible.
+    """
+    from ravencode.runtime.plugins import get_plugin_registry, plugin_files
+
+    if get_plugin_registry().plugins:
+        return []
+    try:
+        return [p.parent.name for p in plugin_files()]
+    except OSError:
+        return []
 
 
 def _ensure_plugin_tools() -> None:
     global _plugin_tools_loaded
-    if not _plugin_tools_loaded:
-        try:
-            from ravencode.runtime.plugins import get_plugin_registry
+    if _plugin_tools_loaded:
+        return
+    from ravencode.runtime.plugins import get_plugin_registry
 
-            reg = get_plugin_registry()
-            for name, tool in reg.all_tools().items():
-                if name not in MODULE_TOOLS:
-                    MODULE_TOOLS[name] = tool
-            _plugin_tools_loaded = True
-        except ImportError:
-            logger.debug("plugin tools unavailable, skipping")
+    for name, tool in get_plugin_registry().all_tools().items():
+        if name in _plugin_tool_names or name not in MODULE_TOOLS:
+            MODULE_TOOLS[name] = tool
+            _plugin_tool_names.add(name)
+        else:
+            logger.warning("[plugins] {} is already a built-in tool - the plugin's version is ignored", name)
+    unregistered = _unregistered_plugins_on_disk()
+    if unregistered:
+        logger.warning(
+            "[plugins] {} plugin(s) on disk are not on the tool surface because this entry point never "
+            "awaited register_all_plugins(): {}",
+            len(unregistered),
+            ", ".join(unregistered),
+        )
+    _plugin_tools_loaded = True
 
 
+def invalidate_plugin_tools() -> None:
+    """Forget every plugin-contributed tool so the next call re-reads the registry.
+
+    Removing the names as well as clearing the cache matters: a plugin retracted by a reload would
+    otherwise stay callable in this process forever.
+    """
+    global _plugin_tools_loaded
+    for name in _plugin_tool_names:
+        MODULE_TOOLS.pop(name, None)
+    _plugin_tool_names.clear()
+    _plugin_tools_loaded = False
+    _build_tool_definitions.cache_clear()
 
 
 def get_tool_definitions(plan_mode: bool = False) -> list[dict[str, Any]]:
     _ensure_plugin_tools()
     return list(_build_tool_definitions(plan_mode))
-
-
 
 
 @functools.lru_cache(maxsize=2)
@@ -59,8 +93,6 @@ def _build_tool_definitions(plan_mode: bool) -> tuple[dict[str, Any], ...]:
         for t in MODULE_TOOLS.values()
         if not plan_mode or t["name"] not in _PLAN_MODE_DENIED
     )
-
-
 
 
 def tool_annotations(name: str) -> dict[str, bool]:

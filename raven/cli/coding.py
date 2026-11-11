@@ -17,6 +17,7 @@ from ravencode.runtime.agent_core import AgentConfig, AgentEvent, EventEmitter, 
 from ravencode.runtime.context import Conversation
 from ravencode.runtime.lsp import enrich_context
 from ravencode.runtime.multisession import get_session_manager
+from ravencode.runtime.plugins import running_plugin_tools
 
 console = Console()
 
@@ -250,7 +251,12 @@ def code(
 ) -> None:
     """Interactive coding agent — like opencode in the terminal"""
     if parallel:
-        asyncio.run(_start_parallel_session(parallel, name=task or "parallel"))
+
+        async def _parallel() -> None:
+            async with running_plugin_tools():
+                await _start_parallel_session(parallel, name=task or "parallel")
+
+        asyncio.run(_parallel())
         return
 
     project_root = Path(project).resolve() if project else Path.cwd().resolve()
@@ -293,13 +299,17 @@ def code(
         for s in summary:
             console.print(f"  {_STYLE_MUTED}{s}")
 
-    if task:
-        console.print(f"\n{_STYLE_USER}Task: {task}")
-        try:
-            result = asyncio.run(agent_obj.run(task))
-            if result:
-                console.print(f"\n{_STYLE_AGENT}{result}")
-        except Exception as exc:
-            console.print(f"\n{_STYLE_ERROR}Error: {exc}")
+    async def _drive() -> None:
+        async with running_plugin_tools():
+            if task:
+                console.print(f"\n{_STYLE_USER}Task: {task}")
+                try:
+                    result = await agent_obj.run(task)
+                    if result:
+                        console.print(f"\n{_STYLE_AGENT}{result}")
+                except Exception as exc:
+                    console.print(f"\n{_STYLE_ERROR}Error: {exc}")
 
-    asyncio.run(_run_interactive(agent_obj, project_root))
+            await _run_interactive(agent_obj, project_root)
+
+    asyncio.run(_drive())

@@ -18,9 +18,12 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from raven.cli import setup_cmd
+from raven.core.artifacts.paths import ArtifactPaths
+from raven.core.features import FeatureFlags, env_flag_names
 from raven.core.hardware import Hardware
 from raven.core.heretic_model import HERETIC_HF_REF, HERETIC_SIZE_GB
 
@@ -46,6 +49,8 @@ def _no_machine_effects(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict
     box: dict[str, Any] = {"hw": _GOOD_BOX, "pulls": []}
     for name in _WRITTEN_KEYS:
         monkeypatch.setenv(name, os.environ.get(name, ""))
+    for env_var in env_flag_names().values():
+        monkeypatch.delenv(env_var, raising=False)
     monkeypatch.setenv("COLUMNS", "300")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(setup_cmd, "detect", lambda: box["hw"])
@@ -147,11 +152,33 @@ class TestFreeSetup:
     def test_the_features_the_panel_promises_are_the_ones_written(self, tmp_path: Path) -> None:
         result = CliRunner().invoke(setup_cmd.setup, ["--free"])
         assert result.exit_code == 0, result.output
-        assert set(_raven_config(tmp_path)["features"]) == {"dreaming", "delegation", "planner", "skills"}
+        # The flags live where FeatureFlags reads them; raven.json never had a features reader, so the
+        # summary used to promise dreaming while the gateway ran with it off.
+        raw = yaml.safe_load((tmp_path / ".raven" / "features.yaml").read_text(encoding="utf-8"))
+        assert raw["features"]["dreaming"] is True
+        flags = FeatureFlags.load(tmp_path / ".raven" / "features.yaml")
+        assert {"dreaming", "delegation", "planner", "skills"} <= set(flags.enabled_list())
+        assert "features" not in _raven_config(tmp_path)
         coded = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
         assert coded["experimental"] == {"dreaming": True, "delegation": True}
         # ravencode's resolver stops at opencode.json, so a second copy would be a file nothing reads.
         assert not (tmp_path / "ravencode.json").exists()
+
+    def test_a_rerun_keeps_the_operators_own_feature_lines(self, tmp_path: Path) -> None:
+        CliRunner().invoke(setup_cmd.setup, ["--free"])
+        path = tmp_path / ".raven" / "features.yaml"
+        before = path.read_text(encoding="utf-8")
+        assert "voice: true" not in before
+        path.write_text(
+            before.replace("skills: true", "skills: true\n  voice: true") + "# operator note\n",
+            encoding="utf-8",
+        )
+        CliRunner().invoke(setup_cmd.setup, ["--free"])
+        after = path.read_text(encoding="utf-8")
+        assert "voice: true" in after, "setup owns four flags, not the whole file"
+        assert "# operator note" in after
+        raw = yaml.safe_load(after)
+        assert raw["features"]["dreaming"] is True
 
     def test_ravencode_is_repointed_at_the_model_the_switch_chose(self, tmp_path: Path, pulls: list[str]) -> None:
         """An existing opencode.json used to keep its old model, so the coding agent ignored the switch."""
@@ -196,9 +223,14 @@ class TestFreeSetup:
         result = CliRunner().invoke(setup_cmd.setup, ["--free"])
         assert result.exit_code == 0, result.output
         cfg = _raven_config(tmp_path)
-        for key in ("workspace", "plugins_dir", "skills_dir"):
-            assert (tmp_path / cfg[key]).is_dir(), key
-        assert (tmp_path / "data").is_dir()
+        # `plugins_dir`/`skills_dir` were read by nothing: the artifact resolver takes directories from
+        # `paths`, so a directory named in the old keys was a setting that silently did nothing.
+        assert "plugins_dir" not in cfg and "skills_dir" not in cfg
+        for key in ("skills", "plugins"):
+            assert cfg["paths"][key], key
+        for directory in ("workspace", "plugins", "data"):
+            assert (tmp_path / directory).is_dir(), directory
+        assert ArtifactPaths.resolve(cwd=tmp_path).plugins == [tmp_path / "plugins"]
 
     def test_a_secret_key_is_generated_once_and_survives_the_next_run(self, tmp_path: Path) -> None:
         CliRunner().invoke(setup_cmd.setup, ["--free"])

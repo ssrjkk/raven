@@ -136,7 +136,7 @@ Use `config_store.set(key, value)` to update at runtime.
 | --- | --- | --- |
 | `RAVEN_DATA_DIR` | directory for runtime artefacts such as `theme_prefs.json`, in place of `DB_PATH`'s parent | `raven/core/commands_api.py:59` |
 | `RAVEN_WORKSPACE` | the workspace root, taking precedence over `WORKSPACE_PATH` | `raven/core/workspace.py:_decide` |
-| `RAVEN_CONFIG` | the file the artifact layer takes `paths` from, searched before `./raven.json` | `raven/core/artifacts/paths.py:143` |
+| `RAVEN_CONFIG` | the file the artifact layer takes `paths` from, searched before `./raven.json` | `raven/core/artifacts/paths.py:146` |
 
 `RAVEN_DATA_DIR` and `RAVEN_WORKSPACE` are also passed into plugin subprocesses
 (`raven/plugins/code/plugin.py:17`), so a plugin started by the gateway sees the root the

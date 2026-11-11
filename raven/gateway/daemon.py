@@ -25,6 +25,7 @@ from raven.gateway.session_store import SessionStore
 from ravencode.runtime.agent_core import AgentConfig, ReActAgent
 from ravencode.runtime.context import Conversation
 from ravencode.runtime.multisession import get_session_manager
+from ravencode.runtime.plugins import ensure_plugin_tools, shutdown_plugins
 from ravencode.runtime.session import validate_session_id
 from ravencode.runtime.tools import execute_tool_public, get_tool_definitions
 
@@ -368,6 +369,10 @@ class RavenFlowDaemon:
         import uvicorn
 
         await asyncio.to_thread(self._load_persisted_sessions)
+        # /api/tools and the ReActAgent below both serve ravencode's tool surface, so a user plugin that
+        # is never registered here is invisible in RavenFlow chat. This loop is the one that later runs
+        # the plugin tools, so registration has to happen on it.
+        await ensure_plugin_tools(watch=True)
         logger.warning("Binding to 0.0.0.0:{}. Ensure firewall/reverse proxy is configured.", self.port)
         config = uvicorn.Config(self.app, host="0.0.0.0", port=self.port, log_level="info")
         server = uvicorn.Server(config)
@@ -384,6 +389,7 @@ class RavenFlowDaemon:
                     await asyncio.wait_for(self._flush_task, timeout=_FLUSH_INTERVAL_SECONDS)
             self._flush_task = None
             await self._flush_dirty()
+            await shutdown_plugins()
 
     async def stop(self) -> None:
         for s in self.sessions.values():

@@ -356,9 +356,13 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     api_app.include_router(create_mcp_router())
 
+    from ravencode.runtime.plugins import ensure_plugin_tools
     from ravencode.runtime.workspace import set_workspace_root
 
     set_workspace_root(root)
+    # The aios bridge router mounted above serves ravencode's tool surface, so a user plugin that is
+    # never registered here is invisible in webchat — the gateway is that surface's entry point.
+    await ensure_plugin_tools(watch=True)
 
     status_router = create_status_router(gateway, plugin_loader, stop_event)
     api_app.include_router(status_router)
@@ -431,6 +435,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             os._exit(1)
 
     async def _shutdown(gw: Gateway, sv_task: asyncio.Task[None]):
+        from ravencode.runtime.plugins import shutdown_plugins
+
         for name, coro in [
             ("dream engine", dream_engine.stop()),
             ("monitor engine", monitor_engine.stop()),
@@ -438,6 +444,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             ("routine engine", routine_engine.stop()),
             ("routine store", routine_store.close()),
             ("analytics engine", analytics_engine.stop()),
+            ("plugin workers", shutdown_plugins()),
             ("LLM cleanup", gw.llm.cleanup()),
             ("gateway stop", gw.stop()),
             ("DB disconnect", gw.db.disconnect()),

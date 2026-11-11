@@ -172,6 +172,9 @@ def _write_json_config(path: Path, fresh: dict[str, Any], owned: Callable[[dict[
     return path
 
 
+_FEATURE_FLAGS = {"dreaming": True, "delegation": True, "planner": True, "skills": True}
+
+
 def _write_raven_json(model: str) -> Path:
     tiers = _tier_models_for(model)
     llm = {
@@ -181,25 +184,68 @@ def _write_raven_json(model: str) -> Path:
         "model_balanced": f"ollama/{tiers['balanced']}",
         "model_quality": f"ollama/{tiers['quality']}",
     }
-    features = {"dreaming": True, "delegation": True, "planner": True, "skills": True}
 
     def owned(cfg: dict[str, Any]) -> None:
         cfg.setdefault("llm", {}).update(llm)
-        cfg.setdefault("features", {}).update(features)
+        if cfg.pop("features", None) is not None:
+            console.print("[yellow]  ![/yellow] raven.json `features` moved to .raven/features.yaml — the flags are read there")
 
     return _write_json_config(
         Path.cwd() / "raven.json",
         {
             "version": "0.4.8",
             "llm": llm,
-            "features": features,
             "security": {"dm_policy": "open", "web_port": 18888},
             "workspace": "workspace",
-            "plugins_dir": "plugins",
-            "skills_dir": "workspace/skills",
+            "paths": {
+                "skills": ["workspace/skills"],
+                "commands": [".raven/commands"],
+                "rules": [".raven/rules"],
+                "agents": [".raven/agents"],
+                "plugins": ["plugins"],
+                "hooks": [".raven/hooks"],
+            },
         },
         owned,
     )
+
+
+def _write_features_yaml() -> Path:
+    """Turn the free stack's toggles on in the file the flag loader reads.
+
+    `raven.json` has no features reader: `raven/core/features.py` takes the flags from
+    `.raven/features.yaml` and lets `RAVEN_FEATURE_*` have the last word, so the switches this command
+    used to write into `raven.json` left dreaming off while the summary said it was on.
+    """
+    path = Path.cwd() / ".raven" / "features.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    if not lines:
+        lines = [
+            "# Feature toggles read by the gateway at startup.",
+            "# RAVEN_FEATURE_<NAME> in the environment overrides anything written here.",
+            "features:",
+        ]
+    head = next((i for i, line in enumerate(lines) if line.strip() == "features:"), None)
+    if head is None:
+        lines = [*lines, "features:"]
+        head = len(lines) - 1
+    end = head + 1
+    while end < len(lines) and (lines[end].startswith(" ") or not lines[end].strip()):
+        end += 1
+    entries = {line.partition(":")[0].strip(): i for i, line in enumerate(lines[head + 1 : end], head + 1)}
+    missing: list[str] = []
+    for key, value in _FEATURE_FLAGS.items():
+        text = f"  {key}: {str(value).lower()}"
+        if key in entries:
+            lines[entries[key]] = text
+        else:
+            missing.append(text)
+    if missing:
+        lines[end:end] = missing
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    console.print(f"[green]  ✓[/green] {path}")
+    return path
 
 
 def _write_opencode_json(model: str) -> Path:
@@ -276,8 +322,11 @@ def _ensure_dirs() -> None:
 
 
 def _print_summary(model: str, ollama_path: str | None, pulled: bool) -> None:
+    from raven.core.features import FeatureFlags
+
     desc = _model_description(model)
     tiers = _tier_models_for(model)
+    enabled = FeatureFlags.load().enabled_list()
     title = "Free Local AI Stack — Ready" if pulled else "Free Local AI Stack — configured, weights missing"
     table = Table(title=title, border_style="green" if pulled else "yellow")
     table.add_column("Component", style="cyan")
@@ -291,8 +340,8 @@ def _print_summary(model: str, ollama_path: str | None, pulled: bool) -> None:
     table.add_row("Quality Tier", f"ollama/{tiers['quality']}")
     table.add_row("Ollama", ollama_path or "not found")
     table.add_row("Ghost Mode", "Enabled — no external API calls")
-    table.add_row("Features", "Dreaming, Delegation, Planner, Skills")
-    table.add_row("Configs", "raven.json, opencode.json, .env")
+    table.add_row("Features", ", ".join(enabled) if enabled else "none enabled")
+    table.add_row("Configs", "raven.json, opencode.json, .env, .raven/features.yaml")
     console.print(table)
 
     console.print()
@@ -445,6 +494,7 @@ def setup(free: bool, model: str | None, experimental: bool, confirmed: bool) ->
     _write_raven_json(chosen)
     _write_opencode_json(chosen)
     _write_env(chosen)
+    _write_features_yaml()
     _ensure_dirs()
 
     console.print()
