@@ -97,6 +97,17 @@ Manage the platform-native service.
 raven service install|start|stop|status|remove|restart
 ```
 
+`install` writes the backend for the platform it runs on and starts the service automatically:
+
+| Platform | What `install` does |
+| --- | --- |
+| Windows | Registers the service `RavenAI` ("Raven AI Gateway") as a `pywin32` service with automatic start. Needs `pip install pywin32` and an elevated shell; `install` exits non-zero if either is missing. |
+| Linux | Writes `/etc/systemd/system/raven.service`, then `daemon-reload`, `enable` and `start`. Needs root, e.g. `sudo raven service install`. |
+| macOS | Writes `~/Library/LaunchAgents/com.raven.ai.plist` and loads it with `launchctl`. |
+
+`stop` asks the gateway to shut down through its own stop event, so channels, engines and the
+database close instead of being cut off. It waits up to 40 s before reporting a stuck shutdown.
+
 ### `raven security`
 
 Run security operations.

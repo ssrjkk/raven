@@ -92,6 +92,33 @@ from raven.core.workflow_api import create_workflow_router, set_workflow_store
 from raven.monitors.register_all import register_all_monitors
 from raven.routines.register_all import register_all_routines
 
+_stop_control: dict[str, tuple[asyncio.AbstractEventLoop, asyncio.Event]] = {}
+
+
+def publish_stop_control(stop_event: asyncio.Event) -> None:
+    """Hand the running gateway's stop event to anything that must stop it from another thread."""
+    _stop_control["gateway"] = (asyncio.get_running_loop(), stop_event)
+
+
+def withdraw_stop_control() -> None:
+    _stop_control.pop("gateway", None)
+
+
+def request_gateway_stop() -> bool:
+    """Ask the gateway this process started to shut down; False when none is running.
+
+    `loop.add_signal_handler` raises NotImplementedError on Windows, so the SCM thread of
+    `raven service` reaches the same stop event through here instead of through a signal.
+    """
+    control = _stop_control.get("gateway")
+    if control is None:
+        return False
+    loop, stop_event = control
+    if loop.is_closed():
+        return False
+    loop.call_soon_threadsafe(stop_event.set)
+    return True
+
 
 def create_gateway() -> Gateway:
     db = DatabaseFactory.create()
@@ -220,6 +247,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     api_app.state.gitlab_channel = gitlab
     stop_event = asyncio.Event()
     api_app.state.stop_event = stop_event
+    publish_stop_control(stop_event)
 
     webhook_router = create_webhook_router(gateway.db, gateway.handle_message)
     api_app.include_router(webhook_router)
@@ -482,3 +510,5 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             await asyncio.wait_for(gateway.db.disconnect(), timeout=5)
         except (TimeoutError, ConnectionError, RuntimeError) as e:
             logger.warning("Interrupt shutdown DB: {}", e)
+    finally:
+        withdraw_stop_control()

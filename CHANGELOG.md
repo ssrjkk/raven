@@ -136,6 +136,27 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
 ### Fixed
+- `raven service` on Windows ran nothing and said it had. Every action spawned `python -m
+  daemon.windows_service`, a module this tree has never had (no `daemon/` directory exists), so
+  install/start/stop/status/remove each printed `Error while finding module specification for
+  'daemon.windows_service' (ModuleNotFoundError: No module named 'daemon')`, `install`
+  still printed "Raven AI Windows service installed and started", and the SCM was never told anything.
+  `raven/cli/windows_service.py` is the real host now: a `win32serviceutil.ServiceFramework` subclass
+  registered as `RavenAI` with automatic start, `HandleCommandLine(cls, serviceClassString=…)` so the
+  class string the SCM reads from the registry resolves to an importable object instead of `__main__`,
+  and an `os.chdir(working_directory())` because `pythonservice.exe` starts in `C:\Windows\System32`
+  and a relative `DB_PATH` would otherwise create the gateway's database there. `SvcStop` no longer
+  kills the process: it signals a win32event that `serve_gateway()` turns into
+  `gateway_runner.request_gateway_stop()`, which sets the gateway's own `stop_event` through
+  `loop.call_soon_threadsafe` — the same event SIGTERM drives on POSIX, so channels, engines and the
+  database shut down instead of being cut off mid-write; `loop.add_signal_handler` raises
+  `NotImplementedError` on Windows, which is why the handle is published at all. `_run_python` returns
+  whether the spawn succeeded and `install` exits 1 when either install or start fails, and
+  `raven start --daemon` on Windows now names `raven service install` instead of two paths a Windows
+  box cannot use. `scripts/raven.spec` names the module because PyInstaller cannot see a `-m` string.
+  `docs/cli.md` states what each backend writes, and the gate proves the statement is about this code:
+  renaming `SERVICE_NAME` or the launchd label fails a test, deleting the Windows daemon hint fails a
+  test, and deleting either `publish_stop_control` call fails a test
 - Making `raven/core/security/__init__.py` lazy to buy back the sandbox's 13 s silently changed what
   `import raven.core.security.policy_engine as policy_engine` binds, and eight policy-veto tests in
   `tests/core/test_tool_policy.py` started dying on `AttributeError: <class 'module'> has no attribute

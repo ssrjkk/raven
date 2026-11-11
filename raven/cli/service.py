@@ -16,6 +16,9 @@ IS_WINDOWS = sys.platform == "win32"
 IS_LINUX = sys.platform.startswith("linux")
 IS_MACOS = sys.platform == "darwin"
 
+# The SCM host: `raven/cli/windows_service.py` carries the service class pywin32 registers.
+SERVICE_MODULE = "raven.cli.windows_service"
+
 
 def _find_raven() -> str:
     """Return the path to the 'raven' executable."""
@@ -63,7 +66,7 @@ def service_install():
 def service_start():
     """Start the Raven service."""
     if IS_WINDOWS:
-        _run_python("daemon.windows_service", "start")
+        _run_python(SERVICE_MODULE, "start")
     elif IS_LINUX:
         _run_systemctl("start")
     elif IS_MACOS:
@@ -75,7 +78,7 @@ def service_start():
 def service_stop():
     """Stop the Raven service."""
     if IS_WINDOWS:
-        _run_python("daemon.windows_service", "stop")
+        _run_python(SERVICE_MODULE, "stop")
     elif IS_LINUX:
         _run_systemctl("stop")
     elif IS_MACOS:
@@ -87,7 +90,7 @@ def service_stop():
 def service_status():
     """Show service status."""
     if IS_WINDOWS:
-        _run_python("daemon.windows_service", "status")
+        _run_python(SERVICE_MODULE, "status")
     elif IS_LINUX:
         _run_systemctl("status")
     elif IS_MACOS:
@@ -99,7 +102,7 @@ def service_status():
 def service_remove():
     """Remove the Raven service."""
     if IS_WINDOWS:
-        _run_python("daemon.windows_service", "remove")
+        _run_python(SERVICE_MODULE, "remove")
     elif IS_LINUX:
         _uninstall_systemd()
     elif IS_MACOS:
@@ -121,8 +124,11 @@ def _install_windows():
     if not importlib.util.find_spec("win32serviceutil"):
         console.print("[red]pywin32 is required. Install: pip install pywin32[/red]")
         sys.exit(1)
-    _run_python("daemon.windows_service", "install")
-    _run_python("daemon.windows_service", "start")
+    if not _run_python(SERVICE_MODULE, "install", "--startup=auto"):
+        sys.exit(1)
+    if not _run_python(SERVICE_MODULE, "start"):
+        console.print("[yellow]Installed, but the service did not start. Try: sc query RavenAI[/yellow]")
+        sys.exit(1)
     console.print("[green]Raven AI Windows service installed and started[/green]")
 
 
@@ -242,13 +248,17 @@ def _uninstall_launchd():
 # -- Helpers ------------------------------------------------------------------
 
 
-def _run_python(module: str, *args: str):
+def _run_python(module: str, *args: str) -> bool:
     cmd = [sys.executable, "-m", module, *args]
     result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, check=False)
+    if result.stdout.strip():
+        console.print(f"[dim]{result.stdout.strip()}[/dim]")
     if result.returncode != 0:
         console.print(f"[yellow]Command failed ({result.returncode}): {' '.join(cmd)}[/yellow]")
         if result.stderr:
             console.print(f"[dim]{result.stderr.strip()}[/dim]")
+        return False
+    return True
 
 
 def _run_systemctl(action: str):

@@ -19,6 +19,9 @@ for _mod in ("aios", "ravencode"):
 # argument is invisible to the import graph. Out of raven.tools on purpose -- that package's __init__
 # builds the whole registry, which cost 13.1 s per sandboxed run -- so it needs to be named here.
 hiddenimports.append("raven.core._pyrunner")
+# `raven service` on Windows spawns `python -m raven.cli.windows_service`, and pywin32 stores the class
+# string in the registry, so neither the import graph nor PyInstaller can see this module otherwise.
+hiddenimports.append("raven.cli.windows_service")
 
 datas: list[tuple[str, str]] = [
     (str(ROOT / "web" / "dist"), "web/dist"),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -66,6 +67,27 @@ class TestCliService:
         with patch("raven.cli.service.Path.exists", return_value=False):
             result = runner.invoke(cli, ["service", "status"])
             assert result.exit_code == 0
+
+
+class TestStartDaemonHint:
+    def test_windows_names_the_command_that_registers_the_service(self, runner):
+        # Before wave #117 the only Windows answer was a systemd/launchd tip, so `raven start
+        # --daemon` printed two paths a Windows box cannot use and started nothing.
+        with patch("raven.cli.main.IS_WINDOWS", True):
+            result = runner.invoke(cli, ["start", "--daemon"])
+        assert result.exit_code == 0
+        assert "raven service install" in result.output
+        assert "systemd" not in result.output
+        assert "launchd" not in result.output
+
+    def test_other_platforms_name_deploy_files_that_exist(self, runner):
+        root = Path(__file__).resolve().parent.parent
+        with patch("raven.cli.main.IS_WINDOWS", False):
+            result = runner.invoke(cli, ["start", "--daemon"])
+        assert (root / "deploy" / "raven.service").is_file()
+        assert (root / "deploy" / "com.raven.plist").is_file()
+        assert "deploy/raven.service" in result.output
+        assert "raven service install" not in result.output
 
 
 class TestCliPlugins:

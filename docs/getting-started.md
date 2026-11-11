@@ -107,6 +107,9 @@ raven service install
 raven service start
 ```
 
+`install` registers and starts the service for your platform (Windows needs `pywin32` and an
+elevated shell). Per-platform details: [CLI reference](cli.md).
+
 ### 4. Send a Message
 
 ```bash

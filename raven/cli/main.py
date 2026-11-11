@@ -37,6 +37,7 @@ from raven.cli.plugins_cmd import plugins_group as _plugins
 from raven.cli.ravencode_cmd import ravencode_group as _ravencode
 from raven.cli.routine_cmd import routine_group as _routine
 from raven.cli.security_cmd import security_group as _security
+from raven.cli.service import IS_WINDOWS
 from raven.cli.service_cmd import service_group as _service
 from raven.cli.setup_cmd import setup as _setup
 from raven.cli.task_cmd import task_group as _task
@@ -120,6 +121,10 @@ def start(daemon: bool, port: int | None, stateless: bool, ghost: bool):
     """Start the Raven AI gateway"""
     setup_logging()
     if daemon:
+        if IS_WINDOWS:
+            console.print("[yellow]Daemon mode requested — register the service instead[/yellow]")
+            console.print("  from an elevated shell: raven service install")
+            return
         console.print("[yellow]Daemon mode requested — use systemd or launchd instead[/yellow]")
         console.print("  systemd: deploy/raven.service")
         console.print("  launchd: sudo cp deploy/com.raven.plist /Library/LaunchDaemons/")
