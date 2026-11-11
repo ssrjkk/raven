@@ -134,12 +134,12 @@ Use `config_store.set(key, value)` to update at runtime.
 
 | Variable | Effect | Read by |
 | --- | --- | --- |
-| `RAVEN_DATA_DIR` | directory for runtime artefacts such as `theme_prefs.json`, in place of `DB_PATH`'s parent | `raven/core/commands_api.py:59` |
+| `RAVEN_DATA_DIR` | directory for runtime artefacts such as `theme_prefs.json`, in place of `DB_PATH`'s parent | `raven/core/commands_api.py` |
 | `RAVEN_WORKSPACE` | the workspace root, taking precedence over `WORKSPACE_PATH` | `raven/core/workspace.py:_decide` |
-| `RAVEN_CONFIG` | the file the artifact layer takes `paths` from, searched before `./raven.json` | `raven/core/artifacts/paths.py:146` |
+| `RAVEN_CONFIG` | the file the artifact layer takes `paths` from, searched before `./raven.json` | `raven/core/artifacts/paths.py` |
 
 `RAVEN_DATA_DIR` and `RAVEN_WORKSPACE` are also passed into plugin subprocesses
-(`raven/plugins/code/plugin.py:17`), so a plugin started by the gateway sees the root the
+(`raven/plugins/code/plugin.py`), so a plugin started by the gateway sees the root the
 gateway resolved.
 
 ### The workspace root
@@ -163,8 +163,8 @@ Containment differs by surface on purpose:
 
 - the plugin tools accept the workspace root **and** the system temp directory, because another
   layer often puts the file there first — the Telegram downloader writes inbound voice notes with
-  `tempfile.mkstemp()` (`raven/channels/telegram/voice.py:48`) and `canvas_save` renders into
-  `tempfile.mkdtemp()` (`raven/tools/canvas.py:68`) — and a tool that cannot read the file the
+  `tempfile.mkstemp()` (`raven/channels/telegram/voice.py`) and `canvas_save` renders into
+  `tempfile.mkdtemp()` (`raven/tools/canvas.py`) — and a tool that cannot read the file the
   channel just received is only half a tool;
 - the coding agent's `confine` (`ravencode/runtime/workspace.py:confine`) accepts the workspace
   root only, so an agent session cannot leave scratch in `/tmp`;
@@ -181,18 +181,18 @@ Seven toggles decide which surfaces the gateway builds. They are read from
 `raven/core/features.py`, taken from `.raven/features.yaml` (or `raven.yaml`) under a
 `features:` key, and then overridden by the environment, which has the last word.
 `raven init` writes the file with the defaults below and `raven doctor` prints the set that
-is on. The last column names the exact place the flag is consulted.
+is on. The last column names the file that asks about the flag.
 
 | Flag | Default | Switch | With the flag off |
 | --- | --- | --- | --- |
-| `skills` | on | `RAVEN_FEATURE_SKILLS` | only built-in skills load - `raven/core/skills.py:160` |
-| `planner` | on | `RAVEN_FEATURE_PLANNER` | `/api/task/*` is not registered - `raven/core/ops_api.py:149` |
-| `delegation` | on | `RAVEN_FEATURE_DELEGATION` | delegated work always routes to `coder` - `raven/core/agents/multi.py:49` |
-| `dreaming` | off | `RAVEN_FEATURE_DREAMING` | the dreaming engine refuses to run - `raven/core/dreaming/engine.py:49` |
-| `browser` | off | `RAVEN_FEATURE_BROWSER` | the browser router is not mounted - `raven/cli/gateway_runner.py:303` |
-| `voice` | off | `RAVEN_FEATURE_VOICE` | the voice router is not mounted - `raven/cli/gateway_runner.py:268` |
-| `telemetry` | off | `RAVEN_FEATURE_TELEMETRY` | the analytics and A/B-testing routers are not mounted - `raven/cli/gateway_runner.py:289` |
+| `skills` | on | `RAVEN_FEATURE_SKILLS` | only built-in skills load - `raven/core/skills.py` |
+| `planner` | on | `RAVEN_FEATURE_PLANNER` | `/api/task/*` is not registered - `raven/core/ops_api.py` |
+| `delegation` | on | `RAVEN_FEATURE_DELEGATION` | delegated work always routes to `coder` - `raven/core/agents/multi.py` |
+| `dreaming` | off | `RAVEN_FEATURE_DREAMING` | the dreaming engine refuses to run - `raven/core/dreaming/engine.py` |
+| `browser` | off | `RAVEN_FEATURE_BROWSER` | the browser router is not mounted - `raven/cli/gateway_runner.py` |
+| `voice` | off | `RAVEN_FEATURE_VOICE` | the voice router is not mounted - `raven/cli/gateway_runner.py` |
+| `telemetry` | off | `RAVEN_FEATURE_TELEMETRY` | the analytics and A/B-testing routers are not mounted - `raven/cli/gateway_runner.py` |
 
 ravencode keeps its own set in `ravencode/core/feature_flags.py`, switched with the `FF_`
 prefix; after the unconsumed flags were removed one remains: `FF_REDIS_RATE_LIMITER`, read by
-`ravencode/core/rate_limiter.py:46`.
+`ravencode/core/rate_limiter.py`.

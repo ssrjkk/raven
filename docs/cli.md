@@ -230,13 +230,13 @@ ravencode serve --host 0.0.0.0 --password <pw>      # or RAVENCODE_SERVER_PASSWO
 
 `--username` defaults to `ravencode`. `RAVENCODE_API_KEY` adds Bearer-token auth; both
 credentials are compared in constant time. `RAVENCODE_SERVER_USERNAME` supplies the
-username from the environment when `--username` is absent (`ravencode/api/server.py:72`).
+username from the environment when `--username` is absent (`ravencode/api/server.py`).
 
 
 Task routing inside `ravencode` can be made deterministic without a model: set
 `RAVEN_SMART_ROUTING=0` and the live classification call is skipped, so a task runs on the
 profile you named rather than the one the router would have chosen
-(`ravencode/agents/orchestrator.py:85`). The same binary honours `RAVENCODE_MODEL`,
+(`ravencode/agents/orchestrator.py`). The same binary honours `RAVENCODE_MODEL`,
 `RAVENCODE_TEMPERATURE`, `RAVENCODE_MAX_STEPS`, `RAVENCODE_THEME` and
 `RAVENCODE_CONFIG_CONTENT`, listed in `.env.example`.
 Request parameters follow the OpenAI protocol: `max_tokens` (1–200000) bounds the completion

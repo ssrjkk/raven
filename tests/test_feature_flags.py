@@ -7,7 +7,7 @@ from typing import Any
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-_DOC_CITE = re.compile(r"^\| `(\w+)` \| (on|off) \| `(RAVEN_FEATURE_[A-Z_]+)` \| .*? - `([\w/.]+):(\d+)` \|", re.M)
+_DOC_CITE = re.compile(r"^\| `(\w+)` \| (on|off) \| `(RAVEN_FEATURE_[A-Z_]+)` \| .*? - `([\w/.]+)` \|", re.M)
 _ENABLED_CALL = re.compile(r"is_enabled\(\s*[\"'](\w+)[\"']")
 
 
@@ -58,12 +58,13 @@ def test_the_documented_table_matches_the_defaults_and_the_citations() -> None:
     assert len(rows) == len(_raven_flags()), rows
 
     defaults = FeatureFlags().to_dict()
-    for name, stated_default, env_var, source_file, line_no in rows:
+    for name, stated_default, env_var, source_file in rows:
         assert env_var == _raven_flags()[name], (name, env_var)
         assert defaults[name] is (stated_default == "on"), (name, stated_default, defaults[name])
-        lines = (ROOT / source_file).read_text(encoding="utf-8").splitlines()
-        cited = lines[int(line_no) - 1]
-        assert f'is_enabled("{name}")' in cited or f"is_enabled('{name}')" in cited, (source_file, line_no, cited)
+        # Cited by file, not by line: a line number is hand-written and every edit above it makes the
+        # documentation point somewhere else, which is how three of these rows went stale silently.
+        cited = (ROOT / source_file).read_text(encoding="utf-8", errors="ignore")
+        assert f'is_enabled("{name}")' in cited or f"is_enabled('{name}')" in cited, (source_file, name)
 
 
 def test_the_environment_overrides_the_file_and_refuses_garbage(

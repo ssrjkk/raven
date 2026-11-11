@@ -184,9 +184,11 @@ class TestServeGateway:
         stop_requested, finished = self._handles()
         win32event.SetEvent(stop_requested)
         stuck = threading.Event()
-        outcome = ws.serve_gateway(
-            stop_requested, finished, runner=lambda: stuck.wait(timeout=30), grace_seconds=0.2
-        )
+
+        def blocked() -> None:
+            stuck.wait(timeout=30)
+
+        outcome = ws.serve_gateway(stop_requested, finished, runner=blocked, grace_seconds=0.2)
         assert "did not shut down" in outcome
         stuck.set()
 
@@ -194,9 +196,10 @@ class TestServeGateway:
 class TestInstallIsHonest:
     @pytest.fixture(autouse=True)
     def _pywin32_present(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # `_install_windows` refuses without it, and the dependency is Windows-only
+        # `_install_windows` refuses without it, and the dependency is Windows-only. Patched on the
+        # real `importlib.util` module, which is the object `service.py` reaches through.
         monkeypatch.setattr(
-            service_module.importlib.util, "find_spec", lambda name: object() if name == "win32serviceutil" else None
+            importlib.util, "find_spec", lambda name: object() if name == "win32serviceutil" else None
         )
 
     def test_install_registers_the_service_to_start_at_boot(self, monkeypatch: pytest.MonkeyPatch) -> None:

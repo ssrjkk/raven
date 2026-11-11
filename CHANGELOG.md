@@ -145,6 +145,22 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   without it). An absent child is the state `stop()` exists to produce, and `raven/core/sandbox.py`
   already treated the same race that way. Two tests in `tests/core/test_plugin_reload.py` hold the
   contract, and both fail the moment the suppression goes back.
+- The Docker image could not be built at all, since `c516115` made `policy/tools.json` a wheel
+  force-include that the `wheel-builder` stage never copied: `python -m build` raised `Forced include
+  not found: /build/policy/tools.json`, and the last green CI run predates that commit. The stage now
+  copies `policy/`, and `tests/test_packaging_docker_context.py` reads pyproject's `packages` and
+  `force-include` against the Dockerfile's own COPY lines, so a path the wheel needs and the context
+  lacks is a test failure rather than a nightly image that silently never ships.
+- Four things CI caught that the local gate could not see. pywin32's top-level modules
+  (`servicemanager`, `win32event`, `win32service`, `win32serviceutil`, `win32timezone`) were undeclared
+  in the dependency audit, which only knew `win32com` and `pythoncom`; `tests/cli/test_windows_service.py`
+  failed mypy on a fake runner that returned a bool where the signature says `None` and on reaching
+  `importlib` through `raven.cli.service`, which does not re-export it; and the feature-flag table in
+  `docs/configuration.md` cited `file.py:303`-style line numbers, three of which already pointed at the
+  wrong statement (`browser` 303 to 331, `voice` 268 to 296, `telemetry` 289 to 317). Citations are now
+  per file and the gate searches the file for the `is_enabled` call, which cannot rot when someone edits
+  above it; the same 7 hand-written line numbers in `docs/cli.md` and the rest of `configuration.md` are
+  gone for the same reason.
 - A tool that reported its own failure printed `ok`. Reproduced against the real `Agent`: a handler
   answering `{"error": "GitHub token not configured. Set GITHUB_TOKEN in .env"}` -- the exact value
   `raven/tools/github.py` returns for every unauthenticated call -- yielded `[github.list → ok]`,

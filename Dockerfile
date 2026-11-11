@@ -10,8 +10,9 @@ COPY web/ ./
 RUN npm run build
 
 # --- Python wheel ---
-# Every directory in pyproject `[tool.hatch.build.targets.wheel] packages` must be copied:
-# hatchling silently skips missing ones, so a partial context produces a partial wheel.
+# hatchling builds the wheel from the build context alone: a package it is asked for is a hard error
+# when the context does not have it, so every directory in pyproject `packages` and `force-include`
+# has to be copied here.
 FROM python:3.15-slim AS wheel-builder
 ARG RAVEN_VERSION
 WORKDIR /build
@@ -19,6 +20,7 @@ COPY pyproject.toml README.md ./
 COPY raven/ raven/
 COPY aios/ aios/
 COPY ravencode/ ravencode/
+COPY policy/ policy/
 RUN pip install --no-cache-dir build \
     && python -m build --wheel
 
