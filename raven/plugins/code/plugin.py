@@ -1,21 +1,20 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 
 from loguru import logger
+
+from raven.core.security.code_sandbox import (
+    PYTHON_RUNNER_MODULE,
+    python_code_issues,
+    untrusted_child_env,
+)
 
 PLUGIN_NAME = "code"
 PLUGIN_DESCRIPTION = "Execute, review, explain, and improve code"
 
 SANDBOX_TIMEOUT = 30
-
-_ENV_SAFELIST = frozenset({
-    "PATH", "PYTHONPATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
-    "TEMP", "TMP", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "LANG",
-    "LC_ALL", "TZ", "RAVEN_DATA_DIR", "RAVEN_WORKSPACE", "PYTHONIOENCODING",
-})
 
 
 async def run_python(code: str, timeout: int = 30) -> str:
@@ -25,14 +24,14 @@ async def run_python(code: str, timeout: int = 30) -> str:
         builtins as '[denied]' before anything runs, and the last expression's value is returned as the result.
     timeout: Seconds before the interpreter is killed and the run reported as timed out.
     """
-    env = {k: v for k, v in os.environ.items() if k in _ENV_SAFELIST}
+    env = untrusted_child_env()
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     try:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
-            "raven.tools._pyrunner",
+            PYTHON_RUNNER_MODULE,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -167,25 +166,15 @@ def find_issues(code: str) -> str:
     """Find potential bugs, vulnerabilities, and anti-patterns. Args: code (str): Code to analyze"""
     import ast
 
-    issues = []
-    try:
-        tree = ast.parse(code)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                if node.func.attr in ("eval", "exec", "compile"):
-                    issues.append(f"Line {node.lineno}: Dangerous dynamic code execution")
-                if (
-                    node.func.attr == "input"
-                    and isinstance(node.func.value, ast.Name)
-                    and node.func.value.id == "builtins"
-                ):
-                    issues.append(f"Line {node.lineno}: Unsafe input() — use with caution")
-            if isinstance(node, ast.Try) and len(node.handlers) == 1:
-                h = node.handlers[0]
-                if h.type is None:
-                    issues.append(f"Line {h.lineno}: Bare except — catches all exceptions silently")
-    except SyntaxError as e:
-        issues.append(f"Parse error: {e}")
+    refused = python_code_issues(code)
+    if refused and refused[0].message.startswith("Syntax Error:"):
+        return "## Issue Scan\n\n" + f"Line {refused[0].line}: {refused[0].message}"
+
+    issues = [f"Line {item.line}: {item.message} — the runner refuses this code" for item in refused]
+    tree = ast.parse(code)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Try) and len(node.handlers) == 1 and node.handlers[0].type is None:
+            issues.append(f"Line {node.handlers[0].lineno}: Bare except — catches all exceptions silently")
 
     if not issues:
         issues.append("✅ No AST-level issues found")

@@ -6,11 +6,10 @@ import platform
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 
 from loguru import logger
 
-from raven.core.security.code_sandbox import DENIED_BUILTINS, DENIED_MODULES, validate_python_code
+from raven.core.security.code_sandbox import PYTHON_RUNNER_MODULE, untrusted_child_env, validate_python_code
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 
 _UNIX_COMMANDS = frozenset(
@@ -156,57 +155,6 @@ async def shell_command(command: str, timeout: int = 30) -> str:
         return f"[timeout after {timeout}s]"
 
 
-_DENIED_MODULES = DENIED_MODULES
-_DENIED_BUILTINS = DENIED_BUILTINS
-
-_RESTRICTED_BUILTINS: dict[str, Any] = {
-    "abs": abs,
-    "all": all,
-    "any": any,
-    "ascii": ascii,
-    "bin": bin,
-    "bool": bool,
-    "bytearray": bytearray,
-    "bytes": bytes,
-    "chr": chr,
-    "complex": complex,
-    "dict": dict,
-    "divmod": divmod,
-    "enumerate": enumerate,
-    "filter": filter,
-    "float": float,
-    "frozenset": frozenset,
-    "hash": hash,
-    "hex": hex,
-    "int": int,
-    "len": len,
-    "list": list,
-    "map": map,
-    "max": max,
-    "min": min,
-    "next": next,
-    "oct": oct,
-    "ord": ord,
-    "pow": pow,
-    "print": print,
-    "range": range,
-    "reversed": reversed,
-    "round": round,
-    "set": set,
-    "slice": slice,
-    "sorted": sorted,
-    "str": str,
-    "sum": sum,
-    "tuple": tuple,
-    "zip": zip,
-    "True": True,
-    "False": False,
-    "None": None,
-}
-
-_DENIED_BUILTINS = DENIED_BUILTINS
-
-
 async def python_code(code: str, timeout: int = 60) -> str:
     try:
         denied = validate_python_code(code)
@@ -216,10 +164,11 @@ async def python_code(code: str, timeout: int = 60) -> str:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
-            "raven.tools._pyrunner",
+            PYTHON_RUNNER_MODULE,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env=untrusted_child_env(),
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(code.encode("utf-8")), timeout=timeout)

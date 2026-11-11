@@ -136,6 +136,69 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
 ### Fixed
+- `code.run_python` could not execute any code on Windows: every call answered with a Winsock traceback
+  instead of a result. The plugin's own environment safelist spelled the key `SystemRoot` and tested
+  membership case-sensitively, while the parent environment spells it `SYSTEMROOT`, so the one key
+  Windows needs to start Python was dropped and the child died at `import asyncio` with
+  `OSError [WinError 10106]` before reaching the user's first line (reproduced against the old filter;
+  a 4-line snippet with no imports and no I/O was enough to trigger it). The filter now compares
+  upper-cased names, because Windows environment names are case-insensitive and the casing the parent
+  carries is not ours to choose, and it lives in `raven/core/security/code_sandbox.py` as
+  `untrusted_child_env()` next to the keys that are load-bearing and why
+- A sandboxed run cost 13.10 s before it printed anything. The module every Python tool spawns lived at
+  `raven.tools._pyrunner`, and `raven.tools.__init__` builds the whole tool registry to satisfy the
+  `-m` import — measured 13.1 s against 0.10 s for a bare interpreter, three times per gateway turn for
+  anything that ran code. It is `raven.core._pyrunner` now, named in `scripts/raven.spec` because
+  PyInstaller cannot see a module reachable only through a `-m` string. Same run, same code: 13.7 s →
+  0.06 s for `run_python('print("hi")\n6*7')`. A gate asserts the runner is importable without pulling
+  `raven.tools` into the child, so the cost cannot come back by accident
+- The same eager import made the security package load the gateway config, so every tool result that
+  carried any `[stderr]` also carried `Loaded WEB_SECRET_KEY from D:\raven\data\web_secret_key` — a
+  path to a signing secret printed into the agent transcript and, through `remember`, into model
+  memory. `raven/core/security/__init__.py` resolves its 15 exports through PEP 562 `__getattr__` now:
+  same public names, same `from raven.core.security import X`, 0.40 s → 0.02 s for
+  `import raven.core.security.code_sandbox`, and no config side effect in the child
+- The value of an expression preceded the output that produced it. `run_python` answered
+  `42\nhi` for `print("hi")` followed by `6*7`: the code's `print()` sat in the interpreter's
+  block-buffered text layer while the runner wrote the result straight to `sys.stdout.buffer`. The
+  runner flushes the text layer first now, so the transcript reads in the order the code ran
+- `code.find_issues` was a security scanner that could not see the thing it scanned. It kept its own
+  list of "dangerous" constructs, and that list had no `eval`, `exec`, `compile` or `input` — the four
+  names the sandbox denies outright — so it told a visitor `✅ No AST-level issues found` about source
+  the runner refuses before executing it. Reporting is now a view of the gate's own walk
+  (`python_code_issues`), and `validate_python_code` returns its first entry, so the verdict and the
+  report cannot drift apart again; agreement is checked over 60 real files under `raven/core`
+- Two of the three Python-executing surfaces handed the sandboxed child the gateway's entire
+  environment — every `*_KEY`, `*_TOKEN` and `*_SECRET` loaded from `.env`, including the ones the
+  agent cannot read any other way — because they spawned with no `env` at all. The third passed a
+  partial safelist of its own. All three (`raven/tools/shell.py::python_code`,
+  `raven/plugins/code/plugin.py::run_python`, `raven/plugins/process/plugin.py::run_python`) now spawn
+  through the one `untrusted_child_env()`: 19 keys, credentials excluded by construction (a child given
+  `OPENAI_API_KEY`, `GH_TOKEN`, `WEB_SECRET_KEY`, `AWS_SECRET_ACCESS_KEY` and
+  `TELEGRAM_BOT_TOKEN` keeps `PATH` alone), and a source-level gate refuses a spawn site that
+  hardcodes its runner target or lets the child inherit the parent environment
+- The registry cut 54 of its 66 tool descriptions mid-word and had nowhere else to show them.
+  `.tool-desc` carried `white-space: nowrap; text-overflow: ellipsis; overflow: hidden` in a 247px
+  card, so a sentence needing 377–969px rendered as `Read the contents of a file. Returns u…` — and
+  `site/registry.js` writes the whole sentence into that one span (`description.textContent =
+  tool.description`, which is also the card's `aria-describedby`), so a screen reader got the text and
+  a visitor never did. There is no detail view to fall back on: clicking a card builds a `tools/call`
+  frame, it does not open the tool. The clamp is gone, cards size to their text and the grid equalises
+  each row. Measured in Chrome over all 7 pages at 1440 and 390: text nodes clipped by a hidden
+  overflow 92 → 0, tools page height 3169 → 4168px — the cost of publishing 66 sentences, not 12
+- Inline mono fell under the site's own type scale. `code, kbd` shrank to `0.92em` to match the sans it
+  sits inside, which in a 12px note is 11.04px — 20 nodes across index, gateway and install
+  (`raven-mcp`, `X-Webhook-Signature`, `raven doctor`). The floor gate could not see it:
+  `test_nothing_renders_text_below_the_floor` reads absolute `px` literals under `web/` only, so a
+  relative size on the landing is outside its reach. The rule now states the floor it may not cross,
+  `max(0.92em, var(--fs-label))`, and a new gate resolves every `font-size:` in `site/styles.css`
+  through the `--fs-*` tokens — `rem`, `px`, a `clamp()` minimum, a `max()` floor — and refuses a bare
+  `em`, which has no provable minimum. Sub-12px text nodes: 93 → 0 at both viewports
+- The two recorded frames in the request-path stages overflowed their own box behind a scroll nothing
+  announced. `.stage-code code` set `white-space: pre; overflow-wrap: normal` while the sibling
+  component `.codeblock code` sets `pre-wrap; break-word`: 1022px of text in a 1010px box, 1080 in
+  1010, and 1022 in 271 at a phone width. They wrap like every other block now, and the gate compares
+  the two rules' declarations instead of trusting either. Code blocks needing horizontal scroll: 13 → 0
 - `/session <id>` in `raven code` hung the REPL and then claimed success. `raven/cli/coding.py` called
   `asyncio.run_coroutine_threadsafe(mgr.get(...), asyncio.get_event_loop()).result()` from inside the
   running loop — blocking the only thread that could execute the coroutine (reproduced: killed at 12 s,
@@ -442,7 +505,7 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
 - `raven/channels/matrix` started its HTTP client and then sat idle: nothing ever called `sync`, so messages already in a room were delivered to the gateway on first connect and never again. The adapter runs the long-poll loop itself (`GET /_matrix/client/v3/sync?timeout=30000`, token carried forward, errors retried) and normalizes each `m.room.message` it receives
 - The MCP stdio server (`raven-mcp`, `ravencode-mcp`) shut down on a single stray byte. `_read_request` returned `None` for EOF, for a blank line and for a line that was not valid JSON, and `run()` read `None` as "client closed the pipe" — so one keepalive empty line, one partial write, or one JSON array ended the session with no response, and the host was left holding a transport that never answered again. Framing now belongs to the loop: stdin is open until `readline()` returns an empty string, blank lines are skipped, and anything else that cannot be dispatched is answered the way the HTTP router already answers it (`-32700` for a line that is not JSON, `-32600` for a JSON value that is not an object) before the next line is read. Six transcript-driven tests cover the loop (`tests/conftest.py::mcp_stdio`), four of which fail against the old reader
 - Both MCP stdio servers ran the transport on the machine's ANSI code page instead of the UTF-8 the protocol requires. The child process inherits `locale.getpreferredencoding()` for `sys.stdin`/`sys.stdout` — measured `cp1251` on a Russian Windows, and it is `ansi_x3.4-1968` under a POSIX `C` locale — so a host's UTF-8 frame was decoded into the wrong string before anything touched it (a 6-character method name came in as 12 mojibake characters, which is what every non-ASCII tool argument became too), and a result the code page cannot encode killed the session outright: `tools/call read` on a file containing `内容` died inside `_send_response` with `UnicodeEncodeError: 'charmap' codec can't encode characters in position 83-84`, exit code 1, no frame. `use_utf8_stdio()` reconfigures stdin/stdout/stderr to UTF-8 — the convention `raven/cli/main.py` already applies for the console — and both `raven-mcp` and `ravencode-mcp` call it before serving. `tests/test_mcp_stdio_server.py` runs each server as a real subprocess with `PYTHONIOENCODING=cp1251` set and asserts a Cyrillic-named file with CJK and emoji content comes back intact; both parametrizations fail without the pin
-- The Python sandbox subprocess ran its stdio on the machine's code page while every caller spoke UTF-8, so an agent's own code was silently rewritten before it executed. `raven/tools/shell.py::python_code`, `raven/plugins/code` and `raven/plugins/process` each spawn `python -m raven.tools._pyrunner`, feed it `code.encode("utf-8")` and decode UTF-8 back, but the child read `sys.stdin` and wrote `print()` through the locale codec — `cp1251` measured here. Two failure modes: in-child corruption, where `len("привет")` exec'd mojibake and the tool answered `12` instead of `6`, and a hard stop, where a result the page cannot encode ended the child with `UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f437'` and the tool returned a traceback. The runner reads `sys.stdin.buffer` and writes `sys.stdout.buffer` as UTF-8 now, so the transport no longer depends on where the machine was configured; `tests/test_pyrunner_stdio.py` drives the real tool with `PYTHONIOENCODING=cp1251` and asserts Cyrillic, CJK and emoji payloads come back intact (two of the four cases fail without the fix)
+- The Python sandbox subprocess ran its stdio on the machine's code page while every caller spoke UTF-8, so an agent's own code was silently rewritten before it executed. `raven/tools/shell.py::python_code`, `raven/plugins/code` and `raven/plugins/process` each spawn `python -m` the shared runner module (`PYTHON_RUNNER_MODULE`), feed it `code.encode("utf-8")` and decode UTF-8 back, but the child read `sys.stdin` and wrote `print()` through the locale codec — `cp1251` measured here. Two failure modes: in-child corruption, where `len("привет")` exec'd mojibake and the tool answered `12` instead of `6`, and a hard stop, where a result the page cannot encode ended the child with `UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f437'` and the tool returned a traceback. The runner reads `sys.stdin.buffer` and writes `sys.stdout.buffer` as UTF-8 now, so the transport no longer depends on where the machine was configured; `tests/test_pyrunner_stdio.py` drives the real tool with `PYTHONIOENCODING=cp1251` and asserts Cyrillic, CJK and emoji payloads come back intact (two of the four cases fail without the fix)
 - Chaos experiments leaked every disk fill they did not finish, and the leaks were not small: `_inject_disk_fill` writes up to 100 MB per fault, `recover()` was only called on the happy path, and `run_experiment`'s `except CancelledError`/`except Exception` branches went straight to the `finally`, which only stamped `end_time` — so an aborted or failed experiment left its fill file behind with nothing in the process ever removing it (measured here: 55 orphaned `.chaos_disk_fill_*.tmp` files, 5.4 GB, accumulating one per gate run since 2026-09-30 because `test_inject_disk_fill` injected into `tempfile.gettempdir()` without recovering). `run_experiment` now recovers and stops the monitor in `finally` whenever the run did not complete, `inject` registers the fault record *before* dispatching (a fault cancelled mid-injection kept its record only after the await, and `to_thread` raises `CancelledError` out of it while the worker thread goes on writing — the record, and with it the artefact, was simply lost), and recovery unlinks the path injection recorded instead of re-deriving it from `config.target`, retrying while a cancelled injection's thread still holds the file open on Windows. `test_inject_disk_fill` fills a `tmp_path` now, with a stubbed `disk_usage` so it writes megabytes rather than 100 MB
 - Every `subprocess` call that asked for text output left the decoding to the machine's locale, so the tools that read Git and ripgrep were wrong wherever the locale was not UTF-8. `text=True` without `encoding=` uses `locale.getpreferredencoding()` — cp1251 on a Russian Windows, ascii under a POSIX `C` locale — while Git and `rg --json` write UTF-8: `GitIntegration._run("log", "-1", "--pretty=%s")` on a commit message `фикс: Ёж и 内容 в сообщении` returned `С„РёРєСЃ: РЃР¶ Рё е†…е®№ РІ СЃРѕРѕР±С‰РµРЅРёРё` (measured against this repository's own code), and `aios/api/bridge.py`'s `rg --json` reader failed in the other direction: JSON punctuation is ASCII, so `json.loads` parsed the mojibake happily and the caller got a hit naming a file that does not exist — a match in `ключ.txt` came back as `{'file': 'РєР»СЋС‡.txt', 'text': 'СЃРѕРґРµСЂР¶РёРјРѕРµ е†…е®№ needle'}` — while under a POSIX `C` locale the decode error is raised inside the reader thread, so `proc.stdout` arrives as `None`, `splitlines()` throws `AttributeError`, and the outer `except Exception` logs it at debug and silently downgrades the search to the Python scan. `raven/coding/test_generator.py` and `ravencode upgrade` decoded their Python children the same way, so the fix pins the child to UTF-8 (`-X utf8`) as well as the parent's read. `scripts/check_all.py` got the same treatment, so a stage's output can no longer fail to decode and mask the failure it was reporting. `tests/test_subprocess_encoding.py` is the permanent guard: an AST scan rejects any `text=True`/`universal_newlines` subprocess call in `raven/`, `ravencode/`, `aios/` and `scripts/` that does not name its encoding, it proves itself against a synthetic violation, and one test runs a real repository and asserts a Russian-and-Chinese commit message comes back byte-for-byte
 - Three adapter tests passed only on a machine that happened to be configured a certain way, and CI proved it. `tests/test_telegram.py::test_connect_disconnect` and `tests/test_discord.py::test_connect_disconnect` never mocked the client, so `connect()` reached `api.telegram.org` and the Discord gateway with whatever token the environment carried — telegram's version failed the gate on a runner that has a token and passed on one that has none. `tests/test_discord.py` patched `raven.channels.discord.channel.discord`, an attribute that does not exist when the optional extra is not installed, so the Discord lifecycle and both `build_embed` paths ran only on a developer machine (`.[dev]`, which CI installs, has no discord.py). The lifecycle tests now drive a faked client, and the discord.py names are injected rather than patched, so they assert on every runner; `tests/channels/test_matrix.py` asserted `channel._sync_token == "s1"`, which held only when exactly one long-poll had completed before the assertion, and now asserts that a later poll asked for events `since=s1`

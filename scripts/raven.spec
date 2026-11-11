@@ -15,6 +15,10 @@ for _mod in ("raven.plugins", "raven.monitors", "raven.routines", "raven.tools",
     hiddenimports += collect_submodules(_mod)
 for _mod in ("aios", "ravencode"):
     hiddenimports += collect_submodules(_mod)
+# Every Python-executing tool spawns `python -m raven.core._pyrunner`, and a module named in a string
+# argument is invisible to the import graph. Out of raven.tools on purpose -- that package's __init__
+# builds the whole registry, which cost 13.1 s per sandboxed run -- so it needs to be named here.
+hiddenimports.append("raven.core._pyrunner")
 
 datas: list[tuple[str, str]] = [
     (str(ROOT / "web" / "dist"), "web/dist"),

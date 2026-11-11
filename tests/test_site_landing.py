@@ -1767,3 +1767,82 @@ def test_the_landing_page_first_load_stays_under_a_payload_budget() -> None:
     assert total < 130_000, sizes
     assert sizes["index.html"] < 45_000, sizes
     assert sizes["styles.css"] < 90_000, sizes
+
+
+SCALE_FLOOR_PX = 12.0
+
+
+def _decl(body: str, prop: str) -> str | None:
+    match = re.search(rf"^\s*{prop}: ([^;]+);", body, re.MULTILINE)
+    return match.group(1).strip() if match else None
+
+
+def _font_floor(value: str, scale: dict[str, str]) -> float | None:
+    """The smallest pixel size a ``font-size`` value can render at, or None when the stylesheet
+    hands the decision to an ancestor the gate cannot see."""
+    value = value.strip()
+    if value == "inherit":
+        return SCALE_FLOOR_PX
+    if value.startswith("max("):
+        terms = [_font_floor(term, scale) for term in value[4:-1].split(",")]
+        known = [term for term in terms if term is not None]
+        return max(known) if known else None
+    if value.startswith("clamp("):
+        return _font_floor(value[6:-1].split(",")[0], scale)
+    token = re.fullmatch(r"var\((--[a-z0-9-]+)\)", value)
+    if token:
+        name = token.group(1)
+        return _font_floor(scale[name], scale) if name in scale else None
+    unit = re.fullmatch(r"(\d*\.?\d+)(rem|px)", value)
+    if unit:
+        return float(unit.group(1)) * (16 if unit.group(2) == "rem" else 1)
+    return None
+
+
+def test_no_site_font_size_renders_below_the_scale_floor() -> None:
+    """Inline mono shrank itself to ``0.92em`` to optically match the sans around it, and inside a
+    12px note that became 11.04px -- measured on 20 nodes across three pages, and invisible to
+    ``test_nothing_renders_text_below_the_floor``, which only reads absolute pixels under ``web/``.
+    A relative size has no floor unless the stylesheet states one, so every ``font-size`` on this
+    site must resolve to at least the smallest token in its own scale."""
+    css = read(STYLES)
+    scale = dict(re.findall(r"^\s*(--fs-[a-z0-9-]+): ([^;]+);", css, re.MULTILINE))
+    assert scale, "no --fs-* tokens found in :root"
+    offenders = {}
+    for value in re.findall(r"font-size:\s*([^;]+);", css):
+        floor = _font_floor(value, scale)
+        if floor is None or floor < SCALE_FLOOR_PX:
+            offenders[value] = floor
+    assert offenders == {}, offenders
+
+
+def test_the_inline_mono_is_shrunk_but_never_below_the_floor() -> None:
+    """The shrink is the point -- mono reads larger than the sans it sits in. What the rule may not
+    do is let that shrink cross the scale, so the floor has to live in the value itself."""
+    value = _decl(css_rule("code,\nkbd"), "font-size")
+    assert value is not None
+    assert value.startswith("max("), value
+    assert "var(--fs-label)" in value, value
+
+
+def test_the_registry_shows_every_description_it_publishes() -> None:
+    """The registry has no detail view: ``registry.js`` writes the whole sentence into ``.tool-desc``
+    and nothing else ever shows it. Clamping that box cut 54 of the 66 descriptions mid-word, so the
+    card sizes to its text and the grid equalises the row instead."""
+    rule = css_rule(".tool-desc")
+    for prop in ("text-overflow", "white-space", "overflow"):
+        assert _decl(rule, prop) is None, f"{prop} reintroduces the clamp"
+    registry = read(REGISTRY_JS)
+    assert "description.className = 'tool-desc'" in registry
+    assert "description.textContent = tool.description" in registry
+
+
+def test_recorded_frames_wrap_like_every_other_code_block() -> None:
+    """``.stage-code`` holds the two recorded JSON-RPC frames, and ``white-space: pre`` put them past
+    their own box -- 1022px of text in 1010px, 1080 in 1010, and 1022 in 271 at a phone width --
+    behind a horizontal scroll nothing hinted at. ``.codeblock`` already wraps the same content."""
+    stage = css_rule(".stage-code code")
+    block = css_rule(".codeblock code")
+    for prop in ("white-space", "overflow-wrap"):
+        assert _decl(stage, prop) == _decl(block, prop), prop
+    assert _decl(stage, "white-space") == "pre-wrap"

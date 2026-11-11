@@ -222,7 +222,10 @@ body::after {
 code,
 kbd {
     font-family: var(--font-mono);
-    font-size: 0.92em;
+    /* Mono reads larger than the sans it sits inside, so inline code is shrunk to 0.92em --
+       but a 12px note turned that into 11.04px, under the floor the scale itself starts at.
+       The shrink stays, the floor is what it cannot go below. */
+    font-size: max(0.92em, var(--fs-label));
     color: var(--violet-text);
 }
 
@@ -876,11 +879,12 @@ a {
 }
 
 .tool-card {
-    /* One row per tool: 66 cards at 160-257px each made the registry a second page of
-       its own. The description is clamped to one line and the parameters unfold on
-       hover, keyboard focus or after a click has built the frame. A button's auto width
-       is fit-content, not fill-available, so the nowrap summary would widen the card past
-       its grid track (measured 403px in a 273px track) and push the page sideways. */
+    /* One row per tool, description included: an ellipsis here cut 54 of the 66 descriptions
+       mid-word, and the page has no detail view that could show the rest -- the full sentence
+       is the content the registry exists to publish. Cards therefore size to their text, and
+       the grid equalises each row. A button's auto width is fit-content, not fill-available,
+       so the unwrapped summary would widen the card past its grid track (measured 403px in a
+       273px track) and push the page sideways; width and min-width are what stop that. */
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
@@ -955,9 +959,6 @@ a {
     font-size: var(--fs-sm);
     line-height: 1.5;
     color: var(--ink-mute);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 .tool-params {
@@ -2533,8 +2534,8 @@ html:not(.js) .composition {
     display: block;
     font-size: var(--fs-sm);
     line-height: 1.55;
-    white-space: pre;
-    overflow-wrap: normal;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
 }
 
 @supports (animation-timeline: view()) {

@@ -9,6 +9,8 @@ from pathlib import Path
 
 from loguru import logger
 
+from raven.core.security.code_sandbox import PYTHON_RUNNER_MODULE, untrusted_child_env
+
 PLUGIN_NAME = "process"
 PLUGIN_DESCRIPTION = "Run, list, and manage system processes"
 
@@ -81,10 +83,11 @@ async def run_python(code: str, timeout: int = 60) -> str:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
-            "raven.tools._pyrunner",
+            PYTHON_RUNNER_MODULE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             stdin=asyncio.subprocess.PIPE,
+            env=untrusted_child_env(),
         )
         try:
             stdout, stderr = await asyncio.wait_for(

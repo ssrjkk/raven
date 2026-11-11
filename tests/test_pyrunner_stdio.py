@@ -1,7 +1,8 @@
 """The sandbox subprocess runner must read and write UTF-8 whatever code page the host uses.
 
 `raven.tools.shell.python_code`, `raven/plugins/code` and `raven/plugins/process` all spawn
-`python -m raven.tools._pyrunner`, write `code.encode("utf-8")` into it and decode UTF-8 back.
+`python -m raven.core._pyrunner` (the shared `PYTHON_RUNNER_MODULE`), write `code.encode("utf-8")`
+into it and decode UTF-8 back.
 Before the runner pinned its own streams it used the machine's ANSI code page in between: on a
 cp1251 host `len("привет")` executed as `len` of mojibake and returned 12, and an emoji result
 killed the child with UnicodeEncodeError, so the tool answer was a traceback.
