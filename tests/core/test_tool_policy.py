@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 
-import raven.core.security.policy_engine as policy_engine
+from raven.core.security.policy_engine import PolicyEngine
 from raven.core.security.tool_policy import (
     ExecAskMode,
     ExecSecurity,
@@ -35,6 +36,25 @@ class TestResolveSafe:
 
     def test_outside_root_returns_none(self, tmp_path: Path):
         assert resolve_within_root(str(tmp_path.parent / "escape"), tmp_path) is None
+
+    def test_traversal_that_stays_inside_root_returns_the_normalized_path(self, tmp_path: Path):
+        (tmp_path / "sub").mkdir()
+        expected = (tmp_path / "notes.txt").resolve()
+        assert resolve_within_root(str(tmp_path / "sub" / ".." / "notes.txt"), tmp_path) == expected
+
+    def test_traversal_out_of_root_returns_none(self, tmp_path: Path):
+        # The string begins with the root; only the resolved form shows it leaves the root.
+        assert resolve_within_root(str(tmp_path / "sub" / ".." / ".." / "escape"), tmp_path) is None
+
+    def test_symlink_out_of_root_returns_none(self, tmp_path: Path):
+        real = tmp_path.parent / "real_outside"
+        real.mkdir(exist_ok=True)
+        link = tmp_path / "link"
+        try:
+            link.symlink_to(real)
+        except (OSError, NotImplementedError):
+            pytest.skip("symlinks not supported on this platform")
+        assert resolve_within_root(str(link / "secret.txt"), tmp_path) is None
 
 
 class TestSetWorkspaceRoot:
@@ -72,7 +92,7 @@ class TestPolicyEngineDeny:
     """The ruleset is a veto: a ``deny`` from it refuses, anything else falls through."""
 
     async def test_check_exec_denied_by_policy_engine(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, name, data: ("deny", "no-evil"))
+        monkeypatch.setattr(PolicyEngine, "evaluate", lambda self, name, data: ("deny", "no-evil"))
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL)
         allowed, reason = await p.check_exec("evil")
         assert allowed is False
@@ -80,13 +100,13 @@ class TestPolicyEngineDeny:
         assert "no-evil" in (reason or "")
 
     async def test_check_exec_allowed_by_policy_engine(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, name, data: ("allow", "any-rule"))
+        monkeypatch.setattr(PolicyEngine, "evaluate", lambda self, name, data: ("allow", "any-rule"))
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL)
         allowed, _reason = await p.check_exec("good")
         assert allowed is True
 
     async def test_check_exec_unmatched_by_policy_engine_falls_through(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, name, data: (None, None))
+        monkeypatch.setattr(PolicyEngine, "evaluate", lambda self, name, data: (None, None))
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL)
         allowed, _reason = await p.check_exec("good")
         assert allowed is True
@@ -97,29 +117,29 @@ class TestPolicyEngineDeny:
         def boom(self, name, data):
             raise PolicyLoadError(f"{name}.json is not a readable ruleset")
 
-        monkeypatch.setattr(type(policy_engine), "evaluate", boom)
+        monkeypatch.setattr(PolicyEngine, "evaluate", boom)
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL)
         allowed, reason = await p.check_exec("anything")
         assert allowed is False
         assert "unreadable" in (reason or "")
 
     def test_is_tool_allowed_denied_by_policy_engine(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, name, data: ("deny", "no-anything"))
+        monkeypatch.setattr(PolicyEngine, "evaluate", lambda self, name, data: ("deny", "no-anything"))
         p = ToolPolicyEvaluator(profile="full")
         assert p.is_tool_allowed("anything") is False
 
     def test_is_tool_allowed_policy_engine_allows(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, name, data: ("allow", "any-rule"))
+        monkeypatch.setattr(PolicyEngine, "evaluate", lambda self, name, data: ("allow", "any-rule"))
         p = ToolPolicyEvaluator(profile="full")
         assert p.is_tool_allowed("anything") is True
 
     def test_an_allow_rule_cannot_widen_the_operators_deny_list(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, name, data: ("allow", "anything-goes"))
+        monkeypatch.setattr(PolicyEngine, "evaluate", lambda self, name, data: ("allow", "anything-goes"))
         p = ToolPolicyEvaluator(profile="full", deny=["marked"])
         assert p.is_tool_allowed("marked") is False
 
     def test_the_refusal_names_the_layer_that_refused(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr(type(policy_engine), "evaluate", lambda self, name, data: ("deny", "deny-by-file"))
+        monkeypatch.setattr(PolicyEngine, "evaluate", lambda self, name, data: ("deny", "deny-by-file"))
         p = ToolPolicyEvaluator(profile="full")
         reason = p.denial_reason("filed-away")
         assert "deny-by-file" in (reason or "")
@@ -127,7 +147,7 @@ class TestPolicyEngineDeny:
 
 
 class TestCheckExecWorkspace:
-    """Containment applies to arguments that name a location, and only when a root is configured."""
+    """Containment applies to arguments that name a location; the root is the pinned one or the deployed one."""
 
     async def test_path_outside_workspace_rejected(self, tmp_path: Path):
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL, workspace_root=str(tmp_path))
@@ -157,7 +177,7 @@ class TestCheckExecWorkspace:
         allowed, _reason = await p.check_exec("shell_execute", {"command": "ls", "cwd": ""})
         assert allowed is True
 
-    async def test_no_explicit_root_confines_to_the_resolved_workspace_instead_of_opening_every_path(
+    async def test_a_pinned_root_confines_to_the_workspace_instead_of_opening_every_path(
         self, tmp_path: Path
     ):
         """`workspace_root=None` used to mean "no containment at all", which let SAM through.
@@ -177,6 +197,23 @@ class TestCheckExecWorkspace:
             assert inside is True, "the resolved root is a boundary, not a blanket denial"
         finally:
             reset_workspace_root(token)
+
+    async def test_an_environment_root_confines_to_the_deployment_roots(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # allowed_roots() is the fallback: the resolved workspace plus the system temp dir, so an
+        # evaluator without a pinned root is still contained. The probe must be a path this platform
+        # reads as absolute — a Windows-style string is relative on Linux and would slip through.
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(ws))
+        p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL, workspace_only=True, workspace_root=None)
+        allowed, _reason = await p.check_exec("t", {"path": str(ws / "notes.txt")})
+        assert allowed is True
+        outside = Path(tempfile.gettempdir()).parent / "raven-outside-roots" / "notes.txt"
+        denied, reason = await p.check_exec("t", {"path": str(outside)})
+        assert denied is False
+        assert "outside the workspace root" in (reason or "")
 
     async def test_workspace_only_off_skips_containment(self, tmp_path: Path):
         p = ToolPolicyEvaluator(

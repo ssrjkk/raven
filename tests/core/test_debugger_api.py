@@ -14,8 +14,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import raven.core.debugger_api as dba
+from raven.core.config import settings
 from raven.core.debugger_api import BreakpointRequest, _DebugSession
 from raven.core.security.path_guard import confine_path
+from raven.core.workspace import reset_workspace_root, set_workspace_root
 
 
 @pytest.fixture(autouse=True)
@@ -64,10 +66,8 @@ def _wait_until(session: _DebugSession, status: str, timeout: float = 5.0) -> bo
 def test_the_root_is_the_process_default_when_nothing_is_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from raven.core import config as config_module
-
     monkeypatch.delenv("RAVEN_WORKSPACE", raising=False)
-    monkeypatch.setattr(config_module.settings, "workspace_path", "")
+    monkeypatch.setattr(settings, "workspace_path", "")
     assert dba._get_workspace() == Path.cwd().resolve()
 
 
@@ -83,6 +83,15 @@ def test_the_root_is_read_at_call_time_not_at_import(monkeypatch: pytest.MonkeyP
     assert dba._get_workspace() == first.resolve()
     monkeypatch.setenv("RAVEN_WORKSPACE", str(second))
     assert dba._get_workspace() == second.resolve()
+
+
+def test_the_pinned_override_beats_the_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path / "other"))
+    token = set_workspace_root(tmp_path)
+    try:
+        assert dba._get_workspace() == tmp_path.resolve()
+    finally:
+        reset_workspace_root(token)
 
 
 def test_confine_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

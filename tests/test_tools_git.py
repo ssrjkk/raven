@@ -10,6 +10,7 @@ import pytest
 
 from raven.core.config import settings
 from raven.core.task_engine.tool_registry import ToolRegistry
+from raven.core.workspace import is_within
 from raven.tools import git as git_mod
 from raven.tools.git import (
     _confined_workspace,
@@ -87,11 +88,25 @@ class TestConfinedWorkspace:
         inside = Path.cwd() / "some" / "repo"
         assert _confined_workspace("some/repo") == inside.resolve()
 
-    def test_a_repo_outside_the_root_is_refused_not_redirected(self, tmp_path: Path) -> None:
-        """Returning the workspace log instead of the refused repo's would be a false success."""
+    def test_a_temporary_workspace_is_a_real_workspace(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The system temp dir is an always-allowed root (workspace.allowed_roots), exactly as in confine().
+        monkeypatch.delenv("RAVEN_WORKSPACE", raising=False)
+        monkeypatch.setattr(settings, "workspace_path", "")
+        target = tmp_path / "some" / "repo"
+        assert _confined_workspace(str(target)) == target.resolve()
+
+    def test_a_repo_outside_every_allowed_root_is_refused_not_redirected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Handing back the base would report another repository's status as the one the caller named."""
         base = tmp_path / "base"
         base.mkdir()
-        outside = tmp_path / "other" / "repo"
+        monkeypatch.delenv("RAVEN_WORKSPACE", raising=False)
+        monkeypatch.setattr(settings, "workspace_path", str(base))
+        # tmp_path lives under the temp dir, which is always allowed, so it cannot express "outside
+        # every root"; the tests themselves live in the repository, which is outside a temp base.
+        outside = Path(__file__).resolve().parent
+        assert not is_within(str(outside)), "the probe must sit outside both allowed roots"
         with pytest.raises(PermissionError, match="outside the workspace root"):
             _confined_workspace(str(outside))
 

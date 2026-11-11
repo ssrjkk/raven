@@ -22,7 +22,6 @@ _EXPORTS = {
     "PolicyEngine": "raven.core.security.policy_engine",
     "Rule": "raven.core.security.policy_engine",
     "RuleSet": "raven.core.security.policy_engine",
-    "policy_engine": "raven.core.security.policy_engine",
     "SecurityAudit": "raven.core.security.security_audit",
     "ExecAskMode": "raven.core.security.tool_policy",
     "ExecSecurity": "raven.core.security.tool_policy",

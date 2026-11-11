@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from raven.core.config import settings
 from raven.core.task_engine.tool_registry import ToolRegistry
 from raven.tools.file import (
     _confine,
@@ -41,10 +42,8 @@ class TestWorkspace:
     def test_the_default_root_is_the_working_directory(self, monkeypatch) -> None:
         """The file tools used to default to ``data/``, a directory no other surface called the
         workspace; one root means the working directory unless the operator says otherwise."""
-        from raven.core import config as config_module
-
         monkeypatch.delenv("RAVEN_WORKSPACE", raising=False)
-        monkeypatch.setattr(config_module.settings, "workspace_path", "")
+        monkeypatch.setattr(settings, "workspace_path", "")
         assert _workspace() == Path.cwd().resolve()
 
     def test_workspace_from_env(self, tmp_path: Path, monkeypatch) -> None:

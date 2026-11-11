@@ -136,6 +136,15 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
 ### Fixed
+- Making `raven/core/security/__init__.py` lazy to buy back the sandbox's 13 s silently changed what
+  `import raven.core.security.policy_engine as policy_engine` binds, and eight policy-veto tests in
+  `tests/core/test_tool_policy.py` started dying on `AttributeError: <class 'module'> has no attribute
+  'evaluate'`. Under the old eager init the package namespace held the `PolicyEngine` singleton under the
+  submodule's own name, and `import a.b as x` resolves through that attribute, so `type(x)` was the class
+  the tests patched; lazily, the same statement returns the module. The aliasing was never the contract,
+  so the tests now patch `PolicyEngine` directly, the lazy map no longer keys any name after the submodule
+  it lives in, and `TestSecurityPackageInit` refuses either regression (verified by re-adding the key: the
+  guard fails, the policy tests still pass)
 - `code.run_python` could not execute any code on Windows: every call answered with a Winsock traceback
   instead of a result. The plugin's own environment safelist spelled the key `SystemRoot` and tested
   membership case-sensitively, while the parent environment spells it `SYSTEMROOT`, so the one key

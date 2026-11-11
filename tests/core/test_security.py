@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import importlib.util as importlib_util
 import json as json_module
 import subprocess
@@ -368,3 +369,19 @@ class TestConfirmationFailsClosed:
         allowed, reason = await p.check_exec("process.kill", {})
         assert not allowed
         assert "deny-dangerous-tools" in (reason or "")
+
+
+class TestSecurityPackageInit:
+    """`raven/core/security/__init__.py` resolves its names lazily; that lazy map must not key a
+    name by the submodule it lives in. `import raven.core.security.policy_engine as x` binds the
+    package attribute when one exists, so a key equal to its own submodule makes the same statement
+    return the module or the singleton depending on which ran first."""
+
+    def test_no_lazy_export_is_named_after_its_own_submodule(self) -> None:
+        exports: dict[str, str] = importlib.import_module("raven.core.security").__dict__["_EXPORTS"]
+        shadowed = {name for name, source in exports.items() if name == source.rpartition(".")[2]}
+        assert not shadowed, f"{sorted(shadowed)} would resolve to the object inside the module"
+
+    def test_a_submodule_import_leaves_the_package_attribute_as_the_module(self) -> None:
+        module = importlib.import_module("raven.core.security.policy_engine")
+        assert importlib.import_module("raven.core.security").policy_engine is module

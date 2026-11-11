@@ -7,7 +7,7 @@ from typing import Any
 
 from raven.coding.git_integration import GitIntegration
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
-from raven.core.workspace import workspace_root
+from raven.core.workspace import is_within, workspace_root
 
 
 def _get_git() -> GitIntegration:
@@ -21,6 +21,11 @@ def _confined_workspace(workspace: str) -> Path:
     try:
         relative = target.relative_to(base)
     except ValueError as exc:
+        # Same allowance as the core confine(): the system temp dir is an always-allowed root, so a
+        # temporary workspace is a real workspace. Everything else is refused -- handing back `base`
+        # would report another repository's status as the one the caller named.
+        if is_within(str(target)):
+            return target
         msg = f"Access denied: {workspace} is outside the workspace root {base}"
         raise PermissionError(msg) from exc
     current = base

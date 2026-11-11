@@ -120,9 +120,9 @@ class TestCronPlugin:
 
 class TestFilesPlugin:
     def _allow(self, tmp_path):
-        import os
-
-        return patch.dict(os.environ, {"RAVEN_WORKSPACE": str(tmp_path)})
+        # confine() already allows the system temp dir, and tmp_path lives there:
+        # no roots patching needed under the central workspace design.
+        return contextlib.nullcontext()
 
     @pytest.mark.asyncio
     async def test_write_and_read(self, tmp_path):
