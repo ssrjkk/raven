@@ -325,11 +325,18 @@ class TestBrowserNavigate:
         await browser_mod.browser_navigate("www.example.com")
         page.goto.assert_awaited_once_with("https://www.example.com", wait_until="domcontentloaded", timeout=30000)
 
-    async def test_wait_until_param_ignored(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_wait_until_reaches_goto(self, monkeypatch: pytest.MonkeyPatch) -> None:
         page = _FakePage()
         _install_browser(monkeypatch, page)
         await browser_mod.browser_navigate("http://example.com", wait_until="load", timeout=7)
-        page.goto.assert_awaited_once_with("http://example.com", wait_until="domcontentloaded", timeout=7000)
+        page.goto.assert_awaited_once_with("http://example.com", wait_until="load", timeout=7000)
+
+    async def test_unknown_wait_until_is_refused_before_navigation(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        page = _FakePage()
+        _install_browser(monkeypatch, page)
+        result = await browser_mod.browser_navigate("http://example.com", wait_until="whenever")
+        assert result.startswith("Blocked: wait_until must be one of ")
+        page.goto.assert_not_awaited()
 
     async def test_blocked(self) -> None:
         result = await browser_mod.browser_navigate("http://127.0.0.1")

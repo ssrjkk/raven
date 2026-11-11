@@ -60,7 +60,10 @@ def _print_welcome() -> None:
         Panel.fit(
             "[bold]Raven Code Agent[/bold]\n"
             "Type your coding task, or use commands:\n"
-            "  /multisession  — list parallel sessions\n"
+            "  /session <id>  — continue a session's conversation\n"
+            "  /session <name> <task> — run a task in a new named session\n"
+            "  /multisession  — list sessions\n"
+            "  /enrich        — load project context via LSP\n"
             "  /plan          — plan-only mode (read-only)\n"
             "  /safe          — safe mode (confirm dangerous)\n"
             "  /fast          — fast mode (no confirm, no preview)\n"
@@ -157,12 +160,14 @@ async def _run_interactive(
                 console.print(f"[yellow]{ctx}[/yellow]")
             continue
 
-        if line.strip().startswith("/session "):
+        if line.strip().startswith("/session"):
             parts = shlex.split(line.strip())
-            if len(parts) >= 2:
-                _switch_session(parts[1], agent)
+            if len(parts) >= 3:
+                await _start_named_session(parts[1], " ".join(parts[2:]), agent)
+            elif len(parts) == 2:
+                await _switch_session(parts[1], agent)
             else:
-                console.print("[yellow]Usage: /session <session-id>[/yellow]")
+                console.print("[yellow]Usage: /session <id> | /session <name> <task>[/yellow]")
             continue
 
         if line.strip().startswith("/"):
@@ -190,10 +195,10 @@ def _show_multisessions() -> None:
     mgr = get_session_manager()
     sessions = mgr.sessions
     if not sessions:
-        console.print("[yellow]No parallel sessions[/yellow]")
+        console.print("[yellow]No sessions yet[/yellow]")
         console.print("[dim]Use /session <name> <task> to start one[/dim]")
         return
-    table = Table(title="Parallel Sessions")
+    table = Table(title="Sessions")
     table.add_column("ID", style="cyan")
     table.add_column("Name")
     table.add_column("Status", style="green")
@@ -203,13 +208,32 @@ def _show_multisessions() -> None:
     console.print(table)
 
 
-def _switch_session(session_id: str, current_agent: ReActAgent) -> None:
+async def _switch_session(session_id: str, current_agent: ReActAgent) -> None:
     mgr = get_session_manager()
-    session = asyncio.run_coroutine_threadsafe(mgr.get(session_id), asyncio.get_event_loop()).result()
-    if session:
-        console.print(f"[green]Switched to session {session_id[:8]}[/green]")
-    else:
-        console.print(f"[yellow]Session not found: {session_id}[/yellow]")
+    # the table lists an 8-character prefix, so that prefix has to be enough to switch
+    matches = [s.id for s in mgr.sessions if s.id.startswith(session_id)]
+    if len(matches) > 1:
+        console.print(f"[yellow]Ambiguous id {session_id}: {', '.join(m[:8] for m in matches)}[/yellow]")
+        return
+    session = await mgr.get(matches[0]) if matches else None
+    if session is None:
+        console.print(f"[yellow]No session matches: {session_id}[/yellow]")
+        return
+    current_agent.conversation = session.agent.conversation
+    console.print(f"[green]Switched to session {session.id[:8]} ({session.name}), {session.message_count} messages[/green]")
+
+
+async def _start_named_session(name: str, task: str, current_agent: ReActAgent) -> None:
+    mgr = get_session_manager()
+    session = await mgr.create(
+        name=name,
+        max_steps=current_agent.config.max_steps,
+        confirm_dangerous=current_agent.config.confirm_dangerous,
+    )
+    console.print(f"[dim]Session {session.id[:8]} ({name}) running...[/dim]")
+    result = await session.run(task)
+    console.print(f"[bold]Result:[/bold] {result[:2000]}")
+    console.print(f"[dim]Continue it with /session {session.id[:8]}[/dim]")
 
 
 async def _start_parallel_session(

@@ -58,7 +58,7 @@ def canvas_render(components: list[dict[str, Any]]) -> str:
     return "\n\n".join(rendered)
 
 
-async def canvas_show(path: str, width: int = 800, height: int = 600) -> str:
+async def canvas_show(path: str) -> str:
     try:
         import tempfile
         import webbrowser
@@ -125,8 +125,6 @@ def register_canvas_tools(registry: ToolRegistry) -> None:
             description="Open an HTML file as a visual canvas in the browser",
             parameters={
                 "path": {"type": "string", "description": "Path to HTML file", "required": True},
-                "width": {"type": "integer", "description": "Canvas width", "required": False},
-                "height": {"type": "integer", "description": "Canvas height", "required": False},
             },
             handler=canvas_show,
             category="visual",

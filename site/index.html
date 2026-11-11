@@ -74,12 +74,13 @@
             <span class="nav-toggle-bar" aria-hidden="true"></span>
         </button>
     </header>
+    <div class="scroll-progress" aria-hidden="true"></div>
 
     <main id="main">
         <section class="hero" id="top">
             <canvas id="hero-canvas" aria-hidden="true"></canvas>
             <div class="hero-shell">
-                <div>
+                <div class="hero-copy">
                     <p class="eyebrow">self-hosted mcp server · v0.4.8</p>
                     <h1>Raven<span class="caret" aria-hidden="true"></span></h1>
                     <p class="hero-tagline">66 tools. One server. Two transports.</p>
@@ -101,17 +102,27 @@
                 </div>
                 <div class="console" aria-labelledby="handshake-title">
                     <div class="console-header">
-                        <span id="handshake-title">raven-mcp — stdio</span>
-                        <span class="console-meta">handshake</span>
+                        <span id="handshake-title" class="console-title"><span class="live-dot" aria-hidden="true"></span><span class="console-name">raven-mcp — stdio</span></span>
+                        <fieldset class="transport-switch">
+                            <legend class="sr-only">Which transport carried the frames below</legend>
+                            <input type="radio" name="transport" id="transport-stdio" value="stdio" checked>
+                            <label for="transport-stdio">stdio</label>
+                            <input type="radio" name="transport" id="transport-http" value="http">
+                            <label for="transport-http">HTTP</label>
+                        </fieldset>
                     </div>
                     <div class="console-body" id="handshake-body" role="log" aria-live="polite" tabindex="0"
                          aria-label="Recorded initialize and tools/list exchange">
-                        <div class="console-line line-request">{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"any-mcp-client","version":"*"}}}</div>
-                        <div class="console-line line-response">{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{}},"serverInfo":{"name":"raven-mcp","version":"0.4.8"}}}</div>
-                        <div class="console-line line-request">{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}</div>
-                        <div class="console-line line-response">{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"read"},{"name":"write"},{"name":"edit"},{"name":"verify"},{"name":"glob"},{"name":"grep"},{"name":"bash"},"… 59 more"]}}</div>
+                        <div class="console-line line-request"><span class="frame-route" aria-hidden="true">client → raven-mcp · stdin</span><span class="frame">{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"any-mcp-client","version":"*"}}}</span></div>
+                        <div class="console-line line-response"><span class="frame-route" aria-hidden="true">raven-mcp → client · stdout</span><span class="frame">{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{}},"serverInfo":{"name":"raven-mcp","version":"0.4.8"}}}</span></div>
+                        <div class="console-line line-request"><span class="frame-route" aria-hidden="true">client → raven-mcp · stdin</span><span class="frame">{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}</span></div>
+                        <div class="console-line line-response"><span class="frame-route" aria-hidden="true">raven-mcp → client · stdout</span><span class="frame">{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"read"},{"name":"write"},{"name":"edit"},{"name":"verify"},{"name":"glob"},{"name":"grep"},{"name":"bash"},"… 59 more"]}}</span></div>
                         <div class="console-line line-system">66 tools registered · workspace confined</div>
                     </div>
+                    <p class="console-source">
+                        Replayed from a live <code>raven-mcp</code> process by
+                        <code>scripts/record_site_frames.py</code> — no frame here is typed by hand.
+                    </p>
                 </div>
             </div>
             <div class="hero-install">
@@ -146,6 +157,53 @@ pip install .</code></pre>
         </section>
 
         <div class="content-body">
+        <section id="numbers" class="section">
+            <div class="section-inner">
+                <div class="section-head">
+                    <p class="eyebrow">Counted from the tree</p>
+                    <h2>The repository, measured</h2>
+                    <p class="section-desc">
+                        Five numbers the test suite recomputes on every commit. They are written into
+                        <code>site/stats.js</code> by the recorder rather than typed into the page, so
+                        a count that drifts from the code fails CI instead of shipping a wrong claim.
+                    </p>
+                </div>
+
+                <dl class="stats">
+                    <div class="stat">
+                        <dt class="stat-term">Registered tools</dt>
+                        <dd class="stat-number" data-stat="tools">66</dd>
+                        <dd class="stat-note">what <code>tools/list</code> returns</dd>
+                    </div>
+                    <div class="stat">
+                        <dt class="stat-term">Channel adapters</dt>
+                        <dd class="stat-number" data-stat="adapters">15</dd>
+                        <dd class="stat-note">one <code>channel.py</code> each</dd>
+                    </div>
+                    <div class="stat">
+                        <dt class="stat-term">Console screens</dt>
+                        <dd class="stat-number" data-stat="screens">38</dd>
+                        <dd class="stat-note">routes the SPA registers</dd>
+                    </div>
+                    <div class="stat">
+                        <dt class="stat-term">Optional groups</dt>
+                        <dd class="stat-number" data-stat="groups">32</dd>
+                        <dd class="stat-note">declared in <code>pyproject.toml</code></dd>
+                    </div>
+                    <div class="stat">
+                        <dt class="stat-term">Commands installed</dt>
+                        <dd class="stat-number" data-stat="commands">5</dd>
+                        <dd class="stat-note">console entry points</dd>
+                    </div>
+                </dl>
+
+                <div class="composition" id="composition">
+                    <p class="composition-title">The registry by category</p>
+                    <ul class="composition-list" id="composition-list"></ul>
+                </div>
+            </div>
+        </section>
+
         <section id="features" class="section">
             <div class="section-inner">
                 <div class="section-head">
@@ -160,27 +218,95 @@ pip install .</code></pre>
                     <div class="feature-card">
                         <h3>Self-hosted</h3>
                         <p>One Python process on your own server. Nothing of yours runs on anyone else's hardware: the calls it makes go to the LLM provider, the messengers and the tools you configure, and every one of those destinations is listed in the egress map.</p>
+                        <p class="feature-tag">nothing between you and the model</p>
                     </div>
                     <div class="feature-card">
                         <h3>66 tools</h3>
                         <p>Files, shell, git, web search, code analysis, testing, memory, routines, monitors — all over MCP.</p>
+                        <p class="feature-tag">one registry, every surface</p>
                     </div>
                     <div class="feature-card">
                         <h3>Two transports</h3>
                         <p>stdio for local clients that spawn the server as a subprocess, JSON-RPC over HTTP for remote access.</p>
+                        <p class="feature-tag">identical frames on both</p>
                     </div>
                     <div class="feature-card">
                         <h3>Workspace confinement</h3>
                         <p>Every file operation is bounded to your project. Symlinks resolved, escape attempts blocked.</p>
+                        <p class="feature-tag">refused, never silently rewritten</p>
                     </div>
                     <div class="feature-card">
                         <h3>Keyed auth</h3>
                         <p>HTTP transport requires a secret token. Fail-closed: unconfigured means rejected, not accepted.</p>
+                        <p class="feature-tag">Bearer or X-Raven-Key</p>
                     </div>
                     <div class="feature-card">
                         <h3>MIT licensed</h3>
-                        <p>Use it, modify it, distribute it. No copyleft, no strings attached.</p>
+                        <p>Use it, modify it, distribute it. No copyleft, no strings attached. The server is Python you can read end to end, and every page here is built from the same tree the package ships — the tool list, the recorded frames and the five counts above all come out of the repository they describe.</p>
+                        <p class="feature-tag">source, tests and documentation in one repository</p>
                     </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="anatomy" class="section">
+            <div class="section-inner">
+                <div class="section-head">
+                    <p class="eyebrow">Request path</p>
+                    <h2>One frame, end to end</h2>
+                    <p class="section-desc">
+                        What happens between a client pressing Enter and the tool's own text landing
+                        back in the reply — four stages, each quoted from the code that runs it.
+                    </p>
+                </div>
+
+                <div class="anatomy">
+                    <article class="stage">
+                        <p class="stage-mark" aria-hidden="true">01</p>
+                        <div class="stage-body">
+                            <h3>The client writes one frame</h3>
+                            <p>A single JSON object, newline-terminated. Nothing about it is specific
+                                to Raven: this is the <code>tools/call</code> shape the MCP
+                                specification defines, which is why any client can send it.</p>
+                            <pre class="stage-code"><code>{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"read","arguments":{"path":"README.md","max_chars":100}}}</code></pre>
+                        </div>
+                    </article>
+                    <article class="stage">
+                        <p class="stage-mark" aria-hidden="true">02</p>
+                        <div class="stage-body">
+                            <h3>The transport carries it</h3>
+                            <p>On stdio the frame goes down the pipe the client opened. On HTTP the
+                                same bytes become the body of <code>POST /mcp/rpc</code>, and the call
+                                is refused before anything is parsed unless an
+                                <code>Authorization: Bearer</code> or <code>X-Raven-Key</code> header
+                                checks out.</p>
+                            <pre class="stage-code"><code>POST /mcp/rpc HTTP/1.1
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json</code></pre>
+                        </div>
+                    </article>
+                    <article class="stage">
+                        <p class="stage-mark" aria-hidden="true">03</p>
+                        <div class="stage-body">
+                            <h3>Policy gets the veto</h3>
+                            <p>Before execution the name and its arguments pass through the ruleset the
+                                agent path obeys as well. A denied call comes back as an error, not as
+                                an empty result that reads like success.</p>
+                            <pre class="stage-code"><code>{"jsonrpc":"2.0","error":{"code":-32601,"message":"Unauthorized"}}</code></pre>
+                            <pre class="stage-code"><code>'process.run' is denied by policy - 'process.run' is in TOOLS_DENY</code></pre>
+                        </div>
+                    </article>
+                    <article class="stage">
+                        <p class="stage-mark" aria-hidden="true">04</p>
+                        <div class="stage-body">
+                            <h3>The tool answers</h3>
+                            <p>The reply is the server's own answer to the frame in stage 01, recorded
+                                from the process instead of written for the page — including the
+                                truncation marker the <code>read</code> tool emits when a file is
+                                longer than the budget it was given.</p>
+                            <pre class="stage-code"><code>{"jsonrpc":"2.0","id":4,"result":{"content":[{"type":"text","text":"&lt;div align=\"center\"&gt; … (truncated, 8720 total chars)"}]}}</code></pre>
+                        </div>
+                    </article>
                 </div>
             </div>
         </section>
@@ -352,6 +478,8 @@ ravenflow</code></pre>
     </footer>
 
     <script src="procedural-animation.js" defer></script>
+    <script src="stats.js" defer></script>
+    <script src="landing.js" defer></script>
     <script src="main.js" defer></script>
 </body>
 </html>

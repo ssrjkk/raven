@@ -90,6 +90,21 @@
     --violet-edge: color-mix(in srgb, var(--violet) 34%, transparent);
     --violet-wash: color-mix(in srgb, var(--violet) 10%, transparent);
 
+    /* Glass is a lens, not a tint: the fill is ink at 3%, so a panel over the hero reads the
+       backdrop through it instead of turning violet. Only the edge and the glow are brand. */
+    --glass-fill: color-mix(in srgb, var(--ink) 3%, transparent);
+    --glass-fill-strong: color-mix(in srgb, var(--ink) 5%, transparent);
+    --glass-edge: color-mix(in srgb, var(--ink) 14%, transparent);
+    --glass-top: color-mix(in srgb, var(--ink) 22%, transparent);
+    --glow: color-mix(in srgb, var(--violet) 26%, transparent);
+    --glow-strong: color-mix(in srgb, var(--fuchsia) 34%, transparent);
+
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --dur-fast: 160ms;
+    --dur: 320ms;
+    --dur-slow: 620ms;
+
     --shell: 1120px;
     --gut: 1.5rem;
     --radius: 6px;
@@ -416,23 +431,8 @@ a {
     margin-bottom: 0.9rem;
 }
 
-/* Inline, not absolutely positioned against the paragraph box: the tagline wraps to two
-   lines on a phone, and an anchored caret then lands on the right edge, away from the text. */
-.hero-tagline::after {
-    content: "";
-    display: inline-block;
-    width: 2px;
-    height: 1.05em;
-    margin-left: 0.35em;
-    background: var(--fuchsia);
-    vertical-align: -0.15em;
-    animation: taglineBlink 1.2s ease-in-out infinite;
-}
-
-@keyframes taglineBlink {
-    0%, 100% { opacity: 0; }
-    50% { opacity: 1; }
-}
+/* One caret, on the wordmark. The tagline used to blink its own bar next to it, and two
+   prompts on one screen read as a glitch rather than as a terminal. */
 
 .hero-description {
     font-size: var(--fs-lede);
@@ -464,7 +464,7 @@ a {
     color: var(--ink-mute);
 }
 
-.hero-facts span::before {
+.hero-facts span + span::before {
     content: "· ";
     color: var(--violet);
 }
@@ -1284,7 +1284,7 @@ a {
     margin: 0;
 }
 
-.door-meta {
+.door .door-meta {
     margin-top: auto;
     font-family: var(--font-mono);
     font-size: var(--fs-label);
@@ -2083,6 +2083,620 @@ footer {
     }
 }
 
+/* ============================================================
+   LANDING LAYER — the motion, glass and depth the landing page drives.
+   Everything here degrades in place: without JS the recorded frames are already in the
+   markup, without `animation-timeline` the scroll-linked fills are simply full, and the
+   reduced-motion block at the end of this file stops every loop this layer starts.
+   ============================================================ */
+
+/* ---------- scroll progress and the bar that condenses into it ---------- */
+
+.scroll-progress {
+    position: fixed;
+    top: var(--bar);
+    left: 0;
+    right: 0;
+    height: 2px;
+    z-index: 101;
+    pointer-events: none;
+    transform: scaleX(var(--scroll, 0));
+    transform-origin: 0 50%;
+    background: linear-gradient(90deg, var(--violet), var(--fuchsia));
+}
+
+.navbar.scrolled {
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
+    border-bottom-color: var(--hairline-strong);
+    box-shadow: 0 12px 32px color-mix(in srgb, var(--scrim) 55%, transparent);
+}
+
+/* ---------- hero ---------- */
+
+.hero-shell {
+    align-items: stretch;
+}
+
+.hero h1 {
+    background-size: 220% 100%;
+    animation: sheen 14s linear infinite;
+}
+
+@keyframes sheen {
+    0% { background-position: 130% 0; }
+    100% { background-position: -90% 0; }
+}
+
+.hero-copy {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+/* ---------- the recorded client: glass, transport switch, typed replay ---------- */
+
+.console {
+    background: linear-gradient(180deg, var(--glass-fill-strong), transparent 60%), var(--bg-panel);
+    border-color: var(--glass-edge);
+    box-shadow:
+        0 40px 90px -40px color-mix(in srgb, var(--scrim) 85%, transparent),
+        inset 0 1px 0 var(--glass-top);
+}
+
+.console-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.transport-switch {
+    display: inline-flex;
+    gap: 2px;
+    margin: 0;
+    padding: 2px;
+    border: 1px solid var(--hairline-strong);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+
+.transport-switch label {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    letter-spacing: 0.04em;
+    padding: 0.3rem 0.7rem;
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    color: var(--ink-mute);
+    cursor: pointer;
+    transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+
+.transport-switch input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+}
+
+.transport-switch input:checked + label {
+    background: var(--violet-wash);
+    color: var(--violet-text);
+    box-shadow: inset 0 0 0 1px var(--violet-edge);
+}
+
+.transport-switch input:focus-visible + label {
+    outline: 2px solid var(--violet-text);
+    outline-offset: 2px;
+}
+
+/* The replay hides a line by taking it out of the paint, never by hiding content from the
+   reader: with JS off the recorded exchange is simply there. */
+.js .console-line.replay-pending {
+    opacity: 0;
+    transform: translateY(6px);
+}
+
+.js .console-line {
+    transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+}
+
+.live-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 0.45em;
+    background: var(--fuchsia);
+    box-shadow: 0 0 0 0 var(--glow-strong);
+    animation: ping 2.4s var(--ease-out) infinite;
+}
+
+@keyframes ping {
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--fuchsia) 55%, transparent); }
+    70%, 100% { box-shadow: 0 0 0 9px transparent; }
+}
+
+.console-title {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.console-name {
+    white-space: nowrap;
+}
+
+.frame-route {
+    display: block;
+    font-size: var(--fs-label);
+    letter-spacing: 0.04em;
+    color: var(--ink-mute);
+}
+
+.frame {
+    display: block;
+}
+
+.console-source {
+    margin: 0;
+    padding: 0.6rem 0.9rem 0.75rem;
+    border-top: 1px solid var(--hairline);
+    font-size: var(--fs-label);
+    line-height: 1.5;
+    color: var(--ink-mute);
+}
+
+/* No script means no switch to flip and nothing to draw the split from, so both come out of the
+   layout and the page says exactly what its markup already said. */
+html:not(.js) .transport-switch,
+html:not(.js) .composition {
+    display: none;
+}
+
+/* ---------- numbers counted from the tree ---------- */
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.stat {
+    position: relative;
+    padding: 1.35rem 1.1rem 1.5rem;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 70%, transparent), transparent);
+    text-align: left;
+    transition: background-color var(--dur) var(--ease-out);
+}
+
+.stat:hover {
+    background: linear-gradient(180deg, var(--violet-wash), transparent);
+}
+
+.stat::after {
+    content: "";
+    position: absolute;
+    left: 1.1rem;
+    bottom: 0.9rem;
+    width: 22px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--violet), var(--fuchsia));
+    transition: width var(--dur-slow) var(--ease-out);
+}
+
+.stat:hover::after {
+    width: calc(100% - 2.2rem);
+}
+
+.stat-number {
+    display: block;
+    font-family: var(--font-display);
+    font-size: clamp(1.9rem, 3.4vw, 2.7rem);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+}
+
+.stat-term {
+    display: block;
+    margin-top: 0.55rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--violet-bright);
+}
+
+.stat-note {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: var(--fs-sm);
+    color: var(--ink-mute);
+}
+
+/* The category split is drawn from the same stats file as the five counts above, so every bar
+   on this row is a measured share of the registry rather than a hand-set width. */
+.composition {
+    margin-top: 1rem;
+    padding: 1.15rem 1.2rem 1.3rem;
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 45%, transparent), transparent);
+}
+
+.composition-title {
+    margin-bottom: 0.85rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--violet-bright);
+}
+
+.composition-list {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.composition-row {
+    display: grid;
+    grid-template-columns: 7.5rem minmax(0, 1fr) 3ch;
+    align-items: center;
+    gap: 0.85rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+}
+
+.composition-name {
+    color: var(--ink-mute);
+}
+
+.composition-track {
+    position: relative;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--hairline-strong);
+    overflow: hidden;
+}
+
+.composition-fill {
+    display: block;
+    width: var(--rel, 0%);
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--violet), var(--fuchsia));
+    transition: width var(--dur-slow) var(--ease-out);
+}
+
+.composition-count {
+    text-align: right;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------- bento: one wide claim, five supporting ones ---------- */
+
+.features-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.features-grid .feature-card:nth-child(1) { grid-column: span 4; }
+.features-grid .feature-card:nth-child(2) { grid-column: span 2; }
+.features-grid .feature-card:nth-child(3),
+.features-grid .feature-card:nth-child(4),
+.features-grid .feature-card:nth-child(5) { grid-column: span 2; }
+.features-grid .feature-card:nth-child(6) { grid-column: span 6; }
+
+/* Pointer light: the card answers where the cursor is, so the surface reads as glass under
+   a lamp rather than as a border that changes colour. Landing.js writes the two coordinates
+   through the CSSOM — a style attribute would be dropped by ``style-src 'self'``. */
+.feature-card,
+.door,
+.explore-card {
+    --gx: 50%;
+    --gy: 50%;
+}
+
+.feature-card::before {
+    background: radial-gradient(260px circle at var(--gx) var(--gy), var(--violet-wash), transparent 70%);
+}
+
+/* Glass depth: a light line along the inner top edge is what makes a panel read as a surface
+   with thickness rather than as a rectangle filled with the page background. */
+.feature-card,
+.stage {
+    box-shadow: inset 0 1px 0 var(--glass-top);
+}
+
+.feature-card:hover {
+    box-shadow:
+        inset 0 1px 0 var(--glass-top),
+        0 8px 32px color-mix(in srgb, var(--violet) 15%, transparent),
+        0 0 0 1px var(--violet-edge);
+}
+
+.explore-card:hover {
+    box-shadow:
+        inset 0 1px 0 var(--glass-top),
+        0 6px 20px color-mix(in srgb, var(--violet) 12%, transparent);
+}
+
+.feature-card:nth-child(1) p {
+    max-width: 62ch;
+}
+
+.feature-card .feature-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    margin-top: 0.9rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--violet-text);
+}
+
+/* ---------- anatomy: one frame, end to end ---------- */
+
+.anatomy {
+    display: grid;
+    gap: 1rem;
+    counter-reset: stage;
+}
+
+.stage {
+    position: relative;
+    display: grid;
+    grid-template-columns: 3.2rem minmax(0, 1fr);
+    gap: 1rem;
+    padding: 1.1rem 1.2rem;
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    background: linear-gradient(120deg, color-mix(in srgb, var(--bg-card) 55%, transparent), transparent);
+    backdrop-filter: blur(10px);
+}
+
+.stage .stage-mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 50%;
+    border: 1px solid var(--violet-edge);
+    background: var(--violet-wash);
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    color: var(--violet-text);
+}
+
+.stage h3 {
+    font-family: var(--font-display);
+    font-size: var(--fs-h3);
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 0.3rem;
+}
+
+.stage p {
+    color: var(--ink-mute);
+    font-size: var(--fs-sm);
+    max-width: 74ch;
+}
+
+.stage code {
+    overflow-wrap: anywhere;
+}
+
+/* The connector is the section's own spine: each stage draws its segment as it crosses the
+   viewport, and where `animation-timeline` is unknown the segment is simply drawn, which is the
+   same picture without the motion. */
+.stage:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    left: 2.2rem;
+    top: 3.6rem;
+    bottom: -0.4rem;
+    width: 2px;
+    background: linear-gradient(180deg, var(--violet-edge), transparent);
+    transform-origin: 50% 0;
+}
+
+.stage-body {
+    min-width: 0;
+}
+
+.stage-code {
+    margin: 0.7rem 0 0;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg) 65%, transparent);
+    overflow-x: auto;
+}
+
+.stage-code code {
+    display: block;
+    font-size: var(--fs-sm);
+    line-height: 1.55;
+    white-space: pre;
+    overflow-wrap: normal;
+}
+
+@supports (animation-timeline: view()) {
+    .js .stage:not(:last-child)::before {
+        transform: scaleY(0);
+        animation: rail-fill linear both;
+        animation-timeline: view(block);
+        animation-range: entry 40% cover 60%;
+    }
+
+    .js .stage {
+        opacity: 0;
+        animation: stage-in linear both;
+        animation-timeline: view(block);
+        animation-range: entry 0% cover 32%;
+    }
+}
+
+@keyframes rail-fill {
+    to { transform: scaleY(1); }
+}
+
+@keyframes stage-in {
+    from { opacity: 0; transform: translateY(26px); }
+    to { opacity: 1; transform: none; }
+}
+
+/* ---------- doors and explore: the same pointer light, wider reach ---------- */
+
+.door,
+.explore-card {
+    transition: transform var(--dur) var(--ease-spring), border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+}
+
+.door::after,
+.explore-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(320px circle at var(--gx) var(--gy), var(--glow), transparent 68%);
+    opacity: 0;
+    transition: opacity var(--dur) var(--ease-out);
+}
+
+.door:hover::after,
+.explore-card:hover::after {
+    opacity: 1;
+}
+
+.explore-card:hover .explore-go {
+    transform: translateX(6px);
+}
+
+.explore-go {
+    transition: transform var(--dur) var(--ease-spring);
+}
+
+/* ---------- staggered rise for the children of a revealed section ---------- */
+
+.js .section-inner.visible .stat,
+.js .section-inner.visible .feature-card,
+.js .section-inner.visible .door,
+.js .section-inner.visible .explore-card {
+    animation: rise var(--dur-slow) var(--ease-out) both;
+}
+
+.js .section-inner.visible .feature-card:nth-child(2),
+.js .section-inner.visible .door:nth-child(2),
+.js .section-inner.visible .explore-card:nth-child(2),
+.js .section-inner.visible .stat:nth-child(2) { animation-delay: 70ms; }
+
+.js .section-inner.visible .feature-card:nth-child(3),
+.js .section-inner.visible .door:nth-child(3),
+.js .section-inner.visible .explore-card:nth-child(3),
+.js .section-inner.visible .stat:nth-child(3) { animation-delay: 140ms; }
+
+.js .section-inner.visible .feature-card:nth-child(4),
+.js .section-inner.visible .explore-card:nth-child(4),
+.js .section-inner.visible .stat:nth-child(4) { animation-delay: 210ms; }
+
+.js .section-inner.visible .feature-card:nth-child(5),
+.js .section-inner.visible .explore-card:nth-child(5),
+.js .section-inner.visible .stat:nth-child(5) { animation-delay: 280ms; }
+
+.js .section-inner.visible .feature-card:nth-child(6) { animation-delay: 350ms; }
+
+@keyframes rise {
+    from { opacity: 0; transform: translateY(18px); }
+    to { opacity: 1; transform: none; }
+}
+
+/* ---------- cross-page view transition ---------- */
+
+@view-transition {
+    navigation: auto;
+}
+
+::view-transition-old(root) {
+    animation: vt-fade 220ms var(--ease-out) both;
+}
+
+::view-transition-new(root) {
+    animation: vt-fade 320ms var(--ease-out) both;
+}
+
+@keyframes vt-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* ---------- narrow viewports for the layer above ---------- */
+
+@media (max-width: 900px) {
+    .stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .features-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .features-grid .feature-card:nth-child(1) { grid-column: span 2; }
+    .features-grid .feature-card:nth-child(n + 2) { grid-column: span 1; }
+    .features-grid .feature-card:nth-child(6) { grid-column: span 2; }
+
+    .stage {
+        grid-template-columns: 2.6rem minmax(0, 1fr);
+        gap: 0.8rem;
+        padding: 0.9rem;
+    }
+
+    .stage .stage-mark {
+        width: 2.2rem;
+        height: 2.2rem;
+    }
+
+    .composition-row {
+        grid-template-columns: 6.4rem minmax(0, 1fr) 3ch;
+        gap: 0.6rem;
+        font-size: var(--fs-label);
+    }
+}
+
+@media (max-width: 640px) {
+    .stats {
+        grid-template-columns: 1fr;
+    }
+
+    .features-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .features-grid .feature-card:nth-child(n) { grid-column: span 1; }
+
+    .transport-switch label {
+        min-height: 44px;
+        padding: 0.55rem 0.9rem;
+    }
+}
+
 /* ---------- motion preferences ---------- */
 
 @media (prefers-reduced-motion: reduce) {
@@ -2106,5 +2720,43 @@ footer {
     .caret {
         animation: none;
         opacity: 1;
+    }
+
+    /* A scroll-linked animation is driven by the timeline, not by a duration, so the blanket
+       ``animation-duration`` above does not stop it — the name has to go. */
+    .js .stage:not(:last-child)::before,
+    .js .stage {
+        animation-name: none;
+        opacity: 1;
+        transform: none;
+    }
+
+    .js .console-line,
+    .js .console-line.replay-pending {
+        opacity: 1;
+        transform: none;
+        transition: none;
+    }
+
+    .hero h1,
+    .live-dot,
+    .js .section-inner.visible .stat,
+    .js .section-inner.visible .feature-card,
+    .js .section-inner.visible .door,
+    .js .section-inner.visible .explore-card {
+        animation: none;
+    }
+
+    .scroll-progress,
+    .feature-card,
+    .door,
+    .explore-card,
+    .stat {
+        transition: none;
+    }
+
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+        animation: none;
     }
 }

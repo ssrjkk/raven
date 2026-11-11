@@ -288,9 +288,15 @@ class TestClientMethods:
         assert await client.hover("u", 0, 0) == "42"
 
     async def test_start(self, monkeypatch) -> None:
+        """start() is the public entry point. Once the client is initialized it must not spawn a
+        second language server; the old version called it and asserted nothing."""
         client = LSPClient("python")
         client._initialized = True
+        exec_mock = AsyncMock(side_effect=AssertionError("start() spawned a process while initialized"))
+        monkeypatch.setattr("ravencode.runtime.lsp.asyncio.create_subprocess_exec", exec_mock)
         await client.start()
+        exec_mock.assert_not_awaited()
+        assert client._process is None
 
     async def test_document_symbols(self, monkeypatch) -> None:
         client = self._client(

@@ -9,6 +9,7 @@ import pytest
 from raven.core.agent.agent import Agent, AgentConfig
 from raven.core.agent.registry import AgentRegistry
 from raven.core.models import PluginTool, Session
+from raven.core.security.tool_policy import ToolPolicyEvaluator
 
 
 @pytest.fixture
@@ -67,22 +68,102 @@ class TestAgent:
         tokens = [t async for t in agent.run("hello")]
         assert "".join(tokens) == "I couldn't generate a response to that. Please try rephrasing your message."
 
-    async def test_run_with_tool(self, session, tools, mock_db):
-        llm = AsyncMock()
+    async def test_run_with_tool(self, session, mock_db):
+        """A tool round has to reach the handler and feed its result back to the model. Streaming
+        the first response and stopping would satisfy a "does not raise" check while executing
+        nothing, which is what this test used to do."""
         from raven.core.llm import LLMResponse, ToolCall
 
-        llm.complete = AsyncMock(
-            return_value=LLMResponse(
-                content="",
-                tool_calls=[ToolCall(id="call1", name="ping", arguments={})],
-                finish_reason="tool_calls",
+        seen: list[dict[str, Any]] = []
+
+        async def ping(**kwargs: Any) -> str:
+            seen.append(kwargs)
+            return "pong"
+
+        tools = [
+            PluginTool(
+                name="ping",
+                description="Ping test",
+                parameters={"type": "object", "properties": {}},
+                handler=ping,
             )
+        ]
+        llm = AsyncMock()
+        llm.complete = AsyncMock(
+            side_effect=[
+                LLMResponse(
+                    content="",
+                    tool_calls=[ToolCall(id="call1", name="ping", arguments={})],
+                    finish_reason="tool_calls",
+                ),
+                LLMResponse(content="all done", finish_reason="stop"),
+            ]
+        )
+
+        config = AgentConfig(max_tool_rounds=3, use_memory=False)
+        agent = Agent(
+            session=session,
+            tools=tools,
+            db=mock_db,
+            llm=llm,
+            config=config,
+            tool_policy=ToolPolicyEvaluator(profile="full"),
+        )
+        tokens = [t async for t in agent.run("ping")]
+
+        assert len(seen) == 1, "the handler must run exactly once for one tool call"
+        assert llm.complete.await_count == 2, "the model must be asked again after the tool result"
+        second_round = llm.complete.await_args_list[1].args[0]
+        tool_messages = [m for m in second_round if m.get("role") == "tool"]
+        assert len(tool_messages) == 1
+        assert tool_messages[0]["tool_call_id"] == "call1"
+        assert "pong" in tool_messages[0]["content"]
+        assert "all done" in "".join(tokens)
+
+    async def test_denied_tool_never_runs_and_the_error_reaches_the_model(self, session, mock_db):
+        """The default profile offers four tools, so an unlisted one must not execute — and the
+        refusal has to travel back as a tool result, otherwise the model waits on a call id that
+        never gets an answer."""
+        from raven.core.llm import LLMResponse, ToolCall
+
+        seen: list[str] = []
+
+        async def ping(**kwargs: Any) -> str:
+            seen.append("ran")
+            return "pong"
+
+        tools = [
+            PluginTool(
+                name="ping",
+                description="Ping test",
+                parameters={"type": "object", "properties": {}},
+                handler=ping,
+            )
+        ]
+        llm = AsyncMock()
+        llm.complete = AsyncMock(
+            side_effect=[
+                LLMResponse(
+                    content="",
+                    tool_calls=[ToolCall(id="call1", name="ping", arguments={})],
+                    finish_reason="tool_calls",
+                ),
+                LLMResponse(content="understood", finish_reason="stop"),
+            ]
         )
 
         config = AgentConfig(max_tool_rounds=3, use_memory=False)
         agent = Agent(session=session, tools=tools, db=mock_db, llm=llm, config=config)
-        async for _ in agent.run("ping"):
-            pass
+        tokens = [t async for t in agent.run("ping")]
+
+        assert seen == [], "a tool the profile does not offer must not reach its handler"
+        second_round = llm.complete.await_args_list[1].args[0]
+        tool_messages = [m for m in second_round if m.get("role") == "tool"]
+        assert len(tool_messages) == 1
+        assert tool_messages[0]["tool_call_id"] == "call1"
+        assert "denied by security policy" in tool_messages[0]["content"]
+        assert "pong" not in tool_messages[0]["content"]
+        assert "understood" in "".join(tokens)
 
     async def test_usage_totals_accumulate_across_model_calls(self, session, tools, mock_db):
         """`/usage tokens` prints these counters, so a run that saw two model calls must not
@@ -105,9 +186,16 @@ class TestAgent:
                 ),
             ]
         )
-        agent = Agent(session=session, tools=tools, db=mock_db, llm=llm, config=AgentConfig(max_tool_rounds=3, use_memory=False))
+        agent = Agent(
+            session=session,
+            tools=tools,
+            db=mock_db,
+            llm=llm,
+            config=AgentConfig(max_tool_rounds=3, use_memory=False),
+            tool_policy=ToolPolicyEvaluator(profile="full"),
+        )
         out = [t async for t in agent.run("ping")]
-        assert "done" in "".join(out)  # the tool line is denied by policy, the counters are not
+        assert "done" in "".join(out)
         assert agent.usage_totals == {"prompt": 220, "completion": 50, "rounds": 2}
 
     async def test_usage_totals_reset_between_runs(self, agent):
@@ -137,7 +225,12 @@ class TestAgent:
 
     def _agent(self, session, tools, mock_db, llm):
         return Agent(
-            session=session, tools=tools, db=mock_db, llm=llm, config=AgentConfig(max_tool_rounds=3, use_memory=False)
+            session=session,
+            tools=tools,
+            db=mock_db,
+            llm=llm,
+            config=AgentConfig(max_tool_rounds=3, use_memory=False),
+            tool_policy=ToolPolicyEvaluator(profile="full"),
         )
 
     async def test_tool_progress_lines_are_what_verbose_switches(self, session, tools, mock_db):
@@ -149,6 +242,48 @@ class TestAgent:
         assert "ping" in loud_out
         assert "ping" not in quiet_out
         assert "done" in quiet_out
+
+    async def test_progress_line_says_ok_only_when_the_tool_returned_a_result(self, session, tools, mock_db):
+        out = "".join([t async for t in self._agent(session, tools, mock_db, self._two_round_llm()).run("ping")])
+        assert "[ping → ok]" in out
+
+    async def test_progress_line_does_not_call_a_denied_tool_ok(self, session, tools, mock_db):
+        """verbose=on streams this line to Telegram and the webchat, so "ok" on a refusal tells the
+        operator the tool ran when the policy stopped it."""
+        agent = Agent(
+            session=session,
+            tools=tools,
+            db=mock_db,
+            llm=self._two_round_llm(),
+            config=AgentConfig(max_tool_rounds=3, use_memory=False),
+        )
+        out = "".join([t async for t in agent.run("ping")])
+        assert "→ ok" not in out
+        assert "denied by security policy" in out
+
+    async def test_progress_line_does_not_call_a_raising_tool_ok(self, session, mock_db):
+        async def boom() -> str:
+            raise RuntimeError("disk on fire")
+
+        tools = [
+            PluginTool(name="boom", description="d", parameters={"type": "object", "properties": {}}, handler=boom)
+        ]
+        llm = AsyncMock()
+        from raven.core.llm import LLMResponse, ToolCall
+
+        llm.complete = AsyncMock(
+            side_effect=[
+                LLMResponse(
+                    content="",
+                    tool_calls=[ToolCall(id="call1", name="boom", arguments={})],
+                    finish_reason="tool_calls",
+                ),
+                LLMResponse(content="done", finish_reason="stop"),
+            ]
+        )
+        out = "".join([t async for t in self._agent(session, tools, mock_db, llm).run("go")])
+        assert "→ ok" not in out
+        assert "disk on fire" in out
 
     async def test_trace_lines_name_the_round_they_came_from(self, session, tools, mock_db):
         agent = self._agent(session, tools, mock_db, self._two_round_llm())
@@ -188,7 +323,6 @@ class TestAgent:
 
     async def test_tool_execution(self, agent, session, tools, mock_db, mock_llm):
         from raven.core.llm import ToolCall
-        from raven.core.security.tool_policy import ToolPolicyEvaluator
 
         agent = Agent(
             session=session,
@@ -196,7 +330,7 @@ class TestAgent:
             db=mock_db,
             llm=mock_llm,
             config=AgentConfig(max_tool_rounds=3, use_memory=False),
-            tool_policy=ToolPolicyEvaluator("full", "", ""),  # type: ignore[arg-type]
+            tool_policy=ToolPolicyEvaluator(profile="full"),
         )
         tc = ToolCall(id="call1", name="ping", arguments={})
         result = await agent._execute_tool(tc)

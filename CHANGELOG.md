@@ -13,6 +13,60 @@ A duplicate `## [Unreleased]` block from the pre-0.4.8 era is archived verbatim 
 Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-10-30). 2026 session fix logs: `docs/archive/fixes-history.md`.
 
 ### Added
+- `site/stats.js` — the third generated site file, and the last number the landing page is allowed
+  to state by hand. `scripts/record_site_frames.py` now also writes `build_stats()`: the version, the
+  protocol, the tool count, the count per category (8 of them: file 6, shell 1, web 9, git 5, code 11,
+  agent 6, workflow 15, infra 13 = 66), the channel adapters (15), the console screens (38), the
+  optional groups (32) and the installed commands (5), each counted from the same four sources
+  `tests/test_site_landing.py` already reads — `tools/list`, `raven/channels/*/channel.py`, the
+  `<Route path=…>` table in `web/src/App.tsx` and `pyproject.toml`. The `#numbers` section is a
+  `<dl>` of five `data-stat` cells plus an empty `<ul id="composition-list">`, and the category bars
+  are built from `categories` at runtime: each bar's width is `count / largest` pushed through the
+  CSSOM as `--rel` (no inline `style`, which the page's own policy forbids), the exact count stays as
+  text, and the list labels itself "The registry split across 8 categories, 66 tools". Measured in
+  Chrome after the change: 8 rows, `--rel` and the rendered pixel ratio agree on all eight (100.00%
+  for workflow, 6.67% for shell), row counts sum to 66
+- `site/landing.js` — the landing page's own client (8 913 B), loaded after `stats.js` and before
+  `main.js`. Six pieces, all progressive enhancement: a scroll rail that writes `--scroll` through the
+  CSSOM and marks the navbar scrolled; a pointer light on cards, doors and explore tiles; counters
+  that seed from `stats.js`, count from zero only when motion is wanted and always land on the exact
+  target; the composition bars; a transport switch; and the hero replay. What the visitor picks in the
+  switch is which envelope carried the frames — stdio names the pipe `raven/core/mcp/server.py` reads
+  (`sys.stdin.readline`), HTTP names `POST /mcp/rpc` behind the `Authorization: Bearer` /
+  `X-Raven-Key` check in `raven/core/mcp/auth.py` — and only `.console-name` and the four
+  `.frame-route` labels are rewritten. Verified in Chrome: the four frame texts keep their byte lengths
+  [159, 146, 58, 172] across the switch, and the request printed in the hero still answers with the
+  reply printed under it when it is sent to a live `MCPServer`
+- The request-path stages now draw their connector as they cross the viewport through
+  `@supports (animation-timeline: view())`, and cross-page navigation fades on one document transition
+  through `@view-transition { navigation: auto }`. Neither one is stopped by a duration: a
+  scroll-linked animation is timed by its timeline, so `prefers-reduced-motion: reduce` switches each
+  affected selector off by name (`animation-name: none` plus `opacity: 1`), which is the difference
+  between a quiet page and a page that hides its stages at `opacity: 0` forever. Measured in Chrome in
+  three states — motion on: after scrolling to the bottom all 4 stages, 6 cards, 3 doors, 5 explore
+  tiles, 5 stats, 8 composition rows, 5 console lines and 5 section inners compute to opacity 1 and
+  all three connector segments read `matrix(1, 0, 0, 1, 0, 0)`; reduced motion: same, with every
+  animated name `none` and the counters already set; scripting off: switch and composition hidden,
+  every frame, count and stage visible, 0 elements hidden by opacity. 0 console errors at 1440, 1280,
+  768 and 390, and `scrollWidth == innerWidth` at all four
+- 15 guards in `tests/test_site_landing.py` (83 → 98) for the layer above, each one checked by
+  mutation — 17 in total across the wave, all 17 failing the suite by name: a drifted `stats.js`
+  (66 → 67), a markup count that no longer matches it, bars written into the HTML instead of computed,
+  bars ranked on the total instead of the largest category, a hero protocol version retyped by hand,
+  the switch relabelled as a caption, an HTTP envelope pointing at a route that does not exist, a
+  renamed door verb, a door port that is not the CLI's default, the refusal sentence reworded, the
+  reduced-motion rule stripped of `animation-name: none`, `--glass-edge` tinted with the accent,
+  `--fuchsia` and `--ink-mute` each pushed under 4.5:1, and `stats.js` loaded after the client that
+  reads it. The new gates compare published text with running code rather than with a screenshot: the
+  five `data-stat` cells against `stats.js` against the tree, the policy stage against
+  `asyncio.run(mcp_deny_reason('process.run', {}))` (and against the empty string `bash` returns, so
+  the check cannot pass on a blanket deny), the truncation figure in stage 04 against the recorded
+  reply, the four `-32601`/`Unauthorized`/`status_code=401` claims against `http_transport.py`, the
+  eight door commands against the `click` trees of `raven.cli.main` and `ravencode.cli.main` and
+  against `[project.scripts]`, the four `--glass-*` tokens against `var(--ink)` with no accent in them,
+  15 foreground/surface token pairs at the AA floor (measured worst 5.31:1, `--fuchsia` on
+  `--bg-card`; best 16.70:1), and the first load of the landing page — HTML, stylesheet and four
+  scripts — at 112 492 bytes against a 130 KB budget
 - A 10px type floor gate: no `text-[Npx]`, `font-size: Npx`, `fontSize={N}` or `fontSize: N` in `web/src`
   may render below 10px, and every `typography.font-size.*` token is checked at the same threshold.
   Both paths verified by mutation -- a `text-[9px]` utility and an 8px token each fail the suite by name
@@ -82,7 +136,69 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
 ### Fixed
-- User plugins loaded nowhere. `docs/plugins.md` described a sandboxed `register(ctx) -> Plugin`
+- `/session <id>` in `raven code` hung the REPL and then claimed success. `raven/cli/coding.py` called
+  `asyncio.run_coroutine_threadsafe(mgr.get(...), asyncio.get_event_loop()).result()` from inside the
+  running loop — blocking the only thread that could execute the coroutine (reproduced: killed at 12 s,
+  exit 124). It printed "Switched to session" without adopting anything, and it looked up an exact
+  12-character id while `/multisession` displays an 8-character prefix, so no displayed id could ever
+  resolve. It is async now, resolves a unique prefix, refuses an ambiguous one, and assigns
+  `session.agent.conversation` to the REPL agent. `/session <name> <task>` — the syntax the empty-state
+  hint already promised — runs a task in a new named session that inherits the REPL's `confirm_dangerous`
+  and `max_steps` and stays switchable afterwards. The welcome panel listed neither `/session` nor
+  `/enrich`; both are documented now. This was the only file in the tree with ≥20 statements and zero
+  coverage (206); it has 11 tests, one of which the old implementation fails by hanging, and a gate that
+  the panel and the command handler name the same set of slash commands
+- The agent's tool progress line reported `ok` for every outcome. `raven/core/agent/agent.py` yielded
+  `[{name} → ok]` whatever `_execute_tool` returned, including `{"error": "Tool 'ping' is denied by
+  security policy"}` and a handler exception — and `verbose=on` streams that line to Telegram and the
+  webchat. Reproduced both: a tool the policy refused and a handler raising `RuntimeError("disk on fire")`
+  each printed `→ ok`. The status is derived from the result now. Repairing `test_run_with_tool`, which
+  streamed a tool call and asserted only that nothing raised, is what exposed it: the test now pins one
+  handler execution, two model calls and the tool result travelling back under its own `tool_call_id`,
+  and a new test pins the refusal path (the default profile does not offer an unlisted tool, so the
+  happy-path test injects `ToolPolicyEvaluator(profile="full")`)
+- Four of the 411 parameters published by the 197 registered tools were inert. `dream_cycle.engine_ref`
+  (its schema description read "Engine reference (unused)"), `browser_navigate.wait_until`
+  (`_page_context` hardcoded `domcontentloaded`, and a test named `test_wait_until_param_ignored` pinned
+  that as expected behaviour), and `canvas_show.width`/`height`, which cannot size a system browser
+  window opened through `webbrowser.open`. `wait_until` now reaches `page.goto` and an unknown state is
+  refused before any navigation; the other three are gone from signature and schema.
+  `tests/test_tool_parameters.py` gates all 411 by AST — accepted by the handler, read in its body, and
+  no description admitting the parameter does nothing — and detects four mutations
+- The dream tools' friendly answers were unreachable. `get_dream_engine()` raises `RuntimeError` when it
+  was never given a memory manager; it never returns `None`, so `if not eng:` could not fire and the
+  caller saw a traceback instead of "Dream engine not running". Both tools catch it now, covered by six
+  tests including the registry call path
+- `test_landing_defines_every_token_it_uses` had a subtraction that never subtracted: the fallback
+  pattern `var\(\s*--[a-z-]+\s*,` has no capture group, so `re.findall` returned whole `var(--scroll,`
+  strings and every fallback-bearing use stayed in `missing`. It read as green for as long as every
+  landing token also happened to carry a CSS declaration; the moment `site/landing.js` and `site/stats.js`
+  introduced `--scroll` and `--rel`, which exist only as `setProperty` targets plus a `var(--x, 0)`
+  fallback, the full gate failed on it (12 checks, 10 passed). Renamed to
+  `test_landing_declares_every_token_it_uses`, the fallback group is captured now, and a token assigned
+  through the CSSOM from any `site/*.js` counts as declared — the three ways a `var()` really resolves.
+  Mutation-checked: one `width: var(--typo-token)` line appended to `site/styles.css` fails it
+- Four landing-page rules were silently overridden by less specific ones, and none of it was visible
+  in the source — only in the computed style. `.stage p` (0,1,1) beat `.stage-mark` (0,1,0), so the
+  stage numbers read `--ink-mute`; `.feature-card p` beat `.feature-tag`, including its `margin: 0`
+  shorthand swallowing a `margin-top` longhand, so the tags rendered 12px grey where the design
+  declared `--violet-text`; `.door p` beat `.door-meta`'s font-size, rendering 14px where 12px was
+  declared. Each selector is now qualified (`.stage .stage-mark`, `.feature-card .feature-tag`,
+  `.door .door-meta`), and the three that carry colour were re-measured in Chrome at 10.77:1,
+  10.77:1 and 9.21:1. The same sweep removed a second blinking caret (`.hero-tagline::after` duplicated
+  `.caret` in the wordmark) and a leading `·` on the first hero fact
+- The hero console rendered blank lines between every frame: `.console-line` is `white-space: pre-wrap`,
+  so the indentation the markup itself carried between `</span>` and `<span>` became text. The four
+  frame lines are now each on one source line, byte-identical inside the `<span class="frame">` payloads
+  (159, 146, 58 and 172 bytes), and the vertical gaps are gone at all four viewports
+- The composition bars drew eight stubs on an empty track. Each was `count / 66` of the container, so
+  the largest category filled 23% and the smallest 1.5%; the ratio is now `count / largest`, which is
+  what a bar next to a bar is for, and the exact count stays as text at the end of the row so no
+  information was traded for the shape
+- `TransportSwitch` deleted the console's live dot. It wrote `textContent` on `#handshake-title`, the
+  span that holds both the dot and the name, and a prepend workaround had been papering over it; the
+  switch now writes the `.console-name` span only, and the guard that pins the frame byte lengths
+  proves the frames themselves are never touched by the switch
   contract, and the code behind it exists — but loading is async (the worker's stdio pipes belong to the
   loop that started it) and every surface that builds a tool surface called only the sync path, which
   did nothing: `ensure_plugin_tools` had 0 entry points, so a `plugins/` directory on disk contributed

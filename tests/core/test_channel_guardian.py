@@ -296,13 +296,30 @@ class TestChannelGuardianErrorTracking:
 
 
 class TestChannelGuardianHeartbeat:
-    async def test_healthy_channel_keeps_error_count_zero(self):
+    async def test_healthy_channel_keeps_error_count_zero(self, monkeypatch):
+        """The heartbeat is the only thing that clears a stale error count, so it has to run.
+        `_heartbeat_loop` is a plain coroutine function with no `__wrapped__`, which made the old
+        `await ... if hasattr(...) else None` line evaluate to None and assert nothing at all."""
+        import raven.core.channel_guardian as guardian
+
+        monkeypatch.setattr(guardian, "HEARTBEAT_INTERVAL", 0.01)
         g = ChannelGuardian()
         ch = _FakeChannel("ch")
         g.register(ch)
         g._error_counts["ch"] = 2
-        await g._handle_unhealthy("ch")
-        await g._heartbeat_loop.__wrapped__(g, "ch") if hasattr(g._heartbeat_loop, "__wrapped__") else None
+        await g.start()
+        try:
+
+            async def cleared() -> bool:
+                while g._error_counts.get("ch") != 0:
+                    await asyncio.sleep(0.01)
+                return True
+
+            assert await asyncio.wait_for(cleared(), timeout=2.0), "a healthy heartbeat must reset the count"
+            assert "ch" not in g._dead_channels
+            assert g._restart_attempts["ch"] == 0
+        finally:
+            await g.stop()
 
 
 class TestChannelGuardianUnhealthy:

@@ -39,12 +39,36 @@ def test_trace_llm_call_context():
         span.set_attribute("test", "value")
 
 
-def test_trace_llm_call_exception():
-    try:
-        with trace_llm_call("test-model"):
+def test_trace_llm_call_exception(monkeypatch):
+    """A failed call must be recorded on the span AND still raise: swallowing it here would hide
+    every LLM error from the caller, and the old try/except-pass version checked neither."""
+    from contextlib import contextmanager
+
+    import raven.core.tracing as tracing
+
+    attrs: dict[str, object] = {}
+    names: list[str] = []
+
+    class _Span:
+        def set_attribute(self, key: str, value: object) -> None:
+            attrs[key] = value
+
+    class _Tracer:
+        @contextmanager
+        def start_as_current_span(self, name: str):
+            names.append(name)
+            yield _Span()
+
+    monkeypatch.setattr(tracing, "get_tracer", lambda _name: _Tracer())
+
+    with pytest.raises(ValueError, match="oops"):
+        with tracing.trace_llm_call("test-model"):
             raise ValueError("oops")
-    except ValueError:
-        pass
+
+    assert names == ["llm.test-model"]
+    assert attrs["llm.model"] == "test-model"
+    assert attrs["error"] == "oops"
+    assert "llm.duration_ms" in attrs, "the finally block must still time a failed call"
 
 
 async def _dummy_tool(x: int) -> int:

@@ -438,7 +438,9 @@ class Agent:
                             }
                         )
                         if self.show_tool_progress:
-                            yield f"[{tc.name} → ok]\n"
+                            error = tool_result.get("error")
+                            status = f"error: {str(error)[:120]}" if error else "ok"
+                            yield f"[{tc.name} → {status}]\n"
                     state = AgentState.THINK
                     continue
 

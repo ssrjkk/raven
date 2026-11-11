@@ -124,8 +124,11 @@ async def _close_agent() -> None:
             _agent = None
 
 
+_WAIT_STATES = ("domcontentloaded", "load", "networkidle")
+
+
 @asynccontextmanager
-async def _page_context(timeout: int = 30, url: str = "", skip_goto: bool = False):
+async def _page_context(timeout: int = 30, url: str = "", skip_goto: bool = False, wait_until: str = "domcontentloaded"):
     browser = await _get_playwright()
     if not browser:
         yield None
@@ -135,7 +138,7 @@ async def _page_context(timeout: int = 30, url: str = "", skip_goto: bool = Fals
         if url:
             _validate_url(url)
             if not skip_goto:
-                await page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
+                await page.goto(url, wait_until=wait_until, timeout=timeout * 1000)
                 final_url = page.url if hasattr(page, "url") else str(url)
                 if final_url:
                     _validate_url(final_url)
@@ -156,13 +159,15 @@ async def browser_open(url: str) -> str:
 
 
 async def browser_navigate(url: str, wait_until: str = "domcontentloaded", timeout: int = 30) -> str:
+    if wait_until not in _WAIT_STATES:
+        return f"Blocked: wait_until must be one of {', '.join(_WAIT_STATES)}"
     try:
         _validate_url(url)
     except ValueError as e:
         return f"Blocked: {e}"
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
-    async with _page_context(timeout=timeout, url=url) as page:
+    async with _page_context(timeout=timeout, url=url, wait_until=wait_until) as page:
         if page is None:
             return "Playwright not available. Install: pip install playwright && playwright install chromium"
         title = await page.title()

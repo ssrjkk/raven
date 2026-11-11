@@ -100,30 +100,24 @@ class TestSSETransport:
         assert len(result) == 0  # stream exited on close
 
     async def test_close_stops_stream(self):
+        """`stop()` is what ends a subscriber's iterator. The old version broke out of the loop
+        itself on a `sent` flag and asserted nothing, so it passed even if stop() closed nothing."""
         t = SSETransport()
         await t.start()
         t.subscribe("client1")
-        sent = False
 
-        async def produce():
-            nonlocal sent
-            await asyncio.sleep(0.05)
-            await t.send("msg", "hello")
-            sent = True
+        async def consume() -> list[str]:
+            return [chunk async for chunk in t.stream("client1")]
 
-        async def consume():
-            chunks: list[str] = []
-            async for chunk in t.stream("client1"):
-                chunks.append(chunk)
-                if sent:
-                    break
-            return chunks
-
-        async with asyncio.TaskGroup() as tg:
-            tg.create_task(produce())
-            tg.create_task(consume())
-
+        consumer = asyncio.create_task(consume())
+        await asyncio.sleep(0)
+        await t.send("msg", "hello")
         await t.stop()
+
+        chunks = await asyncio.wait_for(consumer, timeout=2.0)
+        assert chunks == ["event: msg\ndata: hello\n\n"]
+        assert t._running is False
+        assert t._subscribers == {}
 
     async def test_drop_slow_subscriber(self):
         t = SSETransport()

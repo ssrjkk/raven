@@ -277,11 +277,20 @@ def _site_pages() -> dict[str, str]:
     return {path.name: path.read_text(encoding="utf-8") for path in sorted(site.glob("*.html"))}
 
 
-def test_landing_defines_every_token_it_uses() -> None:
+def _site_js() -> str:
+    site = ROOT / "site"
+    return "\n".join(path.read_text(encoding="utf-8") for path in sorted(site.glob("*.js")))
+
+
+def test_landing_declares_every_token_it_uses() -> None:
+    """A `var(--x)` resolves in three legitimate ways: a CSS declaration, a value the scripts assign
+    with `setProperty('--x', ...)`, or a fallback on the use itself. Anything else is a typo that
+    renders as an empty value, which no screenshot at the author's width catches."""
     css = _site_css()
     declared = set(re.findall(r"(--[a-zA-Z0-9-]+)\s*:", css))
+    declared |= set(re.findall(r"setProperty\(\s*['\"](--[a-zA-Z0-9-]+)", _site_js()))
     used = set(re.findall(r"var\(\s*(--[a-zA-Z0-9-]+)", css))
-    fallback_used = set(re.findall(r"var\(\s*--[a-zA-Z0-9-]+\s*,", css))
+    fallback_used = set(re.findall(r"var\(\s*(--[a-zA-Z0-9-]+)\s*,", css))
     missing = used - declared - fallback_used
     assert not missing, f"landing CSS uses undefined custom properties: {sorted(missing)}"
 
