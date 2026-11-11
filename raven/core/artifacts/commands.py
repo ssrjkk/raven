@@ -79,7 +79,9 @@ class BundleCommandHandler(CommandHandler):
         bundle_ctx = self._manager.context(agent_id=agent_id, channel=ctx.event.channel, cwd=root, root=root)
         bundle = self._manager.command_bundle_for(self._bundle.name, bundle_ctx)
         if bundle is None:
-            await self.gateway._send(ctx.event.channel, ctx.event.session_id, "Command is not available for the current agent.")
+            await self.gateway._send(
+                ctx.event.channel, ctx.event.session_id, "Command is not available for the current agent."
+            )
             return True
         prompt = await render_command(bundle, ctx.args)
         event = IncomingMessage(

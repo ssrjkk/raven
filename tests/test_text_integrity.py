@@ -20,14 +20,38 @@ import re
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # Code and asset directories: here any recoverable non-ASCII run is a defect, not prose.
-SOURCE_DIRS = ("raven", "ravencode", "aios", "scripts", "web/src", "web/public",
-               "extension", "site", "packaging", "deploy", "policy")
-CODE_SUFFIXES = {".py", ".ts", ".tsx", ".js", ".jsx", ".css", ".html", ".json",
-                 ".svg", ".yml", ".yaml", ".toml"}
+SOURCE_DIRS = (
+    "raven",
+    "ravencode",
+    "aios",
+    "scripts",
+    "web/src",
+    "web/public",
+    "extension",
+    "site",
+    "packaging",
+    "deploy",
+    "policy",
+)
+CODE_SUFFIXES = {".py", ".ts", ".tsx", ".js", ".jsx", ".css", ".html", ".json", ".svg", ".yml", ".yaml", ".toml"}
 TEXT_SUFFIXES = CODE_SUFFIXES | {".md", ".txt", ".rst", ".sh", ".ps1", ".cfg", ".ini", ".env"}
-SKIP_DIRS = {"node_modules", "dist", "build", "__pycache__", ".venv", "venv", "Python",
-             ".benchmarks", "allure-results", "test-results", "coverage", "playwright-report",
-             ".next", ".cache", ".git"}
+SKIP_DIRS = {
+    "node_modules",
+    "dist",
+    "build",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "Python",
+    ".benchmarks",
+    "allure-results",
+    "test-results",
+    "coverage",
+    "playwright-report",
+    ".next",
+    ".cache",
+    ".git",
+}
 BOM = b"\xef\xbb\xbf"
 NON_ASCII_RUN = re.compile(r"[^\x00-\x7f]+")
 
@@ -127,8 +151,10 @@ def ui_chrome_files() -> list[pathlib.Path]:
     """Shipped SPA source: rendered text lives here, so it must be in one language."""
     base = ROOT / "web" / "src"
     return sorted(
-        path for path in base.rglob("*")
-        if path.is_file() and path.suffix in UI_SOURCE_SUFFIXES
+        path
+        for path in base.rglob("*")
+        if path.is_file()
+        and path.suffix in UI_SOURCE_SUFFIXES
         and ".test." not in path.name
         and path.relative_to(ROOT).as_posix() != ALIAS_TABLE
     )
@@ -142,8 +168,7 @@ def test_the_ui_chrome_speaks_one_language() -> None:
     files = ui_chrome_files()
     assert len(files) > 50, f"walker found only {len(files)} shipped SPA files"
     offenders = [
-        path.relative_to(ROOT).as_posix() for path in files
-        if CYRILLIC.search(path.read_text(encoding="utf-8"))
+        path.relative_to(ROOT).as_posix() for path in files if CYRILLIC.search(path.read_text(encoding="utf-8"))
     ]
     assert offenders == [], "rendered UI text must be English (aliases belong in the alias table)"
     commands = (ROOT / "raven" / "core" / "commands_api.py").read_text(encoding="utf-8")
@@ -157,8 +182,10 @@ def test_the_alias_table_is_search_only_and_never_rendered() -> None:
     alias = (ROOT / ALIAS_TABLE).read_text(encoding="utf-8")
     assert CYRILLIC.search(alias), "the aliases are what keep a Russian query finding a command"
     importers = [
-        path.name for path in (ROOT / "web" / "src").rglob("*")
-        if path.is_file() and path.suffix in UI_SOURCE_SUFFIXES
+        path.name
+        for path in (ROOT / "web" / "src").rglob("*")
+        if path.is_file()
+        and path.suffix in UI_SOURCE_SUFFIXES
         and ".test." not in path.name
         and "command-keywords" in path.read_text(encoding="utf-8")
     ]

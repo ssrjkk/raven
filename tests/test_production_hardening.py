@@ -93,13 +93,27 @@ class TestChannelGuardianRateLimitConfig:
 
         class FakeChannel(BaseChannel):
             channel_id = "test_ch"
-            async def connect(self): pass
-            async def disconnect(self): pass
-            async def send(self, session_id, message): pass
-            async def on_message(self, handler): pass
-            async def start(self): pass
-            async def stop(self): pass
-            async def health_check(self): return True
+
+            async def connect(self):
+                pass
+
+            async def disconnect(self):
+                pass
+
+            async def send(self, session_id, message):
+                pass
+
+            async def on_message(self, handler):
+                pass
+
+            async def start(self):
+                pass
+
+            async def stop(self):
+                pass
+
+            async def health_check(self):
+                return True
 
         g.register(FakeChannel())
         bucket = g._channel_buckets.get("test_ch")
@@ -116,13 +130,27 @@ class TestChannelGuardianRateLimitConfig:
 
         class FakeChannel(BaseChannel):
             channel_id = "edge_ch"
-            async def connect(self): pass
-            async def disconnect(self): pass
-            async def send(self, session_id, message): pass
-            async def on_message(self, handler): pass
-            async def start(self): pass
-            async def stop(self): pass
-            async def health_check(self): return True
+
+            async def connect(self):
+                pass
+
+            async def disconnect(self):
+                pass
+
+            async def send(self, session_id, message):
+                pass
+
+            async def on_message(self, handler):
+                pass
+
+            async def start(self):
+                pass
+
+            async def stop(self):
+                pass
+
+            async def health_check(self):
+                return True
 
         g.register(FakeChannel())
         bucket = g._channel_buckets.get("edge_ch")

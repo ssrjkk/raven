@@ -32,9 +32,7 @@ async def _run_stages(provider: Any, model: str) -> list[str]:
 
     # 1) plain completion -----------------------------------------------------
     try:
-        resp = await provider.complete(
-            [{"role": "user", "content": "Reply with exactly: OK"}], model
-        )
+        resp = await provider.complete([{"role": "user", "content": "Reply with exactly: OK"}], model)
         print(f"[1/3] completion: {resp.content[:80]!r} tokens={resp.total_tokens}")
         if "OK" not in resp.content:
             failures.append(f"unexpected completion content: {resp.content[:200]!r}")

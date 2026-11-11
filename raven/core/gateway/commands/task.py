@@ -32,7 +32,6 @@ class TaskCommand(CommandHandler):
             await gateway._send(ctx.event.channel, ctx.event.session_id, "Your tasks:" + "\n\n".join(lines))
             return True
 
-
         goal = " ".join(ctx.args)
         if not goal:
             await gateway._send(ctx.event.channel, ctx.event.session_id, "Usage: /task <goal description>")

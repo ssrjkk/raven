@@ -50,19 +50,25 @@ def main() -> None:
     if not args.update and not args.skip_install:
         print("[mobile] Adding Capacitor dependencies...")
         run(["npm", "install", "--save-dev", "@capacitor/cli@^7.0.0"])
-        run(["npm", "install", "--save",
-             "@capacitor/core@^7.0.0",
-             "@capacitor/camera@^7.0.0",
-             "@capacitor/geolocation@^7.0.0",
-             "@capacitor/preferences@^7.0.0",
-             "@capacitor/push-notifications@^7.0.0",
-             "@capacitor/local-notifications@^7.0.0",
-             "@capacitor/status-bar@^7.0.0",
-             "@capacitor/splash-screen@^7.0.0",
-             "@capacitor/haptics@^7.0.0",
-             "@capacitor/network@^7.0.0",
-             "@capacitor/clipboard@^7.0.0",
-             "@capacitor/dialog@^7.0.0"])
+        run(
+            [
+                "npm",
+                "install",
+                "--save",
+                "@capacitor/core@^7.0.0",
+                "@capacitor/camera@^7.0.0",
+                "@capacitor/geolocation@^7.0.0",
+                "@capacitor/preferences@^7.0.0",
+                "@capacitor/push-notifications@^7.0.0",
+                "@capacitor/local-notifications@^7.0.0",
+                "@capacitor/status-bar@^7.0.0",
+                "@capacitor/splash-screen@^7.0.0",
+                "@capacitor/haptics@^7.0.0",
+                "@capacitor/network@^7.0.0",
+                "@capacitor/clipboard@^7.0.0",
+                "@capacitor/dialog@^7.0.0",
+            ]
+        )
 
     # Build the web app
     print("[mobile] Building web app...")

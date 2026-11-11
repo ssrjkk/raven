@@ -32,7 +32,9 @@ class TestModelConfig:
         assert cfg.cost_per_1k_output == 0.0
 
     def test_fields(self) -> None:
-        cfg = ModelConfig(name="m", provider="p", max_tokens=100, context_window=200, cost_per_1k_input=0.1, cost_per_1k_output=0.2)
+        cfg = ModelConfig(
+            name="m", provider="p", max_tokens=100, context_window=200, cost_per_1k_input=0.1, cost_per_1k_output=0.2
+        )
         assert cfg.name == "m"
         assert cfg.provider == "p"
         assert cfg.max_tokens == 100

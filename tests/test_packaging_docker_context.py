@@ -50,9 +50,7 @@ def unstaged(inputs: list[str], copied: list[str]) -> list[str]:
     missing: list[str] = []
     for required in inputs:
         norm = required.rstrip("/")
-        covered = any(
-            src.rstrip("/") == norm or (src.endswith("/") and (norm + "/").startswith(src)) for src in copied
-        )
+        covered = any(src.rstrip("/") == norm or (src.endswith("/") and (norm + "/").startswith(src)) for src in copied)
         if not covered:
             missing.append(required)
     return missing

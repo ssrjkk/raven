@@ -102,9 +102,7 @@ class TestIndexRebuildIsDeferred:
 
 
 class TestCrashSafePersistence:
-    async def test_torn_vectors_file_is_parked_and_never_recycled(
-        self, store: VectorStore, tmp_path: Path
-    ) -> None:
+    async def test_torn_vectors_file_is_parked_and_never_recycled(self, store: VectorStore, tmp_path: Path) -> None:
         await store.upsert("keep", "important text", {"n": 1})
         path = tmp_path / "vectors" / "vectors.json"
         path.write_text(path.read_text(encoding="utf-8")[:40], encoding="utf-8")
@@ -150,4 +148,3 @@ class TestCrashSafePersistence:
             assert json.loads((tmp_path / "vectors" / "vectors.json").read_text(encoding="utf-8")) == {
                 "a": store._vectors["a"]
             }
-

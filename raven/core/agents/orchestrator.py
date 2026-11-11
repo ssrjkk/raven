@@ -30,9 +30,7 @@ AgentStatus = Literal["success", "error", "max_steps", "max_tokens"]
 # and an unknown name the coordinator answered fell through to resolve_profile's coder.
 _VALID_HANDOFF_PROFILES = frozenset(PROFILES) | {"done"}
 
-_IMPLEMENT_TOOLS = frozenset(
-    {"file_write", "file_edit", "file_append", "shell", "python", "git_commit"}
-)
+_IMPLEMENT_TOOLS = frozenset({"file_write", "file_edit", "file_append", "shell", "python", "git_commit"})
 
 _TRANSIENT_MARKERS = (
     "timed out",
@@ -148,7 +146,9 @@ class StatusEmitter:
         await self.emit("error", profile, msg)
 
     async def handoff(self, from_profile: str, to_profile: str, reason: str) -> None:
-        await self.emit("handoff", to_profile, f"{from_profile} → {to_profile}: {reason}", {"from": from_profile, "to": to_profile})
+        await self.emit(
+            "handoff", to_profile, f"{from_profile} → {to_profile}: {reason}", {"from": from_profile, "to": to_profile}
+        )
 
     async def plan_created(self, profile: str, steps: list[str]) -> None:
         await self.emit("plan_created", profile, f"Plan: {len(steps)} steps", {"steps": steps})
@@ -235,7 +235,7 @@ class TaskOutcomeTracker:
             self._outcomes[profile] = []
         self._outcomes[profile].append(success)
         if len(self._outcomes[profile]) > self._max_history:
-            self._outcomes[profile] = self._outcomes[profile][-self._max_history:]
+            self._outcomes[profile] = self._outcomes[profile][-self._max_history :]
         if success:
             self._consecutive_errors[profile] = 0
         else:
@@ -496,9 +496,7 @@ class AgentOrchestrator:
                     "wrap up with a concise summary and recommend the next best role or ask the user for clarification."
                 )
                 messages.append({"role": "system", "content": budget_msg})
-                await st.thinking(
-                    current_profile.name, f"Iteration budget reached: {current_profile.max_iterations}"
-                )
+                await st.thinking(current_profile.name, f"Iteration budget reached: {current_profile.max_iterations}")
 
             if len(messages) > 60:
                 messages = await self._compress_context(messages, current_profile)
@@ -643,7 +641,9 @@ class AgentOrchestrator:
                 else:
                     consecutive_errors = 0
                 await st.tool_result(current_profile.name, tc.name, tool_status)
-                messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(tool_result, default=str)})
+                messages.append(
+                    {"role": "tool", "tool_call_id": tc.id, "content": json.dumps(tool_result, default=str)}
+                )
 
                 round_quality += self._score_tool_result(tool_result)
 
@@ -659,7 +659,9 @@ class AgentOrchestrator:
                         if pattern_val and isinstance(pattern_val, str):
                             self._profile_memory.record_pattern(current_profile.name, pattern_val)
 
-            if plan_tracker and (plan_tracker.is_step_stale() and round_tool_count > 0 and round_quality / round_tool_count < 0.4):
+            if plan_tracker and (
+                plan_tracker.is_step_stale() and round_tool_count > 0 and round_quality / round_tool_count < 0.4
+            ):
                 messages.append(
                     {
                         "role": "system",
@@ -695,7 +697,9 @@ class AgentOrchestrator:
         if status != "success":
             suggested = self._outcome_tracker.suggest_profile(current_profile.name)
             if suggested and self._max_retries > 0 and _retry_depth < self._max_retries:
-                logger.info("TaskOutcomeTracker: auto-retrying with profile '{}' (was '{}')", suggested, current_profile.name)
+                logger.info(
+                    "TaskOutcomeTracker: auto-retrying with profile '{}' (was '{}')", suggested, current_profile.name
+                )
                 retry_result = await self.execute(
                     query=query,
                     context=context,
@@ -839,9 +843,7 @@ class AgentOrchestrator:
         }
         return hints.get(profile_name, "")
 
-    async def _compress_context(
-        self, messages: list[dict[str, Any]], profile: AgentProfile
-    ) -> list[dict[str, Any]]:
+    async def _compress_context(self, messages: list[dict[str, Any]], profile: AgentProfile) -> list[dict[str, Any]]:
         """Compress a long conversation to fit the context window.
 
         Prefers an LLM-generated digest of the middle messages (fast tier) so no
@@ -883,9 +885,7 @@ class AgentOrchestrator:
         try:
             from raven.core.model_tiers import select_model, tiers_configured
 
-            transcript = "\n".join(
-                f"{m.get('role')}: {str(m.get('content', ''))[:400]}" for m in middle
-            )
+            transcript = "\n".join(f"{m.get('role')}: {str(m.get('content', ''))[:400]}" for m in middle)
             want_model = (
                 select_model([{"role": "user", "content": transcript}], prefer_tier="fast")
                 if tiers_configured()
@@ -901,17 +901,13 @@ class AgentOrchestrator:
             digest = (resp.content or "").strip()
             if digest:
                 metrics.inc("agent_context_compressions", {"profile": profile.name})
-                logger.info(
-                    "AgentOrchestrator: context compressed via LLM for profile {}", profile.name
-                )
+                logger.info("AgentOrchestrator: context compressed via LLM for profile {}", profile.name)
                 return digest
         except Exception as e:
             logger.debug("LLM context compression failed, falling back to truncation: {}", e)
         return ""
 
-    async def _execute_tool_safe(
-        self, tc: ToolCall, profile: AgentProfile, agent_ctx: AgentContext
-    ) -> dict[str, Any]:
+    async def _execute_tool_safe(self, tc: ToolCall, profile: AgentProfile, agent_ctx: AgentContext) -> dict[str, Any]:
         tool_spec = self._tool_registry.get(tc.name)
         if not tool_spec:
             return {"error": f"Unknown tool: {tc.name}"}
@@ -963,9 +959,7 @@ class AgentOrchestrator:
             except Exception as e:
                 if retries_left > 0 and _is_transient_error(str(e)):
                     retries_left -= 1
-                    delay = self._tool_retry_backoff * (
-                        2 ** (self._max_tool_retries - retries_left - 1)
-                    )
+                    delay = self._tool_retry_backoff * (2 ** (self._max_tool_retries - retries_left - 1))
                     logger.warning(
                         "Tool {} raised transient error, retrying in {}s ({} left): {}",
                         tc.name,
@@ -1021,9 +1015,7 @@ class AgentOrchestrator:
             logger.debug("Plan generation failed, continuing without a plan: {}", e)
             return []
 
-    async def _critique_result(
-        self, query: str, messages: list[dict[str, Any]], profile: AgentProfile
-    ) -> str | None:
+    async def _critique_result(self, query: str, messages: list[dict[str, Any]], profile: AgentProfile) -> str | None:
         last_content = ""
         for m in reversed(messages):
             if isinstance(m.get("content"), str) and m["content"]:

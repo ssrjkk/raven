@@ -117,8 +117,11 @@ class CheckpointManager:
             if isinstance(loaded, dict):
                 data = {k: v for k, v in loaded.items() if isinstance(v, dict)}
             elif loaded is not None:
-                logger.error("Checkpoint index {} holds {} not an object; rebuilding from the snapshot dirs",
-                             idx, type(loaded).__name__)
+                logger.error(
+                    "Checkpoint index {} holds {} not an object; rebuilding from the snapshot dirs",
+                    idx,
+                    type(loaded).__name__,
+                )
         merged = self._scan_dirs()
         for cid, info in merged.items():
             data.setdefault(cid, info)

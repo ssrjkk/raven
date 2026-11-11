@@ -54,6 +54,7 @@ def mock_agent():
 @pytest.fixture()
 def client(mock_agent):
     import raven.core.browser_api as browser_mod
+
     original_agent = browser_mod._agent
     browser_mod._agent = mock_agent
     try:

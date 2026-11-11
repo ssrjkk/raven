@@ -157,7 +157,6 @@ class TestDefaultConfigPaths:
         assert ("name", Path("p")) in loader._CONFIG_PATHS
 
 
-
 class TestInlineConfig:
     """`RAVENCODE_CONFIG_CONTENT` exists so a configuration with secrets in it stays off the disk."""
 
@@ -191,9 +190,7 @@ class TestInlineConfig:
         assert "inline" not in cfg._source
         assert any("RAVENCODE_CONFIG_CONTENT" in line for line in warnings), warnings
 
-    def test_a_number_that_is_not_a_number_says_so(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_number_that_is_not_a_number_says_so(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from loguru import logger
 
         warnings: list[str] = []
@@ -208,6 +205,7 @@ class TestInlineConfig:
         assert cfg.temperature == 0.7
         assert any("RAVENCODE_MAX_STEPS" in line for line in warnings), warnings
         assert any("RAVENCODE_TEMPERATURE" in line for line in warnings), warnings
+
 
 class TestRavenConfig:
     def test_from_dict_defaults(self) -> None:
@@ -230,7 +228,14 @@ class TestRavenConfig:
         cfg = RavenConfig.from_dict(
             {
                 "providers": [
-                    {"id": "p1", "name": "Prov", "api_key": "k", "base_url": "http://x", "models": ["a"], "options": {"o": 1}},
+                    {
+                        "id": "p1",
+                        "name": "Prov",
+                        "api_key": "k",
+                        "base_url": "http://x",
+                        "models": ["a"],
+                        "options": {"o": 1},
+                    },
                     {"id": "p2"},
                 ]
             }

@@ -47,9 +47,7 @@ def export(output: str | None, sanitize: bool) -> None:
         path = data.get("path", "unknown")
         console.print(f"[green]Memory exported to {path}[/green]")
         if data.get("sanitized"):
-            console.print(
-                "[yellow]Credentials are masked; `raven backup restore` will refuse this file.[/yellow]"
-            )
+            console.print("[yellow]Credentials are masked; `raven backup restore` will refuse this file.[/yellow]")
     except httpx.RequestError as e:
         console.print(f"[red]Failed to connect to gateway: {e}[/red]")
         console.print("[yellow]Make sure the gateway is running with: raven start[/yellow]")
@@ -86,9 +84,7 @@ def restore(path: str) -> None:
 def list_backups() -> None:
     """List available memory backups"""
     try:
-        resp = httpx.get(
-            f"http://localhost:{settings.web_port}/api/memory/backups", headers=_headers(), timeout=10
-        )
+        resp = httpx.get(f"http://localhost:{settings.web_port}/api/memory/backups", headers=_headers(), timeout=10)
         resp.raise_for_status()
         data = resp.json()
         backups = data.get("backups", [])

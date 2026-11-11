@@ -80,7 +80,9 @@ def is_location_key(key: str) -> bool:
 
 def path_args(args: dict[str, Any]) -> list[tuple[str, str]]:
     """Non-empty string arguments whose key names a location."""
-    return [(key, value) for key, value in args.items() if isinstance(value, str) and value.strip() and is_location_key(key)]
+    return [
+        (key, value) for key, value in args.items() if isinstance(value, str) and value.strip() and is_location_key(key)
+    ]
 
 
 def resolve_within_root(path_str: str, root: Path | None = None) -> Path | None:

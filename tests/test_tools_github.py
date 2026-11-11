@@ -422,7 +422,9 @@ class TestGithubCloneRepo:
     async def test_clone_failure(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         _set_token(monkeypatch)
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(asyncio, "create_subprocess_exec", AsyncMock(return_value=_Proc(returncode=1, stderr=b"boom")))
+        monkeypatch.setattr(
+            asyncio, "create_subprocess_exec", AsyncMock(return_value=_Proc(returncode=1, stderr=b"boom"))
+        )
         result = await github_clone_repo("o", "r")
         assert isinstance(result, dict)
         assert "Clone failed" in result["error"]
@@ -474,4 +476,3 @@ class TestRegisterGithubTools:
         ]
         for name in names:
             assert registry.get(name) is not None
-

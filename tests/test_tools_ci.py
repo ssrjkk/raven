@@ -76,7 +76,20 @@ class TestCITools:
     async def test_list_runs_success(self, mock_github_token: None) -> None:
         mock_resp = MagicMock(spec=httpx.Response)
         mock_resp.status_code = 200
-        mock_resp.json = MagicMock(return_value={"workflow_runs": [{"id": 1, "run_number": 1, "name": "CI", "status": "completed", "conclusion": "success", "head_branch": "main"}]})
+        mock_resp.json = MagicMock(
+            return_value={
+                "workflow_runs": [
+                    {
+                        "id": 1,
+                        "run_number": 1,
+                        "name": "CI",
+                        "status": "completed",
+                        "conclusion": "success",
+                        "head_branch": "main",
+                    }
+                ]
+            }
+        )
         with patch("httpx.AsyncClient") as mock_cls:
             mock_cls.return_value.__aenter__.return_value.request = AsyncMock(return_value=mock_resp)
             result = await ci_list_runs("owner", "repo")
@@ -86,7 +99,9 @@ class TestCITools:
         mock_resp = MagicMock(spec=httpx.Response)
         mock_resp.status_code = 201
         mock_resp.text = ""
-        mock_resp.json = MagicMock(return_value={"id": 42, "status": "pending", "web_url": "https://gitlab.com/pipeline/42"})
+        mock_resp.json = MagicMock(
+            return_value={"id": 42, "status": "pending", "web_url": "https://gitlab.com/pipeline/42"}
+        )
         with patch("httpx.AsyncClient") as mock_cls:
             client_mock = AsyncMock()
             client_mock.post = AsyncMock(return_value=mock_resp)
@@ -110,5 +125,13 @@ class TestCITools:
     async def test_register_tools(self) -> None:
         registry = ToolRegistry()
         register_ci_tools(registry)
-        for name in ("ci_list_workflows", "ci_run_workflow", "ci_pipeline_status", "ci_list_runs", "ci_trigger_pipeline", "ci_jenkins_job", "ci_jenkins_status"):
+        for name in (
+            "ci_list_workflows",
+            "ci_run_workflow",
+            "ci_pipeline_status",
+            "ci_list_runs",
+            "ci_trigger_pipeline",
+            "ci_jenkins_job",
+            "ci_jenkins_status",
+        ):
             assert registry.get(name) is not None

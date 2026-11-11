@@ -75,7 +75,9 @@ class TestHealthCheck:
         db = PostgresDatabase("postgresql://user:pass@localhost:5432/test")
         assert await db.health_check() is False
 
-    async def test_health_check_returns_false_on_error(self, db: PostgresDatabase, mock_pool: MagicMock, acquire_cm: AsyncMock):
+    async def test_health_check_returns_false_on_error(
+        self, db: PostgresDatabase, mock_pool: MagicMock, acquire_cm: AsyncMock
+    ):
         conn = AsyncMock(spec=asyncpg.Connection)
         conn.fetchval = AsyncMock(side_effect=asyncpg.PostgresError("connection lost"))
         acquire_cm.__aenter__ = AsyncMock(return_value=conn)

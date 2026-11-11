@@ -70,6 +70,7 @@ class TestTrainingMonitor:
         mock_wandb, mock_run, patcher = _patch_wandb()
         try:
             import raven.unique.fine_tuning as ft
+
             monitor = ft.TrainingMonitor(use_wandb=True)
             assert monitor._use_wandb is True
             monitor._run = mock_run
@@ -82,6 +83,7 @@ class TestTrainingMonitor:
         mock_wandb, mock_run, patcher = _patch_wandb()
         try:
             import raven.unique.fine_tuning as ft
+
             monitor = ft.TrainingMonitor(use_wandb=True)
             monitor._run = mock_run
             cp_dir = tmp_path / "cp-100"
@@ -102,6 +104,7 @@ class TestTrainingMonitor:
         mock_wandb, mock_run, patcher = _patch_wandb()
         try:
             import raven.unique.fine_tuning as ft
+
             monitor = ft.TrainingMonitor(use_wandb=True)
             monitor._run = mock_run
             monitor.finish()
@@ -122,12 +125,12 @@ class TestFineTuningPipelineWandbIntegration:
 
     @pytest.mark.asyncio
     async def test_train_with_wandb_no_wandb_fallback(self):
-        with patch("raven.unique.fine_tuning._WANDB_AVAILABLE", False), patch.object(
-            self.pipeline, "load_model"
-        ) as mock_load, patch.object(self.pipeline, "train", return_value={"train_loss": 0.5}):
-            _result_model, result_metrics = await self.pipeline.train_with_wandb(
-                TrainingConfig(), MagicMock()
-            )
+        with (
+            patch("raven.unique.fine_tuning._WANDB_AVAILABLE", False),
+            patch.object(self.pipeline, "load_model") as mock_load,
+            patch.object(self.pipeline, "train", return_value={"train_loss": 0.5}),
+        ):
+            _result_model, result_metrics = await self.pipeline.train_with_wandb(TrainingConfig(), MagicMock())
             mock_load.assert_called_once()
             assert result_metrics["train_loss"] == 0.5
 

@@ -59,8 +59,6 @@ _BASH_ALLOWLIST = frozenset(
 )
 
 
-
-
 async def bash_exec(command: str, timeout: int = 30) -> str:
     parts = shlex.split(command)
     if not parts:

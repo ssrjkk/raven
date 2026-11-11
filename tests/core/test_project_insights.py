@@ -7,9 +7,30 @@ import pytest
 
 def _sample_commits():
     return [
-        {"hash": "a1", "message": "feat: add login", "author": "u", "date": "2026-07-01", "date_iso": "2026-07-01T10:00:00+00:00", "files": []},
-        {"hash": "a2", "message": "fix: typo", "author": "u", "date": "2026-07-01", "date_iso": "2026-07-01T12:00:00+00:00", "files": []},
-        {"hash": "a3", "message": "docs: readme", "author": "u", "date": "2026-07-02", "date_iso": "2026-07-02T09:00:00+00:00", "files": []},
+        {
+            "hash": "a1",
+            "message": "feat: add login",
+            "author": "u",
+            "date": "2026-07-01",
+            "date_iso": "2026-07-01T10:00:00+00:00",
+            "files": [],
+        },
+        {
+            "hash": "a2",
+            "message": "fix: typo",
+            "author": "u",
+            "date": "2026-07-01",
+            "date_iso": "2026-07-01T12:00:00+00:00",
+            "files": [],
+        },
+        {
+            "hash": "a3",
+            "message": "docs: readme",
+            "author": "u",
+            "date": "2026-07-02",
+            "date_iso": "2026-07-02T09:00:00+00:00",
+            "files": [],
+        },
     ]
 
 
@@ -42,7 +63,16 @@ class TestComputeProjectInsights:
         from raven.core.project_insights_api import compute_project_insights
 
         commits = _sample_commits()
-        commits.append({"hash": "a4", "message": "Revert \"feat: add login\"", "author": "u", "date": "2026-07-03", "date_iso": "2026-07-03T10:00:00+00:00", "files": []})
+        commits.append(
+            {
+                "hash": "a4",
+                "message": 'Revert "feat: add login"',
+                "author": "u",
+                "date": "2026-07-03",
+                "date_iso": "2026-07-03T10:00:00+00:00",
+                "files": [],
+            }
+        )
         result = compute_project_insights("demo", tmp_path, commits, 30)
         assert result["commits"] == 4
         assert result["success_rate"] == pytest.approx(75.0)

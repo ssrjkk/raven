@@ -89,7 +89,11 @@ class _FakeProvider:
         self.calls = 0
 
     async def complete_stream_deltas(
-        self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None = None, priority: float = 0.0
+        self,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        priority: float = 0.0,
     ) -> Any:
         item = self.script[min(self.calls, len(self.script) - 1)]
         self.calls += 1
@@ -203,10 +207,12 @@ class TestAIOSClientMessageStream:
 
     async def test_tokens_and_final_event(self):
         provider = _FakeProvider(
-            [[
-                {"type": "token", "text": "he"},
-                {"type": "token", "text": "y"},
-            ]]
+            [
+                [
+                    {"type": "token", "text": "he"},
+                    {"type": "token", "text": "y"},
+                ]
+            ]
         )
         client, monkey = self._client_with(provider)
         try:
@@ -221,11 +227,13 @@ class TestAIOSClientMessageStream:
 
     async def test_tool_call_fragments_assembled(self):
         provider = _FakeProvider(
-            [[
-                {"type": "tool_call", "index": 0, "id": "c1", "name": "write", "args_fragment": '{"pa'},
-                {"type": "tool_call", "index": 0, "args_fragment": 'th": "a.txt"}'},
-                {"type": "tool_call", "index": 1, "name": "read", "args_fragment": "{}"},
-            ]]
+            [
+                [
+                    {"type": "tool_call", "index": 0, "id": "c1", "name": "write", "args_fragment": '{"pa'},
+                    {"type": "tool_call", "index": 0, "args_fragment": 'th": "a.txt"}'},
+                    {"type": "tool_call", "index": 1, "name": "read", "args_fragment": "{}"},
+                ]
+            ]
         )
         client, monkey = self._client_with(provider)
         try:
@@ -389,11 +397,13 @@ class TestAgentStreaming:
         monkeypatch.setattr(
             "ravencode.runtime.agent_core.AIOSClient",
             self._stream_client(
-                [[
-                    {"type": "token", "text": "he"},
-                    {"type": "token", "text": "y"},
-                    {"type": "final", "content": "hey", "tool_calls": []},
-                ]]
+                [
+                    [
+                        {"type": "token", "text": "he"},
+                        {"type": "token", "text": "y"},
+                        {"type": "final", "content": "hey", "tool_calls": []},
+                    ]
+                ]
             ),
         )
         tokens: list[str] = []
@@ -420,9 +430,11 @@ class TestAgentStreaming:
             self._stream_client(
                 [
                     [
-                        {"type": "final", "content": "", "tool_calls": [
-                            {"id": "c1", "name": "read", "arguments": {"path": "a"}}
-                        ]},
+                        {
+                            "type": "final",
+                            "content": "",
+                            "tool_calls": [{"id": "c1", "name": "read", "arguments": {"path": "a"}}],
+                        },
                     ],
                     [
                         {"type": "token", "text": "done"},

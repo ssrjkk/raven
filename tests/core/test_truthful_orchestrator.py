@@ -378,5 +378,7 @@ async def test_empty_model_string_ok():
 async def test_llmrouter_structural_compatibility():
     from raven.core.agents.truthful_orchestrator import TruthfulOrchestrator
 
-    orchestrator = TruthfulOrchestrator(ScriptedCompleter(["<thinking>ok</thinking>\nответ", "VERIFIED: TRUE"]), model="")
+    orchestrator = TruthfulOrchestrator(
+        ScriptedCompleter(["<thinking>ok</thinking>\nответ", "VERIFIED: TRUE"]), model=""
+    )
     assert orchestrator._model == ""

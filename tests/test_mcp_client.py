@@ -36,15 +36,27 @@ class TestMCPClientResponses:
         with patch("raven.core.mcp.mcp_client.asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_spawn:
             proc = self._make_mock_proc()
 
-            init_resp = json.dumps({
-                "jsonrpc": "2.0", "id": 1,
-                "result": {"serverInfo": {"name": "test-mcp", "version": "1.0"}},
-            }) + "\n"
+            init_resp = (
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "result": {"serverInfo": {"name": "test-mcp", "version": "1.0"}},
+                    }
+                )
+                + "\n"
+            )
 
-            tools_resp = json.dumps({
-                "jsonrpc": "2.0", "id": 2,
-                "result": {"tools": [{"name": "greet", "description": "Say hello"}]},
-            }) + "\n"
+            tools_resp = (
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "result": {"tools": [{"name": "greet", "description": "Say hello"}]},
+                    }
+                )
+                + "\n"
+            )
 
             responses = iter([init_resp.encode(), tools_resp.encode()])
 

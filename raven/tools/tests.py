@@ -99,11 +99,7 @@ async def run_tests(path: str = "", marker: str = "", timeout: int = 120, extra_
 
     out = stdout.decode("utf-8", errors="replace")
     err = stderr.decode("utf-8", errors="replace")
-    return (
-        f"Exit code: {proc.returncode}\n"
-        f"Tests: {_pytest_summary(out)}\n"
-        f"{'Stderr: ' + err[:500] if err else ''}"
-    )
+    return f"Exit code: {proc.returncode}\nTests: {_pytest_summary(out)}\n{'Stderr: ' + err[:500] if err else ''}"
 
 
 async def test_coverage(path: str = "", timeout: int = 180) -> str:

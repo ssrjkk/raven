@@ -359,7 +359,9 @@ class RavenFlowDaemon:
                     continue
                 session.status = "resumed"
                 self.sessions[session.id] = session
-                logger.info("RavenFlow session restored: {} ({}, {} msgs)", session.id, session.channel, session.message_count)
+                logger.info(
+                    "RavenFlow session restored: {} ({}, {} msgs)", session.id, session.channel, session.message_count
+                )
         except Exception as exc:
             logger.error("SessionStore: failed to load persisted sessions: {}", exc)
 
@@ -409,7 +411,9 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="RavenFlow Gateway daemon")
     parser.add_argument("--port", type=int, default=18789, help="Gateway port")
-    parser.add_argument("--host", default=settings.ravenflow_host, help="Bind address (default: the loopback interface)")
+    parser.add_argument(
+        "--host", default=settings.ravenflow_host, help="Bind address (default: the loopback interface)"
+    )
     args = parser.parse_args()
 
     daemon = RavenFlowDaemon(port=args.port, host=args.host)

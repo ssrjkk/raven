@@ -210,6 +210,7 @@ def create_browser_router() -> APIRouter:
     async def api_browser_navigate(req: NavigateRequest):
         try:
             from raven.core.security.ssrf import validate_url as _ssrf_validate
+
             _err = _ssrf_validate(req.url)
             if _err:
                 raise ValueError(_err)

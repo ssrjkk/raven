@@ -9,6 +9,7 @@ For every TaskSpec:
 
 This guarantees the eval suite itself is sound before spending LLM tokens.
 """
+
 from __future__ import annotations
 
 import json

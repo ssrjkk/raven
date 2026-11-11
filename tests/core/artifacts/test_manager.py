@@ -70,9 +70,7 @@ def test_rules_for_ordering_and_scoping(tmp_path: Path) -> None:
     (rules / "root.md").write_text("# Root rules", encoding="utf-8")
     (rules / "web").mkdir()
     (rules / "web" / "ui.md").write_text("# UI rules", encoding="utf-8")
-    (rules / "core.md").write_text(
-        "---\nagents: [coder]\n---\n# Coder only", encoding="utf-8"
-    )
+    (rules / "core.md").write_text("---\nagents: [coder]\n---\n# Coder only", encoding="utf-8")
     m = ArtifactManager(cwd=tmp_path)
 
     ctx = m.context(agent_id="assistant", cwd=tmp_path / "web", root=tmp_path)

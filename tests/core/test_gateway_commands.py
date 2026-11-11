@@ -393,9 +393,7 @@ async def test_compact_empty_summary(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def test_compact_success(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("raven.core.gateway.commands.compact.get_policy_for_channel", lambda ch: object())
-    monkeypatch.setattr(
-        "raven.core.gateway.commands.compact.check_tool_allowed", lambda policy, action, ch: (True, "")
-    )
+    monkeypatch.setattr("raven.core.gateway.commands.compact.check_tool_allowed", lambda policy, action, ch: (True, ""))
     msgs = [SimpleNamespace(role="user", content="a" * 300), SimpleNamespace(role="assistant", content="b")]
     gw = _compact_gw(msgs=msgs, agent=_Agent(["All ", "good "]))
     assert await CompactCommand(gw).execute(_ctx()) is True
@@ -570,9 +568,7 @@ async def test_task_list_shows_the_stored_tasks_and_plans_nothing(monkeypatch: p
     from raven.core.security.sandbox_policy import MAIN_SESSION_POLICY
     from raven.core.task_engine.models import Task, TaskStatus
 
-    monkeypatch.setattr(
-        "raven.core.gateway.commands.task.get_policy_for_channel", lambda ch: MAIN_SESSION_POLICY
-    )
+    monkeypatch.setattr("raven.core.gateway.commands.task.get_policy_for_channel", lambda ch: MAIN_SESSION_POLICY)
     gw = _task_gw()
     gw.tasks.stored_tasks = AsyncMock(
         return_value=[
@@ -591,9 +587,7 @@ async def test_task_list_shows_the_stored_tasks_and_plans_nothing(monkeypatch: p
 async def test_task_list_names_the_way_to_start_one(monkeypatch: pytest.MonkeyPatch) -> None:
     from raven.core.security.sandbox_policy import MAIN_SESSION_POLICY
 
-    monkeypatch.setattr(
-        "raven.core.gateway.commands.task.get_policy_for_channel", lambda ch: MAIN_SESSION_POLICY
-    )
+    monkeypatch.setattr("raven.core.gateway.commands.task.get_policy_for_channel", lambda ch: MAIN_SESSION_POLICY)
     gw = _task_gw()
     assert await TaskCommand(gw).execute(_ctx(args=["list"])) is True
     assert "No tasks yet" in _sent(gw)[2]
@@ -602,9 +596,7 @@ async def test_task_list_names_the_way_to_start_one(monkeypatch: pytest.MonkeyPa
 async def test_task_list_still_needs_the_task_permission(monkeypatch: pytest.MonkeyPatch) -> None:
     from raven.core.security.sandbox_policy import MAIN_SESSION_POLICY
 
-    monkeypatch.setattr(
-        "raven.core.gateway.commands.task.get_policy_for_channel", lambda ch: MAIN_SESSION_POLICY
-    )
+    monkeypatch.setattr("raven.core.gateway.commands.task.get_policy_for_channel", lambda ch: MAIN_SESSION_POLICY)
     gw = _task_gw(perm=False)
     assert await TaskCommand(gw).execute(_ctx(args=["list"])) is True
     assert _sent(gw)[2] == "Access denied: insufficient permissions"

@@ -21,6 +21,7 @@ def _try_api(path: str) -> dict[str, Any] | None:
     import logging
 
     import httpx
+
     try:
         resp = httpx.get(f"http://localhost:{settings.web_port}{path}", timeout=5)
         if resp.is_success:
@@ -62,6 +63,7 @@ def status() -> None:
 def cycle() -> None:
     """Trigger one dream cycle"""
     import httpx
+
     try:
         resp = httpx.post(f"http://localhost:{settings.web_port}/api/dream/cycle", timeout=120)
         if resp.is_success:

@@ -66,6 +66,7 @@ class TestEntityExtractor:
         class MockLLM:
             async def complete(self, messages, **kw):
                 return {"choices": [{"message": {"content": "PERSON|Alice\nORG|Acme"}}]}
+
         extractor = EntityExtractor(llm_provider=MockLLM())
         result = await extractor.extract(
             "Alice works at Acme corporation, a large company in the city of Boston, and manages the engineering team."
@@ -78,6 +79,7 @@ class TestEntityExtractor:
         class MockLLM:
             async def complete(self, messages, **kw):
                 return {"choices": [{"message": {"content": ""}}]}
+
         extractor = EntityExtractor(llm_provider=MockLLM())
         result = await extractor.extract(
             "This is some text that is long enough to trigger the LLM entity extraction path without real entities."
@@ -88,6 +90,7 @@ class TestEntityExtractor:
         class MockLLM:
             async def complete(self, messages, **kw):
                 return {"choices": [{"message": {"content": "ZZZZ|qqqq"}}]}
+
         extractor = EntityExtractor(llm_provider=MockLLM())
         result = await extractor.extract(
             "hello world this is a long message with no organizations or people mentioned anywhere inside it"
@@ -98,6 +101,7 @@ class TestEntityExtractor:
         class FailingLLM:
             async def complete(self, messages, **kw):
                 raise RuntimeError("LLM failed")
+
         extractor = EntityExtractor(llm_provider=FailingLLM())
         result = await extractor.extract(
             "Contact us at test@example.com for more information about our products and services today."
@@ -108,6 +112,7 @@ class TestEntityExtractor:
         class MockLLM:
             async def complete(self, messages, **kw):
                 return {"choices": [{"message": {"content": "EMAIL|test@example.com"}}]}
+
         extractor = EntityExtractor(llm_provider=MockLLM())
         result = await extractor.extract(
             "Please send all invoices to test@example.com, that is the email address our accounting team uses."
@@ -245,6 +250,7 @@ class TestSQLitePersister:
 
     async def test_get_persister_singleton(self, tmp_path):
         import raven.core.services.persister as pm
+
         get_persister(str(tmp_path / "singleton.db"))
         get_persister(str(tmp_path / "singleton.db"))
         old = pm._backend
@@ -261,6 +267,7 @@ class TestChunkerEdgeCases:
         result = chunker.chunk(text, strategy="sliding")
         assert len(result.chunks) == 500  # stride=1, each chunk has varying length 100..1
         assert result.chunks[0].text == "a" * 100
+
     def test_semantic_chunk_overlap(self):
         chunker = Chunker(max_chars=200, overlap=50)
         paras = "\n\n".join([f"Paragraph number {i} with some content." for i in range(10)])

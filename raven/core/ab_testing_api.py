@@ -62,9 +62,7 @@ def create_ab_testing_router() -> APIRouter:
                     "id": e.id,
                     "name": e.name,
                     "status": e.status,
-                    "variants": [
-                        {"name": v.name, "weight": v.weight, "is_control": v.is_control} for v in e.variants
-                    ],
+                    "variants": [{"name": v.name, "weight": v.weight, "is_control": v.is_control} for v in e.variants],
                     "metric": e.metric_name,
                     "metric_type": e.metric_type,
                     "created_at": e.created_at,

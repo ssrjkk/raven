@@ -45,9 +45,31 @@ class TestPhysicalMemory:
 
 
 class TestVram:
+    """`shutil.which` gates the probe, so on a GPU-less machine every branch below it is unreachable.
+
+    These four assertions patched only `subprocess.run`, which the probe never reaches when
+    `nvidia-smi` is not on PATH: the CPU-only laptop answered its own zero and the tests compared it
+    against a non-zero expectation (`assert 0 == 24576`), while the zero-expecting ones passed for the
+    wrong reason and would have kept passing if the parsing broke. The autouse fixture pins the gate
+    open so the assertions are about parsing, not about which machine runs them.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _smi_on_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_shutil, "which", lambda _cmd: "/usr/bin/nvidia-smi")
+
     def test_highest_gpu_wins(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(subprocess, "run", lambda *_a, **_k: _run("24576\n8192\n"))
         assert hardware._vram_mb() == 24576
+
+    def test_no_probe_binary_stops_before_the_subprocess(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_shutil, "which", lambda _cmd: None)
+
+        def _never(*_a: object, **_k: object) -> SimpleNamespace:
+            raise AssertionError("the probe ran nvidia-smi on a machine that has no nvidia-smi")
+
+        monkeypatch.setattr(subprocess, "run", _never)
+        assert hardware._vram_mb() == 0
 
     def test_failing_query_is_no_gpu(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(subprocess, "run", lambda *_a, **_k: _run("", returncode=1))
@@ -72,23 +94,30 @@ class TestWeightsVolume:
         monkeypatch.setenv("OLLAMA_MODELS", str(models))
         assert hardware.weights_volume() == models
 
-    def test_nearest_existing_ancestor_of_a_not_yet_created_path(self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_nearest_existing_ancestor_of_a_not_yet_created_path(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("OLLAMA_MODELS", str(tmp_path / "nested" / "deeper"))
         assert hardware.weights_volume() == tmp_path
 
-    def test_default_is_the_user_ollama_directory(self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_default_is_the_user_ollama_directory(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("OLLAMA_MODELS", raising=False)
         fake_home = tmp_path / "user"
         (fake_home / ".ollama").mkdir(parents=True)
         monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: fake_home))
         assert hardware.weights_volume() == fake_home / ".ollama"
 
-    def test_default_walks_up_to_home_when_the_ollama_directory_is_absent(self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_default_walks_up_to_home_when_the_ollama_directory_is_absent(
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("OLLAMA_MODELS", raising=False)
         fake_home = tmp_path / "user"
         fake_home.mkdir()
         monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: fake_home))
         assert hardware.weights_volume() == fake_home
+
 
 def test_no_wmic_argv_anywhere_in_shipped_code() -> None:
     """``wmic`` left Windows; a probe that calls it returns zero, and zero reads as a small machine.
@@ -125,9 +154,7 @@ class TestDetect:
         monkeypatch.setattr(hardware, "_physical_memory_bytes", lambda: (8_589_934_592, 966_367_692))
         monkeypatch.setattr(hardware, "_vram_mb", lambda: 0)
         monkeypatch.setattr(hardware, "weights_volume", lambda: pathlib.Path("C:/fake"))
-        monkeypatch.setattr(
-            _shutil, "disk_usage", lambda _p: SimpleNamespace(total=0, used=0, free=59_000_000_000)
-        )
+        monkeypatch.setattr(_shutil, "disk_usage", lambda _p: SimpleNamespace(total=0, used=0, free=59_000_000_000))
 
     def test_rounds_each_resource_into_gigabytes(self) -> None:
         read = hardware.detect()
@@ -145,7 +172,9 @@ class TestDetect:
         assert read.ram_total_gb == 8.59, "one unmeasurable resource may not zero the others"
 
 
-def test_disk_usage_measures_the_volume_the_weights_land_on(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+def test_disk_usage_measures_the_volume_the_weights_land_on(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
     monkeypatch.setattr(hardware, "weights_volume", lambda: tmp_path)
     monkeypatch.setattr(hardware, "_vram_mb", lambda: 0)
     read = hardware.detect()
@@ -160,6 +189,7 @@ def test_subprocess_run_is_called_with_a_list_not_a_shell(monkeypatch: pytest.Mo
         calls.append(cmd)
         return _run("", returncode=1)
 
+    monkeypatch.setattr(_shutil, "which", lambda _cmd: "/usr/bin/nvidia-smi")
     monkeypatch.setattr(subprocess, "run", _record)
     hardware._vram_mb()
     assert calls and isinstance(calls[0], list)

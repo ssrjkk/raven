@@ -246,6 +246,7 @@ async def test_outbox_delivery(pg_dsn: str, pg_schema: None) -> None:
 
 async def test_outbox_drop_after_max_attempts(pg_dsn: str, pg_schema: None) -> None:
     await _clean_table(pg_dsn, "outbox")
+
     async def fail(channel_id: str, session_id: str, text: str) -> None:
         raise RuntimeError("boom")
 

@@ -1,4 +1,5 @@
 """Tests for MCP tool integration (ravencode.runtime.mcp_tools)."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -72,7 +73,11 @@ def _clean_registry():
 def test_register_adds_prefixed_tools() -> None:
     client = FakeMCPClient(
         [
-            {"name": "search", "description": "Search stuff", "inputSchema": {"type": "object", "properties": {"q": {"type": "string"}}, "required": ["q"]}},
+            {
+                "name": "search",
+                "description": "Search stuff",
+                "inputSchema": {"type": "object", "properties": {"q": {"type": "string"}}, "required": ["q"]},
+            },
         ]
     )
     registered = register_client_tools("github", client)

@@ -93,66 +93,73 @@ class TestCollabSessions:
 
 class TestCollabUsers:
     def test_join_session(self, client, mock_session):
-        resp = client.post("/api/collab/sessions/sess-1/join", json={
-            "session_id": "sess-1", "user_id": "u1", "user_name": "Alice"
-        })
+        resp = client.post(
+            "/api/collab/sessions/sess-1/join", json={"session_id": "sess-1", "user_id": "u1", "user_name": "Alice"}
+        )
         assert resp.status_code == 200
         mock_session.add_user.assert_called_once_with("u1", "Alice")
 
     def test_join_not_found(self, client, mock_manager):
         mock_manager.get_session.return_value = None
-        resp = client.post("/api/collab/sessions/missing/join", json={
-            "session_id": "missing", "user_id": "u1", "user_name": "Alice"
-        })
+        resp = client.post(
+            "/api/collab/sessions/missing/join", json={"session_id": "missing", "user_id": "u1", "user_name": "Alice"}
+        )
         assert resp.status_code == 404
 
     def test_leave_session(self, client, mock_session):
-        resp = client.post("/api/collab/sessions/sess-1/leave", json={
-            "session_id": "sess-1", "user_id": "u1"
-        })
+        resp = client.post("/api/collab/sessions/sess-1/leave", json={"session_id": "sess-1", "user_id": "u1"})
         assert resp.status_code == 200
         mock_session.remove_user.assert_called_once_with("u1")
 
 
 class TestCollabChanges:
     def test_apply_change(self, client, mock_session):
-        resp = client.post("/api/collab/sessions/sess-1/changes", json={
-            "session_id": "sess-1",
-            "user_id": "u1",
-            "file": "/test.py",
-            "start_line": 0,
-            "start_col": 0,
-            "end_line": 0,
-            "end_col": 5,
-            "old_text": "hello",
-            "new_text": "world",
-        })
+        resp = client.post(
+            "/api/collab/sessions/sess-1/changes",
+            json={
+                "session_id": "sess-1",
+                "user_id": "u1",
+                "file": "/test.py",
+                "start_line": 0,
+                "start_col": 0,
+                "end_line": 0,
+                "end_col": 5,
+                "old_text": "hello",
+                "new_text": "world",
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
     def test_apply_change_failed(self, client, mock_session):
         mock_session.apply_change.return_value = False
-        resp = client.post("/api/collab/sessions/sess-1/changes", json={
-            "session_id": "sess-1",
-            "user_id": "u1",
-            "file": "/test.py",
-            "start_line": 0,
-            "start_col": 0,
-            "end_line": 0,
-            "end_col": 0,
-            "old_text": "",
-            "new_text": "x",
-        })
+        resp = client.post(
+            "/api/collab/sessions/sess-1/changes",
+            json={
+                "session_id": "sess-1",
+                "user_id": "u1",
+                "file": "/test.py",
+                "start_line": 0,
+                "start_col": 0,
+                "end_line": 0,
+                "end_col": 0,
+                "old_text": "",
+                "new_text": "x",
+            },
+        )
         assert resp.status_code == 400
 
     def test_add_comment(self, client):
-        resp = client.post("/api/collab/sessions/sess-1/comments", json={
-            "session_id": "sess-1",
-            "user_id": "u1",
-            "file": "/test.py",
-            "line": 5,
-            "text": "looks good",
-        })
+        resp = client.post(
+            "/api/collab/sessions/sess-1/comments",
+            json={
+                "session_id": "sess-1",
+                "user_id": "u1",
+                "file": "/test.py",
+                "line": 5,
+                "text": "looks good",
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 

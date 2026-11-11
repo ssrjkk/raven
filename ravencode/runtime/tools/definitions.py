@@ -260,7 +260,11 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
                     "items": {"type": "string"},
                     "description": "List of independent task descriptions",
                 },
-                "context": {"type": "string", "description": "Optional shared context for all sub-agents", "default": None},
+                "context": {
+                    "type": "string",
+                    "description": "Optional shared context for all sub-agents",
+                    "default": None,
+                },
             },
             "required": ["tasks"],
         },
@@ -1062,6 +1066,6 @@ MODULE_TOOLS: dict[str, dict[str, Any]] = {
 }
 
 
-
-
-_PLAN_MODE_DENIED = frozenset({"write", "edit", "bash", "task", "git_commit", "git_add", "checkpoint_restore", "undo_changes", "redo"})
+_PLAN_MODE_DENIED = frozenset(
+    {"write", "edit", "bash", "task", "git_commit", "git_add", "checkpoint_restore", "undo_changes", "redo"}
+)

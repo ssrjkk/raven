@@ -581,7 +581,8 @@ class TestGitHubProvider:
         import httpx
 
         provider = GitHubProvider(token="t")
-        provider._request = AsyncMock(side_effect=httpx.HTTPStatusError("404", request=MagicMock(), response=MagicMock()))  # type: ignore[method-assign]
+        missing = AsyncMock(side_effect=httpx.HTTPStatusError("404", request=MagicMock(), response=MagicMock()))
+        provider._request = missing  # type: ignore[method-assign]
         assert await provider.get_file("o/r", "missing.py") is None
 
     async def test_create_branch_success_and_failure(self) -> None:
@@ -723,8 +724,10 @@ class TestGitLabProvider:
         provider = GitLabProvider(token="t")
         provider._request = AsyncMock(  # type: ignore[method-assign]
             return_value=self._resp(
-                [{"name": "main", "commit": {"id": "abc"}, "protected": True},
-                 {"name": "dev", "commit": {"id": "def"}, "protected": False}]
+                [
+                    {"name": "main", "commit": {"id": "abc"}, "protected": True},
+                    {"name": "dev", "commit": {"id": "def"}, "protected": False},
+                ]
             )
         )
         branches = await provider.list_branches("7")
@@ -742,7 +745,10 @@ class TestGitLabProvider:
         call = provider._request.await_args_list[0]
         assert (call.args[0], call.args[1]) == ("POST", "/projects/7/merge_requests")
         assert call.kwargs["json"] == {
-            "title": "T", "description": "desc", "source_branch": "a", "target_branch": "b",
+            "title": "T",
+            "description": "desc",
+            "source_branch": "a",
+            "target_branch": "b",
         }
 
     async def test_get_file_decodes_base64_and_passes_ref(self) -> None:
@@ -786,7 +792,12 @@ class TestGitLabProvider:
         provider = GitLabProvider(token="t")
         provider._request = AsyncMock(  # type: ignore[method-assign]
             return_value=self._resp(
-                {"changes": [{"old_path": "a.py", "new_path": "b.py", "diff": "+x"}, {"old_path": "c", "new_path": "c", "diff": "-y"}]}
+                {
+                    "changes": [
+                        {"old_path": "a.py", "new_path": "b.py", "diff": "+x"},
+                        {"old_path": "c", "new_path": "c", "diff": "-y"},
+                    ]
+                }
             )
         )
         diff = await provider.get_pull_request_diff("7", 9)
@@ -822,7 +833,12 @@ class TestGitLabProvider:
 class TestGitLabIntegrationDelegation:
     def _ctx(self) -> EventContext:
         return EventContext(
-            event_type=EventType.ISSUE_COMMENT, platform="gitlab", owner="acme", repo="app", issue_number=3, pr_number=None
+            event_type=EventType.ISSUE_COMMENT,
+            platform="gitlab",
+            owner="acme",
+            repo="app",
+            issue_number=3,
+            pr_number=None,
         )
 
     async def test_without_token_all_methods_short_circuit(self) -> None:
@@ -861,7 +877,12 @@ class TestGitLabIntegrationDelegation:
         integration = GitLabIntegration(token="t")
         integration._provider = MagicMock()
         ctx = EventContext(
-            event_type=EventType.ISSUE_COMMENT, platform="gitlab", owner="", repo="app", issue_number=None, pr_number=None
+            event_type=EventType.ISSUE_COMMENT,
+            platform="gitlab",
+            owner="",
+            repo="app",
+            issue_number=None,
+            pr_number=None,
         )
         assert await integration.post_comment(ctx, "body") is False
 
@@ -878,7 +899,9 @@ class TestGitHubWebhookApp:
         return mod
 
     def _event(self, event_type: WebhookEventType, comment_body: str = "") -> WebhookEvent:
-        return WebhookEvent(event_type=event_type, repository="o/r", actor="a", payload={"comment": {"body": comment_body}})
+        return WebhookEvent(
+            event_type=event_type, repository="o/r", actor="a", payload={"comment": {"body": comment_body}}
+        )
 
     async def test_health(self, ghw_module) -> None:
         app = ghw_module.app
@@ -900,11 +923,14 @@ class TestGitHubWebhookApp:
             assert exc.value.status_code == 400
 
     async def test_handler_not_initialized(self, ghw_module) -> None:
-        with patch(
-            "ravencode.integrations.github_webhook.parse_github_webhook_request",
-            new_callable=AsyncMock,
-            return_value=self._event(WebhookEventType.PUSH),
-        ), patch("ravencode.integrations.github_webhook._integration", None):
+        with (
+            patch(
+                "ravencode.integrations.github_webhook.parse_github_webhook_request",
+                new_callable=AsyncMock,
+                return_value=self._event(WebhookEventType.PUSH),
+            ),
+            patch("ravencode.integrations.github_webhook._integration", None),
+        ):
             from fastapi import HTTPException
 
             with pytest.raises(HTTPException) as exc:
@@ -912,43 +938,55 @@ class TestGitHubWebhookApp:
             assert exc.value.status_code == 500
 
     async def test_handler_ignored_comment(self, ghw_module, integration) -> None:
-        with patch(
-            "ravencode.integrations.github_webhook.parse_github_webhook_request",
-            new_callable=AsyncMock,
-            return_value=self._event(WebhookEventType.ISSUE_COMMENT, comment_body="just a comment"),
-        ), patch("ravencode.integrations.github_webhook._integration", integration):
+        with (
+            patch(
+                "ravencode.integrations.github_webhook.parse_github_webhook_request",
+                new_callable=AsyncMock,
+                return_value=self._event(WebhookEventType.ISSUE_COMMENT, comment_body="just a comment"),
+            ),
+            patch("ravencode.integrations.github_webhook._integration", integration),
+        ):
             result = await ghw_module.webhook_handler(make_request(b"{}"))
         assert result == {"status": "ignored", "reason": "Not a ravencode command"}
         integration.handle_event.assert_not_called()
 
     async def test_handler_processed_comment(self, ghw_module, integration) -> None:
         integration.handle_event = AsyncMock(return_value=WorkflowResult(success=True, summary="done"))
-        with patch(
-            "ravencode.integrations.github_webhook.parse_github_webhook_request",
-            new_callable=AsyncMock,
-            return_value=self._event(WebhookEventType.PULL_REQUEST_COMMENT, comment_body="/ravencode run tests"),
-        ), patch("ravencode.integrations.github_webhook._integration", integration):
+        with (
+            patch(
+                "ravencode.integrations.github_webhook.parse_github_webhook_request",
+                new_callable=AsyncMock,
+                return_value=self._event(WebhookEventType.PULL_REQUEST_COMMENT, comment_body="/ravencode run tests"),
+            ),
+            patch("ravencode.integrations.github_webhook._integration", integration),
+        ):
             result = await ghw_module.webhook_handler(make_request(b"{}"))
         assert result["status"] == "processed"
         assert result["result"] == "done"
 
     async def test_handler_processed_push(self, ghw_module, integration) -> None:
         integration.handle_event = AsyncMock(return_value=WorkflowResult(success=True, summary="pushed"))
-        with patch(
-            "ravencode.integrations.github_webhook.parse_github_webhook_request",
-            new_callable=AsyncMock,
-            return_value=self._event(WebhookEventType.PUSH),
-        ), patch("ravencode.integrations.github_webhook._integration", integration):
+        with (
+            patch(
+                "ravencode.integrations.github_webhook.parse_github_webhook_request",
+                new_callable=AsyncMock,
+                return_value=self._event(WebhookEventType.PUSH),
+            ),
+            patch("ravencode.integrations.github_webhook._integration", integration),
+        ):
             result = await ghw_module.webhook_handler(make_request(b"{}"))
         assert result["status"] == "processed"
 
     async def test_handler_no_result(self, ghw_module, integration) -> None:
         integration.handle_event = AsyncMock(return_value=None)
-        with patch(
-            "ravencode.integrations.github_webhook.parse_github_webhook_request",
-            new_callable=AsyncMock,
-            return_value=self._event(WebhookEventType.PUSH),
-        ), patch("ravencode.integrations.github_webhook._integration", integration):
+        with (
+            patch(
+                "ravencode.integrations.github_webhook.parse_github_webhook_request",
+                new_callable=AsyncMock,
+                return_value=self._event(WebhookEventType.PUSH),
+            ),
+            patch("ravencode.integrations.github_webhook._integration", integration),
+        ):
             result = await ghw_module.webhook_handler(make_request(b"{}"))
         assert result["result"] == "No action"
 

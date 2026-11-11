@@ -96,7 +96,9 @@ class FeedbackLoop:
             self._pattern_scores.move_to_end(pattern)
         logger.debug(
             "FeedbackLoop: profile={} success={} rate={:.2f}",
-            profile, success, self._outcomes[key].success_rate,
+            profile,
+            success,
+            self._outcomes[key].success_rate,
         )
 
     def _scores_for(self, pattern: str) -> dict[str, float]:
@@ -153,15 +155,39 @@ def get_feedback_loop() -> FeedbackLoop:
 
 
 _KEYWORD_RULES: list[tuple[re.Pattern[str], str, float]] = [
-    (re.compile(r"(?:security|vulnerability|cve|owasp|threat|exploit|injection|xss|ssrf|hardcoded|secret|token|permission|authenticat)"), "security", 0.85),
+    (
+        re.compile(
+            r"(?:security|vulnerability|cve|owasp|threat|exploit|injection|xss|ssrf|hardcoded|secret|token|permission|authenticat)"
+        ),
+        "security",
+        0.85,
+    ),
     (re.compile(r"(?:design|architect|architecture|structure|overview|diagram|system\s*design)"), "architect", 0.7),
     (re.compile(r"(?:plan|break\s*down|decompose|roadmap|milestone|task\s*list|steps? to|prioritize)"), "planner", 0.7),
-    (re.compile(r"(?:debug|bug|error|crash|exception|stack.?trace|fix\s*this|not\s*working|broken|failing|traceback)"), "debugger", 0.85),
+    (
+        re.compile(
+            r"(?:debug|bug|error|crash|exception|stack.?trace|fix\s*this|not\s*working|broken|failing|traceback)"
+        ),
+        "debugger",
+        0.85,
+    ),
     (re.compile(r"(?:review|check\s*code|quality|lint|code\s*review|static\s*analysis)"), "reviewer", 0.75),
     (re.compile(r"(?:test|coverage|unit\s*test|integration\s*test|e2e\s*test|pytest|assert)"), "qa", 0.75),
-    (re.compile(r"(?:implement|write\s*code|create\s*(?:a|an)\s+(?:function|class|module|file)|refactor|add\s+feature)"), "coder", 0.65),
+    (
+        re.compile(
+            r"(?:implement|write\s*code|create\s*(?:a|an)\s+(?:function|class|module|file)|refactor|add\s+feature)"
+        ),
+        "coder",
+        0.65,
+    ),
     (re.compile(r"(?:write|create|generate|build|make|develop)"), "coder", 0.5),
-    (re.compile(r"(?:research|investigate|explore|find|search|look\s*up|learn|study|analyze\s*codebase|discover|documentation)"), "researcher", 0.7),
+    (
+        re.compile(
+            r"(?:research|investigate|explore|find|search|look\s*up|learn|study|analyze\s*codebase|discover|documentation)"
+        ),
+        "researcher",
+        0.7,
+    ),
 ]
 
 _OVERRIDE_RULES: list[tuple[re.Pattern[str], str, float]] = [

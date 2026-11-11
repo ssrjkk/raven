@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at 
 _MONITOR_ADDED_COLUMNS = (
     ("slo_target", "ALTER TABLE monitors ADD COLUMN slo_target REAL NOT NULL DEFAULT 0.99"),
     ("slo_window_seconds", "ALTER TABLE monitors ADD COLUMN slo_window_seconds INTEGER NOT NULL DEFAULT 86400"),
-    ("group", 'ALTER TABLE monitors ADD COLUMN "group" TEXT NOT NULL DEFAULT \'\''),
+    ("group", "ALTER TABLE monitors ADD COLUMN \"group\" TEXT NOT NULL DEFAULT ''"),
 )
 _MONITOR_ADDED_COLUMNS_POSTGRES = (
     (
@@ -108,7 +108,7 @@ _MONITOR_ADDED_COLUMNS_POSTGRES = (
         "slo_window_seconds",
         "ALTER TABLE monitors ADD COLUMN IF NOT EXISTS slo_window_seconds INTEGER NOT NULL DEFAULT 86400",
     ),
-    ("group", 'ALTER TABLE monitors ADD COLUMN IF NOT EXISTS "group" TEXT NOT NULL DEFAULT \'\''),
+    ("group", "ALTER TABLE monitors ADD COLUMN IF NOT EXISTS \"group\" TEXT NOT NULL DEFAULT ''"),
 )
 
 

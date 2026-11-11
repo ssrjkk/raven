@@ -214,7 +214,9 @@ class TestOptimizeForCoverage:
         test_file = tmp_path / "test_module.py"
         test_file.write_text("def test_foo(): pass")
 
-        with patch("raven.coding.test_generator.subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="pytest", timeout=1)):
+        with patch(
+            "raven.coding.test_generator.subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="pytest", timeout=1)
+        ):
             result = gen.optimize_for_coverage("module.py", str(test_file))
 
         assert result.passed is False
@@ -283,7 +285,11 @@ def greet(name: str) -> str:
 
     def test_generate_test_for_function_preserved(self):
         gen = TestGenerator()
-        func = FunctionInfo(name="add", args=[TypeInfo(name="x", type_hint="int"), TypeInfo(name="y", type_hint="int")], return_type="int")
+        func = FunctionInfo(
+            name="add",
+            args=[TypeInfo(name="x", type_hint="int"), TypeInfo(name="y", type_hint="int")],
+            return_type="int",
+        )
         test = gen.generate_test_for_function(func, "calc.py")
         assert "test_add_basic" in test
         assert "test_add_edge_empty" in test
@@ -319,6 +325,7 @@ def add(x: int, y: int) -> int:
 
     def test_get_type_hint_preserved(self):
         import ast
+
         gen = TestGenerator()
         arg = ast.arg(arg="x", annotation=ast.Name(id="int"))
         assert gen._get_type_hint(arg) == "int"

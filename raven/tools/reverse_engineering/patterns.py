@@ -144,12 +144,23 @@ _RUNTIME_STRING_SCAN_WORDS: list[tuple[str, bytes, str]] = [
     ("Rust", b" (rust", "Rust toolchain metadata"),
 ]
 
-_MSVC_IMPORTS: frozenset[str] = frozenset({
-    "MSVCRT", "MSVCP140", "VCRUNTIME140", "ucrtbase", "api-ms-win-crt-",
-})
-_MINGW_IMPORTS: frozenset[str] = frozenset({
-    "libgcc", "libmingw", "libstdc++-6", "libwinpthread",
-})
+_MSVC_IMPORTS: frozenset[str] = frozenset(
+    {
+        "MSVCRT",
+        "MSVCP140",
+        "VCRUNTIME140",
+        "ucrtbase",
+        "api-ms-win-crt-",
+    }
+)
+_MINGW_IMPORTS: frozenset[str] = frozenset(
+    {
+        "libgcc",
+        "libmingw",
+        "libstdc++-6",
+        "libwinpthread",
+    }
+)
 
 
 def detect_toolchain(path: str) -> str:
@@ -179,7 +190,10 @@ def detect_toolchain(path: str) -> str:
 
     if raw[:2] == b"MZ":
         imports = _extract_imports(raw)
-        if any(i.startswith("MSVCRT") or i.startswith("MSVCP") or i.startswith("VCRUNTIME") or i.startswith("ucrtbase") for i in imports):
+        if any(
+            i.startswith("MSVCRT") or i.startswith("MSVCP") or i.startswith("VCRUNTIME") or i.startswith("ucrtbase")
+            for i in imports
+        ):
             _add("TOOLCHAIN", "Microsoft C/C++ runtime (MSVCRT/MSVCP/VCRUNTIME)")
         if any(i.startswith("libgcc") or i.startswith("libmingw") or "libstdc++" in i for i in imports):
             _add("TOOLCHAIN", "MinGW/GCC runtime")

@@ -87,7 +87,6 @@ def _make_rag_with_clip(monkeypatch: pytest.MonkeyPatch) -> MultiModalRAG:
     return MultiModalRAG(dimension=32)
 
 
-
 @pytest.fixture(autouse=True)
 def _optional_embedders_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     """The unit suite must not pull `openai/clip-vit-base-patch32` over the network just because
@@ -120,15 +119,13 @@ class TestMultiModalRAG:
         assert all(isinstance(r, SearchResult) for r in results)
 
     def test_search_by_metadata(self):
-        doc = Document(id="d1", text="Machine learning is fun",
-                       metadata={"topic": "ai"})
+        doc = Document(id="d1", text="Machine learning is fun", metadata={"topic": "ai"})
         self.rag.index_document(doc)
         results = self.rag.search_by_metadata("learning", {"topic": "ai"}, top_k=5)
         assert len(results) >= 1
 
     def test_search_by_metadata_no_match(self):
-        doc = Document(id="d1", text="Machine learning is fun",
-                       metadata={"topic": "ai"})
+        doc = Document(id="d1", text="Machine learning is fun", metadata={"topic": "ai"})
         self.rag.index_document(doc)
         results = self.rag.search_by_metadata("learning", {"topic": "database"})
         assert len(results) == 0
@@ -162,12 +159,16 @@ class TestMultiModalRAG:
 
 class _FakeCollection:
     def __init__(self, response: dict[str, Any] | None = None, raises: bool = False) -> None:
-        self._resp = response if response is not None else {
-            "ids": [["c1"]],
-            "distances": [[0.1]],
-            "metadatas": [[{"document_id": "d1", "source": "s", "page": 0, "chunk_index": 0, "modality": "text"}]],
-            "documents": [["hit text"]],
-        }
+        self._resp = (
+            response
+            if response is not None
+            else {
+                "ids": [["c1"]],
+                "distances": [[0.1]],
+                "metadatas": [[{"document_id": "d1", "source": "s", "page": 0, "chunk_index": 0, "modality": "text"}]],
+                "documents": [["hit text"]],
+            }
+        )
         self._raises = raises
         self.added: list[dict[str, Any]] = []
         self.deleted: list[list[str]] = []
@@ -300,7 +301,14 @@ class TestIndexPathAndChroma:
             "distances": [[0.1, 0.2]],
             "metadatas": [
                 [
-                    {"document_id": "d1", "source": "s", "page": 1, "chunk_index": 0, "modality": "image", "image_path": "p.png"},
+                    {
+                        "document_id": "d1",
+                        "source": "s",
+                        "page": 1,
+                        "chunk_index": 0,
+                        "modality": "image",
+                        "image_path": "p.png",
+                    },
                     {"document_id": "d2"},
                 ]
             ],

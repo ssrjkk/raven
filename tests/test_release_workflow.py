@@ -84,9 +84,7 @@ def test_the_release_artifacts_are_attested() -> None:
 def test_every_third_party_action_is_pinned_to_a_commit() -> None:
     # A tag is a pointer that its owner can repoint at any code; only a commit SHA is immutable.
     # The release workflows carry PyPI and GHCR credentials, where that difference is the supply chain.
-    sources = sorted(WORKFLOWS.glob("*.yml")) + sorted(
-        (ROOT / ".github" / "actions").glob("*/action.yml")
-    )
+    sources = sorted(WORKFLOWS.glob("*.yml")) + sorted((ROOT / ".github" / "actions").glob("*/action.yml"))
     unpinned: list[str] = []
     for path in sources:
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):

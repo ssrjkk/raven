@@ -80,7 +80,6 @@ class _FakeYDoc:
         return b"diff-bytes"
 
 
-
 class TestCollaborationSession:
     def setup_method(self) -> None:
         self.session = CollaborationSession("s1", "test.py")
@@ -102,9 +101,16 @@ class TestCollaborationSession:
 
     def test_apply_change_same_line(self):
         self.session.document.content = "hello world"
-        change = TextChange(user_id="u1", file="test.py",
-                            start_line=0, start_col=6, end_line=0, end_col=11,
-                            old_text="world", new_text="there")
+        change = TextChange(
+            user_id="u1",
+            file="test.py",
+            start_line=0,
+            start_col=6,
+            end_line=0,
+            end_col=11,
+            old_text="world",
+            new_text="there",
+        )
         result = self.session.apply_change(change)
         assert result is True
         assert self.session.document.content == "hello there"
@@ -115,9 +121,16 @@ class TestCollaborationSession:
 
         self.session.document.content = "x"
         for _i in range(_MAX_CHANGE_HISTORY + 50):
-            change = TextChange(user_id="u1", file="test.py",
-                                start_line=0, start_col=0, end_line=0, end_col=1,
-                                old_text="x", new_text="x")
+            change = TextChange(
+                user_id="u1",
+                file="test.py",
+                start_line=0,
+                start_col=0,
+                end_line=0,
+                end_col=1,
+                old_text="x",
+                new_text="x",
+            )
             assert self.session.apply_change(change) is True
         assert len(self.session.document.changes) == _MAX_CHANGE_HISTORY
         assert self.session.document.change_count == _MAX_CHANGE_HISTORY + 50
@@ -126,9 +139,16 @@ class TestCollaborationSession:
 
     def test_apply_change_multiline(self):
         self.session.document.content = "line1\nline2\nline3"
-        change = TextChange(user_id="u1", file="test.py",
-                            start_line=0, start_col=0, end_line=2, end_col=5,
-                            old_text="line1\nline2\nline3", new_text="replacement")
+        change = TextChange(
+            user_id="u1",
+            file="test.py",
+            start_line=0,
+            start_col=0,
+            end_line=2,
+            end_col=5,
+            old_text="line1\nline2\nline3",
+            new_text="replacement",
+        )
         result = self.session.apply_change(change)
         assert result is True
         assert self.session.document.content == "replacement"
@@ -242,21 +262,31 @@ class TestSessionExtraBranches:
     def test_invalid_start_line(self):
         s = CollaborationSession("s1", "a.py")
         s.document.content = "only"
-        ch = TextChange(user_id="u1", file="a.py", start_line=3, start_col=0, end_line=3, end_col=0, old_text="", new_text="x")
+        ch = TextChange(
+            user_id="u1", file="a.py", start_line=3, start_col=0, end_line=3, end_col=0, old_text="", new_text="x"
+        )
         assert s.apply_change(ch) is False
 
     def test_invalid_end_line(self):
         s = CollaborationSession("s1", "a.py")
         s.document.content = "only"
-        ch = TextChange(user_id="u1", file="a.py", start_line=0, start_col=0, end_line=5, end_col=0, old_text="", new_text="x")
+        ch = TextChange(
+            user_id="u1", file="a.py", start_line=0, start_col=0, end_line=5, end_col=0, old_text="", new_text="x"
+        )
         assert s.apply_change(ch) is False
 
     def test_multiline_insert(self):
         s = CollaborationSession("s1", "a.py")
         s.document.content = "A\nB\nC"
         ch = TextChange(
-            user_id="u1", file="a.py", start_line=0, start_col=0, end_line=2, end_col=1,
-            old_text="A\nB\nC", new_text="X\nY\nZ",
+            user_id="u1",
+            file="a.py",
+            start_line=0,
+            start_col=0,
+            end_line=2,
+            end_col=1,
+            old_text="A\nB\nC",
+            new_text="X\nY\nZ",
         )
         assert s.apply_change(ch) is True
         assert s.document.version == 1
@@ -379,8 +409,14 @@ class TestCrdtWithFakeYpy:
         s.set_crdt_content("hello\nworld")
         s.set_crdt_content("abc")
         ch = TextChange(
-            user_id="u1", file="a.py", start_line=0, start_col=0, end_line=0, end_col=3,
-            old_text="abc", new_text="ABC",
+            user_id="u1",
+            file="a.py",
+            start_line=0,
+            start_col=0,
+            end_line=0,
+            end_col=3,
+            old_text="abc",
+            new_text="ABC",
         )
         assert s.apply_change(ch) is True
         assert s.get_crdt_content() == "ABC"
@@ -390,8 +426,14 @@ class TestCrdtWithFakeYpy:
         s = self._mk(monkeypatch)
         s.set_crdt_content("aaa\nbbb")
         ch = TextChange(
-            user_id="u1", file="a.py", start_line=1, start_col=0, end_line=1, end_col=3,
-            old_text="bbb", new_text="ccc",
+            user_id="u1",
+            file="a.py",
+            start_line=1,
+            start_col=0,
+            end_line=1,
+            end_col=3,
+            old_text="bbb",
+            new_text="ccc",
         )
         assert s.apply_change(ch) is True
         assert s.get_crdt_content() == "aaa\nccc"
@@ -399,9 +441,13 @@ class TestCrdtWithFakeYpy:
     def test_apply_invalid_bounds(self, monkeypatch: pytest.MonkeyPatch):
         s = self._mk(monkeypatch)
         s.set_crdt_content("only")
-        bad_start = TextChange(user_id="u1", file="a.py", start_line=5, start_col=0, end_line=5, end_col=0, old_text="", new_text="x")
+        bad_start = TextChange(
+            user_id="u1", file="a.py", start_line=5, start_col=0, end_line=5, end_col=0, old_text="", new_text="x"
+        )
         assert s.apply_change(bad_start) is False
-        bad_end = TextChange(user_id="u1", file="a.py", start_line=0, start_col=0, end_line=9, end_col=0, old_text="", new_text="x")
+        bad_end = TextChange(
+            user_id="u1", file="a.py", start_line=0, start_col=0, end_line=9, end_col=0, old_text="", new_text="x"
+        )
         assert s.apply_change(bad_end) is False
 
     def test_apply_error_falls_back(self, monkeypatch: pytest.MonkeyPatch):
@@ -409,8 +455,14 @@ class TestCrdtWithFakeYpy:
         s.set_crdt_content("hello")
         s._ytext.raise_on_delete = True
         ch = TextChange(
-            user_id="u1", file="a.py", start_line=0, start_col=0, end_line=0, end_col=5,
-            old_text="hello", new_text="HI",
+            user_id="u1",
+            file="a.py",
+            start_line=0,
+            start_col=0,
+            end_line=0,
+            end_col=5,
+            old_text="hello",
+            new_text="HI",
         )
         assert s.apply_change(ch) is True
         assert s.document.content == "HI"
@@ -440,7 +492,9 @@ class TestRealTimeCollaboration:
         s.document.content = "hello"
         s.add_user("u1", "Alice")
         monkeypatch.setattr(rtc._manager, "get_session", lambda sid: None)
-        ch = TextChange(user_id="u1", file="a.py", start_line=0, start_col=0, end_line=0, end_col=0, old_text="", new_text="x")
+        ch = TextChange(
+            user_id="u1", file="a.py", start_line=0, start_col=0, end_line=0, end_col=0, old_text="", new_text="x"
+        )
         assert await rtc.edit("u1", [ch]) is False
 
     async def test_full_join_edit_leave_flow(self, monkeypatch: pytest.MonkeyPatch):
@@ -452,8 +506,14 @@ class TestRealTimeCollaboration:
         ws = _FakeWS()
         await rtc.get_ws_manager().connect("s1", "u9", ws)
         ch = TextChange(
-            user_id="ignored", file="a.py", start_line=0, start_col=0, end_line=0, end_col=5,
-            old_text="hello", new_text="HELLO",
+            user_id="ignored",
+            file="a.py",
+            start_line=0,
+            start_col=0,
+            end_line=0,
+            end_col=5,
+            old_text="hello",
+            new_text="HELLO",
         )
         assert await rtc.edit("u1", [ch]) is True
         assert s.document.content == "HELLO world"
@@ -465,7 +525,9 @@ class TestRealTimeCollaboration:
         s = rtc.create_session("s1", "a.py")
         s.document.content = "one\nline"
         await rtc.join_session("s1", "u1", "Alice")
-        bad = TextChange(user_id="u1", file="a.py", start_line=9, start_col=0, end_line=9, end_col=0, old_text="", new_text="x")
+        bad = TextChange(
+            user_id="u1", file="a.py", start_line=9, start_col=0, end_line=9, end_col=0, old_text="", new_text="x"
+        )
         assert await rtc.edit("u1", [bad]) is False
 
     async def test_join_missing_session(self):
@@ -480,7 +542,9 @@ class TestRealTimeCollaboration:
         rtc = RealTimeCollaboration()
         s = rtc.create_session("s1", "a.py")
         s.document.content = "abc"
-        ch = TextChange(user_id="u1", file="a.py", start_line=0, start_col=0, end_line=0, end_col=1, old_text="a", new_text="X")
+        ch = TextChange(
+            user_id="u1", file="a.py", start_line=0, start_col=0, end_line=0, end_col=1, old_text="a", new_text="X"
+        )
         assert await rtc.apply_change("s1", ch) is True
         assert await rtc.apply_change("missing", ch) is False
 

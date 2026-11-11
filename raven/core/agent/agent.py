@@ -246,13 +246,7 @@ class Agent:
     def _mark_untrusted(text: str) -> str:
         if "<<<EXTERNAL_UNTRUSTED_CONTENT>>>" in text:
             return text
-        return (
-            "<<<EXTERNAL_UNTRUSTED_CONTENT>>>\n"
-            "Source: channel message\n"
-            "---\n"
-            f"{text}\n"
-            "<<<END_EXTERNAL_CONTENT>>>"
-        )
+        return f"<<<EXTERNAL_UNTRUSTED_CONTENT>>>\nSource: channel message\n---\n{text}\n<<<END_EXTERNAL_CONTENT>>>"
 
     def _detect_loop(self, history: list[dict[str, Any]]) -> bool:
         tool_calls = [

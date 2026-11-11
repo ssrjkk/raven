@@ -201,9 +201,7 @@ class TestCodeCommands:
             sent.append((channel_id, text))
 
         gateway_with_perms._send = fake_send  # type: ignore[method-assign]
-        result = await gateway_with_perms._handle_command(
-            _event(f"/code index {tmp_path / 'outside'}"), user
-        )
+        result = await gateway_with_perms._handle_command(_event(f"/code index {tmp_path / 'outside'}"), user)
         assert result is True
         assert any("Access denied" in text for _, text in sent)
 
@@ -225,9 +223,7 @@ class TestCodeCommands:
             sent.append((channel_id, text))
 
         gateway_with_perms._send = fake_send  # type: ignore[method-assign]
-        result = await gateway_with_perms._handle_command(
-            _event(f"/code review {secret!s}"), user
-        )
+        result = await gateway_with_perms._handle_command(_event(f"/code review {secret!s}"), user)
         assert result is True
         assert any("Access denied" in text for _, text in sent)
 

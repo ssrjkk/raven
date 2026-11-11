@@ -19,6 +19,7 @@ def _safe_query(query: str, limit: int = 120) -> str:
     """Log-friendly query: truncated and PII-redacted (no secrets/emails in logs)."""
     return redact_pii(query)[:limit]
 
+
 _THINKING_RE = re.compile(r"<thinking>(.*?)</thinking>", re.DOTALL | re.IGNORECASE)
 _VERDICT_RE = re.compile(r"^\s*VERIFIED:\s*(TRUE|FALSE)", re.IGNORECASE | re.MULTILINE)
 _REFUSAL_MARKERS = (
@@ -118,9 +119,7 @@ class TruthfulOrchestrator:
             return TruthfulResult(status="refused", content=clean_answer, thinking_process=thinking)
 
         if corrections > 0:
-            logger.warning(
-                "truthful_orchestrator_corrected_final", query=_safe_query(query), corrections=corrections
-            )
+            logger.warning("truthful_orchestrator_corrected_final", query=_safe_query(query), corrections=corrections)
             return TruthfulResult(status="corrected", content=clean_answer, thinking_process=thinking)
 
         logger.info("truthful_orchestrator_verified", query=_safe_query(query))

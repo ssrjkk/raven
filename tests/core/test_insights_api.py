@@ -24,9 +24,7 @@ SAMPLE_LOG = (
 
 
 def _git(r: Path, *args: str) -> tuple[str, str]:
-    p = subprocess.run(
-        ["git", "-C", str(r), *args], capture_output=True, text=True, encoding="utf-8", errors="replace"
-    )
+    p = subprocess.run(["git", "-C", str(r), *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
     return p.stdout.strip(), p.stderr.strip()
 
 
@@ -160,7 +158,9 @@ def test_llm_insights_aggregation(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         _rec(yesterday, "claude-3", 0.1, 10, 5),
         _rec(yesterday - 10 * 86400, "gpt-4o", 0.2, 10, 10),
     ]
-    monkeypatch.setattr(ia, "_cost", SimpleNamespace(records_since=lambda cutoff: [r for r in records if r.timestamp >= cutoff]))
+    monkeypatch.setattr(
+        ia, "_cost", SimpleNamespace(records_since=lambda cutoff: [r for r in records if r.timestamp >= cutoff])
+    )
     c = _client(str(tmp_path))
     resp = c.get("/api/insights/llm", params={"days": 7})
     assert resp.status_code == 200

@@ -74,7 +74,10 @@ class TestSchemaRoundTripWithRegistry:
             ToolSpec(
                 name="write",
                 description="write file",
-                parameters={"path": {"type": "string", "required": True}, "content": {"type": "string", "required": False}},
+                parameters={
+                    "path": {"type": "string", "required": True},
+                    "content": {"type": "string", "required": False},
+                },
                 handler=lambda path, content="": content,
                 category="file",
             )

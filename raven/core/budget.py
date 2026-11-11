@@ -27,6 +27,4 @@ class TokenBudgetTracker:
         )
 
     async def record_usage(self, user_id: str, tokens: int, budget: int, window: int) -> bool:
-        return await self._limiter.is_allowed_weighted(
-            f"token_budget:{user_id}", tokens, budget, window
-        )
+        return await self._limiter.is_allowed_weighted(f"token_budget:{user_id}", tokens, budget, window)

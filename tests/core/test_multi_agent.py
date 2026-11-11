@@ -334,7 +334,9 @@ class TestRunGoal:
         async def fake_plan(goal, llm, task_id: str = "", user_id: str = "", channel: str = ""):
             return FakePlan()
 
-        monkeypatch.setattr("raven.core.task_engine.planner.TaskPlanner", lambda registry: SimpleNamespace(plan=fake_plan))
+        monkeypatch.setattr(
+            "raven.core.task_engine.planner.TaskPlanner", lambda registry: SimpleNamespace(plan=fake_plan)
+        )
         monkeypatch.setattr("raven.core.agents.router.needs_task_decomposition", lambda goal, threshold=2: True)
 
         orch = DelegationOrchestrator(llm=AsyncMock(), tool_registry=MockToolRegistry())  # type: ignore[arg-type]

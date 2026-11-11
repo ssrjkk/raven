@@ -232,9 +232,7 @@ class TestClaimAndLease:
 
 
 class TestRetrySchedule:
-    async def test_delay_doubles_until_the_cap(
-        self, db_path: str, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_delay_doubles_until_the_cap(self, db_path: str, monkeypatch: pytest.MonkeyPatch) -> None:
         box = Outbox(db_path, _always_fail, retry_interval=3600.0, backoff_base=30.0)
         await box.start()
         try:
@@ -274,9 +272,7 @@ class TestRetrySchedule:
 
 
 class TestClockGuard:
-    async def test_backward_step_reattaches_the_queue(
-        self, db_path: str, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_backward_step_reattaches_the_queue(self, db_path: str, monkeypatch: pytest.MonkeyPatch) -> None:
         box = Outbox(db_path, _always_fail, max_attempts=9, retry_interval=3600.0, backoff_base=30.0)
         await box.start()
         assert box._db is not None
@@ -371,4 +367,3 @@ class TestLifecycle:
         assert box._db is None
         release.set()
         await stopping
-

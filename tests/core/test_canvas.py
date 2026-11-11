@@ -86,10 +86,12 @@ class TestCanvas:
         assert result == "raw"
 
     async def test_render_multiple_components(self):
-        result = canvas_render([
-            {"type": "text", "content": "hello"},
-            {"type": "code", "language": "py", "content": "pass"},
-        ])
+        result = canvas_render(
+            [
+                {"type": "text", "content": "hello"},
+                {"type": "code", "language": "py", "content": "pass"},
+            ]
+        )
         assert "hello" in result
         assert "```py" in result
 

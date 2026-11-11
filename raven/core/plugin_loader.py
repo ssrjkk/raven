@@ -170,7 +170,9 @@ class WorkerProcess:
             # cannot see the death. `raven/core/sandbox.py` treats the same race the same way.
             logger.debug("[plugin] worker for {} had already exited", self._plugin_path.name)
         if self._loop is not asyncio.get_running_loop():
-            logger.debug("[plugin] worker for {} belongs to another loop, terminated without reaping", self._plugin_path.name)
+            logger.debug(
+                "[plugin] worker for {} belongs to another loop, terminated without reaping", self._plugin_path.name
+            )
             return
         await proc.wait()
 

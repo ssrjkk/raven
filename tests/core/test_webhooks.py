@@ -115,6 +115,7 @@ async def test_generic_webhook_text_field():
     body_bytes = json_mod.dumps(body).encode()
     import hashlib
     import hmac as hmac_mod
+
     sig = "sha256=" + hmac_mod.new(b"test-secret", body_bytes, hashlib.sha256).hexdigest()
     req = FakeRequest(headers={"X-Webhook-Source": "github", "X-Webhook-Signature": sig}, body_bytes=body_bytes)
     with patch("raven.core.webhooks.settings") as mock_settings:
@@ -137,6 +138,7 @@ async def test_generic_webhook_message_field():
     body_bytes = json_mod.dumps(body).encode()
     import hashlib
     import hmac as hmac_mod
+
     sig = "sha256=" + hmac_mod.new(b"test-secret", body_bytes, hashlib.sha256).hexdigest()
     req = FakeRequest(headers={"X-Webhook-Source": "test", "X-Webhook-Signature": sig}, body_bytes=body_bytes)
     with patch("raven.core.webhooks.settings") as mock_settings:
@@ -157,6 +159,7 @@ async def test_generic_webhook_no_text():
     body_bytes = json_mod.dumps(body).encode()
     import hashlib
     import hmac as hmac_mod
+
     sig = "sha256=" + hmac_mod.new(b"test-secret", body_bytes, hashlib.sha256).hexdigest()
     req = FakeRequest(headers={"X-Webhook-Signature": sig}, body_bytes=body_bytes)
     from fastapi import HTTPException
@@ -178,6 +181,7 @@ async def test_slack_url_verification():
     ts = str(int(time.time()))
     import hashlib
     import hmac as hmac_mod
+
     sig_basestring = f"v0:{ts}:{body_bytes.decode('utf-8')}"
     slack_sig = "v0=" + hmac_mod.new(b"test-secret", sig_basestring.encode(), hashlib.sha256).hexdigest()
     req = FakeRequest(
@@ -200,6 +204,7 @@ async def test_slack_events_no_channel():
     ts = str(int(time.time()))
     import hashlib
     import hmac as hmac_mod
+
     sig_basestring = f"v0:{ts}:{body_bytes.decode('utf-8')}"
     slack_sig = "v0=" + hmac_mod.new(b"test-secret", sig_basestring.encode(), hashlib.sha256).hexdigest()
     req = FakeRequest(
@@ -326,8 +331,9 @@ async def test_slack_events_fails_closed_when_no_secret_anywhere():
     req = FakeRequest(body_bytes=json_mod.dumps(body).encode())
     from fastapi import HTTPException
 
-    with patch("raven.core.webhooks.settings") as mock_settings, patch(
-        "raven.core.webhooks.get_channel_config", return_value={}
+    with (
+        patch("raven.core.webhooks.settings") as mock_settings,
+        patch("raven.core.webhooks.get_channel_config", return_value={}),
     ):
         mock_settings.web_secret_key = SafeSecretStr("")
         with pytest.raises(HTTPException) as exc_info:
@@ -498,9 +504,7 @@ async def test_line_webhook_checks_base64_signature(monkeypatch):
     body_bytes = json_mod.dumps(body).encode()
 
     def req(sig: str) -> FakeRequest:
-        return FakeRequest(
-            headers={"X-Line-Signature": sig}, app_state=_state_with("line", ch), body_bytes=body_bytes
-        )
+        return FakeRequest(headers={"X-Line-Signature": sig}, app_state=_state_with("line", ch), body_bytes=body_bytes)
 
     with patch("raven.core.webhooks.settings") as mock_settings:
         mock_settings.web_secret_key = SafeSecretStr("test-secret")
@@ -559,9 +563,7 @@ async def test_feishu_webhook_checks_sha256_signature(monkeypatch):
 
     with patch("raven.core.webhooks.settings") as mock_settings:
         mock_settings.web_secret_key = SafeSecretStr("test-secret")
-        assert await _dispatch(router, 7, body, req(_lark_signature("lark-key", ts, nonce, body_bytes))) == {
-            "ok": True
-        }
+        assert await _dispatch(router, 7, body, req(_lark_signature("lark-key", ts, nonce, body_bytes))) == {"ok": True}
         # Feishu's digest is a plain SHA-256 over key + body, so an HMAC of the same key must not pass.
         for bad in (_hub_signature("lark-key", body_bytes), "0" * 64):
             with pytest.raises(HTTPException) as exc_info:
@@ -654,9 +656,7 @@ async def test_whatsapp_handshake_keeps_the_admin_secret_out_of_the_query(monkey
     router = create_webhook_router(db, handler)  # type: ignore[arg-type]
 
     def req(token: str) -> FakeRequest:
-        return FakeRequest(
-            query_params={"hub.mode": "subscribe", "hub.verify_token": token, "hub.challenge": "12345"}
-        )
+        return FakeRequest(query_params={"hub.mode": "subscribe", "hub.verify_token": token, "hub.challenge": "12345"})
 
     with patch("raven.core.webhooks.settings") as mock_settings:
         mock_settings.web_secret_key = SafeSecretStr("admin-secret")
@@ -664,4 +664,3 @@ async def test_whatsapp_handshake_keeps_the_admin_secret_out_of_the_query(monkey
         with pytest.raises(HTTPException) as exc_info:
             await _dispatch_get(router, 3, req("admin-secret"))
         assert exc_info.value.status_code == 403
-

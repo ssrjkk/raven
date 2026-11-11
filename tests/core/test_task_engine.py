@@ -365,9 +365,7 @@ class TestTaskRunner:
             await asyncio.sleep(3600)
 
         registry = ToolRegistry()
-        registry.register(
-            ToolSpec(name="slow", description="slow", parameters={}, handler=slow_handler, timeout=1)
-        )
+        registry.register(ToolSpec(name="slow", description="slow", parameters={}, handler=slow_handler, timeout=1))
         metrics.clear()
         t = Task(
             goal="timeout task",
@@ -404,9 +402,7 @@ class TestTaskRunner:
         async def slow_handler():
             await asyncio.sleep(1.0)
 
-        registry.register(
-            ToolSpec(name="slow", description="slow", parameters={}, handler=slow_handler, timeout=30)
-        )
+        registry.register(ToolSpec(name="slow", description="slow", parameters={}, handler=slow_handler, timeout=30))
         t = Task(
             goal="shield test",
             steps=[TaskStep(task_id="", order=0, description="slow", tool="slow", params={})],
@@ -490,9 +486,7 @@ class TestTaskRunner:
             return "[error] service temporarily unavailable"
 
         registry = ToolRegistry()
-        registry.register(
-            ToolSpec(name="flaky", description="flaky", parameters={}, handler=always_fail)
-        )
+        registry.register(ToolSpec(name="flaky", description="flaky", parameters={}, handler=always_fail))
         t = Task(
             goal="retry fail",
             steps=[TaskStep(task_id="", order=0, description="x", tool="flaky", params={})],

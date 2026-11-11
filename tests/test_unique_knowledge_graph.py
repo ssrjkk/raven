@@ -33,19 +33,18 @@ class TestKnowledgeGraph:
 
     def test_add_relation_invalid(self):
         import pytest
+
         with pytest.raises(ValueError):
             self.kg.add_relation("nonexistent", "also", "invalid")
 
     def test_extract_entities_from_document(self):
-        doc = Document(text="Alice Smith uses Python and Docker. "
-                            "John Doe imports flask.")
+        doc = Document(text="Alice Smith uses Python and Docker. John Doe imports flask.")
         result = self.kg.extract_from_document(doc)
         assert len(result["entities"]) >= 3
         assert any("Alice" in e for e in result["entities"])
 
     def test_extract_tech_entities(self):
-        doc = Document(text="We use PostgreSQL and Redis for storage, "
-                            "and deploy with Docker and Kubernetes.")
+        doc = Document(text="We use PostgreSQL and Redis for storage, and deploy with Docker and Kubernetes.")
         result = self.kg.extract_from_document(doc)
         tech_names = [e.lower() for e in result["entities"]]
         assert "postgresql" in tech_names

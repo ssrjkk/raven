@@ -10,12 +10,7 @@ import pytest
 
 from raven.core.asyncdb import SQLiteDB
 
-_SCHEMA = (
-    "CREATE TABLE a (v TEXT);"
-    "CREATE TABLE b (v TEXT);"
-    "INSERT INTO a VALUES ('keep');"
-    "INSERT INTO b VALUES ('keep');"
-)
+_SCHEMA = "CREATE TABLE a (v TEXT);CREATE TABLE b (v TEXT);INSERT INTO a VALUES ('keep');INSERT INTO b VALUES ('keep');"
 
 
 @pytest.fixture
@@ -91,7 +86,7 @@ async def test_read_during_a_foreign_transaction_sees_committed_state(db: SQLite
 
     async def reader() -> list[str]:
         await inside.wait()
-        settle.set()                      # let the transaction fail; the read must still wait
+        settle.set()  # let the transaction fail; the read must still wait
         rows = await db.fetchall("SELECT v FROM a")
         return [r["v"] for r in rows]
 

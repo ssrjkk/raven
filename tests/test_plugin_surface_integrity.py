@@ -79,9 +79,7 @@ def _write_plugin(tmp_path: Path, source: str, name: str = "probe") -> Path:
 
 def _helpers_module(tmp_path: Path) -> Path:
     """A module outside the plugin directory exporting one coroutine, the way the SSRF layer does."""
-    (tmp_path / "helperlib.py").write_bytes(
-        b"async def imported_helper(url: str) -> str:\n    return url\n"
-    )
+    (tmp_path / "helperlib.py").write_bytes(b"async def imported_helper(url: str) -> str:\n    return url\n")
     return tmp_path
 
 
@@ -157,10 +155,10 @@ def test_a_tool_that_shows_the_model_only_its_name_is_warned_about(tmp_path: Pat
 
     plugin_dir = _write_plugin(
         tmp_path,
-        '''
+        """
         async def undocumented(url: str) -> str:
             return url
-        ''',
+        """,
     )
     records: list[str] = []
     sink_id = logger.add(records.append, level="WARNING")

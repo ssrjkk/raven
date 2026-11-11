@@ -108,6 +108,7 @@ async def test_retriever_index_and_retrieve(tmp_db: Path):
     assert len(results) >= 1
     assert results[0]["id"] == "test1"
 
+
 async def test_retriever_context(tmp_db: Path):
     from raven.core.rag.retriever import Retriever
 
@@ -117,6 +118,7 @@ async def test_retriever_context(tmp_db: Path):
     ctx = await r.retrieve_context("alpha", k=5)
     assert "alpha" in ctx
     assert "beta" in ctx
+
 
 async def test_retriever_index_chunks(tmp_db: Path):
     chunks = [
@@ -149,9 +151,7 @@ def test_rag_api_metrics(tmp_path: Path):
             resp = client.post("/api/rag/index", json={"document_id": "d1", "text": "hello world"})
             assert resp.status_code == 200
             assert resp.json()["chunks"] >= 1
-            resp = client.post(
-                "/api/rag/search", json={"query": "hello", "top_k": 2, "include_images": False}
-            )
+            resp = client.post("/api/rag/search", json={"query": "hello", "top_k": 2, "include_images": False})
             assert resp.status_code == 200
     snap = metrics.snapshot()
     assert snap.get("raven_rag_index_document_total") == 1

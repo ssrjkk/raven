@@ -68,8 +68,12 @@ async def _plan_from(steps: list[dict[str, Any]], registry: ToolRegistry | None 
 
 async def test_a_step_naming_a_tool_that_does_not_exist_is_rejected() -> None:
     with pytest.raises(PlanValidationError, match="does not serve"):
-        await _plan_from([{"description": "read", "tool": "file_read", "params": {}},
-                          {"description": "ghost", "tool": "teleport", "params": {}}])
+        await _plan_from(
+            [
+                {"description": "read", "tool": "file_read", "params": {}},
+                {"description": "ghost", "tool": "teleport", "params": {}},
+            ]
+        )
 
 
 async def test_the_rejection_names_the_step_and_the_tool() -> None:
@@ -144,9 +148,7 @@ def test_the_prompt_drops_the_per_parameter_prose() -> None:
 def test_the_compact_form_is_measurably_smaller_than_the_schema_dump() -> None:
     registry = create_task_tool_registry()
     prompt = TaskPlanner(registry)._build_prompt("goal")
-    json_form = "\n".join(
-        f"- {t.name}: {t.description} (params: {json.dumps(t.parameters)})" for t in registry.list()
-    )
+    json_form = "\n".join(f"- {t.name}: {t.description} (params: {json.dumps(t.parameters)})" for t in registry.list())
     assert len(prompt) < len(json_form) * 0.6, f"{len(prompt)} vs {len(json_form)}"
 
 
@@ -163,9 +165,7 @@ def test_task_run_reports_a_rejected_plan_instead_of_tracing_back() -> None:
     handler = [
         n
         for n in ast.walk(tree)
-        if isinstance(n, ast.ExceptHandler)
-        and isinstance(n.type, ast.Name)
-        and n.type.id == "PlanValidationError"
+        if isinstance(n, ast.ExceptHandler) and isinstance(n.type, ast.Name) and n.type.id == "PlanValidationError"
     ]
     assert len(handler) == 1, "the CLI must catch the rejection exactly once"
     printed = [n for n in ast.walk(handler[0]) if isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "print"]

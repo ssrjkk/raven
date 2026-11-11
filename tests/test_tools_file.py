@@ -297,9 +297,7 @@ class TestReadRelevant:
 
     async def test_generic_js_prunes_by_function(self, tmp_workspace: Path) -> None:
         f = tmp_workspace / "app.js"
-        body = "\n\n".join(
-            [f"export function fn_{i}(x) {{\n  return x * {i};\n}}" for i in range(1, 31)]
-        )
+        body = "\n\n".join([f"export function fn_{i}(x) {{\n  return x * {i};\n}}" for i in range(1, 31)])
         f.write_text(body, encoding="utf-8")
         result = await file_read_relevant(str(f), query="fn_7", max_lines=10)
         assert "fn_7" in result
@@ -331,7 +329,15 @@ class TestRegisterFileTools:
         registry = ToolRegistry()
         register_file_tools(registry)
         assert registry.count == 7
-        for name in ("file_read", "file_write", "file_append", "file_edit", "file_list", "file_delete", "file_read_relevant"):
+        for name in (
+            "file_read",
+            "file_write",
+            "file_append",
+            "file_edit",
+            "file_list",
+            "file_delete",
+            "file_read_relevant",
+        ):
             spec = registry.get(name)
             assert spec is not None
             assert spec.category == "file"

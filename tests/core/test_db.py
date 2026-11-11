@@ -42,6 +42,7 @@ class TestDatabase:
 
     async def test_disconnect_noop_when_closed(self):
         from pathlib import Path
+
         d = Database(Path("/tmp/nonexistent.db"))
         await d.disconnect()
 
@@ -294,9 +295,7 @@ class TestConcurrentWrites:
             await db.save_message(Message(session_id="s1", role="user", content=f"old {i}"))
 
         ops = [db.save_message(Message(session_id="s2", role="user", content=f"live {i}")) for i in range(4)]
-        ops += [
-            db.replace_session_messages("s1", [{"role": "system", "content": "summary"}]) for _ in range(2)
-        ]
+        ops += [db.replace_session_messages("s1", [{"role": "system", "content": "summary"}]) for _ in range(2)]
         results = await asyncio.gather(*ops, return_exceptions=True)
         assert [r for r in results if isinstance(r, BaseException)] == []
 
@@ -304,9 +303,7 @@ class TestConcurrentWrites:
         assert [m.content for m in await db.get_session_messages("s1", limit=50)] == ["summary"]
         assert len(await db.get_session_messages("s2", limit=50)) == 4
 
-    async def test_write_is_durable_without_another_callers_commit(
-        self, db: Database, tmp_path
-    ) -> None:
+    async def test_write_is_durable_without_another_callers_commit(self, db: Database, tmp_path) -> None:
         await db.get_or_create_session("s1", channel="telegram", user_id="u1")
         await db.save_message(Message(session_id="s1", role="user", content="visible"))
         async with aiosqlite.connect(str(tmp_path / "test.db")) as other:

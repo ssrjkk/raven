@@ -74,12 +74,16 @@ def finetune_add_conversation(
     return f"Conversation added ({len(messages)} messages). Consented: {stats['consented']['conversations']}"
 
 
-def finetune_add_code(code: str, language: str = "", description: str = "", consented: bool = False, source: str = "") -> str:
+def finetune_add_code(
+    code: str, language: str = "", description: str = "", consented: bool = False, source: str = ""
+) -> str:
     builder = _get_builder()
     if not consented:
         return _consent_refusal("code")
     metadata = {"source": source} if source else {}
-    builder.add_code(CodeExample(code=code, language=language, description=description, metadata=metadata, consented=True))
+    builder.add_code(
+        CodeExample(code=code, language=language, description=description, metadata=metadata, consented=True)
+    )
     stats = builder.stats()
     return f"Code sample added ({language}, {len(code)} chars). Consented: {stats['consented']['code_samples']}"
 

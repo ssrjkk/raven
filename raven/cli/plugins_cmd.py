@@ -30,9 +30,7 @@ def _plugin_dirs() -> list[Path]:
 def _resolve_registry(registry: str | None) -> str:
     source = registry or settings.plugin_registry_url
     if not source:
-        console.print(
-            "[red]No plugin registry configured. Set PLUGIN_REGISTRY_URL or pass --registry.[/red]"
-        )
+        console.print("[red]No plugin registry configured. Set PLUGIN_REGISTRY_URL or pass --registry.[/red]")
         raise SystemExit(1)
     return source
 

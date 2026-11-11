@@ -13,8 +13,7 @@ MIGRATIONS_TABLE_SQLITE = (
     "(version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
 )
 MIGRATIONS_TABLE_POSTGRES = (
-    "CREATE TABLE IF NOT EXISTS _migrations "
-    "(version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW())"
+    "CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW())"
 )
 
 MigrateFn = Callable[[AsyncDB], Awaitable[None]]
@@ -502,12 +501,8 @@ async def _migration_12(db: AsyncDB) -> None:
     # Old rows hold the credential itself, which cannot be turned into a digest retroactively:
     # the sessions are revoked instead of being migrated with a secret still in place.
     await db.run_script("DELETE FROM auth_sessions")
-    await db.run_script(
-        "CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions(user_id)"
-    )
-    logger.warning(
-        "Revoked {} session(s): they were stored as plaintext bearer tokens", outstanding or 0
-    )
+    await db.run_script("CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions(user_id)")
+    logger.warning("Revoked {} session(s): they were stored as plaintext bearer tokens", outstanding or 0)
 
 
 async def apply_pending_migrations(db: AsyncDB) -> None:

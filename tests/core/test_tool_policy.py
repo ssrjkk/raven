@@ -177,9 +177,7 @@ class TestCheckExecWorkspace:
         allowed, _reason = await p.check_exec("shell_execute", {"command": "ls", "cwd": ""})
         assert allowed is True
 
-    async def test_a_pinned_root_confines_to_the_workspace_instead_of_opening_every_path(
-        self, tmp_path: Path
-    ):
+    async def test_a_pinned_root_confines_to_the_workspace_instead_of_opening_every_path(self, tmp_path: Path):
         """`workspace_root=None` used to mean "no containment at all", which let SAM through.
 
         The policy now asks the one resolver at call time, so an unconfigured policy is confined to the
@@ -216,9 +214,7 @@ class TestCheckExecWorkspace:
         assert "outside the workspace root" in (reason or "")
 
     async def test_workspace_only_off_skips_containment(self, tmp_path: Path):
-        p = ToolPolicyEvaluator(
-            exec_security=ExecSecurity.FULL, workspace_only=False, workspace_root=str(tmp_path)
-        )
+        p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL, workspace_only=False, workspace_root=str(tmp_path))
         allowed, _reason = await p.check_exec("t", {"path": str(tmp_path.parent / "escape")})
         assert allowed is True
 

@@ -6,6 +6,7 @@ filesystem state deterministically (no LLM judgement). This makes regression
 measurement objective: either the file exists with the right content / the
 script produces the right output, or it does not.
 """
+
 from __future__ import annotations
 
 import json
@@ -57,9 +58,7 @@ def _verify_create_file(ws: Path, output: str) -> list[str]:
 
 def _setup_fix_bug(ws: Path) -> None:
     (ws / "median.py").write_text(
-        "def median(nums):\n"
-        "    nums.sort()\n"
-        "    return nums[len(nums) // 2]\n",  # wrong for even-length lists
+        "def median(nums):\n    nums.sort()\n    return nums[len(nums) // 2]\n",  # wrong for even-length lists
         encoding="utf-8",
     )
     (ws / "test_median.py").write_text(
@@ -133,9 +132,7 @@ def _verify_append_log(ws: Path, output: str) -> list[str]:
 
 
 def _setup_csv_sum(ws: Path) -> None:
-    (ws / "sales.csv").write_text(
-        "region,amount\nwest,120\neast,80\nwest,50\n", encoding="utf-8"
-    )
+    (ws / "sales.csv").write_text("region,amount\nwest,120\neast,80\nwest,50\n", encoding="utf-8")
 
 
 def _verify_csv_sum(ws: Path, output: str) -> list[str]:
@@ -148,9 +145,7 @@ def _verify_csv_sum(ws: Path, output: str) -> list[str]:
 
 
 def _setup_make_tests_pass(ws: Path) -> None:
-    (ws / "calc.py").write_text(
-        "def add(a, b):\n    return a - b  # bug\n", encoding="utf-8"
-    )
+    (ws / "calc.py").write_text("def add(a, b):\n    return a - b  # bug\n", encoding="utf-8")
     (ws / "test_calc.py").write_text(
         "from calc import add\n\nassert add(2, 3) == 5\nassert add(-1, 1) == 0\nprint('OK')\n",
         encoding="utf-8",

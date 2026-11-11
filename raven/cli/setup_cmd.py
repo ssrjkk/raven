@@ -75,6 +75,7 @@ def _install_ollama() -> bool:
         if system == "Windows":
             url = "https://ollama.com/download/OllamaSetup.exe"
             import httpx
+
             installer = Path(os.environ.get("TEMP", ".")) / "OllamaSetup.exe"
             console.print(f"  Downloading from {url}...")
             resp = httpx.get(url, follow_redirects=True, timeout=120)
@@ -85,6 +86,7 @@ def _install_ollama() -> bool:
             return _find_ollama() is not None
         if system == "Linux":
             import tempfile
+
             with tempfile.NamedTemporaryFile(suffix=".sh", delete=False) as tmp:
                 script_path = Path(tmp.name)
             try:
@@ -97,7 +99,11 @@ def _install_ollama() -> bool:
                     return False
                 result = subprocess.run(
                     [sh, str(script_path)],
-                    capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=120,
                 )
                 if result.returncode == 0:
                     return _find_ollama() is not None
@@ -166,7 +172,9 @@ def _write_json_config(path: Path, fresh: dict[str, Any], owned: Callable[[dict[
         except json.JSONDecodeError:
             cfg = None
         if not isinstance(cfg, dict):
-            console.print(f"[yellow]  ![/yellow] {path} is not plain JSON — left untouched, edit it to change the model")
+            console.print(
+                f"[yellow]  ![/yellow] {path} is not plain JSON — left untouched, edit it to change the model"
+            )
             return path
         owned(cfg)
     else:
@@ -192,7 +200,9 @@ def _write_raven_json(model: str) -> Path:
     def owned(cfg: dict[str, Any]) -> None:
         cfg.setdefault("llm", {}).update(llm)
         if cfg.pop("features", None) is not None:
-            console.print("[yellow]  ![/yellow] raven.json `features` moved to .raven/features.yaml — the flags are read there")
+            console.print(
+                "[yellow]  ![/yellow] raven.json `features` moved to .raven/features.yaml — the flags are read there"
+            )
 
     return _write_json_config(
         Path.cwd() / "raven.json",
@@ -349,12 +359,14 @@ def _print_summary(model: str, ollama_path: str | None, pulled: bool) -> None:
     console.print(table)
 
     console.print()
-    console.print(Panel.fit(
-        "[bold]Start Raven:[/bold]  [green]raven start --ghost[/green]\n"
-        "[bold]Start coding:[/bold] [green]raven repl[/green]\n"
-        "[bold]View status:[/bold]  [green]raven status[/green]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold]Start Raven:[/bold]  [green]raven start --ghost[/green]\n"
+            "[bold]Start coding:[/bold] [green]raven repl[/green]\n"
+            "[bold]View status:[/bold]  [green]raven status[/green]",
+            border_style="cyan",
+        )
+    )
 
 
 def _ollama_serve() -> bool:
@@ -363,6 +375,7 @@ def _ollama_serve() -> bool:
         return False
     try:
         import httpx
+
         resp = httpx.get("http://localhost:11434/api/tags", timeout=3)
         return resp.is_success
     except Exception:
@@ -375,6 +388,7 @@ def _ollama_serve() -> bool:
         else:
             subprocess.Popen([ollama, "serve"], start_new_session=True)
         import time
+
         time.sleep(3)
         return True
     except Exception as e:
@@ -428,26 +442,30 @@ def _experimental_choice(hw: Hardware, confirmed: bool, vram_mb: int, ram_gb: in
 def setup(free: bool, model: str | None, experimental: bool, confirmed: bool) -> None:
     """Configure Raven for completely free, offline AI with local LLMs"""
     if not free:
-        console.print(Panel.fit(
-            "[bold]Usage:[/bold]  [green]raven setup --free[/green]\n\n"
-            "Sets up the entire stack with local Ollama models — no API keys needed.\n"
-            "Auto-detects your GPU and picks the best model for your hardware.\n"
-            "Add [green]--experimental[/green] for the bundled uncensored 9B, [green]--model NAME[/green] to pick one.",
-            border_style="yellow",
-        ))
+        console.print(
+            Panel.fit(
+                "[bold]Usage:[/bold]  [green]raven setup --free[/green]\n\n"
+                "Sets up the entire stack with local Ollama models — no API keys needed.\n"
+                "Auto-detects your GPU and picks the best model for your hardware.\n"
+                "Add [green]--experimental[/green] for the bundled uncensored 9B, [green]--model NAME[/green] to pick one.",
+                border_style="yellow",
+            )
+        )
         return
 
     console.print(Rule(style="bold green"))
-    console.print(Panel.fit(
-        "[bold]Raven Free Local AI Setup[/bold]\n\n"
-        "This will set up a completely free, offline AI stack:\n"
-        "  • Install Ollama (if missing)\n"
-        "  • Download the best model for your hardware\n"
-        "  • Configure Raven, Ravencode, and Ravenflow\n"
-        "  • Enable all features (dreaming, delegation, planner)\n"
-        "  • No API keys required — 100% free",
-        border_style="green",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold]Raven Free Local AI Setup[/bold]\n\n"
+            "This will set up a completely free, offline AI stack:\n"
+            "  • Install Ollama (if missing)\n"
+            "  • Download the best model for your hardware\n"
+            "  • Configure Raven, Ravencode, and Ravenflow\n"
+            "  • Enable all features (dreaming, delegation, planner)\n"
+            "  • No API keys required — 100% free",
+            border_style="green",
+        )
+    )
 
     hw = detect()
     vram = hw.vram_mb

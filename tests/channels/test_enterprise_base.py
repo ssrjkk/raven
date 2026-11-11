@@ -39,6 +39,7 @@ def _msg(content: str = "hello") -> Message:
 # RateLimiter
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_rate_limiter_decrements_when_tokens_available() -> None:
     limiter = RateLimiter(max_per_minute=30)
@@ -61,6 +62,7 @@ async def test_rate_limiter_sleeps_when_exhausted(monkeypatch: pytest.MonkeyPatc
 # ---------------------------------------------------------------------------
 # Lifecycle
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_start_sets_ready_and_stop_clears() -> None:
@@ -103,6 +105,7 @@ async def test_on_message_stores_handler() -> None:
 # send
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_send_skips_when_not_ready() -> None:
     c = _ConcreteChannel()
@@ -141,6 +144,7 @@ def test_stats_includes_channel() -> None:
 # _post
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_post_delegates_to_client_manager(monkeypatch: pytest.MonkeyPatch) -> None:
     post = AsyncMock(return_value={"ok": 1})
@@ -163,6 +167,7 @@ async def test_post_defaults_headers_to_empty(monkeypatch: pytest.MonkeyPatch) -
 # ---------------------------------------------------------------------------
 # _retry_call
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_retry_succeeds_first_attempt() -> None:
@@ -207,6 +212,7 @@ async def test_retry_zero_attempts_hits_unreachable() -> None:
 # ---------------------------------------------------------------------------
 # audit helpers
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_audit_send_parses_user_from_session(monkeypatch: pytest.MonkeyPatch) -> None:

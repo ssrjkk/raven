@@ -98,8 +98,10 @@ class TestEnableHeredic:
         monkeypatch.setattr(
             models_cmd,
             "enable",
-            lambda url, **kwargs: seen.update(kwargs)
-            or SwitchResult(ok=True, detail="DEFAULT_MODEL=ollama/x", env_file=Path("C:/fake/.env")),
+            lambda url, **kwargs: (
+                seen.update(kwargs)
+                or SwitchResult(ok=True, detail="DEFAULT_MODEL=ollama/x", env_file=Path("C:/fake/.env"))
+            ),
         )
         result = CliRunner().invoke(models_cmd.models_group, ["enable-heretic", "--no-pull"])
         assert result.exit_code == 0, result.output
@@ -108,7 +110,9 @@ class TestEnableHeredic:
     def test_blockers_are_printed_before_the_choice_and_a_refusal_is_exit_one(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(models_cmd, "status", lambda *_a, **_k: _status(present=False, blockers=["0.9 GB RAM free"]))
+        monkeypatch.setattr(
+            models_cmd, "status", lambda *_a, **_k: _status(present=False, blockers=["0.9 GB RAM free"])
+        )
         monkeypatch.setattr(
             models_cmd,
             "enable",
@@ -125,8 +129,10 @@ class TestEnableHeredic:
         monkeypatch.setattr(
             models_cmd,
             "enable",
-            lambda url, **kwargs: seen.update(kwargs)
-            or SwitchResult(ok=True, detail="DEFAULT_MODEL=ollama/x", env_file=Path("C:/fake/.env")),
+            lambda url, **kwargs: (
+                seen.update(kwargs)
+                or SwitchResult(ok=True, detail="DEFAULT_MODEL=ollama/x", env_file=Path("C:/fake/.env"))
+            ),
         )
         result = CliRunner().invoke(models_cmd.models_group, ["enable-heretic", "--force"])
         assert result.exit_code == 0, result.output
@@ -138,7 +144,9 @@ class TestEnableHeredic:
             models_cmd,
             "enable",
             lambda *_a, **_k: SwitchResult(
-                ok=True, detail="DEFAULT_MODEL=ollama/x", env_file=Path("C:/fake/.env"),
+                ok=True,
+                detail="DEFAULT_MODEL=ollama/x",
+                env_file=Path("C:/fake/.env"),
                 warnings=["MODEL_QUALITY=anthropic/claude-sonnet-4-5 still bills a hosted provider"],
             ),
         )

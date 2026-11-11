@@ -61,4 +61,4 @@ def test_the_gateway_builds_cors_from_the_validated_settings() -> None:
     source = pathlib.Path("raven/cli/gateway_runner.py").read_text(encoding="utf-8")
     assert "allow_origins=settings.cors_origin_list" in source
     assert "allow_credentials=settings.web_cors_allow_credentials" in source
-    assert "http://localhost:5173\"" not in source
+    assert 'http://localhost:5173"' not in source

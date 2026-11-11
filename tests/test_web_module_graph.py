@@ -18,7 +18,13 @@ def _resolve(spec: str, origin: pathlib.Path) -> pathlib.Path | None:
     if not spec.startswith("."):
         return None
     base = (origin.parent / spec).resolve()
-    for candidate in (base, pathlib.Path(str(base) + ".ts"), pathlib.Path(str(base) + ".tsx"), base / "index.ts", base / "index.tsx"):
+    for candidate in (
+        base,
+        pathlib.Path(str(base) + ".ts"),
+        pathlib.Path(str(base) + ".tsx"),
+        base / "index.ts",
+        base / "index.tsx",
+    ):
         if candidate.is_file():
             return candidate
     return None

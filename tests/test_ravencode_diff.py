@@ -181,7 +181,9 @@ class TestApplyPatchShapes:
 
     def test_multi_file_diff_is_refused(self, tmp_path: Path):
         p = self._file(tmp_path, "m.txt", "one\n")
-        diff = "--- a/m.txt\n+++ b/m.txt\n@@ -1,1 +1,1 @@\n-one\n+ONE\n--- a/n.txt\n+++ b/n.txt\n@@ -1,1 +1,1 @@\n-x\n+y\n"
+        diff = (
+            "--- a/m.txt\n+++ b/m.txt\n@@ -1,1 +1,1 @@\n-one\n+ONE\n--- a/n.txt\n+++ b/n.txt\n@@ -1,1 +1,1 @@\n-x\n+y\n"
+        )
         assert "multi-file" in apply_patch(str(p), diff)
         assert p.read_text(encoding="utf-8") == "one\n"
 

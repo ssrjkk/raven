@@ -337,6 +337,7 @@ class TestOllamaCalls:
         assert heretic_model._pull_via_binary(HERETIC_HF_REF) is False
 
         monkeypatch.setattr(shutil, "which", lambda _exe: "C:/ollama.exe")
+
         def _record(cmd: list[str], **_k: object) -> SimpleNamespace:
             calls.append(cmd)
             return SimpleNamespace(returncode=0)
@@ -347,9 +348,7 @@ class TestOllamaCalls:
 
     def test_binary_pull_failure_is_reported_not_swallowed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(shutil, "which", lambda _exe: "C:/ollama.exe")
-        monkeypatch.setattr(
-            subprocess, "run", lambda *_a, **_k: SimpleNamespace(returncode=1)
-        )
+        monkeypatch.setattr(subprocess, "run", lambda *_a, **_k: SimpleNamespace(returncode=1))
         assert heretic_model._pull_via_binary(HERETIC_HF_REF) is False
 
 
@@ -372,9 +371,7 @@ class TestEnsure:
         monkeypatch.setattr(heretic_model, "_pull_via_api", lambda *_a, **_k: pytest.fail("re-pulled"))
         assert ensure_heretic_model("http://x").detail == "already present"
 
-    def test_startup_check_never_downloads(
-        self, restore_ollama_probe: object, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_startup_check_never_downloads(self, restore_ollama_probe: object, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(heretic_model, "list_ollama_models", lambda *_a, **_k: ["llama3"])
         res = ensure_heretic_model("http://x", pull=False)
         assert res.ok is False
@@ -593,18 +590,14 @@ class TestStatus:
 
 
 class TestEnvFilePlumbing:
-    def test_the_highest_existing_file_wins_and_the_user_file_is_the_fallback(
-        self, env_files: SimpleNamespace
-    ) -> None:
+    def test_the_highest_existing_file_wins_and_the_user_file_is_the_fallback(self, env_files: SimpleNamespace) -> None:
         assert config.effective_env_file() == env_files.user
         env_files.root.write_text("A=1\n", encoding="utf-8")
         assert config.effective_env_file() == env_files.root
         env_files.local.write_text("A=2\n", encoding="utf-8")
         assert config.effective_env_file() == env_files.local
 
-    def test_the_written_switch_is_not_shadowed_by_a_lower_file(
-        self, env_files: SimpleNamespace
-    ) -> None:
+    def test_the_written_switch_is_not_shadowed_by_a_lower_file(self, env_files: SimpleNamespace) -> None:
         """`env_file_candidates` ascending, so nothing above the effective file can outrank it."""
         env_files.root.write_text("DEFAULT_MODEL=root/model\n", encoding="utf-8")
         env_files.local.write_text("DEFAULT_MODEL=local/model\n", encoding="utf-8")

@@ -74,17 +74,13 @@ class TestEnsureInitialized:
         client = LSPClient("python")
         writes: list[bytes] = []
         proc: Any = SimpleNamespace(
-            stdin=SimpleNamespace(
-                write=MagicMock(side_effect=lambda d: writes.append(d)), drain=AsyncMock()
-            ),
+            stdin=SimpleNamespace(write=MagicMock(side_effect=lambda d: writes.append(d)), drain=AsyncMock()),
             stdout=SimpleNamespace(read=AsyncMock(side_effect=[b""])),
             terminate=MagicMock(),
             kill=MagicMock(),
             wait=AsyncMock(return_value=0),
         )
-        monkeypatch.setattr(
-            "ravencode.runtime.lsp.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)
-        )
+        monkeypatch.setattr("ravencode.runtime.lsp.asyncio.create_subprocess_exec", AsyncMock(return_value=proc))
         await client._ensure_initialized()
         assert client._initialized is True
         assert client._process is proc
@@ -152,7 +148,7 @@ class TestReader:
 
     async def test_bad_header_resets(self) -> None:
         client = LSPClient("python")
-        proc = _fake_proc([b"Content-Length: abc\r\n\r\n{\"a\":1}", b""])
+        proc = _fake_proc([b'Content-Length: abc\r\n\r\n{"a":1}', b""])
         client._process = proc
         await client._reader()
 
@@ -211,8 +207,10 @@ class TestClientMethods:
         client = LSPClient("python")
         client._initialized = True
         client._process = _fake_proc()
+
         async def fake_request(method, params):
             return request_result
+
         client._request = fake_request  # type: ignore[method-assign]
         return client
 
@@ -229,15 +227,19 @@ class TestClientMethods:
     async def test_diagnostics_error_falls_back(self, monkeypatch) -> None:
         client = LSPClient("python")
         client._diag_cache["u"] = (0.0, [{"m": "prev"}])
+
         async def fail(method, params):
             raise RuntimeError("boom")
+
         client._request = fail  # type: ignore[method-assign]
         assert await client.diagnostics("u") == [{"m": "prev"}]
 
     async def test_diagnostics_error_no_cache(self, monkeypatch) -> None:
         client = LSPClient("python")
+
         async def fail(method, params):
             raise RuntimeError("boom")
+
         client._request = fail  # type: ignore[method-assign]
         assert await client.diagnostics("u") == []
 
@@ -309,8 +311,10 @@ class TestClientMethods:
 
     async def test_document_symbols_error(self, monkeypatch) -> None:
         client = LSPClient("python")
+
         async def fail(method, params):
             raise RuntimeError("x")
+
         client._request = fail  # type: ignore[method-assign]
         assert await client.document_symbols("u") == []
 
@@ -347,8 +351,10 @@ class TestPool:
 
     async def test_diagnostics_no_client(self, monkeypatch) -> None:
         pool = LSPPool()
+
         async def none_get(language, root_uri=None):
             return None
+
         monkeypatch.setattr(pool, "get", none_get)
         assert await pool.diagnostics("a.py", "python") == []
 
@@ -356,8 +362,10 @@ class TestPool:
         pool = LSPPool()
         fake = MagicMock()
         fake.diagnostics = AsyncMock(return_value=[{"m": 1}])
+
         async def get(language, root_uri=None):
             return fake
+
         monkeypatch.setattr(pool, "get", get)
         assert await pool.diagnostics("a.py", "python") == [{"m": 1}]
 

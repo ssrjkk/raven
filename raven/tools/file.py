@@ -114,6 +114,7 @@ _BLOCK_SIGNATURE_RE = re.compile(
     re.MULTILINE,
 )
 
+
 def _block_name(line: str) -> str:
     match = re.search(r"\b(?:async\s+def|def|class|function|fn|func|impl)\s+(\w+)", line)
     return match.group(1) if match else ""
@@ -193,7 +194,9 @@ def _prune_generic_source(source: str, query: str, max_lines: int) -> str:
 
     preamble: list[str] = []
     for ln in lines[: sigs[0][0]][:12]:
-        if ln.startswith(("import ", "use ", "require(", "const ", "let ", "var ", "#", "//", "/*", "*", "package ", "from ")):
+        if ln.startswith(
+            ("import ", "use ", "require(", "const ", "let ", "var ", "#", "//", "/*", "*", "package ", "from ")
+        ):
             preamble.append(ln)
 
     out: list[str] = []

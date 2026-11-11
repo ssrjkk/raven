@@ -607,10 +607,7 @@ async def image_analyze(filepath: str, prompt: str = "Describe this image in det
 
         size = (await asyncio.to_thread(path.stat)).st_size
         if size > _MAX_IMAGE_ANALYZE_BYTES:
-            return (
-                f"[error] Image too large for analysis: {size} bytes "
-                f"(max {_MAX_IMAGE_ANALYZE_BYTES})"
-            )
+            return f"[error] Image too large for analysis: {size} bytes (max {_MAX_IMAGE_ANALYZE_BYTES})"
 
         def _read_image() -> str:
             with Path(path).open("rb") as f:

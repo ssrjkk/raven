@@ -29,8 +29,23 @@ SRC_DIRS = ("raven", "ravencode", "aios", "scripts")
 FILE_METHODS = {"open", "read_text", "write_text"}
 # Objects that expose .open() but are not paths: they take no text encoding, or a different one.
 FOREIGN_RECEIVERS = {
-    "Image", "PILImage", "webbrowser", "os", "io", "socket", "shutil", "tempfile",
-    "aiofiles", "wave", "gzip", "bz2", "lzma", "zipfile", "zf", "zip", "tarfile",
+    "Image",
+    "PILImage",
+    "webbrowser",
+    "os",
+    "io",
+    "socket",
+    "shutil",
+    "tempfile",
+    "aiofiles",
+    "wave",
+    "gzip",
+    "bz2",
+    "lzma",
+    "zipfile",
+    "zf",
+    "zip",
+    "tarfile",
 }
 
 

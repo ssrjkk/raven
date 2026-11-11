@@ -195,9 +195,7 @@ class TestSpawnSitesShareTheContract:
             ("raven/tools/shell.py", "python_code"),
         ],
     )
-    def test_every_python_spawning_surface_sanitizes_and_uses_the_shared_runner(
-        self, rel_path: str, func: str
-    ) -> None:
+    def test_every_python_spawning_surface_sanitizes_and_uses_the_shared_runner(self, rel_path: str, func: str) -> None:
         source = _function_source(rel_path, func)
         assert "untrusted_child_env()" in source, f"{rel_path}:{func} would hand the child the gateway env"
         assert "PYTHON_RUNNER_MODULE" in source, f"{rel_path}:{func} hardcodes its own runner target"

@@ -73,7 +73,11 @@ def create_finetune_router() -> APIRouter:
 
         _builder.add_code(
             CodeExample(
-                code=req.code, language=req.language, description=req.description, metadata={"source": req.source}, consented=True
+                code=req.code,
+                language=req.language,
+                description=req.description,
+                metadata={"source": req.source},
+                consented=True,
             )
         )
         return {"success": True, "consented": _builder.stats()["consented"]["code_samples"]}

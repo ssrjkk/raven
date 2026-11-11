@@ -25,10 +25,12 @@ class TestTodoWrite:
 
     def test_write_multiple_tasks(self):
         _setup()
-        result = todo_write([
-            {"content": "task 1"},
-            {"content": "task 2"},
-        ])
+        result = todo_write(
+            [
+                {"content": "task 1"},
+                {"content": "task 2"},
+            ]
+        )
         assert "1" in result
         assert "2" in result
 

@@ -167,8 +167,10 @@ class TestWebChatChannel:
         mock_ws.send_json.side_effect = RuntimeError("WS crashed")
         channel._connections["client_x"] = mock_ws
         msg = Message(
-            session_id="webchat:client_x:default", channel="webchat",
-            role="assistant", content="Hello",
+            session_id="webchat:client_x:default",
+            channel="webchat",
+            role="assistant",
+            content="Hello",
         )
         await channel.send("webchat:client_x:default", msg)
         mock_ws.send_json.assert_awaited_once()
@@ -204,9 +206,7 @@ class TestCanvasLinkProxy:
             "raven.core.security.ssrf.safe_fetch_async",
             AsyncMock(return_value=httpx.Response(200, headers=headers, content=content)),
         ):
-            return TestClient(channel.app).get(
-                "/api/canvas/link", params={"url": url}, headers=self._auth_headers()
-            )
+            return TestClient(channel.app).get("/api/canvas/link", params={"url": url}, headers=self._auth_headers())
 
     def test_html_content_is_sandboxed(self, channel):
         response = self._proxied_content(
@@ -244,9 +244,7 @@ class TestCanvasLinkProxy:
         assert response.json()["error"] == "Proxy failed"
 
     def test_image_proxy_requires_auth_in_secure_mode(self, channel):
-        response = TestClient(channel.app).get(
-            "/api/canvas/image", params={"url": "https://example.com/img.png"}
-        )
+        response = TestClient(channel.app).get("/api/canvas/image", params={"url": "https://example.com/img.png"})
         assert response.status_code == 401
 
 

@@ -39,9 +39,7 @@ def main(argv: list[str]) -> int:
         return 1
     refs = offsite_references(root)
     if refs:
-        sys.stderr.write(
-            f"::error::built documentation fetches from another host: {sorted(refs)}\n"
-        )
+        sys.stderr.write(f"::error::built documentation fetches from another host: {sorted(refs)}\n")
         return 1
     sys.stdout.write(f"checked {root}: no third-party asset request\n")
     return 0

@@ -663,7 +663,9 @@ def compare_binaries(path_a: str, path_b: str) -> str:
     if size_a == size_b and chunks_a == chunks_b:
         lines.append("  Result: IDENTICAL")
     else:
-        lines.append(f"  Result: DIFFERENT (first difference at byte offset {first_diff if first_diff is not None else 0})")
+        lines.append(
+            f"  Result: DIFFERENT (first difference at byte offset {first_diff if first_diff is not None else 0})"
+        )
     return "\n".join(lines)
 
 

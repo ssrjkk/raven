@@ -44,7 +44,6 @@ class TaskOrchestrator:
         self._bg_tasks: set[asyncio.Task[None]] = set()
         self._retention_task: asyncio.Task[None] | None = None
 
-
     async def start(self) -> None:
         self._store = TaskStore(self._db.db_path)
         tools = create_task_tool_registry(self._mcp_pool)

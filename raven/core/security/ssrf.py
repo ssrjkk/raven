@@ -159,9 +159,7 @@ async def validate_url_async(url: str) -> str | None:
     return _policy_error(host, await _resolve_host_async(host))
 
 
-def _policy_error(
-    host: str, ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address]
-) -> str | None:
+def _policy_error(host: str, ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address]) -> str | None:
     """One policy for the pre-flight check and the pinned transport.
 
     Ghost mode is the inverse of the default: only the private network is reachable,

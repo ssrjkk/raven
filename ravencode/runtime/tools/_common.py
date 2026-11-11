@@ -26,8 +26,6 @@ def _compute_diff(original: str, modified: str, path: str) -> str:
     )
 
 
-
-
 async def _safe_read(path: str, max_chars: int = 50_000) -> tuple[str, str]:
     p = _confine(path)
     if not p.is_file():
@@ -40,8 +38,6 @@ async def _safe_read(path: str, max_chars: int = 50_000) -> tuple[str, str]:
     if len(content) > max_chars:
         content = content[:max_chars] + f"\n... (truncated, {len(content)} total chars)"
     return content, ""
-
-
 
 
 async def _safe_write(path: str, content: str) -> None:

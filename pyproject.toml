@@ -118,8 +118,13 @@ dev = [
     # >=50.0.0 is the first release with no open advisories (pip-audit clean); the old
     # <45.0 cap pinned a version with 10 known vulnerabilities
     "cryptography>=50.0.2,<51.0",
-    "ruff>=0.5,<1.0",
-    "mypy>=2.4.0,<3.0",
+    # The gate runs `ruff format --check` over the tree and strict mypy over it, so the tool version
+    # is part of the control rather than a preference: a wide range lets a fresh install resolve a
+    # formatter that disagrees with the tree the committed one produced. 0.17.2 formatted it and 0.17.4
+    # -- what CI installs -- reports 925 files already formatted, so ~=0.17.4 admits the next patch
+    # without letting the layout answer change underneath the gate.
+    "ruff~=0.17.4",
+    "mypy~=2.4.1",
     # scripts/check_all.py runs it as the security-lint stage; the gate fails on High and Medium
     "bandit>=1.7.10,<2.0",
     "pre-commit>=4.7.0,<5.0",

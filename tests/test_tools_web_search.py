@@ -277,7 +277,9 @@ class TestDuckduckgo:
         assert await tool._duckduckgo("q", 10) == []
 
     async def test_result_without_title_link_is_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        client = _install_client(monkeypatch, _Resp(200, text='<div class="result"><span class="result__snippet">x</span></div>'))
+        client = _install_client(
+            monkeypatch, _Resp(200, text='<div class="result"><span class="result__snippet">x</span></div>')
+        )
         tool = WebSearchTool()
         results = await tool._duckduckgo("q", 10)
         assert results == []
@@ -291,7 +293,9 @@ class TestPerplexity:
     async def test_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
         client = _install_client(
             monkeypatch,
-            self._resp("intro line\n1. [Title](https://example.com/a) - description here\n\n2. [Title2](https://example.com/b) - more"),
+            self._resp(
+                "intro line\n1. [Title](https://example.com/a) - description here\n\n2. [Title2](https://example.com/b) - more"
+            ),
         )
         tool = WebSearchTool()
         results = await tool._perplexity("q", 10)
@@ -415,7 +419,12 @@ class TestTavily:
         assert len(results) == 1
         assert results[0].provider == SearchProvider.TAVILY
         assert client.calls[0][0] == "POST"
-        assert client.calls[0][2]["json"] == {"api_key": "tavily-key", "query": "q", "max_results": 10, "search_depth": "basic"}
+        assert client.calls[0][2]["json"] == {
+            "api_key": "tavily-key",
+            "query": "q",
+            "max_results": 10,
+            "search_depth": "basic",
+        }
 
     async def test_max_results_capped_at_10(self, monkeypatch: pytest.MonkeyPatch) -> None:
         client = _install_client(monkeypatch, _Resp(200, {}))

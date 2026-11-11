@@ -1,9 +1,9 @@
 """Credential masking for data that leaves the machine.
 
-   Memory tiers and session files hold whatever the assistant was told, which includes provider
-   keys, so an export written verbatim becomes a leak the moment the file is shared. This is the
-   one place that decides what a credential looks like: `raven backup export --sanitize` and
-   `ravencode session export --sanitize` both call it, so the two cannot drift apart."""
+Memory tiers and session files hold whatever the assistant was told, which includes provider
+keys, so an export written verbatim becomes a leak the moment the file is shared. This is the
+one place that decides what a credential looks like: `raven backup export --sanitize` and
+`ravencode session export --sanitize` both call it, so the two cannot drift apart."""
 
 from __future__ import annotations
 

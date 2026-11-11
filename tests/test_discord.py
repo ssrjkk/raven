@@ -300,7 +300,7 @@ def _install_contract_discord(monkeypatch, bot):
     monkeypatch.setattr(
         discord_channel_mod,
         "app_commands",
-        SimpleNamespace(CommandTree=_TreeContract, describe=lambda **kwargs: (lambda fn: fn)),
+        SimpleNamespace(CommandTree=_TreeContract, describe=lambda **kwargs: lambda fn: fn),
         raising=False,
     )
 
@@ -325,7 +325,6 @@ def _message_events(bot):
 
     bot.event = _event
     return registry
-
 
 
 class _TextChannel:

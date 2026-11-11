@@ -103,6 +103,7 @@ class ProviderPayload(BaseModel):
 
 class UpdateProviderPayload(BaseModel):
     """Partial update — every field is optional (PATCH semantics via PUT)."""
+
     name: str | None = None
     type: str | None = None
     api_key: str | None = None
@@ -165,6 +166,7 @@ def _validate_base_url_scheme(url: str) -> None:
     if not url:
         return
     from urllib.parse import urlparse
+
     parsed = urlparse(url)
     if parsed.scheme and parsed.scheme.lower() not in ("http", "https"):
         raise HTTPException(400, f"Unsupported URL scheme: {parsed.scheme!r}. Only http/https allowed.")
@@ -284,9 +286,7 @@ def create_connection_router(dependencies: list[Any] | None = None) -> APIRouter
                     providers.pop(i)
                     # Cascade: delete contexts bound to this provider
                     ctx_ids_to_delete = {c["id"] for c in _store._data["contexts"] if c.get("provider") == name}
-                    _store._data["contexts"] = [
-                        c for c in _store._data["contexts"] if c.get("provider") != name
-                    ]
+                    _store._data["contexts"] = [c for c in _store._data["contexts"] if c.get("provider") != name]
                     # Cascade: unlink agents (clear provider, clear context if its ctx was deleted)
                     for ag in _store._data["agents"]:
                         if ag.get("provider") == name:
@@ -445,10 +445,9 @@ def create_connection_router(dependencies: list[Any] | None = None) -> APIRouter
         return await _store.mutate(_do)
 
     @router.post("/agents/{agent_id}/log", dependencies=[Depends(_require_admin)])
-    async def append_agent_log(
-        agent_id: str, body: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def append_agent_log(agent_id: str, body: dict[str, Any]) -> dict[str, Any]:
         """Append an entry to an agent's run history."""
+
         def _do() -> dict[str, Any]:
             for a in _store._data["agents"]:
                 if a.get("id") == agent_id:

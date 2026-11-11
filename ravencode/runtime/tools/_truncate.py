@@ -24,8 +24,6 @@ def _spill_output(text: str) -> str | None:
         return None
 
 
-
-
 def smart_truncate(text: str, limit: int = 10_000) -> str:
     """Middle-out truncation with disk spill for oversized tool results.
 

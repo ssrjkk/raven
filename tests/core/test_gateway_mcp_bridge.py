@@ -67,9 +67,7 @@ async def test_start_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 async def test_start_skips_missing_command(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "raven.core.gateway.mcp_bridge.settings", MagicMock(mcp_servers='{"srv": {"cwd": "/x"}}')
-    )
+    monkeypatch.setattr("raven.core.gateway.mcp_bridge.settings", MagicMock(mcp_servers='{"srv": {"cwd": "/x"}}'))
     bridge, pool = _bridge(monkeypatch)
     await bridge.start()
     pool.connect.assert_not_awaited()

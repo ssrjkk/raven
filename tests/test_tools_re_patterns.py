@@ -78,11 +78,11 @@ def _elf_raw(names: list[str]) -> bytes:
 def _everything_raw() -> bytes:
     b = bytearray(0x200)
     b[0:4] = b"\x7fELF"
-    b[0x40 : 0x46] = b"ASPack"
-    b[0x50 : 0x58] = b"\x63\x7c\x77\x7b\xf2\x6b\x6f\xc5"
-    b[0x60 : 0x66] = b"\x64\xa1\x30\x00\x00\x00"
-    b[0x80 : 0x86] = b"strcpy"
-    b[0x90 : 0xB5] = b"\x00VirtualAllocEx\x00CryptEncrypt\x00WSASend\x00"
+    b[0x40:0x46] = b"ASPack"
+    b[0x50:0x58] = b"\x63\x7c\x77\x7b\xf2\x6b\x6f\xc5"
+    b[0x60:0x66] = b"\x64\xa1\x30\x00\x00\x00"
+    b[0x80:0x86] = b"strcpy"
+    b[0x90:0xB5] = b"\x00VirtualAllocEx\x00CryptEncrypt\x00WSASend\x00"
     return bytes(b)
 
 

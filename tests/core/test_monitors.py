@@ -547,15 +547,9 @@ class TestSLOStats:
         m = Monitor(name="slo", type=MonitorType.HTTP, target="https://example.com")
         await store.save_monitor(m)
         now = time.time()
-        await store.save_check(
-            MonitorCheck(monitor_id=m.id, status="up", checked_at=now - 10, triggered=False)
-        )
-        await store.save_check(
-            MonitorCheck(monitor_id=m.id, status="down", checked_at=now - 50, triggered=True)
-        )
-        await store.save_check(
-            MonitorCheck(monitor_id=m.id, status="down", checked_at=now - 2000, triggered=True)
-        )
+        await store.save_check(MonitorCheck(monitor_id=m.id, status="up", checked_at=now - 10, triggered=False))
+        await store.save_check(MonitorCheck(monitor_id=m.id, status="down", checked_at=now - 50, triggered=True))
+        await store.save_check(MonitorCheck(monitor_id=m.id, status="down", checked_at=now - 2000, triggered=True))
         stats = await store.get_slo_stats(m.id, 1000)
         assert stats == {"total": 2, "ok": 1, "fail": 1}
 

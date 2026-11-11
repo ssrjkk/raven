@@ -63,7 +63,9 @@ class TestPermissionManager:
         assert mgr.is_allowed("bash") == (False, "tool 'bash' denied by permission rule")
 
     def test_rule_order_reversed(self) -> None:
-        mgr = PermissionManager([PermissionRule("bash", PermissionAction.DENY, "first"), PermissionRule("*", PermissionAction.ALLOW)])
+        mgr = PermissionManager(
+            [PermissionRule("bash", PermissionAction.DENY, "first"), PermissionRule("*", PermissionAction.ALLOW)]
+        )
         assert mgr.is_allowed("bash") == (True, "")
 
     def test_to_dict(self) -> None:

@@ -37,7 +37,9 @@ class CompactCommand(CommandHandler):
                 summary += token
         except Exception as exc:
             logger.warning("Compact failed: {}", exc)
-            await gateway._send(ctx.event.channel, ctx.event.session_id, "Compact failed — conversation left unchanged.")
+            await gateway._send(
+                ctx.event.channel, ctx.event.session_id, "Compact failed — conversation left unchanged."
+            )
             return True
         if not summary.strip():
             await gateway._send(

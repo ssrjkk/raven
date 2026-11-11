@@ -154,9 +154,7 @@ class PluginRegistry:
         logger.info("Plugin {} updated to v{}", name, entry.version)
         return True
 
-    async def update(
-        self, dest_dir: Path, names: list[str] | None = None, force: bool = False
-    ) -> dict[str, bool]:
+    async def update(self, dest_dir: Path, names: list[str] | None = None, force: bool = False) -> dict[str, bool]:
         """Update all catalog plugins (or a subset). Returns {name: installed}."""
         entries = await self.list_available()
         result: dict[str, bool] = {}
@@ -233,9 +231,7 @@ def _normalize_plugin_root(dest: Path) -> None:
     if (dest / "plugin.py").exists():
         return
     subdirs = [
-        d
-        for d in dest.iterdir()
-        if d.is_dir() and ((d / "plugin.py").exists() or (d / "manifest.json").exists())
+        d for d in dest.iterdir() if d.is_dir() and ((d / "plugin.py").exists() or (d / "manifest.json").exists())
     ]
     if len(subdirs) == 1:
         inner = subdirs[0]

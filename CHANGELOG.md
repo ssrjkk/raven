@@ -13,6 +13,43 @@ A duplicate `## [Unreleased]` block from the pre-0.4.8 era is archived verbatim 
 Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-10-30). 2026 session fix logs: `docs/archive/fixes-history.md`.
 
 ### Added
+- `check_format()` in `scripts/check_all.py` — the declared formatter, turned into a control.
+  `.pre-commit-config.yaml` ran `ruff-format` and `docs/development.md:15` tells every contributor to
+  `pre-commit install`, but `.git/hooks/pre-commit` did not exist in this clone and no CI job mentioned
+  the formatter: measured before the stage existed, `ruff format --check` wanted to restyle 346 of the
+  925 Python files. The tree was formatted once (347 files, +2,947/−2,155), `ruff format --check` over
+  `CHECK_DIRS` is now a quick-gate stage, and re-running it reports "925 files already formatted", so
+  the style is stable and the stage cannot be satisfied by luck. Two inline suppressions did not
+  survive the reflow, because a formatter moves a trailing comment to the closing bracket: bandit came
+  back with 2 live `MEDIUM` `B608` findings in `raven/core/task_engine/store.py` (the annotation had
+  slid off the f-string it covers) and mypy reported `method-assign` plus an unused
+  `# type: ignore` in `tests/test_ravencode_integrations.py`. Both were rewritten into shapes that a
+  re-wrap cannot break, the six remaining bracket-line `# nosec` sites were re-measured rather than
+  trusted (bandit is back to HIGH 0 / MEDIUM 0 / LOW 90, and every annotation still erases a finding),
+  and the full `ruff` + `mypy` + `bandit` sweep over the formatted tree is clean
+- `check_annotations()` — the first measurement of the first rule of `agents.md`, "type hints required
+  for all Python functions". mypy runs `strict = true` with `disallow_untyped_defs = false`, so an
+  unannotated `def` was legal and nothing counted how many there were: the shipped tree
+  (`raven/`, `ravencode/`, `aios/`, `plugins/`) holds 909 unannotated functions across 178 files. The
+  stage walks them with `ast` in 1.2 s instead of a second full mypy pass, demands a hint for every
+  parameter except the implicit `self` / `cls`, for `*args` / `**kwargs` too, and for the return type,
+  and compares each file against the ceiling recorded in `scripts/untyped_baseline.json`. It fails in
+  both directions: one function more than the ceiling fails, naming `file:line def(missing, …)`, and a
+  ceiling left *above* what the tree now holds fails too, because an unre-measured ceiling is exactly
+  how 909 became 909 — `python scripts/check_all.py --annotations` re-measures and rewrites it, in a
+  diff anyone reviewing the branch can see. Against `mypy --disallow-untyped-defs` on the same tree
+  (2.4.1, cold cache: 794 sites — the same flag on a warm cache answers 38, because the per-file
+  results were cached before the flag existed) this rule is the stricter of the two by 115, and each
+  site of that difference is measured: 95 are `__init__` methods whose parameters carry hints but
+  whose `-> None` is missing, which mypy infers and therefore never reports, and 22 sit in
+  `raven/channels/discord/channel.py` (14) and `raven/core/metrics.py` (8) — two of the four modules
+  `pyproject.toml` tells mypy to skip outright with `ignore_errors = true`, which the ratchet covers
+  anyway; 2 of those 22 omit only `-> None` and so land in both groups, and 95 + 22 − 2 = 115.
+  17 mutations of the counter and the ratchet, each caught: tolerating one extra function, skipping files with no ceiling entry, letting a
+  stale ceiling stand, certifying a tree whose baseline file is missing, demanding `self`, letting
+  `*args` through, dropping the return-type demand, skipping nested functions and methods, writing a
+  ceiling one off, and five shape checks of the formatter stage. 42 tests in
+  `tests/test_check_all_gates.py`, two of which run against the shipped tree rather than a stub
 - `site/stats.js` — the third generated site file, and the last number the landing page is allowed
   to state by hand. `scripts/record_site_frames.py` now also writes `build_stats()`: the version, the
   protocol, the tool count, the count per category (8 of them: file 6, shell 1, web 9, git 5, code 11,
@@ -136,6 +173,48 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
 ### Fixed
+- The browser tool's SSRF guard could be walked straight through by an IP literal. `_validate_url()`
+  in `raven/tools/browser.py` raised its `private IP` error *inside* a `try` whose
+  `except ValueError: pass` was written to mean "this host is a name, not a literal" -- and
+  `_SSRFError` subclasses `ValueError`, so the guard caught and discarded its own decision. The branch
+  could never fire: every literal was handed to `socket.getaddrinfo`, and when resolution failed the
+  same handler logged `DNS resolution failed` and returned *without raising*. Reproduced on the shipped
+  tree with the resolver forced to fail: `http://169.254.169.254/latest/meta-data/` -- the cloud
+  credential endpoint -- passed the guard, as did `10.0.0.1`, `192.168.1.1` and `[fd00::1]`. A literal
+  is exactly the address the socket will be opened on, so it is now decided before the resolver is
+  asked, in the order `raven/core/browser_agent.py` had already used. Same tree, same broken resolver:
+  those four plus `[::]` are refused, `http://8.8.8.8/` is allowed and the resolver is never called.
+  `tests/test_tools_browser.py` pins all of it (122 pass), including one test that runs both browser
+  surfaces over the same URL table and fails if either loosens, because they were already two copies of
+  one policy with a bug in only one of them. 5 mutations of the guard, each caught -- the first
+  reproduces the shipped bypass.
+- Generated files were being committed with CRLF, and a gate stage now makes that impossible. Four
+  `scripts/` writers called `Path.write_text()` on files that belong to the repo -- `site/frames.js`,
+  `site/stats.js`, the gateway page and `deploy_id` -- and on Windows that rewrites every `\n` to
+  `\r\n` in the working copy. `.gitattributes` (`* text eol=lf`) normalises on add, so `git status`
+  stayed clean while the files on disk drifted: a local re-run of a recorder and CI's checkout of the
+  same commit were not the same bytes. The writers now use `write_bytes(...encode("utf-8"))` or an
+  explicit `newline="\n"` (`record_site_frames.py` gained one `_write_lf()` helper for the three site
+  files it emits), every tracked file whose working copy had already drifted was byte-normalised back to
+  LF, and `git ls-files --eol` now reports CRLF only for the four `.ps1` scripts that `.gitattributes:16`
+  declares `text eol=crlf` -- the one place CRLF is intended. `check_generated_writers()` is a new
+  quick-gate stage: it parses every `scripts/*.py` with `ast`,
+  accepts `write_bytes`, accepts `write_text` only with a `newline` keyword whose literal value is
+  `"\n"`, and fails naming `file:line` -- currently "5 writers, all LF-explicit". Checking the keyword
+  *name* alone would have accepted `encoding=`; that mutation and 9 others are each caught.
+  7 tests in `tests/test_check_all_gates.py` (49 in the file).
+- Two VRAM assertions could only pass on a machine with a GPU. `_vram_mb()` gates on
+  `shutil.which("nvidia-smi")` and returns 0 before it reads anything, and the tests patched only
+  `subprocess.run` -- so on this CPU-only laptop the probe answered its own zero and
+  `test_highest_gpu_wins` failed (`assert 0 == 24576`) while `test_failing_query_is_no_gpu` and
+  `test_non_numeric_output_is_no_gpu` passed a zero they never derived from the parsing they claimed
+  to cover. GitHub's Ubuntu runners do ship `nvidia-smi`, so CI saw green for the wrong reason and
+  could not see this at all: the same class of control as the temp-dir `PermissionError` below, where
+  the assertion held only because of what the machine happened to have installed. The class now pins
+  the gate open with an autouse fixture, one new test pins it shut and asserts `subprocess.run` is
+  never reached, and the module-level list-vs-shell test patches the gate too instead of silently
+  asserting on an empty call list. 18 tests pass on a machine with no GPU; 3 mutations of the probe
+  (drop the `which` gate, `max` -> `min`, drop the `isdigit` guard) each fail.
 - Stopping a plugin worker whose child the OS had already lost raised out of the shutdown path. The
   pool keeps a worker whose loop has closed; its `returncode` never gets set, so `stop()` could not see
   the death, and `uvloop` -- which checks the pid before signalling, and is what CI runs -- answered
@@ -895,6 +974,10 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
 - `extension/extension.js` + `extension/package.json` — dead VS Code prototype superseded by `extension/vscode/` (stale API port, duplicate command manifest)
 
 ### Changed
+- `.pre-commit-config.yaml` runs lint, format and types from this repository's own interpreter (`language: system`) instead of downloaded copies. The pins were the bug: `ruff-pre-commit v0.5.0` and `mirrors-mypy v1.11.0` against the `ruff>=0.5,<1.0` / `mypy>=2.4.0` ranges pyproject carried — so a contributor who did install the hooks would have formatted with a ruff three releases behind the one `scripts/check_all.py` now gates on, which is a diff that immediately re-formats, not a control. The hygiene hooks, gitleaks and the web eslint hook are unchanged; `pre-commit validate-config` passes, and the hooks are still not installed in `.git/hooks` here because that is a per-machine choice (`pre-commit install`, documented where it always was)
+- `pyproject.toml` fixes the toolchain the gate measures with: `ruff~=0.17.4`, `mypy~=2.4.1` in place of `ruff>=0.5,<1.0` / `mypy>=2.4.0,<3.0`. The new format stage only means something if every runner compares the tree against the formatter that wrote it, and the wide range let a fresh `pip install -e ".[dev]"` resolve anything from 0.5 to 0.99 — CI resolved 0.17.4 while this machine sat on 0.17.2. Measured after the upgrade: 0.17.4 reports `925 files already formatted` on the tree 0.17.2 wrote (the two agree, so no re-format was needed), and the quick gate passes 7/7 on mypy 2.4.1 (`ruff check` 0.2 s, `ruff format` 0.2 s, mypy 269.8 s, annotations 3.3 s, bandit 14.6 s, imports, CLI)
+- CI is down to one failing assertion per leg. `tests/test_workspace_root.py::test_a_git_repo_outside_the_root_is_refused_instead_of_quietly_redirected` asked for a `PermissionError` on `tmp_path / "elsewhere"`, but `allowed_roots()` publishes the system temp dir as an always-allowed root, so that path is *permitted* and the refusal it asserted was unreachable on any runner whose temp dir pytest uses — it failed on both Linux legs (1 failed, 7594 passed) and reproduces here. The test now names a path outside both roots and proves the premise (`assert not is_within(...)`), so it can no longer pass by accident; restoring the old silent redirect (`return base`) makes it fail again. `tests/core/test_tool_outcome.py` reached for the mock call log through `cast("AsyncMock", agent.llm).complete`, which the Windows leg's mypy resolved to the `LLMClient` protocol's `complete` — a `Callable`, which has no `await_args_list`; the local is now typed `Any`, which is what a mock attribute actually is, and the file passes ruff, mypy and its own 28 tests
+- `docs/development.md` documents what the quick gate now is (ruff, format, mypy, the annotation ratchet, bandit, imports, CLI), adds `ruff format .` and `python scripts/check_all.py --annotations` to the loop, and states both controls under "Style and hint controls"
 - `scripts/check_all.py` deletes `allure-results/` before a test stage. The addopts write one JSON file per test and the directory had grown to 2,037,313 entries, which every pytest start and every Windows directory operation under the repo root paid for (the quick gate measured 178 s against 49 s once it was gone); the unit stage keeps the same addopts, so reports are rebuilt per run instead of accumulating
 - `tests/test_optional_extra_parity.py` guards the failure that made CI red twice: a test that patches a name bound only by an optional import. It reads the AST of every module under `raven/`, `ravencode/` and `aios/`, collects the names each one imports inside a `try` whose handler catches an import failure (81 modules today, `raven.channels.discord.channel` and its `discord`/`commands`/`app_commands` among them), and fails if any test under `tests/` passes one of those names as a dotted string to `patch(...)`/`monkeypatch.setattr(...)`. Such a target raises `AttributeError` on a runner that installed only `.[dev]`, or silently skips, so the assertions never execute there. Injecting the fake with `monkeypatch.setattr(module, "name", fake, raising=False)` runs on every runner and is what the rule pushes towards. Against the commit that broke CI it reports the seven offending targets; against the current suite it reports none, and a self-check test proves the scanner still matches the pattern it forbids
 - Two pre-existing gate failures repaired in the test tree: `tests/test_ravencode_streaming_core.py` had an unused unpacked `client` (RUF059) and an un-sorted in-function import block (I001); `tests/test_ravencode_code_search.py` read `code_search.iter_files` to keep a reference, which `mypy --strict` flags as an implicit re-export, so the test now imports `iter_files` from its real home (`ravencode.runtime.fs_walk`) while still patching the name where `code_search` looks it up

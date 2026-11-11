@@ -137,9 +137,7 @@ def _server_config(app: FastAPI, host: str, port: int) -> uvicorn.Config:
     # WebSocket clients have no way to send an Authorization header — the token travels as
     # ?token=. request_id_middleware already logs method, sanitized path, status and duration,
     # so the access log would only add the credential.
-    return uvicorn.Config(
-        app, host=host, port=port, log_level="info", ws="auto", access_log=False
-    )
+    return uvicorn.Config(app, host=host, port=port, log_level="info", ws="auto", access_log=False)
 
 
 async def _run_gateway(gateway: Gateway, web_port: int):
@@ -449,7 +447,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         await dream_engine.start()
         sse_stream.start_cleanup()
         if binds_every_interface(settings.web_host):
-            logger.warning("Binding to {}:{}. Ensure firewall/reverse proxy is configured.", settings.web_host, web_port)
+            logger.warning(
+                "Binding to {}:{}. Ensure firewall/reverse proxy is configured.", settings.web_host, web_port
+            )
         config = _server_config(api_app, settings.web_host, web_port)
         server = uvicorn.Server(config)
         server_task = asyncio.create_task(server.serve())

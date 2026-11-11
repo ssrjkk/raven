@@ -22,6 +22,7 @@ from raven.tools.utils import get_timestamp, wait_for
 # File tools
 # ---------------------------------------------------------------------------
 
+
 class TestFileTools:
     @pytest.fixture
     def tmp_workspace(self, tmp_path: Path) -> Generator[Path, None, None]:
@@ -94,6 +95,7 @@ class TestFileTools:
 # Shell tools
 # ---------------------------------------------------------------------------
 
+
 class TestShellTools:
     async def test_shell_echo(self) -> None:
         result = await shell_command("echo hello")
@@ -105,6 +107,7 @@ class TestShellTools:
 
     async def test_shell_timeout(self) -> None:
         import platform
+
         cmd = "ping -n 30 127.0.0.1" if platform.system() == "Windows" else "sleep 10"
         result = await shell_command(cmd, timeout=1)
         assert "timeout" in result
@@ -150,6 +153,7 @@ class TestShellTools:
 # DB tools
 # ---------------------------------------------------------------------------
 
+
 class TestDBTools:
     @pytest.fixture
     def tmp_workspace(self, tmp_path: Path) -> Generator[Path, None, None]:
@@ -163,6 +167,7 @@ class TestDBTools:
 
     async def test_db_query_select(self, tmp_workspace: Path) -> None:
         import sqlite3
+
         db = tmp_workspace / "test.db"
         conn = sqlite3.connect(str(db))
         conn.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, val TEXT)")
@@ -174,6 +179,7 @@ class TestDBTools:
 
     async def test_db_query_not_select(self, tmp_workspace: Path) -> None:
         import sqlite3
+
         db = tmp_workspace / "test.db"
         conn = sqlite3.connect(str(db))
         conn.execute("CREATE TABLE t (id INT)")
@@ -188,6 +194,7 @@ class TestDBTools:
 
     async def test_db_query_empty(self, tmp_workspace: Path) -> None:
         import sqlite3
+
         db = tmp_workspace / "empty.db"
         conn = sqlite3.connect(str(db))
         conn.execute("CREATE TABLE t (id INT)")
@@ -200,6 +207,7 @@ class TestDBTools:
 # ---------------------------------------------------------------------------
 # Util tools
 # ---------------------------------------------------------------------------
+
 
 class TestUtilTools:
     async def test_wait(self) -> None:
@@ -215,6 +223,7 @@ class TestUtilTools:
 # ---------------------------------------------------------------------------
 # ToolRegistry integration
 # ---------------------------------------------------------------------------
+
 
 class TestToolRegistryIntegration:
     def test_create_registry_has_all_tools(self) -> None:
@@ -235,6 +244,7 @@ class TestToolRegistryIntegration:
         async def hung() -> str:
             await asyncio.sleep(999)
             return "done"
+
         spec = ToolSpec(
             name="hung",
             description="hung tool",
@@ -313,6 +323,7 @@ class TestToolRegistryIntegration:
 # ---------------------------------------------------------------------------
 # Test runner tools
 # ---------------------------------------------------------------------------
+
 
 class TestTestsTool:
     async def test_run_tests_denies_outside_workspace(self, tmp_path: Path) -> None:
@@ -427,6 +438,7 @@ class TestTestsTool:
 # ---------------------------------------------------------------------------
 # Shell / python sandbox branches driven with mocked subprocess
 # ---------------------------------------------------------------------------
+
 
 class TestShellValidation:
     async def test_empty_command_denied(self) -> None:
@@ -585,6 +597,7 @@ class TestPythonCodeBranches:
 # ---------------------------------------------------------------------------
 # tests.py tool: marker/args, subprocess failure modes, generate_tests
 # ---------------------------------------------------------------------------
+
 
 class _OkProc:
     returncode = 0

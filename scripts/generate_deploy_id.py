@@ -2,6 +2,7 @@
 
 Called automatically by pre-commit hook. Each commit produces a distinct build.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -15,33 +16,45 @@ _GIT = shutil.which("git") or "git"
 
 def _git_describe() -> str:
     try:
-        return subprocess.check_output(
-            [_GIT, "describe", "--always", "--dirty", "--long"],
-            stderr=subprocess.DEVNULL,
-            timeout=5,
-        ).decode().strip()
+        return (
+            subprocess.check_output(
+                [_GIT, "describe", "--always", "--dirty", "--long"],
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+            .decode()
+            .strip()
+        )
     except Exception:
         return "unknown"
 
 
 def _git_origin() -> str:
     try:
-        return subprocess.check_output(
-            [_GIT, "remote", "get-url", "origin"],
-            stderr=subprocess.DEVNULL,
-            timeout=5,
-        ).decode().strip()
+        return (
+            subprocess.check_output(
+                [_GIT, "remote", "get-url", "origin"],
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+            .decode()
+            .strip()
+        )
     except Exception:
         return "unknown"
 
 
 def _git_branch() -> str:
     try:
-        return subprocess.check_output(
-            [_GIT, "rev-parse", "--abbrev-ref", "HEAD"],
-            stderr=subprocess.DEVNULL,
-            timeout=5,
-        ).decode().strip()
+        return (
+            subprocess.check_output(
+                [_GIT, "rev-parse", "--abbrev-ref", "HEAD"],
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+            .decode()
+            .strip()
+        )
     except Exception:
         return "unknown"
 
@@ -53,14 +66,14 @@ def main():
     timestamp = datetime.now(UTC).isoformat(timespec="seconds")
 
     out = Path(__file__).resolve().parent.parent / "raven" / "core" / "_deploy.py"
-    out.write_text(
+    text = (
         "# Auto-generated deploy ID - do not edit manually.\n"
         f"DEPLOY_ID = {deploy_id!r}\n"
         f"DEPLOY_ORIGIN = {origin!r}\n"
         f"DEPLOY_BRANCH = {branch!r}\n"
-        f"DEPLOY_TIMESTAMP = {timestamp!r}\n",
-        encoding="utf-8",
+        f"DEPLOY_TIMESTAMP = {timestamp!r}\n"
     )
+    out.write_bytes(text.encode("utf-8"))
     print(f"[watermark] wrote {out}")
     print(f"[watermark]   DEPLOY_ID={deploy_id}")
     print(f"[watermark]   ORIGIN={origin}")

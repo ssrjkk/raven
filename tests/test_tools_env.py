@@ -59,9 +59,7 @@ class TestUrlUserinfoMasking:
         assert _mask_url_userinfo("redis://:s3cret@cache:6379/0") == "redis://:***@cache:6379/0"
 
     def test_at_in_password_is_swallowed(self) -> None:
-        assert (
-            _mask_url_userinfo("postgresql://user:p@ss@db/raven") == "postgresql://user:***@db/raven"
-        )
+        assert _mask_url_userinfo("postgresql://user:p@ss@db/raven") == "postgresql://user:***@db/raven"
 
     def test_plain_value_untouched(self) -> None:
         assert _mask_url_userinfo("https://example.com/path") == "https://example.com/path"

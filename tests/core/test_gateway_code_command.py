@@ -105,9 +105,7 @@ async def test_code_policy_denied(monkeypatch: pytest.MonkeyPatch) -> None:
         "raven.core.gateway.commands.code.check_tool_allowed",
         lambda policy, action, ch: (False, "read-only channel"),
     )
-    monkeypatch.setattr(
-        "raven.core.gateway.commands.code.get_policy_for_channel", lambda ch: object()
-    )
+    monkeypatch.setattr("raven.core.gateway.commands.code.get_policy_for_channel", lambda ch: object())
     gw = _FakeGateway()
     assert await CodeCommand(gw).execute(_ctx()) is True
     assert _sent(gw)[2] == "Access denied: read-only channel"
@@ -149,9 +147,7 @@ async def test_code_index_without_a_path_indexes_the_workspace_root(
     assert holder["last"].index_calls == [2000]
 
 
-async def test_code_index_confines_a_relative_directory(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+async def test_code_index_confines_a_relative_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     (tmp_path / "src").mkdir()
     holder: dict[str, _FakeIndexer] = {}
 
@@ -267,9 +263,7 @@ async def test_code_review_many_comments_truncates(monkeypatch: pytest.MonkeyPat
     f = tmp_path / "many.py"
     f.write_text("x = 1\n", encoding="utf-8")
     rv = _FakeReviewer()
-    rv.comments = [
-        ReviewComment(line=i, severity=ReviewSeverity.SUGGESTION, message=f"s{i}") for i in range(20)
-    ]
+    rv.comments = [ReviewComment(line=i, severity=ReviewSeverity.SUGGESTION, message=f"s{i}") for i in range(20)]
     monkeypatch.setattr("raven.core.coder.review.CodeReviewer", lambda: rv)
     monkeypatch.setattr("raven.core.coder.session.CodingSessionManager", _FakeMgr)
     gw = _FakeGateway()

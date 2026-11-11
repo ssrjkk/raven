@@ -119,9 +119,7 @@ class TestSimpleSettingsBranches:
         monkeypatch.setattr(config_module.settings, "web_cors_origins", "*")
         assert not _run("_check_web_cors").passed
 
-    def test_web_cors_wildcard_subdomain_fails_even_without_credentials(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_web_cors_wildcard_subdomain_fails_even_without_credentials(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(config_module.settings, "web_cors_origins", "https://*.raven.test")
         monkeypatch.setattr(config_module.settings, "web_cors_allow_credentials", False)
         assert not _run("_check_web_cors").passed
@@ -280,6 +278,7 @@ class TestDependencyImportBranches:
         check = _run("_check_audit_chain")
         assert not check.passed
         assert "chain errors" in check.message
+
 
 class _FakeDockerClient:
     def __init__(self, *, reachable: bool) -> None:

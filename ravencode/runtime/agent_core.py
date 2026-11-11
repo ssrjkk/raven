@@ -129,15 +129,11 @@ class AgentConfig:
 
     @classmethod
     def fast(cls) -> Self:
-        return cls(
-            confirm_dangerous=False, diff_preview=False, proactive_scan=False, max_steps=50, repo_map=True
-        )
+        return cls(confirm_dangerous=False, diff_preview=False, proactive_scan=False, max_steps=50, repo_map=True)
 
     @classmethod
     def autonomous(cls) -> Self:
-        return cls(
-            confirm_dangerous=False, diff_preview=True, proactive_scan=True, max_steps=100, repo_map=True
-        )
+        return cls(confirm_dangerous=False, diff_preview=True, proactive_scan=True, max_steps=100, repo_map=True)
 
     @classmethod
     def plan(cls) -> Self:
@@ -354,7 +350,9 @@ class ReActAgent:
                 if isinstance(tasks, list) and tasks:
                     done = [t for t in tasks if isinstance(t, dict) and t.get("status") == "done"]
                     if done:
-                        parts.append("Completed tasks: " + "; ".join(str(t.get("description", ""))[:100] for t in done[-5:]))
+                        parts.append(
+                            "Completed tasks: " + "; ".join(str(t.get("description", ""))[:100] for t in done[-5:])
+                        )
             recent_key = "recent_work"
             if recent_key in store:
                 rw = store[recent_key]
@@ -529,7 +527,10 @@ class ReActAgent:
             if ws is None:
                 return None
             proc = await asyncio.create_subprocess_exec(
-                "git", "status", "--porcelain", "-b",
+                "git",
+                "status",
+                "--porcelain",
+                "-b",
                 cwd=str(ws),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
@@ -853,8 +854,7 @@ class ReActAgent:
             return
         self.conversation.add_system_message(
             "Files mentioned in the task, read in advance "
-            "(use these contents instead of re-reading; they may be stale if you modify them):\n"
-            + "\n".join(previews)
+            "(use these contents instead of re-reading; they may be stale if you modify them):\n" + "\n".join(previews)
         )
 
     # -----------------------------------------------------------------------
@@ -1003,7 +1003,9 @@ class ReActAgent:
 
         try:
             async with asyncio.timeout(self.config.llm_timeout):
-                resp = await client.ask_messages(messages, tools=tool_defs, priority=_config_priority(self.config.priority))
+                resp = await client.ask_messages(
+                    messages, tools=tool_defs, priority=_config_priority(self.config.priority)
+                )
         except TimeoutError:
             return {"content": "[error: LLM call timed out]", "tool_calls": []}
 
@@ -1041,7 +1043,9 @@ class ReActAgent:
         raw_calls: list[dict[str, Any]] = []
         try:
             async with asyncio.timeout(self.config.llm_timeout):
-                async for ev in client.ask_messages_stream(messages, tools=tool_defs, priority=_config_priority(self.config.priority)):
+                async for ev in client.ask_messages_stream(
+                    messages, tools=tool_defs, priority=_config_priority(self.config.priority)
+                ):
                     if ev["type"] == "token":
                         accumulated += ev.get("text", "")
                         if ee:

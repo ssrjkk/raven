@@ -8,7 +8,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 _ROUTER_PREFIX = re.compile('APIRouter\\(\\s*prefix="([^"]*)"')
 _ROUTER_DECORATOR = re.compile('@router\\.(?:get|post|put|delete|patch|websocket)\\(\\s*"([^"]*)"')
 _APP_DECORATOR = re.compile('@app\\.(?:get|post|put|delete|patch|websocket)\\(\\s*"([^"]*)"')
-_CLIENT_PATH = re.compile('["`\'](/(?:api|aios|ws|events|mcp)[A-Za-z0-9_./{}$?&=-]*)')
+_CLIENT_PATH = re.compile("[\"`'](/(?:api|aios|ws|events|mcp)[A-Za-z0-9_./{}$?&=-]*)")
 
 _PY_DIRS = ("raven", "aios")
 _CLIENT_DIRS = (("web", "src"), ("extension", "src"))

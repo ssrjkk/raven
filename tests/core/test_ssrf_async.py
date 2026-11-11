@@ -425,7 +425,9 @@ async def test_safe_fetch_malformed_url_passes_pattern(monkeypatch: pytest.Monke
         await safe_fetch_async("http://example.com/a\\b")
 
 
-async def _stub_stream(monkeypatch: pytest.MonkeyPatch, responses: list[tuple[int, dict[str, str], bytes]]) -> list[str]:
+async def _stub_stream(
+    monkeypatch: pytest.MonkeyPatch, responses: list[tuple[int, dict[str, str], bytes]]
+) -> list[str]:
     """Patch httpx.AsyncClient so client.stream yields canned responses in order."""
     it = iter(responses)
     requested: list[str] = []

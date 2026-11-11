@@ -41,9 +41,7 @@ class TestFeatureFlags:
         ff._load_from_env()
         assert ff.is_enabled("redis_rate_limiter") is False
 
-    def test_a_value_that_is_not_on_or_off_is_reported_not_guessed(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_value_that_is_not_on_or_off_is_reported_not_guessed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from loguru import logger
 
         ff = FeatureFlags()
@@ -62,5 +60,7 @@ class TestFeatureFlags:
         monkeypatch.delenv("FF_REDIS_RATE_LIMITER", raising=False)
         ff = FeatureFlags()
         assert ff.is_enabled("redis_rate_limiter") is False
+
+
 def test_module_singleton_is_featureflags() -> None:
     assert isinstance(feature_flags, FeatureFlags)

@@ -13,6 +13,7 @@ from raven.core.commands_api import create_commands_router
 
 ROOT = Path(__file__).resolve().parents[2]
 
+
 @pytest.fixture()
 def client(tmp_path: Path) -> TestClient:
     app = FastAPI()
@@ -81,6 +82,7 @@ def test_get_contextual_commands_has_code(client: TestClient) -> None:
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
+
 
 def spa_routes() -> set[str]:
     """The paths the console router answers, read out of the SPA source."""

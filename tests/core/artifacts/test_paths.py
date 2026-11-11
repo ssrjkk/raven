@@ -42,9 +42,7 @@ def test_env_override_highest_precedence(tmp_path: Path, monkeypatch: pytest.Mon
 def test_config_override_from_raven_json(tmp_path: Path) -> None:
     cfg_dir = tmp_path / "cfg-skills"
     cfg_dir.mkdir()
-    (tmp_path / "raven.json").write_text(
-        '{"paths": {"skills": ["cfg-skills"]}}', encoding="utf-8"
-    )
+    (tmp_path / "raven.json").write_text('{"paths": {"skills": ["cfg-skills"]}}', encoding="utf-8")
     paths = ArtifactPaths.resolve(cwd=tmp_path)
     assert paths.skills[0] == cfg_dir.resolve()
 

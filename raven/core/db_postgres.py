@@ -26,9 +26,7 @@ class _PostgresMigrator:
     async def get_current_version(self) -> int:
         db = self._shared_db()
         await db.execute(
-            "CREATE TABLE IF NOT EXISTS _migrations ("
-            "version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW()"
-            ")"
+            "CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW())"
         )
         current = await db.fetchval("SELECT COALESCE(MAX(version), 0) FROM _migrations") or 0
         return int(current)

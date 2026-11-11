@@ -98,9 +98,7 @@ FIRST_PARTY = ("https://ssrjkk.github.io/", "https://github.com/ssrjkk/raven")
 CLIENT_NAMES = ("qoder", "cursor", "windsurf", "cline", "opencode", "claude")
 
 HERO_TOOL_LIST = re.compile(r'\{"jsonrpc":"2\.0","id":\d+,"result":\{"tools":\[.*?\]\}\}')
-CHANNEL_COUNT = re.compile(
-    r'<dt class="spec-term">Channel adapters</dt>\s*<dd class="spec-value">(\d+)</dd>'
-)
+CHANNEL_COUNT = re.compile(r'<dt class="spec-term">Channel adapters</dt>\s*<dd class="spec-value">(\d+)</dd>')
 ADAPTER_CLAIM = re.compile(r"(\d+) channel adapters")
 CODEBAR_HEAD = re.compile(
     r'<div class="codeblock">\s*<div class="codebar">\s*<span class="code-lang">[\w ]+</span>\s*'
@@ -109,9 +107,7 @@ CODEBAR_HEAD = re.compile(
 ADAPTER_TABLE = re.compile(r"<caption>How each adapter receives a message</caption>")
 SCREEN_TABLE = re.compile(r"<caption>The (\d+) screens the console serves</caption>")
 CSS_URL = re.compile(r"url\('([^']+)'\)")
-NAV_TOGGLE = re.compile(
-    r'<button class="nav-toggle"[^>]*aria-expanded="false"[^>]*aria-controls="([^"]+)"'
-)
+NAV_TOGGLE = re.compile(r'<button class="nav-toggle"[^>]*aria-expanded="false"[^>]*aria-controls="([^"]+)"')
 LD_JSON = re.compile(r'<script type="application/ld\+json">(.*?)</script>', re.S)
 REFERENCE_ATTR = re.compile(r'\b(aria-labelledby|aria-describedby|aria-controls|for)="([^"]+)"')
 
@@ -217,11 +213,7 @@ def local_refs() -> set[str]:
             for url in re.findall(r'(?:src|href)="([^"?#]+)"', html)
             if not url.startswith(("http://", "https://", "mailto:"))
         }
-    refs |= {
-        name
-        for name in CSS_URL.findall(read(STYLES))
-        if not name.startswith(("http://", "https://", "data:"))
-    }
+    refs |= {name for name in CSS_URL.findall(read(STYLES)) if not name.startswith(("http://", "https://", "data:"))}
     return refs
 
 
@@ -387,11 +379,10 @@ def build_entries() -> Any:
 # covered by the shape assertions instead, so editing README.md cannot break the landing page.
 _STABLE_METHODS = frozenset({"initialize", "tools/list", "ping", "logging/setLevel"})
 
+
 def signature(frame: dict[str, Any]) -> str:
     """Request identity as the browser computes it: method + params, ids ignored."""
-    return json.dumps(
-        [frame["method"], frame.get("params", {})], sort_keys=True, separators=(",", ":")
-    )
+    return json.dumps([frame["method"], frame.get("params", {})], sort_keys=True, separators=(",", ":"))
 
 
 def project_version() -> str:
@@ -504,8 +495,23 @@ def test_version_statements_agree_with_pyproject() -> None:
 EXTRAS_TABLE = re.compile(r"Optional dependency groups and the features they carry", re.I)
 EXTRAS_COUNT = re.compile(r"There are (\d+) optional groups")
 EXTRAS_MUST_SHOW = (
-    "voice", "speaker", "stt", "tts", "search", "vector", "rag", "ml", "browser",
-    "discord", "slack", "email", "docker", "secrets", "postgres", "metrics", "tui",
+    "voice",
+    "speaker",
+    "stt",
+    "tts",
+    "search",
+    "vector",
+    "rag",
+    "ml",
+    "browser",
+    "discord",
+    "slack",
+    "email",
+    "docker",
+    "secrets",
+    "postgres",
+    "metrics",
+    "tui",
 )
 
 
@@ -581,10 +587,7 @@ def test_console_screens_are_the_routes_the_spa_registers() -> None:
     source = read(ROOT / "web" / "src" / "App.tsx")
     shell = {p for p in re.findall(r'<Route\s+path="([^"]+)"', source) if p not in {"/login", "*"}}
     chips = {
-        route
-        for cells in page_table(SCREEN_TABLE, "gateway.html").values()
-        for cell in cells
-        for route in cell.split()
+        route for cells in page_table(SCREEN_TABLE, "gateway.html").values() for cell in cells for route in cell.split()
     }
     assert chips == shell
     match = SCREEN_TABLE.search(page("gateway.html"))
@@ -921,9 +924,7 @@ def test_every_page_preloads_both_faces_and_the_stylesheet() -> None:
     preloaded = {"fonts/SpaceGrotesk-latin.woff2", "fonts/IBMPlexSans-latin.woff2"}
     for name in ALL_PAGES:
         html = page(name)
-        preloads = re.findall(
-            r'<link rel="preload" href="([^"]+)" as="font" type="font/woff2" crossorigin>', html
-        )
+        preloads = re.findall(r'<link rel="preload" href="([^"]+)" as="font" type="font/woff2" crossorigin>', html)
         assert set(preloads) == preloaded and len(preloads) == 2, name
         assert '<link rel="icon" href="favicon.svg" type="image/svg+xml">' in html, name
         assert '<link rel="stylesheet" href="styles.css">' in html, name
@@ -1004,6 +1005,7 @@ def test_every_snippet_fits_the_room_a_search_result_gives_it() -> None:
 def test_the_snippet_guard_detects_the_truncation_it_forbids() -> None:
     synthetic = '<meta name="description" content="' + "word " * 40 + '">'
     assert len(DESCRIPTION_TAG.search(synthetic).group(1)) > 155  # type: ignore[union-attr]
+
 
 def test_the_software_application_claim_matches_the_project() -> None:
     blocks = [json.loads(block) for block in LD_JSON.findall(page("index.html"))]
@@ -1228,37 +1230,27 @@ def test_the_offsite_audit_allows_the_published_host(tmp_path: Path) -> None:
     assert audit_module().main(["audit", str(tmp_path)]) == 0
 
 
-def test_the_offsite_audit_fails_when_the_build_is_empty(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_the_offsite_audit_fails_when_the_build_is_empty(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert audit_module().main(["audit", str(tmp_path)]) == 1
     assert "no documentation" in capsys.readouterr().err
 
 
-def test_the_offsite_audit_fails_on_a_page_asset(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    (tmp_path / "index.html").write_text(
-        '<script src="https://cdn.example.com/app.js"></script>', encoding="utf-8"
-    )
+def test_the_offsite_audit_fails_on_a_page_asset(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / "index.html").write_text('<script src="https://cdn.example.com/app.js"></script>', encoding="utf-8")
     assert audit_module().main(["audit", str(tmp_path)]) == 1
     assert capsys.readouterr().err == (
-        "::error::built documentation fetches from another host: "
-        "['https://cdn.example.com/app.js']\n"
+        "::error::built documentation fetches from another host: ['https://cdn.example.com/app.js']\n"
     )
 
 
-def test_the_offsite_audit_fails_on_a_stylesheet_url(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_the_offsite_audit_fails_on_a_stylesheet_url(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (tmp_path / "index.html").write_text("<h1>docs</h1>", encoding="utf-8")
     (tmp_path / "styles.css").write_text(
         "@import url('https://fonts.googleapis.com/css?family=Roboto');", encoding="utf-8"
     )
     assert audit_module().main(["audit", str(tmp_path)]) == 1
     assert capsys.readouterr().err == (
-        "::error::built documentation fetches from another host: "
-        "['https://fonts.googleapis.com/css?family=Roboto']\n"
+        "::error::built documentation fetches from another host: ['https://fonts.googleapis.com/css?family=Roboto']\n"
     )
 
 
@@ -1298,6 +1290,7 @@ def test_documentation_build_is_pinned() -> None:
     assert "mkdocs-material==" in install["run"]
     assert "mkdocstrings[python]==" in install["run"]
 
+
 # ---------------------------------------------------------------------------
 # The gateway page publishes the command registry instead of a copy of it
 # ---------------------------------------------------------------------------
@@ -1307,9 +1300,7 @@ COMMANDS_END = "                <!-- commands:end -->"
 
 
 def _load_record_site_commands() -> Any:
-    spec = importlib.util.spec_from_file_location(
-        "record_site_commands", ROOT / "scripts" / "record_site_commands.py"
-    )
+    spec = importlib.util.spec_from_file_location("record_site_commands", ROOT / "scripts" / "record_site_commands.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -1366,6 +1357,7 @@ def test_the_generator_refuses_a_registration_it_cannot_list(
     assert recorder.main() == 1
     assert page("gateway.html").count(COMMANDS_START) == 1
 
+
 def spa_routes() -> set[str]:
     """Every path the SPA router answers, minus the sign-in gate and the wildcard page."""
     source = (ROOT / "web" / "src" / "App.tsx").read_text(encoding="utf-8")
@@ -1390,7 +1382,10 @@ def test_the_console_screen_list_is_the_route_table() -> None:
     screens = spa_routes()
     chips = console_screen_chips()
     assert len(screens) >= 30, sorted(screens)
-    assert chips == screens, {"only on the page": sorted(chips - screens), "only in the router": sorted(screens - chips)}
+    assert chips == screens, {
+        "only on the page": sorted(chips - screens),
+        "only in the router": sorted(screens - chips),
+    }
     assert f"<caption>The {len(screens)} screens the console serves</caption>" in page("gateway.html")
     assert f"<summary>The {len(screens)} screens the console serves, by group</summary>" in page("gateway.html")
 
@@ -1489,7 +1484,7 @@ def test_the_numbers_section_ships_the_generated_counts() -> None:
     assert [key for key, _ in shown] == ["tools", "adapters", "screens", "groups", "commands"]
     for key, value in shown:
         assert int(value) == stats[key], key
-    assert f'{stats["tools"]} tools registered' in text
+    assert f"{stats['tools']} tools registered" in text
     assert f'"version":"{stats["version"]}"' in text
     assert f'"protocolVersion":"{stats["protocol"]}"' in text
 
@@ -1563,7 +1558,11 @@ def test_the_hero_handshake_is_answered_by_the_server_that_ships() -> None:
 
 def test_the_transport_switch_is_a_control_and_only_touches_the_envelope() -> None:
     text = page("index.html")
-    switch = text[text.index('<fieldset class="transport-switch">') : text.index("</fieldset>", text.index('<fieldset class="transport-switch">'))]
+    switch = text[
+        text.index('<fieldset class="transport-switch">') : text.index(
+            "</fieldset>", text.index('<fieldset class="transport-switch">')
+        )
+    ]
     assert re.findall(r'<input type="radio" name="transport" id="[^"]+" value="([^"]+)"', switch) == ["stdio", "http"]
     assert re.findall(r'<label for="([^"]+)">', switch) == ["transport-stdio", "transport-http"]
     assert '<legend class="sr-only">' in switch
@@ -1617,10 +1616,7 @@ def door_commands() -> list[str]:
     text = page("index.html")
     doors = text[text.index('<div class="doors-grid">') : text.index('<section id="explore"')]
     return [
-        line.strip()
-        for block in DOOR_LINE.findall(doors)
-        for line in html.unescape(block).splitlines()
-        if line.strip()
+        line.strip() for block in DOOR_LINE.findall(doors) for line in html.unescape(block).splitlines() if line.strip()
     ]
 
 
@@ -1687,7 +1683,7 @@ def test_the_policy_refusal_the_page_quotes_is_the_one_the_code_returns() -> Non
     frame = next(c for c in codes if '"error"' in c)
     error = json.loads(frame)["error"]
     transport = read(ROOT / "raven" / "core" / "mcp" / "http_transport.py")
-    assert f'{error["code"]}' in transport and f'"{error["message"]}"' in transport
+    assert f"{error['code']}" in transport and f'"{error["message"]}"' in transport
     assert "status_code=401" in transport
 
 

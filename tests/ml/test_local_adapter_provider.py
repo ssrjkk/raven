@@ -39,9 +39,7 @@ class TestLocalAdapterProvider:
     async def test_factory_resolves_local(self, trained_adapter: dict[str, object]) -> None:
         adapter = trained_adapter["adapter"]
         assert isinstance(adapter, Path)
-        created = LLMProviderFactory.create(
-            "local", base_model=str(trained_adapter["base"]), adapter_path=str(adapter)
-        )
+        created = LLMProviderFactory.create("local", base_model=str(trained_adapter["base"]), adapter_path=str(adapter))
         assert isinstance(created, LocalAdapterProvider)
 
     async def test_complete_returns_generated_text_and_usage(self, provider: LocalAdapterProvider) -> None:
@@ -51,14 +49,10 @@ class TestLocalAdapterProvider:
         assert not response.content.startswith("user:")
         assert response.usage["prompt_tokens"] > 0
         assert response.usage["completion_tokens"] > 0
-        assert response.usage["total_tokens"] == (
-            response.usage["prompt_tokens"] + response.usage["completion_tokens"]
-        )
+        assert response.usage["total_tokens"] == (response.usage["prompt_tokens"] + response.usage["completion_tokens"])
         await provider.cleanup()
 
-    async def test_stream_yields_pieces_that_reassemble_the_answer(
-        self, provider: LocalAdapterProvider
-    ) -> None:
+    async def test_stream_yields_pieces_that_reassemble_the_answer(self, provider: LocalAdapterProvider) -> None:
         pieces = [chunk async for chunk in provider.complete_stream(MESSAGES, model="")]
         assert len(pieces) > 0
         assert "".join(pieces).strip() != ""

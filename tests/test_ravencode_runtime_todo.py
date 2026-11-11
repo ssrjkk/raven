@@ -32,7 +32,10 @@ class TestTodoWrite:
     def test_explicit_ids_preserve_order(self) -> None:
         todo_write([{"id": "b", "content": "B"}, {"id": "a", "content": "A"}])
         todo_write([{"id": "a", "content": "A2"}, {"id": "c", "content": "C"}])
-        assert todo_list() == "  [pending] b: B\n  [pending] a: A2\n  [pending] c: C\n\nProgress: 0/3 completed, 0 in progress"
+        assert (
+            todo_list()
+            == "  [pending] b: B\n  [pending] a: A2\n  [pending] c: C\n\nProgress: 0/3 completed, 0 in progress"
+        )
 
     def test_status_field(self) -> None:
         result = todo_write([{"id": "x", "content": "X", "status": "completed"}])

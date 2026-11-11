@@ -37,8 +37,6 @@ async def read_file(path: str, max_chars: int = 50_000) -> str:
     return err or content
 
 
-
-
 async def write_file(path: str, content: str) -> str:
     try:
         await _safe_write(path, content)
@@ -46,8 +44,6 @@ async def write_file(path: str, content: str) -> str:
     except PermissionError as exc:
         logger.debug("[files] write denied for {}: {}", path, exc)
         return f"[error] {exc}"
-
-
 
 
 def _fuzzy_find(old_string: str, content: str) -> tuple[int, int] | None:
@@ -58,6 +54,7 @@ def _fuzzy_find(old_string: str, content: str) -> tuple[int, int] | None:
     the matching region in the original content, or None when zero or
     multiple regions match.
     """
+
     def normalize(text: str) -> list[str]:
         return [ln.rstrip() for ln in text.splitlines()]
 
@@ -77,8 +74,6 @@ def _fuzzy_find(old_string: str, content: str) -> tuple[int, int] | None:
     start = sum(len(ln) for ln in lines[: hits[0]])
     end = sum(len(ln) for ln in lines[: hits[0] + n])
     return start, end
-
-
 
 
 async def edit_file(path: str, old_string: str, new_string: str, preview: bool = False) -> str:
@@ -166,7 +161,9 @@ async def verify_file(path: str) -> str:
     elif suffix in (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"):
         try:
             proc = await asyncio.create_subprocess_exec(
-                "node", "--check", str(full),
+                "node",
+                "--check",
+                str(full),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -187,15 +184,11 @@ async def verify_file(path: str) -> str:
     return "[problems]\n" + "\n".join(problems)
 
 
-
-
 async def glob_files(pattern: str, path: str | None = None) -> list[str]:
     search_root = workspace_root() if path is None else _confine(path)
     if not search_root.is_dir():
         return [f"[error] directory not found: {path or search_root}"]
     return await asyncio.to_thread(_glob_scan, search_root, pattern)
-
-
 
 
 def _glob_scan(search_root: Path, pattern: str) -> list[str]:
@@ -205,8 +198,6 @@ def _glob_scan(search_root: Path, pattern: str) -> list[str]:
         if fnmatch.fnmatch(rel, pattern):
             results.append(rel)
     return sorted(results)[:_GLOB_MAX_RESULTS]
-
-
 
 
 async def grep_files(
@@ -234,11 +225,13 @@ async def grep_files(
             continue
         for i, line in enumerate(text.splitlines(), 1):
             if (matcher is not None and matcher.search(line)) or (matcher is None and pattern in line):
-                results.append({
-                    "file": p.relative_to(search_root).as_posix(),
-                    "line": i,
-                    "content": line[:200],
-                })
+                results.append(
+                    {
+                        "file": p.relative_to(search_root).as_posix(),
+                        "line": i,
+                        "content": line[:200],
+                    }
+                )
                 if len(results) >= _GREP_MAX_RESULTS:
                     return results
     return results

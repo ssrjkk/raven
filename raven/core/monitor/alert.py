@@ -32,9 +32,7 @@ class AlertDispatcher:
         count = self._streaks.get(key, 0) + 1
         self._streaks[key] = count
         if count < self._min_consecutive:
-            logger.debug(
-                "Alert suppressed (streak {}/{} for {}): {}", count, self._min_consecutive, key, monitor.name
-            )
+            logger.debug("Alert suppressed (streak {}/{} for {}): {}", count, self._min_consecutive, key, monitor.name)
             return
         self._streaks[key] = 0
         logger.info("Alert fired: {} — {} ({} consecutive)", monitor.name, message, count)

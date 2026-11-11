@@ -269,9 +269,7 @@ class TestApiPlugin:
                 new=AsyncMock(return_value=response),
             ) as mock_fetch,
         ):
-            result = await p.http_post(
-                "https://example.com/api", data='{"name": "test"}'
-            )
+            result = await p.http_post("https://example.com/api", data='{"name": "test"}')
         assert "201" in result
         mock_fetch.assert_awaited_once_with(
             "https://example.com/api",

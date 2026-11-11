@@ -57,9 +57,7 @@ class WorkingMemory:
                 if now > exp:
                     continue
                 if q in k.lower() or q in v.lower():
-                    results.append(
-                        MemoryEntry(key=k, value=v, tier=MemoryTier.WORKING, metadata=m)
-                    )
+                    results.append(MemoryEntry(key=k, value=v, tier=MemoryTier.WORKING, metadata=m))
             return results[:limit]
 
     async def list_keys(self) -> list[str]:

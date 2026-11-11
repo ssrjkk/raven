@@ -111,9 +111,10 @@ class TestLlmHealthCheck:
 
 class TestDbRestart:
     async def test_db_restart(self, gateway: Gateway):
-        with patch.object(gateway.db, "disconnect", new_callable=AsyncMock) as mock_disc, patch.object(
-            gateway.db, "connect", new_callable=AsyncMock
-        ) as mock_conn:
+        with (
+            patch.object(gateway.db, "disconnect", new_callable=AsyncMock) as mock_disc,
+            patch.object(gateway.db, "connect", new_callable=AsyncMock) as mock_conn,
+        ):
             await gateway._db_restart()
             mock_disc.assert_awaited_once()
             mock_conn.assert_awaited_once()

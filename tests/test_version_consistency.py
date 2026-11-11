@@ -159,7 +159,10 @@ def test_every_python_floor_claim_matches_the_package_requirement() -> None:
 
 def test_the_readme_states_the_python_versions_ci_actually_runs() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    matrix = re.findall(r"python-version: \[\"([\d.]+)\"(?:, \"([\d.]+)\")?\]", (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
+    matrix = re.findall(
+        r"python-version: \[\"([\d.]+)\"(?:, \"([\d.]+)\")?\]",
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"),
+    )
     tested = sorted({value for pair in matrix for value in pair if value})
     assert tested, "the CI matrix no longer names python-version values"
     claimed = re.search(r"Python ([\d.]+) and ([\d.]+)", readme)
@@ -184,7 +187,7 @@ def test_every_installed_command_is_documented() -> None:
         starts = [i for i, line in enumerate(lines) if line.startswith("| `raven start`")]
         assert starts, f"{rel} has no command table"
         rows = []
-        for line in lines[starts[0]:]:
+        for line in lines[starts[0] :]:
             if not line.startswith("| `"):
                 break
             rows.append(line)

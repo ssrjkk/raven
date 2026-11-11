@@ -524,7 +524,9 @@ async def aios_completion(payload: dict[str, Any]) -> dict[str, Any]:
         prompt_parts = []
         if language:
             prompt_parts.append(f"Language: {language}")
-        prompt_parts.append("Complete the code. Reply with ONLY the completion text, no explanation, no markdown fences.")
+        prompt_parts.append(
+            "Complete the code. Reply with ONLY the completion text, no explanation, no markdown fences."
+        )
         if prefix:
             prompt_parts.append(f"\nCode before cursor:\n{prefix[-2000:]}")
         if suffix:
@@ -576,11 +578,14 @@ async def aios_inline_edit(payload: dict[str, Any]) -> dict[str, Any]:
             if lines and lines[-1].strip() == "```":
                 lines = lines[:-1]
             edited = "\n".join(lines)
-        diff_lines = list(difflib.unified_diff(
-            code.splitlines(keepends=True),
-            edited.splitlines(keepends=True),
-            fromfile="original", tofile="edited",
-        ))
+        diff_lines = list(
+            difflib.unified_diff(
+                code.splitlines(keepends=True),
+                edited.splitlines(keepends=True),
+                fromfile="original",
+                tofile="edited",
+            )
+        )
         return {"edited_code": edited, "diff": "".join(diff_lines)}
     except Exception:
         logger.debug("Inline edit failed")
@@ -611,11 +616,13 @@ async def workspace_tree(path: str = ".") -> dict[str, Any]:
                     if children:
                         items.append(children)
                 else:
-                    items.append({
-                        "type": "file",
-                        "name": item.name,
-                        "path": str(item.relative_to(root)),
-                    })
+                    items.append(
+                        {
+                            "type": "file",
+                            "name": item.name,
+                            "path": str(item.relative_to(root)),
+                        }
+                    )
             return {
                 "type": "directory",
                 "name": dir_path.name if dir_path != root else root.name,
@@ -718,10 +725,12 @@ def _rg_search(query: str, root: Path, limit: int) -> list[dict[str, Any]]:
     results = []
     try:
         import re as _re
+
         pattern = _re.compile(_re.escape(query))
     except Exception:
         return results
     from ravencode.runtime.fs_walk import iter_files
+
     for fpath in iter_files(root):
         if len(results) >= limit:
             break
@@ -756,6 +765,7 @@ async def aios_search_semantic(payload: dict[str, Any]) -> dict[str, Any]:
 
     def _search() -> list[dict[str, Any]]:
         from ravencode.runtime.code_search import RepoIndex
+
         idx = RepoIndex()
         raw = idx.search(root, query, k=top_k)
         results: list[dict[str, Any]] = []
@@ -766,6 +776,7 @@ async def aios_search_semantic(payload: dict[str, Any]) -> dict[str, Any]:
             file_part, _, line_range = header.rpartition(":")
             results.append({"file": file_part, "range": line_range, "text": text})
         return results
+
     results = await asyncio.to_thread(_search)
     return {"results": results, "count": len(results)}
 

@@ -14,7 +14,9 @@ UNSAFE_IDS = ("../../outside", "a/b", "a\\b", "", "x" * 129, "..", ".")
 
 
 def make_session(session_id: str = "abc123", message_count: int = 3) -> FlowSession:
-    return FlowSession(id=session_id, channel="test", created_at="2026-01-01T00:00:00+00:00", message_count=message_count)
+    return FlowSession(
+        id=session_id, channel="test", created_at="2026-01-01T00:00:00+00:00", message_count=message_count
+    )
 
 
 class TestSessionStoreRoundTrip:

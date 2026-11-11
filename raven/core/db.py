@@ -311,9 +311,7 @@ class Database:
 
     async def get_sessions(self, channel: str | None = None) -> list[Session]:
         if channel:
-            rows = await self._fetchall(
-                "SELECT * FROM sessions WHERE channel = ? ORDER BY updated_at DESC", (channel,)
-            )
+            rows = await self._fetchall("SELECT * FROM sessions WHERE channel = ? ORDER BY updated_at DESC", (channel,))
         else:
             rows = await self._fetchall("SELECT * FROM sessions ORDER BY updated_at DESC")
         result = []
@@ -344,9 +342,7 @@ class Database:
         )
 
     async def get_plugin_state(self, plugin_id: str, key: str) -> str | None:
-        row = await self._fetchone(
-            "SELECT value FROM plugin_state WHERE plugin_id = ? AND key = ?", (plugin_id, key)
-        )
+        row = await self._fetchone("SELECT value FROM plugin_state WHERE plugin_id = ? AND key = ?", (plugin_id, key))
         return row["value"] if row else None
 
     @timed("delete_session")

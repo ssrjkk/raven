@@ -91,6 +91,7 @@ def orchestrator_report(
         lines.append(usage)
     return "\n".join(lines)
 
+
 class Gateway:
     def __init__(self, db: Any, plugin_loader: PluginLoader, redis_url: str | None = None):
         self.db = db
@@ -246,20 +247,26 @@ class Gateway:
             if not result.entities:
                 return
             chunks = self._chunker.chunk(text, strategy="semantic")
-            doc_id = await self._persister.insert("messages", {
-                "channel": channel,
-                "user_id": user_id,
-                "text": text[:500],
-                "entity_count": len(result.entities),
-                "chunk_count": len(chunks.chunks),
-            })
+            doc_id = await self._persister.insert(
+                "messages",
+                {
+                    "channel": channel,
+                    "user_id": user_id,
+                    "text": text[:500],
+                    "entity_count": len(result.entities),
+                    "chunk_count": len(chunks.chunks),
+                },
+            )
             for entity in result.entities:
-                await self._persister.insert("entities", {
-                    "doc_id": doc_id,
-                    "text": entity.text,
-                    "label": entity.label,
-                    "score": entity.score,
-                })
+                await self._persister.insert(
+                    "entities",
+                    {
+                        "doc_id": doc_id,
+                        "text": entity.text,
+                        "label": entity.label,
+                        "score": entity.score,
+                    },
+                )
         except Exception as exc:
             logger.debug("[services] extract_and_store failed: {}", exc)
 

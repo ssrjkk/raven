@@ -108,7 +108,12 @@ class DreamEngine:
             for p in proposals:
                 name = p.get("name", "")
                 if name:
-                    skill = Skill(name=name, description=p.get("description", ""), instructions=p.get("instructions", ""), source="dream")
+                    skill = Skill(
+                        name=name,
+                        description=p.get("description", ""),
+                        instructions=p.get("instructions", ""),
+                        source="dream",
+                    )
                     skills_registry.register_builtin(skill)
                     applied.append(name)
             stats["skills_applied"] = len(applied)

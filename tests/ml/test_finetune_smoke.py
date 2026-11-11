@@ -102,9 +102,7 @@ def test_tiny_lora_run_trains_saves_and_reloads(tmp_path: Path) -> None:
 
     encoded = tokenizer("count to", return_tensors="pt")
     with torch.no_grad():
-        out = pipeline.model.generate(
-            **encoded, max_new_tokens=4, do_sample=False, pad_token_id=tokenizer.pad_token_id
-        )
+        out = pipeline.model.generate(**encoded, max_new_tokens=4, do_sample=False, pad_token_id=tokenizer.pad_token_id)
     assert tokenizer.decode(out[0], skip_special_tokens=True).startswith("count to")
 
 

@@ -43,7 +43,9 @@ def _clean_email_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
-def _raw_email(from_header: str = "Alice <alice@corp.com>", subject: str = "Question", body: str = "Please help") -> bytes:
+def _raw_email(
+    from_header: str = "Alice <alice@corp.com>", subject: str = "Question", body: str = "Please help"
+) -> bytes:
     msg = EmailMessage()
     msg["From"] = from_header
     msg["Subject"] = subject
@@ -154,7 +156,9 @@ async def test_disconnect_logs_out_once(monkeypatch: pytest.MonkeyPatch):
 async def test_send_replies_to_the_session_address(monkeypatch: pytest.MonkeyPatch):
     send = _smtp(monkeypatch)
     channel = EmailChannel(config=CONFIGURED)
-    await channel.send(session_id_for("alice@corp.com"), Message(session_id="x", channel="email", role="assistant", content="hi"))
+    await channel.send(
+        session_id_for("alice@corp.com"), Message(session_id="x", channel="email", role="assistant", content="hi")
+    )
     call = send.await_args
     assert call is not None
     assert call.kwargs["hostname"] == "smtp.test.com"
@@ -174,11 +178,15 @@ async def test_send_without_recipient_address_is_dropped(monkeypatch: pytest.Mon
 async def test_send_requires_smtp(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(email_channel_mod, "_AIOSMTP_AVAILABLE", False)
     channel = EmailChannel(config=CONFIGURED)
-    await channel.send(session_id_for("a@b.com"), Message(session_id="x", channel="email", role="assistant", content="hi"))
+    await channel.send(
+        session_id_for("a@b.com"), Message(session_id="x", channel="email", role="assistant", content="hi")
+    )
 
     send = _smtp(monkeypatch)
     unconfigured = EmailChannel(config=EmailConfig(imap_host="imap.test.com", imap_user="bot@test.com"))
-    await unconfigured.send(session_id_for("a@b.com"), Message(session_id="x", channel="email", role="assistant", content="hi"))
+    await unconfigured.send(
+        session_id_for("a@b.com"), Message(session_id="x", channel="email", role="assistant", content="hi")
+    )
     send.assert_not_awaited()
 
 
@@ -192,7 +200,9 @@ async def test_send_failure_is_logged_not_raised(monkeypatch: pytest.MonkeyPatch
         raising=False,
     )
     channel = EmailChannel(config=CONFIGURED)
-    await channel.send(session_id_for("a@b.com"), Message(session_id="x", channel="email", role="assistant", content="hi"))
+    await channel.send(
+        session_id_for("a@b.com"), Message(session_id="x", channel="email", role="assistant", content="hi")
+    )
 
 
 @pytest.mark.asyncio

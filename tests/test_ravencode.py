@@ -13,6 +13,7 @@ class TestRavencodeApiClient:
         reset_shared_llm()
         yield
         reset_shared_llm()
+
     @patch("raven.core.llm.LLMRouter")
     @patch("ravencode.api.client.settings")
     def test_ask_success(self, mock_settings, mock_llm_cls):

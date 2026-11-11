@@ -27,11 +27,7 @@ class ToolPolicyStore:
             with self._path.open(encoding="utf-8") as f:
                 raw = json.load(f)
             if isinstance(raw, dict):
-                self._policy = {
-                    str(k): [str(r) for r in v]
-                    for k, v in raw.items()
-                    if isinstance(v, list)
-                }
+                self._policy = {str(k): [str(r) for r in v] for k, v in raw.items() if isinstance(v, list)}
         except Exception as e:
             logger.warning("Failed to load tool policy: {}", e)
 

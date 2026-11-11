@@ -248,5 +248,3 @@ class TestMemoryManager:
         status = await mm.status()
         assert "working" in status
         assert "long_term" in status
-
-

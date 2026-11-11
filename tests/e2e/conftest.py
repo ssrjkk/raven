@@ -109,6 +109,7 @@ async def gateway(mock_db, mock_plugin_loader, mock_settings) -> AsyncGenerator[
     g = Gateway(db=mock_db, plugin_loader=mock_plugin_loader)
     g.llm = LLMRouter()
     from typing import cast
+
     g.llm._providers["test"] = cast(Any, MockLLMProvider(["Test response"]))
     channel = MockChannel()
     await g.register_channel(channel)

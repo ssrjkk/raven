@@ -224,16 +224,12 @@ class TestDataclasses:
         assert vp.metadata == {}
 
     def test_verification_result_defaults(self):
-        result = VerificationResult(
-            verified=True, score=0.9, threshold=0.65, speaker_id="s1"
-        )
+        result = VerificationResult(verified=True, score=0.9, threshold=0.65, speaker_id="s1")
         assert result.latency_ms == 0.0
         assert result.is_spoof is False
         assert result.anti_spoof_score is None
 
     def test_enrollment_result_defaults(self):
-        result = EnrollmentResult(
-            speaker_id="s1", samples_processed=2, embedding=[0.1, 0.2]
-        )
+        result = EnrollmentResult(speaker_id="s1", samples_processed=2, embedding=[0.1, 0.2])
         assert result.success is True
         assert result.error == ""

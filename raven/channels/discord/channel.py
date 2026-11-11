@@ -48,6 +48,7 @@ def _is_prefix_command(bot: commands.Bot, content: str) -> bool:
     name = content[1:].split(maxsplit=1)[0].lower()
     return any(name in {command.name, *command.aliases} for command in bot.commands)
 
+
 class DiscordChannel(BaseChannel):
     channel_id = "discord"
 
@@ -307,11 +308,7 @@ class DiscordChannel(BaseChannel):
             await msg.add_reaction("❌")
 
             def check(reaction: discord.Reaction, user: discord.User | discord.Member) -> bool:
-                return (
-                    str(reaction.emoji) in ("✅", "❌")
-                    and reaction.message.id == msg.id
-                    and str(user.id) == user_id
-                )
+                return str(reaction.emoji) in ("✅", "❌") and reaction.message.id == msg.id and str(user.id) == user_id
 
             reaction, _ = await self._bot.wait_for("reaction_add", timeout=120, check=check)
             return str(reaction.emoji) == "✅"

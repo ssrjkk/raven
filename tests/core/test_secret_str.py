@@ -53,6 +53,7 @@ def test_llm_provider_factory_create():
     provider = LLMProviderFactory.create("openai", api_key=api_key)
     assert provider is not None
     import httpx
+
     assert isinstance(provider.http, httpx.AsyncClient)  # type: ignore[attr-defined]
     assert str(provider.api_key) == "**********"  # type: ignore[attr-defined]
     assert provider.api_key.get_secret_value() == "sk-test"  # type: ignore[attr-defined]
@@ -97,6 +98,7 @@ async def test_provider_cleanup_zeroes_key():
 @pytest.mark.asyncio
 async def test_base_llm_provider():
     from raven.core.llm import BaseLLMProvider
+
     provider = BaseLLMProvider(api_key=SecretStr("sk-base"), base_url="https://test.api")
     assert provider._get_api_key() == "sk-base"
     assert provider._api_key.get_secret_value() == "sk-base"

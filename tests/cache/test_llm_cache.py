@@ -59,7 +59,9 @@ class TestLLMCacheKey:
     def test_key_is_deterministic(self) -> None:
         msgs = [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "world"}]
         k = LLMCache._build_key("gpt-4", msgs)
-        digest = hashlib.sha256(json.dumps({"messages": msgs, "tools": None}, sort_keys=True, default=str).encode()).hexdigest()
+        digest = hashlib.sha256(
+            json.dumps({"messages": msgs, "tools": None}, sort_keys=True, default=str).encode()
+        ).hexdigest()
         assert k == f"llm_cache:gpt-4:{digest}"
 
 

@@ -60,7 +60,7 @@ class TestCheckFunctions:
     def test_missing_type_hints_detected(self, py_file: Path) -> None:
         from raven.core.pattern_checker import _check_type_hints
 
-        content = 'def add(a, b):\n    return a + b\n\ndef typed(x: int) -> int:\n    return x\n'
+        content = "def add(a, b):\n    return a + b\n\ndef typed(x: int) -> int:\n    return x\n"
         v = _check_type_hints(py_file, content, content.split("\n"))
         ids = {x["pattern_id"] for x in v}
         assert "missing-type-hints" in ids
@@ -152,9 +152,7 @@ class TestRunEndpoint:
         target = tmp_path / "app.py"
         target.write_text('print("hi")\n# TODO: fix\n', encoding="utf-8")
         client = self._client(tmp_path)
-        resp = client.get(
-            "/api/v1/patterns/run", params={"file": "app.py", "check_ids": "print-vs-loguru"}
-        )
+        resp = client.get("/api/v1/patterns/run", params={"file": "app.py", "check_ids": "print-vs-loguru"})
         body = resp.json()
         assert body["total"] == 1
         assert body["violations"][0]["pattern_id"] == "print-vs-loguru"
@@ -242,9 +240,7 @@ class TestRunEndpoint:
 
         monkeypatch.setitem(pc._PATTERN_CHECKS, "print-vs-loguru", boom)
         client = self._client(tmp_path)
-        resp = client.get(
-            "/api/v1/patterns/run", params={"file": "app.py", "check_ids": "print-vs-loguru"}
-        )
+        resp = client.get("/api/v1/patterns/run", params={"file": "app.py", "check_ids": "print-vs-loguru"})
         assert resp.status_code == 200
         assert resp.json()["files_checked"] == 1
 

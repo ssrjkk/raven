@@ -10,8 +10,9 @@ from raven.core.plugin_context import handle_capability
 
 @pytest.mark.asyncio
 async def test_cap_safe_http_get() -> None:
-    with patch("raven.core.plugin_context.validate_url", return_value=None), patch(
-        "raven.tools.http._fetch", new_callable=AsyncMock, return_value="response body"
+    with (
+        patch("raven.core.plugin_context.validate_url", return_value=None),
+        patch("raven.tools.http._fetch", new_callable=AsyncMock, return_value="response body"),
     ):
         result = await handle_capability("test_plugin", "safe_http", {"method": "GET", "url": "https://example.com"})
         assert result == "response body"
@@ -19,8 +20,9 @@ async def test_cap_safe_http_get() -> None:
 
 @pytest.mark.asyncio
 async def test_cap_safe_http_post() -> None:
-    with patch("raven.core.plugin_context.validate_url", return_value=None), patch(
-        "raven.tools.http._fetch", new_callable=AsyncMock, return_value="created"
+    with (
+        patch("raven.core.plugin_context.validate_url", return_value=None),
+        patch("raven.tools.http._fetch", new_callable=AsyncMock, return_value="created"),
     ):
         result = await handle_capability(
             "test_plugin", "safe_http", {"method": "POST", "url": "https://example.com", "body": '{"a":1}'}

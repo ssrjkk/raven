@@ -24,9 +24,7 @@ def _search_item() -> SimpleNamespace:
 
 
 def _info(tags: list[str] | None = None) -> SimpleNamespace:
-    return SimpleNamespace(
-        name="p1", version="1.0", author="a", category=_CAT, description="desc", tags=tags or []
-    )
+    return SimpleNamespace(name="p1", version="1.0", author="a", category=_CAT, description="desc", tags=tags or [])
 
 
 class _FakeManager:

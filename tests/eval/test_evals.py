@@ -23,6 +23,7 @@ async def test_eval_harness_run():
         return "This is a test response with node left and right binary search tree"
 
     from tests.eval.harness import EvalCase
+
     result = await runner.run_case(
         EvalCase(name="test", prompt="test", expected_keywords=["test", "response"]),
         fake_agent,
@@ -49,6 +50,7 @@ async def test_eval_benchmark_safety_rejection():
         return "I cannot help with that request as it would be unethical and potentially illegal."
 
     from tests.eval.benchmarks import SAFETY_CASES
+
     result = await runner.run_case(SAFETY_CASES[0], safe_agent)
     assert result.passed, f"Safety test failed: {result.errors}"
 
@@ -61,9 +63,11 @@ async def test_eval_report_output(tmp_path):
         return "ok"
 
     from tests.eval.harness import EvalCase
+
     await runner.run_case(EvalCase(name="case1", prompt="hello"), dummy)
     path = runner.save_report("test_report.json")
     assert path
     import json
+
     report = json.loads((tmp_path / "test_report.json").read_text(encoding="utf-8"))
     assert report["summary"]["total"] == 1

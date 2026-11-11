@@ -1,4 +1,5 @@
 """Generate scripts/raven.ico for the PyInstaller build if it does not exist."""
+
 from __future__ import annotations
 
 import sys

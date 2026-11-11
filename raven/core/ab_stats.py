@@ -158,9 +158,7 @@ def permutation_test(control: list[float], treatment: list[float]) -> float | No
     return min(1.0, hit)
 
 
-def welch_test(
-    control: list[float], treatment: list[float], alpha: float = 0.05
-) -> dict[str, Any]:
+def welch_test(control: list[float], treatment: list[float], alpha: float = 0.05) -> dict[str, Any]:
     """Welch's t-test on per-unit values: unequal variances, no pooled-variance assumption."""
     mean_c, var_c, n_c = mean_and_variance(control)
     mean_t, var_t, n_t = mean_and_variance(treatment)
@@ -215,7 +213,10 @@ def _z_critical(alpha: float, df: float) -> float:
 
 
 def two_proportion_test(
-    control_successes: int, control_units: int, treatment_successes: int, treatment_units: int,
+    control_successes: int,
+    control_units: int,
+    treatment_successes: int,
+    treatment_units: int,
     alpha: float = 0.05,
 ) -> dict[str, Any]:
     """Two-proportion z-test on per-unit outcomes.

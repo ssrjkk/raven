@@ -70,9 +70,7 @@ def _install_fake_psutil(
     mod.virtual_memory = lambda: _VM()
     mod.disk_usage = lambda path: _DU()
     mod.pids = lambda: pids or [1, 2, 3]
-    mod.process_iter = lambda attrs=None: [
-        _FakeProc(pid, name) for pid, name in (procs or [])
-    ]
+    mod.process_iter = lambda attrs=None: [_FakeProc(pid, name) for pid, name in (procs or [])]
     monkeypatch.setitem(sys.modules, "psutil", mod)
     return killed
 
@@ -125,9 +123,7 @@ class TestDataclasses:
         assert h.metrics_expected == {}
 
     def test_experiment_result_defaults(self):
-        config = ExperimentConfig(
-            name="x", hypothesis=ExperimentHypothesis(description="d")
-        )
+        config = ExperimentConfig(name="x", hypothesis=ExperimentHypothesis(description="d"))
         result = ExperimentResult(
             experiment_id="e1",
             config=config,
@@ -144,9 +140,7 @@ class TestFaultInjector:
 
     @pytest.mark.asyncio
     async def test_inject_service_kill_simulated(self):
-        config = FaultConfig(
-            fault_type=FaultType.SERVICE_KILL, target="nginx", duration_sec=0.01
-        )
+        config = FaultConfig(fault_type=FaultType.SERVICE_KILL, target="nginx", duration_sec=0.01)
         result = await self.injector.inject(config)
         assert "id" in result
         assert result["config"]["fault_type"] == "service_kill"
@@ -168,9 +162,7 @@ class TestFaultInjector:
     @pytest.mark.asyncio
     async def test_inject_disk_fill(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         _small_free_space(monkeypatch)
-        config = FaultConfig(
-            fault_type=FaultType.DISK_FILL, target=str(tmp_path), intensity=0.5, duration_sec=0.01
-        )
+        config = FaultConfig(fault_type=FaultType.DISK_FILL, target=str(tmp_path), intensity=0.5, duration_sec=0.01)
         result = await self.injector.inject(config)
         assert result["details"]["fill_percent"] == 75.0
         fill = Path(result["details"]["file"])
@@ -193,27 +185,21 @@ class TestFaultInjector:
 
     @pytest.mark.asyncio
     async def test_inject_cpu_storm(self):
-        config = FaultConfig(
-            fault_type=FaultType.CPU_STORM, intensity=0.5, duration_sec=0.01
-        )
+        config = FaultConfig(fault_type=FaultType.CPU_STORM, intensity=0.5, duration_sec=0.01)
         result = await self.injector.inject(config)
         assert "cores" in result["details"]
         assert result["error"] == ""
 
     @pytest.mark.asyncio
     async def test_inject_memory_leak(self):
-        config = FaultConfig(
-            fault_type=FaultType.MEMORY_LEAK, intensity=0.5, duration_sec=0.01
-        )
+        config = FaultConfig(fault_type=FaultType.MEMORY_LEAK, intensity=0.5, duration_sec=0.01)
         result = await self.injector.inject(config)
         assert result["details"]["mb"] == 512
         assert result["error"] == ""
 
     @pytest.mark.asyncio
     async def test_recover_fault(self):
-        config = FaultConfig(
-            fault_type=FaultType.NETWORK_LATENCY, duration_sec=0.01
-        )
+        config = FaultConfig(fault_type=FaultType.NETWORK_LATENCY, duration_sec=0.01)
         injected = await self.injector.inject(config)
         recovered = await self.injector.recover(injected["id"])
         assert recovered is not None
@@ -590,7 +576,11 @@ class TestFaultInjectorTcBranch:
         self._fake_linux_tc(monkeypatch, lambda *a, **k: calls.append(a))
         inj = FaultInjector()
         inj._recover_fault(
-            {"config": {"fault_type": "network_latency", "target": "lo"}, "id": "n", "details": {"method": "tc", "target": "lo"}}
+            {
+                "config": {"fault_type": "network_latency", "target": "lo"},
+                "id": "n",
+                "details": {"method": "tc", "target": "lo"},
+            }
         )
         assert calls
 
@@ -908,9 +898,7 @@ class TestExperimentMeasurement:
         await asyncio.wait_for(ce._injector._cpu_burn(cores=1, duration=0.05, fault_id="f"), timeout=1.5)
         assert reads["n"] == 0, "the fault window is still bounded by the wall clock"
 
-    async def test_reported_duration_is_measured_on_the_monotonic_clock(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_reported_duration_is_measured_on_the_monotonic_clock(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ticks = chain(iter(range(0, 10_000_000, 3_600)), repeat(10_000_000.0))
         # chaos_engineering imports the same stdlib time module this test patches. The tail is an
         # infinite repeat: a finite iterator would run dry inside pytest's own timing and take the

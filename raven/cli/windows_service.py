@@ -94,9 +94,7 @@ def serve_gateway(
 
     thread = threading.Thread(target=guarded, name="raven-gateway", daemon=True)
     thread.start()
-    signalled = win32event.WaitForMultipleObjects(
-        [stop_requested, finished], False, win32event.INFINITE
-    )
+    signalled = win32event.WaitForMultipleObjects([stop_requested, finished], False, win32event.INFINITE)
     if signalled != win32event.WAIT_OBJECT_0:
         return "the gateway exited on its own"
 
@@ -146,9 +144,7 @@ def main(argv: list[str] | None = None) -> int:
         servicemanager.PrepareToHostSingle(RavenService)
         servicemanager.StartServiceCtrlDispatcher()
         return 0
-    win32serviceutil.HandleCommandLine(
-        RavenService, serviceClassString=SERVICE_CLASS_STRING, argv=[sys.argv[0], *args]
-    )
+    win32serviceutil.HandleCommandLine(RavenService, serviceClassString=SERVICE_CLASS_STRING, argv=[sys.argv[0], *args])
     return 0
 
 

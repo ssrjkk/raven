@@ -145,6 +145,7 @@ class DelegationOrchestrator:
 
     async def _run_single(self, task: DelegatedTask) -> DelegationResult:
         import time
+
         started = time.monotonic()
         feedback = get_feedback_loop()
         try:

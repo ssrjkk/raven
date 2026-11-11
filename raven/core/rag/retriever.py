@@ -78,9 +78,7 @@ class Retriever:
         search_mode: str = "hybrid",
         alpha: float = 0.7,
     ) -> list[dict[str, Any]]:
-        return await self.store.search(
-            query, k=k, filter_meta=filter_meta, search_mode=search_mode, alpha=alpha
-        )
+        return await self.store.search(query, k=k, filter_meta=filter_meta, search_mode=search_mode, alpha=alpha)
 
     async def retrieve_context(self, query: str, k: int = 5, max_tokens: int = 3000) -> str:
         results = await self.retrieve(query, k=k)

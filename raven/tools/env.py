@@ -24,7 +24,7 @@ def _mask_url_userinfo(value: str) -> str:
     info = match.group("info")
     user, separator, _password = info.partition(":")
     masked = f"{user}:***" if separator else "***"
-    return f"{match.group('scheme')}{masked}@{value[match.end():]}"
+    return f"{match.group('scheme')}{masked}@{value[match.end() :]}"
 
 
 def _is_sensitive(name: str) -> bool:

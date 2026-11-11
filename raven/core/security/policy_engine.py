@@ -313,8 +313,7 @@ class PolicyEngine:
         filepath = Path(path) if path else self._candidate(name)
         if filepath is None:
             logger.warning(
-                "Policy ruleset '{}' not found under {} — the rules the documentation attributes to"
-                " it enforce nothing",
+                "Policy ruleset '{}' not found under {} — the rules the documentation attributes to it enforce nothing",
                 name,
                 self.rules_dir(name),
             )

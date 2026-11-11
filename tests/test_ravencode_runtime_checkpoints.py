@@ -146,9 +146,7 @@ class TestGlobals:
 
     async def test_checkpoint_save_delegates(self, monkeypatch) -> None:
         fake = AsyncMock(return_value="[ok] checkpoint 'cp' saved (0 files)")
-        monkeypatch.setattr(
-            ckpt_mod, "get_checkpoint_manager", lambda: type("M", (), {"save": fake})()
-        )
+        monkeypatch.setattr(ckpt_mod, "get_checkpoint_manager", lambda: type("M", (), {"save": fake})())
         assert await checkpoint_save() == "[ok] checkpoint 'cp' saved (0 files)"
 
     async def test_checkpoint_restore_delegates(self, monkeypatch) -> None:
@@ -157,7 +155,11 @@ class TestGlobals:
         assert await checkpoint_restore("cp") == "[ok] restored"
 
     async def test_checkpoint_list_empty(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.setattr(ckpt_mod, "get_checkpoint_manager", lambda: CheckpointManager(workspace=str(tmp_path), storage_dir=str(tmp_path / "cp")))
+        monkeypatch.setattr(
+            ckpt_mod,
+            "get_checkpoint_manager",
+            lambda: CheckpointManager(workspace=str(tmp_path), storage_dir=str(tmp_path / "cp")),
+        )
         assert await checkpoint_list() == "(no checkpoints)"
 
     async def test_checkpoint_list_renders(self, tmp_path) -> None:

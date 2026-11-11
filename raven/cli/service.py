@@ -251,7 +251,9 @@ def _uninstall_launchd():
 
 def _run_python(module: str, *args: str) -> bool:
     cmd = [sys.executable, "-m", module, *args]
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, check=False)
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, check=False
+    )
     if result.stdout.strip():
         console.print(f"[dim]{result.stdout.strip()}[/dim]")
     if result.returncode != 0:

@@ -62,7 +62,7 @@ def render_rows(entries: list[tuple[str, str]]) -> str:
     rows: list[str] = []
     for call, description in entries:
         rows.append("                                <tr>")
-        rows.append(f"                                    <th scope=\"row\"><code>{html.escape(call)}</code></th>")
+        rows.append(f'                                    <th scope="row"><code>{html.escape(call)}</code></th>')
         rows.append(f"                                    <td>{html.escape(description)}</td>")
         rows.append("                                </tr>")
     return "\n".join(rows)
@@ -70,27 +70,29 @@ def render_rows(entries: list[tuple[str, str]]) -> str:
 
 def block(entries: list[tuple[str, str]]) -> str:
     count = len(entries)
-    return "\n".join([
-        START,
-        '                <details class="matrix">',
-        f"                    <summary>The {count} commands you can type on any channel, by name</summary>",
-        '                    <div class="table-wrap">',
-                        "                        <table>",
-        f"                            <caption>The {count} chat commands the gateway dispatches</caption>",
-        "                            <thead>",
-        "                                <tr>",
-        '                                    <th scope="col">You type</th>',
-        '                                    <th scope="col">What the gateway does</th>',
-        "                                </tr>",
-        "                            </thead>",
-        "                            <tbody>",
-        render_rows(entries),
-        "                            </tbody>",
-        "                        </table>",
-        "                    </div>",
-        "                </details>",
-        END,
-    ])
+    return "\n".join(
+        [
+            START,
+            '                <details class="matrix">',
+            f"                    <summary>The {count} commands you can type on any channel, by name</summary>",
+            '                    <div class="table-wrap">',
+            "                        <table>",
+            f"                            <caption>The {count} chat commands the gateway dispatches</caption>",
+            "                            <thead>",
+            "                                <tr>",
+            '                                    <th scope="col">You type</th>',
+            '                                    <th scope="col">What the gateway does</th>',
+            "                                </tr>",
+            "                            </thead>",
+            "                            <tbody>",
+            render_rows(entries),
+            "                            </tbody>",
+            "                        </table>",
+            "                    </div>",
+            "                </details>",
+            END,
+        ]
+    )
 
 
 def main() -> int:
@@ -118,7 +120,7 @@ def main() -> int:
     if updated == page:
         print(f"{GATEWAY_PAGE.name}: already current ({len(entries)} commands)")
         return 0
-    GATEWAY_PAGE.write_text(updated, encoding="utf-8")
+    GATEWAY_PAGE.write_bytes(updated.encode("utf-8"))
     print(f"{GATEWAY_PAGE.name}: wrote {len(entries)} command rows")
     return 0
 

@@ -39,7 +39,9 @@ async def test_execute_briefing_falls_back_on_error() -> None:
 @pytest.mark.asyncio
 async def test_check_email_gmail_import_error() -> None:
     # raven.integrations.gmail is absent → ImportError branch
-    r = Routine(name="e", action=RoutineAction.CHECK_EMAIL, config={"provider": "gmail_api", "credentials_file": "x.json"})
+    r = Routine(
+        name="e", action=RoutineAction.CHECK_EMAIL, config={"provider": "gmail_api", "credentials_file": "x.json"}
+    )
     out = await actions.check_email(r)
     assert out == "[error] gmail integration not installed"
 
@@ -51,7 +53,11 @@ async def test_check_email_gmail_success(monkeypatch: pytest.MonkeyPatch) -> Non
     mod.check_gmail = AsyncMock(return_value="3 unread gmail")  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "raven.integrations", pkg)
     monkeypatch.setitem(sys.modules, "raven.integrations.gmail", mod)
-    r = Routine(name="e", action=RoutineAction.CHECK_EMAIL, config={"provider": "gmail_api", "credentials_file": "x.json", "max_emails": 2})
+    r = Routine(
+        name="e",
+        action=RoutineAction.CHECK_EMAIL,
+        config={"provider": "gmail_api", "credentials_file": "x.json", "max_emails": 2},
+    )
     out = await actions.check_email(r)
     assert out == "3 unread gmail"
     mod.check_gmail.assert_awaited_once_with("x.json", max_results=2)
@@ -64,7 +70,9 @@ async def test_check_email_gmail_runtime_error(monkeypatch: pytest.MonkeyPatch) 
     mod.check_gmail = AsyncMock(side_effect=RuntimeError("api down"))  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "raven.integrations", pkg)
     monkeypatch.setitem(sys.modules, "raven.integrations.gmail", mod)
-    r = Routine(name="e", action=RoutineAction.CHECK_EMAIL, config={"provider": "gmail_api", "credentials_file": "x.json"})
+    r = Routine(
+        name="e", action=RoutineAction.CHECK_EMAIL, config={"provider": "gmail_api", "credentials_file": "x.json"}
+    )
     out = await actions.check_email(r)
     assert "gmail check failed" in out
 

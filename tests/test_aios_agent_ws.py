@@ -52,8 +52,10 @@ class TestAiosAgentWebSocket:
     async def test_agent_event_stream(self):
         ee = EventEmitter()
         received: list[AgentEvent] = []
+
         async def collector(event: AgentEvent) -> None:
             received.append(event)
+
         ee.on("step_start", collector)
         ee.on("tool_call", collector)
         ee.on("tool_result", collector)
@@ -72,6 +74,7 @@ class TestAiosAgentWebSocket:
     @pytest.mark.asyncio
     async def test_agent_config_defaults_match_ws(self):
         from ravencode.runtime.agent_core import AgentConfig
+
         config = AgentConfig(max_steps=30, diff_preview=True, proactive_scan=True)
         assert config.max_steps == 30
         assert config.event_emitter is None
@@ -263,9 +266,7 @@ class TestAiosBridgeEndpoints:
 
     @pytest.mark.asyncio
     async def test_exec_success(self, monkeypatch) -> None:
-        monkeypatch.setattr(
-            "aios.runtime.adapter.RuntimeAdapter.run_command", AsyncMock(return_value="out")
-        )
+        monkeypatch.setattr("aios.runtime.adapter.RuntimeAdapter.run_command", AsyncMock(return_value="out"))
         resp = await aios_exec(ExecRequest(command="ls"))
         assert resp.output == "out"
         assert resp.error is None
@@ -286,9 +287,7 @@ class TestAiosBridgeEndpoints:
             "aios.api.bridge._orch",
             SimpleNamespace(
                 dispatch=AsyncMock(
-                    return_value=SimpleNamespace(
-                        agent="planner", success=True, data={"plan": "x"}, error=None, steps=2
-                    )
+                    return_value=SimpleNamespace(agent="planner", success=True, data={"plan": "x"}, error=None, steps=2)
                 )
             ),
         )
@@ -377,9 +376,7 @@ class TestAiosBridgeEndpoints:
 
     @pytest.mark.asyncio
     async def test_list_sessions(self, monkeypatch) -> None:
-        monkeypatch.setattr(
-            "aios.api.bridge._session_store", SimpleNamespace(list=lambda: [{"id": "s1"}])
-        )
+        monkeypatch.setattr("aios.api.bridge._session_store", SimpleNamespace(list=lambda: [{"id": "s1"}]))
         resp = await aios_list_sessions()
         assert resp == {"sessions": [{"id": "s1"}]}
 
@@ -399,9 +396,7 @@ class TestAiosBridgeEndpoints:
 
     @pytest.mark.asyncio
     async def test_metrics(self, monkeypatch) -> None:
-        monkeypatch.setattr(
-            "raven.core.metrics.metrics", SimpleNamespace(snapshot=lambda: {"x": 1})
-        )
+        monkeypatch.setattr("raven.core.metrics.metrics", SimpleNamespace(snapshot=lambda: {"x": 1}))
         resp = await aios_metrics()
         assert resp == {"x": 1}
 
@@ -444,9 +439,7 @@ class TestAiosWebSocketAuth:
 
     @pytest.mark.asyncio
     async def test_require_auth_rejects(self, monkeypatch) -> None:
-        monkeypatch.setattr(
-            "aios.api.bridge._ws_auth_payload", AsyncMock(return_value=None)
-        )
+        monkeypatch.setattr("aios.api.bridge._ws_auth_payload", AsyncMock(return_value=None))
         ws = _FakeWS()
         payload = await _require_ws_auth(ws)  # type: ignore[arg-type]
         assert payload is None
@@ -454,9 +447,7 @@ class TestAiosWebSocketAuth:
 
     @pytest.mark.asyncio
     async def test_require_auth_accepts(self, monkeypatch) -> None:
-        monkeypatch.setattr(
-            "aios.api.bridge._ws_auth_payload", AsyncMock(return_value={"sub": "admin"})
-        )
+        monkeypatch.setattr("aios.api.bridge._ws_auth_payload", AsyncMock(return_value={"sub": "admin"}))
         ws = _FakeWS()
         payload = await _require_ws_auth(ws)  # type: ignore[arg-type]
         assert payload == {"sub": "admin"}
@@ -482,9 +473,7 @@ class TestAiosWebSocket:
             "aios.api.bridge._orch",
             SimpleNamespace(
                 dispatch=AsyncMock(
-                    return_value=SimpleNamespace(
-                        agent="planner", success=True, data={"plan": "x"}, error=None, steps=2
-                    )
+                    return_value=SimpleNamespace(agent="planner", success=True, data={"plan": "x"}, error=None, steps=2)
                 )
             ),
         )
@@ -622,9 +611,7 @@ class TestAiosAgentWebSocketEndpoint:
 
             async def run(self, prompt: str) -> str:
                 if self.config.event_emitter is not None:
-                    await self.config.event_emitter.emit(
-                        AgentEvent("message", {"role": "user", "content": "x"})
-                    )
+                    await self.config.event_emitter.emit(AgentEvent("message", {"role": "user", "content": "x"}))
                 return "ok"
 
         monkeypatch.setattr("aios.api.bridge.ReActAgent", _EmittingAgent)

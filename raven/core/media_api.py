@@ -17,14 +17,45 @@ _UPLOAD_CHUNK = 65536
 _ALLOWED_UPLOAD_EXTS: frozenset[str] = frozenset(
     {
         # images
-        "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "avif", "tif", "tiff",
+        "png",
+        "jpg",
+        "jpeg",
+        "gif",
+        "webp",
+        "bmp",
+        "ico",
+        "avif",
+        "tif",
+        "tiff",
         # documents
-        "pdf", "txt", "md", "csv", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "rtf",
+        "pdf",
+        "txt",
+        "md",
+        "csv",
+        "doc",
+        "docx",
+        "xls",
+        "xlsx",
+        "ppt",
+        "pptx",
+        "rtf",
         # audio / video
-        "mp3", "wav", "flac", "ogg", "m4a", "aac",
-        "mp4", "mov", "mkv", "webm", "avi",
+        "mp3",
+        "wav",
+        "flac",
+        "ogg",
+        "m4a",
+        "aac",
+        "mp4",
+        "mov",
+        "mkv",
+        "webm",
+        "avi",
         # archives
-        "zip", "tar", "gz", "7z",
+        "zip",
+        "tar",
+        "gz",
+        "7z",
     }
 )
 
@@ -243,7 +274,7 @@ def create_media_router(workspace_dir: str | Path = "") -> APIRouter:
                     break
                 total += len(chunk)
                 if total > MAX_UPLOAD_BYTES:
-                    raise HTTPException(413, f"File too large (max {MAX_UPLOAD_BYTES // (1024*1024)} MB)")
+                    raise HTTPException(413, f"File too large (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)")
                 chunks.append(chunk)
             content = b"".join(chunks)
             await asyncio.to_thread(dest.write_bytes, content)

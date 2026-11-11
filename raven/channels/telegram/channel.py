@@ -73,7 +73,6 @@ class TelegramChannel(BaseChannel):
         app.add_handler(TGMessageHandler(filters.VOICE, self._on_voice))
         app.add_handler(CallbackQueryHandler(self._on_callback))
 
-
     async def start(self):
         if not self._token:
             logger.warning("Telegram token not configured, skipping")
@@ -318,7 +317,7 @@ class TelegramChannel(BaseChannel):
 
         if data.startswith("cy:") or data.startswith("cn:"):
             prefix = "cy:" if data.startswith("cy:") else "cn:"
-            cid = data[len(prefix):]
+            cid = data[len(prefix) :]
             event = self._confirm_events.get(cid)
             if event:
                 self._confirm_results[cid] = data.startswith("cy:")

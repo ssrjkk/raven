@@ -55,18 +55,14 @@ class TestAiosRuntimeAdapter:
     async def test_run_command_posix_branch(self, monkeypatch):
         proc = SimpleNamespace(communicate=AsyncMock(return_value=(b"stdout data", b"stderr data")))
         monkeypatch.setattr(sys, "platform", "linux")
-        monkeypatch.setattr(
-            "aios.runtime.adapter.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)
-        )
+        monkeypatch.setattr("aios.runtime.adapter.asyncio.create_subprocess_exec", AsyncMock(return_value=proc))
         result = await RuntimeAdapter.run_command("ls -la")
         assert result == "stdout datastderr data"
 
     @pytest.mark.asyncio
     async def test_run_command_timeout_branch(self, monkeypatch):
         proc = SimpleNamespace(communicate=AsyncMock(), kill=Mock())
-        monkeypatch.setattr(
-            "aios.runtime.adapter.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)
-        )
+        monkeypatch.setattr("aios.runtime.adapter.asyncio.create_subprocess_exec", AsyncMock(return_value=proc))
         monkeypatch.setattr(
             "aios.runtime.adapter.asyncio.wait_for",
             Mock(side_effect=TimeoutError("boom")),
@@ -77,30 +73,22 @@ class TestAiosRuntimeAdapter:
 
     @pytest.mark.asyncio
     async def test_read_file_success(self, monkeypatch):
-        monkeypatch.setattr(
-            "aios.runtime.adapter.files_plugin.read", AsyncMock(return_value="file contents")
-        )
+        monkeypatch.setattr("aios.runtime.adapter.files_plugin.read", AsyncMock(return_value="file contents"))
         assert await RuntimeAdapter.read_file("a.txt") == "file contents"
 
     @pytest.mark.asyncio
     async def test_read_file_error(self, monkeypatch):
-        monkeypatch.setattr(
-            "aios.runtime.adapter.files_plugin.read", AsyncMock(side_effect=RuntimeError("boom"))
-        )
+        monkeypatch.setattr("aios.runtime.adapter.files_plugin.read", AsyncMock(side_effect=RuntimeError("boom")))
         assert await RuntimeAdapter.read_file("a.txt") == "Read error"
 
     @pytest.mark.asyncio
     async def test_write_file_success(self, monkeypatch):
-        monkeypatch.setattr(
-            "aios.runtime.adapter.files_plugin.write", AsyncMock(return_value="written")
-        )
+        monkeypatch.setattr("aios.runtime.adapter.files_plugin.write", AsyncMock(return_value="written"))
         assert await RuntimeAdapter.write_file("a.txt", "data") == "written"
 
     @pytest.mark.asyncio
     async def test_write_file_error(self, monkeypatch):
-        monkeypatch.setattr(
-            "aios.runtime.adapter.files_plugin.write", AsyncMock(side_effect=RuntimeError("boom"))
-        )
+        monkeypatch.setattr("aios.runtime.adapter.files_plugin.write", AsyncMock(side_effect=RuntimeError("boom")))
         assert await RuntimeAdapter.write_file("a.txt", "data") == "Write error"
 
     @pytest.mark.asyncio
@@ -121,11 +109,7 @@ class TestAiosRuntimeAdapter:
 
     @pytest.mark.asyncio
     async def test_search_codebase(self, monkeypatch):
-        fake_retriever = SimpleNamespace(
-            retrieve=AsyncMock(
-                return_value=[{"text": "hello world"}, {"no_text": 1}]
-            )
-        )
+        fake_retriever = SimpleNamespace(retrieve=AsyncMock(return_value=[{"text": "hello world"}, {"no_text": 1}]))
         monkeypatch.setattr("aios.runtime.adapter.Retriever", Mock(return_value=fake_retriever))
         results = await RuntimeAdapter.search_codebase("query")
         assert results == ["hello world", str({"no_text": 1})]

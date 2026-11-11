@@ -311,17 +311,13 @@ class ConfigLoader:
             try:
                 overrides["temperature"] = float(temperature)
             except ValueError:
-                logger.warning(
-                    "RAVENCODE_TEMPERATURE={} is not a number, keeping the configured value", temperature
-                )
+                logger.warning("RAVENCODE_TEMPERATURE={} is not a number, keeping the configured value", temperature)
         max_steps = os.environ.get("RAVENCODE_MAX_STEPS")
         if max_steps:
             try:
                 overrides["max_steps"] = int(max_steps)
             except ValueError:
-                logger.warning(
-                    "RAVENCODE_MAX_STEPS={} is not an integer, keeping the configured value", max_steps
-                )
+                logger.warning("RAVENCODE_MAX_STEPS={} is not an integer, keeping the configured value", max_steps)
         theme = os.environ.get("RAVENCODE_THEME")
         if theme:
             overrides["theme"] = theme

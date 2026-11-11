@@ -58,7 +58,9 @@ def _imap_client(
     client.search = AsyncMock(return_value=search)
     client.fetch = AsyncMock(return_value=fetch or ("OK", [(b"1", _raw_email())]))
     client.logout = AsyncMock()
-    monkeypatch.setattr(email_api, "aioimaplib", SimpleNamespace(IMAP4_SSL=MagicMock(return_value=client)), raising=False)
+    monkeypatch.setattr(
+        email_api, "aioimaplib", SimpleNamespace(IMAP4_SSL=MagicMock(return_value=client)), raising=False
+    )
     return client
 
 

@@ -38,11 +38,7 @@ def _repository_owned_names(root: Path) -> set[str]:
         return set()
     if listed.returncode != 0:
         return set()
-    return {
-        name.decode("utf-8", "replace")
-        for name in listed.stdout.split(b"\0")
-        if name and b"/" not in name
-    }
+    return {name.decode("utf-8", "replace") for name in listed.stdout.split(b"\0") if name and b"/" not in name}
 
 
 def _day_matches(

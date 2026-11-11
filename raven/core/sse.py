@@ -48,7 +48,9 @@ def _parse_event_seq(event_id: str) -> tuple[int, int] | None:
 
 
 class SSEEvent:
-    def __init__(self, event: str, data: dict[str, Any] | str | None, retry: int | None = None, event_id: str | None = None):
+    def __init__(
+        self, event: str, data: dict[str, Any] | str | None, retry: int | None = None, event_id: str | None = None
+    ):
         self.event = event
         self.data = data
         self.retry = retry

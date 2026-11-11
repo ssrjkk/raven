@@ -54,9 +54,7 @@ def _sr(modality: str, score: float, doc_id: str, text: str, image: str = "") ->
 
 
 class TestGetRag:
-    def test_creates_and_loads_when_index_exists(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_creates_and_loads_when_index_exists(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         idx = tmp_path / "rag.json"
         idx.write_text("{}", encoding="utf-8")
         monkeypatch.setattr(rag_mod, "_rag", None)

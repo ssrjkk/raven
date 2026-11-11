@@ -54,7 +54,9 @@ class _FakeLLM:
         self._responses = list(responses or [])
         self.seen: list[list[dict[str, Any]]] = []
 
-    async def complete(self, messages: list[dict[str, Any]], tools: Any = None, model: str | None = None) -> LLMResponse:
+    async def complete(
+        self, messages: list[dict[str, Any]], tools: Any = None, model: str | None = None
+    ) -> LLMResponse:
         self.seen.append(messages)
         return self._responses.pop(0) if self._responses else LLMResponse(content="done")
 
@@ -129,7 +131,9 @@ async def test_the_shipped_deny_list_reaches_this_registry(switches: None, monke
     assert RAN == []
 
 
-async def test_the_orchestrator_builds_the_policy_the_agent_path_builds(switches: None, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_the_orchestrator_builds_the_policy_the_agent_path_builds(
+    switches: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from raven.core.config import _DEFAULT_TOOLS_DENY
 
     monkeypatch.setattr(settings, "tools_deny", ",".join(_DEFAULT_TOOLS_DENY))

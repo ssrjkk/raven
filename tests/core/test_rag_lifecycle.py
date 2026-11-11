@@ -57,8 +57,9 @@ def _client() -> TestClient:
 def test_routes_reuse_one_engine_instead_of_building_one_each_time(tmp_path: Path) -> None:
     _reset()
     try:
-        with patch.object(rag_api, "_RAG_PATH", tmp_path / "rag_index.json"), patch.object(
-            rag_api, "MultiModalRAG", _CountingEngine
+        with (
+            patch.object(rag_api, "_RAG_PATH", tmp_path / "rag_index.json"),
+            patch.object(rag_api, "MultiModalRAG", _CountingEngine),
         ):
             client = _client()
             with client:
@@ -110,8 +111,10 @@ def test_a_text_only_query_never_loads_the_clip_model(tmp_path: Path) -> None:
             loaded.append("model")
             return object()
 
-    with patch.object(mm, "_CLIP_AVAILABLE", True), patch.object(mm, "CLIPProcessor", _Processor), patch.object(
-        mm, "CLIPModel", _Model
+    with (
+        patch.object(mm, "_CLIP_AVAILABLE", True),
+        patch.object(mm, "CLIPProcessor", _Processor),
+        patch.object(mm, "CLIPModel", _Model),
     ):
         rag = mm.MultiModalRAG(dimension=32)
         rag.set_index_path(tmp_path / "idx.json")

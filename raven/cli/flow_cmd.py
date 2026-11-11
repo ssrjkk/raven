@@ -18,7 +18,9 @@ def flow_group():
 
 @flow_group.command()
 @click.option("--port", default=18789, type=int, help="RavenFlow gateway port")
-@click.option("--host", default=None, help="Bind address. Defaults to RAVENFLOW_HOST (loopback); 0.0.0.0 needs a firewall.")
+@click.option(
+    "--host", default=None, help="Bind address. Defaults to RAVENFLOW_HOST (loopback); 0.0.0.0 needs a firewall."
+)
 def serve(port: int, host: str | None):
     """Start the RavenFlow gateway daemon"""
     from raven.gateway.daemon import RavenFlowDaemon

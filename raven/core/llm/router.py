@@ -391,9 +391,7 @@ class LLMRouter:
                     )
                     await asyncio.sleep(delay)
                 else:
-                    logger.warning(
-                        "Primary stream '{}' failed after {} attempts: {}", model, settings.llm_retry_max, e
-                    )
+                    logger.warning("Primary stream '{}' failed after {} attempts: {}", model, settings.llm_retry_max, e)
                     metrics.inc("llm_stream_error", {"model": model, "error": type(e).__name__})
             except Exception as e:
                 raise RuntimeError(f"Primary stream '{model}' failed: {e}") from e

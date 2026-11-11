@@ -220,7 +220,9 @@ async def _switch_session(session_id: str, current_agent: ReActAgent) -> None:
         console.print(f"[yellow]No session matches: {session_id}[/yellow]")
         return
     current_agent.conversation = session.agent.conversation
-    console.print(f"[green]Switched to session {session.id[:8]} ({session.name}), {session.message_count} messages[/green]")
+    console.print(
+        f"[green]Switched to session {session.id[:8]} ({session.name}), {session.message_count} messages[/green]"
+    )
 
 
 async def _start_named_session(name: str, task: str, current_agent: ReActAgent) -> None:

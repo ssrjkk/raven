@@ -176,6 +176,7 @@ def _create_monitor(store: MonitorStore, name: str = "disk", target: str = "/tmp
         status=MonitorStatus.ACTIVE,
         created_at=time.time(),
     )
+
     async def _save() -> None:
         await store.save_monitor(m)
 
@@ -296,7 +297,9 @@ class TestMonitors:
 
     def test_ssrf_rejected_at_model(self, gateway, registry, channels) -> None:
         client = _make_client(gateway, registry, channels)
-        resp = client.post("/api/admin/monitors", json={"name": "bad", "type": "http", "target": "http://localhost:8080"})
+        resp = client.post(
+            "/api/admin/monitors", json={"name": "bad", "type": "http", "target": "http://localhost:8080"}
+        )
         assert resp.status_code == 422
 
 

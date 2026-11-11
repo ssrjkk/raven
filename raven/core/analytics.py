@@ -146,9 +146,7 @@ class AnalyticsEngine:
     async def query_metrics_list(self) -> list[str]:
         if self._db is None:
             raise RuntimeError("AnalyticsEngine not started")
-        rows = await self._db.fetchall(
-            "SELECT DISTINCT metric_name FROM analytics_snapshots ORDER BY metric_name"
-        )
+        rows = await self._db.fetchall("SELECT DISTINCT metric_name FROM analytics_snapshots ORDER BY metric_name")
         return [r[0] for r in rows]
 
     async def query_summary(self, since: int | None = None) -> dict[str, Any]:

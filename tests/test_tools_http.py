@@ -47,7 +47,10 @@ def _make_client(*responses: FakeResponse) -> tuple[AsyncMock, list[tuple[str, s
 class TestHttpGet:
     async def test_get_success(self) -> None:
         client, calls = _make_client(FakeResponse(text="hello"))
-        with patch("raven.tools.http.httpx") as fake_httpx, patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)):
+        with (
+            patch("raven.tools.http.httpx") as fake_httpx,
+            patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)),
+        ):
             fake_httpx.AsyncClient.return_value = client
             result = await http_get("https://example.com/")
         assert result == "hello"
@@ -69,7 +72,10 @@ class TestHttpGet:
 
     async def test_get_parses_headers(self) -> None:
         client, calls = _make_client(FakeResponse(text="ok"))
-        with patch("raven.tools.http.httpx") as fake_httpx, patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)):
+        with (
+            patch("raven.tools.http.httpx") as fake_httpx,
+            patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)),
+        ):
             fake_httpx.AsyncClient.return_value = client
             result = await http_get("https://example.com/", headers="Content-Type: application/json\nX-Test: yes")
         assert result == "ok"
@@ -77,7 +83,10 @@ class TestHttpGet:
 
     async def test_get_truncates_long_body(self) -> None:
         client, _ = _make_client(FakeResponse(text="x" * 25000))
-        with patch("raven.tools.http.httpx") as fake_httpx, patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)):
+        with (
+            patch("raven.tools.http.httpx") as fake_httpx,
+            patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)),
+        ):
             fake_httpx.AsyncClient.return_value = client
             result = await http_get("https://example.com/")
         assert len(result) == 20000
@@ -86,7 +95,10 @@ class TestHttpGet:
         client, calls = _make_client(
             FakeResponse(302, redirect=True, location="https://example.com/next"), FakeResponse(text="final")
         )
-        with patch("raven.tools.http.httpx") as fake_httpx, patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)):
+        with (
+            patch("raven.tools.http.httpx") as fake_httpx,
+            patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)),
+        ):
             fake_httpx.AsyncClient.return_value = client
             result = await http_get("https://example.com/start")
         assert result == "final"
@@ -98,8 +110,9 @@ class TestHttpGet:
             return "blocked by test" if "next" in url else None
 
         client, calls = _make_client(FakeResponse(302, redirect=True, location="https://example.com/next"))
-        with patch("raven.tools.http.httpx") as fake_httpx, patch(
-            "raven.tools.http.validate_url_async", AsyncMock(side_effect=validate)
+        with (
+            patch("raven.tools.http.httpx") as fake_httpx,
+            patch("raven.tools.http.validate_url_async", AsyncMock(side_effect=validate)),
         ):
             fake_httpx.AsyncClient.return_value = client
             result = await http_get("https://example.com/start")
@@ -108,14 +121,22 @@ class TestHttpGet:
 
     async def test_get_redirect_without_location(self) -> None:
         client, _ = _make_client(FakeResponse(302, redirect=True, location=None))
-        with patch("raven.tools.http.httpx") as fake_httpx, patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)):
+        with (
+            patch("raven.tools.http.httpx") as fake_httpx,
+            patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)),
+        ):
             fake_httpx.AsyncClient.return_value = client
             result = await http_get("https://example.com/start")
         assert result == "[blocked] too many redirects"
 
     async def test_get_too_many_redirects(self) -> None:
-        client, calls = _make_client(*[FakeResponse(302, redirect=True, location="https://example.com/n") for _ in range(6)])
-        with patch("raven.tools.http.httpx") as fake_httpx, patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)):
+        client, calls = _make_client(
+            *[FakeResponse(302, redirect=True, location="https://example.com/n") for _ in range(6)]
+        )
+        with (
+            patch("raven.tools.http.httpx") as fake_httpx,
+            patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)),
+        ):
             fake_httpx.AsyncClient.return_value = client
             result = await http_get("https://example.com/start")
         assert result == "[blocked] too many redirects"
@@ -125,7 +146,10 @@ class TestHttpGet:
 class TestHttpPost:
     async def test_post_success(self) -> None:
         client, calls = _make_client(FakeResponse(text="created"))
-        with patch("raven.tools.http.httpx") as fake_httpx, patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)):
+        with (
+            patch("raven.tools.http.httpx") as fake_httpx,
+            patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)),
+        ):
             fake_httpx.AsyncClient.return_value = client
             result = await http_post("https://example.com/api", body='{"a": 1}', content_type="application/json")
         assert result == "created"
@@ -137,7 +161,10 @@ class TestHttpPost:
         client, calls = _make_client(
             FakeResponse(302, redirect=True, location="https://example.com/new"), FakeResponse(text="posted")
         )
-        with patch("raven.tools.http.httpx") as fake_httpx, patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)):
+        with (
+            patch("raven.tools.http.httpx") as fake_httpx,
+            patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)),
+        ):
             fake_httpx.AsyncClient.return_value = client
             result = await http_post("https://example.com/start", body="payload")
         assert result == "posted"
@@ -149,7 +176,10 @@ class TestHttpPost:
         client, calls = _make_client(
             FakeResponse(301, redirect=True, location="https://example.com/new"), FakeResponse(text="posted")
         )
-        with patch("raven.tools.http.httpx") as fake_httpx, patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)):
+        with (
+            patch("raven.tools.http.httpx") as fake_httpx,
+            patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)),
+        ):
             fake_httpx.AsyncClient.return_value = client
             result = await http_post("https://example.com/start", body="payload")
         assert result == "posted"
@@ -160,7 +190,10 @@ class TestHttpPost:
         client, calls = _make_client(
             FakeResponse(307, redirect=True, location="https://example.com/new"), FakeResponse(text="posted")
         )
-        with patch("raven.tools.http.httpx") as fake_httpx, patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)):
+        with (
+            patch("raven.tools.http.httpx") as fake_httpx,
+            patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)),
+        ):
             fake_httpx.AsyncClient.return_value = client
             result = await http_post("https://example.com/start", body="payload")
         assert result == "posted"
@@ -171,7 +204,10 @@ class TestHttpPost:
         client, calls = _make_client(
             FakeResponse(100, location="https://example.com/new", informational=True), FakeResponse(text="done")
         )
-        with patch("raven.tools.http.httpx") as fake_httpx, patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)):
+        with (
+            patch("raven.tools.http.httpx") as fake_httpx,
+            patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)),
+        ):
             fake_httpx.AsyncClient.return_value = client
             result = await http_post("https://example.com/start")
         assert result == "done"
@@ -247,9 +283,7 @@ class TestHttpStreamingAndErrors:
         assert result == "[network error] redirect failed: boom"
 
     async def test_relative_redirect_resolves_against_request_url(self) -> None:
-        client, calls = _make_client(
-            FakeResponse(302, redirect=True, location="/next"), FakeResponse(text="final")
-        )
+        client, calls = _make_client(FakeResponse(302, redirect=True, location="/next"), FakeResponse(text="final"))
         with (
             patch("raven.tools.http.validate_url_async", AsyncMock(return_value=None)),
             patch("raven.tools.http.httpx.AsyncClient", return_value=client),

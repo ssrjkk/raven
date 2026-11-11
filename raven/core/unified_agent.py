@@ -163,7 +163,10 @@ class UnifiedAgent:
                 summary = resp.text or ""
             if summary and hasattr(agent.conversation, "messages"):
                 keep = messages[-5:] if len(messages) > 5 else messages
-                agent.conversation.messages = [{"role": "system", "content": f"[Previous context summarized: {summary[:500]}]"}, *keep]
+                agent.conversation.messages = [
+                    {"role": "system", "content": f"[Previous context summarized: {summary[:500]}]"},
+                    *keep,
+                ]
                 logger.info("Context summarized from {} messages to {}", len(messages), len(keep) + 1)
                 return True
         except Exception as exc:

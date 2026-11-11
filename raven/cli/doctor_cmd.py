@@ -35,7 +35,9 @@ def security_posture_checks() -> list[tuple[str, str]]:
 
     mode = state.exec_security
     if mode == "deny":
-        rows.append(("Tool Exec Policy", "[OK] deny — shell, python, browser, mcp_, plugin_, git writes, db_query refused"))
+        rows.append(
+            ("Tool Exec Policy", "[OK] deny — shell, python, browser, mcp_, plugin_, git writes, db_query refused")
+        )
     elif mode == "ask":
         if state.exec_ask_mode == "off":
             rows.append(("Tool Exec Policy", "[!] ask with EXEC_ASK_MODE=off — exec runs without asking anyone"))
@@ -44,7 +46,12 @@ def security_posture_checks() -> list[tuple[str, str]]:
     elif mode == "full":
         rows.append(("Tool Exec Policy", "[!] full — exec-class tools run with no confirmation"))
     else:
-        rows.append(("Tool Exec Policy", f"[ERR] EXEC_SECURITY={mode!r} is not one of {list(_EXEC_MODES)}; every agent build raises"))
+        rows.append(
+            (
+                "Tool Exec Policy",
+                f"[ERR] EXEC_SECURITY={mode!r} is not one of {list(_EXEC_MODES)}; every agent build raises",
+            )
+        )
 
     if not state.workspace_only:
         rows.append(("Workspace Confinement", "[!] WORKSPACE_ONLY=false — path arguments are not confined"))
@@ -57,7 +64,9 @@ def security_posture_checks() -> list[tuple[str, str]]:
     rows.append(
         (
             "Tool Role Overrides",
-            f"[OK] {overrides} exists — restricted tools need the role it grants" if overrides.exists() else "none — defaults apply",
+            f"[OK] {overrides} exists — restricted tools need the role it grants"
+            if overrides.exists()
+            else "none — defaults apply",
         )
     )
 
@@ -136,10 +145,19 @@ def _training_posture_row() -> tuple[str, str]:
     from raven.unique.fine_tuning import training_tracking_enabled
 
     if training_tracking_enabled():
-        return ("Finetune Tracking", "[!] RAVEN_TRAIN_TRACKING=on — metrics and checkpoint artifacts are published to api.wandb.ai")
+        return (
+            "Finetune Tracking",
+            "[!] RAVEN_TRAIN_TRACKING=on — metrics and checkpoint artifacts are published to api.wandb.ai",
+        )
     if os.environ.get("WANDB_API_KEY"):
-        return ("Finetune Tracking", "[!] off, but WANDB_API_KEY is set: one RAVEN_TRAIN_TRACKING=on starts publishing weights")
-    return ("Finetune Tracking", "[OK] off — training publishes nothing; corpus rows need consented=true and are PII-redacted")
+        return (
+            "Finetune Tracking",
+            "[!] off, but WANDB_API_KEY is set: one RAVEN_TRAIN_TRACKING=on starts publishing weights",
+        )
+    return (
+        "Finetune Tracking",
+        "[OK] off — training publishes nothing; corpus rows need consented=true and are PII-redacted",
+    )
 
 
 def _plugin_posture_row() -> tuple[str, str]:

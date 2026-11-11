@@ -1,4 +1,5 @@
 """Tests for round: usage accounting, deep compaction, undo_changes, task_parallel."""
+
 from __future__ import annotations
 
 import json
@@ -35,7 +36,10 @@ class _UsageProvider:
 async def test_usage_accounting_accumulates(monkeypatch) -> None:
     _patch_save(monkeypatch)
     provider = _UsageProvider()
-    agent = ReActAgent(config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, use_cache=False), llm_provider=provider)
+    agent = ReActAgent(
+        config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, use_cache=False),
+        llm_provider=provider,
+    )
     await agent.run("hello")
     u = agent.usage
     assert u["prompt_tokens"] == 100
@@ -143,7 +147,9 @@ async def test_auto_checkpoint_taken_at_run_start(tmp_path: Path, monkeypatch) -
 
     (tmp_path / "b.py").write_text("keep", encoding="utf-8")
     set_workspace_root(tmp_path)
-    monkeypatch.setattr(cp, "_checkpoint_manager", cp.CheckpointManager(workspace=str(tmp_path), storage_dir=str(tmp_path / "cps")))
+    monkeypatch.setattr(
+        cp, "_checkpoint_manager", cp.CheckpointManager(workspace=str(tmp_path), storage_dir=str(tmp_path / "cps"))
+    )
     _patch_save(monkeypatch)
     try:
         agent = ReActAgent(

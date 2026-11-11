@@ -55,4 +55,3 @@ def test_docs_cover_core_commands() -> None:
 @pytest.mark.parametrize("name", ["start", "stop", "status", "doctor", "onboard", "init", "service", "tui"])
 def test_core_commands_still_registered(name: str) -> None:
     assert name in _cli_commands()
-

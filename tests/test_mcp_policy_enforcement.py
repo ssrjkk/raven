@@ -186,6 +186,7 @@ def test_the_documented_exec_class_count_matches_the_registry() -> None:
     doc = (Path(__file__).resolve().parents[1] / "docs" / "mcp.md").read_text(encoding="utf-8")
     assert f"the {len(exec_tools)} exec-class tools" in doc, (len(exec_tools), exec_tools)
 
+
 def test_the_default_deny_list_touches_the_served_surface_once() -> None:
     from raven.core.config import _DEFAULT_TOOLS_DENY
 

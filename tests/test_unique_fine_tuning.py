@@ -264,6 +264,7 @@ class TestChatRender:
         assert with_specials[0] == 1 and with_specials[-1] == 2
         assert training_row == with_specials[1:-1]
 
+
 class TestFineTuningPipeline:
     def setup_method(self) -> None:
         self.pipeline = FineTuningPipeline()
@@ -330,9 +331,7 @@ class TestFineTuningPipeline:
         assert self.pipeline._tokenizer is None
 
     def test_save_checkpoint_creates_directory(self, tmp_path: Path):
-        cp = self.pipeline.save_checkpoint(
-            str(tmp_path / "cp1"), step=100, epoch=2, metrics={"loss": 0.5}
-        )
+        cp = self.pipeline.save_checkpoint(str(tmp_path / "cp1"), step=100, epoch=2, metrics={"loss": 0.5})
         assert cp.step == 100
         assert cp.epoch == 2
         assert cp.metrics == {"loss": 0.5}

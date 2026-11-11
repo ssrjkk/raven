@@ -402,9 +402,7 @@ class WebChatChannel(BaseChannel):
         return self._app
 
     def _get_index_html(self) -> str:
-        built = (
-            Path(__file__).resolve().parent.parent.parent.parent / "web" / "dist" / "index.html"
-        )
+        built = Path(__file__).resolve().parent.parent.parent.parent / "web" / "dist" / "index.html"
         if built.is_file():
             return built.read_text(encoding="utf-8")
         return INDEX_HTML.replace("__VERSION__", __version__)

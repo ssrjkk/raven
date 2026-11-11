@@ -10,10 +10,19 @@ from pathlib import Path
 from loguru import logger
 
 _ENV_KEY_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_]*$")
-_BLOCKED_KEYS = frozenset({
-    "PATH", "HOME", "USER", "SHELL", "COMSPEC", "PYTHONPATH",
-    "VIRTUAL_ENV", "RAVEN_ADMIN_KEY", "RAVEN_SECRET_KEY",
-})
+_BLOCKED_KEYS = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "USER",
+        "SHELL",
+        "COMSPEC",
+        "PYTHONPATH",
+        "VIRTUAL_ENV",
+        "RAVEN_ADMIN_KEY",
+        "RAVEN_SECRET_KEY",
+    }
+)
 
 
 class ConfigWatcher:

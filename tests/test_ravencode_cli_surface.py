@@ -138,9 +138,7 @@ class TestSessionCommands:
 
 
 class TestTuiCommand:
-    def test_missing_project_directory_is_a_clean_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_missing_project_directory_is_a_clean_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
         result = _invoke("tui", "no-such-project")
         assert result.exit_code == 1
@@ -411,9 +409,7 @@ async def _drive_tui(
 
 
 class TestTUICommandSurface:
-    async def test_control_commands_report_state(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    async def test_control_commands_report_state(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         import ravencode.runtime.checkpoints as cps
         import ravencode.runtime.undo as undo_mod
 

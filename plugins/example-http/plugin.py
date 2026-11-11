@@ -11,6 +11,7 @@ def register(ctx: Any = None) -> Plugin:
             return cast("str", await ctx.safe_http("GET", url, headers=headers or {}))
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
                 resp = await client.get(url, headers=headers or {})
                 resp.raise_for_status()
@@ -26,6 +27,7 @@ def register(ctx: Any = None) -> Plugin:
             return cast("str", await ctx.safe_http("POST", url, headers=headers or {}, body=data))
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
                 resp = await client.post(url, json=data, headers=headers or {})
                 resp.raise_for_status()

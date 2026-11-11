@@ -111,7 +111,9 @@ async def test_schedule_as_routine_engine_path(monkeypatch: pytest.MonkeyPatch) 
     async def add_routine(routine) -> None:
         added.append(routine)
 
-    monkeypatch.setattr("raven.core.routine.engine.get_routine_engine", lambda: SimpleNamespace(add_routine=add_routine))
+    monkeypatch.setattr(
+        "raven.core.routine.engine.get_routine_engine", lambda: SimpleNamespace(add_routine=add_routine)
+    )
     tpl = _template(
         trigger=TemplateTrigger.INTERVAL,
         default_interval=3600,
@@ -129,7 +131,9 @@ async def test_schedule_as_routine_defaults_schedule_when_unset(monkeypatch: pyt
     async def add_routine(routine) -> None:
         added.append(routine)
 
-    monkeypatch.setattr("raven.core.routine.engine.get_routine_engine", lambda: SimpleNamespace(add_routine=add_routine))
+    monkeypatch.setattr(
+        "raven.core.routine.engine.get_routine_engine", lambda: SimpleNamespace(add_routine=add_routine)
+    )
     tpl = _template(trigger=TemplateTrigger.MANUAL)
     await TemplateRunner.schedule_as_routine(tpl)
     assert added[0].schedule == "08:00"

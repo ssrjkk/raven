@@ -10,6 +10,7 @@ Usage at an entry point that creates a ReActAgent::
 
     await ensure_mcp_tools()   # idempotent; logs and continues on failure
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -49,9 +50,7 @@ def _format_content(content: Any) -> str:
 
 def _make_handler(client: MCPClient, tool_name: str) -> Any:
     async def handler(**kwargs: Any) -> str:
-        result = await asyncio.wait_for(
-            client.call_tool(tool_name, dict(kwargs)), timeout=_tool_call_timeout
-        )
+        result = await asyncio.wait_for(client.call_tool(tool_name, dict(kwargs)), timeout=_tool_call_timeout)
         return _format_content(result)
 
     return handler
@@ -72,11 +71,7 @@ def register_client_tools(server: str, client: Any) -> list[str]:
         name = prefix + _sanitize(raw_name)
         if name in MODULE_TOOLS:
             continue
-        schema = (
-            tool.get("inputSchema")
-            or tool.get("parameters")
-            or {"type": "object", "properties": {}}
-        )
+        schema = tool.get("inputSchema") or tool.get("parameters") or {"type": "object", "properties": {}}
         MODULE_TOOLS[name] = {
             "name": name,
             "dangerous": True,

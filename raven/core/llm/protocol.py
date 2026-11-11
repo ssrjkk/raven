@@ -38,7 +38,13 @@ class ToolCall:
 
 
 class LLMResponse:
-    def __init__(self, content: str = "", tool_calls: list[ToolCall] | None = None, finish_reason: str = "stop", usage: dict[str, int] | None = None):
+    def __init__(
+        self,
+        content: str = "",
+        tool_calls: list[ToolCall] | None = None,
+        finish_reason: str = "stop",
+        usage: dict[str, int] | None = None,
+    ):
         self.content = content
         self.tool_calls = tool_calls or []
         self.finish_reason = finish_reason

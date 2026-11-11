@@ -34,6 +34,7 @@ async def _ws_authenticated(websocket: WebSocket) -> bool:
         return False
     return payload is not None
 
+
 _manager: CollaborationManager | None = None
 _ws_manager: WebSocketManager | None = None
 

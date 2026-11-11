@@ -73,7 +73,11 @@ class TestSplitConversationInput:
     def test_tool_calls_preserved_in_history(self):
         messages = [
             _msg("user", "do it"),
-            _msg("assistant", "", tool_calls=[{"id": "c1", "type": "function", "function": {"name": "read", "arguments": "{}"}}]),
+            _msg(
+                "assistant",
+                "",
+                tool_calls=[{"id": "c1", "type": "function", "function": {"name": "read", "arguments": "{}"}}],
+            ),
             _msg("tool", "file body", tool_call_id="c1"),
             _msg("user", "thanks"),
         ]
@@ -141,9 +145,7 @@ async def test_stream_fallback_chunks_when_no_tokens(fake_agent: type[_FakeAgent
     chunks, _comments, done = _parse_sse(resp.text)
     assert done == ["[DONE]"]
     contents = "".join(
-        c["choices"][0]["delta"].get("content", "")
-        for c in chunks
-        if c["choices"][0]["delta"].get("content")
+        c["choices"][0]["delta"].get("content", "") for c in chunks if c["choices"][0]["delta"].get("content")
     )
     assert contents == "x" * 250
 
@@ -179,7 +181,8 @@ async def _post(payload: dict[str, Any]) -> httpx.Response:
     transport = httpx.ASGITransport(app=srv.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         return await client.post(
-            "/v1/chat/completions", json={"model": "ravencode", "messages": [{"role": "user", "content": "hi"}], **payload}
+            "/v1/chat/completions",
+            json={"model": "ravencode", "messages": [{"role": "user", "content": "hi"}], **payload},
         )
 
 
@@ -247,9 +250,7 @@ class TestStreamCancellation:
         await asyncio.sleep(0.01)
         assert _EndlessAgent.cancelled == ["cancelled"]
 
-    async def test_truncated_stream_stops_the_agent_instead_of_burning_tokens(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_truncated_stream_stops_the_agent_instead_of_burning_tokens(self, monkeypatch: pytest.MonkeyPatch):
         _EndlessAgent.chunk = "AAAA"
         _EndlessAgent.cancelled = []
         monkeypatch.setattr(srv, "ReActAgent", _EndlessAgent)

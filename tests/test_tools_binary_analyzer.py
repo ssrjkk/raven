@@ -60,7 +60,7 @@ def _pe(machine: int = 0x8664, characteristics: int = 0x0002, num_sections: int 
     b = bytearray(0x200)
     b[0:2] = b"MZ"
     struct.pack_into("<I", b, 0x3C, 0x80)
-    b[0x80 : 0x84] = b"PE\x00\x00"
+    b[0x80:0x84] = b"PE\x00\x00"
     struct.pack_into("<H", b, 0x84, machine)
     struct.pack_into("<H", b, 0x86, num_sections)
     struct.pack_into("<H", b, 0x92, characteristics)
@@ -73,7 +73,7 @@ def _pe_full(
     b = bytearray(0x200)
     b[0:2] = b"MZ"
     struct.pack_into("<I", b, 0x3C, 0x80)
-    b[0x80 : 0x84] = b"PE\x00\x00"
+    b[0x80:0x84] = b"PE\x00\x00"
     struct.pack_into("<H", b, 0x84, 0x8664)
     struct.pack_into("<I", b, 0x80 + 8, timestamp)
     struct.pack_into("<H", b, 0x80 + 24, opt_magic)
@@ -103,9 +103,7 @@ def _macho(
     return bytes(b)
 
 
-def _elf_with_section(
-    sh_type: int = 1, sh_offset: int = 0x1000, sh_size: int = 8, bits: int = 64
-) -> bytes:
+def _elf_with_section(sh_type: int = 1, sh_offset: int = 0x1000, sh_size: int = 8, bits: int = 64) -> bytes:
     b = bytearray(512)
     b[0:4] = b"\x7fELF"
     b[4] = 2 if bits == 64 else 1
@@ -129,7 +127,7 @@ def _pe_with_text() -> bytes:
     b = bytearray(0x200)
     b[0:2] = b"MZ"
     struct.pack_into("<I", b, 0x3C, 0x80)
-    b[0x80 : 0x84] = b"PE\x00\x00"
+    b[0x80:0x84] = b"PE\x00\x00"
     struct.pack_into("<H", b, 0x86, 1)  # num_sections
     sh = 0x80 + 248
     b[sh : sh + 8] = b".text\x00\x00\x00"
@@ -165,7 +163,7 @@ def _pe_full_with_imports() -> bytes:
     desc_off = rva_to_off(sect_vaddr)
     offt_rva = sect_vaddr + 0x20  # OriginalFirstThunk array
     name_rva = sect_vaddr + 0x50  # DLL name string
-    ft_rva = sect_vaddr + 0x30    # FirstThunk array
+    ft_rva = sect_vaddr + 0x30  # FirstThunk array
     byname_rva = sect_vaddr + 0x40
     struct.pack_into("<I", b, desc_off + 0, offt_rva)
     struct.pack_into("<I", b, desc_off + 12, name_rva)

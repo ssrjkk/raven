@@ -1,4 +1,5 @@
 """Capture the hero section as a 1200x630 og:image."""
+
 import http.server
 import os
 import sys

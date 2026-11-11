@@ -63,10 +63,14 @@ class LSPClient:
             reader_task = asyncio.create_task(self._reader())
             self._bg_tasks.add(reader_task)
             reader_task.add_done_callback(self._bg_tasks.discard)
-            await self._send({
-                "jsonrpc": "2.0", "id": 1, "method": "initialize",
-                "params": {"processId": None, "rootUri": self._root_uri, "capabilities": {}},
-            })
+            await self._send(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {"processId": None, "rootUri": self._root_uri, "capabilities": {}},
+                }
+            )
             await self._send({"jsonrpc": "2.0", "method": "initialized", "params": {}})
             self._initialized = True
 
@@ -76,18 +80,20 @@ class LSPClient:
         try:
             path = uri.removeprefix("file://")
             content = Path(path).read_text(encoding="utf-8")
-            await self._send({
-                "jsonrpc": "2.0",
-                "method": "textDocument/didOpen",
-                "params": {
-                    "textDocument": {
-                        "uri": uri,
-                        "languageId": self.language,
-                        "version": 1,
-                        "text": content,
-                    }
-                },
-            })
+            await self._send(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "textDocument/didOpen",
+                    "params": {
+                        "textDocument": {
+                            "uri": uri,
+                            "languageId": self.language,
+                            "version": 1,
+                            "text": content,
+                        }
+                    },
+                }
+            )
             self._open_files[uri] = content
         except Exception as exc:
             logger.debug("LSP didOpen failed for {}: {}", uri, exc)
@@ -99,14 +105,16 @@ class LSPClient:
         if self._open_files[uri] == content:
             return
         version = len([k for k in self._open_files if k == uri]) + 1
-        await self._send({
-            "jsonrpc": "2.0",
-            "method": "textDocument/didChange",
-            "params": {
-                "textDocument": {"uri": uri, "version": version},
-                "contentChanges": [{"text": content}],
-            },
-        })
+        await self._send(
+            {
+                "jsonrpc": "2.0",
+                "method": "textDocument/didChange",
+                "params": {
+                    "textDocument": {"uri": uri, "version": version},
+                    "contentChanges": [{"text": content}],
+                },
+            }
+        )
         self._open_files[uri] = content
 
     async def _send(self, msg: dict[str, Any]) -> None:
@@ -168,9 +176,12 @@ class LSPClient:
         if cached and (time.monotonic() - cached[0]) < _DIAG_CACHE_TTL:
             return cached[1]
         try:
-            result: Any = await self._request("textDocument/diagnostic", {
-                "textDocument": {"uri": uri},
-            })
+            result: Any = await self._request(
+                "textDocument/diagnostic",
+                {
+                    "textDocument": {"uri": uri},
+                },
+            )
             items: list[dict[str, Any]] = result.get("result", {}).get("items", [])
             self._diag_cache[uri] = (time.monotonic(), items)
             return items
@@ -181,19 +192,25 @@ class LSPClient:
 
     async def completion(self, uri: str, line: int, col: int) -> list[str]:
         await self._ensure_file_open(uri)
-        result = await self._request("textDocument/completion", {
-            "textDocument": {"uri": uri},
-            "position": {"line": line, "character": col},
-        })
+        result = await self._request(
+            "textDocument/completion",
+            {
+                "textDocument": {"uri": uri},
+                "position": {"line": line, "character": col},
+            },
+        )
         items = (result.get("result") or {}).get("items", [])
         return [i.get("label", "") for i in items[:20]]
 
     async def definition(self, uri: str, line: int, col: int) -> list[dict[str, Any]]:
         await self._ensure_file_open(uri)
-        result = await self._request("textDocument/definition", {
-            "textDocument": {"uri": uri},
-            "position": {"line": line, "character": col},
-        })
+        result = await self._request(
+            "textDocument/definition",
+            {
+                "textDocument": {"uri": uri},
+                "position": {"line": line, "character": col},
+            },
+        )
         locs = result.get("result", [])
         if isinstance(locs, dict):
             locs = [locs]
@@ -204,11 +221,14 @@ class LSPClient:
 
     async def references(self, uri: str, line: int, col: int) -> list[dict[str, Any]]:
         await self._ensure_file_open(uri)
-        result = await self._request("textDocument/references", {
-            "textDocument": {"uri": uri},
-            "position": {"line": line, "character": col},
-            "context": {"includeDeclaration": True},
-        })
+        result = await self._request(
+            "textDocument/references",
+            {
+                "textDocument": {"uri": uri},
+                "position": {"line": line, "character": col},
+                "context": {"includeDeclaration": True},
+            },
+        )
         locs = result.get("result", [])
         return [
             {"uri": loc.get("uri", ""), "line": loc.get("range", {}).get("start", {}).get("line", 0)}
@@ -217,10 +237,13 @@ class LSPClient:
 
     async def hover(self, uri: str, line: int, col: int) -> str:
         await self._ensure_file_open(uri)
-        result = await self._request("textDocument/hover", {
-            "textDocument": {"uri": uri},
-            "position": {"line": line, "character": col},
-        })
+        result = await self._request(
+            "textDocument/hover",
+            {
+                "textDocument": {"uri": uri},
+                "position": {"line": line, "character": col},
+            },
+        )
         contents = (result.get("result") or {}).get("contents", "")
         if isinstance(contents, str):
             return contents
@@ -241,19 +264,24 @@ class LSPClient:
     async def document_symbols(self, uri: str) -> list[dict[str, Any]]:
         await self._ensure_file_open(uri)
         try:
-            result = await self._request("textDocument/documentSymbol", {
-                "textDocument": {"uri": uri},
-            })
+            result = await self._request(
+                "textDocument/documentSymbol",
+                {
+                    "textDocument": {"uri": uri},
+                },
+            )
             symbols = result.get("result", [])
             out: list[dict[str, Any]] = []
             for s in symbols:
                 if isinstance(s, dict):
-                    out.append({
-                        "name": s.get("name", ""),
-                        "kind": s.get("kind", 0),
-                        "detail": s.get("detail", ""),
-                        "range": s.get("range", {}),
-                    })
+                    out.append(
+                        {
+                            "name": s.get("name", ""),
+                            "kind": s.get("kind", 0),
+                            "detail": s.get("detail", ""),
+                            "range": s.get("range", {}),
+                        }
+                    )
             return out
         except Exception as exc:
             logger.debug("[lsp] document_symbols failed for {}: {}", uri, exc)
@@ -419,9 +447,6 @@ def _find_key_files(root: Path, exts: list[str], max_files: int) -> list[Path]:
     return files
 
 
-
-
-
 async def enrich_context(project_root: str | Path | None = None, max_files: int = 10) -> str:
     root = Path(project_root or Path.cwd()).resolve()
     if not root.is_dir():
@@ -469,9 +494,13 @@ async def enrich_context(project_root: str | Path | None = None, max_files: int 
 def _detect_language(path: str) -> str:
     ext = Path(path).suffix.lower()
     mapping = {
-        ".py": "python", ".pyi": "python",
-        ".ts": "typescript", ".tsx": "typescript",
-        ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript",
+        ".py": "python",
+        ".pyi": "python",
+        ".ts": "typescript",
+        ".tsx": "typescript",
+        ".js": "javascript",
+        ".jsx": "javascript",
+        ".mjs": "javascript",
         ".go": "go",
         ".rs": "rust",
         ".java": "java",

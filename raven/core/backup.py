@@ -49,8 +49,7 @@ async def export_memory(memory: MemoryManager, dest: Path | None = None, sanitiz
     if sanitize:
         for tier_name, entries in data["tiers"].items():
             data["tiers"][tier_name] = [
-                {"key": entry["key"], "value": mask_entry(entry["key"], entry["value"])}
-                for entry in entries
+                {"key": entry["key"], "value": mask_entry(entry["key"], entry["value"])} for entry in entries
             ]
         # The flag is written into the file, not just into the filename: import refuses it,
         # because restoring masked values would overwrite real memory with ***.

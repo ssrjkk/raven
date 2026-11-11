@@ -295,9 +295,7 @@ class TestTUIContinuity:
             agent: Any = None,
         ) -> Any:
             dispatched.append(agent)
-            return SimpleNamespace(
-                success=True, agent="autonomous", data={"result": "ok"}, error=None, steps=1
-            )
+            return SimpleNamespace(success=True, agent="autonomous", data={"result": "ok"}, error=None, steps=1)
 
         monkeypatch.setattr(tui, "_session_agent", None)
         monkeypatch.setattr(Orchestrator, "dispatch", fake_dispatch)
@@ -308,9 +306,7 @@ class TestTUIContinuity:
         assert dispatched == [stub, stub]
         assert tui._session_agent is stub
 
-    async def test_role_switch_does_not_touch_the_session_agent(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_role_switch_does_not_touch_the_session_agent(self, monkeypatch: pytest.MonkeyPatch) -> None:
         stub: Any = SimpleNamespace(name="stub")
         dispatched: list[Any] = []
 
@@ -324,9 +320,7 @@ class TestTUIContinuity:
         assert dispatched == [None]
         assert tui._session_agent is stub
 
-    async def test_run_streaming_agent_applies_the_custom_system_prompt(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_run_streaming_agent_applies_the_custom_system_prompt(self, monkeypatch: pytest.MonkeyPatch) -> None:
         captured: dict[str, Any] = {}
 
         class _Stub:

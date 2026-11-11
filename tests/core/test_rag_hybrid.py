@@ -27,9 +27,7 @@ class TestBM25:
         assert tokenize("Hello, WORLD_2!") == ["hello", "world_2"]
 
     def test_exact_term_ranks_higher(self):
-        bm = BM25Index().fit(
-            ["the quick brown fox", "completely unrelated text", "quick fox again"]
-        )
+        bm = BM25Index().fit(["the quick brown fox", "completely unrelated text", "quick fox again"])
         scores = bm.scores("quick fox")
         assert scores[0] > scores[1]
         assert scores[2] > scores[1]

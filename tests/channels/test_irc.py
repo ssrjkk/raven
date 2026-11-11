@@ -194,9 +194,7 @@ async def test_invalid_port_fails_the_start(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.asyncio
-async def test_unreachable_server_fails_the_start(
-    monkeypatch: pytest.MonkeyPatch, server: FakeIRCServer
-) -> None:
+async def test_unreachable_server_fails_the_start(monkeypatch: pytest.MonkeyPatch, server: FakeIRCServer) -> None:
     port = server.port
     await server.close()  # nothing is listening on the port any more
     monkeypatch.setenv("IRC_SERVER", "127.0.0.1")

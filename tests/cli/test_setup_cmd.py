@@ -213,7 +213,9 @@ class TestFreeSetup:
         assert [p["id"] for p in coded["providers"]] == ["openrouter", "ollama"]
 
     def test_a_jsonc_config_is_left_alone_rather_than_flattened(self, tmp_path: Path) -> None:
-        (tmp_path / "opencode.json").write_text('{\n  // operator note\n  "model": "ollama/keepme"\n}\n', encoding="utf-8")
+        (tmp_path / "opencode.json").write_text(
+            '{\n  // operator note\n  "model": "ollama/keepme"\n}\n', encoding="utf-8"
+        )
         result = CliRunner().invoke(setup_cmd.setup, ["--free"])
         assert result.exit_code == 0, result.output
         assert "not plain JSON" in result.output
@@ -242,7 +244,9 @@ class TestFreeSetup:
         assert f"WEB_SECRET_KEY={key}" in text, "rotating the key on re-run logs out every session"
 
     def test_re_running_keeps_the_operators_own_keys(self, tmp_path: Path) -> None:
-        (tmp_path / ".env").write_text("OPENROUTER_API_KEY=sk-or-keepme\nDEFAULT_MODEL=openrouter/x\n", encoding="utf-8")
+        (tmp_path / ".env").write_text(
+            "OPENROUTER_API_KEY=sk-or-keepme\nDEFAULT_MODEL=openrouter/x\n", encoding="utf-8"
+        )
         CliRunner().invoke(setup_cmd.setup, ["--free"])
         text = (tmp_path / ".env").read_text(encoding="utf-8")
         assert "OPENROUTER_API_KEY=sk-or-keepme" in text
@@ -398,17 +402,13 @@ class TestPullOutcome:
     def test_a_nonzero_pull_exit_is_a_failure_not_a_success(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], real_pull: None
     ) -> None:
-        monkeypatch.setattr(
-            subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=1, stderr="")
-        )
+        monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=1, stderr=""))
         assert setup_cmd._pull_model("qwen2.5:32b") is False
         assert "Retry with: ollama pull qwen2.5:32b" in capsys.readouterr().out
 
     def test_a_missing_binary_cannot_start_a_pull(self, monkeypatch: pytest.MonkeyPatch, real_pull: None) -> None:
         monkeypatch.setattr(setup_cmd, "_find_ollama", lambda: None)
-        monkeypatch.setattr(
-            subprocess, "run", lambda *a, **k: pytest.fail("pulled without an ollama binary")
-        )
+        monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("pulled without an ollama binary"))
         assert setup_cmd._pull_model("qwen2.5:32b") is False
 
 

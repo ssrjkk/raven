@@ -14,6 +14,7 @@ from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 class PlanValidationError(ValueError):
     """The plan names a tool this registry does not serve, so running it would fail at that step."""
 
+
 PLANNER_PROMPT = """\
 You are a task planner for the Raven AI assistant.
 Given a user's goal and a list of available tools, decompose the goal into a sequence of steps.

@@ -514,7 +514,10 @@ class FaultInjector:
                     _tc_path = shutil.which("tc")
                     if _tc_path:
                         _subprocess.run(
-                            [_tc_path, "qdisc", "del", "dev", iface, "root"], capture_output=True, timeout=5, check=False
+                            [_tc_path, "qdisc", "del", "dev", iface, "root"],
+                            capture_output=True,
+                            timeout=5,
+                            check=False,
                         )
                     logger.info("[RECOVER] tc qdisc removed from {}", iface)
             else:
@@ -681,9 +684,7 @@ class ChaosEngineering:
             msg = f"Experiment not found: {experiment_id}"
             raise ValueError(msg)
 
-        duration = result.elapsed_sec or (
-            result.end_time - result.start_time if result.end_time > 0 else 0.0
-        )
+        duration = result.elapsed_sec or (result.end_time - result.start_time if result.end_time > 0 else 0.0)
         steadiness = self._compute_steadiness(result)
         return {
             "experiment_id": result.experiment_id,

@@ -28,9 +28,13 @@ def run(code: str) -> str:
     if tree.body and isinstance(tree.body[-1], ast.Expr):
         last_expr = cast(ast.Expr, tree.body.pop())
     ns: dict[str, object] = {"__builtins__": RESTRICTED_BUILTINS.copy()}
-    exec(compile(tree, "<sandbox>", "exec"), ns)  # this is the python tool: policy-checked code, run in a child process against RESTRICTED_BUILTINS  # nosec B102
+    exec(
+        compile(tree, "<sandbox>", "exec"), ns
+    )  # this is the python tool: policy-checked code, run in a child process against RESTRICTED_BUILTINS  # nosec B102
     if last_expr:
-        result = eval(compile(ast.Expression(last_expr.value), "<sandbox>", "eval"), ns)  # the trailing expression of that same checked code, in the same restricted namespace  # nosec B307
+        result = eval(
+            compile(ast.Expression(last_expr.value), "<sandbox>", "eval"), ns
+        )  # the trailing expression of that same checked code, in the same restricted namespace  # nosec B307
         return str(result) if result is not None else "(no return value)"
     return "(code executed, no return value)"
 

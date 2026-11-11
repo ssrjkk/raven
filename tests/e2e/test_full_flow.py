@@ -117,11 +117,7 @@ class TestFullFlowRealSqlite:
         )
         await real_gateway.handle_message(event)
         snap = metrics.snapshot()
-        received = {
-            k: v
-            for k, v in snap.items()
-            if k.startswith("raven_messages_received") and k.endswith("_total")
-        }
+        received = {k: v for k, v in snap.items() if k.startswith("raven_messages_received") and k.endswith("_total")}
         assert sum(received.values()) >= 1
 
     async def test_db_health_check_true(self, real_gateway) -> None:

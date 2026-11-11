@@ -44,9 +44,7 @@ class TestDataclasses:
         assert meta.category == Category.UNIQUE
 
     def test_plugin_metadata_with_category(self) -> None:
-        meta = PluginMetadata(
-            id="p2", name="coder", version="0.5.0", category=Category.CODING, tags=["python", "llm"]
-        )
+        meta = PluginMetadata(id="p2", name="coder", version="0.5.0", category=Category.CODING, tags=["python", "llm"])
         assert meta.category == Category.CODING
         assert "python" in meta.tags
 
@@ -63,9 +61,30 @@ class TestPluginCatalog:
     def setup_method(self) -> None:
         self.catalog = PluginCatalog()
         self.catalog._plugins = {
-            "p1": PluginMetadata(id="p1", name="web-scraper", version="1.0.0", description="Scrape websites", category=Category.AUTOMATION, tags=["http", "scrape"]),
-            "p2": PluginMetadata(id="p2", name="voice-transcriber", version="2.1.0", description="Transcribe voice", category=Category.VOICE, tags=["audio", "stt"]),
-            "p3": PluginMetadata(id="p3", name="code-formatter", version="0.3.0", description="Format code", category=Category.CODING, tags=["python", "format"]),
+            "p1": PluginMetadata(
+                id="p1",
+                name="web-scraper",
+                version="1.0.0",
+                description="Scrape websites",
+                category=Category.AUTOMATION,
+                tags=["http", "scrape"],
+            ),
+            "p2": PluginMetadata(
+                id="p2",
+                name="voice-transcriber",
+                version="2.1.0",
+                description="Transcribe voice",
+                category=Category.VOICE,
+                tags=["audio", "stt"],
+            ),
+            "p3": PluginMetadata(
+                id="p3",
+                name="code-formatter",
+                version="0.3.0",
+                description="Format code",
+                category=Category.CODING,
+                tags=["python", "format"],
+            ),
         }
         self.catalog._ratings = {"p1": 4.5, "p2": 3.8, "p3": 4.2}
         self.catalog._downloads = {"p1": 1200, "p2": 800, "p3": 3500}
@@ -126,19 +145,21 @@ class TestPluginCatalog:
 
     def test_sync_with_data(self) -> None:
         catalog = PluginCatalog()
-        catalog._parse_catalog({
-            "plugins": [
-                {
-                    "id": "sync-1",
-                    "name": "sync-plugin",
-                    "version": "1.0.0",
-                    "category": "automation",
-                    "rating": 4.0,
-                    "downloads": 500,
-                    "releases": [{"version": "1.0.0", "download_url": "https://example.com/p"}],
-                }
-            ]
-        })
+        catalog._parse_catalog(
+            {
+                "plugins": [
+                    {
+                        "id": "sync-1",
+                        "name": "sync-plugin",
+                        "version": "1.0.0",
+                        "category": "automation",
+                        "rating": 4.0,
+                        "downloads": 500,
+                        "releases": [{"version": "1.0.0", "download_url": "https://example.com/p"}],
+                    }
+                ]
+            }
+        )
         assert "sync-1" in catalog._plugins
         assert catalog._ratings["sync-1"] == 4.0
         assert len(catalog._releases["sync-1"]) == 1
@@ -152,6 +173,7 @@ class TestPluginManager:
 
     def teardown_method(self) -> None:
         import shutil
+
         if self.tmp_dir.exists():
             shutil.rmtree(self.tmp_dir)
 
@@ -266,6 +288,7 @@ class TestPluginManager:
 # ---------------------------------------------------------------------------
 # Fakes for network / subprocess / catalog interactions
 # ---------------------------------------------------------------------------
+
 
 class _Resp:
     def __init__(self, payload: Any = None, status: int = 200) -> None:
@@ -399,9 +422,7 @@ class TestPluginManagerPaths:
         installed = await manager.install_plugin("https://x.com/rem", source="remote")
         assert installed.metadata.name == "rem"
 
-    async def test_install_real_when_allowed(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_install_real_when_allowed(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from unittest.mock import AsyncMock
 
         manager = PluginManager(plugins_dir=tmp_path / "plugins", allow_real_install=True)
@@ -409,7 +430,9 @@ class TestPluginManagerPaths:
         installed = await manager.install_plugin("https://x.com/real", source="local")
         assert installed.metadata.name == "real"
 
-    async def test_install_wraps_and_raises_errors(self, manager: PluginManager, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_install_wraps_and_raises_errors(
+        self, manager: PluginManager, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from unittest.mock import AsyncMock
 
         monkeypatch.setattr(manager, "_simulated_install", AsyncMock(side_effect=OSError("disk full")))
@@ -478,7 +501,9 @@ class TestUpdatePlugin:
         from unittest.mock import AsyncMock
 
         manager = PluginManager(plugins_dir=tmp_path / "plugins", allow_real_install=True)
-        manager._catalog = cast(PluginCatalog, _StubCatalog([PluginRelease(version="2.0.0", download_url="https://x/p")]))
+        manager._catalog = cast(
+            PluginCatalog, _StubCatalog([PluginRelease(version="2.0.0", download_url="https://x/p")])
+        )
         self._install(manager, "up", "1.0.0")
         monkeypatch.setattr(manager, "_real_install", AsyncMock())
         result = await manager.update_plugin("up")

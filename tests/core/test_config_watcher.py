@@ -128,7 +128,9 @@ async def test_watch_loop_survives_stat_error(tmp_path: Path) -> None:
         await w.stop()
 
 
-def test_with_no_path_it_watches_the_file_settings_actually_reads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_with_no_path_it_watches_the_file_settings_actually_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The gateway starts a watcher with no argument, so the default must be the obeyed file.
 
     Before this, a switch written into ``~/.raven/.env`` was watched while the operator's ``./.env``

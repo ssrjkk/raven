@@ -17,7 +17,7 @@ import json
 import sys
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -61,7 +61,9 @@ class FakeLLM:
         self._handoff = handoff
         self._critic = critic
 
-    async def complete(self, messages: list[dict[str, Any]], tools: Any = None, model: str | None = None) -> LLMResponse:
+    async def complete(
+        self, messages: list[dict[str, Any]], tools: Any = None, model: str | None = None
+    ) -> LLMResponse:
         system = messages[0]["content"] if messages else ""
         if system == _PLAN_PROMPT:
             return LLMResponse(content=json.dumps(self._plan))
@@ -129,12 +131,16 @@ class TestRealEmitters:
 
 
 class TestAgentProgressLine:
-    def _agent(self, handler: Callable[..., Any], name: str = "any.tool", arguments: dict[str, Any] | None = None) -> Agent:
+    def _agent(
+        self, handler: Callable[..., Any], name: str = "any.tool", arguments: dict[str, Any] | None = None
+    ) -> Agent:
         async def wrapped(**kwargs: Any) -> Any:
             answer = handler(**kwargs)
             return await answer if inspect.isawaitable(answer) else answer
 
-        tools = [PluginTool(name=name, description="t", parameters={"type": "object", "properties": {}}, handler=wrapped)]
+        tools = [
+            PluginTool(name=name, description="t", parameters={"type": "object", "properties": {}}, handler=wrapped)
+        ]
         llm = AsyncMock()
         llm.complete = AsyncMock(
             side_effect=[
@@ -162,7 +168,7 @@ class TestAgentProgressLine:
         """The progress lines the operator saw, and the tool messages the model was given."""
         tokens = [t async for t in agent.run("go")]
         lines = [t for t in tokens if t.startswith("[") and "→" in t]
-        llm = cast("AsyncMock", agent.llm)
+        llm: Any = agent.llm
         rounds = [list(call.args[0]) for call in llm.complete.await_args_list]
         payloads = [json.loads(m["content"]) for round_ in rounds for m in round_ if m.get("role") == "tool"]
         return lines, payloads
@@ -176,9 +182,7 @@ class TestAgentProgressLine:
         assert payloads[0]["error"] == "GitHub token not configured"
 
     async def test_a_refused_command_is_not_printed_as_ok(self) -> None:
-        agent = self._agent(
-            shell_command, arguments={"command": "raven_no_such_command --version"}
-        )
+        agent = self._agent(shell_command, arguments={"command": "raven_no_such_command --version"})
         lines, payloads = await self._stream(agent)
         assert "→ ok" not in lines[0], lines[0]
         assert payloads[0]["error"].startswith("[denied]")

@@ -90,9 +90,7 @@ class TestSwitch:
     def test_disable_answers_in_the_request_because_it_is_instant(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            heretic_model, "disable", lambda: SwitchResult(ok=True, detail="DEFAULT_MODEL=groq/x")
-        )
+        monkeypatch.setattr(heretic_model, "disable", lambda: SwitchResult(ok=True, detail="DEFAULT_MODEL=groq/x"))
         body = client.post("/api/admin/models/experimental", json={"action": "disable"}).json()
         assert body == {"ok": True, "detail": "DEFAULT_MODEL=groq/x", "busy": False}
 
@@ -166,9 +164,7 @@ class TestSwitch:
         assert "already running" in second.json()["detail"]
 
     @pytest.mark.parametrize("client", ["admin"], indirect=True)
-    def test_force_is_carried_into_the_switch(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_force_is_carried_into_the_switch(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
         seen: dict[str, Any] = {}
 
         def _record(_url: str, **kwargs: Any) -> SwitchResult:

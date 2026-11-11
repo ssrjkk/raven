@@ -9,39 +9,28 @@ async def think(reasoning: str) -> str:
     return f"[thinking: {reasoning}]"
 
 
-
-
 _task_depth: contextvars.ContextVar[int] = contextvars.ContextVar("_task_depth", default=0)
 
 
 _MAX_TASK_DEPTH = 5
 
 
-
 # A hung sub-agent must not wedge the parent loop forever.
 _SUBTASK_TIMEOUT = 600
-
 
 
 _AGENT_MEMORY: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar("_AGENT_MEMORY", default=None)
 
 
-
 _MEMORY_STORE: contextvars.ContextVar[Any] = contextvars.ContextVar("_MEMORY_STORE", default=None)
-
-
 
 
 def set_agent_memory(memory: dict[str, Any] | None) -> None:
     _AGENT_MEMORY.set(memory)
 
 
-
-
 def set_agent_memory_store(store: Any) -> None:
     _MEMORY_STORE.set(store)
-
-
 
 
 async def memory_remember(fact: str, key: str = "notes") -> str:
@@ -54,8 +43,6 @@ async def memory_remember(fact: str, key: str = "notes") -> str:
         return "[validation_error] fact must be a non-empty string"
     was_new = await store.push(key, fact)
     return "remembered" if was_new else "duplicate ignored (already known)"
-
-
 
 
 async def memory_recall(key: str = "notes") -> str:
@@ -71,8 +58,6 @@ async def memory_recall(key: str = "notes") -> str:
             return f"(nothing remembered under '{key}')"
         return "\n".join(f"- {item}" for item in value)
     return str(value)
-
-
 
 
 async def task_delegate(description: str, context: str | None = None) -> str:
@@ -111,8 +96,6 @@ async def task_delegate(description: str, context: str | None = None) -> str:
         _task_depth.reset(token)
 
 
-
-
 async def task_parallel(tasks: list[str], context: str | None = None) -> str:
     """Run several independent sub-tasks on concurrent sub-agents."""
     if not tasks or not isinstance(tasks, list):
@@ -142,8 +125,6 @@ async def task_parallel(tasks: list[str], context: str | None = None) -> str:
         )
     finally:
         _task_depth.reset(token)
-
-
 
 
 def _delegate_role_prompt(description: str) -> str:

@@ -12,6 +12,7 @@ import pytest
 def _data_dir(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a temporary data directory and patch db_path to use it."""
     import sqlite3
+
     d = tmp_path / "data"
     d.mkdir()
     db_path = d / "raven.db"

@@ -34,8 +34,10 @@ def app(db):
     api.state.teams_channel = None
     api.state.feishu_channel = None
     api.state.line_channel = None
+
     async def handle_incoming(event):
         pass
+
     router = create_webhook_router(db, handle_incoming)
     api.include_router(router)
     return api
@@ -44,6 +46,7 @@ def app(db):
 @pytest.fixture(autouse=True)
 def _patch_webhook_settings():
     from unittest.mock import patch
+
     with patch("raven.core.webhooks.settings") as mock_settings:
         mock_settings.web_secret_key = SafeSecretStr("test-secret-key")
         yield

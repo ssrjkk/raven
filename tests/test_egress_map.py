@@ -119,9 +119,7 @@ def test_an_sdk_owned_host_is_still_reached_by_the_call_that_earns_it(host: str)
 
 def _external_refs(markup: str) -> list[str]:
     return [
-        value
-        for value in re.findall(r"(?:src|href)\s*=\s*\"([^\"]+)\"", markup)
-        if re.match(r"(?:https?:)?//", value)
+        value for value in re.findall(r"(?:src|href)\s*=\s*\"([^\"]+)\"", markup) if re.match(r"(?:https?:)?//", value)
     ]
 
 

@@ -24,8 +24,6 @@ async def _ddg_search(query: str, num_results: int) -> list[dict[str, str]] | No
         return None
 
 
-
-
 async def _httpx_search(query: str, num_results: int) -> list[dict[str, str]] | None:
     try:
         import httpx
@@ -54,14 +52,10 @@ async def _httpx_search(query: str, num_results: int) -> list[dict[str, str]] | 
         return None
 
 
-
-
 def _urlencode(q: str) -> str:
     import urllib.parse
 
     return urllib.parse.quote(q)
-
-
 
 
 async def web_search(query: str, num_results: int = 5) -> str:
@@ -69,8 +63,6 @@ async def web_search(query: str, num_results: int = 5) -> str:
     if not results:
         return "(no results)"
     return "\n\n".join(f"• {r.get('title', '')}\n  {r.get('body', '')[:200]}\n  {r.get('href', '')}" for r in results)
-
-
 
 
 async def web_fetch(url: str) -> str:

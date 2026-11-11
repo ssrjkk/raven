@@ -62,9 +62,7 @@ def _no_policy(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _valid_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "raven.core.routine.engine.RoutineEngine.validate_schedule", staticmethod(lambda s: None)
-    )
+    monkeypatch.setattr("raven.core.routine.engine.RoutineEngine.validate_schedule", staticmethod(lambda s: None))
 
 
 def test_routine_name_and_description() -> None:
@@ -78,9 +76,7 @@ async def test_routine_policy_denied(monkeypatch: pytest.MonkeyPatch) -> None:
         "raven.core.gateway.commands.routine.check_tool_allowed",
         lambda policy, action, ch: (False, "blocked"),
     )
-    monkeypatch.setattr(
-        "raven.core.gateway.commands.routine.get_policy_for_channel", lambda ch: object()
-    )
+    monkeypatch.setattr("raven.core.gateway.commands.routine.get_policy_for_channel", lambda ch: object())
     gw = _FakeGateway()
     assert await RoutineCommand(gw).execute(_ctx()) is True
     assert _sent(gw)[2] == "Access denied: blocked"
@@ -109,10 +105,14 @@ async def test_routine_list_empty() -> None:
 async def test_routine_list_with_entries() -> None:
     gw = _FakeGateway()
     gw._routine_store.routines = [
-        Routine(name="Morning", action=RoutineAction.SEND_BRIEFING, schedule="08:00",
-                status=RoutineStatus.ACTIVE, last_run_status="ok"),
-        Routine(name="Paused one", action=RoutineAction.CHECK_EMAIL, schedule="300",
-                status=RoutineStatus.PAUSED),
+        Routine(
+            name="Morning",
+            action=RoutineAction.SEND_BRIEFING,
+            schedule="08:00",
+            status=RoutineStatus.ACTIVE,
+            last_run_status="ok",
+        ),
+        Routine(name="Paused one", action=RoutineAction.CHECK_EMAIL, schedule="300", status=RoutineStatus.PAUSED),
     ]
     assert await RoutineCommand(gw).execute(_ctx(args=["list"])) is True
     out = gw._send.await_args_list[0].args[2]

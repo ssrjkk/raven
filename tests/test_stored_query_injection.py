@@ -71,9 +71,7 @@ class TestTaskStoreInterpolation:
             assert "user_id = ?" in sql and "status = ?" in sql, sql
             assert params[0] == HOSTILE, params
 
-    async def test_a_user_id_that_reads_like_sql_returns_nothing_it_should_not(
-        self, task_store: TaskStore
-    ) -> None:
+    async def test_a_user_id_that_reads_like_sql_returns_nothing_it_should_not(self, task_store: TaskStore) -> None:
         await task_store.save_task(Task(user_id="alice", goal="keep"))
         await task_store.save_task(Task(user_id="bob", goal="keep"))
         assert len(await task_store.list_tasks()) == 2

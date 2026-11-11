@@ -118,9 +118,7 @@ def preflight(hw: Hardware | None = None) -> list[str]:
             f"GB for {HERETIC_SIZE_GB:.2f} GB of weights"
         )
     if read.ram_total_gb and read.ram_total_gb < _MIN_TOTAL_RAM_GB:
-        blockers.append(
-            f"{read.ram_total_gb:.1f} GB of RAM, needs {_MIN_TOTAL_RAM_GB:.0f} GB to hold a 9B at Q4_K_M"
-        )
+        blockers.append(f"{read.ram_total_gb:.1f} GB of RAM, needs {_MIN_TOTAL_RAM_GB:.0f} GB to hold a 9B at Q4_K_M")
     if read.vram_mb < _GPU_OFFLOAD_MB and read.ram_free_gb and read.ram_free_gb < _MIN_FREE_RAM_GB:
         blockers.append(
             f"{read.ram_free_gb:.1f} GB RAM free with {read.vram_mb} MB of VRAM to offload to, "

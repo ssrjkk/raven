@@ -185,9 +185,7 @@ def _split_conversation_input(messages: list[ChatMessage]) -> tuple[Conversation
 
 
 def _sse_chunk(chunk_id: str, model: str, delta: dict[str, Any], finish: str | None = None) -> str:
-    return (
-        f"data: {json.dumps({'id': chunk_id, 'object': 'chat.completion.chunk', 'created': int(time.time()), 'model': model, 'choices': [{'index': 0, 'delta': delta, 'finish_reason': finish}]})}\n\n"
-    )
+    return f"data: {json.dumps({'id': chunk_id, 'object': 'chat.completion.chunk', 'created': int(time.time()), 'model': model, 'choices': [{'index': 0, 'delta': delta, 'finish_reason': finish}]})}\n\n"
 
 
 async def _run_agent_nonstream(messages: list[ChatMessage], model: str, max_tokens: int) -> ChatCompletionResponse:

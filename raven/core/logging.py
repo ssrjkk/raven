@@ -134,8 +134,7 @@ def _structlog_processors(json_format: bool) -> list[Callable[..., Any]]:
 _CONSOLE_FMT = "{time:HH:mm:ss} | {level: <8} | {name} - {message}"
 _FILE_FMT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}"
 _CONSOLE_COLOR_FMT = (
-    "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | "
-    "<cyan>{name}</cyan> - <level>{message}</level>"
+    "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan> - <level>{message}</level>"
 )
 
 

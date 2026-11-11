@@ -45,9 +45,7 @@ def _agent_permissions(agent_def: CustomAgentDef) -> PermissionManager | None:
     return pm
 
 
-async def run_streaming_agent(
-    prompt: str, config: AgentConfig, system_prompt: str | None = None
-) -> str:
+async def run_streaming_agent(prompt: str, config: AgentConfig, system_prompt: str | None = None) -> str:
     """Run an agent with live token streaming and tool-activity hints.
 
     Tokens print as they arrive; tool calls appear as dim inline lines. If
@@ -179,6 +177,7 @@ async def main_loop(session_id: str | None = None) -> None:
 
     if session_id:
         from ravencode.runtime.session import SessionStore
+
         store = SessionStore()
         agent = await store.load(session_id)
         if agent is not None:

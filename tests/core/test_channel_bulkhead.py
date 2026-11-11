@@ -128,9 +128,7 @@ class TestChannelBulkhead:
         assert await gateway._outbox.pending_count() == 1
 
     async def test_circuit_breaker_open_routes_to_outbox_without_send(self, gateway, monkeypatch) -> None:
-        monkeypatch.setattr(
-            "raven.core.gateway.gateway.settings.channel_send_failure_threshold", 3
-        )
+        monkeypatch.setattr("raven.core.gateway.gateway.settings.channel_send_failure_threshold", 3)
         fail = FailChannel()
         await gateway.register_channel(fail)
 

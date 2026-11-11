@@ -248,7 +248,6 @@ def _write_real_env(llm: dict[str, str], channels: dict[str, Any], security: dic
         console.print(f"[green]Written {path} with your secrets (gitignored)[/green]")
 
 
-
 def _write_features_yaml(team_dir: Path) -> None:
     """State the toggles the scaffold created, using only the names the loader accepts."""
     from raven.core.features import FeatureFlags, env_flag_names
@@ -262,6 +261,7 @@ def _write_features_yaml(team_dir: Path) -> None:
     for name in env_flag_names():
         lines.append(f"  {name}: {str(getattr(flags, name)).lower()}")
     (team_dir / "features.yaml").write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
+
 
 def init() -> None:
     console.print()

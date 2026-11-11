@@ -74,6 +74,7 @@ async def _collect(agen):
 # Copilot
 # ---------------------------------------------------------------------------
 
+
 def test_copilot_static_token(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("COPILOT_TOKEN", raising=False)
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
@@ -171,7 +172,9 @@ async def test_copilot_complete_stream_with_tools(monkeypatch: pytest.MonkeyPatc
     client = _FakeClient(stream_lines=lines)
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: client)
     p = CopilotProvider(api_key="k")
-    tokens = await _collect(p.complete_stream([{"role": "user", "content": "x"}], "copilot/gpt-4", tools=[{"name": "t"}]))
+    tokens = await _collect(
+        p.complete_stream([{"role": "user", "content": "x"}], "copilot/gpt-4", tools=[{"name": "t"}])
+    )
     assert tokens == ["y"]
 
 
@@ -187,6 +190,7 @@ async def test_copilot_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 # Vertex
 # ---------------------------------------------------------------------------
+
 
 class _FakeProc:
     def __init__(self, out=b"VT-TOKEN\n", err=b"", rc: int = 0) -> None:
@@ -217,7 +221,8 @@ async def test_vertex_token_from_gcloud_is_cached(monkeypatch: pytest.MonkeyPatc
 @pytest.mark.asyncio
 async def test_vertex_token_falls_back_to_creds_file(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setattr(
-        "raven.core.llm.providers.vertex.asyncio.create_subprocess_exec", AsyncMock(side_effect=FileNotFoundError("no gcloud"))
+        "raven.core.llm.providers.vertex.asyncio.create_subprocess_exec",
+        AsyncMock(side_effect=FileNotFoundError("no gcloud")),
     )
     creds = tmp_path / "creds.json"
     creds.write_text('{"access_token": "AT-FROM-FILE"}')
@@ -233,7 +238,8 @@ async def test_vertex_token_falls_back_to_creds_file(monkeypatch: pytest.MonkeyP
 @pytest.mark.asyncio
 async def test_vertex_gcloud_nonzero_rc_then_no_creds(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "raven.core.llm.providers.vertex.asyncio.create_subprocess_exec", AsyncMock(return_value=_FakeProc(rc=1, err=b"unauth"))
+        "raven.core.llm.providers.vertex.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=_FakeProc(rc=1, err=b"unauth")),
     )
     monkeypatch.delenv("VERTEX_AI_CREDENTIALS", raising=False)
     monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
@@ -272,9 +278,7 @@ async def test_vertex_creds_file_read_error(monkeypatch: pytest.MonkeyPatch, tmp
 @pytest.mark.asyncio
 async def test_vertex_gcloud_timeout_kills_process(monkeypatch: pytest.MonkeyPatch) -> None:
     proc = _FakeProc()
-    monkeypatch.setattr(
-        "raven.core.llm.providers.vertex.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)
-    )
+    monkeypatch.setattr("raven.core.llm.providers.vertex.asyncio.create_subprocess_exec", AsyncMock(return_value=proc))
 
     async def _raise_timeout(coro, *a, **k):
         # real wait_for wraps the coroutine; close it so it is not left un-awaited
@@ -295,6 +299,8 @@ def test_vertex_model_id() -> None:
     p = VertexAIProvider.__new__(VertexAIProvider)
     assert p._model_id("vertex/gemini-1.5") == "gemini-1.5"
     assert p._model_id("gemini-pro") == "gemini-pro"
+
+
 @pytest.mark.asyncio
 async def test_vertex_complete(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = {"candidates": [{"content": {"parts": [{"text": "Hello "}, {"text": "world"}]}}]}
@@ -337,6 +343,7 @@ async def test_vertex_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
 # Bedrock
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_bedrock_signed_headers_without_session(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AWS_SESSION_TOKEN", raising=False)
@@ -369,7 +376,10 @@ def test_bedrock_model_id_and_env_defaults(monkeypatch: pytest.MonkeyPatch) -> N
 
 @pytest.mark.asyncio
 async def test_bedrock_complete(monkeypatch: pytest.MonkeyPatch) -> None:
-    payload = {"output": {"message": {"content": [{"text": "A"}, {"text": "B"}, {"nope": 1}]}}, "stopReason": "end_turn"}
+    payload = {
+        "output": {"message": {"content": [{"text": "A"}, {"text": "B"}, {"nope": 1}]}},
+        "stopReason": "end_turn",
+    }
     client = _FakeClient(post_payload=payload)
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: client)
     p = BedrockProvider(region="us-east-1", api_key="AK", secret_key="SK")

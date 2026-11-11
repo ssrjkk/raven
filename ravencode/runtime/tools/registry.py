@@ -120,6 +120,8 @@ def get_mcp_tool_definitions(plan_mode: bool = False) -> list[dict[str, Any]]:
             }
         )
     return tools
+
+
 def is_dangerous(name: str) -> bool:
     t = MODULE_TOOLS.get(name)
     return bool(t.get("dangerous")) if t else False
@@ -181,17 +183,11 @@ async def execute_tool_public(name: str, arguments: dict[str, Any]) -> str:
         return "[execution_error] tool failed"
 
 
-
-
 _PERMISSION_CHECKER: contextvars.ContextVar[Any] = contextvars.ContextVar("_PERMISSION_CHECKER", default=None)
-
-
 
 
 def set_permission_checker(checker: Any) -> None:
     _PERMISSION_CHECKER.set(checker)
-
-
 
 
 def _get_permission_for_tool(name: str, arguments: dict[str, Any]) -> tuple[bool, str]:

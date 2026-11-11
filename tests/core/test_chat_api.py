@@ -27,8 +27,22 @@ def test_search_chat_no_db(client: TestClient) -> None:
 
 def test_search_chat_with_results(client: TestClient) -> None:
     rows = [
-        {"id": "1", "session_id": "s1", "role": "user", "content": "hello world", "created_at": "2026-01-01", "session_name": "test"},
-        {"id": "2", "session_id": "s1", "role": "assistant", "content": "hello there", "created_at": "2026-01-02", "session_name": "test"},
+        {
+            "id": "1",
+            "session_id": "s1",
+            "role": "user",
+            "content": "hello world",
+            "created_at": "2026-01-01",
+            "session_name": "test",
+        },
+        {
+            "id": "2",
+            "session_id": "s1",
+            "role": "assistant",
+            "content": "hello there",
+            "created_at": "2026-01-02",
+            "session_name": "test",
+        },
     ]
 
     cursor = AsyncMock()

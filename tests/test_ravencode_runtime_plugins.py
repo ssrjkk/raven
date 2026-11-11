@@ -422,7 +422,9 @@ class TestPluginFiles:
 
 
 class TestLoadUntrustedPlugin:
-    async def test_tool_metadata_is_namespaced_by_the_directory(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    async def test_tool_metadata_is_namespaced_by_the_directory(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         reported = {
             "name": "weather",
             "tools": [
@@ -458,7 +460,9 @@ class TestLoadUntrustedPlugin:
         # the worker is addressed by file and by its own un-prefixed tool name
         assert calls == [(str(plugin_dir / "plugin.py"), "get_forecast", {"city": "Oslo"})]
 
-    async def test_a_worker_that_refuses_yields_no_plugin(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    async def test_a_worker_that_refuses_yields_no_plugin(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         async def _none(path: Path, **kwargs: Any) -> None:
             return None
 
@@ -467,7 +471,9 @@ class TestLoadUntrustedPlugin:
 
 
 class TestDiscoveryAndRegistration:
-    async def test_discover_skips_failures_and_keeps_order(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    async def test_discover_skips_failures_and_keeps_order(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         _write_plugin(tmp_path, "a", "def register():\n    return Plugin(name='a')\n")
         _write_plugin(tmp_path, "b", "def register():\n    return Plugin(name='b')\n")
         _write_plugin(tmp_path, "c", "def register():\n    return Plugin(name='c')\n")
@@ -511,9 +517,7 @@ class TestDiscoveryAndRegistration:
         assert await ensure_plugin_tools(force=True) == 1
         assert runs == 2
 
-    async def test_a_broken_discovery_is_reported_once_and_not_fatal(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_a_broken_discovery_is_reported_once_and_not_fatal(self, monkeypatch: pytest.MonkeyPatch) -> None:
         async def _boom(_dir: Any = None, watch: bool = False) -> int:
             raise OSError("plugins directory is a file")
 
@@ -846,9 +850,7 @@ class TestSandboxRefusals:
         outside = tmp_path / "deps"
         outside.mkdir()
         monkeypatch.setenv("SOME_API_KEY", "leak-me")
-        monkeypatch.setenv(
-            "PYTHONPATH", os.pathsep.join([str(root), str(root / "libs"), str(outside), str(script)])
-        )
+        monkeypatch.setenv("PYTHONPATH", os.pathsep.join([str(root), str(root / "libs"), str(outside), str(script)]))
         env = _worker_env(script)
         assert [k for k in env if _SECRETISH.search(k)] == [], sorted(env)
         assert "SOME_API_KEY" not in env

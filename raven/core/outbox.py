@@ -101,9 +101,7 @@ class Outbox:
             self._running = True
             await self._recover()
             self._worker = asyncio.create_task(self._run())
-            logger.info(
-                "Outbox started (path={}, retry_interval={}s)", self._db_path, self._retry_interval
-            )
+            logger.info("Outbox started (path={}, retry_interval={}s)", self._db_path, self._retry_interval)
 
     async def stop(self) -> None:
         async with self._state_lock:
@@ -164,9 +162,7 @@ class Outbox:
                 or 0
             )
         if stranded:
-            logger.warning(
-                "Outbox rescheduled {} rows stranded by a clock change, retrying them now", stranded
-            )
+            logger.warning("Outbox rescheduled {} rows stranded by a clock change, retrying them now", stranded)
         reclaimed = await self._reclaim_expired_leases()
         if reclaimed:
             logger.warning("Outbox reclaimed {} rows whose lease expired", reclaimed)
@@ -181,9 +177,7 @@ class Outbox:
         if db is None:
             return 0
         now = time.time()
-        if not await db.fetchval(
-            "SELECT COUNT(*) FROM outbox WHERE status = 'in_flight' AND next_due <= ?", (now,)
-        ):
+        if not await db.fetchval("SELECT COUNT(*) FROM outbox WHERE status = 'in_flight' AND next_due <= ?", (now,)):
             return 0
         async with db.transaction():
             return (
@@ -199,17 +193,10 @@ class Outbox:
         if db is None:
             return
         cutoff = time.time() - self._DROPPED_RETENTION_DAYS * 86400
-        if not await db.fetchval(
-            "SELECT COUNT(*) FROM outbox WHERE status = 'dropped' AND created_at < ?", (cutoff,)
-        ):
+        if not await db.fetchval("SELECT COUNT(*) FROM outbox WHERE status = 'dropped' AND created_at < ?", (cutoff,)):
             return
         async with db.transaction():
-            deleted = (
-                await db.execute(
-                    "DELETE FROM outbox WHERE status = 'dropped' AND created_at < ?", (cutoff,)
-                )
-                or 0
-            )
+            deleted = await db.execute("DELETE FROM outbox WHERE status = 'dropped' AND created_at < ?", (cutoff,)) or 0
         if deleted:
             logger.info(
                 "Outbox purged {} dropped messages older than {} days",
@@ -273,8 +260,7 @@ class Outbox:
             return False
         async with db.transaction():
             claimed = await db.execute(
-                "UPDATE outbox SET status = 'in_flight', next_due = ? "
-                "WHERE id = ? AND status = 'pending'",
+                "UPDATE outbox SET status = 'in_flight', next_due = ? WHERE id = ? AND status = 'pending'",
                 (time.time() + self._LEASE_SECONDS, row_id),
             )
         return (claimed or 0) == 1
@@ -310,9 +296,7 @@ class Outbox:
                     (attempts, time.time(), row_id),
                 )
             metrics.inc("outbox_dropped", {"channel": channel_id})
-            logger.error(
-                "Outbox message to {} dropped after {} attempts: {}", channel_id, attempts, error
-            )
+            logger.error("Outbox message to {} dropped after {} attempts: {}", channel_id, attempts, error)
             return
         delay = self._retry_delay(attempts)
         async with db.transaction():

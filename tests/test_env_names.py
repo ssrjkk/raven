@@ -57,13 +57,14 @@ def _table_env_names(source: str) -> set[str]:
             pairs.extend((target, node.value) for target in node.targets)
         for target, table in pairs:
             if not isinstance(target, ast.Name) or not _ENV_TABLE.search(target.id):
-                    continue
+                continue
             if not isinstance(table, ast.Dict):
                 continue
             for entry in table.values:
                 if isinstance(entry, ast.Constant) and isinstance(entry.value, str) and _ENV_LIKE.match(entry.value):
                     found.add(entry.value)
     return found
+
 
 @functools.lru_cache(maxsize=1)
 def _consumed() -> frozenset[str]:
@@ -108,7 +109,6 @@ def _generated(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> dict[
     monkeypatch.chdir(tmp_path)
     out["raven setup --free .env"] = setup_cmd._write_env("llama3").read_text(encoding="utf-8")
 
-
     out[".env.example"] = (ROOT / ".env.example").read_text(encoding="utf-8")
     return out
 
@@ -152,7 +152,9 @@ def test_the_sweep_counts_real_switches_on_both_sides() -> None:
     assert (ROOT / ".env.example").is_file()
 
 
-def test_no_switch_the_tooling_hands_out_is_one_the_application_ignores(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_no_switch_the_tooling_hands_out_is_one_the_application_ignores(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     assert _inert(_emitted(tmp_path, monkeypatch), _consumed()) == []
 
 
@@ -163,7 +165,9 @@ def test_the_sweep_reads_the_files_it_claims_to(tmp_path: pathlib.Path, monkeypa
     assert "raven init .env" in emitted and "raven deploy full" in emitted
 
 
-def test_the_check_names_a_switch_the_application_never_reads(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_check_names_a_switch_the_application_never_reads(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     assert _inert({"raven init .env": ["RAVEN_NO_SUCH_SWITCH"]}, _consumed()) == [
         ("raven init .env", "RAVEN_NO_SUCH_SWITCH")
     ]

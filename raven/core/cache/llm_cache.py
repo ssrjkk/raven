@@ -39,7 +39,13 @@ class LLMCache:
             if hasattr(tc, "to_dict"):
                 tool_calls_data.append(tc.to_dict())
             else:
-                tool_calls_data.append({"id": getattr(tc, "id", ""), "name": getattr(tc, "name", ""), "arguments": getattr(tc, "arguments", {})})
+                tool_calls_data.append(
+                    {
+                        "id": getattr(tc, "id", ""),
+                        "name": getattr(tc, "name", ""),
+                        "arguments": getattr(tc, "arguments", {}),
+                    }
+                )
         return json.dumps(
             {
                 "content": response.content,
@@ -67,7 +73,8 @@ class LLMCache:
             raw_tool_calls = data.get("tool_calls", [])
             tool_calls = [
                 ToolCall(id=tc.get("id", ""), name=tc.get("name", ""), arguments=tc.get("arguments", {}))
-                if isinstance(tc, dict) else tc
+                if isinstance(tc, dict)
+                else tc
                 for tc in raw_tool_calls
             ]
             return LLMResponse(

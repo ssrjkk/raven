@@ -192,7 +192,9 @@ def _coerce_palette(raw: object) -> dict[str, dict[str, str]]:
     return result
 
 
-def _complete_palette(base: dict[str, dict[str, str]], overrides: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
+def _complete_palette(
+    base: dict[str, dict[str, str]], overrides: dict[str, dict[str, str]]
+) -> dict[str, dict[str, str]]:
     merged: dict[str, dict[str, str]] = {}
     for group, colors in base.items():
         group_map = dict(colors)
@@ -212,7 +214,7 @@ async def _llm_palette(prompt: str) -> dict[str, dict[str, str]] | None:
             "You generate cohesive dark-mode UI color schemes as strict JSON. "
             'Return ONLY a JSON object with groups "bg", "surface", "accent", "text", "border", "status". '
             "Every color MUST be a 6-digit hex like #a1b2c3. "
-            'bg: primary/secondary/tertiary/inverse; surface: default/elevated/card/tooltip/modal; '
+            "bg: primary/secondary/tertiary/inverse; surface: default/elevated/card/tooltip/modal; "
             "accent: default/hover/active; text: primary/secondary/tertiary/link; border: default/hover/focus; "
             "status: success/warning/error/info. Colors must form a harmonious accessible palette."
         )

@@ -15,8 +15,17 @@ def _record(costs: CostManager, model: str = "gpt-4o", tokens: int = 1000) -> Us
 
 
 def _stamp(costs: CostManager, record_id: str, timestamp: float) -> UsageRecord:
-    record = UsageRecord(id=record_id, model="m", input_tokens=1, output_tokens=1,
-                         cost=0.0, user_id="", channel="", session_id="", timestamp=timestamp)
+    record = UsageRecord(
+        id=record_id,
+        model="m",
+        input_tokens=1,
+        output_tokens=1,
+        cost=0.0,
+        user_id="",
+        channel="",
+        session_id="",
+        timestamp=timestamp,
+    )
     costs._records.append(record)
     return record
 
@@ -67,5 +76,5 @@ def test_ring_keeps_the_recent_window_the_dashboards_read() -> None:
     for i in range(cm._RECORD_WINDOW + 5):
         _stamp(costs, str(i), 1000.0 + i)
     assert len(costs._records) == cm._RECORD_WINDOW
-    assert costs._records[0].id == "5"          # the five oldest were pushed out
+    assert costs._records[0].id == "5"  # the five oldest were pushed out
     assert costs.records_since(1000.5)[0].id == "5"

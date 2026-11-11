@@ -48,18 +48,31 @@ class _FakeMCPPool:
 @pytest.mark.e2e
 class TestMCPGatewayIntegration:
     def test_mcp_tools_registered_in_registry(self):
-        pool = _FakeMCPPool({
-            "math": _FakeMCPClient("math", [
-                {"name": "add", "description": "Add two numbers", "inputSchema": {
-                    "type": "object",
-                    "properties": {"a": {"type": "number"}, "b": {"type": "number"}},
-                }},
-                {"name": "subtract", "description": "Subtract two numbers", "inputSchema": {
-                    "type": "object",
-                    "properties": {"a": {"type": "number"}, "b": {"type": "number"}},
-                }},
-            ]),
-        })
+        pool = _FakeMCPPool(
+            {
+                "math": _FakeMCPClient(
+                    "math",
+                    [
+                        {
+                            "name": "add",
+                            "description": "Add two numbers",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"a": {"type": "number"}, "b": {"type": "number"}},
+                            },
+                        },
+                        {
+                            "name": "subtract",
+                            "description": "Subtract two numbers",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"a": {"type": "number"}, "b": {"type": "number"}},
+                            },
+                        },
+                    ],
+                ),
+            }
+        )
         registry = create_tool_registry(pool)
         tools = registry.list(category="mcp")
         assert len(tools) == 2
@@ -68,37 +81,57 @@ class TestMCPGatewayIntegration:
         assert "mcp_math_subtract" in names
 
     def test_mcp_plugin_tools_created(self):
-        pool = _FakeMCPPool({
-            "fs": _FakeMCPClient("fs", [
-                {"name": "read", "description": "Read a file", "inputSchema": {
-                    "type": "object",
-                    "properties": {"path": {"type": "string"}},
-                }},
-            ]),
-        })
+        pool = _FakeMCPPool(
+            {
+                "fs": _FakeMCPClient(
+                    "fs",
+                    [
+                        {
+                            "name": "read",
+                            "description": "Read a file",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"path": {"type": "string"}},
+                            },
+                        },
+                    ],
+                ),
+            }
+        )
         tools = create_mcp_plugin_tools(pool)  # type: ignore[arg-type]
         assert len(tools) == 1
         assert tools[0].name == "mcp_fs_read"
         assert isinstance(tools[0], PluginTool)
 
     async def test_mcp_pool_disconnect_all(self):
-        pool = _FakeMCPPool({
-            "server_a": _FakeMCPClient("server_a", [{"name": "tool1"}]),
-            "server_b": _FakeMCPClient("server_b", [{"name": "tool2"}]),
-        })
+        pool = _FakeMCPPool(
+            {
+                "server_a": _FakeMCPClient("server_a", [{"name": "tool1"}]),
+                "server_b": _FakeMCPClient("server_b", [{"name": "tool2"}]),
+            }
+        )
         assert pool.connected_count == 2
         await pool.disconnect_all()
         assert pool.connected_count == 0
 
     async def test_mcp_tool_call_via_handler(self):
-        pool = _FakeMCPPool({
-            "math": _FakeMCPClient("math", [
-                {"name": "echo", "description": "Echo args", "inputSchema": {
-                    "type": "object",
-                    "properties": {"msg": {"type": "string"}},
-                }},
-            ]),
-        })
+        pool = _FakeMCPPool(
+            {
+                "math": _FakeMCPClient(
+                    "math",
+                    [
+                        {
+                            "name": "echo",
+                            "description": "Echo args",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"msg": {"type": "string"}},
+                            },
+                        },
+                    ],
+                ),
+            }
+        )
         registry = create_tool_registry(pool)
         spec = registry.get("mcp_math_echo")
         assert spec is not None
@@ -107,11 +140,16 @@ class TestMCPGatewayIntegration:
         assert data == {"msg": "hello"}
 
     async def test_mcp_tool_call_error_returns_error_string(self):
-        pool = _FakeMCPPool({
-            "bad": _FakeMCPClient("bad", [
-                {"name": "fail", "description": "Always fails"},
-            ]),
-        })
+        pool = _FakeMCPPool(
+            {
+                "bad": _FakeMCPClient(
+                    "bad",
+                    [
+                        {"name": "fail", "description": "Always fails"},
+                    ],
+                ),
+            }
+        )
         registry = create_tool_registry(pool)
         spec = registry.get("mcp_bad_fail")
         assert spec is not None
@@ -146,14 +184,23 @@ class TestMCPGatewayIntegration:
         assert len(mcp_tools) == 0
 
     async def test_mcp_concurrent_calls(self):
-        pool = _FakeMCPPool({
-            "srv": _FakeMCPClient("srv", [
-                {"name": "echo", "description": "Echo", "inputSchema": {
-                    "type": "object",
-                    "properties": {"x": {"type": "integer"}},
-                }},
-            ]),
-        })
+        pool = _FakeMCPPool(
+            {
+                "srv": _FakeMCPClient(
+                    "srv",
+                    [
+                        {
+                            "name": "echo",
+                            "description": "Echo",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"x": {"type": "integer"}},
+                            },
+                        },
+                    ],
+                ),
+            }
+        )
         registry = create_tool_registry(pool)
         spec = registry.get("mcp_srv_echo")
         assert spec is not None

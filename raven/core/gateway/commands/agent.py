@@ -28,20 +28,23 @@ class AgentCommand(CommandHandler):
         if not args:
             profile_list = "\n".join(f"  /agent {k} — {v.display_name}" for k, v in PROFILES.items())
             await self._gw._send(
-                ctx.event.channel, ctx.event.session_id,
+                ctx.event.channel,
+                ctx.event.session_id,
                 f"Available agent profiles:\n{profile_list}\n\nUsage: /agent <profile>",
             )
             return True
         profile_name = args[0].lower()
         if profile_name not in PROFILES:
             await self._gw._send(
-                ctx.event.channel, ctx.event.session_id,
+                ctx.event.channel,
+                ctx.event.session_id,
                 f"Unknown profile: {profile_name}. Available: {', '.join(PROFILES.keys())}",
             )
             return True
         ctx.user["agent_profile"] = profile_name
         await self._gw._send(
-            ctx.event.channel, ctx.event.session_id,
+            ctx.event.channel,
+            ctx.event.session_id,
             f"Switched to agent profile: {PROFILES[profile_name].display_name}",
         )
         return True
@@ -62,8 +65,8 @@ class AgentStatusCommand(CommandHandler):
     async def execute(self, ctx: Any) -> bool:
         profile = (ctx.user or {}).get("agent_profile", "auto")
         await self._gw._send(
-            ctx.event.channel, ctx.event.session_id,
-            f"Current agent mode: {profile}\n"
-            f"Use /agent <name> to switch profiles.",
+            ctx.event.channel,
+            ctx.event.session_id,
+            f"Current agent mode: {profile}\nUse /agent <name> to switch profiles.",
         )
         return True

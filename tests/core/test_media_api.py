@@ -101,7 +101,13 @@ def test_generate_no_urls(client: TestClient, monkeypatch: pytest.MonkeyPatch) -
 
 def test_generate_http_error(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-    _patch_client(monkeypatch, _FakeResp({"data": []}, error=httpx.HTTPStatusError("400", request=httpx.Request("POST", "/"), response=httpx.Response(400))))
+    _patch_client(
+        monkeypatch,
+        _FakeResp(
+            {"data": []},
+            error=httpx.HTTPStatusError("400", request=httpx.Request("POST", "/"), response=httpx.Response(400)),
+        ),
+    )
     resp = client.post("/api/media/generate", params={"prompt": "x"})
     assert resp.status_code == 500
 
@@ -118,7 +124,15 @@ def test_process_resize_crop_rotate_flip(client: TestClient, tmp_path: Path) -> 
     _make_png(img)
     resp = client.post(
         "/api/media/process",
-        params={"filepath": str(img), "resize": "5x5", "crop": "1,1,4,4", "rotate": 90, "flip": "horizontal", "output_format": "jpeg", "quality": 50},
+        params={
+            "filepath": str(img),
+            "resize": "5x5",
+            "crop": "1,1,4,4",
+            "rotate": 90,
+            "flip": "horizontal",
+            "output_format": "jpeg",
+            "quality": 50,
+        },
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -454,7 +468,9 @@ def test_video_thumbnail(client: TestClient, monkeypatch: pytest.MonkeyPatch) ->
         return "thumb.png"
 
     monkeypatch.setattr("raven.tools.media.video_thumbnail", fake_thumb)
-    resp = client.post("/api/media/video-thumbnail", params={"filepath": "clip.mp4", "time_sec": 2.5, "size": "640x480"})
+    resp = client.post(
+        "/api/media/video-thumbnail", params={"filepath": "clip.mp4", "time_sec": 2.5, "size": "640x480"}
+    )
     assert resp.status_code == 200
     assert resp.json()["result"] == "thumb.png"
 

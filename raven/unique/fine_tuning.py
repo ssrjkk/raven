@@ -260,7 +260,10 @@ class DatasetBuilder:
     def corpus_hash(self) -> str:
         """sha256 over the rows exactly as they enter the tokenizer, redaction included. A dataset
         card without this cannot say which corpus a checkpoint came from."""
-        lines = [json.dumps(self._messages(c), ensure_ascii=False, sort_keys=True) for c in self._consented(self._conversations)]
+        lines = [
+            json.dumps(self._messages(c), ensure_ascii=False, sort_keys=True)
+            for c in self._consented(self._conversations)
+        ]
         lines += [self._format_code(c) for c in self._consented(self._code_samples)]
         return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
 
@@ -439,7 +442,9 @@ class FineTuningPipeline:
         elif self._config.load_in_8bit:
             quantization_kwargs["load_in_8bit"] = True
 
-        self._tokenizer = AutoTokenizer.from_pretrained(model_id, revision=self._config.model_revision, trust_remote_code=True)
+        self._tokenizer = AutoTokenizer.from_pretrained(
+            model_id, revision=self._config.model_revision, trust_remote_code=True
+        )
         if self._tokenizer.pad_token is None:
             self._tokenizer.pad_token = self._tokenizer.eos_token
 
@@ -666,7 +671,9 @@ class FineTuningPipeline:
 
         if _TRANSFORMERS_AVAILABLE and _PEFT_AVAILABLE:
             model_id = self._resolve_model_name()
-            self._tokenizer = AutoTokenizer.from_pretrained(model_id, revision=self._config.model_revision, trust_remote_code=True)
+            self._tokenizer = AutoTokenizer.from_pretrained(
+                model_id, revision=self._config.model_revision, trust_remote_code=True
+            )
             base_model = AutoModelForCausalLM.from_pretrained(
                 model_id,
                 revision=self._config.model_revision,

@@ -109,9 +109,7 @@ class TestGetChaos:
 
 class TestChaosInject:
     @pytest.mark.parametrize("fault_type", ALL_FAULT_TYPES)
-    async def test_success_each_fault_type(
-        self, ce: _FakeChaosEngineering, fault_type: str
-    ) -> None:
+    async def test_success_each_fault_type(self, ce: _FakeChaosEngineering, fault_type: str) -> None:
         result = await chaos.chaos_inject(fault_type, target="nginx", duration_sec=30.0, intensity=0.5)
         assert "Fault injected [id=fault-1]" in result
         assert f"- Type: {fault_type}" in result

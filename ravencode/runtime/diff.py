@@ -48,9 +48,7 @@ def _bare(line: str) -> str:
 def _is_file_header(lines: list[str], index: int) -> bool:
     """A real "--- " header is followed by its "+++" and an "@@"; a removed "-- x" line is not."""
     following = [lines[i].rstrip("\r\n") for i in range(index + 1, min(index + 3, len(lines)))]
-    return len(following) == 2 and following[0].startswith("+++ ") and bool(
-        _UNIFIED_HUNK_RE.match(following[1])
-    )
+    return len(following) == 2 and following[0].startswith("+++ ") and bool(_UNIFIED_HUNK_RE.match(following[1]))
 
 
 def _patch_targets_multiple_files(diff_text: str) -> bool:
@@ -101,9 +99,7 @@ def _split_hunk_body(hunk: dict[str, Any]) -> tuple[list[str], list[str]] | str:
         elif diff_line.startswith(_MISSING_NEWLINE):
             continue
         else:
-            return (
-                f"[error] malformed line {diff_line!r} in the hunk at line {hunk['old_start']}"
-            )
+            return f"[error] malformed line {diff_line!r} in the hunk at line {hunk['old_start']}"
     if len(old) != hunk["old_count"] or len(new) != hunk["new_count"]:
         return (
             f"[error] hunk at line {hunk['old_start']} declares -{hunk['old_count']} "

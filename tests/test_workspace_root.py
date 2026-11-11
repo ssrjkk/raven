@@ -64,7 +64,9 @@ def test_the_default_root_is_the_directory_the_process_runs_in(isolated: Path) -
     assert workspace_source() == "the working directory"
 
 
-def test_a_relative_configured_path_is_taken_from_the_working_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_relative_configured_path_is_taken_from_the_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Anchoring a relative WORKSPACE_PATH at the installation directory put the workspace inside
     site-packages on a wheel install; it is a path the operator means relative to their project."""
     from raven.core.config import Settings
@@ -106,7 +108,9 @@ async def test_the_confine_is_decided_at_call_time_not_at_import_time(monkeypatc
         await files_plugin.read(str(second / target))
 
 
-def test_the_policy_and_the_plugin_layer_answer_for_the_same_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_policy_and_the_plugin_layer_answer_for_the_same_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Two layers, one answer: what the agent path's guard allows, the tool itself has to allow too."""
     monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
     policy = policy_from_settings()
@@ -121,7 +125,9 @@ def test_the_policy_and_the_plugin_layer_answer_for_the_same_paths(tmp_path: Pat
     assert policy.check_path(candidates[1]) is False
 
 
-def test_a_path_outside_the_root_is_refused_with_both_roots_named(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_path_outside_the_root_is_refused_with_both_roots_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
     with pytest.raises(PermissionError) as refused:
         confine(str(_outside_every_root("escape.txt")))
@@ -130,7 +136,9 @@ def test_a_path_outside_the_root_is_refused_with_both_roots_named(tmp_path: Path
     assert str(Path(tempfile.gettempdir()).resolve()) in message
 
 
-def test_the_allowed_roots_are_exactly_the_workspace_and_the_temp_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_allowed_roots_are_exactly_the_workspace_and_the_temp_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
     assert allowed_roots() == (tmp_path.resolve(), Path(tempfile.gettempdir()).resolve())
 
@@ -150,7 +158,9 @@ async def test_the_temp_directory_stays_open_when_the_workspace_is_somewhere_els
         shutil.rmtree(home, ignore_errors=True)
 
 
-async def test_the_byte_count_a_write_reports_is_the_size_the_file_has(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_the_byte_count_a_write_reports_is_the_size_the_file_has(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """`len(content)` is a character count; the tool reported it as bytes and the file disagreed."""
     from raven.plugins.files import plugin as files_plugin
 
@@ -165,18 +175,28 @@ async def test_a_git_repo_outside_the_root_is_refused_instead_of_quietly_redirec
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Clamping a refused repo path to the workspace returned the workspace's own log: a tool that
-    answers with the wrong repository's commits is worse than one that says no."""
+    answers with the wrong repository's commits is worse than one that says no.
+
+    The path has to be outside both roots that `allowed_roots()` publishes, because the system temp
+    dir is one of them: an earlier version of this test asked for a refusal inside the temp dir and
+    could only ever pass on a machine whose temp dir pytest did not use -- on the Linux runners, and
+    on this box, `tmp_path / "elsewhere"` is allowed and the assertion never ran.
+    """
     from raven.tools.git import _confined_workspace
 
     base = tmp_path / "base"
     base.mkdir()
     monkeypatch.setenv("RAVEN_WORKSPACE", str(base))
-    with pytest.raises(PermissionError, match="outside the workspace root"):
-        _confined_workspace(str(tmp_path / "elsewhere"))
+    outside = Path(Path(tempfile.gettempdir()).anchor, "raven-outside-every-root")
+    assert not is_within(str(outside)), outside
     assert _confined_workspace(str(base / "repo")) == (base / "repo").resolve()
+    with pytest.raises(PermissionError, match="outside the workspace root"):
+        _confined_workspace(str(outside))
 
 
-def test_the_coding_agent_confines_to_the_workspace_without_the_temp_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_coding_agent_confines_to_the_workspace_without_the_temp_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The agent's own file tools stay stricter than the plugin tools: no scratch outside the repo."""
     from ravencode.runtime.workspace import confine as agent_confine
 

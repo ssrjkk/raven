@@ -12,6 +12,7 @@ from raven.core.connection_api import _is_masked, _mask_key, create_connection_r
 @pytest.fixture()
 def mock_store():
     import asyncio
+
     store = MagicMock()
     store._data = {
         "providers": [
@@ -69,6 +70,7 @@ def mock_store():
 @pytest.fixture()
 def client(mock_store):
     import raven.core.connection_api as conn_mod
+
     original_store = conn_mod._store
     conn_mod._store = mock_store
     try:
@@ -132,13 +134,16 @@ class TestContexts:
         assert len(data["contexts"]) == 1
 
     def test_create_context(self, client, mock_store):
-        resp = client.post("/api/connections/contexts", json={
-            "name": "New Context",
-            "provider": "",
-            "repositories": [],
-            "files": [],
-            "folders": [],
-        })
+        resp = client.post(
+            "/api/connections/contexts",
+            json={
+                "name": "New Context",
+                "provider": "",
+                "repositories": [],
+                "files": [],
+                "folders": [],
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["name"] == "New Context"
 
@@ -151,11 +156,14 @@ class TestAgents:
         assert len(data["agents"]) == 1
 
     def test_create_agent(self, client):
-        resp = client.post("/api/connections/agents", json={
-            "name": "New Agent",
-            "provider": "",
-            "context": "",
-            "model": "gpt-4",
-        })
+        resp = client.post(
+            "/api/connections/agents",
+            json={
+                "name": "New Agent",
+                "provider": "",
+                "context": "",
+                "model": "gpt-4",
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["name"] == "New Agent"

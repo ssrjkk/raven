@@ -10,6 +10,7 @@ score is objective. Usage (no key is ever written to disk):
 Falls back from openai/gpt-oss-120b to llama-3.3-70b-versatile on 429s.
 Exit code 0 = all attempted tasks passed their verifiers.
 """
+
 from __future__ import annotations
 
 import argparse

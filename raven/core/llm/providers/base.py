@@ -169,12 +169,18 @@ def _parse_openai_response(data: dict[str, Any]) -> LLMResponse:
     tool_calls_raw = msg.get("tool_calls")
     tool_calls = [ToolCall.from_openai(tc) for tc in tool_calls_raw] if tool_calls_raw else []
     usage_raw = data.get("usage", {})
-    usage = {
-        "prompt_tokens": usage_raw.get("prompt_tokens", 0),
-        "completion_tokens": usage_raw.get("completion_tokens", 0),
-        "total_tokens": usage_raw.get("total_tokens", 0),
-    } if usage_raw else {}
-    return LLMResponse(content=content, tool_calls=tool_calls, finish_reason=choice.get("finish_reason", "stop"), usage=usage)
+    usage = (
+        {
+            "prompt_tokens": usage_raw.get("prompt_tokens", 0),
+            "completion_tokens": usage_raw.get("completion_tokens", 0),
+            "total_tokens": usage_raw.get("total_tokens", 0),
+        }
+        if usage_raw
+        else {}
+    )
+    return LLMResponse(
+        content=content, tool_calls=tool_calls, finish_reason=choice.get("finish_reason", "stop"), usage=usage
+    )
 
 
 def _convert_to_gemini(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:

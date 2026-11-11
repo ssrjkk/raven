@@ -67,6 +67,7 @@ def _imap_check(config: dict[str, Any]) -> str:
         return result
     finally:
         import contextlib
+
         with contextlib.suppress(Exception):
             conn.logout()
 

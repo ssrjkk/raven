@@ -14,18 +14,64 @@ from raven.core.security.code_sandbox import PYTHON_RUNNER_MODULE, untrusted_chi
 PLUGIN_NAME = "process"
 PLUGIN_DESCRIPTION = "Run, list, and manage system processes"
 
-_UNIX_ALLOWLIST = frozenset({
-    "ls", "cat", "head", "tail", "echo", "pwd", "whoami", "date",
-    "find", "grep", "wc", "sort", "uniq", "cut", "tr", "diff",
-    "df", "du", "free", "ps", "top", "uptime", "sleep",
-})
-_WIN_ALLOWLIST = frozenset({
-    "echo", "dir", "type", "cd", "cls", "ver",
-    "date", "time", "timeout", "find", "findstr", "sort", "more", "fc",
-    "where", "ping", "tracert", "pathping", "nslookup", "tasklist",
-    "systeminfo", "ipconfig", "netstat", "whoami",
-    "attrib", "mkdir", "rmdir",
-})
+_UNIX_ALLOWLIST = frozenset(
+    {
+        "ls",
+        "cat",
+        "head",
+        "tail",
+        "echo",
+        "pwd",
+        "whoami",
+        "date",
+        "find",
+        "grep",
+        "wc",
+        "sort",
+        "uniq",
+        "cut",
+        "tr",
+        "diff",
+        "df",
+        "du",
+        "free",
+        "ps",
+        "top",
+        "uptime",
+        "sleep",
+    }
+)
+_WIN_ALLOWLIST = frozenset(
+    {
+        "echo",
+        "dir",
+        "type",
+        "cd",
+        "cls",
+        "ver",
+        "date",
+        "time",
+        "timeout",
+        "find",
+        "findstr",
+        "sort",
+        "more",
+        "fc",
+        "where",
+        "ping",
+        "tracert",
+        "pathping",
+        "nslookup",
+        "tasklist",
+        "systeminfo",
+        "ipconfig",
+        "netstat",
+        "whoami",
+        "attrib",
+        "mkdir",
+        "rmdir",
+    }
+)
 _ALLOWED = _WIN_ALLOWLIST if platform.system() == "Windows" else _UNIX_ALLOWLIST
 
 
@@ -90,9 +136,7 @@ async def run_python(code: str, timeout: int = 60) -> str:
             env=untrusted_child_env(),
         )
         try:
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(input=code.encode("utf-8")), timeout=timeout
-            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(input=code.encode("utf-8")), timeout=timeout)
         except TimeoutError:
             proc.kill()
             return f"Code execution timed out after {timeout}s"

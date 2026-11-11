@@ -12,16 +12,10 @@ from loguru import logger
 _TURN_TERMINATORS = ("im_end", "endoftext")
 
 
-def render_chat(
-    messages: list[dict[str, Any]], tokenizer: Any, *, add_generation_prompt: bool = True
-) -> str:
+def render_chat(messages: list[dict[str, Any]], tokenizer: Any, *, add_generation_prompt: bool = True) -> str:
     """Render with the tokenizer's own chat template, or the same fallback on both sides."""
     if tokenizer is not None and getattr(tokenizer, "chat_template", None):
-        return str(
-            tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=add_generation_prompt
-            )
-        )
+        return str(tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=add_generation_prompt))
     lines = [f"{m.get('role', 'user')}: {m.get('content', '')}" for m in messages]
     tail = "\nassistant:" if add_generation_prompt else "\n"
     return "\n".join(lines) + tail

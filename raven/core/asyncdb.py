@@ -254,9 +254,7 @@ class PostgresDB(AsyncDB):
         # The open transaction belongs to the caller that opened it, not to the handle: as
         # instance state it leaked into every other task's execute(), which then ran inside a
         # foreign transaction and was rolled back when that transaction failed.
-        self._tx: contextvars.ContextVar[Any] = contextvars.ContextVar(
-            f"raven_pg_tx_{next(_handle_seq)}", default=None
-        )
+        self._tx: contextvars.ContextVar[Any] = contextvars.ContextVar(f"raven_pg_tx_{next(_handle_seq)}", default=None)
 
     @property
     def _p(self) -> Any:

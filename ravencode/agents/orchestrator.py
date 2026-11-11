@@ -35,20 +35,57 @@ class AgentResult:
 # Priority order matters: on keyword-score ties the earlier role wins.
 _ROLE_KEYWORDS: dict[str, tuple[str, ...]] = {
     "debugger": (
-        "debug", "error", "crash", "fix", "bug", "failing", "traceback",
-        "exception", "broken", "regression", "stack trace", "not working",
+        "debug",
+        "error",
+        "crash",
+        "fix",
+        "bug",
+        "failing",
+        "traceback",
+        "exception",
+        "broken",
+        "regression",
+        "stack trace",
+        "not working",
     ),
     "verifier": (
-        "review", "check", "lint", "quality", "audit", "verify", "validate",
-        "confirm", "security", "vulnerability", "smoke test",
+        "review",
+        "check",
+        "lint",
+        "quality",
+        "audit",
+        "verify",
+        "validate",
+        "confirm",
+        "security",
+        "vulnerability",
+        "smoke test",
     ),
     "planner": (
-        "plan", "break down", "decompose", "roadmap", "architecture",
-        "design", "approach", "strategy", "milestone", "estimate",
+        "plan",
+        "break down",
+        "decompose",
+        "roadmap",
+        "architecture",
+        "design",
+        "approach",
+        "strategy",
+        "milestone",
+        "estimate",
     ),
     "coder": (
-        "write", "implement", "create", "code", "refactor", "add feature",
-        "build", "function", "class", "script", "migrate", "optimize",
+        "write",
+        "implement",
+        "create",
+        "code",
+        "refactor",
+        "add feature",
+        "build",
+        "function",
+        "class",
+        "script",
+        "migrate",
+        "optimize",
     ),
 }
 
@@ -284,8 +321,7 @@ class Orchestrator:
                 memory_path=memory_path,
             )
             verification = await verify_agent.run(
-                f"Verify the following result is correct and complete. "
-                f"Report any issues found.\n\nResult:\n{result}"
+                f"Verify the following result is correct and complete. Report any issues found.\n\nResult:\n{result}"
             )
             if verification.strip().startswith("[issues]"):
                 return AgentResult(

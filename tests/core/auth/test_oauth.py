@@ -388,8 +388,13 @@ class TestOAuthSession:
 class TestOAuthProvider:
     def test_defaults(self):
         p = OAuthProvider(
-            name="test", client_id="id", client_secret="secret",
-            authorize_url="a", token_url="t", userinfo_url="u", scopes=[]
+            name="test",
+            client_id="id",
+            client_secret="secret",
+            authorize_url="a",
+            token_url="t",
+            userinfo_url="u",
+            scopes=[],
         )
         assert p.redirect_uri == ""
         assert p.icon == ""

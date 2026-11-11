@@ -162,7 +162,8 @@ def test_every_preference_a_command_writes_is_something_the_pipeline_reads() -> 
 def test_the_preference_guard_reads_the_calls_it_claims_to() -> None:
     assert _WRITE_RE.findall('await gateway.set_pref(ch, uid, "verbose", setting)') == ["verbose"]
     assert _READ_RE.findall('mode = await self._get_pref(ch, uid, "usage_mode", "off")') == ["usage_mode"]
-    assert _READ_RE.findall('await self._get_pref(channel, user_id)') == []
+    assert _READ_RE.findall("await self._get_pref(channel, user_id)") == []
+
 
 def _emitter() -> StatusEmitter:
     async def build() -> StatusEmitter:
@@ -176,44 +177,32 @@ def _emitter() -> StatusEmitter:
 
 
 def _result(tokens: int = 4821, iterations: int = 3, duration: float = 12.34) -> SimpleNamespace:
-    return SimpleNamespace(
-        tokens_used=tokens, iterations=iterations, duration=duration, content="the answer"
-    )
+    return SimpleNamespace(tokens_used=tokens, iterations=iterations, duration=duration, content="the answer")
 
 
 def test_a_profile_run_reports_nothing_until_a_preference_asks() -> None:
-    report = orchestrator_report(
-        _emitter(), _result(), verbose=False, trace=False, usage_mode="off"
-    )
+    report = orchestrator_report(_emitter(), _result(), verbose=False, trace=False, usage_mode="off")
     assert report == ""
 
 
 def test_verbose_lists_the_tool_calls_a_profile_run_made() -> None:
-    report = orchestrator_report(
-        _emitter(), _result(), verbose=True, trace=False, usage_mode="off"
-    )
+    report = orchestrator_report(_emitter(), _result(), verbose=True, trace=False, usage_mode="off")
     assert report.splitlines() == ["[coder] shell.run", "[coder] shell.run: ok"]
     # the thinking line is not a tool call: /verbose promises the calls, not the monologue
     assert "choosing a path" not in report
 
 
 def test_trace_reports_the_run_from_the_numbers_the_result_kept() -> None:
-    report = orchestrator_report(
-        _emitter(), _result(), verbose=False, trace=True, usage_mode="off"
-    )
+    report = orchestrator_report(_emitter(), _result(), verbose=False, trace=True, usage_mode="off")
     assert report == "[trace 3 iterations | 12.3s | 4821 tokens]"
 
 
 def test_usage_of_a_profile_run_reports_the_total_it_actually_has() -> None:
     """The orchestrator counts tokens used, not an in/out split, so the line must say one
     number rather than claim a request that cost nothing."""
-    report = orchestrator_report(
-        _emitter(), _result(), verbose=False, trace=False, usage_mode="tokens"
-    )
+    report = orchestrator_report(_emitter(), _result(), verbose=False, trace=False, usage_mode="tokens")
     assert report == "[tokens: 4821 total]"
-    report = orchestrator_report(
-        _emitter(), _result(), verbose=False, trace=False, usage_mode="full"
-    )
+    report = orchestrator_report(_emitter(), _result(), verbose=False, trace=False, usage_mode="full")
     assert report.startswith("[tokens: 4821 total] ")
     assert "model calls: 3" in report
 

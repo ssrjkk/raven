@@ -81,12 +81,8 @@ def _agent(factory: Any) -> MagicMock:
 
 @pytest.fixture(autouse=True)
 def _patch(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "raven.core.gateway.message_processor.settings", SimpleNamespace(agent_token_timeout=5.0)
-    )
-    monkeypatch.setattr(
-        "raven.core.gateway.message_processor.get_policy_for_channel", lambda ch: _Policy()
-    )
+    monkeypatch.setattr("raven.core.gateway.message_processor.settings", SimpleNamespace(agent_token_timeout=5.0))
+    monkeypatch.setattr("raven.core.gateway.message_processor.get_policy_for_channel", lambda ch: _Policy())
 
 
 # ── _mask_tool_args ───────────────────────────────────────────────
@@ -180,9 +176,7 @@ async def test_process_confirm_fn_uses_channel(monkeypatch: pytest.MonkeyPatch) 
 
 
 async def test_process_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "raven.core.gateway.message_processor.settings", SimpleNamespace(agent_token_timeout=0.05)
-    )
+    monkeypatch.setattr("raven.core.gateway.message_processor.settings", SimpleNamespace(agent_token_timeout=0.05))
 
     async def _slow(confirm_fn: Any = None, history: Any = None) -> AsyncIterator[str]:
         yield "partial"
@@ -199,9 +193,7 @@ async def test_process_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def test_process_error_mid_stream(monkeypatch: pytest.MonkeyPatch) -> None:
     proc, send, metrics = _processor()
-    monkeypatch.setattr(
-        proc.registry, "create_agent", lambda s: _agent(_gen(["ok"], raise_exc=RuntimeError("boom")))
-    )
+    monkeypatch.setattr(proc.registry, "create_agent", lambda s: _agent(_gen(["ok"], raise_exc=RuntimeError("boom"))))
     await proc.process(_event(), "sid")
     metrics.inc.assert_any_call("message_processing_errors", {"channel": "web"})
     assert "Error occurred while processing" in send.await_args_list[-1].args[2]
@@ -211,9 +203,7 @@ async def test_process_error_mid_stream(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 async def test_process_timeout_streams_tail(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "raven.core.gateway.message_processor.settings", SimpleNamespace(agent_token_timeout=0.05)
-    )
+    monkeypatch.setattr("raven.core.gateway.message_processor.settings", SimpleNamespace(agent_token_timeout=0.05))
     channel_obj = SimpleNamespace(send_stream=MagicMock(), ask_confirmation=AsyncMock(return_value=True))
 
     async def _slow(confirm_fn: Any = None, history: Any = None) -> AsyncIterator[str]:
@@ -230,9 +220,7 @@ async def test_process_timeout_streams_tail(monkeypatch: pytest.MonkeyPatch) -> 
 async def test_process_error_streams_hint(monkeypatch: pytest.MonkeyPatch) -> None:
     channel_obj = SimpleNamespace(send_stream=MagicMock(), ask_confirmation=AsyncMock(return_value=True))
     proc, send, _m = _processor(channel_obj=channel_obj)
-    monkeypatch.setattr(
-        proc.registry, "create_agent", lambda s: _agent(_gen(["ok"], raise_exc=RuntimeError("boom")))
-    )
+    monkeypatch.setattr(proc.registry, "create_agent", lambda s: _agent(_gen(["ok"], raise_exc=RuntimeError("boom"))))
     await proc.process(_event(), "sid")
     stream_calls = [c for c in send.await_args_list if c.kwargs.get("streaming") is True]
     assert any("Error occurred while processing" in c.args[2] for c in stream_calls)
@@ -333,7 +321,7 @@ def test_usage_line_full_counts_the_model_calls() -> None:
 
 
 async def test_process_sends_the_usage_line_the_pref_asked_for(monkeypatch: pytest.MonkeyPatch) -> None:
-    proc, send, _m = _processor(prefs={'usage_mode': 'tokens'})
+    proc, send, _m = _processor(prefs={"usage_mode": "tokens"})
     monkeypatch.setattr(proc.registry, "create_agent", lambda s: _agent(_gen(["Hel", "lo"])))
     await proc.process(_event(), "sid")
     assert send.await_args_list[-1].args[2] == "[tokens: 40 in / 12 out / 52 total]"
@@ -344,7 +332,7 @@ async def test_process_sends_the_usage_line_the_pref_asked_for(monkeypatch: pyte
 async def test_usage_line_is_a_separate_message(monkeypatch: pytest.MonkeyPatch) -> None:
     """The reply is what gets stored as assistant history; a meter reading glued onto it would be
     re-read by the model as part of its own answer."""
-    proc, send, _m = _processor(prefs={'usage_mode': 'full'})
+    proc, send, _m = _processor(prefs={"usage_mode": "full"})
     monkeypatch.setattr(proc.registry, "create_agent", lambda s: _agent(_gen(["Hel", "lo"])))
     await proc.process(_event(), "sid")
     sent = [c for c in send.await_args_list if c.kwargs.get("streaming") is False]

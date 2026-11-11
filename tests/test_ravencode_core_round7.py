@@ -1,4 +1,5 @@
 """Tests for round 7: run_tests tool, git context injection, cost estimation."""
+
 from __future__ import annotations
 
 import subprocess
@@ -191,9 +192,7 @@ async def test_cost_estimated_from_token_cost(monkeypatch) -> None:
 async def test_no_cost_without_rates(monkeypatch) -> None:
     monkeypatch.setattr(ReActAgent, "_auto_save", AsyncMock())
     agent = ReActAgent(
-        config=AgentConfig(
-            proactive_scan=False, diff_preview=False, confirm_dangerous=False, use_cache=False
-        ),
+        config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, use_cache=False),
         llm_provider=_OkProvider(),
     )
     await agent.run("x")

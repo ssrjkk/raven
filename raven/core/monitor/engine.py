@@ -140,11 +140,7 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
                 await asyncio.sleep(60)
 
     def _init_alert_clock(self, monitor: Monitor) -> None:
-        if (
-            monitor.id not in self._last_alert_at
-            and monitor.last_check is not None
-            and monitor.last_check.triggered
-        ):
+        if monitor.id not in self._last_alert_at and monitor.last_check is not None and monitor.last_check.triggered:
             self._last_alert_at[monitor.id] = monitor.last_check.checked_at
 
     async def _run_item(self, monitor: Monitor) -> str | None:

@@ -71,9 +71,7 @@ async def test_monitor_policy_denied(monkeypatch: pytest.MonkeyPatch) -> None:
         "raven.core.gateway.commands.monitor.check_tool_allowed",
         lambda policy, action, ch: (False, "blocked"),
     )
-    monkeypatch.setattr(
-        "raven.core.gateway.commands.monitor.get_policy_for_channel", lambda ch: object()
-    )
+    monkeypatch.setattr("raven.core.gateway.commands.monitor.get_policy_for_channel", lambda ch: object())
     gw = _FakeGateway()
     assert await MonitorCommand(gw).execute(_ctx()) is True
     assert _sent(gw)[2] == "Access denied: blocked"
@@ -88,9 +86,7 @@ async def test_monitor_read_permission_denied() -> None:
 
 async def test_monitor_write_permission_denied() -> None:
     gw = _FakeGateway()
-    gw._check_permission = MagicMock(
-        side_effect=lambda user, perm: perm is not Permission.MONITOR_WRITE
-    )
+    gw._check_permission = MagicMock(side_effect=lambda user, perm: perm is not Permission.MONITOR_WRITE)
     assert await MonitorCommand(gw).execute(_ctx(args=["add", "http", "https://x"])) is True
     assert _sent(gw)[2] == "Access denied: insufficient permissions"
 
@@ -104,8 +100,13 @@ async def test_monitor_list_empty() -> None:
 async def test_monitor_list_with_entries() -> None:
     gw = _FakeGateway()
     gw._monitor_store.monitors = [
-        Monitor(name="Site", type=MonitorType.HTTP, target="https://x", status=MonitorStatus.ACTIVE,
-                last_check=CheckResult(status="up")),
+        Monitor(
+            name="Site",
+            type=MonitorType.HTTP,
+            target="https://x",
+            status=MonitorStatus.ACTIVE,
+            last_check=CheckResult(status="up"),
+        ),
         Monitor(name="Feed", type=MonitorType.RSS, target="https://y", status=MonitorStatus.PAUSED),
         Monitor(name="Broken", type=MonitorType.FILE, target="/p", status=MonitorStatus.ERROR),
     ]
@@ -121,8 +122,7 @@ async def test_monitor_list_with_entries() -> None:
 async def test_monitor_list_shows_down_status() -> None:
     gw = _FakeGateway()
     gw._monitor_store.monitors = [
-        Monitor(name="Site", type=MonitorType.HTTP, status=MonitorStatus.ACTIVE,
-                last_check=CheckResult(status="down")),
+        Monitor(name="Site", type=MonitorType.HTTP, status=MonitorStatus.ACTIVE, last_check=CheckResult(status="down")),
     ]
     assert await MonitorCommand(gw).execute(_ctx(args=["list"])) is True
     assert "❌" in gw._send.await_args_list[0].args[2]

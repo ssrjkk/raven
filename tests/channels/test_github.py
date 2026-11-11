@@ -69,8 +69,11 @@ async def test_github_pull_request_event():
     body = {
         "action": "opened",
         "pull_request": {
-            "title": "Add X", "body": "because", "number": 7,
-            "user": {"login": "author"}, "head": {"ref": "feature"},
+            "title": "Add X",
+            "body": "because",
+            "number": 7,
+            "user": {"login": "author"},
+            "head": {"ref": "feature"},
         },
         "repository": {"full_name": "o/r"},
     }
@@ -195,9 +198,9 @@ async def test_github_send_skips_without_token_or_shape(monkeypatch: pytest.Monk
     post = AsyncMock()
     monkeypatch.setattr("raven.channels.github.channel.client_manager.post", post)
     msg = Message(session_id="x", channel="github", role="assistant", content="r")
-    await c.send("github:acme/app:issue:12", msg)   # no token
-    await c.send("short", msg)                       # malformed session id
-    await c.send("github:acme/app:pr:1", msg)        # not an issue target
+    await c.send("github:acme/app:issue:12", msg)  # no token
+    await c.send("short", msg)  # malformed session id
+    await c.send("github:acme/app:pr:1", msg)  # not an issue target
     post.assert_not_awaited()
 
 

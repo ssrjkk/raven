@@ -92,9 +92,7 @@ class TestCacheKey:
         k1 = LLMRouter._cache_key(
             [{"role": "user", "content": "hi"}, {"role": "tool", "content": "a  b\n  c"}], "m", None
         )
-        k2 = LLMRouter._cache_key(
-            [{"role": "user", "content": "hi"}, {"role": "tool", "content": "ab c"}], "m", None
-        )
+        k2 = LLMRouter._cache_key([{"role": "user", "content": "hi"}, {"role": "tool", "content": "ab c"}], "m", None)
         assert k1 != k2
 
 
@@ -163,8 +161,10 @@ class TestGetProvider:
         assert got is dummy
 
     def test_provider_key_selection(self):
-        with patch("raven.core.llm.router.settings") as mock_settings, \
-             patch("raven.core.config_discovery.get_discovered_keys") as mock_disc:
+        with (
+            patch("raven.core.llm.router.settings") as mock_settings,
+            patch("raven.core.config_discovery.get_discovered_keys") as mock_disc,
+        ):
             mock_settings.ghost_mode = False
             mock_settings.default_model = "ollama/test"
             mock_settings.llm_max_concurrent = 10
@@ -313,9 +313,7 @@ class TestCompleteStream:
 
                 MockFailover.return_value.complete_stream = fail_stream
                 with pytest.raises(RuntimeError, match="All LLM providers exhausted"):
-                    async for _ in router.complete_stream(
-                        [{"role": "user", "content": "hi"}], model="ollama/test"
-                    ):
+                    async for _ in router.complete_stream([{"role": "user", "content": "hi"}], model="ollama/test"):
                         pass
 
 
@@ -385,9 +383,11 @@ class TestAdmissionIntegration:
             await router._admission.release()
 
     async def test_failover_bypasses_admission(self):
-        with patch("raven.core.failover.auto_model_list", return_value=["ollama/backup"]), \
-             patch("raven.core.failover.get_discovered_keys") as mock_disc, \
-             patch("raven.core.llm.router.settings") as mock_settings:
+        with (
+            patch("raven.core.failover.auto_model_list", return_value=["ollama/backup"]),
+            patch("raven.core.failover.get_discovered_keys") as mock_disc,
+            patch("raven.core.llm.router.settings") as mock_settings,
+        ):
             _admission_settings(mock_settings)
             mock_disc.return_value.providers_available = ["ollama"]
             router = LLMRouter()
@@ -396,9 +396,11 @@ class TestAdmissionIntegration:
             assert resp.content == "backup ok"
 
     async def test_failover_stream_bypasses_admission(self):
-        with patch("raven.core.failover.auto_model_list", return_value=["ollama/backup"]), \
-             patch("raven.core.failover.get_discovered_keys") as mock_disc, \
-             patch("raven.core.llm.router.settings") as mock_settings:
+        with (
+            patch("raven.core.failover.auto_model_list", return_value=["ollama/backup"]),
+            patch("raven.core.failover.get_discovered_keys") as mock_disc,
+            patch("raven.core.llm.router.settings") as mock_settings,
+        ):
             _admission_settings(mock_settings)
             mock_disc.return_value.providers_available = ["ollama"]
             router = LLMRouter()

@@ -26,6 +26,7 @@ def _normalize(values: list[float]) -> list[float]:
         return [0.5] * len(values)
     return [(v - lo) / (hi - lo) for v in values]
 
+
 try:
     import hnswlib
 

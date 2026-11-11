@@ -31,16 +31,22 @@ def _validate_url(url: str) -> None:
     host = parsed.hostname
     if not host:
         raise _SSRFError("URL missing hostname")
+    # The order `raven/core/browser_agent.py` already used, and it is the order because an IP literal is
+    # exactly what the socket will be opened on, so it has to be decided without asking a resolver. This
+    # function used to raise `private IP` inside a `try` whose `except ValueError` caught it again --
+    # `_SSRFError` is a ValueError -- so that branch could never fire, and on a machine with a broken
+    # resolver a private literal fell through to the DNS warning below and was fetched anyway.
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        literal = None
+    if literal is not None:
+        for net in PRIVATE_NETS:
+            if literal in net:
+                raise _SSRFError(f"private IP {host}")
     if names_this_machine(host):
         raise _SSRFError(f"hostname {host}")
-    try:
-        ip = ipaddress.ip_address(host)
-        for net in PRIVATE_NETS:
-            if ip in net:
-                raise _SSRFError(f"private IP {host}")
-    except ValueError:
-        pass
-    else:
+    if literal is not None:
         return
     try:
         addrs = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
@@ -114,7 +120,9 @@ _WAIT_STATES = ("domcontentloaded", "load", "networkidle")
 
 
 @asynccontextmanager
-async def _page_context(timeout: int = 30, url: str = "", skip_goto: bool = False, wait_until: str = "domcontentloaded"):
+async def _page_context(
+    timeout: int = 30, url: str = "", skip_goto: bool = False, wait_until: str = "domcontentloaded"
+):
     browser = await _get_playwright()
     if not browser:
         yield None

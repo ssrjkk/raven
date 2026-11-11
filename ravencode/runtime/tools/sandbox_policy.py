@@ -8,7 +8,6 @@ _current_sandbox_policy: contextvars.ContextVar[str] = contextvars.ContextVar(
 )
 
 
-
 _SANDBOX_SOFT_MUTATORS: frozenset[str] = frozenset(
     {
         "write",
@@ -26,7 +25,6 @@ _SANDBOX_SOFT_MUTATORS: frozenset[str] = frozenset(
         "undo_changes",
     }
 )
-
 
 
 _CODE_EXEC_TOOLS: frozenset[str] = frozenset(
@@ -78,7 +76,6 @@ _CODE_EXEC_TOOLS: frozenset[str] = frozenset(
 )
 
 
-
 _WEB_BROWSING_TOOLS: frozenset[str] = frozenset(
     {
         "browser_navigate",
@@ -100,7 +97,6 @@ _WEB_BROWSING_TOOLS: frozenset[str] = frozenset(
 )
 
 
-
 _SANDBOX_POLICY_RULES: dict[str, dict[str, Any]] = {
     "main": {"allow": None, "deny_prefix": frozenset(), "deny_exact": frozenset()},
     "non-main": {
@@ -112,8 +108,6 @@ _SANDBOX_POLICY_RULES: dict[str, dict[str, Any]] = {
     "web-browsing": {"allow": _WEB_BROWSING_TOOLS, "deny_prefix": frozenset(), "deny_exact": frozenset()},
     "read-only": {"allow": None, "deny_prefix": frozenset(), "deny_exact": _SANDBOX_SOFT_MUTATORS},
 }
-
-
 
 
 def _sandbox_deny_reason(name: str) -> str:
@@ -129,8 +123,6 @@ def _sandbox_deny_reason(name: str) -> str:
     ):
         return f"Tool '{name}' denied in {policy} sandbox policy"
     return ""
-
-
 
 
 async def _sandbox_policy_handler(policy: str | None = None) -> str:

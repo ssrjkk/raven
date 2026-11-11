@@ -13,6 +13,7 @@ def client() -> TestClient:
     with patch("raven.core.kg_api._KG_PATH") as mock_path:
         mock_path.exists.return_value = False
         from raven.core.kg_api import create_knowledge_router
+
         app.include_router(create_knowledge_router())
     return TestClient(app)
 
@@ -117,7 +118,9 @@ def test_add_relation(client: TestClient) -> None:
         kg.add_relation.return_value = rel
         mock_get.return_value = kg
 
-        resp = client.post("/api/knowledge/relation", params={"source": "Python", "target": "Programming", "type": "is_a"})
+        resp = client.post(
+            "/api/knowledge/relation", params={"source": "Python", "target": "Programming", "type": "is_a"}
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["relation"]["source"] == "Python"

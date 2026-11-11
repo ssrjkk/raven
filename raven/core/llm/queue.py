@@ -63,9 +63,7 @@ class PriorityAdmissionQueue:
             heapq.heappush(self._heap, (priority, self._seq, fut))
             queued = len(self._heap)
             if queued >= _BACKPRESSURE_THRESHOLD and queued % _BACKPRESSURE_THRESHOLD == 0:
-                logger.warning(
-                    "LLM backpressure: {} requests queued, concurrency limit {}", queued, self._concurrency
-                )
+                logger.warning("LLM backpressure: {} requests queued, concurrency limit {}", queued, self._concurrency)
         assert fut is not None
         try:
             await asyncio.wait_for(fut, timeout=self._queue_timeout)

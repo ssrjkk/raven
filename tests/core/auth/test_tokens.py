@@ -69,9 +69,7 @@ class TestTokenManagerStore:
     async def test_database_stores_only_the_digest(self, store: AuthStore):
         token = await store.create_session("user:alice", "user")
         rows = await store._fetchall("SELECT token_hash FROM auth_sessions")
-        assert [row["token_hash"] for row in rows] == [
-            hashlib.sha256(token.encode("utf-8")).hexdigest()
-        ]
+        assert [row["token_hash"] for row in rows] == [hashlib.sha256(token.encode("utf-8")).hexdigest()]
         assert token not in {row["token_hash"] for row in rows}
 
     async def test_expired_session_is_gone(self, store: AuthStore):

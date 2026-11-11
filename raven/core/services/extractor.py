@@ -62,13 +62,15 @@ class EntityExtractor:
             if labels and label not in labels:
                 continue
             for m in pattern.finditer(text):
-                entities.append(Entity(
-                    text=m.group(),
-                    label=label,
-                    start=m.start(),
-                    end=m.end(),
-                    score=1.0,
-                ))
+                entities.append(
+                    Entity(
+                        text=m.group(),
+                        label=label,
+                        start=m.start(),
+                        end=m.end(),
+                        score=1.0,
+                    )
+                )
         return entities
 
     async def _extract_llm(self, text: str, labels: list[str] | None = None) -> list[Entity]:

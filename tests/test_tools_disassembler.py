@@ -200,9 +200,7 @@ class TestDisassembleBytesCapstone:
             ("riscv64", 10, 12),
         ],
     )
-    def test_arch_mapping(
-        self, capstone_module: MagicMock, arch: str, cs_arch: int, cs_mode: int
-    ) -> None:
+    def test_arch_mapping(self, capstone_module: MagicMock, arch: str, cs_arch: int, cs_mode: int) -> None:
         capstone_module.Cs.return_value.disasm.return_value = [FakeInsn(0x1000, "nop", "", b"\x90")]
         out = disassemble_bytes(b"\x90", arch)
         assert f"; Disassembly ({arch}) - 1 bytes" in out
@@ -217,10 +215,7 @@ class TestDisassembleBytesCapstone:
     def test_unsupported_arch(self, capstone_module: MagicMock) -> None:
         out = disassemble_bytes(b"\x90", "mips64")
         assert out.startswith("[error] Unsupported architecture: mips64")
-        assert (
-            "x86, x64, x86-64, arm, arm64, aarch64, mips, thumb, riscv, riscv32, riscv64"
-            in out
-        )
+        assert "x86, x64, x86-64, arm, arm64, aarch64, mips, thumb, riscv, riscv32, riscv64" in out
         capstone_module.Cs.assert_not_called()
 
     def test_init_failure(self, capstone_module: MagicMock) -> None:
@@ -424,9 +419,7 @@ class TestExtractCodeBytes:
 
     def test_text_section_default_cap(self, monkeypatch: pytest.MonkeyPatch) -> None:
         raw = b"\x02" * 5000
-        monkeypatch.setattr(
-            "raven.tools.reverse_engineering.disassembler._find_text_section", lambda r: 100
-        )
+        monkeypatch.setattr("raven.tools.reverse_engineering.disassembler._find_text_section", lambda r: 100)
         code, offset = _extract_code_bytes(raw, "", 0)
         assert offset == 100
         assert len(code) == 4096
@@ -434,27 +427,21 @@ class TestExtractCodeBytes:
 
     def test_text_section_with_size(self, monkeypatch: pytest.MonkeyPatch) -> None:
         raw = b"\x02" * 5000
-        monkeypatch.setattr(
-            "raven.tools.reverse_engineering.disassembler._find_text_section", lambda r: 100
-        )
+        monkeypatch.setattr("raven.tools.reverse_engineering.disassembler._find_text_section", lambda r: 100)
         code, offset = _extract_code_bytes(raw, "", 8)
         assert offset == 100
         assert code == raw[100:108]
 
     def test_no_text_section_with_size(self, monkeypatch: pytest.MonkeyPatch) -> None:
         raw = b"\x03" * 100
-        monkeypatch.setattr(
-            "raven.tools.reverse_engineering.disassembler._find_text_section", lambda r: None
-        )
+        monkeypatch.setattr("raven.tools.reverse_engineering.disassembler._find_text_section", lambda r: None)
         code, offset = _extract_code_bytes(raw, "", 4)
         assert offset == 0
         assert code == raw[:4]
 
     def test_no_text_section_default_cap(self, monkeypatch: pytest.MonkeyPatch) -> None:
         raw = b"\x03" * 100
-        monkeypatch.setattr(
-            "raven.tools.reverse_engineering.disassembler._find_text_section", lambda r: None
-        )
+        monkeypatch.setattr("raven.tools.reverse_engineering.disassembler._find_text_section", lambda r: None)
         code, offset = _extract_code_bytes(raw, "", 0)
         assert offset == 0
         assert code == raw[:100]
@@ -475,18 +462,14 @@ class TestResolveSymbol:
         sym = MagicMock(name="symbol")
         sym.name = "main"
         sym.entry.st_value = 0x401000
-        fake_elftools.return_value.iter_sections.return_value = [
-            MagicMock(iter_symbols=lambda: [sym])
-        ]
+        fake_elftools.return_value.iter_sections.return_value = [MagicMock(iter_symbols=lambda: [sym])]
         assert _resolve_symbol(b"\x00" * 16, "main") == 0x401000
 
     def test_symbol_missing(self, fake_elftools: MagicMock) -> None:
         sym = MagicMock(name="symbol")
         sym.name = "other"
         sym.entry.st_value = 0x1000
-        fake_elftools.return_value.iter_sections.return_value = [
-            MagicMock(iter_symbols=lambda: [sym])
-        ]
+        fake_elftools.return_value.iter_sections.return_value = [MagicMock(iter_symbols=lambda: [sym])]
         assert _resolve_symbol(b"\x00" * 16, "main") is None
 
     def test_elf_parse_error(self, fake_elftools: MagicMock) -> None:

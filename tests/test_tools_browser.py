@@ -92,6 +92,14 @@ def _oserror(*_: Any, **__: Any) -> Any:
     raise OSError("network down")
 
 
+def _verdict(validator: Any, url: str) -> str | None:
+    try:
+        validator(url)
+    except ValueError as exc:
+        return str(exc)
+    return None
+
+
 class TestValidateUrl:
     def test_missing_hostname(self) -> None:
         with pytest.raises(ValueError, match="missing hostname"):
@@ -115,13 +123,60 @@ class TestValidateUrl:
     def test_public_ip_literal(self) -> None:
         browser_mod._validate_url("http://8.8.8.8/x")  # must not raise
 
+    def test_public_ip_literal_never_reaches_a_resolver(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(socket, "getaddrinfo", _dns_fail)
+        browser_mod._validate_url("http://8.8.8.8/x")  # a literal is decided without DNS
+
+    @pytest.mark.parametrize(
+        "url", ["http://10.0.0.1/", "http://169.254.169.254/latest/meta-data/", "http://[fd00::1]/"]
+    )
+    def test_private_literal_is_refused_with_dns_down(self, url: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The bypass this closes: the private-literal raise used to sit inside a `try` whose
+        `except ValueError` caught it again, because `_SSRFError` is a ValueError. On a machine where
+        resolution fails, the swallowed raise let the guard fall through to a logged warning and fetch
+        the cloud metadata address anyway."""
+        monkeypatch.setattr(socket, "getaddrinfo", _dns_fail)
+        with pytest.raises(ValueError, match="private IP"):
+            browser_mod._validate_url(url)
+
+    def test_ipv6_unspecified_is_refused(self) -> None:
+        """`::` is not in PRIVATE_NETS, so it survives the literal pass and is caught as a name."""
+        with pytest.raises(ValueError, match="hostname"):
+            browser_mod._validate_url("http://[::]/")
+
     def test_localhost_blocked(self) -> None:
         with pytest.raises(ValueError, match="hostname localhost"):
             browser_mod._validate_url("http://localhost/")
 
     def test_zero_zero_zero_zero_blocked(self) -> None:
-        with pytest.raises(ValueError, match="hostname"):
+        with pytest.raises(ValueError, match="private IP"):
             browser_mod._validate_url("http://0.0.0.0/")
+
+    @pytest.mark.parametrize(
+        ("url", "reason"),
+        [
+            ("http://10.0.0.1/", "private IP"),
+            ("http://127.0.0.1/", "private IP"),
+            ("http://localhost/", "hostname"),
+            ("http://8.8.8.8/", None),
+        ],
+    )
+    def test_the_two_browser_surfaces_agree_on_every_verdict(
+        self, url: str, reason: str | None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`raven/core/browser_agent.py` guards the CDP path and this guards the Playwright tool. They
+        were already two copies of one policy with different wording and a bug in only one of them;
+        the copies stay, so the verdicts have to match or one path is quietly more open."""
+        from raven.core import browser_agent
+
+        monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: [("AF_INET", "SOCK_STREAM", 6, "", ("8.8.8.8", 0))])
+        ours = _verdict(browser_mod._validate_url, url)
+        theirs = _verdict(browser_agent.validate_url, url)
+        if reason is None:
+            assert ours is None and theirs is None, (url, ours, theirs)
+            return
+        assert ours is not None and theirs is not None, (url, ours, theirs)
+        assert reason in ours and reason in theirs, (url, ours, theirs)
 
     def test_resolves_to_private(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: [("AF_INET", "SOCK_STREAM", 6, "", ("10.0.0.5", 0))])

@@ -225,7 +225,9 @@ class _FakeAgent:
 @pytest.fixture(autouse=True)
 def _patch_agent(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
     monkeypatch.setattr(orch, "ReActAgent", _FakeAgent)
-    monkeypatch.setattr(orch, "Conversation", lambda system_prompt=None: SimpleNamespace(system_prompt=system_prompt, message_count=2))
+    monkeypatch.setattr(
+        orch, "Conversation", lambda system_prompt=None: SimpleNamespace(system_prompt=system_prompt, message_count=2)
+    )
     yield
 
 
@@ -342,18 +344,14 @@ async def test_dispatch_planner_readonly_no_override(monkeypatch: pytest.MonkeyP
 async def test_dispatch_planner_readonly_with_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("ravencode.agents.orchestrator.get_prompt", Mock(return_value="PRO"))
     cfg = AgentConfig(plan_mode=True)
-    result = await Orchestrator().dispatch(
-        "plan", AgentType.PLANNER_READONLY, agent_config_override=cfg
-    )
+    result = await Orchestrator().dispatch("plan", AgentType.PLANNER_READONLY, agent_config_override=cfg)
     assert result.success is True
 
 
 @pytest.mark.asyncio
 async def test_dispatch_coder(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("ravencode.agents.orchestrator.get_prompt", Mock(return_value="CODER"))
-    result = await Orchestrator().dispatch(
-        "code", AgentType.CODER, agent_config_override=AgentConfig()
-    )
+    result = await Orchestrator().dispatch("code", AgentType.CODER, agent_config_override=AgentConfig())
     assert result.success is True
     assert result.agent == "coder"
     assert result.data == {"code_result": "done"}
@@ -399,9 +397,7 @@ async def test_dispatch_catches_exception(monkeypatch: pytest.MonkeyPatch) -> No
             raise RuntimeError("agent exploded")
 
     monkeypatch.setattr(orch, "ReActAgent", _BoomAgent)
-    result = await Orchestrator().dispatch(
-        "plan", AgentType.PLANNER, agent_config_override=AgentConfig()
-    )
+    result = await Orchestrator().dispatch("plan", AgentType.PLANNER, agent_config_override=AgentConfig())
     assert result.success is False
     assert result.error == "agent exploded"
 

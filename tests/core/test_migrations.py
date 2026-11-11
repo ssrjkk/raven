@@ -92,9 +92,7 @@ async def test_apply_pending_catches_a_migration_added_below_the_max(db_path):
     _MIGRATIONS[:] = [Migration(0, "back-merged hotfix", None, _noop)]
     try:
         await apply_pending_migrations(db)
-        applied = sorted(
-            row["version"] for row in await db.fetchall("SELECT version FROM _migrations")
-        )
+        applied = sorted(row["version"] for row in await db.fetchall("SELECT version FROM _migrations"))
     finally:
         _MIGRATIONS[:] = registered
 

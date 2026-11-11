@@ -11,22 +11,32 @@ repos:
       - id: check-json
       - id: detect-private-key
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.0
+  # Lint, format and types run from this repository's own interpreter rather than a copy pre-commit
+  # downloads into an isolated env. The pins that used to sit here were ruff v0.5.0 against mypy
+  # v1.11.0, while pyproject then allowed `ruff>=0.5,<1.0` and `mypy>=2.4.0`: the hook and the gate
+  # formatted with two different tools, and a formatter that disagrees with the gate is worse than
+  # none -- the older one would have restyled this tree into a diff the newer one immediately restyles
+  # again. pyproject now fixes the toolchain (`ruff~=0.17.4`, `mypy~=2.4.1` -- what CI installs and
+  # what this tree was formatted with), so the hook, `python scripts/check_all.py --quick` and CI run
+  # one toolchain against one config.
+  - repo: local
     hooks:
-      - id: ruff
-        args: [--fix]
+      - id: ruff-check
+        name: ruff check
+        entry: python -m ruff check --fix
+        language: system
+        types_or: [python, pyi]
       - id: ruff-format
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.11.0
-    hooks:
+        name: ruff format
+        entry: python -m ruff format
+        language: system
+        types_or: [python, pyi]
       - id: mypy
-        args: [--ignore-missing-imports, --python-version=3.11]
-        additional_dependencies:
-          - pydantic>=2.10
-          - httpx>=0.28
-          - fastapi>=0.115
+        name: mypy
+        entry: python -m mypy --ignore-missing-imports
+        language: system
+        types_or: [python, pyi]
+        exclude: ^(deploy|build|extension)/
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.18.2

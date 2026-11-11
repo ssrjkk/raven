@@ -17,11 +17,20 @@ class TestEstimateComplexity:
         assert _estimate_complexity(messages) == "medium"
 
     def test_medium_multiple_messages(self):
-        messages = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}, {"role": "user", "content": "what is a decorator"}]
+        messages = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+            {"role": "user", "content": "what is a decorator"},
+        ]
         assert _estimate_complexity(messages) == "medium"
 
     def test_complex_code_request(self):
-        messages = [{"role": "user", "content": "implement a binary search tree in python with insert, delete, and search methods"}]
+        messages = [
+            {
+                "role": "user",
+                "content": "implement a binary search tree in python with insert, delete, and search methods",
+            }
+        ]
         assert _estimate_complexity(messages) == "complex"
 
     def test_complex_with_code_block(self):

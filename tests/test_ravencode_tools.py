@@ -380,9 +380,7 @@ async def test_grep_files_skips_dependency_dirs(ws: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_grep_files_skips_oversized_files(
-    ws: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_grep_files_skips_oversized_files(ws: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (ws / "a.txt").write_text("needle\n", encoding="utf-8")
     monkeypatch.setattr("ravencode.runtime.tools.files._GREP_MAX_FILE_BYTES", 0)
     assert await tools.grep_files("needle") == []

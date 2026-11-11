@@ -68,9 +68,7 @@ class ModelFailover:
                 if resp.content or resp.tool_calls:
                     metrics.inc("failover_success", {"provider": model_cfg.provider, "model": model_cfg.model})
                     return resp  # type: ignore[no-any-return]
-                logger.warning(
-                    "Failover: model {} returned empty response, trying next", model_cfg.model
-                )
+                logger.warning("Failover: model {} returned empty response, trying next", model_cfg.model)
             except CircuitBreakerOpenError as e:
                 last_error = e
                 continue
@@ -104,9 +102,7 @@ class ModelFailover:
                     raise
 
                 if not yielded:
-                    logger.warning(
-                        "Failover stream: model {} returned empty stream, trying next", model_cfg.model
-                    )
+                    logger.warning("Failover stream: model {} returned empty stream, trying next", model_cfg.model)
                     continue
 
                 await cb.on_success()

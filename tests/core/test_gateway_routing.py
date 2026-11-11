@@ -95,9 +95,10 @@ class TestCircuitBreaker:
 
     async def test_generic_exception_sends_error(self, gateway: Gateway):
         await gateway.start()
-        with patch.object(
-            gateway._message_cb, "call", new_callable=AsyncMock, side_effect=RuntimeError("boom")
-        ), patch("raven.core.gateway.gateway.metrics") as m:
+        with (
+            patch.object(gateway._message_cb, "call", new_callable=AsyncMock, side_effect=RuntimeError("boom")),
+            patch("raven.core.gateway.gateway.metrics") as m,
+        ):
             ch = gateway.channels["mock"]
             assert isinstance(ch, MockChannel)
             await gateway.handle_message(_event("hello"))
@@ -206,7 +207,9 @@ class TestHandleMessageInnerRouting:
             user = {"id": "u_arch", "name": "Arch", "role": "user", "agent_profile": "coder"}
             with patch.object(gateway.db, "find_or_create_user", new_callable=AsyncMock, return_value=user):
                 await gateway._handle_message_inner(
-                    IncomingMessage(channel="mock", user_id="u_arch", session_id="mock:u_arch:default", text="code this"),
+                    IncomingMessage(
+                        channel="mock", user_id="u_arch", session_id="mock:u_arch:default", text="code this"
+                    ),
                     "cid2",
                 )
                 mock_h.assert_awaited_once()

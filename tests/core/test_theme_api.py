@@ -134,6 +134,9 @@ class TestThemeEndpoints:
         response = client.get("/api/v1/commands/theme")
         saved = response.json()["accentColor"]
         assert saved.startswith("#")
-        assert saved == client.post(
-            "/api/v1/commands/theme/generate", json={"prompt": "coral reef", "use_llm": False}
-        ).json()["accent"]
+        assert (
+            saved
+            == client.post("/api/v1/commands/theme/generate", json={"prompt": "coral reef", "use_llm": False}).json()[
+                "accent"
+            ]
+        )

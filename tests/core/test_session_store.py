@@ -261,7 +261,9 @@ class TestUpdate:
         redis._client.hset.assert_not_awaited()
         redis._client.expire.assert_not_awaited()
 
-    async def test_ignores_unknown_field_but_updates_known(self, store_and_redis: tuple[SessionStore, _FakeRedis]) -> None:
+    async def test_ignores_unknown_field_but_updates_known(
+        self, store_and_redis: tuple[SessionStore, _FakeRedis]
+    ) -> None:
         store, redis = store_and_redis
         ok = await store.update(_SESSION_ID, bogus="x", channel="discord")
         assert ok is True

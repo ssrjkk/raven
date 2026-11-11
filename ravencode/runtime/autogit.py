@@ -63,7 +63,9 @@ def _summarize_diff(diff: str, max_lines: int = 5) -> str:
     lines = diff.splitlines()
     summary = []
     for line in lines:
-        if (line.startswith("+") and not line.startswith("+++")) or (line.startswith("-") and not line.startswith("---")):
+        if (line.startswith("+") and not line.startswith("+++")) or (
+            line.startswith("-") and not line.startswith("---")
+        ):
             summary.append(line[1:80])
         if len(summary) >= max_lines:
             break

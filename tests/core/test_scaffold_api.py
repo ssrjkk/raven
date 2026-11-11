@@ -48,7 +48,10 @@ def test_get_plan_not_found(client: TestClient) -> None:
 def test_generate_fastapi_react(client: TestClient) -> None:
     resp = client.post(
         "/api/v1/scaffold/generate",
-        json={"template_id": "fastapi-react", "answers": {"project_name": "test-app", "use_auth": True, "use_db": "sqlite", "use_docker": False}},
+        json={
+            "template_id": "fastapi-react",
+            "answers": {"project_name": "test-app", "use_auth": True, "use_db": "sqlite", "use_docker": False},
+        },
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -70,7 +73,10 @@ def test_generate_python_cli(client: TestClient) -> None:
 def test_generate_ts_react(client: TestClient) -> None:
     resp = client.post(
         "/api/v1/scaffold/generate",
-        json={"template_id": "ts-react", "answers": {"project_name": "my-app", "use_router": True, "use_state": "zustand"}},
+        json={
+            "template_id": "ts-react",
+            "answers": {"project_name": "my-app", "use_router": True, "use_state": "zustand"},
+        },
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -98,7 +104,9 @@ def test_generate_not_found(client: TestClient) -> None:
 def test_gen_fastapi_react_function(tmp_path: pytest.TempPathFactory) -> None:
     target = tmp_path / "test"  # type: ignore[operator]
     target.mkdir()
-    files = _gen_fastapi_react(target, {"project_name": "test", "use_auth": False, "use_db": "sqlite", "use_docker": False})
+    files = _gen_fastapi_react(
+        target, {"project_name": "test", "use_auth": False, "use_db": "sqlite", "use_docker": False}
+    )
     assert len(files) >= 2
     paths = [f["path"] for f in files]
     assert "backend/requirements.txt" in paths

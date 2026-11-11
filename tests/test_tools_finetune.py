@@ -155,7 +155,9 @@ class TestDatasetOps:
     def test_add_conversation_valid(self, monkeypatch: pytest.MonkeyPatch) -> None:
         b = _FakeBuilder()
         _patch(monkeypatch, b, _FakePipeline())
-        out = ft_mod.finetune_add_conversation("sys", '[{"role":"user","content":"hi"}]', consented=True, source="operator")
+        out = ft_mod.finetune_add_conversation(
+            "sys", '[{"role":"user","content":"hi"}]', consented=True, source="operator"
+        )
         assert out == "Conversation added (1 messages). Consented: 1"
         assert b._conversations[0].consented is True
         assert b._conversations[0].metadata == {"source": "operator"}

@@ -12,6 +12,7 @@ one script run moves the data file and the pages together.
 
 Run from the repo root:  python scripts/record_site_frames.py
 """
+
 from __future__ import annotations
 
 import json
@@ -29,33 +30,73 @@ CATEGORIES: dict[str, list[str]] = {
     "file": ["read", "write", "edit", "verify", "glob", "grep"],
     "shell": ["bash"],
     "web": [
-        "web_search", "web_fetch", "browser_navigate", "browser_click", "browser_type",
-        "browser_screenshot", "browser_get_html", "browser_evaluate", "browser_close",
+        "web_search",
+        "web_fetch",
+        "browser_navigate",
+        "browser_click",
+        "browser_type",
+        "browser_screenshot",
+        "browser_get_html",
+        "browser_evaluate",
+        "browser_close",
     ],
     "git": ["git_status", "git_diff", "git_log", "git_commit", "git_add"],
     "code": [
-        "run_tests", "format_file", "format_files", "smart_edit", "patch", "lsp_completion",
-        "lsp_definition", "lsp_references", "lsp_hover", "lsp_diagnostics", "code_search",
+        "run_tests",
+        "format_file",
+        "format_files",
+        "smart_edit",
+        "patch",
+        "lsp_completion",
+        "lsp_definition",
+        "lsp_references",
+        "lsp_hover",
+        "lsp_diagnostics",
+        "code_search",
     ],
     "agent": ["think", "task", "task_parallel", "memory_remember", "memory_recall", "question"],
     "workflow": [
-        "undo", "redo", "checkpoint_save", "checkpoint_restore", "checkpoint_list",
-        "undo_changes", "auto_commit", "todowrite", "todolist", "todoupdate", "todoclear",
-        "anchored_summary_write", "anchored_summary_append", "anchored_summary_read",
+        "undo",
+        "redo",
+        "checkpoint_save",
+        "checkpoint_restore",
+        "checkpoint_list",
+        "undo_changes",
+        "auto_commit",
+        "todowrite",
+        "todolist",
+        "todoupdate",
+        "todoclear",
+        "anchored_summary_write",
+        "anchored_summary_append",
+        "anchored_summary_read",
         "anchored_summary_clear",
     ],
     "infra": [
-        "sandbox_exec", "sandbox_policy", "create_artifact", "read_image", "canvas_render",
-        "nodes_list", "cron_schedule", "cron_list", "cron_cancel", "talk", "skill",
-        "download_skill", "set_skill_registry",
+        "sandbox_exec",
+        "sandbox_policy",
+        "create_artifact",
+        "read_image",
+        "canvas_render",
+        "nodes_list",
+        "cron_schedule",
+        "cron_list",
+        "cron_cancel",
+        "talk",
+        "skill",
+        "download_skill",
+        "set_skill_registry",
     ],
 }
 
 FRAMES: list[dict[str, Any]] = [
     {
-        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
         "params": {
-            "protocolVersion": "2025-03-26", "capabilities": {},
+            "protocolVersion": "2025-03-26",
+            "capabilities": {},
             "clientInfo": {"name": "raven-landing", "version": "1.0"},
         },
     },
@@ -63,11 +104,15 @@ FRAMES: list[dict[str, Any]] = [
     {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
     {"jsonrpc": "2.0", "id": 3, "method": "ping", "params": {}},
     {
-        "jsonrpc": "2.0", "id": 4, "method": "tools/call",
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
         "params": {"name": "read", "arguments": {"path": "README.md", "max_chars": 100}},
     },
     {
-        "jsonrpc": "2.0", "id": 5, "method": "tools/call",
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "tools/call",
         "params": {"name": "glob", "arguments": {"pattern": "docs/*.md", "path": "."}},
     },
     {"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {}},
@@ -77,8 +122,13 @@ FRAMES: list[dict[str, Any]] = [
 
 def exchange(cmd: list[str]) -> list[dict[str, Any]]:
     proc = subprocess.Popen(
-        cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL, text=True, encoding="utf-8", cwd=ROOT,
+        cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        encoding="utf-8",
+        cwd=ROOT,
     )
     if proc.stdin is None or proc.stdout is None:
         raise RuntimeError("server pipes unavailable")
@@ -121,19 +171,30 @@ def build_entries(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for tool in tools:
         schema = tool["inputSchema"]
         props: dict[str, Any] = schema.get("properties", {})
-        entries.append({
-            "name": tool["name"],
-            "category": category_of[tool["name"]],
-            "description": tool["description"],
-            "params": {key: value.get("type", "string") for key, value in props.items()},
-            "required": [key for key in schema.get("required", []) if key in props],
-        })
+        entries.append(
+            {
+                "name": tool["name"],
+                "category": category_of[tool["name"]],
+                "description": tool["description"],
+                "params": {key: value.get("type", "string") for key, value in props.items()},
+                "required": [key for key in schema.get("required", []) if key in props],
+            }
+        )
     order: dict[str, int] = {}
     for names in CATEGORIES.values():
         for name in names:
             order[name] = len(order)
     entries.sort(key=lambda e: order[e["name"]])
     return entries
+
+
+def _write_lf(path: Path, text: str) -> None:
+    """Generated files are committed byte-for-byte, so LF is part of the output, not a platform detail.
+
+    `Path.write_text` on Windows translates every `\\n` it writes into `\\r\\n`, including the ones inside
+    a JSON payload: a rerun of this script on a Windows machine rewrote the whole file and left the
+    working copy disagreeing with `.gitattributes` (`* text eol=lf`) until git normalized it back."""
+    path.write_bytes(text.encode("utf-8"))
 
 
 def write_tools_data(entries: list[dict[str, Any]]) -> None:
@@ -143,7 +204,7 @@ def write_tools_data(entries: list[dict[str, Any]]) -> None:
         "// Do not edit by hand: rerun the script after changing the tool registry.\n"
         f"const TOOLS_DATA = [\n{body}\n];\n"
     )
-    (SITE / "tools-data.js").write_text(text, encoding="utf-8")
+    _write_lf(SITE / "tools-data.js", text)
 
 
 def build_stats(entries: list[dict[str, Any]]) -> dict[str, Any]:
@@ -159,9 +220,7 @@ def build_stats(entries: list[dict[str, Any]]) -> dict[str, Any]:
         categories[entry["category"]] = categories.get(entry["category"], 0) + 1
 
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-    routes = re.findall(
-        r'<Route\s+path="([^"]+)"', (ROOT / "web" / "src" / "App.tsx").read_text(encoding="utf-8")
-    )
+    routes = re.findall(r'<Route\s+path="([^"]+)"', (ROOT / "web" / "src" / "App.tsx").read_text(encoding="utf-8"))
     screens = {path for path in routes if path not in {"/login", "*"}}
     adapters = len(list((ROOT / "raven" / "channels").glob("*/channel.py")))
 
@@ -179,11 +238,11 @@ def build_stats(entries: list[dict[str, Any]]) -> dict[str, Any]:
 
 def write_stats(stats: dict[str, Any]) -> None:
     body = json.dumps(stats, indent=1, ensure_ascii=False)
-    (SITE / "stats.js").write_text(
+    _write_lf(
+        SITE / "stats.js",
         "// Generated by scripts/record_site_frames.py — every count is measured from the tree.\n"
         "// Do not edit by hand: rerun the script after changing the registry, the channels or the routes.\n"
         f"const RAVEN_STATS = {body};\n",
-        encoding="utf-8",
     )
 
 
@@ -193,11 +252,11 @@ def write_frames(recorded: list[dict[str, Any]]) -> None:
         "frames": recorded,
     }
     body = json.dumps(payload, indent=1, ensure_ascii=False)
-    (SITE / "mcp-frames.js").write_text(
+    _write_lf(
+        SITE / "mcp-frames.js",
         "// Generated by scripts/record_site_frames.py — real request/response frames, not hand-written.\n"
         "// Do not edit by hand: rerun the script after changing the protocol or the tool registry.\n"
         f"const MCP_FRAMES = {body};\n",
-        encoding="utf-8",
     )
 
 

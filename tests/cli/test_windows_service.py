@@ -198,9 +198,7 @@ class TestInstallIsHonest:
     def _pywin32_present(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # `_install_windows` refuses without it, and the dependency is Windows-only. Patched on the
         # real `importlib.util` module, which is the object `service.py` reaches through.
-        monkeypatch.setattr(
-            importlib.util, "find_spec", lambda name: object() if name == "win32serviceutil" else None
-        )
+        monkeypatch.setattr(importlib.util, "find_spec", lambda name: object() if name == "win32serviceutil" else None)
 
     def test_install_registers_the_service_to_start_at_boot(self, monkeypatch: pytest.MonkeyPatch) -> None:
         calls: list[list[str]] = []

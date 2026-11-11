@@ -33,9 +33,7 @@ class TestMCPHttpTransport:
 
     @pytest.fixture(autouse=True)
     def authorized(self):
-        with patch(
-            "ravencode.mcp.http_transport.authorize_request", new=AsyncMock(return_value=True)
-        ) as mock_auth:
+        with patch("ravencode.mcp.http_transport.authorize_request", new=AsyncMock(return_value=True)) as mock_auth:
             yield mock_auth
 
     def test_router_routes(self, router) -> None:
@@ -189,9 +187,7 @@ class TestMCPServer:
 
     async def test_tools_call_delegates_when_the_policy_allows_it(self) -> None:
         server = MCPServer()
-        with patch(
-            "raven.core.mcp.server.execute_tool_public", new_callable=AsyncMock, return_value="out"
-        ) as executor:
+        with patch("raven.core.mcp.server.execute_tool_public", new_callable=AsyncMock, return_value="out") as executor:
             result = await server.handle_request(
                 {"method": "tools/call", "id": 3, "params": {"name": "read", "arguments": {"path": "README.md"}}}
             )
@@ -201,9 +197,7 @@ class TestMCPServer:
 
     async def test_tools_call_refuses_a_denied_tool_without_reaching_the_executor(self) -> None:
         server = MCPServer()
-        with patch(
-            "raven.core.mcp.server.execute_tool_public", new_callable=AsyncMock, return_value="out"
-        ) as executor:
+        with patch("raven.core.mcp.server.execute_tool_public", new_callable=AsyncMock, return_value="out") as executor:
             result = await server.handle_request(
                 {"method": "tools/call", "id": 3, "params": {"name": "shell", "arguments": {"cmd": "x"}}}
             )

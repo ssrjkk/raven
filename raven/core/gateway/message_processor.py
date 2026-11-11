@@ -27,6 +27,7 @@ def _mask_tool_args(args: dict[str, Any]) -> str:
 
     return str(scrub(args))[:200]
 
+
 if TYPE_CHECKING:
     from raven.core.agent.registry import AgentRegistry
     from raven.core.context_window import ContextWindowManager
@@ -55,6 +56,7 @@ def usage_line(mode: str, totals: dict[str, int], rounds: int | None = None) -> 
     if mode == "full":
         line += f" · model calls: {used}"
     return line
+
 
 class MessageProcessor:
     def __init__(

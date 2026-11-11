@@ -32,19 +32,23 @@ async def detect_patterns(memory: MemoryManager, min_frequency: int = 2) -> list
     patterns: list[dict[str, str | int]] = []
     for phrase, count in topics.most_common(10):
         if count >= min_frequency:
-            patterns.append({
-                "type": "recurring_phrase",
-                "pattern": phrase,
-                "frequency": count,
-            })
+            patterns.append(
+                {
+                    "type": "recurring_phrase",
+                    "pattern": phrase,
+                    "frequency": count,
+                }
+            )
 
     reported_topics = await _extract_recurring_topics(memory, raw_lines)
     for topic, count in reported_topics:
-        patterns.append({
-            "type": "recurring_topic",
-            "pattern": topic,
-            "frequency": count,
-        })
+        patterns.append(
+            {
+                "type": "recurring_topic",
+                "pattern": topic,
+                "frequency": count,
+            }
+        )
 
     patterns.sort(key=lambda p: int(p["frequency"]), reverse=True)
     top = [p for p in patterns if int(p["frequency"]) >= min_frequency][:5]

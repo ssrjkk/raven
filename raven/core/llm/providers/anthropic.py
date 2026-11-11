@@ -41,9 +41,7 @@ class AnthropicProvider(LLMProvider):
                 # Ephemeral cache marker on the system prefix: tools + system
                 # prompt are stable across agent steps, so every step after
                 # the first is served from the prompt cache at ~10% cost.
-                body["system"] = [
-                    {"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}
-                ]
+                body["system"] = [{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}]
             else:
                 body["system"] = system_text
         if tools:

@@ -15,6 +15,7 @@ from ravencode.runtime.context import Conversation, MemoryStore, create_conversa
 class TestMemoryStore:
     def _temp_path(self):
         import os
+
         fd, path = tempfile.mkstemp(suffix=".json", text=True)
         os.write(fd, b"{}")
         os.close(fd)
@@ -131,12 +132,14 @@ class TestMemoryStore:
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w", encoding="utf-8") as f:
             path = f.name
         try:
+
             async def run():
                 store = MemoryStore(path=path)
                 await store.set("saved", "data")
                 await asyncio.sleep(0.05)
                 data = json.loads(Path(path).read_text(encoding="utf-8"))
                 assert data["saved"] == "data"
+
             asyncio.run(run())
         finally:
             Path(path).unlink(missing_ok=True)
@@ -322,11 +325,13 @@ class TestConversation:
         assert d["max_tokens"] == 500
 
     def test_from_dict(self):
-        c = Conversation.from_dict({
-            "system_prompt": "Restored.",
-            "messages": [{"role": "system", "content": "Restored."}, {"role": "user", "content": "hello"}],
-            "max_tokens": 1000,
-        })
+        c = Conversation.from_dict(
+            {
+                "system_prompt": "Restored.",
+                "messages": [{"role": "system", "content": "Restored."}, {"role": "user", "content": "hello"}],
+                "max_tokens": 1000,
+            }
+        )
         assert c.system_prompt == "Restored."
         assert len(c.messages) == 2
         assert c.messages[1]["content"] == "hello"

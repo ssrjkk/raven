@@ -14,6 +14,7 @@ def client() -> TestClient:
         mock_path.exists.return_value = False
         mock_path.parent = MagicMock()
         from raven.core.rag_api import create_rag_router
+
         app.include_router(create_rag_router())
     return TestClient(app)
 

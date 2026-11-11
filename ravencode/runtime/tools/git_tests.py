@@ -49,12 +49,8 @@ async def _git_cmd(*args: str, cwd: str | None = None) -> str:
     return output
 
 
-
-
 async def git_status(path: str | None = None) -> str:
     return await _git_cmd("status", cwd=path)
-
-
 
 
 async def git_diff(path: str | None = None, staged: bool = False) -> str:
@@ -62,24 +58,16 @@ async def git_diff(path: str | None = None, staged: bool = False) -> str:
     return await _git_cmd(*args, cwd=path)
 
 
-
-
 async def git_log(max_count: int = 10, path: str | None = None) -> str:
     return await _git_cmd("log", f"--max-count={max_count}", "--oneline", cwd=path)
-
-
 
 
 async def git_commit(message: str, path: str | None = None) -> str:
     return await _git_cmd("commit", "-m", message, cwd=path)
 
 
-
-
 async def git_add(files: str, path: str | None = None) -> str:
     return await _git_cmd("add", *files.split(), cwd=path)
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -97,16 +85,13 @@ _RUN_TESTS_MAX_FAILURES = 10
 _PYTEST_SUMMARY_RE = re.compile(r"\d+ (?:passed|failed|error)s?\b.*in \d", re.IGNORECASE)
 
 
-
-
 def _summarize_pytest(output: str, returncode: int) -> str:
     """Compress pytest output to failures + summary (models drown in raw logs)."""
     lines = output.splitlines()
     failed = [
         ln
         for ln in lines
-        if ln.startswith(("FAILED ", "ERROR "))
-        or (" - " in ln and (ln.startswith("FAILED") or ln.startswith("ERROR")))
+        if ln.startswith(("FAILED ", "ERROR ")) or (" - " in ln and (ln.startswith("FAILED") or ln.startswith("ERROR")))
     ][: 2 * _RUN_TESTS_MAX_FAILURES]
     summary = next(
         (ln for ln in reversed(lines) if _PYTEST_SUMMARY_RE.search(ln)),
@@ -128,8 +113,6 @@ def _summarize_pytest(output: str, returncode: int) -> str:
     return smart_truncate(result, limit=4_000)
 
 
-
-
 async def run_tests(path: str | None = None, extra_args: str | None = None) -> str:
     """Run pytest inside the workspace and return a token-efficient summary."""
     try:
@@ -137,9 +120,12 @@ async def run_tests(path: str | None = None, extra_args: str | None = None) -> s
     except PermissionError as exc:
         logger.debug("[tests] access denied: {}", exc)
         return f"[error] {exc}"
-    if not (Path(cwd) / "pyproject.toml").exists() and not any(Path(cwd).glob("test_*.py")) and not any(
-        Path(cwd).glob("*_test.py")
-    ) and not (Path(cwd) / "tests").exists():
+    if (
+        not (Path(cwd) / "pyproject.toml").exists()
+        and not any(Path(cwd).glob("test_*.py"))
+        and not any(Path(cwd).glob("*_test.py"))
+        and not (Path(cwd) / "tests").exists()
+    ):
         return "[error] no tests found here (no tests/ dir, no test_*.py, no pyproject.toml)"
     args = [sys.executable, "-m", "pytest", "--tb=short", "-rf", "--no-header", "-p", "no:cacheprovider"]
     if extra_args:

@@ -205,10 +205,16 @@ class TestOnVoice:
         update.message.from_user.username = "testuser"
         update.message.reply_text = AsyncMock(return_value=reply_msg)
         context = MagicMock()
-        with patch.object(channel, "send_typing", new_callable=AsyncMock), patch(
-            "raven.channels.telegram.channel.download_voice", new_callable=AsyncMock, return_value="/tmp/audio.ogg"
-        ), patch(
-            "raven.channels.telegram.channel.transcribe_voice", new_callable=AsyncMock, return_value="transcribed text"
+        with (
+            patch.object(channel, "send_typing", new_callable=AsyncMock),
+            patch(
+                "raven.channels.telegram.channel.download_voice", new_callable=AsyncMock, return_value="/tmp/audio.ogg"
+            ),
+            patch(
+                "raven.channels.telegram.channel.transcribe_voice",
+                new_callable=AsyncMock,
+                return_value="transcribed text",
+            ),
         ):
             await channel._on_voice(update, context)
             handler.assert_awaited_once()

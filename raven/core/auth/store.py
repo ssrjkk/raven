@@ -64,7 +64,9 @@ class AuthStore(BaseStore):
     def db_path(self) -> str:
         return self._path or ""
 
-    async def create_user(self, username: str, password: str = "", display_name: str = "", email: str = "", role: str = "user") -> User:
+    async def create_user(
+        self, username: str, password: str = "", display_name: str = "", email: str = "", role: str = "user"
+    ) -> User:
         now = time.time()
         uid = f"user:{username}"
         pwd_hash = hash_password(password) if password else ""
@@ -80,7 +82,9 @@ class AuthStore(BaseStore):
                 existing = await self.get_user(username)
                 if existing:
                     return existing
-        return User(id=uid, username=username, display_name=display_name, email=email, email_verified=False, role=Role(role))
+        return User(
+            id=uid, username=username, display_name=display_name, email=email, email_verified=False, role=Role(role)
+        )
 
     async def _row_to_user(self, row: Any) -> User:
         return User(
@@ -201,8 +205,7 @@ class AuthStore(BaseStore):
         token = secrets.token_urlsafe(32)
         now = time.time()
         await self._execute(
-            "INSERT INTO auth_sessions (token_hash, user_id, role, created_at, expires_at) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO auth_sessions (token_hash, user_id, role, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
             (_token_digest(token), user_id, role, now, now + ttl_seconds),
         )
         await self._commit()

@@ -4,44 +4,47 @@
 ``node_modules`` or ``.git`` spends minutes producing paths that callers then
 throw away. ``iter_files`` prunes those trees during the walk instead.
 """
+
 from __future__ import annotations
 
 import os
 from collections.abc import Iterator
 from pathlib import Path
 
-EXCLUDED_DIR_NAMES: frozenset[str] = frozenset({
-    ".git",
-    ".hg",
-    ".svn",
-    ".idea",
-    ".vscode",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".tox",
-    ".nox",
-    ".eggs",
-    "__pycache__",
-    ".venv",
-    "venv",
-    "env",
-    "site-packages",
-    "node_modules",
-    "bower_components",
-    "dist",
-    "build",
-    ".next",
-    ".nuxt",
-    ".svelte-kit",
-    ".turbo",
-    ".parcel-cache",
-    ".terraform",
-    "coverage",
-    "allure-results",
-    "allure-report",
-    ".verdent",
-})
+EXCLUDED_DIR_NAMES: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        ".idea",
+        ".vscode",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".tox",
+        ".nox",
+        ".eggs",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "env",
+        "site-packages",
+        "node_modules",
+        "bower_components",
+        "dist",
+        "build",
+        ".next",
+        ".nuxt",
+        ".svelte-kit",
+        ".turbo",
+        ".parcel-cache",
+        ".terraform",
+        "coverage",
+        "allure-results",
+        "allure-report",
+        ".verdent",
+    }
+)
 
 
 def iter_files(root: Path) -> Iterator[Path]:

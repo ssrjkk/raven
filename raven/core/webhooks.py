@@ -28,9 +28,7 @@ def _slack_signing_secret() -> str:
 async def _verify_webhook_signature(request: Request) -> None:
     secret = settings.web_secret_key.get_secret_value()
     if not secret:
-        raise HTTPException(
-            status_code=403, detail="Webhook signature not supported — WEB_SECRET_KEY not configured"
-        )
+        raise HTTPException(status_code=403, detail="Webhook signature not supported — WEB_SECRET_KEY not configured")
     body_bytes = await request.body()
     sig = request.headers.get("X-Webhook-Signature", "")
     if not sig or not _verify_hmac_sha256(body_bytes, sig, secret):
@@ -137,7 +135,9 @@ def create_webhook_router(db: Database, handle_incoming: Any) -> APIRouter:
             except (ValueError, TypeError) as err:
                 raise HTTPException(status_code=403, detail="Invalid Slack timestamp") from err
             sig_basestring = f"v0:{slack_ts}:{body_bytes.decode('utf-8', errors='replace')}"
-            expected = "v0=" + hmac_mod.new(signing_secret.encode(), sig_basestring.encode(), hashlib.sha256).hexdigest()
+            expected = (
+                "v0=" + hmac_mod.new(signing_secret.encode(), sig_basestring.encode(), hashlib.sha256).hexdigest()
+            )
             if not hmac_mod.compare_digest(expected, slack_sig):
                 raise HTTPException(status_code=403, detail="Invalid Slack signature")
         else:

@@ -110,9 +110,7 @@ class TestRoutineStore:
         assert [row.status for row in await store.get_logs(routine.id)] == ["success"]
 
     @pytest.mark.asyncio
-    async def test_record_run_is_atomic(
-        self, store: RoutineStore, routine: Routine, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_record_run_is_atomic(self, store: RoutineStore, routine: Routine, monkeypatch: pytest.MonkeyPatch):
         await store.save_routine(routine)
         db = await store._conn()
         real_execute = db.execute
@@ -551,9 +549,7 @@ class TestEmailCheckAction:
         r = Routine(name="mail", action=RoutineAction.CHECK_EMAIL, trigger=RoutineTrigger.MANUAL)
         assert await engine._execute_email_check(r) == "Email check skipped: no IMAP configured"
 
-    async def test_counts_unseen_and_notifies(
-        self, store: RoutineStore, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_counts_unseen_and_notifies(self, store: RoutineStore, monkeypatch: pytest.MonkeyPatch):
         calls: list[tuple[object, ...]] = []
 
         class _IMAP:
@@ -627,9 +623,7 @@ class TestEmailCheckAction:
         r = Routine(name="mail", action=RoutineAction.CHECK_EMAIL, trigger=RoutineTrigger.MANUAL)
         assert await engine._execute_email_check(r) == "Failed to search inbox"
 
-    async def test_socket_error_is_reported_as_failure(
-        self, store: RoutineStore, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_socket_error_is_reported_as_failure(self, store: RoutineStore, monkeypatch: pytest.MonkeyPatch):
         class _IMAP:
             def __init__(self, host: str, port: int) -> None:
                 raise OSError("connection refused")

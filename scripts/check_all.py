@@ -9,13 +9,15 @@ Usage:
     python scripts/check_all.py --tests      # all tests only
     python scripts/check_all.py --component core  # single component tests
     python scripts/check_all.py --frontend   # include frontend build
-    python scripts/check_all.py --quick      # lint + mypy + imports + CLI only (no tests)
+    python scripts/check_all.py --quick      # lint + types + imports + CLI only (no tests)
+    python scripts/check_all.py --annotations  # rewrite the unannotated-function ceiling
     python scripts/check_all.py --cov        # full run with coverage report
 """
 
 from __future__ import annotations
 
 import argparse
+import ast
 import contextlib
 import importlib
 import json
@@ -65,6 +67,7 @@ class CheckResult:
 
 
 # -- Helpers -----------------------------------------------------------------
+
 
 def _resolve_exe(name: str) -> str:
     """Resolve an executable on Windows, preferring .cmd/.exe/.bat over .ps1."""
@@ -163,7 +166,13 @@ def _print_pytest_output(output: str, returncode: int) -> None:
 
 
 def _print_result(r: CheckResult) -> None:
-    icon = f"{GREEN}PASS{RESET}" if r.status == "pass" else f"{RED}FAIL{RESET}" if r.status == "fail" else f"{YELLOW}SKIP{RESET}"
+    icon = (
+        f"{GREEN}PASS{RESET}"
+        if r.status == "pass"
+        else f"{RED}FAIL{RESET}"
+        if r.status == "fail"
+        else f"{YELLOW}SKIP{RESET}"
+    )
     time_str = f" ({r.duration:.1f}s)" if r.duration else ""
     print(f"  [{icon}]{time_str} {r.name}")
     if r.detail:
@@ -179,6 +188,7 @@ def _print_section(title: str) -> None:
 
 # -- Checks ------------------------------------------------------------------
 
+
 def check_ruff() -> CheckResult:
     _print_section("Lint (ruff)")
     t0 = time.time()
@@ -190,6 +200,28 @@ def check_ruff() -> CheckResult:
         return CheckResult("ruff check", "fail", dt, r.stderr)
     errors = [line for line in r.stdout.splitlines() if line.strip()]
     return CheckResult("ruff check", "fail", dt, "\n".join(errors[:20]))
+
+
+def check_format() -> CheckResult:
+    """Whether the tree is what `ruff format` would leave it as.
+
+    `.pre-commit-config.yaml` declares the formatter and `docs/development.md` tells contributors to
+    install those hooks, but a hook that is not installed formats nothing, and no CI job ran the
+    formatter either: measured before this stage existed, 346 of 925 Python files were not formatted.
+    The tree is formatted now, so a non-zero here means a new file or edit that the declared style
+    would change — the drift this stage exists to stop.
+    """
+    _print_section("Format (ruff format)")
+    t0 = time.time()
+    r = _run([sys.executable, "-m", "ruff", "format", "--check", *CHECK_DIRS], timeout=180)
+    dt = time.time() - t0
+    if r.returncode == 0:
+        return CheckResult("ruff format", "pass", dt, r.stdout.strip().splitlines()[-1] if r.stdout else "")
+    if r.returncode == TIMEOUT_RETURNCODE:
+        return CheckResult("ruff format", "fail", dt, r.stderr)
+    offenders = [line.removeprefix("Would reformat: ") for line in r.stdout.splitlines() if line.strip()]
+    counts = {"files": len(offenders)}
+    return CheckResult("ruff format", "fail", dt, "\n".join(offenders[:20]) or r.stderr[:1200], counts)
 
 
 def _mypy_targets() -> list[str]:
@@ -219,6 +251,102 @@ def check_mypy() -> CheckResult:
         return CheckResult("mypy", "fail", dt, r.stderr)
     errors = [line for line in (r.stdout + r.stderr).splitlines() if line.strip() and ":" in line]
     return CheckResult("mypy", "fail", dt, "\n".join(errors[:20]))
+
+
+ANNOTATION_BASELINE = ROOT / "scripts" / "untyped_baseline.json"
+
+
+def _untyped_definitions() -> dict[str, list[str]]:
+    """Every shipped function that does not annotate itself, grouped by file.
+
+    `agents.md` states "type hints required for all Python functions" as its first rule, while mypy
+    runs strict with `disallow_untyped_defs = false`: the mandate was prose, and nothing counted
+    against it. First measurement of the shipped tree (raven, ravencode, aios, plugins): 909 functions
+    in 178 files. The ceiling per file is recorded in `scripts/untyped_baseline.json`; the count itself
+    comes from the project's own parser, so the stage costs about a second instead of a second mypy
+    pass.
+
+    Only the implicit `self` / `cls` receiver is free, plus everything under `tests/`, `scripts/` and
+    the tooling directories. Measured against `mypy --disallow-untyped-defs` on the same tree (2.4.1,
+    cold cache: 794 sites), this rule is the stricter of the two by 115, and every one of those 115 is
+    accounted for: 95 are `__init__` methods whose parameters carry hints but which omit `-> None`,
+    which mypy infers and so never reports, and 22 sit in the four modules `pyproject.toml` tells mypy
+    to ignore outright with `ignore_errors = true` (14 in `raven/channels/discord/channel.py`, 8 in
+    `raven/core/metrics.py`); 2 of those are both. A probe file proved mypy does demand `*args` /
+    `**kwargs` hints, so they are counted here too.
+    """
+    out: dict[str, list[str]] = {}
+    for name in BANDIT_DIRS:
+        for py in sorted((ROOT / name).rglob("*.py")):
+            rel = py.relative_to(ROOT).as_posix()
+            missing: list[str] = []
+            tree = ast.parse(py.read_text(encoding="utf-8-sig"), filename=str(py))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                    continue
+                gaps = [
+                    a.arg
+                    for i, a in enumerate([*node.args.posonlyargs, *node.args.args])
+                    if a.annotation is None and not (i == 0 and a.arg in ("self", "cls"))
+                ]
+                gaps += [a.arg for a in node.args.kwonlyargs if a.annotation is None]
+                gaps += [
+                    f"*{a.arg}" if a is node.args.vararg else f"**{a.arg}"
+                    for a in (node.args.vararg, node.args.kwarg)
+                    if a is not None and a.annotation is None
+                ]
+                if node.returns is None:
+                    gaps.append("return")
+                if gaps:
+                    missing.append(f"{rel}:{node.lineno} {node.name}({', '.join(gaps)})")
+            if missing:
+                out[rel] = missing
+    return out
+
+
+def check_annotations(*, write_baseline: bool = False) -> CheckResult:
+    """The type-hint mandate as a ratchet: what is annotated stays annotated.
+
+    The baseline records the count per file, and the stage requires the two to agree in both
+    directions. Growth fails outright — a new unannotated `def` is refused even in a file that
+    already carries debt. So does a file that got cleaner without its ceiling being lowered, because a
+    ceiling nobody re-measures stops describing the tree it guards: run `--annotations` to re-measure
+    it.
+    """
+    _print_section("Type hints (annotation ratchet)")
+    t0 = time.time()
+    measured = _untyped_definitions()
+    dt = time.time() - t0
+    counts = {"functions": sum(len(v) for v in measured.values()), "files": len(measured)}
+    if write_baseline:
+        payload = {path: len(v) for path, v in sorted(measured.items())}
+        ANNOTATION_BASELINE.write_bytes((json.dumps(payload, indent=1) + "\n").encode("utf-8"))
+        return CheckResult("annotations", "pass", dt, f"baseline written: {payload}", counts)
+    if not ANNOTATION_BASELINE.is_file():
+        return CheckResult("annotations", "fail", dt, f"{ANNOTATION_BASELINE.name} is missing: nothing is checked")
+    try:
+        ceiling = json.loads(ANNOTATION_BASELINE.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        return CheckResult("annotations", "fail", dt, f"{ANNOTATION_BASELINE.name} is not JSON: {exc}")
+    grown = sorted(p for p, hits in measured.items() if len(hits) > ceiling.get(p, 0))
+    tightened = sorted(p for p, hits in measured.items() if len(hits) < ceiling.get(p, 0))
+    deleted = sorted(p for p in ceiling if p not in measured)
+    if grown:
+        limit = max(1, 20 // len(grown))
+        detail = "\n".join(h for p in grown for h in measured[p][:limit])
+        return CheckResult("annotations", "fail", dt, f"unannotated functions added:\n{detail}", counts)
+    if tightened or deleted:
+        stale = "\n".join([*tightened, *deleted][:20])
+        return CheckResult(
+            "annotations",
+            "fail",
+            dt,
+            f"ceiling above the measured debt, run python scripts/check_all.py --annotations:\n{stale}",
+            counts,
+        )
+    return CheckResult(
+        "annotations", "pass", dt, f"{counts['functions']} functions await hints in {counts['files']} files", counts
+    )
 
 
 # Bandit reads the ids of a `# nosec` out of the comment with these two expressions (core/manager.py).
@@ -314,6 +442,53 @@ def check_bandit() -> CheckResult:
         return CheckResult("bandit", "pass", dt, f"{counts['low']} low-severity notes", counts)
     detail = "\n".join(f"{f['filename']}:{f['line_number']} {f['test_id']} {f['issue_text']}" for f in findings[:20])
     return CheckResult("bandit", "fail", dt, detail, counts)
+
+
+def check_generated_writers() -> CheckResult:
+    """Every script that rewrites a committed file has to state LF, on every platform.
+
+    `Path.write_text` translates `\\n` into the platform separator, so a generator rerun on Windows
+    re-emits the whole file with CRLF while the repository says LF in `.gitattributes` (`* text
+    eol=lf`). Git normalizes it back on add, which is exactly the problem: `git status` stays clean,
+    the working copy does not, and a guard that compares generated bytes against the committed file
+    fails only for whoever runs it here. Measured on this tree: nine committed files carried CRLF in
+    the working copy, six write calls in four scripts produced them (`record_site_frames.py` x3,
+    `record_site_commands.py`, `generate_deploy_id.py`, and this script's own `untyped_baseline.json`
+    writer), and one -- `gen_theme_css.py` -- already stated `newline="\\n"`. That one is the shape
+    the rest now match, and this stage is what keeps them matching.
+
+    Passes when each `write_text` call under `scripts/` carries an explicit `newline="\\n"`, or the
+    script writes bytes with `write_bytes` instead.
+    """
+    _print_section("Generated-file writers")
+    t0 = time.time()
+    offenders: list[str] = []
+    writers = 0
+    for py in sorted((ROOT / "scripts").glob("*.py")):
+        try:
+            tree = ast.parse(py.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError, UnicodeDecodeError) as exc:
+            return CheckResult("writers", "fail", time.time() - t0, f"{py.name}: cannot parse ({exc})")
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            if node.func.attr not in {"write_text", "write_bytes"}:
+                continue
+            writers += 1
+            if node.func.attr != "write_text":
+                continue
+            stated = any(
+                kw.arg == "newline" and isinstance(kw.value, ast.Constant) and kw.value.value == "\n"
+                for kw in node.keywords
+            )
+            if not stated:
+                rel = py.relative_to(ROOT).as_posix()
+                offenders.append(f"{rel}:{node.lineno} write_text without an explicit newline")
+    dt = time.time() - t0
+    counts = {"writers": writers, "offenders": len(offenders)}
+    if offenders:
+        return CheckResult("writers", "fail", dt, "\n".join(offenders[:20]), counts)
+    return CheckResult("writers", "pass", dt, f"{writers} writers, all LF-explicit", counts)
 
 
 def check_imports() -> CheckResult:
@@ -484,11 +659,17 @@ def check_component(name: str) -> CheckResult:
 
     cov_flag = "--no-cov"
     cmd = [
-        sys.executable, "-m", "pytest",
-        "-q", "--tb=short", "--timeout=120",
-        "-p", "no:schemathesis",
+        sys.executable,
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "--timeout=120",
+        "-p",
+        "no:schemathesis",
         cov_flag,
-        "-W", "ignore::RuntimeWarning",
+        "-W",
+        "ignore::RuntimeWarning",
     ]
 
     cmd.extend(cfg["paths"])
@@ -547,14 +728,20 @@ def check_full_tests() -> CheckResult:
     # measuring the same benchmark twice in one gate run - not benchmarking itself.
     cov_flag = "--cov=raven" if _USE_COV else "--no-cov"
     cmd = [
-        sys.executable, "-m", "pytest",
+        sys.executable,
+        "-m",
+        "pytest",
         "tests/",
-        "-q", "--tb=short", "--timeout=120",
+        "-q",
+        "--tb=short",
+        "--timeout=120",
         "--ignore=tests/core/test_sandbox.py",
-        "-p", "no:schemathesis",
+        "-p",
+        "no:schemathesis",
         "--benchmark-disable",
         cov_flag,
-        "-W", "ignore::RuntimeWarning",
+        "-W",
+        "ignore::RuntimeWarning",
     ]
 
     r = _run(cmd, timeout=1800)
@@ -619,6 +806,7 @@ def check_frontend() -> CheckResult:
 
 # -- Main --------------------------------------------------------------------
 
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Unified project check script")
     parser.add_argument("--lint", action="store_true", help="Run ruff lint only")
@@ -627,9 +815,12 @@ def main() -> int:
     parser.add_argument("--frontend", action="store_true", help="Include frontend build check")
     parser.add_argument("--quick", action="store_true", help="Lint + mypy + imports + CLI only (skip tests)")
     parser.add_argument("--cov", action="store_true", help="Include coverage report in full test run")
+    parser.add_argument(
+        "--annotations", action="store_true", help="Re-measure the unannotated-function ceiling and exit"
+    )
     args = parser.parse_args()
 
-    run_all = not (args.lint or args.tests or args.component or args.quick)
+    run_all = not (args.lint or args.tests or args.component or args.quick or args.annotations)
 
     global _USE_COV
     _USE_COV = args.cov
@@ -642,10 +833,15 @@ def main() -> int:
     t_start = time.time()
 
     # Always run these
-    if run_all or args.lint or args.quick:
+    if args.annotations:
+        results.append(check_annotations(write_baseline=True))
+    elif run_all or args.lint or args.quick:
         results.append(check_ruff())
+        results.append(check_format())
         results.append(check_mypy())
+        results.append(check_annotations())
         results.append(check_bandit())
+        results.append(check_generated_writers())
 
     if run_all or args.quick:
         results.append(check_imports())
@@ -678,11 +874,13 @@ def main() -> int:
     for r in results:
         _print_result(r)
 
-    print(f"\n  {BOLD}Total: {len(results)} checks{RESET}  "
-          f"{GREEN}{passed} passed{RESET}  "
-          f"{RED}{failed} failed{RESET}  "
-          f"{YELLOW}{skipped} skipped{RESET}  "
-          f"({total_time:.1f}s)")
+    print(
+        f"\n  {BOLD}Total: {len(results)} checks{RESET}  "
+        f"{GREEN}{passed} passed{RESET}  "
+        f"{RED}{failed} failed{RESET}  "
+        f"{YELLOW}{skipped} skipped{RESET}  "
+        f"({total_time:.1f}s)"
+    )
 
     if failed:
         print(f"\n  {RED}{BOLD}FAILED{RESET}")

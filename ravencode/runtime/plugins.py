@@ -111,6 +111,7 @@ class PluginRegistry:
             while True:
                 await asyncio.sleep(interval)
                 await self._check_reload()
+
         self._watch_task = asyncio.create_task(_poll())
         logger.debug("[plugins] watch started (interval={}s)", interval)
 

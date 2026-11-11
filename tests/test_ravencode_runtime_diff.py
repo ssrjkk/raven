@@ -165,7 +165,9 @@ class TestSmartEdit:
     def test_no_mode(self, tmp_path) -> None:
         f = tmp_path / "a.txt"
         f.write_text("ab")
-        assert smart_edit(str(f)) == "[error] provide old_text+new_text or insert_after/new_text+insert_before or append"
+        assert (
+            smart_edit(str(f)) == "[error] provide old_text+new_text or insert_after/new_text+insert_before or append"
+        )
 
 
 class TestComputePatch:

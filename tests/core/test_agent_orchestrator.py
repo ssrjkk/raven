@@ -30,7 +30,9 @@ class FakeLLM:
         self._handoff = handoff
         self._critic = critic
 
-    async def complete(self, messages: list[dict[str, Any]], tools: Any = None, model: str | None = None) -> LLMResponse:
+    async def complete(
+        self, messages: list[dict[str, Any]], tools: Any = None, model: str | None = None
+    ) -> LLMResponse:
         system = messages[0]["content"] if messages else ""
         if system == _PLAN_PROMPT:
             return LLMResponse(content=json.dumps(self._plan))
@@ -44,7 +46,9 @@ class FakeLLM:
 def make_registry(handlers: dict[str, tuple[dict[str, Any], Callable[..., Any]]]) -> ToolRegistry:
     registry = ToolRegistry()
     for name, (parameters, handler) in handlers.items():
-        registry.register(ToolSpec(name=name, description=name, parameters=parameters, handler=handler, category="test"))
+        registry.register(
+            ToolSpec(name=name, description=name, parameters=parameters, handler=handler, category="test")
+        )
     return registry
 
 
@@ -258,7 +262,9 @@ class TestPlannerExecutorCritic:
     @pytest.mark.asyncio
     async def test_max_iterations_returns_max_steps(self):
         registry = make_registry({"echo": ({"text": {"type": "string", "required": True}}, lambda text: "echo")})
-        responses = [LLMResponse(tool_calls=[ToolCall(id=str(i), name="echo", arguments={"text": "x"})]) for i in range(20)]
+        responses = [
+            LLMResponse(tool_calls=[ToolCall(id=str(i), name="echo", arguments={"text": "x"})]) for i in range(20)
+        ]
         llm = FakeLLM(responses=responses)
         orch = AgentOrchestrator(llm=llm, tool_registry=registry, max_total_iterations=4)  # type: ignore[arg-type]
         result = await orch.execute("implement the login feature", profile_override="coder")
@@ -316,7 +322,9 @@ class TestExecuteWithStream:
             ]
         )
         orch = AgentOrchestrator(llm=llm, tool_registry=registry, max_total_iterations=10)  # type: ignore[arg-type]
-        chunks = [chunk async for chunk in orch.execute_with_stream("implement the login feature", profile_override="coder")]
+        chunks = [
+            chunk async for chunk in orch.execute_with_stream("implement the login feature", profile_override="coder")
+        ]
         assert "".join(chunks) == "streamed answer"
 
 

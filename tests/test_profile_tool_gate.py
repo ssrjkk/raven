@@ -117,12 +117,7 @@ def ran_clean(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 def test_every_profile_tool_name_names_a_real_tool() -> None:
     real = _registry_names(_real())
-    ghosts = {
-        n
-        for p in PROFILES.values()
-        for n in (*p.allowed_tools, *p.denied_tools)
-        if n != "*" and n not in real
-    }
+    ghosts = {n for p in PROFILES.values() for n in (*p.allowed_tools, *p.denied_tools) if n != "*" and n not in real}
     assert not ghosts, f"profiles name tools no surface serves: {sorted(ghosts)}"
 
 
@@ -200,8 +195,12 @@ async def test_the_coder_deny_list_is_honoured_at_call_time(ran_clean: list[str]
 def test_a_star_in_denied_tools_refuses_everything() -> None:
     # The branch this replaces treated "*" in denied_tools as "allow everything instead".
     profile = AgentProfile(
-        name="blanket", display_name="Blanket", role="blanket", system_prompt="x",
-        allowed_tools=["*"], denied_tools=["*"],
+        name="blanket",
+        display_name="Blanket",
+        role="blanket",
+        system_prompt="x",
+        allowed_tools=["*"],
+        denied_tools=["*"],
     )
     assert not profile.allows_tool("file_read")
     orch = _orchestrator(_inverted(_real()))
@@ -210,8 +209,12 @@ def test_a_star_in_denied_tools_refuses_everything() -> None:
 
 def test_the_denied_name_wins_over_the_allowed_name() -> None:
     profile = AgentProfile(
-        name="both", display_name="Both", role="both", system_prompt="x",
-        allowed_tools=["file_read", "shell"], denied_tools=["shell"],
+        name="both",
+        display_name="Both",
+        role="both",
+        system_prompt="x",
+        allowed_tools=["file_read", "shell"],
+        denied_tools=["shell"],
     )
     assert profile.allows_tool("file_read")
     assert not profile.allows_tool("shell")
@@ -304,11 +307,7 @@ def test_the_dead_names_have_no_reference_left_anywhere() -> None:
 def test_the_helper_that_duplicated_the_schema_filter_is_gone() -> None:
     source = (ROOT / "raven/core/agents/orchestrator.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
-    bodies = {
-        n.name: ast.dump(n)
-        for n in ast.walk(tree)
-        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
-    }
+    bodies = {n.name: ast.dump(n) for n in ast.walk(tree) if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)}
     assert "profile.denied_tools" not in bodies["_execute_tool_safe"]
     assert "allows_tool" in bodies["_execute_tool_safe"]
     assert "allows_tool" in bodies["_build_tool_schemas"]

@@ -137,7 +137,9 @@ def _theme_tokens(name: str) -> set[str]:
 
 def _used_tokens() -> dict[str, list[str]]:
     used: dict[str, list[str]] = {}
-    sources = list((WEB / "src").rglob("*.tsx")) + list((WEB / "src").rglob("*.ts")) + list((WEB / "src").rglob("*.css"))
+    sources = (
+        list((WEB / "src").rglob("*.tsx")) + list((WEB / "src").rglob("*.ts")) + list((WEB / "src").rglob("*.css"))
+    )
     for path in sources:
         if path.name.endswith(".test.ts") or path.name.endswith(".test.tsx"):
             continue
@@ -178,8 +180,8 @@ def test_every_data_table_carries_row_labels_the_mobile_layout_needs() -> None:
 
 def test_the_row_label_guard_detects_the_layout_it_protects() -> None:
     broken = (
-        "<table><caption>Example</caption><thead><tr><th scope=\"col\">A</th>"
-        "<th scope=\"col\">B</th></tr></thead><tbody><tr><td>one</td><td>two</td></tr></tbody></table>"
+        '<table><caption>Example</caption><thead><tr><th scope="col">A</th>'
+        '<th scope="col">B</th></tr></thead><tbody><tr><td>one</td><td>two</td></tr></tbody></table>'
     )
     assert tables_without_row_labels(broken) == ["Example"]
     labelled = broken.replace("<tr><td>one</td>", '<tr><th scope="row">one</th><td>')
@@ -222,7 +224,9 @@ def test_text_pairs_meet_aa_in_every_theme(theme: str) -> None:
         background = colors[bg_group][bg_key]
         ratio = contrast(foreground, background)
         if ratio < minimum:
-            failures.append(f"{fg_group}.{fg_key} {foreground} on {bg_group}.{bg_key} {background} = {ratio:.2f} < {minimum}")
+            failures.append(
+                f"{fg_group}.{fg_key} {foreground} on {bg_group}.{bg_key} {background} = {ratio:.2f} < {minimum}"
+            )
     assert not failures, f"{theme}:\n  " + "\n  ".join(failures)
 
 
@@ -230,7 +234,9 @@ def test_the_three_themes_define_the_same_token_set() -> None:
     sets = {theme: _theme_tokens(theme) for theme in THEME_FILES}
     reference = sets[THEME_FILES[0]]
     for theme, tokens in sets.items():
-        assert tokens == reference, f"{theme} differs: missing {sorted(reference - tokens)}, extra {sorted(tokens - reference)}"
+        assert tokens == reference, (
+            f"{theme} differs: missing {sorted(reference - tokens)}, extra {sorted(tokens - reference)}"
+        )
 
 
 def test_white_labels_on_every_accent_state_clear_aa() -> None:
@@ -259,7 +265,13 @@ def test_the_accent_family_stays_purple_black() -> None:
     new stock blue or indigo cannot slip in under a different code."""
     for theme in THEME_FILES:
         colors = _palette(theme)
-        for group, key in (("accent", "default"), ("accent", "hover"), ("accent", "active"), ("text", "link"), ("border", "focus")):
+        for group, key in (
+            ("accent", "default"),
+            ("accent", "hover"),
+            ("accent", "active"),
+            ("text", "link"),
+            ("border", "focus"),
+        ):
             value = colors[group][key]
             hue, _, _ = _hsl(value)
             assert 250 <= hue <= 330, f"{theme}: {group}.{key} {value} has hue {hue:.0f}, outside the brand range"
@@ -299,7 +311,9 @@ def test_landing_honours_reduced_motion() -> None:
     css = _site_css()
     assert "prefers-reduced-motion: reduce" in css, "the animated hero owes the user an off switch"
     block = _media_block(css, "prefers-reduced-motion: reduce")
-    assert "animation-duration" in block and "transition-duration" in block, "the reduce block must actually stop motion"
+    assert "animation-duration" in block and "transition-duration" in block, (
+        "the reduce block must actually stop motion"
+    )
 
 
 def test_landing_has_a_visible_focus_indicator() -> None:
@@ -311,7 +325,9 @@ def test_landing_images_are_sized_and_named() -> None:
     for name, html in _site_pages().items():
         for img in re.findall(r"<img\b[^>]*>", html):
             assert "alt=" in img, f"{name}: img without alt: {img[:80]}"
-            assert "width=" in img and "height=" in img, f"{name}: img without intrinsic size (layout shift): {img[:80]}"
+            assert "width=" in img and "height=" in img, (
+                f"{name}: img without intrinsic size (layout shift): {img[:80]}"
+            )
 
 
 def test_landing_anchors_resolve() -> None:
@@ -324,9 +340,27 @@ def test_landing_anchors_resolve() -> None:
 # ── visualisation ──────────────────────────────────────────────────
 
 CHART_TAGS = (
-    "AreaChart", "Area", "BarChart", "Bar", "LineChart", "Line", "PieChart", "Pie", "Cell",
-    "ScatterChart", "Scatter", "RadarChart", "Radar", "CartesianGrid", "PolarGrid", "XAxis",
-    "YAxis", "Tooltip", "Legend", "ReferenceLine", "LabelList",
+    "AreaChart",
+    "Area",
+    "BarChart",
+    "Bar",
+    "LineChart",
+    "Line",
+    "PieChart",
+    "Pie",
+    "Cell",
+    "ScatterChart",
+    "Scatter",
+    "RadarChart",
+    "Radar",
+    "CartesianGrid",
+    "PolarGrid",
+    "XAxis",
+    "YAxis",
+    "Tooltip",
+    "Legend",
+    "ReferenceLine",
+    "LabelList",
 )
 _HEX = re.compile(r"(?:stroke|fill|color|stopColor)=\"#[0-9a-fA-F]{3,8}\"")
 
@@ -343,7 +377,11 @@ def test_charts_are_painted_from_tokens_not_from_copied_hexes() -> None:
     for path in (WEB / "src").rglob("*.tsx"):
         if path.name.endswith(".test.tsx"):
             continue
-        bad = [element[:60] for element in _chart_elements(path.read_text(encoding="utf-8", errors="replace")) if _HEX.search(element)]
+        bad = [
+            element[:60]
+            for element in _chart_elements(path.read_text(encoding="utf-8", errors="replace"))
+            if _HEX.search(element)
+        ]
         if bad:
             offenders[str(path.relative_to(WEB))] = bad
     assert not offenders, f"hard-coded colours in chart props: {offenders}"
@@ -390,13 +428,20 @@ def test_chart_series_are_distinguishable_from_each_other() -> None:
 def test_inline_svg_scales_and_is_labelled() -> None:
     """An svg without a viewBox cannot resize, and a decorative one read out loud is noise."""
     offenders: list[str] = []
-    sources = list((WEB / "src").rglob("*.tsx")) + list((ROOT / "site").glob("*.html")) + list((ROOT / "site").glob("*.svg"))
+    sources = (
+        list((WEB / "src").rglob("*.tsx")) + list((ROOT / "site").glob("*.html")) + list((ROOT / "site").glob("*.svg"))
+    )
     for path in sources:
         text = path.read_text(encoding="utf-8", errors="replace")
         for tag in re.findall(r"<svg\b[^>]*>", text):
             if "viewBox" not in tag:
                 offenders.append(f"{path.name}: {tag[:70]}")
-            if "aria-hidden" not in tag and "aria-label" not in tag and "role=" not in tag and "<title" in text[text.index(tag) : text.index(tag) + 400]:
+            if (
+                "aria-hidden" not in tag
+                and "aria-label" not in tag
+                and "role=" not in tag
+                and "<title" in text[text.index(tag) : text.index(tag) + 400]
+            ):
                 offenders.append(f"{path.name}: svg with a title but no role")
     assert not offenders, f"svg without a viewBox: {offenders}"
 
@@ -407,7 +452,9 @@ def test_the_spa_has_a_focus_ring_and_never_removes_one_without_replacing_it() -
     for rule in re.findall(r"([^{}]*:focus[^{}]*)\{([^{}]*)\}", css):
         selector, body = rule
         if "outline: none" in body or "outline:none" in body:
-            assert "box-shadow" in body or "border-color" in body, f"{selector.strip()} removes the ring and draws nothing in its place"
+            assert "box-shadow" in body or "border-color" in body, (
+                f"{selector.strip()} removes the ring and draws nothing in its place"
+            )
 
 
 FIXED_WIDTH = re.compile(r"(?<!max-)(?<!min-)width:\s*(\d{3,})px")
@@ -547,7 +594,6 @@ def test_the_generated_sheet_equals_the_token_files_and_is_loaded() -> None:
         assert selector in rendered, f"{selector} block missing from the sheet"
 
 
-
 def test_token_files_validate_against_their_schema() -> None:
     import jsonschema
 
@@ -625,7 +671,9 @@ def test_offline_surfaces_embed_the_generated_token_region(label: str) -> None:
     assert region == generator.surface_block(), f"{label}: embedded region is not what the generator emits"
 
     declared = set(re.findall(r"^\s*(--dt-[a-zA-Z0-9-]+):", region, re.M))
-    body = re.sub(r"\s*" + re.escape(generator.SENTINEL_START) + r".*" + re.escape(generator.SENTINEL_END), "", text, flags=re.S)
+    body = re.sub(
+        r"\s*" + re.escape(generator.SENTINEL_START) + r".*" + re.escape(generator.SENTINEL_END), "", text, flags=re.S
+    )
     referenced = set(re.findall(r"var\(\s*(--dt-[a-zA-Z0-9-]+)", body))
     dangling = sorted(referenced - declared)
     assert not dangling, f"{label} references tokens its region does not declare: {dangling}"
@@ -646,9 +694,7 @@ def test_offline_surfaces_carry_no_colour_of_their_own(label: str) -> None:
     text = OFFLINE_SHEETS[label].read_text(encoding="utf-8", errors="replace")
     body = text.replace(_region_of(text, generator), "")
     offenders = [
-        f"{label}:{i}: {hit}"
-        for i, line in enumerate(body.splitlines(), 1)
-        for hit in _COLOUR_LITERAL.findall(line)
+        f"{label}:{i}: {hit}" for i, line in enumerate(body.splitlines(), 1) for hit in _COLOUR_LITERAL.findall(line)
     ]
     assert not offenders, "\n".join(offenders)
 
@@ -685,8 +731,6 @@ def test_shipped_chat_pages_declare_their_colour_contrast() -> None:
         assert ratio >= minimum, f"{label}: {foreground} on {background} = {ratio:.2f}:1, need {minimum}"
 
 
-
-
 def _jsx_tags(name: str) -> list[tuple[str, int, str]]:
     """Every `<name ...>` tag in the SPA sources, with the file and line it starts on."""
     out: list[tuple[str, int, str]] = []
@@ -706,7 +750,9 @@ def _jsx_tags(name: str) -> list[tuple[str, int, str]]:
                 elif char == ">" and braces == 0:
                     break
                 index += 1
-            out.append((str(path.relative_to(WEB)), text[: match.start()].count(chr(10)) + 1, text[match.start() : index + 1]))
+            out.append(
+                (str(path.relative_to(WEB)), text[: match.start()].count(chr(10)) + 1, text[match.start() : index + 1])
+            )
     return out
 
 
@@ -799,7 +845,9 @@ def _resolve_colour(text: str, variables: dict[str, str]) -> tuple[float, float,
     return None
 
 
-def _over(foreground: tuple[float, float, float, float], background: tuple[float, float, float]) -> tuple[float, float, float]:
+def _over(
+    foreground: tuple[float, float, float, float], background: tuple[float, float, float]
+) -> tuple[float, float, float]:
     if foreground[3] >= 1.0:
         return foreground[:3]
     alpha = foreground[3]
@@ -872,7 +920,6 @@ _PALETTE_CLASS = re.compile(
     r"indigo|blue|sky|cyan|teal|emerald|green|lime|yellow|amber|orange|gray|grey|slate|zinc|stone|"
     r"neutral)-\d{2,3}\b"
 )
-
 
 
 def test_markdown_surfaces_restore_what_preflight_took_away() -> None:
@@ -1009,8 +1056,21 @@ def test_the_categorical_scale_is_readable_on_the_panel_it_is_drawn_on(theme: st
     card = colors["surface"]["card"]
     category = colors["category"]
     assert set(category) == {
-        "blue", "green", "amber", "violet", "pink", "cyan", "orange", "teal", "yellow", "purple",
-        "indigo", "red", "lime", "slate", "grey",
+        "blue",
+        "green",
+        "amber",
+        "violet",
+        "pink",
+        "cyan",
+        "orange",
+        "teal",
+        "yellow",
+        "purple",
+        "indigo",
+        "red",
+        "lime",
+        "slate",
+        "grey",
     }, f"{theme}: the categorical scale is not the fifteen named hues"
     for name, value in category.items():
         ratio = contrast(value, card)
@@ -1067,7 +1127,9 @@ def _as_paint(value: str, background: str) -> str:
     inner = value[value.index("(") + 1 : -1]
     red, green, blue, alpha = (float(part) for part in inner.split(","))
     back = _to_rgb(background)
-    mixed = tuple(round(colour * alpha + other * (1 - alpha)) for colour, other in zip((red, green, blue), back, strict=True))
+    mixed = tuple(
+        round(colour * alpha + other * (1 - alpha)) for colour, other in zip((red, green, blue), back, strict=True)
+    )
     return "#{:02x}{:02x}{:02x}".format(*mixed)
 
 
@@ -1107,9 +1169,7 @@ def test_a_state_indicator_is_perceptible_on_the_panel_it_changes() -> None:
                 card = published[theme]["--dt-colors-surface-card"]
                 ratio = contrast(_as_paint(value, card), card)
                 if ratio < LARGE_TEXT_OR_UI:
-                    offenders.append(
-                        f"{selector.strip()[:48]}: {token}={value} on {theme} card {card} = {ratio:.2f}:1"
-                    )
+                    offenders.append(f"{selector.strip()[:48]}: {token}={value} on {theme} card {card} = {ratio:.2f}:1")
     assert not offenders, "\n".join(offenders)
 
 

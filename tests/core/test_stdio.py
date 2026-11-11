@@ -87,6 +87,7 @@ def test_stdio_pin_covers_stdin_too() -> None:
 
 def test_pin_survives_streams_without_reconfigure(monkeypatch: pytest.MonkeyPatch) -> None:
     """A replaced stream (a test capture, a redirected pipe object) must not break setup."""
+
     class Legacy:
         def write(self, text: str) -> int:
             return len(text)

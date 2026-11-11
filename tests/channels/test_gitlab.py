@@ -58,7 +58,9 @@ async def test_gitlab_push_hook_message_fallbacks():
     await c.on_message(handler)
     await c.start()
     base = {"object_kind": "push", "ref": "refs/heads/dev", "project": {"id": 1, "path": "p"}}
-    assert await c.handle_webhook({**base, "commits": [{"message": "from commit"}], "user_username": "uu"}, {"x-gitlab-event": "Push Hook"})
+    assert await c.handle_webhook(
+        {**base, "commits": [{"message": "from commit"}], "user_username": "uu"}, {"x-gitlab-event": "Push Hook"}
+    )
     assert handler.await_args[0][0].text == "from commit"  # type: ignore[index]
     assert handler.await_args[0][0].user_id == "uu"  # type: ignore[index]
 
@@ -105,7 +107,11 @@ async def test_gitlab_merge_request_event():
         "object_kind": "merge_request",
         "user": {"id": 3},
         "object_attributes": {
-            "title": "MR", "description": "why", "action": "merge", "iid": 8, "source_branch": "feat",
+            "title": "MR",
+            "description": "why",
+            "action": "merge",
+            "iid": 8,
+            "source_branch": "feat",
         },
         "project": {"id": 42, "path_with_namespace": "acme/app"},
     }
@@ -222,7 +228,7 @@ async def test_gitlab_send_skips_without_project_or_token(monkeypatch: pytest.Mo
     post = AsyncMock()
     monkeypatch.setattr("raven.channels.gitlab.channel.client_manager.post", post)
     msg = Message(session_id="x", channel="gitlab", role="assistant", content="r")
-    await c.send("solo", msg)      # no project id in session
+    await c.send("solo", msg)  # no project id in session
     await c.send("gitlab:42:7", msg)  # no token
     post.assert_not_awaited()
 

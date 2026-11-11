@@ -72,9 +72,7 @@ class TestStartRestartRecovery:
         finally:
             await orch.stop()
 
-    async def test_fresh_running_task_resumed_and_completed(
-        self, db_path: str, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_fresh_running_task_resumed_and_completed(self, db_path: str, monkeypatch: pytest.MonkeyPatch):
         store = TaskStore(db_path)
         try:
             t = _task_with_steps("fresh")
@@ -234,9 +232,7 @@ class TestFullCycle:
                 handler=handler,
             )
         )
-        monkeypatch.setattr(
-            "raven.core.gateway.task_orchestrator.create_task_tool_registry", lambda _mcp: registry
-        )
+        monkeypatch.setattr("raven.core.gateway.task_orchestrator.create_task_tool_registry", lambda _mcp: registry)
         orch = TaskOrchestrator(
             SimpleNamespace(db_path=db_path),
             llm=cast("Any", llm),
@@ -273,9 +269,7 @@ class TestFullCycle:
 
 
 class TestTaskRetention:
-    async def test_start_prunes_finished_tasks_and_stops_cleanly(
-        self, db_path: str, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_start_prunes_finished_tasks_and_stops_cleanly(self, db_path: str, monkeypatch: pytest.MonkeyPatch):
         store = TaskStore(db_path)
         try:
             old = Task(goal="old", status=TaskStatus.COMPLETED, created_at=time.time() - 31 * 24 * 3600)

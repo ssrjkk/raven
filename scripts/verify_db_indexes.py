@@ -3,6 +3,7 @@ Script to verify migration v5 indexes exist and are used in query plans.
 Creates a temp DB, runs migrations, verifies indexes, then disconnects.
 100% local, no external dependencies beyond aiosqlite + stdlib.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -45,9 +46,7 @@ async def main() -> int:
     print(f"\n{Colors.BOLD}--- Index verification: {db_path} ---{Colors.RESET}\n")
 
     async with aiosqlite.connect(str(db_path)) as conn:
-        cursor = await conn.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%'"
-        )
+        cursor = await conn.execute("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%'")
         existing = {row[0] for row in await cursor.fetchall()}
 
     all_present = True

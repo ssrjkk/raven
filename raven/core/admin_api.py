@@ -46,6 +46,7 @@ def _client_ip(request: Request) -> str:
         return forwarded.split(",")[0].strip() or host
     return host
 
+
 _workflow_store = WorkflowStore()
 _workflow_store.register_many(BUILTIN_TEMPLATES)
 
@@ -542,10 +543,17 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
             raise HTTPException(403, "Config update requires admin role")
         from raven.core.config_store import config_store
 
-        allowed_config_keys = frozenset({
-            "default_model", "dm_policy", "rate_limit_max",
-            "log_level", "json_log", "web_port", "context_visibility",
-        })
+        allowed_config_keys = frozenset(
+            {
+                "default_model",
+                "dm_policy",
+                "rate_limit_max",
+                "log_level",
+                "json_log",
+                "web_port",
+                "context_visibility",
+            }
+        )
         if body.key not in allowed_config_keys:
             raise HTTPException(403, f"Key '{body.key}' is not in the allowed config keys")
         config_store.set(body.key, body.value)

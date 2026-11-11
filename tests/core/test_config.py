@@ -248,10 +248,7 @@ class TestNoProxyEnv:
 
     def test_importing_the_config_layer_rewrites_the_environment_of_a_real_process(self, tmp_path: Path) -> None:
         env = dict(os.environ, NO_PROXY="localhost,.localhost,127.0.0.1,[::1],::1")
-        code = (
-            "import os; import raven.core.config; import httpx; "
-            "httpx.Client(); print(os.environ['NO_PROXY'])"
-        )
+        code = "import os; import raven.core.config; import httpx; httpx.Client(); print(os.environ['NO_PROXY'])"
         run = subprocess.run(
             [sys.executable, "-c", code], env=env, capture_output=True, text=True, cwd=str(tmp_path), timeout=120
         )

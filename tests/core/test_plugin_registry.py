@@ -24,9 +24,7 @@ def _write_plugin(root: Path, name: str, version: str) -> None:
     d = root / name
     d.mkdir(parents=True, exist_ok=True)
     (d / "plugin.py").write_text(_PLUGIN_PY, encoding="utf-8")
-    (d / "manifest.json").write_text(
-        f'{{"name":"{name}","version":"{version}"}}', encoding="utf-8"
-    )
+    (d / "manifest.json").write_text(f'{{"name":"{name}","version":"{version}"}}', encoding="utf-8")
 
 
 @pytest.fixture
@@ -105,6 +103,7 @@ class TestCatalogParsing:
                 {"name": "fileurl", "version": "1.0.0", "url": "file:///etc/passwd"},
             ]
         }
+
         async def _validate(url: str) -> str | None:
             if url.startswith("http://10.0.0.5"):
                 return "URL resolves to a private IP range"

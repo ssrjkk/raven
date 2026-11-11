@@ -304,9 +304,7 @@ class Settings(BaseSettings):
         if self.dm_policy not in ("pairing", "open", "closed"):
             errors.append(f"DM_POLICY must be 'pairing', 'open', or 'closed', got '{self.dm_policy}'")
         if self.sandbox_backend not in ("subprocess", "docker", "none"):
-            errors.append(
-                f"SANDBOX_BACKEND must be 'subprocess', 'docker', or 'none', got '{self.sandbox_backend}'"
-            )
+            errors.append(f"SANDBOX_BACKEND must be 'subprocess', 'docker', or 'none', got '{self.sandbox_backend}'")
         if self.web_port < 1 or self.web_port > 65535:
             errors.append(f"WEB_PORT must be 1-65535, got {self.web_port}")
         if self.rate_limit_max < 1:

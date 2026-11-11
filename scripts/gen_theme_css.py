@@ -106,7 +106,9 @@ def surface_block() -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="verify the sheet is up to date")
-    parser.add_argument("--print-surface", action="store_true", help="print the generated region the offline surfaces embed")
+    parser.add_argument(
+        "--print-surface", action="store_true", help="print the generated region the offline surfaces embed"
+    )
     args = parser.parse_args()
 
     if args.print_surface:

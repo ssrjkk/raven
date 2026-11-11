@@ -40,8 +40,6 @@ async def read_image(path: str) -> str:
     return f"Image ({size.st_size} bytes, {ext}): data:image/{ext[1:]};base64,{data}"
 
 
-
-
 # ---------------------------------------------------------------------------
 # artifact creation
 # ---------------------------------------------------------------------------
@@ -79,8 +77,6 @@ async def create_artifact(title: str, artifact_type: str, content: str, path: st
         return json.dumps({"error": f"create_artifact failed: {exc}"}, ensure_ascii=False)
 
 
-
-
 # ---------------------------------------------------------------------------
 # undo / redo tools
 # ---------------------------------------------------------------------------
@@ -91,13 +87,9 @@ async def undo_action() -> str:
     return result or "[undo] nothing to undo"
 
 
-
-
 async def redo_action() -> str:
     result = await asyncio.to_thread(get_undo_manager().redo)
     return result or "[redo] nothing to redo"
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -111,14 +103,10 @@ async def checkpoint_save_tool(description: str = "") -> str:
     return await get_checkpoint_manager().save(description)
 
 
-
-
 async def checkpoint_restore_tool(cid: str) -> str:
     from ravencode.runtime.checkpoints import get_checkpoint_manager
 
     return await get_checkpoint_manager().restore(cid)
-
-
 
 
 async def checkpoint_list_tool() -> str:
@@ -128,8 +116,6 @@ async def checkpoint_list_tool() -> str:
     if not cps:
         return "(no checkpoints)"
     return "\n".join(f"{cp['id']}: {cp['description']} ({cp['created']})" for cp in cps)
-
-
 
 
 async def undo_changes_tool() -> str:
@@ -143,8 +129,6 @@ async def undo_changes_tool() -> str:
     return await mgr.restore(cps[-1]["id"])
 
 
-
-
 # ---------------------------------------------------------------------------
 # LSP tools
 # ---------------------------------------------------------------------------
@@ -156,14 +140,10 @@ async def lsp_completion_tool(path: str, line: int, col: int) -> str:
     return await lsp_completion(path, line, col)
 
 
-
-
 async def lsp_definition_tool(path: str, line: int, col: int) -> str:
     from ravencode.runtime.lsp import lsp_definition
 
     return await lsp_definition(path, line, col)
-
-
 
 
 async def lsp_references_tool(path: str, line: int, col: int) -> str:
@@ -172,22 +152,16 @@ async def lsp_references_tool(path: str, line: int, col: int) -> str:
     return await lsp_references(path, line, col)
 
 
-
-
 async def lsp_hover_tool(path: str, line: int, col: int) -> str:
     from ravencode.runtime.lsp import lsp_hover
 
     return await lsp_hover(path, line, col)
 
 
-
-
 async def lsp_diagnostics_tool(path: str) -> str:
     from ravencode.runtime.lsp import lsp_diagnostics
 
     return await lsp_diagnostics(path)
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -199,8 +173,6 @@ async def sandbox_exec_tool(code: str, language: str = "python") -> str:
     from ravencode.runtime.sandbox import get_sandbox
 
     return await get_sandbox().run_code(code, language)
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -229,14 +201,10 @@ async def smart_edit_tool(
     )
 
 
-
-
 async def patch_file_tool(path: str, diff_text: str) -> str:
     from ravencode.runtime.diff import apply_patch
 
     return await asyncio.to_thread(apply_patch, path, diff_text)
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -250,14 +218,10 @@ async def format_file_tool(path: str) -> str:
     return await format_file(path)
 
 
-
-
 async def format_files_tool(paths: list[str]) -> str:
     from ravencode.runtime.formatters import format_files
 
     return await format_files(paths)
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -271,14 +235,10 @@ async def auto_commit_tool(message: str | None = None, path: str | None = None) 
     return await auto_commit(path=path, message=message)
 
 
-
-
 async def load_skill(name: str) -> str:
     from ravencode.runtime.skills import load_skill as _load_skill
 
     return _load_skill(name)
-
-
 
 
 async def download_skill(name: str) -> str:
@@ -287,14 +247,10 @@ async def download_skill(name: str) -> str:
     return await _download_skill(name)
 
 
-
-
 async def set_skill_registry(url: str) -> str:
     from ravencode.runtime.skills import set_skill_registry as _set_registry
 
     return _set_registry(url)
-
-
 
 
 async def todo_write(tasks: list[dict[str, str]]) -> str:
@@ -303,14 +259,10 @@ async def todo_write(tasks: list[dict[str, str]]) -> str:
     return _todo_write(tasks)
 
 
-
-
 async def todo_list(status_filter: str | None = None) -> str:
     from ravencode.runtime.todo import todo_list as _todo_list
 
     return _todo_list(status_filter)
-
-
 
 
 async def todo_update(tid: str, status: str) -> str:
@@ -319,15 +271,11 @@ async def todo_update(tid: str, status: str) -> str:
     return _todo_update(tid, status)
 
 
-
-
 async def todo_clear() -> str:
     from ravencode.runtime.todo import todo_clear as _todo_clear
 
     _todo_clear()
     return "(todo list cleared)"
-
-
 
 
 async def question_tool(
@@ -347,15 +295,11 @@ async def question_tool(
     return await ask_question(q)
 
 
-
-
 async def anchored_summary_read() -> str:
     from ravencode.runtime.anchored import anchored_summary
 
     val = anchored_summary()
     return val if val else "(no anchored summary)"
-
-
 
 
 async def anchored_summary_write(text: str) -> str:
@@ -364,14 +308,10 @@ async def anchored_summary_write(text: str) -> str:
     return update_anchored_summary(text)
 
 
-
-
 async def anchored_summary_append(text: str) -> str:
     from ravencode.runtime.anchored import append_anchored_summary
 
     return append_anchored_summary(text)
-
-
 
 
 async def anchored_summary_clear() -> str:
@@ -380,14 +320,10 @@ async def anchored_summary_clear() -> str:
     return clear_anchored_summary()
 
 
-
-
 async def browser_navigate(url: str) -> str:
     from ravencode.runtime.browser import browser_navigate as _navigate
 
     return await _navigate(url)
-
-
 
 
 async def browser_click(selector: str) -> str:
@@ -396,14 +332,10 @@ async def browser_click(selector: str) -> str:
     return await _click(selector)
 
 
-
-
 async def browser_type(selector: str, text: str) -> str:
     from ravencode.runtime.browser import browser_type as _type
 
     return await _type(selector, text)
-
-
 
 
 async def browser_screenshot(path: str = "screenshot.png") -> str:
@@ -412,14 +344,10 @@ async def browser_screenshot(path: str = "screenshot.png") -> str:
     return await _screenshot(path)
 
 
-
-
 async def browser_get_html(selector: str = "body") -> str:
     from ravencode.runtime.browser import browser_get_html as _get_html
 
     return await _get_html(selector)
-
-
 
 
 async def browser_evaluate(script: str) -> str:
@@ -428,14 +356,10 @@ async def browser_evaluate(script: str) -> str:
     return await _evaluate(script)
 
 
-
-
 async def browser_close() -> str:
     from ravencode.runtime.browser import browser_close as _close
 
     return await _close()
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -474,8 +398,6 @@ async def _canvas_render_handler(components: list[dict[str, Any]]) -> str:
     return "\n\n".join(rendered)
 
 
-
-
 async def _nodes_list_handler() -> str:
     try:
         from raven.tools.nodes import nodes_list
@@ -483,8 +405,6 @@ async def _nodes_list_handler() -> str:
         return await nodes_list()
     except ImportError:
         return "(nodes module not available)"
-
-
 
 
 async def _cron_schedule_handler(cron: str, task: str, task_id: str | None = None) -> str:
@@ -496,8 +416,6 @@ async def _cron_schedule_handler(cron: str, task: str, task_id: str | None = Non
         return "[error] cron plugin not available"
 
 
-
-
 async def _cron_list_handler() -> str:
     try:
         from raven.plugins.cron.plugin import list_schedules
@@ -507,8 +425,6 @@ async def _cron_list_handler() -> str:
         return "(cron plugin not available)"
 
 
-
-
 async def _cron_cancel_handler(task_id: str) -> str:
     try:
         from raven.plugins.cron.plugin import cancel_schedule
@@ -516,8 +432,6 @@ async def _cron_cancel_handler(task_id: str) -> str:
         return await cancel_schedule(task_id)
     except ImportError:
         return "[error] cron plugin not available"
-
-
 
 
 async def _talk_handler(text: str, voice: str = "", provider: str = "") -> str:

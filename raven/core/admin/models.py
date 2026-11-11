@@ -5,7 +5,14 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
-_SSRF_BLOCKED_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "[::1]", "169.254.169.254", "metadata.google.internal"}  # hosts an admin target may never name; nothing reads them as bind addresses  # nosec B104
+_SSRF_BLOCKED_HOSTS = {
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "[::1]",
+    "169.254.169.254",
+    "metadata.google.internal",
+}  # hosts an admin target may never name; nothing reads them as bind addresses  # nosec B104
 
 
 def _check_ssrf(target: str) -> str:
@@ -112,7 +119,8 @@ class AuthRegisterRequest(BaseModel):
     def validate_email(cls, v: str | None) -> str | None:
         if v is not None:
             import re
-            pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+
+            pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
             if not re.match(pattern, v):
                 raise ValueError("Invalid email format")
         return v

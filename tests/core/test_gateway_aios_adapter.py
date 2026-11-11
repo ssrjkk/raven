@@ -34,9 +34,7 @@ def test_get_bridge_router_returns_real_router() -> None:
 
 async def test_run_agent_valid_type(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[tuple[str, Any]] = []
-    monkeypatch.setattr(
-        "aios.agents.orchestrator.Orchestrator", lambda: _FakeOrchestrator(captured)
-    )
+    monkeypatch.setattr("aios.agents.orchestrator.Orchestrator", lambda: _FakeOrchestrator(captured))
     result = await AIOSAdapter().run_agent("do it", "coder")
     assert result == {"ok": True, "task": "do it"}
     assert captured[0][0] == "do it" and captured[0][1].value == "coder"
@@ -44,9 +42,7 @@ async def test_run_agent_valid_type(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def test_run_agent_unknown_type_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[tuple[str, Any]] = []
-    monkeypatch.setattr(
-        "aios.agents.orchestrator.Orchestrator", lambda: _FakeOrchestrator(captured)
-    )
+    monkeypatch.setattr("aios.agents.orchestrator.Orchestrator", lambda: _FakeOrchestrator(captured))
     await AIOSAdapter().run_agent("do it", "not-a-real-agent")
     assert captured[0][0] == "do it" and captured[0][1].value == "autonomous"
 
@@ -69,9 +65,7 @@ async def test_ask(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def test_run_agent_task(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[tuple[str, Any]] = []
-    monkeypatch.setattr(
-        "ravencode.agents.orchestrator.Orchestrator", lambda: _FakeOrchestrator(captured)
-    )
+    monkeypatch.setattr("ravencode.agents.orchestrator.Orchestrator", lambda: _FakeOrchestrator(captured))
     result = await AIOSAdapter().run_agent_task("build", "planner")
     assert result == {"ok": True, "task": "build"}
     assert captured[0][0] == "build" and captured[0][1].value == "planner"

@@ -245,7 +245,9 @@ async def test_start_marks_stale_and_resumes(monkeypatch: pytest.MonkeyPatch) ->
 
     await orch.start()
 
-    store.update_status.assert_awaited_once_with("stale", TaskStatus.FAILED, error="Task interrupted by gateway restart")
+    store.update_status.assert_awaited_once_with(
+        "stale", TaskStatus.FAILED, error="Task interrupted by gateway restart"
+    )
     runner.reset_inflight_steps.assert_awaited_once_with(full)
     submitted = {c.args[0].id for c in runner.submit.await_args_list}
     assert submitted == {"run", "pend"}

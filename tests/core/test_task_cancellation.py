@@ -31,9 +31,7 @@ async def store(tmp_path: Path):
 
 def registry_with(handler, *, timeout: int = 30, **spec_kwargs) -> ToolRegistry:
     reg = ToolRegistry()
-    reg.register(
-        ToolSpec(name="step", description="x", parameters={}, handler=handler, timeout=timeout, **spec_kwargs)
-    )
+    reg.register(ToolSpec(name="step", description="x", parameters={}, handler=handler, timeout=timeout, **spec_kwargs))
     return reg
 
 

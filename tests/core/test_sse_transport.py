@@ -91,10 +91,12 @@ class TestSSETransport:
         await t.start()
         q = t.subscribe("client1")
         chunks: list[str] = []
+
         async def collect():
             async for chunk in t.stream("client1"):
                 chunks.append(chunk)
             return chunks
+
         await q.put({"event": "close", "data": ""})
         result = await asyncio.wait_for(collect(), timeout=2.0)
         assert len(result) == 0  # stream exited on close

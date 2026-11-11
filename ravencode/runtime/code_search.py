@@ -6,6 +6,7 @@ indexed with the existing dependency-free BM25 engine, and queried through
 the ``code_search`` tool. The index is rebuilt lazily when the workspace
 fingerprint (file count + newest mtime) changes.
 """
+
 from __future__ import annotations
 
 import re

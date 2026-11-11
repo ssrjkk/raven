@@ -132,6 +132,7 @@ class TestAutoCommit:
 
     async def test_with_message(self, monkeypatch) -> None:
         calls: list[tuple[tuple[str, ...], str | None]] = []
+
         async def fake_git(*args, cwd=None) -> str:
             calls.append((args, cwd))
             if args[0] == "status":
@@ -160,6 +161,7 @@ class TestAutoCommit:
 
     async def test_many_files_summary(self, monkeypatch) -> None:
         status = "\n".join(f" M f{i}.py" for i in range(8))
+
         async def fake_git(*args, cwd=None) -> str:
             if args[0] == "status":
                 return status + "\n"

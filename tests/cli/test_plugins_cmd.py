@@ -14,9 +14,7 @@ def _write_plugin(root: Path, name: str, version: str) -> None:
     d = root / name
     d.mkdir(parents=True, exist_ok=True)
     (d / "plugin.py").write_text(_PLUGIN_PY, encoding="utf-8")
-    (d / "manifest.json").write_text(
-        f'{{"name":"{name}","version":"{version}"}}', encoding="utf-8"
-    )
+    (d / "manifest.json").write_text(f'{{"name":"{name}","version":"{version}"}}', encoding="utf-8")
 
 
 def test_cli_plugins_update_from_local_registry(tmp_path: Path, monkeypatch) -> None:
@@ -62,8 +60,6 @@ def test_cli_plugins_update_without_registry(tmp_path: Path, monkeypatch) -> Non
     plugins_dir = tmp_path / "plugins"
     plugins_dir.mkdir()
     runner = CliRunner()
-    result = runner.invoke(
-        plugins_group, ["update", "foo", "--dir", str(plugins_dir)]
-    )
+    result = runner.invoke(plugins_group, ["update", "foo", "--dir", str(plugins_dir)])
     assert result.exit_code == 1
     assert "registry" in result.output.lower()

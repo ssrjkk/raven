@@ -67,9 +67,7 @@ def test_the_documented_table_matches_the_defaults_and_the_citations() -> None:
         assert f'is_enabled("{name}")' in cited or f"is_enabled('{name}')" in cited, (source_file, name)
 
 
-def test_the_environment_overrides_the_file_and_refuses_garbage(
-    tmp_path: pathlib.Path, monkeypatch: Any
-) -> None:
+def test_the_environment_overrides_the_file_and_refuses_garbage(tmp_path: pathlib.Path, monkeypatch: Any) -> None:
     from raven.core.features import FeatureFlags
 
     config = tmp_path / "features.yaml"

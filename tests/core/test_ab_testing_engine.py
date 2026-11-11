@@ -28,9 +28,7 @@ def assigned(engine: ABTestEngine, experiment_id: str, user_id: str) -> str:
     return variant
 
 
-def make_running(
-    engine: ABTestEngine, variants: list[dict[str, Any]], **kwargs: Any
-) -> Experiment:
+def make_running(engine: ABTestEngine, variants: list[dict[str, Any]], **kwargs: Any) -> Experiment:
     exp = engine.create_experiment("exp", "desc", variants, **kwargs)
     started = engine.start_experiment(exp.id)
     assert started is not None
@@ -241,9 +239,7 @@ class TestStatistics:
     def test_report_is_scale_invariant_on_a_continuous_metric(self, engine: ABTestEngine) -> None:
         def run(factor: float) -> float:
             local = ABTestEngine()
-            exp = make_running(
-                local, [{"name": "s"}, {"name": "f"}], metric_name="latency", metric_type="mean"
-            )
+            exp = make_running(local, [{"name": "s"}, {"name": "f"}], metric_name="latency", metric_type="mean")
             rng = random.Random(11)
             for i in range(60):
                 local.record_event(exp.id, "s", "latency", rng.gauss(2.5, 0.4) * factor, f"u{i}")
@@ -324,10 +320,13 @@ class TestStatistics:
 
 
 class TestFalsePositiveControl:
-    @pytest.mark.parametrize(("metric_type", "draw"), [
-        ("rate", lambda r: 1.0 if r.random() < 0.3 else 0.0),
-        ("mean", lambda r: r.gauss(1.0, 0.5)),
-    ])
+    @pytest.mark.parametrize(
+        ("metric_type", "draw"),
+        [
+            ("rate", lambda r: 1.0 if r.random() < 0.3 else 0.0),
+            ("mean", lambda r: r.gauss(1.0, 0.5)),
+        ],
+    )
     def test_aa_experiments_only_fire_at_the_nominal_rate(
         self, metric_type: str, draw: Callable[[random.Random], float]
     ) -> None:
@@ -335,9 +334,7 @@ class TestFalsePositiveControl:
         trials = 200
         hits = 0
         for t in range(trials):
-            exp = make_running(
-                engine, [{"name": "c"}, {"name": "t"}], metric_name="m", metric_type=metric_type
-            )
+            exp = make_running(engine, [{"name": "c"}, {"name": "t"}], metric_name="m", metric_type=metric_type)
             rng = random.Random(t)
             for i in range(80):
                 engine.record_event(exp.id, "c", "m", draw(rng), f"c{t}-{i}")

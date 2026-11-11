@@ -7,8 +7,12 @@ from raven.coding.test_generator import ClassInfo, FunctionInfo, TestGenerator, 
 
 class TestFunctionInfo:
     def test_create_function(self):
-        f = FunctionInfo(name="add", args=[TypeInfo(name="x", type_hint="int"), TypeInfo(name="y", type_hint="int")],
-                         return_type="int", docstring="Add two numbers")
+        f = FunctionInfo(
+            name="add",
+            args=[TypeInfo(name="x", type_hint="int"), TypeInfo(name="y", type_hint="int")],
+            return_type="int",
+            docstring="Add two numbers",
+        )
         assert f.name == "add"
         assert len(f.args) == 2
         assert f.return_type == "int"
@@ -36,7 +40,7 @@ class Adder:
         gen = TestGenerator(str(tmp_path))
         types = gen.extract_types("example.py")
         assert len(types) >= 2
-        funcs = [t for t in types if hasattr(t, 'args') and not isinstance(t, ClassInfo)]
+        funcs = [t for t in types if hasattr(t, "args") and not isinstance(t, ClassInfo)]
         classes = [t for t in types if isinstance(t, ClassInfo)]
         assert any(f.name == "greet" for f in funcs)
         assert any(c.name == "Adder" for c in classes)
@@ -55,8 +59,11 @@ def add(x: int, y: int) -> int:
 
     def test_generate_test_for_function(self):
         gen = TestGenerator()
-        func = FunctionInfo(name="add", args=[TypeInfo(name="x", type_hint="int"), TypeInfo(name="y", type_hint="int")],
-                            return_type="int")
+        func = FunctionInfo(
+            name="add",
+            args=[TypeInfo(name="x", type_hint="int"), TypeInfo(name="y", type_hint="int")],
+            return_type="int",
+        )
         test = gen.generate_test_for_function(func, "calc.py")
         assert "test_add_basic" in test
         assert "def test_add_edge_empty" in test
@@ -86,6 +93,7 @@ def add(x: int, y: int) -> int:
 
     def test_get_type_hint(self):
         import ast
+
         gen = TestGenerator()
         arg = ast.arg(arg="x", annotation=ast.Name(id="int"))
         assert gen._get_type_hint(arg) == "int"

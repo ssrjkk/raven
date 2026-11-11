@@ -30,7 +30,9 @@ def client(mock_ce: MagicMock) -> Iterator[TestClient]:
 
 def test_inject(client: TestClient, mock_ce: MagicMock) -> None:
     mock_ce.injector.inject = AsyncMock(return_value={"fault_id": "f1", "status": "active"})
-    resp = client.post("/api/chaos/inject", json={"fault_type": "network_latency", "target": "api", "duration_sec": 30.0})
+    resp = client.post(
+        "/api/chaos/inject", json={"fault_type": "network_latency", "target": "api", "duration_sec": 30.0}
+    )
     assert resp.status_code == 200
 
 

@@ -1,4 +1,5 @@
 """Tests for smart tool-result truncation (middle-out + spill)."""
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -233,9 +233,7 @@ class TaskRunner:
                 await self._store.update_status(task.id, TaskStatus.PENDING)
                 logger.info("Task {} requeued after restart (was RUNNING)", task.id)
             else:
-                await self._store.update_status(
-                    task.id, TaskStatus.FAILED, error="Task interrupted by process restart"
-                )
+                await self._store.update_status(task.id, TaskStatus.FAILED, error="Task interrupted by process restart")
                 logger.warning("Task {} marked FAILED: interrupted by restart", task.id)
             processed.append(task.id)
         if processed:
@@ -248,9 +246,7 @@ class TaskRunner:
         if reason is not None:
             return f"Denied by operator policy: {reason}"
         if is_exec_class(step.tool):
-            allowed, reason = await self._tool_policy.check_exec(
-                step.tool, step.params, confirm_fn=self._confirm_fn
-            )
+            allowed, reason = await self._tool_policy.check_exec(step.tool, step.params, confirm_fn=self._confirm_fn)
             if not allowed:
                 return f"Blocked by operator policy: {reason}"
         return None

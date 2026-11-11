@@ -1,4 +1,5 @@
 """Generate landing video using Seedance 2.0 via Replicate API."""
+
 from __future__ import annotations
 
 import os

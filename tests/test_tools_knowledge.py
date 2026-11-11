@@ -129,7 +129,10 @@ class TestKnowledgeExtract:
         kg.extract_from_document.return_value = {"entities": [], "relations": []}
         kg.get_stats.return_value = {"entities": 0, "relations": 0}
         result = knowledge_extract("plain text")
-        assert result == "Extracted from text\n- Entities found: 0\n- Relations found: 0\n- Total in graph: 0 entities, 0 relations"
+        assert (
+            result
+            == "Extracted from text\n- Entities found: 0\n- Relations found: 0\n- Total in graph: 0 entities, 0 relations"
+        )
         assert "Relations:" not in result
 
     def test_extract_groups_and_truncates_types(self, kg: MagicMock) -> None:
@@ -298,7 +301,7 @@ class TestKnowledgeGraphVis:
         kg.export_vis.return_value = {"nodes": [{"id": "e1"}], "links": [{"source": "e1"}]}
         result = knowledge_graph_vis()
         assert "[Graph data: 1 nodes, 1 links]" in result
-        assert '```json' in result
+        assert "```json" in result
         assert '"nodes"' in result
 
 

@@ -190,8 +190,7 @@ def build_repo_map(
             # Exclude files inside symlink target directories
             try:
                 resolved = path.resolve()
-                if any(str(resolved).startswith(str(target) + "/") or resolved == target
-                       for target in symlink_targets):
+                if any(str(resolved).startswith(str(target) + "/") or resolved == target for target in symlink_targets):
                     continue
             except (OSError, ValueError):
                 pass
@@ -250,6 +249,5 @@ def repo_map_block(root: str | Path | None = None, max_chars: int = DEFAULT_MAX_
     logger.debug("repo_map built in {:.1f} ms", elapsed * 1000)
     return (
         "\n\n# Repository structure\n"
-        "Use this map to locate files before reading them; do not re-list directories:\n"
-        + repo_map
+        "Use this map to locate files before reading them; do not re-list directories:\n" + repo_map
     )

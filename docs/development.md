@@ -51,14 +51,20 @@ deploy/                # Docker, systemd, observability, traefik
 ## Development Loop
 
 ```bash
-# Quick validation gate (ruff + mypy + imports, no tests)
+# Quick validation gate (ruff, format, mypy, annotation ratchet, bandit, imports, CLI; no tests)
 python scripts/check_all.py --quick
 
-# Full gate (lint + types + imports + all tests + frontend build)
+# Full gate (the same, plus all tests and the frontend build)
 python scripts/check_all.py
+
+# Re-measure the unannotated-function ceiling after fixing hints
+python scripts/check_all.py --annotations
 
 # Lint
 ruff check .
+
+# Format
+ruff format .
 
 # Test
 pytest tests/ -q --tb=short
@@ -69,6 +75,19 @@ raven start
 # Run TUI
 raven tui
 ```
+
+### Style and hint controls
+
+`pre-commit install` runs this repository's own interpreter rather than a downloaded copy of ruff or
+mypy, so the hook, `--quick` and CI check the tree with one toolchain and one config. `pyproject.toml`
+fixes that toolchain (`ruff~=0.17.4`, `mypy~=2.4.1`): the format stage compares the tree against the
+output of a specific formatter, so a resolver free to pick any 0.x would gate against a different one.
+
+- **format** — `ruff format` is a gate stage: a file the formatter would restyle fails the run.
+- **type hints** — `agents.md` requires hints on every function, while mypy runs with
+  `disallow_untyped_defs = false`, so the mandate is enforced by `scripts/untyped_baseline.json`: the
+  number of unannotated functions per shipped file. Adding one fails the gate, and so does leaving
+  the recorded ceiling above what the tree now holds — `--annotations` re-measures it.
 
 ## Testing
 

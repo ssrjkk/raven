@@ -214,7 +214,11 @@ def test_image_edit_success(ws: Path) -> None:
     src = ws / "in.png"
     _make_png(src)
     out = ws / "out.jpg"
-    result = asyncio.run(media.image_edit(str(src), resize="5x5", crop="1,1,4,4", rotate=90, flip="horizontal", format="jpeg", output=str(out)))
+    result = asyncio.run(
+        media.image_edit(
+            str(src), resize="5x5", crop="1,1,4,4", rotate=90, flip="horizontal", format="jpeg", output=str(out)
+        )
+    )
     assert "Image edited" in result
     assert "crop(1,1,4,4)" in result
     assert "resize(5x5)" in result

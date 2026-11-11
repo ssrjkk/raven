@@ -23,6 +23,8 @@ _SANITIZE_PATTERNS: list[re.Pattern[str]] = [
 ]
 _MAX_FILE_SIZE = 512_000  # 500 KB — debug only, not arbitrary file read
 _ALLOWED_EXTENSIONS = frozenset({".py", ".pyw"})
+
+
 def _get_workspace() -> Path:
     return workspace_root()
 
@@ -86,7 +88,9 @@ def create_debugger_router() -> APIRouter:
         if file_path.suffix.lower() not in _ALLOWED_EXTENSIONS:
             raise HTTPException(403, f"Only .py files can be debugged, got: {file_path.suffix}")
         if file_path.stat().st_size > _MAX_FILE_SIZE:
-            raise HTTPException(400, f"File too large for debugging ({file_path.stat().st_size} > {_MAX_FILE_SIZE} bytes)")
+            raise HTTPException(
+                400, f"File too large for debugging ({file_path.stat().st_size} > {_MAX_FILE_SIZE} bytes)"
+            )
         with _debug_lock:
             if _active_debugger is not None:
                 _active_debugger.stop()
@@ -115,7 +119,9 @@ def create_debugger_router() -> APIRouter:
             return _active_debugger.get_state()
 
     @router.post("/breakpoints")
-    async def set_breakpoints(bps: list[BreakpointRequest], _admin: dict[str, Any] = Depends(_require_admin)) -> DebuggerState:
+    async def set_breakpoints(
+        bps: list[BreakpointRequest], _admin: dict[str, Any] = Depends(_require_admin)
+    ) -> DebuggerState:
         with _debug_lock:
             if _active_debugger is None:
                 raise HTTPException(400, "No active debug session")
@@ -286,18 +292,39 @@ class _DebugSession:
             safe_builtins = {
                 k: v
                 for k, v in vars(_builtins).items()
-                if k not in frozenset({
-                    "__import__", "exec", "eval", "compile", "open", "exit", "quit",
-                    "getattr", "setattr", "delattr", "globals", "locals", "vars",
-                    "type", "object", "super", "staticmethod", "classmethod", "property",
-                })
+                if k
+                not in frozenset(
+                    {
+                        "__import__",
+                        "exec",
+                        "eval",
+                        "compile",
+                        "open",
+                        "exit",
+                        "quit",
+                        "getattr",
+                        "setattr",
+                        "delattr",
+                        "globals",
+                        "locals",
+                        "vars",
+                        "type",
+                        "object",
+                        "super",
+                        "staticmethod",
+                        "classmethod",
+                        "property",
+                    }
+                )
             }
             ns: dict[str, object] = {
                 "__name__": "__main__",
                 "__file__": str(self._file_path),
                 "__builtins__": safe_builtins,
             }
-            exec(compiled, ns)  # running the file under debug is what a debugger does; this namespace ships no unsafe builtins  # nosec B102
+            exec(
+                compiled, ns
+            )  # running the file under debug is what a debugger does; this namespace ships no unsafe builtins  # nosec B102
             with self._lock:
                 if self._status not in ("stopped", "error"):
                     self._status = "running"

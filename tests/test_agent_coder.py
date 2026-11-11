@@ -120,6 +120,7 @@ class TestCodeIndexer:
         """resolve() walks the network provider on Windows, so a dead UNC share raises
         OSError (WinError 64) instead of returning a path. The indexer must answer with an
         empty index, not crash the agent that asked it to index a share."""
+
         def explode(self, *args: object, **kwargs: object) -> None:
             raise OSError(22, "The server name could not be resolved (WinError 64)")
 
@@ -184,7 +185,7 @@ class TestMultiLangIndexing:
             "func NewServer(port int) *Server { return &Server{Port: port} }\n"
             "func (s *Server) Serve() error { return nil }\n"
             "const DefaultPort = 8080\n"
-            "var Version = \"1.0\"\n"
+            'var Version = "1.0"\n'
         )
         indexer = CodeIndexer(str(src))
         files = indexer.index()
@@ -223,7 +224,7 @@ class TestMultiLangIndexing:
             "public class App {\n"
             "    public static void main(String[] args) {}\n"
             "    private int count;\n"
-            "    public String getName() { return \"\"; }\n"
+            '    public String getName() { return ""; }\n'
             "}\n"
             "interface Service { void execute(); }\n"
         )

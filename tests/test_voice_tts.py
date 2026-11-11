@@ -36,7 +36,10 @@ def _install_fake_elevenlabs(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         return b"\x00\x01\x02mp3"
 
     def voices() -> list[types.SimpleNamespace]:
-        return [types.SimpleNamespace(voice_id="v1", name="Voice One"), types.SimpleNamespace(voice_id="v2", name="Voice Two")]
+        return [
+            types.SimpleNamespace(voice_id="v1", name="Voice One"),
+            types.SimpleNamespace(voice_id="v2", name="Voice Two"),
+        ]
 
     mod.Voice = Voice  # type: ignore[attr-defined]
     mod.generate = generate  # type: ignore[attr-defined]
@@ -133,7 +136,9 @@ class TestTTSConfig:
     def test_custom(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(tts, "_ELEVENLABS_API_KEY", "")
         cache = tmp_path / "my_cache"
-        cfg = TTSConfig(provider=TTSProvider.ELEVENLABS, voice="v", model="m", speed=1.5, api_key="k", cache_dir=str(cache))
+        cfg = TTSConfig(
+            provider=TTSProvider.ELEVENLABS, voice="v", model="m", speed=1.5, api_key="k", cache_dir=str(cache)
+        )
         assert cfg.provider == TTSProvider.ELEVENLABS
         assert cfg.voice == "v"
         assert cfg.model == "m"
@@ -226,7 +231,9 @@ class TestSynthesizeElevenlabs:
     def test_success_custom_voice_and_output(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         state = _install_fake_elevenlabs(monkeypatch)
         out = tmp_path / "custom.mp3"
-        tts_obj = TextToSpeech(TTSConfig(provider=TTSProvider.ELEVENLABS, api_key="k", voice="myv", model="m1", cache_dir=str(tmp_path)))
+        tts_obj = TextToSpeech(
+            TTSConfig(provider=TTSProvider.ELEVENLABS, api_key="k", voice="myv", model="m1", cache_dir=str(tmp_path))
+        )
         result = tts_obj._synthesize_elevenlabs("hello", output_path=str(out))
         assert result == str(out)
         assert out.exists()
@@ -262,7 +269,11 @@ class TestSynthesizeSystem:
         monkeypatch.setattr(os, "name", "nt")
         tts_obj = TextToSpeech(TTSConfig())
         calls: dict[str, Any] = {}
-        monkeypatch.setattr(tts_obj, "_synthesize_windows_sapi", lambda text, output_path: calls.update(text=text, output_path=output_path))
+        monkeypatch.setattr(
+            tts_obj,
+            "_synthesize_windows_sapi",
+            lambda text, output_path: calls.update(text=text, output_path=output_path),
+        )
         out = tts_obj._synthesize_system("hello")
         assert calls == {"text": "hello", "output_path": out}
         assert out.endswith(".wav")
@@ -272,7 +283,9 @@ class TestSynthesizeSystem:
         monkeypatch.setattr(os, "name", "posix")
         tts_obj = TextToSpeech(TTSConfig())
         calls: dict[str, Any] = {}
-        monkeypatch.setattr(tts_obj, "_synthesize_macos_say", lambda text, output_path: calls.update(text=text, output_path=output_path))
+        monkeypatch.setattr(
+            tts_obj, "_synthesize_macos_say", lambda text, output_path: calls.update(text=text, output_path=output_path)
+        )
         out = tts_obj._synthesize_system("hello")
         assert calls == {"text": "hello", "output_path": out}
 
@@ -388,7 +401,9 @@ class TestSynthesizeEdge:
     def test_success_custom_voice(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         state = _install_fake_edge_tts(monkeypatch)
         out = tmp_path / "custom.mp3"
-        tts_obj = TextToSpeech(TTSConfig(provider=TTSProvider.EDGETTS, voice="en-GB-SoniaNeural", cache_dir=str(tmp_path)))
+        tts_obj = TextToSpeech(
+            TTSConfig(provider=TTSProvider.EDGETTS, voice="en-GB-SoniaNeural", cache_dir=str(tmp_path))
+        )
         assert tts_obj._synthesize_edge("hello", output_path=str(out)) == str(out)
         assert state["voice"] == "en-GB-SoniaNeural"
         assert state["out"] == str(out)

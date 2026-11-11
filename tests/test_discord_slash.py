@@ -49,6 +49,7 @@ class TestSlashCommandIntegration:
             def wrapper(fn):
                 captured[fn.__name__] = fn
                 return fn
+
             return wrapper
 
         mock_tree.command = capture_decorator
@@ -68,6 +69,7 @@ class TestSlashCommandIntegration:
             def wrapper(fn):
                 captured[fn.__name__] = fn
                 return fn
+
             return wrapper
 
         mock_tree.command = capture_decorator
@@ -101,6 +103,7 @@ class TestSlashCommandIntegration:
             def wrapper(fn):
                 captured[fn.__name__] = fn
                 return fn
+
             return wrapper
 
         mock_tree.command = capture_decorator
@@ -132,6 +135,7 @@ class TestSlashCommandIntegration:
             def wrapper(fn):
                 captured[fn.__name__] = fn
                 return fn
+
             return wrapper
 
         mock_tree.command = capture_decorator
@@ -163,6 +167,7 @@ class TestSlashCommandIntegration:
             def wrapper(fn):
                 captured[fn.__name__] = fn
                 return fn
+
             return wrapper
 
         mock_tree.command = capture_decorator
@@ -194,6 +199,7 @@ class TestSlashCommandIntegration:
             def wrapper(fn):
                 captured[fn.__name__] = fn
                 return fn
+
             return wrapper
 
         mock_tree.command = capture_decorator

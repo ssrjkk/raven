@@ -20,7 +20,11 @@ async def _run_subprocess(args: list[str], timeout: float = 15.0) -> tuple[int, 
         proc.kill()
         await proc.wait()
         raise
-    return proc.returncode or 0, stdout.decode("utf-8", errors="replace"), (stderr or b"").decode("utf-8", errors="replace")
+    return (
+        proc.returncode or 0,
+        stdout.decode("utf-8", errors="replace"),
+        (stderr or b"").decode("utf-8", errors="replace"),
+    )
 
 
 async def process_list() -> str:

@@ -74,12 +74,14 @@ def create_mcp_router() -> APIRouter:
     async def mcp_events(request: Request) -> StreamingResponse:
         client_id = f"ravencode_mcp_{id(request)}"
         _sse_transport.subscribe(client_id)
+
         async def _event_stream() -> Any:
             try:
                 async for chunk in _sse_transport.stream(client_id):
                     yield chunk
             finally:
                 _sse_transport.unsubscribe(client_id)
+
         return StreamingResponse(_event_stream(), media_type="text/event-stream")
 
     @router.get("/health")

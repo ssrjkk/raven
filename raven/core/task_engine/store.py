@@ -280,8 +280,14 @@ class TaskStore(BaseStore):
             if not ids:
                 return 0
             id_placeholders = ", ".join("?" for _ in ids)
-            await db.execute(f"DELETE FROM task_steps WHERE task_id IN ({id_placeholders})", ids)  # the only interpolated text is the run of '?' markers itself; the values travel bound  # nosec B608
-            await db.execute(f"DELETE FROM tasks WHERE id IN ({id_placeholders})", ids)  # the only interpolated text is the run of '?' markers itself; the values travel bound  # nosec B608
+            await db.execute(
+                f"DELETE FROM task_steps WHERE task_id IN ({id_placeholders})",  # only the run of '?' markers is interpolated; the ids travel bound  # nosec B608
+                ids,
+            )
+            await db.execute(
+                f"DELETE FROM tasks WHERE id IN ({id_placeholders})",  # only the run of '?' markers is interpolated; the ids travel bound  # nosec B608
+                ids,
+            )
         return len(ids)
 
     @measure_latency()

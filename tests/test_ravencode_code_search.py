@@ -1,4 +1,5 @@
 """Tests for BM25-based code_search tool (ravencode.runtime.code_search)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -15,18 +16,7 @@ def teardown_function() -> None:
 
 
 def test_chunk_source_splits_on_definitions() -> None:
-    text = (
-        "import os\n"
-        "\n"
-        "def alpha():\n"
-        "    return 1\n"
-        "\n"
-        "def beta():\n"
-        "    return 2\n"
-        "\n"
-        "class Gamma:\n"
-        "    pass\n"
-    )
+    text = "import os\n\ndef alpha():\n    return 1\n\ndef beta():\n    return 2\n\nclass Gamma:\n    pass\n"
     chunks = chunk_source(text)
     assert len(chunks) >= 3
     joined = "\n".join(c[2] for c in chunks)
@@ -56,15 +46,11 @@ def _make_repo(root: Path) -> None:
     pkg = root / "app"
     pkg.mkdir()
     (pkg / "payments.py").write_text(
-        "def process_payment(amount):\n"
-        "    '''Charge the customer with retry backoff.'''\n"
-        "    return amount\n",
+        "def process_payment(amount):\n    '''Charge the customer with retry backoff.'''\n    return amount\n",
         encoding="utf-8",
     )
     (pkg / "ui.py").write_text(
-        "def render_button(label):\n"
-        "    '''Draw a button on screen.'''\n"
-        "    return label\n",
+        "def render_button(label):\n    '''Draw a button on screen.'''\n    return label\n",
         encoding="utf-8",
     )
     junk = root / "node_modules" / "lib"

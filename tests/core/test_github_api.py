@@ -603,9 +603,7 @@ def test_token_status_oauth_only(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     monkeypatch.setattr(gh, "_client", lambda: FakeClient())
     secrets = FakeSecrets()
     secrets.store["github_oauth_token"] = "oauth-tok"
-    monkeypatch.setattr(
-        gh, "settings", SimpleNamespace(github_token=FakeSecret(""), resolved_workspace=str(tmp_path))
-    )
+    monkeypatch.setattr(gh, "settings", SimpleNamespace(github_token=FakeSecret(""), resolved_workspace=str(tmp_path)))
     monkeypatch.setattr(gh, "secrets", secrets)
     app = FastAPI()
     app.include_router(gh.create_github_router())
@@ -634,8 +632,6 @@ def test_set_github_token_ok(env: tuple[TestClient, FakeClient, FakeSecrets]) ->
 def test_resolve_token_oauth_fallback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     secrets = FakeSecrets()
     secrets.store["github_oauth_token"] = "oauth-fallback"
-    monkeypatch.setattr(
-        gh, "settings", SimpleNamespace(github_token=FakeSecret(""), resolved_workspace=str(tmp_path))
-    )
+    monkeypatch.setattr(gh, "settings", SimpleNamespace(github_token=FakeSecret(""), resolved_workspace=str(tmp_path)))
     monkeypatch.setattr(gh, "secrets", secrets)
     assert gh._resolve_token() == "oauth-fallback"

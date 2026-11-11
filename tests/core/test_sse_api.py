@@ -46,7 +46,11 @@ def test_events_sessions_valid_token(client: TestClient) -> None:
 
 
 def test_events_sessions_web_secret(client: TestClient) -> None:
-    with patch("raven.core.sse_api.token_manager") as mock_tm, patch("raven.core.sse_api.settings") as mock_settings, patch("raven.core.sse_api.sse_stream") as mock_stream:
+    with (
+        patch("raven.core.sse_api.token_manager") as mock_tm,
+        patch("raven.core.sse_api.settings") as mock_settings,
+        patch("raven.core.sse_api.sse_stream") as mock_stream,
+    ):
         mock_tm.validate_token = AsyncMock(return_value=None)
         mock_secret = MagicMock()
         mock_secret.get_secret_value.return_value = "admin-secret"

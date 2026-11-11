@@ -29,9 +29,7 @@ class FeatureFlags:
             elif value in _FALSY:
                 self._flags[key] = False
             else:
-                logger.warning(
-                    "FF_{}={} is not an on/off value, keeping {}", key.upper(), env_val, self._flags[key]
-                )
+                logger.warning("FF_{}={} is not an on/off value, keeping {}", key.upper(), env_val, self._flags[key])
 
     def is_enabled(self, flag: str, default: bool = False) -> bool:
         return self._flags.get(flag, default)

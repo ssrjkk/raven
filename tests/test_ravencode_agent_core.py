@@ -85,6 +85,7 @@ class TestEventEmitter:
     @pytest.mark.asyncio
     async def test_event_timestamp(self):
         import time
+
         before = time.time()
         event = AgentEvent("test")
         after = time.time()
@@ -154,12 +155,14 @@ class TestAgentConfig:
     def test_on_step_config(self):
         async def cb(s: str, step: int) -> None:
             pass
+
         cfg = AgentConfig(on_step=cb)
         assert cfg.on_step is cb
 
     def test_on_message_config(self):
         async def cb(msg: dict[str, str]) -> None:
             pass
+
         cfg = AgentConfig(on_message=cb)
         assert cfg.on_message is cb
 
@@ -171,6 +174,7 @@ class TestQuestionErrorPropagation:
     @pytest.mark.asyncio
     async def test_question_error_passed_through_retry(self):
         from ravencode.runtime.agent_core import ReActAgent
+
         agent = ReActAgent(config=AgentConfig(max_steps=5, max_tool_retries=3))
         assert agent.config.max_tool_retries == 3
         assert agent.config.max_steps == 5
@@ -370,9 +374,7 @@ class TestArtifactBlocks:
         assert agent._artifact_blocks() == ""
 
     def test_exception_skipped(self, monkeypatch):
-        monkeypatch.setattr(
-            "raven.core.artifacts.get_artifact_manager", MagicMock(side_effect=RuntimeError("boom"))
-        )
+        monkeypatch.setattr("raven.core.artifacts.get_artifact_manager", MagicMock(side_effect=RuntimeError("boom")))
         agent = ReActAgent(config=AgentConfig())
         assert agent._artifact_blocks() == ""
 
@@ -474,7 +476,9 @@ class TestRunBranches:
                 "tool_calls": [{"id": "1", "function": {"name": "read", "arguments": {}}}],
             }
 
-        agent = ReActAgent(config=AgentConfig(proactive_scan=False, diff_preview=False, event_emitter=ee), llm_provider=fake_llm)
+        agent = ReActAgent(
+            config=AgentConfig(proactive_scan=False, diff_preview=False, event_emitter=ee), llm_provider=fake_llm
+        )
         _patch_save(monkeypatch)
         result = await agent.run("x")
         assert result == "[aborted]"
@@ -536,7 +540,9 @@ class TestCompleteFlow:
             return {"content": "final answer"}
 
         agent = ReActAgent(
-            config=AgentConfig(proactive_scan=False, diff_preview=False, event_emitter=ee, on_step=on_step, on_message=on_message),
+            config=AgentConfig(
+                proactive_scan=False, diff_preview=False, event_emitter=ee, on_step=on_step, on_message=on_message
+            ),
             llm_provider=fake_llm,
         )
         _patch_save(monkeypatch)
@@ -595,13 +601,19 @@ class TestCompleteFlow:
         async def fake_llm(messages):
             return {
                 "content": "thinking",
-                "tool_calls": [
-                    {"id": "c1", "function": {"name": "read", "arguments": {"path": "a.py"}}}
-                ],
+                "tool_calls": [{"id": "c1", "function": {"name": "read", "arguments": {"path": "a.py"}}}],
             }
 
         agent = ReActAgent(
-            config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, event_emitter=ee, on_step=on_step, on_message=on_message, max_steps=3),
+            config=AgentConfig(
+                proactive_scan=False,
+                diff_preview=False,
+                confirm_dangerous=False,
+                event_emitter=ee,
+                on_step=on_step,
+                on_message=on_message,
+                max_steps=3,
+            ),
             llm_provider=fake_llm,
         )
         _patch_save(monkeypatch)
@@ -658,7 +670,9 @@ class TestCompleteFlow:
             }
 
         agent = ReActAgent(
-            config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=True, confirm_callback=deny, max_steps=5),
+            config=AgentConfig(
+                proactive_scan=False, diff_preview=False, confirm_dangerous=True, confirm_callback=deny, max_steps=5
+            ),
             llm_provider=fake_llm,
         )
         _patch_save(monkeypatch)
@@ -678,13 +692,13 @@ class TestCompleteFlow:
         async def fake_llm(messages):
             return {
                 "content": "",
-                "tool_calls": [
-                    {"id": "1", "function": {"name": "create_artifact", "arguments": {"content": "x"}}}
-                ],
+                "tool_calls": [{"id": "1", "function": {"name": "create_artifact", "arguments": {"content": "x"}}}],
             }
 
         agent = ReActAgent(
-            config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, event_emitter=ee, max_steps=5),
+            config=AgentConfig(
+                proactive_scan=False, diff_preview=False, confirm_dangerous=False, event_emitter=ee, max_steps=5
+            ),
             llm_provider=fake_llm,
         )
         _patch_save(monkeypatch)
@@ -700,9 +714,7 @@ class TestCompleteFlow:
         async def fake_llm(messages):
             return {
                 "content": "",
-                "tool_calls": [
-                    {"id": "1", "function": {"name": "create_artifact", "arguments": {"content": "x"}}}
-                ],
+                "tool_calls": [{"id": "1", "function": {"name": "create_artifact", "arguments": {"content": "x"}}}],
             }
 
         agent = ReActAgent(
@@ -739,9 +751,7 @@ class TestProactiveScan:
 
         monkeypatch.setattr("ravencode.runtime.agent_core.execute_tool", fake_execute)
         agent = ReActAgent(config=AgentConfig())
-        await agent._proactive_scan(
-            "touch a.py b.py c.py d.py e.py and gone.py https://example.com/x.py"
-        )
+        await agent._proactive_scan("touch a.py b.py c.py d.py e.py and gone.py https://example.com/x.py")
         assert len(reads) == 3  # _PREREAD_MAX_FILES cap; URL and beyond-cap skipped
         sys_msgs = [m["content"] for m in agent.conversation.messages if m.get("role") == "system"]
         assert all("gone.py" not in c for c in sys_msgs), "failed reads must be skipped"
@@ -1147,16 +1157,8 @@ class TestToolResultCache:
             config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, max_steps=5),
             llm_provider=self._scripted_llm(
                 [
-                    {
-                        "tool_calls": [
-                            {"id": "c1", "function": {"name": "read", "arguments": {"path": "a"}}}
-                        ]
-                    },
-                    {
-                        "tool_calls": [
-                            {"id": "c2", "function": {"name": "read", "arguments": {"path": "a"}}}
-                        ]
-                    },
+                    {"tool_calls": [{"id": "c1", "function": {"name": "read", "arguments": {"path": "a"}}}]},
+                    {"tool_calls": [{"id": "c2", "function": {"name": "read", "arguments": {"path": "a"}}}]},
                 ]
             ),
         )
@@ -1176,21 +1178,9 @@ class TestToolResultCache:
             config=AgentConfig(proactive_scan=False, diff_preview=False, confirm_dangerous=False, max_steps=6),
             llm_provider=self._scripted_llm(
                 [
-                    {
-                        "tool_calls": [
-                            {"id": "c1", "function": {"name": "read", "arguments": {"path": "a"}}}
-                        ]
-                    },
-                    {
-                        "tool_calls": [
-                            {"id": "c2", "function": {"name": "write", "arguments": {"path": "a"}}}
-                        ]
-                    },
-                    {
-                        "tool_calls": [
-                            {"id": "c3", "function": {"name": "read", "arguments": {"path": "a"}}}
-                        ]
-                    },
+                    {"tool_calls": [{"id": "c1", "function": {"name": "read", "arguments": {"path": "a"}}}]},
+                    {"tool_calls": [{"id": "c2", "function": {"name": "write", "arguments": {"path": "a"}}}]},
+                    {"tool_calls": [{"id": "c3", "function": {"name": "read", "arguments": {"path": "a"}}}]},
                 ]
             ),
         )
@@ -1282,9 +1272,7 @@ class TestCoreLoopHardening:
             if n <= 6:
                 return {
                     "content": "",
-                    "tool_calls": [
-                        {"id": f"c{n}", "function": {"name": "read", "arguments": {"path": f"f{n}.py"}}}
-                    ],
+                    "tool_calls": [{"id": f"c{n}", "function": {"name": "read", "arguments": {"path": f"f{n}.py"}}}],
                 }
             return {"content": "gave up"}
 
@@ -1311,9 +1299,7 @@ class TestCoreLoopHardening:
         agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
         assert await agent._git_context() == "[repo context] branch main, working tree clean"
 
-    async def test_git_context_empty_output_returns_none(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
-    ) -> None:
+    async def test_git_context_empty_output_returns_none(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
         monkeypatch.setattr("ravencode.runtime.workspace.get_workspace_root", lambda: str(tmp_path))
 
         async def fake_exec(*a: Any, **k: Any) -> _FakeGitProc:
@@ -1521,9 +1507,7 @@ class TestCoreLoopHardening:
         agent = ReActAgent(config=AgentConfig(repo_map=True))
         assert agent._build_system_prompt()
 
-    async def test_auto_checkpoint_error_is_swallowed(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
-    ) -> None:
+    async def test_auto_checkpoint_error_is_swallowed(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
         monkeypatch.setattr("ravencode.runtime.workspace.get_workspace_root", lambda: str(tmp_path))
 
         def boom(*a: Any, **k: Any) -> None:
@@ -1542,8 +1526,12 @@ class TestCoreLoopHardening:
         monkeypatch.setattr(conv, "compact_deep", lambda keep_recent=8: deep_calls.append(1))
         agent = ReActAgent(
             config=AgentConfig(
-                proactive_scan=False, diff_preview=False, confirm_dangerous=False, git_context=False,
-                auto_checkpoint=False, max_steps=2,
+                proactive_scan=False,
+                diff_preview=False,
+                confirm_dangerous=False,
+                git_context=False,
+                auto_checkpoint=False,
+                max_steps=2,
             ),
             conversation=conv,
             llm_provider=AsyncMock(return_value={"content": "done"}),
@@ -1590,4 +1578,3 @@ class TestCoreLoopHardening:
         agent = ReActAgent(config=AgentConfig(), conversation=Conversation(system_prompt="s"))
         result = await agent._llm_call_streaming(_Client(), [], [])  # type: ignore[arg-type]
         assert result == {"content": "[error: LLM call timed out]", "tool_calls": []}
-

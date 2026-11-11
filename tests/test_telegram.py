@@ -204,8 +204,11 @@ async def test_send_with_show_menu_metadata(channel):
     mock_app.bot = mock_bot
     channel._app = mock_app
     msg = Message(
-        session_id="telegram:12345", channel="telegram", role="assistant",
-        content="Menu time", metadata={"show_menu": True},
+        session_id="telegram:12345",
+        channel="telegram",
+        role="assistant",
+        content="Menu time",
+        metadata={"show_menu": True},
     )
     await channel.send("telegram:12345", msg)
     kwargs = mock_bot.send_message.await_args[1]

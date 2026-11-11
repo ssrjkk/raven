@@ -185,9 +185,7 @@ class AIOSClient:
                     arguments = {"value": arguments}
             except json.JSONDecodeError:
                 arguments = {"_raw": raw}
-            tool_calls.append(
-                {"id": slot["id"] or f"call_{idx}", "name": slot["name"], "arguments": arguments}
-            )
+            tool_calls.append({"id": slot["id"] or f"call_{idx}", "name": slot["name"], "arguments": arguments})
         yield {"type": "final", "content": "".join(content_parts), "tool_calls": tool_calls}
 
 

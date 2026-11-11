@@ -470,15 +470,13 @@ class TestLoopDetection:
 
     def test_detect_loop_few_calls(self, agent):
         history = [
-            {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "ping"}}]}
-            for _ in range(3)
+            {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "ping"}}]} for _ in range(3)
         ]
         assert agent._detect_loop(history) is False
 
     def test_detect_loop_same_tool_four_times(self, agent):
         history = [
-            {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "ping"}}]}
-            for _ in range(4)
+            {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "ping"}}]} for _ in range(4)
         ]
         assert agent._detect_loop(history) is True
 
@@ -562,8 +560,9 @@ class TestTruthfulAudit:
                 LLMResponse(content="VERIFIED: TRUE", finish_reason="stop"),
             ]
         )
-        with patch("raven.core.model_tiers.tiers_configured", return_value=True), patch(
-            "raven.core.model_tiers.select_model", return_value="fast"
+        with (
+            patch("raven.core.model_tiers.tiers_configured", return_value=True),
+            patch("raven.core.model_tiers.select_model", return_value="fast"),
         ):
             tokens = [t async for t in audit_agent.run("write add function")]
         result = "".join(tokens)
@@ -577,11 +576,14 @@ class TestTruthfulAudit:
             side_effect=[
                 LLMResponse(content=self.CODE_REPLY, finish_reason="stop"),
                 LLMResponse(content="ISSUE: add has no return type", finish_reason="stop"),
-                LLMResponse(content="```python\ndef add(a: int, b: int) -> int:\n    return a + b\n```", finish_reason="stop"),
+                LLMResponse(
+                    content="```python\ndef add(a: int, b: int) -> int:\n    return a + b\n```", finish_reason="stop"
+                ),
             ]
         )
-        with patch("raven.core.model_tiers.tiers_configured", return_value=True), patch(
-            "raven.core.model_tiers.select_model", return_value="fast"
+        with (
+            patch("raven.core.model_tiers.tiers_configured", return_value=True),
+            patch("raven.core.model_tiers.select_model", return_value="fast"),
         ):
             tokens = [t async for t in audit_agent.run("write add function")]
         result = "".join(tokens)
@@ -607,8 +609,9 @@ class TestTruthfulAudit:
                 LLMResponse(content="", finish_reason="stop"),
             ]
         )
-        with patch("raven.core.model_tiers.tiers_configured", return_value=True), patch(
-            "raven.core.model_tiers.select_model", return_value="fast"
+        with (
+            patch("raven.core.model_tiers.tiers_configured", return_value=True),
+            patch("raven.core.model_tiers.select_model", return_value="fast"),
         ):
             tokens = [t async for t in audit_agent.run("write add function")]
         result = "".join(tokens)
@@ -637,7 +640,6 @@ class TestAgentRegistry:
         agent = registry.create_agent(session)
         assert agent is not None
         assert agent.session.id == "s1"
-
 
 
 class TestToolExecutionPolicy:
@@ -675,9 +677,7 @@ class TestToolExecutionPolicy:
             confirm=confirm,
         )
 
-    async def test_exec_class_tool_is_denied_under_the_documented_default(
-        self, session, mock_db, mock_llm
-    ) -> None:
+    async def test_exec_class_tool_is_denied_under_the_documented_default(self, session, mock_db, mock_llm) -> None:
         from raven.core.llm import ToolCall
 
         agent = self._agent(session, mock_db, mock_llm, [self._tool("shell_exec")])
@@ -687,29 +687,21 @@ class TestToolExecutionPolicy:
     async def test_exec_class_tool_runs_when_policy_is_full(self, session, mock_db, mock_llm) -> None:
         from raven.core.llm import ToolCall
 
-        agent = self._agent(
-            session, mock_db, mock_llm, [self._tool("shell_exec")], exec_security="full"
-        )
+        agent = self._agent(session, mock_db, mock_llm, [self._tool("shell_exec")], exec_security="full")
         result = await agent._execute_tool(ToolCall(id="c", name="shell_exec", arguments={}))
         assert result.get("result") == "ran"
 
-    async def test_non_exec_tool_is_unaffected_by_the_exec_policy(
-        self, session, mock_db, mock_llm
-    ) -> None:
+    async def test_non_exec_tool_is_unaffected_by_the_exec_policy(self, session, mock_db, mock_llm) -> None:
         from raven.core.llm import ToolCall
 
         agent = self._agent(session, mock_db, mock_llm, [self._tool("ping")])
         result = await agent._execute_tool(ToolCall(id="c", name="ping", arguments={}))
         assert result.get("result") == "ran"
 
-    async def test_confirm_required_without_a_confirmer_is_denied(
-        self, session, mock_db, mock_llm
-    ) -> None:
+    async def test_confirm_required_without_a_confirmer_is_denied(self, session, mock_db, mock_llm) -> None:
         from raven.core.llm import ToolCall
 
-        agent = self._agent(
-            session, mock_db, mock_llm, [self._tool("notes", confirm=True)], exec_security="full"
-        )
+        agent = self._agent(session, mock_db, mock_llm, [self._tool("notes", confirm=True)], exec_security="full")
         result = await agent._execute_tool(ToolCall(id="c", name="notes", arguments={}))
         assert "no confirmer" in result["error"]
 
@@ -719,9 +711,7 @@ class TestToolExecutionPolicy:
         async def decline(_name: str, _args: dict[str, Any]) -> bool:
             return False
 
-        agent = self._agent(
-            session, mock_db, mock_llm, [self._tool("notes", confirm=True)], exec_security="full"
-        )
+        agent = self._agent(session, mock_db, mock_llm, [self._tool("notes", confirm=True)], exec_security="full")
         agent._confirm_fn = decline
         result = await agent._execute_tool(ToolCall(id="c", name="notes", arguments={}))
         assert "cancelled" in result["error"]
@@ -734,9 +724,7 @@ class TestToolExecutionPolicy:
         def sync_tool(value: int = 0) -> str:
             return f"sync:{value}"
 
-        agent = self._agent(
-            session, mock_db, mock_llm, [self._tool("calc", sync_tool)], exec_security="full"
-        )
+        agent = self._agent(session, mock_db, mock_llm, [self._tool("calc", sync_tool)], exec_security="full")
         result = await agent._execute_tool(ToolCall(id="c", name="calc", arguments={"value": 7}))
         assert result.get("result") == "sync:7"
 
@@ -750,9 +738,7 @@ class TestConfirmerPropagation:
         agent = registry.create_agent(session, confirm_fn=terminal_confirm)
         assert agent._confirm_fn is terminal_confirm
 
-    async def test_a_built_in_confirmer_is_used_for_a_confirming_tool(
-        self, session, mock_db, mock_llm
-    ) -> None:
+    async def test_a_built_in_confirmer_is_used_for_a_confirming_tool(self, session, mock_db, mock_llm) -> None:
         from raven.core.llm import ToolCall
         from raven.core.security.tool_policy import ToolPolicyEvaluator
 
@@ -796,9 +782,7 @@ class TestConfirmerPropagation:
             pass
         assert agent._confirm_fn is keeper
 
-    async def test_terminal_confirm_denies_when_no_terminal_is_available(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_terminal_confirm_denies_when_no_terminal_is_available(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from raven.core.security.confirm import terminal_confirm
 
         def raise_eof(*_args: object) -> str:

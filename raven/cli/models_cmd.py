@@ -54,7 +54,9 @@ def models_list():
     exp.add_column("Value")
     exp.add_row("Reference", st.ref)
     exp.add_row("Weights", f"{st.size_gb:.2f} GB ({st.ref.rsplit(':', 1)[-1]})")
-    exp.add_row("Ollama", "[OK] reachable" if st.ollama_reachable else f"[NO] not reachable at {settings.ollama_base_url}")
+    exp.add_row(
+        "Ollama", "[OK] reachable" if st.ollama_reachable else f"[NO] not reachable at {settings.ollama_base_url}"
+    )
     exp.add_row("In Ollama", "[OK] pulled" if st.present else "[NO] not pulled")
     exp.add_row("In use", "[OK] DEFAULT_MODEL" if st.is_default else f"[NO] DEFAULT_MODEL={st.default_model}")
     exp.add_row("This machine", st.hardware.summary())
