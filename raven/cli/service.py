@@ -122,7 +122,7 @@ def service_restart():
 
 def _install_windows():
     if not importlib.util.find_spec("win32serviceutil"):
-        console.print("[red]pywin32 is required. Install: pip install pywin32[/red]")
+        console.print('[red]pywin32 is required. Install: pip install "raven[service-win]"[/red]')
         sys.exit(1)
     if not _run_python(SERVICE_MODULE, "install", "--startup=auto"):
         sys.exit(1)

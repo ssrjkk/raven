@@ -136,6 +136,14 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
 ### Fixed
+- `raven service install` on Windows told the operator `pip install pywin32`, bypassing the
+  `service-win` extra `pyproject.toml` declares (and its `pywin32>=312` floor); the hint now names the
+  extra, `docs/cli.md` states what each backend writes -- the `RavenAI` service,
+  `/etc/systemd/system/raven.service`, `~/Library/LaunchAgents/com.raven.ai.plist` -- and the gate
+  reads both sides: drifting `SERVICE_NAME`, the launchd label or the shutdown grace fails a test, as
+  does pointing the hint at an extra pyproject does not declare. `raven start --daemon` on Windows
+  printed two systemd/launchd paths a Windows box cannot use and started nothing; it now names
+  `raven service install`
 - `raven service` on Windows ran nothing and said it had. Every action spawned `python -m
   daemon.windows_service`, a module this tree has never had (no `daemon/` directory exists), so
   install/start/stop/status/remove each printed `Error while finding module specification for

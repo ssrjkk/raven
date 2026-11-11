@@ -14,9 +14,11 @@ import asyncio
 import importlib
 import importlib.util
 import inspect
+import re
 import subprocess
 import sys
 import threading
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -275,8 +277,20 @@ class TestDocumentedContract:
         docs = (ROOT / "docs" / "cli.md").read_text(encoding="utf-8")
         assert ws.SERVICE_NAME in docs
         assert ws.SERVICE_DISPLAY_NAME in docs
-        assert "pywin32" in docs
         assert f"{ws.SHUTDOWN_GRACE_SECONDS:.0f} s" in docs
+
+    def test_the_install_hint_names_an_extra_pyproject_declares(self) -> None:
+        # A hint the user copies into a shell must name a real extra: naming the bare distribution
+        # would skip the floor pyproject sets, and the docs repeat whichever string the code prints.
+        hint = re.search(r'pip install "raven\[([a-z-]+)\]"', inspect.getsource(service_module))
+        assert hint, "service.py must tell the operator how to install pywin32"
+        declared: dict[str, list[str]] = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+            "project"
+        ]["optional-dependencies"]
+        requirements = declared.get(hint.group(1))
+        assert requirements, f"{hint.group(1)} is not an extra pyproject declares"
+        assert any("pywin32" in req.lower() for req in requirements)
+        assert hint.group(1) in (ROOT / "docs" / "cli.md").read_text(encoding="utf-8")
 
     @pytest.mark.parametrize("claim", ["/etc/systemd/system/raven.service", "com.raven.ai.plist"])
     def test_every_backend_path_the_docs_name_is_a_path_the_code_writes(self, claim: str) -> None:
