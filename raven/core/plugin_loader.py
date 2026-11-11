@@ -155,12 +155,20 @@ class WorkerProcess:
         that shuts down plugins it did not start — or a process whose earlier loop has already closed —
         used to raise `got Future attached to a different loop` out of the shutdown path, which left the
         child running and the caller without an answer. The kill itself is loop-independent, so it is
-        done unconditionally and the reap is skipped.
+        done unconditionally and the reap is skipped — and a child the OS has already lost is stopped,
+        not an error, because that is what the kill was for.
         """
         proc = self._process
         if proc is None or proc.returncode is not None:
             return
-        proc.kill()
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            # An absent child is the state stop() exists to produce. `uvloop` checks the pid before
+            # signalling and raises when the OS has already lost it, which is what a closed loop
+            # leaves behind: it reaped the child without ever setting `returncode`, so the test above
+            # cannot see the death. `raven/core/sandbox.py` treats the same race the same way.
+            logger.debug("[plugin] worker for {} had already exited", self._plugin_path.name)
         if self._loop is not asyncio.get_running_loop():
             logger.debug("[plugin] worker for {} belongs to another loop, terminated without reaping", self._plugin_path.name)
             return

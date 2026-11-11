@@ -235,6 +235,25 @@ async def _wait_until_dead(pid: int, attempts: int = 40) -> bool:
     return False
 
 
+def _lose_the_pid(monkeypatch: pytest.MonkeyPatch, worker: Any) -> None:
+    """Make one worker's kill behave the way uvloop's does once the OS has lost the child.
+
+    The state is the real one: a loop that closed reaped its subprocess without setting `returncode`,
+    so `stop()` cannot see the death and the pid check fails with `ProcessLookupError`. The child is
+    terminated for real first, so the assertion about the dead pid means something on a runner that
+    cannot install uvloop; only the reporting of the lost pid is substituted.
+    """
+    proc = worker._process
+    assert proc is not None, "the loop that came and went must leave its worker in the pool"
+    terminate = proc.kill
+
+    def kill() -> None:
+        terminate()
+        raise ProcessLookupError(3, "No such process")
+
+    monkeypatch.setattr(proc, "kill", kill)
+
+
 def _on_a_dying_loop(plugin_file: Path) -> tuple[int, Any]:
     """Register a plugin on its own event loop in a thread, and let that loop close.
 
@@ -304,3 +323,35 @@ class TestAWorkerFromAClosedLoop:
         first = _WORKER_POOL[str(plugin_file)]
         assert await register_all_plugins(plugin_file.parent.parent) == 1
         assert _WORKER_POOL[str(plugin_file)] is first
+
+    async def test_a_child_the_os_already_lost_is_stopped_not_an_error(
+        self, plugin_file: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The child can be gone before `returncode` ever learns it, and that is not a failure.
+
+        Measured in CI, where uvloop is installed and probes the pid before signalling: `stop()` took
+        `ProcessLookupError` out of the shutdown path, so every surface that shut plugins down on exit
+        reported a broken test instead of a stopped worker, and the pool entry survived. uvloop cannot
+        be installed on Windows, so the pid probe is the only part substituted here.
+        """
+        pid, orphan = _on_a_dying_loop(plugin_file)
+        _lose_the_pid(monkeypatch, orphan)
+        await shutdown_plugins()
+        assert _WORKER_POOL == {}
+        assert await _wait_until_dead(pid), f"worker pid {pid} outlived the shutdown"
+
+    async def test_a_lost_worker_does_not_poison_the_next_registration(
+        self, plugin_file: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Registration stops the pooled worker before adopting its replacement — measured 0 plugins.
+
+        The exception escaped `register_untrusted_plugin`'s handler, which then reported a plugin that
+        loads fine as undiscoverable, so the tool surface shipped without it.
+        """
+        _on_a_dying_loop(plugin_file)
+        _lose_the_pid(monkeypatch, _WORKER_POOL[str(plugin_file)])
+        assert await register_all_plugins(plugin_file.parent.parent) == 1
+        fresh = plugins_mod.get_plugin_registry().get_plugin("greeter")
+        assert fresh is not None
+        answer = await asyncio.wait_for(fresh.tools["greeter.hello"]["handler"](name="bob"), timeout=10.0)
+        assert answer == "hi bob"

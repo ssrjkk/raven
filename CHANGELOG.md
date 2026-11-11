@@ -136,6 +136,15 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
 ### Fixed
+- Stopping a plugin worker whose child the OS had already lost raised out of the shutdown path. The
+  pool keeps a worker whose loop has closed; its `returncode` never gets set, so `stop()` could not see
+  the death, and `uvloop` -- which checks the pid before signalling, and is what CI runs -- answered
+  `ProcessLookupError`. That single exception failed 11 tests and produced 67 errors in the unit and
+  full stages: `shutdown_plugins()` died on exit, and `register_untrusted_plugin()` reported a plugin
+  that loads fine as undiscoverable (`register_all_plugins` returned 0, so the tool surface shipped
+  without it). An absent child is the state `stop()` exists to produce, and `raven/core/sandbox.py`
+  already treated the same race that way. Two tests in `tests/core/test_plugin_reload.py` hold the
+  contract, and both fail the moment the suppression goes back.
 - A tool that reported its own failure printed `ok`. Reproduced against the real `Agent`: a handler
   answering `{"error": "GitHub token not configured. Set GITHUB_TOKEN in .env"}` -- the exact value
   `raven/tools/github.py` returns for every unauthenticated call -- yielded `[github.list → ok]`,
