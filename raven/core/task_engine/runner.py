@@ -12,6 +12,7 @@ from raven.core.security.tool_policy import ToolPolicyEvaluator, is_exec_class, 
 from raven.core.task_engine.models import Task, TaskStatus, TaskStep
 from raven.core.task_engine.store import TaskStore
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+from raven.core.tool_outcome import failure_detail
 
 _TRANSIENT_MARKERS = (
     "timed out",
@@ -32,7 +33,7 @@ _TRANSIENT_MARKERS = (
 
 
 def _is_tool_error(result: Any) -> bool:
-    return isinstance(result, str) and result.startswith("[error]")
+    return failure_detail(result) is not None
 
 
 def _is_transient_error(error: str) -> bool:
@@ -260,10 +261,12 @@ class TaskRunner:
         """Execute one tool step with bounded retries for transient failures.
 
         Returns ``(result, None)`` when the call succeeded or ``(None, error)``
-        once retries are exhausted. Error strings coming back from
-        :class:`ToolRegistry` (``[error] ...``) are treated as failures, not
-        successful results. Transient errors (timeouts, network, rate limits)
-        are retried with exponential backoff; permanent errors fail fast.
+        once retries are exhausted. What counts as a failure is the vocabulary
+        every handler answers with, shared through
+        :func:`raven.core.tool_outcome.failure_detail`: a ``[error]``, ``[denied]``
+        or ``[timeout ...]`` string, a non-zero ``[exit code: N]`` tail, or a dict
+        carrying an ``error`` key. Transient errors (timeouts, network, rate
+        limits) are retried with exponential backoff; permanent errors fail fast.
         """
         denial = await self._policy_denial(step)
         if denial is not None:

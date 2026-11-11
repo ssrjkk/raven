@@ -18,6 +18,7 @@ from raven.core.llm.queue import PRIORITY_LOW, PRIORITY_NORMAL
 from raven.core.models import Message, PluginTool, Session
 from raven.core.security.context_filter import sanitize_external_content
 from raven.core.security.tool_policy import ExecSecurity, ToolPolicyEvaluator, is_exec_class, path_args
+from raven.core.tool_outcome import failure_detail
 from raven.core.workspace import workspace_root
 
 
@@ -534,7 +535,10 @@ class Agent:
             except TimeoutError:
                 logger.error("Tool {} timed out after {}s", tc.name, settings.agent_tool_timeout)
                 return {"error": f"Tool '{tc.name}' timed out after {settings.agent_tool_timeout:g}s"}
-            return {"result": str(result)[:4000]}
+            detail = failure_detail(result)
+            if detail is None:
+                return {"result": str(result)[:4000]}
+            return {"result": str(result)[:4000], "error": detail[:500]}
         except Exception as e:
             logger.error("Tool {} error: {}", tc.name, e)
             return {"error": str(e)[:500]}

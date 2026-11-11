@@ -18,6 +18,7 @@ from raven.core.audit import AuditEventType, audit_logger
 from raven.core.metrics import metrics
 from raven.core.security.context_filter import redact_pii, sanitize_external_content
 from raven.core.security.tool_policy import ExecSecurity, ToolPolicyEvaluator, is_exec_class, policy_from_settings
+from raven.core.tool_outcome import failure_detail
 
 if TYPE_CHECKING:
     from raven.core.llm import LLMResponse, LLMRouter, ToolCall
@@ -939,10 +940,10 @@ class AgentOrchestrator:
             try:
                 self._check_security_policy(tc, agent_ctx.workspace)
                 result = await self._tool_registry.call(tc.name, **args)
-                if isinstance(result, str) and result.startswith("[error]"):
-                    payload: dict[str, Any] = {"error": result[:500]}
-                else:
-                    payload = {"result": str(result)[:5000]}
+                payload: dict[str, Any] = {"result": str(result)[:5000]}
+                detail = failure_detail(result)
+                if detail is not None:
+                    payload["error"] = detail[:500]
                 if _is_transient_error(str(payload.get("error", ""))) and retries_left > 0:
                     retries_left -= 1
                     delay = self._tool_retry_backoff * (2 ** (self._max_tool_retries - retries_left - 1))

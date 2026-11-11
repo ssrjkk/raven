@@ -136,6 +136,23 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
 ### Fixed
+- A tool that reported its own failure printed `ok`. Reproduced against the real `Agent`: a handler
+  answering `{"error": "GitHub token not configured. Set GITHUB_TOKEN in .env"}` -- the exact value
+  `raven/tools/github.py` returns for every unauthenticated call -- yielded `[github.list → ok]`,
+  because `_execute_tool` flattened every value into `{"result": str(result)[:4000]}` and the status
+  line then looked for an `error` key on the flattened envelope. Every failure a handler states about
+  itself was invisible: `[denied] ...` from `raven/tools/shell.py` (a command outside the allowlist),
+  `[exit code: N]` from the shell and the code/process/git plugins, `[timeout after Ns]`,
+  `[error] ...` from `raven/core/plugin_loader.py` and the MCP bridge, and dict replies carrying
+  `error`. Policy and exec denials inside the executors were already reported -- only the handler's
+  own answer was flattened away. `raven/core/tool_outcome.py` is that vocabulary in one place, and it
+  classifies the handler's value *before* the 4000/5000-char cap: a failing command that floods the
+  output carried its marker off the end of the string, so the status was lost with it. Three
+  consumers now read it: the agent envelope (`{"result": …, "error": …}`, so the text the model keeps
+  says what happened, not only the line the operator saw), the orchestrator's `tool_status` -- which
+  feeds the error counter that decides whether a run is stuck and the quality score -- and the task
+  engine's `_is_tool_error`, which had learned only `[error]`, so a step whose command was refused
+  counted as passed and a `[denied]` never failed the task
 - `raven service install` on Windows told the operator `pip install pywin32`, bypassing the
   `service-win` extra `pyproject.toml` declares (and its `pywin32>=312` floor); the hint now names the
   extra, `docs/cli.md` states what each backend writes -- the `RavenAI` service,
