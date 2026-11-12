@@ -18,7 +18,7 @@ from raven.core.auth.store import AuthStore, _token_digest
 
 
 @pytest.fixture
-def db_path(tmp_path) -> Path:
+def db_path(tmp_path: Path) -> Path:
     return tmp_path / "raven.db"
 
 
