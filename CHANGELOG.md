@@ -183,6 +183,17 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
 ### Fixed
+- The type stage could not fail on the developer machine, and then failed for the wrong reason. Two
+  separate problems: mypy 2.4.1's Windows wheel is mypyc-compiled, and every one of the 232 `.pyd`
+  modules next to the `.py` sources is refused by Windows app control, so `check_mypy()` returned a
+  failure carrying `DLL load failed while importing mypy` in 0.1s — the stage was red but proved nothing,
+  which is how `tests/core/auth/test_session_sweep.py:22` (`tmp_path` unannotated, `-> Path` declared,
+  so the return was `Any` under `strict = true`) reached CI and failed all three test jobs. Deleting the
+  `.pyd` files from the local venv leaves the wheel's own pure-Python modules, and that build reproduces
+  the CI error line for line (`Success: no issues found in 925 source files` once fixed). Second problem:
+  the stage's 300s cap fitted a compiled cold pass (134.5s) but not an interpreted one — measured 187.0s
+  cold on an idle machine and over 300s (killed, no diagnostics) while `tests/unit` ran alongside it, so
+  the cap is now 600s.
 - Expired credentials were never deleted from the table that decides whether a caller is revoked.
   `auth_sessions` expiry was consulted only when a row was read, so an abandoned login left its row
   forever and the table grew with every login for the whole life of the database: measured on a snapshot
