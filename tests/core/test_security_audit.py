@@ -588,10 +588,23 @@ class TestRemainingBranches:
         assert check.passed
         assert check.fix_hint() is not None
 
-    def test_pii_redaction_active_ok(self) -> None:
+    def test_pii_redaction_with_ner_reports_both_engines(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def _spec(name: str) -> object | None:
+            return object() if name == "presidio_analyzer" else None
+
+        monkeypatch.setattr(importlib.util, "find_spec", _spec)
         check = _run("_check_pii_redaction")
         assert check.passed
-        assert "patterns" in check.message
+        assert "presidio NER" in check.message
+
+    def test_pii_redaction_without_ner_is_not_reported_active(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # No `nlp` extra is the common install. The check used to answer "PII redaction active"
+        # for it, which is how a half-built control reads as a whole one.
+        monkeypatch.setattr(importlib.util, "find_spec", lambda _name: None)
+        check = _run("_check_pii_redaction")
+        assert not check.passed
+        assert "regex-only" in check.message
+        assert "raven[nlp]" in (check.fix_hint() or "")
 
     def test_tool_overrides_unambiguous_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(config_module.settings, "tools_deny", "")

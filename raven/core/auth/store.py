@@ -7,8 +7,10 @@ import time
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from raven.core._json import json
-from raven.core.asyncdb import is_postgres_dsn
+from raven.core.asyncdb import AsyncDB, is_postgres_dsn
 from raven.core.auth.models import Role, User
 from raven.core.auth.password import dummy_verify, hash_password, verify_and_rehash
 from raven.core.store import BaseStore
@@ -35,16 +37,29 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
     expires_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires_at ON auth_sessions(expires_at);
 CREATE TABLE IF NOT EXISTS auth_email_tokens (
     token_hash TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     created_at REAL NOT NULL,
     expires_at REAL NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_auth_email_tokens_expires_at ON auth_email_tokens(expires_at);
 CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 """
 
 _TOKEN_TTL_SECONDS = 86400
+_PURGE_SESSIONS = "DELETE FROM auth_sessions WHERE expires_at <= ?"
+_PURGE_EMAIL_TOKENS = "DELETE FROM auth_email_tokens WHERE expires_at <= ?"
+
+
+async def _purge_expired_on(connection: AsyncDB, now: float) -> dict[str, int]:
+    """Delete credentials past their expiry. Expiry was only ever consulted when a row was read,
+    so an abandoned login left a permanent row in the table that decides whether a caller is
+    revoked, and a verification link nobody clicked was never reached by the spend-time delete."""
+    sessions = await connection.execute(_PURGE_SESSIONS, (now,)) or 0
+    tokens = await connection.execute(_PURGE_EMAIL_TOKENS, (now,)) or 0
+    return {"sessions": sessions, "email_tokens": tokens}
 
 
 def _token_digest(token: str) -> str:
@@ -63,6 +78,18 @@ class AuthStore(BaseStore):
     @property
     def db_path(self) -> str:
         return self._path or ""
+
+    async def _post_schema(self, connection: AsyncDB) -> None:
+        removed = await _purge_expired_on(connection, time.time())
+        total = removed["sessions"] + removed["email_tokens"]
+        if total:
+            logger.info("AuthStore: dropped {} expired credential rows", total)
+
+    async def purge_expired(self) -> dict[str, int]:
+        """Drop expired sessions and email tokens. Returns how many rows each table lost."""
+        db = await self._conn()
+        async with db.transaction():
+            return await _purge_expired_on(db, time.time())
 
     async def create_user(
         self, username: str, password: str = "", display_name: str = "", email: str = "", role: str = "user"
@@ -162,12 +189,13 @@ class AuthStore(BaseStore):
         something that can be spent by whoever reads the database."""
         token = secrets.token_urlsafe(32)
         now = time.time()
-        expires_at = now + _TOKEN_TTL_SECONDS
-        await self._execute(
-            "INSERT INTO auth_email_tokens (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
-            (_token_digest(token), user_id, now, expires_at),
-        )
-        await self._commit()
+        db = await self._conn()
+        async with db.transaction():
+            await _purge_expired_on(db, now)
+            await db.execute(
+                "INSERT INTO auth_email_tokens (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                (_token_digest(token), user_id, now, now + _TOKEN_TTL_SECONDS),
+            )
         return token
 
     async def verify_email_token(self, token: str) -> bool:
@@ -204,11 +232,13 @@ class AuthStore(BaseStore):
         """Issue a bearer token and store only its digest, so a database reader cannot replay it."""
         token = secrets.token_urlsafe(32)
         now = time.time()
-        await self._execute(
-            "INSERT INTO auth_sessions (token_hash, user_id, role, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
-            (_token_digest(token), user_id, role, now, now + ttl_seconds),
-        )
-        await self._commit()
+        db = await self._conn()
+        async with db.transaction():
+            await _purge_expired_on(db, now)
+            await db.execute(
+                "INSERT INTO auth_sessions (token_hash, user_id, role, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+                (_token_digest(token), user_id, role, now, now + ttl_seconds),
+            )
         return token
 
     async def get_session(self, token: str) -> dict[str, Any] | None:

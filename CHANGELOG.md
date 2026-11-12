@@ -13,6 +13,16 @@ A duplicate `## [Unreleased]` block from the pre-0.4.8 era is archived verbatim 
 Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-10-30). 2026 session fix logs: `docs/archive/fixes-history.md`.
 
 ### Added
+- `tests/core/test_tools_deny_resolves.py` — the switch that could go silent. `TOOLS_DENY` is matched by
+  exact string in `ToolPolicyEvaluator.denial_reason`, and the shipped list deliberately uses two
+  spellings for one capability: registry tools are bare (`process_kill`), plugin tools arrive namespaced
+  (`process.kill`, built from the plugin directory name in `raven/core/plugin_loader.py`). A rename on
+  either side therefore un-denies a tool while every test stays green. Measured on the shipped tree: 31
+  default entries against 239 names actually served (197 bare + 42 namespaced), 0 inert — so this is a
+  drift gate, not a repair. A second test builds the policy the way `policy_from_settings` builds it,
+  from one comma-joined string, and demands `is in TOOLS_DENY` for every entry, which pins the parser
+  too: a separator change would hand back every denied tool. Renaming `git.git_push` to
+  `git.git_pushed` in the default list is caught (1 failed).
 - `check_format()` in `scripts/check_all.py` — the declared formatter, turned into a control.
   `.pre-commit-config.yaml` ran `ruff-format` and `docs/development.md:15` tells every contributor to
   `pre-commit install`, but `.git/hooks/pre-commit` did not exist in this clone and no CI job mentioned
@@ -173,6 +183,42 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
 ### Fixed
+- Expired credentials were never deleted from the table that decides whether a caller is revoked.
+  `auth_sessions` expiry was consulted only when a row was read, so an abandoned login left its row
+  forever and the table grew with every login for the whole life of the database: measured on a snapshot
+  of the live `data/raven.db` on 2026-11-12, 3471 rows, 3096 of them (89%) already past `expires_at`.
+  `auth_email_tokens` had the same gap — a verification link nobody clicked is never reached by the
+  spend-time `DELETE`. `raven/core/auth/store.py` now deletes what is past expiry at three points: in
+  `_post_schema`, so every process bounds the table when it opens; inside the `create_session` and
+  `create_email_verification_token` transactions, so a server that never restarts stays bounded; and
+  through a public `purge_expired()` that reports what each table lost. The sweep runs on a new
+  `expires_at` index per table rather than as a scan — `PRAGMA index_list('auth_sessions')` held only
+  `idx_auth_sessions_user_id` and the primary-key autoindex before this. 5 tests in
+  `tests/core/auth/test_session_sweep.py`, failing on the pre-fix tree exactly as measured:
+  `assert 2 == 1`, `assert 1 == 0`, `assert 6 == 1`, `AttributeError: purge_expired`. 2 mutations
+  caught: a purge window 2 days too eager fails 3 of them, so the expiry boundary is load-bearing and
+  not decoration, and removing the sweep from `create_session` fails 1.
+- The test suite wrote the operator's runtime log. Eleven product entry points call `setup_logging()`
+  with no path — `raven/cli/init_cmd.py` (3), `raven/cli/aios_cmd.py` (2), then `raven/cli/main.py`,
+  `raven/cli/deploy_cmd.py`, `raven/cli/windows_service.py`, `raven/gateway/daemon.py`,
+  `raven/tui/app.py` and `ravencode/cli/main.py` — which resolves to `settings.resolved_log_file`
+  — the repository's own `data/raven.log`. Every test that ran one of them appended to a live 41 MB log:
+  697 `from mock` lines from a single gate run, on a file whose retention then deletes real history on a
+  30-day timer.
+  `tests/conftest.py` gained a session-scoped autouse fixture that points `settings.log_file` at this
+  run's temp directory, so all eleven sites are neutralised at once instead of each caller rearranging
+  loguru sinks; a guard test in `tests/core/test_logging.py` asserts `settings.resolved_log_file` is
+  not inside the repository, and deleting the redirect fails it (1 failed).
+- `raven doctor` called a regex-only PII pipeline "active". The named-entity half of
+  `raven/core/security/context_filter.py` is an optional extra (`raven[nlp]` → `presidio-analyzer`) that
+  no CI job installs — `ci.yml` runs `[dev]`, `[dev,postgres]` and `[dev,ml]` — and
+  `_check_pii_redaction` never looked for it. On this tree, where `find_spec("presidio_analyzer")` is
+  `None`, the check reported `PII redaction active: 30 patterns` as passed while names, IBANs and dates
+  passed through untouched. It now reports `regex-only: 30 patterns, no named-entity recognition` at
+  `low`, with the exact install command as the fix hint, matching the rule already documented for
+  optional imports: an absent one is stated, not hidden. `docs/getting-started.md` now answers this
+  switch specifically. Inverting the `find_spec` comparison is caught by both the degraded and the
+  full-engine assertion (2 failed of 95 in the module).
 - The browser tool's SSRF guard could be walked straight through by an IP literal. `_validate_url()`
   in `raven/tools/browser.py` raised its `private IP` error *inside* a `try` whose
   `except ValueError: pass` was written to mean "this host is a name, not a literal" -- and

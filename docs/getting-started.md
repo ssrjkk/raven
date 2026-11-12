@@ -40,7 +40,10 @@ that no group declares, which is the control that was missing when the anti-spoo
 
 An optional import that is absent is reported, not hidden: without `speaker`, `voice_verify` says
 `Anti-spoof: NOT evaluated` and `/api/voice/verify` answers `anti_spoof_checked: false`, because a
-verification that never ran must not read as a verification that passed.
+verification that never ran must not read as a verification that passed. The same applies to `nlp`:
+without it `raven doctor` answers `pii_redaction: regex-only: N patterns, no named-entity
+recognition` instead of reporting redaction as fully active -- the built-in patterns still run,
+entity detection does not.
 
 ### From a release (Windows)
 

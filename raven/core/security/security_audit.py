@@ -239,12 +239,23 @@ class SecurityAudit:
             from raven.core.security.context_filter import PIIEngine
 
             _patterns = PIIEngine._build_patterns()
-            if _patterns:
-                c.ok(f"PII redaction active: {len(_patterns)} patterns")
-            else:
-                c.fail("No PII patterns configured")
         except ImportError:
             c.fail("PII redaction module not available")
+            return
+        if not _patterns:
+            c.fail("No PII patterns configured")
+            return
+        if importlib.util.find_spec("presidio_analyzer") is None:
+            # The NER half of the engine is an extra. Without it the context filter still redacts
+            # what a regex can see, and used to report itself as fully active while names, IBANs
+            # and dates passed through untouched.
+            c.severity = "low"
+            c.fail(
+                f"regex-only: {len(_patterns)} patterns, no named-entity recognition",
+                fix_hint="pip install 'raven[nlp]' (presidio-analyzer) for entity detection",
+            )
+            return
+        c.ok(f"PII redaction active: {len(_patterns)} patterns + presidio NER")
 
     def _check_audit_chain(self):
         c = self._add("audit_chain", "Audit log chain integrity", "medium")

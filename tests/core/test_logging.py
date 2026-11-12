@@ -121,6 +121,14 @@ class TestEnrichRecord:
 
 
 class TestSetupLogging:
+    def test_the_default_destination_is_not_inside_the_repository(self):
+        """`setup_logging()` with no path is what every CLI entry point does, so the session must
+        move that default out of the working tree or the suite writes the operator's live log."""
+        from raven.core.config import settings
+
+        repo_root = Path(__file__).resolve().parents[2]
+        assert not Path(settings.resolved_log_file).is_relative_to(repo_root)
+
     @staticmethod
     def _records(path: Path) -> list[dict[str, Any]]:
         return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]

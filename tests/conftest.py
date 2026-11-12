@@ -103,6 +103,22 @@ def _isolate_token_manager() -> Iterator[None]:
     token_manager._tokens.clear()
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _runtime_logs_stay_out_of_the_repository(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
+    """Eleven product entry points call `setup_logging()` with no path, which resolves to
+    `settings.resolved_log_file` — the repository's own `data/raven.log`. Every test that ran one
+    of them appended to the operator's live log (697 mock-channel lines from a single gate run),
+    and rotation then deletes real history on a 30-day timer. Point the default destination at
+    this run's temp directory; callers that pass an explicit path are unaffected.
+    """
+    from loguru import logger
+
+    log_dir = tmp_path_factory.mktemp("runtime-logs")
+    settings.log_file = str(log_dir / "pytest-raven.log")
+    yield
+    logger.remove()
+
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
