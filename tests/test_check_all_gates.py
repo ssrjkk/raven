@@ -111,11 +111,12 @@ class TestStageReporting:
 
     def test_mypy_timeout_names_the_kill_instead_of_an_empty_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
         captured: dict[str, Any] = {}
-        _stub_run(monkeypatch, ca.TIMEOUT_RETURNCODE, "", "TIMED OUT after 300s (process killed)", captured)
+        kill = f"TIMED OUT after {ca.MYPY_TIMEOUT}s (process killed)"
+        _stub_run(monkeypatch, ca.TIMEOUT_RETURNCODE, "", kill, captured)
         result = ca.check_mypy()
         assert result.status == "fail"
-        assert "TIMED OUT after 300s" in result.detail
-        assert captured["timeout"] == 300
+        assert f"TIMED OUT after {ca.MYPY_TIMEOUT}s" in result.detail
+        assert captured["timeout"] == ca.MYPY_TIMEOUT
 
     def test_mypy_reports_type_errors_as_usual(self, monkeypatch: pytest.MonkeyPatch) -> None:
         captured: dict[str, Any] = {}

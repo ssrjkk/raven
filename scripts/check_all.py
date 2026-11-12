@@ -237,16 +237,19 @@ def _mypy_targets() -> list[str]:
     return targets
 
 
+# The 925 source files this stage covers measured 187.0s cold on the dev laptop with an idle
+# machine and over 300s — killed, reported as a failure with no diagnostics — while `tests/unit`
+# ran alongside it. mypy runs interpreted here because the compiled wheel's `.pyd` files are
+# blocked by Windows app control, so the cap has to cover a contended cold pass, not the 2.8s
+# warm one. Named so `tests/test_check_all_gates.py` can assert against it instead of restating it.
+MYPY_TIMEOUT = 600
+
+
 def check_mypy() -> CheckResult:
     _print_section("Type Check (mypy)")
     t0 = time.time()
     targets = _mypy_targets()
-    # The 925 source files this stage covers measured 187.0s cold on the dev laptop with an idle
-    # machine and over 300s — killed, reported as a failure with no diagnostics — while `tests/unit`
-    # ran alongside it. mypy runs interpreted here because the compiled wheel's `.pyd` files are
-    # blocked by Windows app control, so the cap has to cover a contended cold pass, not the 2.8s
-    # warm one.
-    r = _run([sys.executable, "-m", "mypy", *targets, "--ignore-missing-imports"], timeout=600)
+    r = _run([sys.executable, "-m", "mypy", *targets, "--ignore-missing-imports"], timeout=MYPY_TIMEOUT)
     dt = time.time() - t0
     if r.returncode == 0:
         return CheckResult("mypy", "pass", dt)

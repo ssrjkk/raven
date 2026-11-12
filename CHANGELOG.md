@@ -193,7 +193,13 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   the CI error line for line (`Success: no issues found in 925 source files` once fixed). Second problem:
   the stage's 300s cap fitted a compiled cold pass (134.5s) but not an interpreted one — measured 187.0s
   cold on an idle machine and over 300s (killed, no diagnostics) while `tests/unit` ran alongside it, so
-  the cap is now 600s.
+  the cap is now 600s. Raising it broke both Linux test jobs first, which is its own finding:
+  `tests/test_check_all_gates.py` asserted `captured["timeout"] == 300` — a gate stage's cap restated by
+  hand in a test, so any honest change to the number fails CI, and the `Check (Windows)` job could report
+  green over the same commit because it runs `--quick` and never reaches the stage's tests. The cap is
+  now the named `MYPY_TIMEOUT` in `scripts/check_all.py` and the test asserts against it, so it checks
+  that the stage passes the cap it declares rather than checking a literal: `timeout=300` written back
+  over the name fails it (1 failed), and the whole file is green again (49 passed).
 - Expired credentials were never deleted from the table that decides whether a caller is revoked.
   `auth_sessions` expiry was consulted only when a row was read, so an abandoned login left its row
   forever and the table grew with every login for the whole life of the database: measured on a snapshot
