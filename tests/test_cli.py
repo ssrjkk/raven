@@ -52,10 +52,13 @@ class TestCliDoctor:
             with patch("raven.cli.main.Path.read_text", return_value='{"model": "test"}'):
                 result = runner.invoke(cli, ["doctor"])
                 assert result.exit_code == 0
+                # every posture helper has to reach the printed table, or it is a dead control
+                assert "Admin Accounts" in result.output
 
     def test_doctor_no_config(self, runner):
         result = runner.invoke(cli, ["doctor"])
         assert result.exit_code == 0
+        assert "DB Path" in result.output
 
 
 class TestCliService:

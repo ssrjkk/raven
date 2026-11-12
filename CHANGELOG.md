@@ -13,6 +13,39 @@ A duplicate `## [Unreleased]` block from the pre-0.4.8 era is archived verbatim 
 Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-10-30). 2026 session fix logs: `docs/archive/fixes-history.md`.
 
 ### Added
+- `raven security promote USERNAME [--password VALUE|-] [--activate]` — the admin account the login path can
+  actually reach, because nothing in the product could create one. `POST /api/auth/register` writes
+  `role='user'`, and `/api/auth/users` — the only route that hands out roles — requires the `admin:users`
+  permission, so on a fresh database the admin surface is reachable with the raw `WEB_SECRET_KEY` header and
+  with no identifier any shipped client sends. The command writes the role into `auth_users` and then revokes
+  that account's live sessions: `auth_sessions` stores the role as it was at login, so an unreclaimed session
+  keeps the freshly promoted account answering `403` until its own 24 h TTL lapses. It refuses — exit code 1,
+  row untouched — the three shapes that would only mint a decoy: no account row and no `--password`; an empty
+  `password_hash`, which `authenticate()` rejects on every login so a role changes nothing about it; and a
+  deactivated account without `--activate`. `--password -` reads the value from stdin, keeping it out of the
+  shell history and the process list. 20 tests in `tests/cli/test_security_promote_cmd.py`, and every control
+  dies when mutated: skipping the revocation costs 2 (one of them the end-to-end loop in
+  `tests/test_aios_e2e.py`, which proves the revocation through `/api/auth/me` because `PATH_PERMISSIONS`
+  answers `403` for a revoked session and for a live `user` session alike), dropping the deactivated refusal
+  costs 1, the empty-hash refusal 1, the policy call 7.
+- `check_password_strength()` in `raven/core/auth/password.py` — the password policy in one place instead of
+  half a place. The four character-class rules lived inside `AuthRegisterRequest`'s field validator, which is
+  why they bound the HTTP route and no other writer of `password_hash`, while the 8-character floor was
+  declared twice (`Field(min_length=8)` and `docs/openapi/raven-services.yaml:95`) and checked by neither
+  validator. The route and the CLI now call the same function, so `promote` cannot create an account the
+  published contract refuses: muting the CLI's call costs 7 tests, muting the route's costs 1, and one test
+  asserts both paths reject the *same* string.
+- `Admin Accounts` row in `raven doctor` — the count that answers *can anybody sign in as admin*, not the
+  count of rows whose role column says `admin`. Reachable means `is_active` with a non-empty `password_hash`;
+  the row names the accounts that can log in and says how many cannot. It reads `settings.resolved_db_path`,
+  reports `[!] no database at …` without creating one, and turns an unreadable file into an `[ERR]` row rather
+  than an abort, because it is one row of a report. 7 tests in `tests/test_doctor_posture.py`; counting admin
+  rows instead of reachable ones costs 3, removing the existence guard 1, and computing the row without
+  appending it 1 — the last caught in the rendered table by `tests/test_cli.py::test_doctor_basic`, not in a
+  mock. `SECURITY.md`, `docs/cli.md`, `docs/getting-started.md` and `docs/security/overview.md` document the
+  recipe, and `SECURITY.md` now states 22 standard checks because that is what
+  `SecurityAudit().run_all(deep=False)` returns — a number that had drifted to 23 in the docs, which
+  `tests/test_docs_cli_consistency.py` now compares against the audit itself instead of a literal.
 - `tests/core/test_tools_deny_resolves.py` — the switch that could go silent. `TOOLS_DENY` is matched by
   exact string in `ToolPolicyEvaluator.denial_reason`, and the shipped list deliberately uses two
   spellings for one capability: registry tools are bare (`process_kill`), plugin tools arrive namespaced
@@ -183,6 +216,45 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
 ### Fixed
+- A `raven doctor` that reported an unreadable database printed its row and then never exited.
+  `SQLiteDB._ensure()` calls `aiosqlite.connect()`, which starts its worker thread — not a daemon — before
+  the first statement runs; on a file that is not a database the `PRAGMA journal_mode=WAL` raises
+  `sqlite3.DatabaseError: file is not a database` while `self._conn` is still unassigned, so the caller's
+  `finally: await store.close()` closes nothing and the orphaned worker sits on its queue forever. Python then
+  blocks in `threading._shutdown` with the report already on screen. Measured at the CLI level with
+  `DB_PATH` pointed at a non-sqlite file: the same `[ERR] auth_users could not be read: DatabaseError` row,
+  and the process had to be killed at 90 s (exit 124) instead of returning 0. `_ensure()` now closes the
+  connection it could not finish opening and re-raises, so the failure still reaches the caller unchanged —
+  a test asserts the exact `sqlite3.DatabaseError`, not just that something raised. 3 tests in
+  `TestFailedOpenReleasesItsWorker`, including the negative control that a healthy open really does show one
+  worker to the probe, so a passing leak assertion is not an always-empty set. Putting the old body back fails
+  1 of the file's 14 tests and the session-end reporter counts 2 surviving workers; 6 pytest runs from this
+  wave were sitting in exactly that hang on this machine when it was found, the oldest 55 minutes old, each
+  having printed its summary first.
+- The test suite wrote the operator's live `auth_sessions` table, and one full gate run adds 76 rows to the
+  table that decides whether a caller is revoked. `create_aios_app()` binds an `AuthStore` at
+  `settings.resolved_db_path` (`raven/cli/aios_cmd.py:56`) while building the app, and that startup bind beat
+  the autouse `token_manager.bind(None)` in `tests/conftest.py`, so every e2e and bridge test minted real
+  session rows into `data/raven.db`. Measured over a 16-stage gate with the redirect in place: the live file's
+  mtime stayed frozen at 12:07:38 while the gate ran 12:26→12:55 and its count stayed 451 rows / 440 admin,
+  while the redirected copy went 451→527 (`bridge-admin` +66, `e2e-admin` +8, `e2e-user` +2). The residue
+  already in the operator's table is 100 % test user_ids (`bridge-admin` 396, `e2e-admin` 44, `e2e-user` 11),
+  and nothing will clear it: their 24 h TTL had not lapsed and `purge_expired()` still has 0 product callers.
+  `tests/conftest.py` now points `settings.db_path` at the run's temp directory for the whole session — the
+  #123b pattern, redirecting the one attribute the ~30 store consumers read instead of patching each test —
+  plus an autouse guard that snapshots `data/raven.db` and its `-wal` around every test and fails if either
+  changed. Removing the redirect is what proves it: with only the guard in place, the
+  same 67 tests wrote 489 rows into the operator's database before the guard failed 38 of them; the file was
+  restored bit-for-bit afterwards (sha256 prefix
+  `bd10d4afa8293bec`, 451 rows, `PRAGMA integrity_check` ok).
+- `create_aios_app()` bound a browser-reachable port and served it without the response headers the gateway
+  registers. `security_headers_middleware` was wired only into the runner (`raven/cli/gateway_runner.py:234`),
+  so nothing built from `create_aios_app()` answered with `X-Content-Type-Options`, `X-Frame-Options`,
+  `Referrer-Policy` or a CSP, and no test referenced the middleware at all — which is why the gap survived
+  every suite that passed. It is now registered last, the outermost Starlette layer, so the headers ride the
+  responses the auth layer and the error handler produce, not only the ones a route returns: 2 tests assert
+  them on `/aios/health` and on the unauthenticated `401` from `/aios/exec`, and unregistering the middleware
+  fails both.
 - The type stage could not fail on the developer machine, and then failed for the wrong reason. Two
   separate problems: mypy 2.4.1's Windows wheel is mypyc-compiled, and every one of the 232 `.pyd`
   modules next to the `.py` sources is refused by Windows app control, so `check_mypy()` returned a

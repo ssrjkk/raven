@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
+from raven.core.auth.password import check_password_strength
+
 _SSRF_BLOCKED_HOSTS = {
     "localhost",
     "127.0.0.1",
@@ -104,14 +106,7 @@ class AuthRegisterRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password_strength(cls, v: str) -> str:
-        if not any(c.isupper() for c in v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not any(c.islower() for c in v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Password must contain at least one digit")
-        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in v):
-            raise ValueError("Password must contain at least one special character")
+        check_password_strength(v)
         return v
 
     @field_validator("email")

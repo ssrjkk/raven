@@ -179,6 +179,13 @@ applies four escalating rules:
 - **fail-closed writes** — any `POST`/`PUT`/`PATCH`/`DELETE` under `/api` from an anonymous
   caller is `401`. The only exemptions are `/api/auth/*` (login itself) and `/api/webhooks/*`,
   which authenticate by signature instead (section 9)
+- **the first admin is not self-service** — `POST /api/auth/register` writes `role='user'` and
+  `/api/auth/users`, the route that changes roles, requires `admin:users`. No HTTP call can therefore
+  mint the admin role on a fresh install, which is what `raven security promote USERNAME
+  --password -` does against `auth_users` directly: it enforces the same password policy as the
+  registration route, refuses an account that could not log in afterwards (empty `password_hash`,
+  `is_active=0`), and revokes the account's sessions because `auth_sessions` stores the role as it
+  was at login. `raven doctor` reports the result as `Admin Accounts`
 
 **Secure mode** is what separates a local bench run from a deployed one: as soon as a
 `WEB_SECRET_KEY` is configured, the 27 read prefixes in `_PRIVATE_READ_PREFIXES`

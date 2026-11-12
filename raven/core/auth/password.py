@@ -14,6 +14,25 @@ def hash_password(password: str) -> str:
     return salt.hex() + ":" + key.hex()
 
 
+def check_password_strength(password: str) -> None:
+    """The one password policy the product has, in the one place it is written.
+
+    It used to live inside `AuthRegisterRequest`, so only the registration route enforced it. Any
+    other path that writes `password_hash` — the admin bootstrap CLI above all — would otherwise mint
+    an account the whole system trusts on a credential the documented policy refuses.
+    """
+    if len(password) < 8:
+        raise ValueError("Password must be at least 8 characters")
+    if not any(c.isupper() for c in password):
+        raise ValueError("Password must contain at least one uppercase letter")
+    if not any(c.islower() for c in password):
+        raise ValueError("Password must contain at least one lowercase letter")
+    if not any(c.isdigit() for c in password):
+        raise ValueError("Password must contain at least one digit")
+    if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
+        raise ValueError("Password must contain at least one special character")
+
+
 def verify_password(password: str, hashed: str) -> bool:
     try:
         salt_hex, key_hex = hashed.split(":")

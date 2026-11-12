@@ -83,15 +83,24 @@ class SQLiteDB(AsyncDB):
             # and no stale implicit transaction can make a later BEGIN fail. Grouped writes use
             # transaction(), which still issues an explicit BEGIN.
             connection = await aiosqlite.connect(self._path, isolation_level=None)
-            connection.row_factory = aiosqlite.Row
-            for pragma in (
-                "PRAGMA journal_mode=WAL",
-                "PRAGMA synchronous=NORMAL",
-                "PRAGMA busy_timeout=5000",
-                "PRAGMA foreign_keys=ON",
-            ):
-                async with connection.execute(pragma):
-                    pass
+            try:
+                connection.row_factory = aiosqlite.Row
+                for pragma in (
+                    "PRAGMA journal_mode=WAL",
+                    "PRAGMA synchronous=NORMAL",
+                    "PRAGMA busy_timeout=5000",
+                    "PRAGMA foreign_keys=ON",
+                ):
+                    async with connection.execute(pragma):
+                        pass
+            except BaseException:
+                # `aiosqlite.connect()` already started its worker thread, and that thread is not a
+                # daemon: it sits on its queue until close() hands it the stop sentinel. A file that
+                # is not a database fails here, before `self._conn` exists, so a later close() has
+                # nothing to close and the interpreter never exits.
+                with contextlib.suppress(Exception):
+                    await connection.close()
+                raise
             self._conn = connection
         return self._conn
 

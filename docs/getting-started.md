@@ -103,7 +103,21 @@ raven start
 
 The gateway listens on `http://localhost:18888` by default.
 
-### 3. Install as a Service
+### 3. Create the admin account
+
+Nothing hands out the admin role over HTTP: registration writes `role='user'`, and the route that
+changes roles needs an admin. One command writes the first admin into `auth_users` and revokes any
+sessions that still carry the old role:
+
+```bash
+raven security promote operator --password -
+```
+
+`--password -` reads the password from stdin instead of the command line. No restart is needed — sign
+in with `POST /api/auth/login` and `/api/admin/*` is reachable. `raven doctor` reports the count in its
+`Admin Accounts` row.
+
+### 4. Install as a Service
 
 ```bash
 raven service install
@@ -113,7 +127,7 @@ raven service start
 `install` registers and starts the service for your platform (Windows needs `pywin32` and an
 elevated shell). Per-platform details: [CLI reference](cli.md).
 
-### 4. Send a Message
+### 5. Send a Message
 
 ```bash
 raven agent --message "Hello! What can you do?"

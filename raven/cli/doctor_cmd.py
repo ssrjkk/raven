@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from typing import Any
 
 import click
 from loguru import logger
@@ -160,6 +161,62 @@ def _training_posture_row() -> tuple[str, str]:
     )
 
 
+def admin_account_check() -> tuple[str, str]:
+    """Whether anybody can sign in as admin at all.
+
+    Registration writes role='user' and `/api/auth/users` — the only route that hands out roles — needs
+    the admin role to answer, so a fresh install has no path to an admin account and the admin surface
+    is reachable only by the raw `WEB_SECRET_KEY`. This row is the count that gap leaves behind.
+    """
+    import asyncio
+    from pathlib import Path
+
+    from raven.core.asyncdb import is_postgres_dsn
+    from raven.core.auth.store import AuthStore
+
+    db = str(get_settings().resolved_db_path)
+    if not is_postgres_dsn(db) and not Path(db).exists():
+        return (
+            "Admin Accounts",
+            f"[!] no database at {db} — raven security promote <name> --password creates the first admin",
+        )
+
+    async def _read() -> list[Any]:
+        store = AuthStore(db)
+        try:
+            return await store.list_users()
+        finally:
+            await store.close()
+
+    try:
+        users = asyncio.run(_read())
+    except Exception as exc:  # a diagnostic must not abort the report it is one row of
+        return ("Admin Accounts", f"[ERR] auth_users could not be read: {type(exc).__name__}: {exc}")
+
+    # authenticate() refuses an empty password_hash and a deactivated account, so an admin row that has
+    # either is a decoy: the table says admin and every login still gets 401.
+    admins = [u for u in users if u.role.value == "admin"]
+    reachable = [u for u in admins if u.is_active and u.password_hash]
+    if reachable:
+        dead = len(admins) - len(reachable)
+        names = ", ".join(sorted(u.username for u in reachable))
+        return (
+            "Admin Accounts",
+            f"[OK] {len(reachable)} reachable ({names})" + (f", {dead} that cannot log in" if dead else ""),
+        )
+    if admins:
+        return (
+            "Admin Accounts",
+            f"[!] {len(admins)} admin row(s) none of which can log in (no password or deactivated) "
+            "— raven security promote <name> --password",
+        )
+    return (
+        "Admin Accounts",
+        f"[!] 0 admin accounts of {len(users)} — login cannot reach /api/admin; "
+        "raven security promote <name> --password",
+    )
+
+
 def _plugin_posture_row() -> tuple[str, str]:
     """Which directory a user plugin has to be dropped in to load, and what is waiting there.
 
@@ -281,6 +338,7 @@ def doctor():
 
     checks.append(_plugin_posture_row())
     checks.extend(experimental_model_checks())
+    checks.append(admin_account_check())
     checks.extend(security_posture_checks())
 
     table = Table(show_header=False)

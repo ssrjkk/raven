@@ -113,8 +113,28 @@ database close instead of being cut off. It waits up to 40 s before reporting a 
 Run security operations.
 
 ```bash
-raven security audit [--deep]
+raven security audit [--deep] [--fix]
+raven security promote USERNAME [--password VALUE|-] [--activate]
 ```
+
+`promote` is how an install gets its first admin. `POST /api/auth/register` writes `role='user'`, and
+`/api/auth/users` — the route that hands out roles — answers only to an admin, so a fresh database has
+no account whose login grants the admin role and the admin surface is reachable only with the raw
+`WEB_SECRET_KEY`. `promote` writes the role into `auth_users` itself:
+
+| Situation | What `promote` does |
+| --- | --- |
+| no such account | creates it as `admin` when `--password` is given; otherwise refuses with exit code 1 |
+| account has no password | refuses unless `--password` sets one: `authenticate()` rejects an empty `password_hash`, so the role alone would be a decoy |
+| account is deactivated | refuses unless `--activate` switches it back on |
+| role is `user` and a password is set | sets `admin` and revokes the account's live sessions |
+| already a reachable admin | changes nothing and leaves its sessions alone |
+
+Revoking belongs to promoting: `auth_sessions` stores the role as it was at login, so a session minted
+before the change keeps answering `403` until its 24 h TTL lapses. A password set here goes through the
+same policy `/api/auth/register` enforces (`check_password_strength` in `raven/core/auth/password.py`).
+`--password -` reads the value from stdin, keeping it out of the shell history and the process list.
+`raven doctor` prints the outcome as the `Admin Accounts` row.
 
 ### `raven tui`
 

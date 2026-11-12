@@ -1,4 +1,36 @@
-from raven.core.auth.password import hash_password, verify_password
+import pytest
+
+from raven.core.auth.password import check_password_strength, hash_password, verify_password
+
+
+class TestPasswordStrength:
+    """One policy, one definition: /api/auth/register and `raven security promote` both read it."""
+
+    def test_a_credential_that_meets_every_rule_passes(self):
+        assert check_password_strength("Sup3rSecret!") is None
+
+    @pytest.mark.parametrize(
+        "weak, fragment",
+        [
+            ("Ab1!", "at least 8 characters"),
+            ("alllower1!", "uppercase"),
+            ("ALLUPPER1!", "lowercase"),
+            ("NoDigits!!", "digit"),
+            ("NoSpecialAb1", "special character"),
+        ],
+    )
+    def test_each_rule_names_itself(self, weak, fragment):
+        with pytest.raises(ValueError, match=fragment):
+            check_password_strength(weak)
+
+    def test_the_registration_route_refuses_what_the_function_refuses(self):
+        from pydantic import ValidationError
+
+        from raven.core.admin.models import AuthRegisterRequest
+
+        with pytest.raises(ValidationError, match="special character"):
+            AuthRegisterRequest(username="operator", password="NoSpecialAb1")
+        assert AuthRegisterRequest(username="operator", password="Sup3rSecret!").password == "Sup3rSecret!"
 
 
 class TestHashPassword:

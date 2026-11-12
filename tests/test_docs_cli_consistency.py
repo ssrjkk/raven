@@ -1,4 +1,4 @@
-"""Docs must not reference CLI commands that no longer exist."""
+"""Docs must not claim what the code does not do: commands it lacks, checks it never runs."""
 
 from __future__ import annotations
 
@@ -55,3 +55,17 @@ def test_docs_cover_core_commands() -> None:
 @pytest.mark.parametrize("name", ["start", "stop", "status", "doctor", "onboard", "init", "service", "tui"])
 def test_core_commands_still_registered(name: str) -> None:
     assert name in _cli_commands()
+
+
+def test_security_md_counts_the_checks_the_audit_actually_runs() -> None:
+    """SECURITY.md advertises `raven security audit` by its check count, and the count it carried (23)
+    was one more than the list the code builds (22) — a reader looking for the missing check would find
+    no such control. The number is read out of the sentence and compared with what is produced."""
+    from raven.core.security.security_audit import SecurityAudit
+
+    text = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    match = re.search(r"(\d+) стандартных", text)
+    assert match, "SECURITY.md no longer states the standard check count, so this guard has no anchor"
+    # The `--deep` count is not gated here: building that list probes Docker and the dependency tree,
+    # measured at 16.56 s, which is a CI job rather than a unit test.
+    assert int(match.group(1)) == len(SecurityAudit().run_all(deep=False))

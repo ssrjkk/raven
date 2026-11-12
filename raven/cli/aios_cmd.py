@@ -37,6 +37,7 @@ def create_aios_app() -> FastAPI:
         input_sanitize_middleware,
         rate_limit_middleware,
         request_id_middleware,
+        security_headers_middleware,
     )
     from raven.core.watermark import install_fastapi_watermark
 
@@ -47,6 +48,10 @@ def create_aios_app() -> FastAPI:
     app.middleware("http")(input_sanitize_middleware)
     app.middleware("http")(auth_middleware)
     app.middleware("http")(error_handler_middleware)
+    # Registered last so it is the outermost layer: the gateway binds this app to a port the browser
+    # can reach, and headers have to be on the response the error handler produces, not only the ones
+    # a route returns itself.
+    app.middleware("http")(security_headers_middleware)
     app.include_router(get_aios_adapter().get_bridge_router())
     init_auth_routes(app, str(settings.resolved_db_path))
     return app

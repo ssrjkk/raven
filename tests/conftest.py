@@ -104,6 +104,22 @@ def _isolate_token_manager() -> Iterator[None]:
 
 
 @pytest.fixture(scope="session", autouse=True)
+def _database_stays_out_of_the_repository(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
+    """`create_aios_app()` binds an AuthStore at `settings.resolved_db_path` on startup, and that bind
+    lands after the per-test `token_manager.bind(None)`, so the ordering race cannot be won: every
+    bearer session issued by `tests/test_aios_bridge.py` and `tests/test_aios_e2e.py` was written into
+    the operator's real `data/raven.db`. Measured across one full 16-stage gate: `auth_sessions` went
+    451 -> 527 rows (+76: `bridge-admin` +66, `e2e-admin` +8, `e2e-user` +2) and the table that decides
+    whether a caller is revoked was 100% test residue. Redirecting `settings.db_path` for the whole
+    run puts every consumer of `resolved_db_path` -- auth, tasks, routines, monitors, the data dir the
+    outbox and sessions live in -- under this run's temp directory, which is how the log is isolated.
+    """
+    db_dir = tmp_path_factory.mktemp("runtime-db")
+    settings.db_path = str(db_dir / "raven.db")
+    yield
+
+
+@pytest.fixture(scope="session", autouse=True)
 def _runtime_logs_stay_out_of_the_repository(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
     """Eleven product entry points call `setup_logging()` with no path, which resolves to
     `settings.resolved_log_file` — the repository's own `data/raven.log`. Every test that ran one
@@ -120,6 +136,38 @@ def _runtime_logs_stay_out_of_the_repository(tmp_path_factory: pytest.TempPathFa
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_DB = _REPO_ROOT / "data" / "raven.db"
+
+
+def _repo_db_state() -> tuple[Any, ...]:
+    """What a write to the repository's own database changes: the main file's size and mtime, plus the
+    size of its write-ahead log, which a WAL-mode transaction appends to before any checkpoint."""
+    state: list[Any] = []
+    for path in (_REPO_DB, Path(f"{_REPO_DB}-wal")):
+        try:
+            stat = path.stat()
+        except OSError:
+            state.append(None)
+            continue
+        state.append((stat.st_size, stat.st_mtime_ns))
+    return tuple(state)
+
+
+@pytest.fixture(autouse=True)
+def _operator_database_is_not_a_test_fixture() -> Iterator[None]:
+    """Fail the test that writes the operator's database, naming it.
+
+    The session redirect is what stops this happening; this is what proves it stopped, because a test
+    that hands a repository path straight to a store bypasses `settings.db_path` entirely.
+    """
+    before = _repo_db_state()
+    yield
+    after = _repo_db_state()
+    if after != before:
+        pytest.fail(
+            f"this test modified the operator's database at {_REPO_DB} -- point it at a tmp_path "
+            "database instead of the repository one"
+        )
 
 
 def _tracked_top_level_entries() -> frozenset[str]:

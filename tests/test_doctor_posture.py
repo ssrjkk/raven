@@ -6,6 +6,7 @@ says one thing and the code will do another, [ERR] means the value cannot be loa
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -161,3 +162,79 @@ def test_a_probe_that_throws_does_not_blank_the_report(monkeypatch: pytest.Monke
     monkeypatch.setattr(heretic_model, "status", _boom)
     row = doctor_cmd.experimental_model_checks()[0]
     assert row[0] == MODEL_ROW and row[1].startswith("[ERR]") and "no disk here" in row[1]
+
+
+ADMIN_ROW = "Admin Accounts"
+
+
+async def _seed(db_path: Path, *accounts: tuple[str, str, str, bool]) -> None:
+    """Write (username, password, role, is_active) rows exactly as the product's store would."""
+    from raven.core.auth.store import AuthStore
+
+    store = AuthStore(str(db_path))
+    try:
+        for username, password, role, active in accounts:
+            await store.create_user(username, password, role=role)
+            if not active:
+                await store.set_active(username, False)
+    finally:
+        await store.close()
+
+
+def _admin_row(db_path: Path) -> str:
+    doctor_cmd.get_settings().db_path = str(db_path)
+    label, value = doctor_cmd.admin_account_check()
+    assert label == ADMIN_ROW
+    return value
+
+
+def test_no_database_says_who_creates_the_first_admin_and_does_not_create_it(tmp_path: Path) -> None:
+    absent = tmp_path / "data" / "raven.db"
+    row = _admin_row(absent)
+    assert row.startswith("[!]") and "raven security promote" in row
+    assert not absent.exists(), "a diagnostic must not mint the operator's database"
+    assert not absent.parent.exists()
+
+
+def test_zero_admin_accounts_names_the_surface_login_cannot_reach(tmp_path: Path) -> None:
+    db = tmp_path / "auth.db"
+    asyncio.run(_seed(db, ("alice", "Sup3rSecret!", "user", True), ("bob", "Sup3rSecret!", "viewer", True)))
+    row = _admin_row(db)
+    assert row.startswith("[!]") and "0 admin accounts of 2" in row and "/api/admin" in row
+
+
+def test_an_admin_with_no_password_is_not_reported_as_reachable(tmp_path: Path) -> None:
+    db = tmp_path / "auth.db"
+    asyncio.run(_seed(db, ("svc", "", "admin", True)))
+    row = _admin_row(db)
+    assert row.startswith("[!]") and "none of which can log in" in row and "raven security promote" in row
+
+
+def test_a_deactivated_admin_is_equally_unreachable(tmp_path: Path) -> None:
+    db = tmp_path / "auth.db"
+    asyncio.run(_seed(db, ("root", "Sup3rSecret!", "admin", False)))
+    row = _admin_row(db)
+    assert row.startswith("[!]") and "1 admin row(s)" in row
+
+
+def test_a_reachable_admin_is_named(tmp_path: Path) -> None:
+    db = tmp_path / "auth.db"
+    asyncio.run(_seed(db, ("operator", "Sup3rSecret!", "admin", True)))
+    row = _admin_row(db)
+    assert row.startswith("[OK]") and "1 reachable (operator)" in row
+
+
+def test_both_numbers_are_reported_when_one_admin_is_real_and_one_is_not(tmp_path: Path) -> None:
+    db = tmp_path / "auth.db"
+    asyncio.run(
+        _seed(db, ("operator", "Sup3rSecret!", "admin", True), ("svc", "", "admin", True)),
+    )
+    row = _admin_row(db)
+    assert row.startswith("[OK]") and "1 reachable (operator)" in row and "1 that cannot log in" in row
+
+
+def test_an_unreadable_database_is_an_error_row(tmp_path: Path) -> None:
+    db = tmp_path / "auth.db"
+    db.write_bytes(b"this is not a sqlite file at all")
+    row = _admin_row(db)
+    assert row.startswith("[ERR]") and "auth_users could not be read" in row
