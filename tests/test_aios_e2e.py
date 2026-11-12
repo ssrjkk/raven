@@ -68,7 +68,8 @@ class TestAdminBootstrap:
         resp = client.post("/api/auth/register", json={"username": name, "password": self.PASSWORD})
         assert resp.status_code == 200, resp.text
         assert resp.json()["role"] == "user", "registration is not a path to admin"
-        return resp.json()["token"]
+        token: str = resp.json()["token"]
+        return token
 
     def test_a_registered_account_cannot_reach_the_route_that_hands_out_roles(self, client: TestClient) -> None:
         token = self._register(client, f"bootstrap-{uuid4().hex[:8]}")
@@ -85,7 +86,8 @@ class TestAdminBootstrap:
         old_token = self._register(client, name)
 
         def who_am_i(token: str) -> dict[str, str]:
-            return client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).json()
+            body: dict[str, str] = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).json()
+            return body
 
         assert who_am_i(old_token)["user_id"] == f"user:{name}", "the session is live before the promotion"
 

@@ -6,8 +6,8 @@ from raven.core.auth.password import check_password_strength, hash_password, ver
 class TestPasswordStrength:
     """One policy, one definition: /api/auth/register and `raven security promote` both read it."""
 
-    def test_a_credential_that_meets_every_rule_passes(self):
-        assert check_password_strength("Sup3rSecret!") is None
+    def test_a_credential_that_meets_every_rule_passes(self) -> None:
+        check_password_strength("Sup3rSecret!")  # any rule it fails raises ValueError
 
     @pytest.mark.parametrize(
         "weak, fragment",
