@@ -199,7 +199,9 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   green over the same commit because it runs `--quick` and never reaches the stage's tests. The cap is
   now the named `MYPY_TIMEOUT` in `scripts/check_all.py` and the test asserts against it, so it checks
   that the stage passes the cap it declares rather than checking a literal: `timeout=300` written back
-  over the name fails it (1 failed), and the whole file is green again (49 passed).
+  over the name fails it (1 failed), and the whole file is green again (49 passed). The same restatement
+  was still live for two more caps — the full suite's 1800s and the per-component 600s fallback — now
+  `FULL_TESTS_TIMEOUT` and `DEFAULT_COMPONENT_TIMEOUT`, so nothing in the gate has a number a test repeats.
 - Expired credentials were never deleted from the table that decides whether a caller is revoked.
   `auth_sessions` expiry was consulted only when a row was read, so an abandoned login left its row
   forever and the table grew with every login for the whole life of the database: measured on a snapshot

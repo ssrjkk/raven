@@ -658,6 +658,15 @@ def _failure_detail(summary: str, output: str, returncode: int, stderr: str) -> 
     return "\n".join(tail[-12:]) or f"exit code {returncode}, no output captured"
 
 
+# Every stage cap is a named constant because `tests/test_check_all_gates.py` asserts that a stage
+# passes the cap it declares. A cap written inline next to a test that repeats the number by hand is
+# a landmine: raising the mypy cap from 300s to 600s failed both Linux test jobs on the next push for
+# no reason except that the old number was restated in a test, and `Check (Windows)` stayed green over
+# the same commit because it runs `--quick` and never reaches those tests.
+FULL_TESTS_TIMEOUT = 1800
+DEFAULT_COMPONENT_TIMEOUT = 600
+
+
 def check_component(name: str) -> CheckResult:
     cfg = COMPONENTS[name]
     _print_section(f"Tests: {name} -- {cfg['desc']}")
@@ -684,7 +693,7 @@ def check_component(name: str) -> CheckResult:
     if "mark" in cfg:
         cmd.extend(["-m", cfg["mark"]])
 
-    r = _run(cmd, timeout=int(cfg.get("timeout", 600)))
+    r = _run(cmd, timeout=int(cfg.get("timeout", DEFAULT_COMPONENT_TIMEOUT)))
     dt = time.time() - t0
 
     output = _strip_ansi(r.stdout + r.stderr)
@@ -750,7 +759,7 @@ def check_full_tests() -> CheckResult:
         "ignore::RuntimeWarning",
     ]
 
-    r = _run(cmd, timeout=1800)
+    r = _run(cmd, timeout=FULL_TESTS_TIMEOUT)
     dt = time.time() - t0
 
     output = _strip_ansi(r.stdout + r.stderr)
