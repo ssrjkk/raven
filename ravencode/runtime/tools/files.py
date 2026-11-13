@@ -148,7 +148,7 @@ async def verify_file(path: str) -> str:
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
                     )
-                except FileNotFoundError:
+                except OSError:
                     continue
                 try:
                     out, err = await asyncio.wait_for(proc.communicate(), timeout=60)
@@ -167,7 +167,7 @@ async def verify_file(path: str) -> str:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-        except FileNotFoundError:
+        except OSError:
             pass
         else:
             out, err = await asyncio.wait_for(proc.communicate(), timeout=60)

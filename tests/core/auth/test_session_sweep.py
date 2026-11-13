@@ -67,11 +67,19 @@ async def _insert_live_session(store: AuthStore, user_id: str) -> str:
     return token
 
 
+async def _account(store: AuthStore, username: str) -> str:
+    """A session is only readable while its account row is, so a seeded token needs a real user."""
+    await store.create_user(username, "pw")
+    return f"user:{username}"
+
+
 @pytest.mark.asyncio
 async def test_expired_sessions_are_dropped_when_the_store_opens(auth_store, db_path):
     seed = auth_store()
-    expired = await seed.create_session("user:gone", "user", ttl_seconds=-1)
-    live = await seed.create_session("user:here", "user", ttl_seconds=3600)
+    gone = await _account(seed, "gone")
+    here = await _account(seed, "here")
+    expired = await seed.create_session(gone, "user", ttl_seconds=-1)
+    live = await seed.create_session(here, "user", ttl_seconds=3600)
     await seed.close()
 
     reopened = auth_store(db_path)
@@ -111,7 +119,8 @@ async def test_issuing_a_session_sweeps_so_a_never_restarting_server_stays_bound
     store = auth_store()
     for i in range(5):
         await _insert_expired_session(store, i)
-    live = await store.create_session("user:spin", "user", ttl_seconds=3600)
+    spin = await _account(store, "spin")
+    live = await store.create_session(spin, "user", ttl_seconds=3600)
     assert await _count(store, "auth_sessions") == 1
     assert (await store.get_session(live))["user_id"] == "user:spin"
 
@@ -121,7 +130,8 @@ async def test_purge_reports_what_it_removed(auth_store):
     store = auth_store()
     for i in range(3):
         await _insert_expired_session(store, i)
-    live = await _insert_live_session(store, "user:keep")
+    keep = await _account(store, "keep")
+    live = await _insert_live_session(store, keep)
     removed = await store.purge_expired()
     assert removed["sessions"] == 3
     assert removed["email_tokens"] == 0

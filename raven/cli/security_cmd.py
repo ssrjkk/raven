@@ -100,6 +100,10 @@ async def _promote_into(store: AuthStore, username: str, password: str | None, a
         )
 
     changes: list[str] = []
+    # Counted before the writes: auth_sessions stores the role as it was at login, and both
+    # update_role() and update_password() drop the sessions they invalidate as they go, so the
+    # number has to be read while the rows are still there.
+    revoked = await store.count_user_sessions(user.id)
     if user.role.value != admin:
         await store.update_role(username, admin)
         changes.append(f"role {user.role.value} -> {admin}")
@@ -114,9 +118,6 @@ async def _promote_into(store: AuthStore, username: str, password: str | None, a
         console.print(f"[OK] {username} is already a reachable admin — nothing changed, sessions left alone")
         return 0
 
-    # auth_sessions stores the role as it was at login, so a session minted before the promotion keeps
-    # saying "user"; revoking is what makes the new role apply without waiting out a 24 h TTL.
-    revoked = await store.revoke_all_user_sessions(user.id)
     changes.append(f"{revoked} session(s) revoked")
     console.print(f"[green]promoted[/green] {username}: {', '.join(changes)}")
     return 0

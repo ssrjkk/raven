@@ -335,6 +335,15 @@ class Database:
             )
         return result
 
+    async def get_session_owner(self, session_id: str) -> str | None:
+        """Who a session belongs to, or None when there is no such session.
+
+        Read-only on purpose: `get_or_create_session` would invent the row a caller is only
+        trying to prove the ownership of.
+        """
+        row = await self._fetchone("SELECT user_id FROM sessions WHERE id = ?", (session_id,))
+        return row["user_id"] if row else None
+
     async def save_plugin_state(self, plugin_id: str, key: str, value: str) -> None:
         await self._write(
             "INSERT OR REPLACE INTO plugin_state (plugin_id, key, value) VALUES (?, ?, ?)",

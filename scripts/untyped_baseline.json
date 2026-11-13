@@ -145,7 +145,7 @@
  "raven/core/spa.py": 1,
  "raven/core/sse.py": 12,
  "raven/core/sse_api.py": 1,
- "raven/core/status_api.py": 10,
+ "raven/core/status_api.py": 9,
  "raven/core/store.py": 1,
  "raven/core/task_engine/planner.py": 1,
  "raven/core/task_engine/runner.py": 1,

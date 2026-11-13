@@ -10,29 +10,25 @@ from raven.core.api_errors import internal_error
 from raven.unique.collaboration import CollaborationManager, TextChange, WebSocketManager
 
 
-def _secure_mode() -> bool:
-    from raven.core.config import settings
+async def _ws_identity(websocket: WebSocket) -> str | None:
+    """Resolve the socket's caller from `?token=`, the credential the HTTP gate accepts.
 
-    secret = settings.web_secret_key.get_secret_value() if settings.web_secret_key else ""
-    return bool(secret)
-
-
-async def _ws_authenticated(websocket: WebSocket) -> bool:
+    The identity must come from the token: a `user_id` claimed in the first message is whatever
+    the caller says it is, and it ends up stamped on every change and cursor it broadcasts.
+    """
     from raven.core.auth.auth_handler import auth_handler
     from raven.core.config import settings
 
     token = websocket.query_params.get("token", "")
     if not token:
-        return False
+        return None
     secret = settings.web_secret_key.get_secret_value()
     if secret and hmac.compare_digest(token, secret):
-        return True
-    try:
-        payload = await auth_handler.decode_token(token)
-    except Exception as e:
-        logger.debug("[collab] token decode failed: {}", e)
-        return False
-    return payload is not None
+        return "admin"
+    payload = await auth_handler.decode_token(token)
+    if payload is None:
+        return None
+    return str(payload["sub"])
 
 
 _manager: CollaborationManager | None = None
@@ -193,15 +189,12 @@ def create_collab_router() -> APIRouter:
 
     @router.websocket("/sessions/{session_id}/ws")
     async def collab_websocket(session_id: str, websocket: WebSocket):
-        if _secure_mode() and not await _ws_authenticated(websocket):
+        user_id = await _ws_identity(websocket)
+        if user_id is None:
             await websocket.accept()
             await websocket.close(code=1008, reason="Authentication required")
             return
         await websocket.accept()
-        user_id = "anon"
-        msg = await websocket.receive_json()
-        if msg.get("kind") == "auth" and msg.get("user_id"):
-            user_id = msg["user_id"]
         wsm = _get_ws_manager()
         await wsm.connect(session_id, user_id, websocket)
         mgr = _get_manager()

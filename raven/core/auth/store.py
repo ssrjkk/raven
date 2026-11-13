@@ -51,6 +51,9 @@ CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at 
 _TOKEN_TTL_SECONDS = 86400
 _PURGE_SESSIONS = "DELETE FROM auth_sessions WHERE expires_at <= ?"
 _PURGE_EMAIL_TOKENS = "DELETE FROM auth_email_tokens WHERE expires_at <= ?"
+# `create_user` mints every local id as f"user:{username}", so a session whose user_id lacks that
+# prefix is an identity the table was never told about: an OAuth subject.
+_LOCAL_ID_PREFIX = "user:"
 
 
 async def _purge_expired_on(connection: AsyncDB, now: float) -> dict[str, int]:
@@ -95,7 +98,7 @@ class AuthStore(BaseStore):
         self, username: str, password: str = "", display_name: str = "", email: str = "", role: str = "user"
     ) -> User:
         now = time.time()
-        uid = f"user:{username}"
+        uid = f"{_LOCAL_ID_PREFIX}{username}"
         pwd_hash = hash_password(password) if password else ""
         db = await self._conn()
         async with db.transaction():
@@ -167,6 +170,9 @@ class AuthStore(BaseStore):
         now = time.time()
         await self._execute("UPDATE auth_users SET role = ?, updated_at = ? WHERE username = ?", (role, now, username))
         await self._commit()
+        # The role a token carries was copied from the account when it was issued, so a promotion
+        # or a demotion is invisible to the tokens already out there until they are dropped.
+        await self.revoke_all_user_sessions(f"{_LOCAL_ID_PREFIX}{username}")
 
     async def update_password(self, username: str, password: str):
         now = time.time()
@@ -175,6 +181,9 @@ class AuthStore(BaseStore):
             "UPDATE auth_users SET password_hash = ?, updated_at = ? WHERE username = ?", (pwd_hash, now, username)
         )
         await self._commit()
+        # Changing the password is what an operator does when a credential leaked; leaving the
+        # sessions issued under the old one alive for another `_TOKEN_TTL_SECONDS` would not end the leak.
+        await self.revoke_all_user_sessions(f"{_LOCAL_ID_PREFIX}{username}")
 
     async def set_active(self, username: str, active: bool):
         now = time.time()
@@ -228,8 +237,31 @@ class AuthStore(BaseStore):
         )
         return row is not None
 
+    async def _ensure_external_identity(self, user_id: str, role: str) -> None:
+        """Give an identity that arrives from outside the table a row of its own.
+
+        An OAuth subject used to be issued a token with nothing behind it: the session could not be
+        revoked by deactivating anyone, because there was nobody to deactivate, and `get_session`
+        had to treat a missing account row as normal — which is the same shape as a local account
+        that has been deleted.
+        """
+        if user_id.startswith(_LOCAL_ID_PREFIX):
+            return
+        if await self.get_user_by_id(user_id):
+            return
+        now = time.time()
+        db = await self._conn()
+        async with db.transaction():
+            await db.execute(
+                "INSERT INTO auth_users "
+                "(id, username, display_name, email, email_verified, role, password_hash, api_tokens, "
+                "is_active, created_at, updated_at) VALUES (?, ?, ?, '', 0, ?, '', '[]', 1, ?, ?)",
+                (user_id, user_id, user_id, role, now, now),
+            )
+
     async def create_session(self, user_id: str, role: str, ttl_seconds: int = _TOKEN_TTL_SECONDS) -> str:
         """Issue a bearer token and store only its digest, so a database reader cannot replay it."""
+        await self._ensure_external_identity(user_id, role)
         token = secrets.token_urlsafe(32)
         now = time.time()
         db = await self._conn()
@@ -253,9 +285,9 @@ class AuthStore(BaseStore):
         if row["expires_at"] <= time.time():
             await self.revoke_session(token)
             return None
-        # A session for a user the table knows must die with deactivation; an identity that only
-        # exists in the session itself (OAuth callback) has no account row to consult.
-        if row["user_row"] is not None and not row["is_active"]:
+        # A token is only as live as the account behind it. `create_session` guarantees the row
+        # exists for every identity it issues to, so a missing row here means the account is gone.
+        if row["user_row"] is None or not row["is_active"]:
             return None
         return {
             "user_id": row["user_id"],
@@ -272,3 +304,7 @@ class AuthStore(BaseStore):
         rowcount = await self._execute("DELETE FROM auth_sessions WHERE user_id = ?", (user_id,))
         await self._commit()
         return rowcount or 0
+
+    async def count_user_sessions(self, user_id: str) -> int:
+        row = await self._fetchone("SELECT COUNT(*) AS n FROM auth_sessions WHERE user_id = ?", (user_id,))
+        return int(row["n"]) if row else 0

@@ -11,6 +11,20 @@ from raven.core.config import settings
 console = Console()
 
 
+def _headers() -> dict[str, str]:
+    """The operator credential, when this install has one.
+
+    Every `flow` subcommand talks to a daemon that answers 401 to an unauthenticated call, so a
+    command that skips this header does not list nothing — it fails to ask.
+    """
+    key = settings.web_secret_key.get_secret_value() if settings.web_secret_key else ""
+    return {"X-Raven-Key": key} if key else {}
+
+
+def _daemon_url(path: str) -> str:
+    return f"http://localhost:{settings.ravenflow_port}{path}"
+
+
 @click.group(name="flow")
 def flow_group():
     """RavenFlow — AI workflow orchestrator & gateway"""
@@ -42,12 +56,15 @@ def flow_ask(message: str, channel: str, mode: str, session: str):
     async def _ask():
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                f"http://localhost:{settings.ravenflow_port}/api/agent",
+                _daemon_url("/api/agent"),
                 json={"message": message, "channel": channel, "mode": mode, "session_id": session},
+                headers=_headers(),
                 timeout=120,
             )
             data = resp.json()
-            if "error" in data:
+            if resp.status_code >= 400:
+                console.print(f"[red]Error: HTTP {resp.status_code} {data.get('error', data)}[/red]")
+            elif "error" in data:
                 console.print(f"[red]Error: {data['error']}[/red]")
             else:
                 console.print(data.get("response", ""))
@@ -61,7 +78,10 @@ def flow_sessions():
 
     async def _list():
         async with httpx.AsyncClient() as client:
-            resp = await client.get(f"http://localhost:{settings.ravenflow_port}/api/sessions", timeout=10)
+            resp = await client.get(_daemon_url("/api/sessions"), headers=_headers(), timeout=10)
+            if resp.status_code >= 400:
+                console.print(f"[red]Error: HTTP {resp.status_code} {resp.json().get('error', '')}[/red]")
+                return
             data = resp.json()
             mgr_sessions = data.get("sessions", [])
             flow_sessions = data.get("flow_sessions", [])

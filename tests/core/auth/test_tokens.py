@@ -56,6 +56,7 @@ class TestTokenManagerStore:
         await s.close()
 
     async def test_session_survives_a_new_manager(self, store: AuthStore):
+        await store.create_user("alice", "Secret123!")
         first = TokenManager()
         first.bind(store)
         token = await first.create_token("user:alice", "user")
@@ -97,14 +98,37 @@ class TestTokenManagerStore:
         assert await store.get_session(t1) is None
         assert await store.get_session(t2) is None
 
-    async def test_unknown_identity_without_account_row_still_valid(self, store: AuthStore):
-        # OAuth callbacks mint a session for an identity that has no auth_users row.
+    async def test_an_oauth_identity_gets_a_row_that_can_be_deactivated(self, store: AuthStore):
+        """The callback used to mint a token for an identity the table had never heard of, which left
+        it nothing to deactivate and forced `get_session` to treat a missing account row as normal."""
         token = await store.create_session("oauth:github:42", "user")
-        data = await store.get_session(token)
-        assert data is not None
-        assert data["user_id"] == "oauth:github:42"
+        assert await store.get_user_by_id("oauth:github:42") is not None
+        assert await store.get_session(token) is not None
+        await store.set_active("oauth:github:42", False)
+        assert await store.get_session(token) is None
+
+    async def test_a_session_whose_account_row_was_removed_is_refused(self, store: AuthStore):
+        await store.create_user("alice", "Secret123!")
+        token = await store.create_session("user:alice", "user")
+        db = await store._conn()
+        await db.execute("DELETE FROM auth_users WHERE id = ?", ("user:alice",))
+        await db.commit()
+        assert await store.get_session(token) is None
+
+    async def test_a_role_change_revokes_the_sessions_that_carry_the_old_role(self, store: AuthStore):
+        await store.create_user("alice", "Secret123!", role="admin")
+        token = await store.create_session("user:alice", "admin")
+        await store.update_role("alice", "user")
+        assert await store.get_session(token) is None
+
+    async def test_a_password_change_revokes_the_sessions_issued_under_the_old_one(self, store: AuthStore):
+        await store.create_user("alice", "Secret123!")
+        token = await store.create_session("user:alice", "user")
+        await store.update_password("alice", "Sup3rSecret!")
+        assert await store.get_session(token) is None
 
     async def test_created_at_and_expiry_are_reported(self, store: AuthStore):
+        await store.create_user("alice", "Secret123!")
         before = time.time()
         token = await store.create_session("user:alice", "user", ttl_seconds=60)
         data = await store.get_session(token)

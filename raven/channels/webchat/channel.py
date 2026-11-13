@@ -6,7 +6,7 @@ import hmac
 import json
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any
+from typing import NamedTuple
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from loguru import logger
 
 from raven.channels.base import BaseChannel
+from raven.core.auth.models import Role
 from raven.core.canvas import canvas_manager
 from raven.core.db import Database
 from raven.core.llm.queue import PRIORITY_HIGH
@@ -21,7 +22,7 @@ from raven.core.models import IncomingMessage, Message
 from raven.core.version import __version__
 from raven.core.watermark import canary_html_comment, install_fastapi_watermark
 
-_MAX_LINK_PROXY_BYTES = 10 * 1024 * 1024
+_MAX_PROXY_BYTES = 10 * 1024 * 1024
 
 _HTML_LIKE_MEDIA_TYPES = frozenset(
     {
@@ -34,29 +35,82 @@ _HTML_LIKE_MEDIA_TYPES = frozenset(
 )
 
 
-async def _validate_ws_token(token: str) -> dict[str, Any] | None:
+class Identity(NamedTuple):
+    user_id: str
+    role: str
+
+
+def _secure_endpoints_enabled() -> bool:
+    from raven.core.config import settings
+
+    secret = settings.web_secret_key.get_secret_value() if settings.web_secret_key else ""
+    return bool(secret)
+
+
+# The shared secret is a credential with no account behind it, and the WebSocket path has always
+# read it as the operator; the HTTP paths have to read it the same way or the two entry points
+# disagree about who owns the rows they write into one table.
+_OPERATOR_IDENTITY = Identity(user_id="admin", role=Role.ADMIN)
+# An install with no secret has no credential to check, so the port it binds is the trust boundary
+# and whoever reaches it is the operator. `web_user` stays the id those rows are filed under.
+_OPEN_INSTALL_IDENTITY = Identity(user_id="web_user", role=Role.ADMIN)
+
+
+async def identity_from_token(token: str) -> Identity | None:
+    """Who a bearer credential belongs to, or None when this install does not accept it."""
     from raven.core.auth.auth_handler import auth_handler
     from raven.core.config import settings
 
-    secret = settings.web_secret_key.get_secret_value()
-    if secret and hmac.compare_digest(token, secret):
-        return {"sub": "admin", "role": "admin"}
-    try:
-        return await auth_handler.decode_token(token)
-    except Exception as e:
-        logger.debug("[webchat] WS token decode failed: {}", e)
+    if not token:
         return None
+    secret = settings.web_secret_key.get_secret_value() if settings.web_secret_key else ""
+    if secret and hmac.compare_digest(token, secret):
+        return _OPERATOR_IDENTITY
+    try:
+        payload = await auth_handler.decode_token(token)
+    except Exception as e:
+        logger.debug("[webchat] token decode failed: {}", e)
+        return None
+    if payload is None:
+        return None
+    return Identity(user_id=str(payload.get("sub", "")), role=str(payload.get("role", Role.USER)))
 
 
-async def _authenticate_ws(websocket: WebSocket) -> dict[str, Any] | None:
+async def authorize(request: Request) -> Identity | None:
+    """Name the caller, or return None, which every route below answers with a 401.
+
+    These endpoints read and write the one `sessions` table the whole install shares, so a yes/no
+    credential check is not enough: a list has to be scoped to what the caller owns, and a new row
+    has to be stamped with who created it, or the first user through the port reads every other
+    user's conversation out of the history.
+    """
+    header = request.headers.get("authorization", "")
+    bearer = header[7:] if header.startswith("Bearer ") else ""
+    identity = await identity_from_token(bearer or request.query_params.get("token", ""))
+    if identity is not None:
+        return identity
+    if _secure_endpoints_enabled():
+        return None
+    return _OPEN_INSTALL_IDENTITY
+
+
+def _unauthorized() -> JSONResponse:
+    return JSONResponse(status_code=401, content={"error": "Authentication required"})
+
+
+def _not_found() -> JSONResponse:
+    return JSONResponse(status_code=404, content={"error": "Session not found"})
+
+
+async def _authenticate_ws(websocket: WebSocket) -> Identity | None:
     query_token = websocket.query_params.get("token", "")
     if query_token:
-        payload = await _validate_ws_token(query_token)
-        if payload is None:
+        identity = await identity_from_token(query_token)
+        if identity is None:
             await websocket.close(code=1008, reason="Authentication required")
             return None
         await websocket.accept()
-        return payload
+        return identity
 
     await websocket.accept()
     try:
@@ -71,43 +125,11 @@ async def _authenticate_ws(websocket: WebSocket) -> dict[str, Any] | None:
         await websocket.close(code=1008, reason="Authentication required")
         return None
     token = str(msg.get("token", "")) if isinstance(msg, dict) else ""
-    if not token:
+    identity = await identity_from_token(token)
+    if identity is None:
         await websocket.close(code=1008, reason="Authentication required")
         return None
-    payload = await _validate_ws_token(token)
-    if payload is None:
-        await websocket.close(code=1008, reason="Authentication required")
-        return None
-    return payload
-
-
-def _secure_endpoints_enabled() -> bool:
-    from raven.core.config import settings
-
-    secret = settings.web_secret_key.get_secret_value() if settings.web_secret_key else ""
-    return bool(secret)
-
-
-async def _authenticate_request(request: Request) -> bool:
-    from raven.core.auth.auth_handler import auth_handler
-    from raven.core.config import settings
-
-    token = request.headers.get("authorization", "")
-    if token.startswith("Bearer "):
-        token = token[7:]
-    if not token:
-        token = request.query_params.get("token", "")
-    if not token:
-        return False
-    secret = settings.web_secret_key.get_secret_value()
-    if secret and hmac.compare_digest(token, secret):
-        return True
-    try:
-        payload = await auth_handler.decode_token(token)
-    except Exception as e:
-        logger.debug("[webchat] token decode failed: {}", e)
-        return False
-    return payload is not None
+    return identity
 
 
 class WebChatChannel(BaseChannel):
@@ -133,9 +155,12 @@ class WebChatChannel(BaseChannel):
 
         @app.get("/api/sessions")
         async def list_sessions(request: Request):
-            if _secure_endpoints_enabled() and not await _authenticate_request(request):
-                return JSONResponse(status_code=401, content={"error": "Authentication required"})
+            caller = await authorize(request)
+            if caller is None:
+                return _unauthorized()
             sessions = await self._db.get_sessions()
+            if caller.role != Role.ADMIN:
+                sessions = [s for s in sessions if s.user_id == caller.user_id]
             return [
                 {
                     "id": s.id,
@@ -149,23 +174,30 @@ class WebChatChannel(BaseChannel):
 
         @app.post("/api/sessions")
         async def create_session(request: Request):
-            if _secure_endpoints_enabled() and not await _authenticate_request(request):
-                return JSONResponse(status_code=401, content={"error": "Authentication required"})
+            caller = await authorize(request)
+            if caller is None:
+                return _unauthorized()
             session_id = f"webchat:{uuid4().hex}:default"
-            session = await self._db.get_or_create_session(session_id, "webchat", "web_user")
+            session = await self._db.get_or_create_session(session_id, "webchat", caller.user_id)
             return {"id": session.id, "channel": session.channel}
 
         @app.delete("/api/sessions/{session_id}")
         async def delete_session(session_id: str, request: Request):
-            if _secure_endpoints_enabled() and not await _authenticate_request(request):
-                return JSONResponse(status_code=401, content={"error": "Authentication required"})
+            caller = await authorize(request)
+            if caller is None:
+                return _unauthorized()
+            if not await self._owns_session(session_id, caller):
+                return _not_found()
             await self._db.delete_session(session_id)
             return {"ok": True}
 
         @app.get("/api/messages/{session_id}")
         async def get_messages(session_id: str, request: Request):
-            if _secure_endpoints_enabled() and not await _authenticate_request(request):
-                return JSONResponse(status_code=401, content={"error": "Authentication required"})
+            caller = await authorize(request)
+            if caller is None:
+                return _unauthorized()
+            if not await self._owns_session(session_id, caller):
+                return _not_found()
             msgs = await self._db.get_session_messages(session_id, limit=50)
             return [
                 {
@@ -179,11 +211,11 @@ class WebChatChannel(BaseChannel):
 
         @app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):
-            payload = await _authenticate_ws(websocket)
-            if payload is None:
+            caller = await _authenticate_ws(websocket)
+            if caller is None:
                 return
-            websocket.state.user_id = payload.get("sub", "unknown")
-            websocket.state.role = payload.get("role", "user")
+            websocket.state.user_id = caller.user_id
+            websocket.state.role = caller.role
             client_id = str(uuid4().hex[:8])
             self._connections[client_id] = websocket
             session_id = f"webchat:{client_id}:default"
@@ -300,12 +332,12 @@ class WebChatChannel(BaseChannel):
         async def canvas_image_proxy(url: str, request: Request) -> Response:
             from raven.core.security.ssrf import safe_fetch_async
 
-            if _secure_endpoints_enabled() and not await _authenticate_request(request):
-                return JSONResponse(status_code=401, content={"error": "Authentication required"})
+            if await authorize(request) is None:
+                return _unauthorized()
             if not url.startswith(("http://", "https://")):
                 return JSONResponse(status_code=400, content={"error": "Invalid URL scheme"})
             try:
-                response = await safe_fetch_async(url, max_bytes=10 * 1024 * 1024)
+                response = await safe_fetch_async(url, max_bytes=_MAX_PROXY_BYTES)
             except Exception as exc:
                 logger.warning("[webchat] canvas image proxy failed: {}", exc)
                 return JSONResponse(status_code=502, content={"error": "Proxy failed"})
@@ -318,12 +350,12 @@ class WebChatChannel(BaseChannel):
         async def canvas_link_proxy(url: str, request: Request) -> Response:
             from raven.core.security.ssrf import safe_fetch_async
 
-            if _secure_endpoints_enabled() and not await _authenticate_request(request):
-                return JSONResponse(status_code=401, content={"error": "Authentication required"})
+            if await authorize(request) is None:
+                return _unauthorized()
             if not url.startswith(("http://", "https://")):
                 return JSONResponse(status_code=400, content={"error": "Invalid URL scheme"})
             try:
-                response = await safe_fetch_async(url, max_bytes=_MAX_LINK_PROXY_BYTES)
+                response = await safe_fetch_async(url, max_bytes=_MAX_PROXY_BYTES)
             except Exception as exc:
                 logger.warning("[webchat] canvas link proxy failed: {}", exc)
                 return JSONResponse(status_code=502, content={"error": "Proxy failed"})
@@ -334,6 +366,16 @@ class WebChatChannel(BaseChannel):
                 headers["Content-Security-Policy"] = "sandbox"
                 headers["Referrer-Policy"] = "no-referrer"
             return Response(content=response.content, media_type=content_type, headers=headers)
+
+    async def _owns_session(self, session_id: str, caller: Identity) -> bool:
+        """Whether this caller may open a session at all: their own, or any at all for the operator.
+
+        A session that does not exist answers the same way as one belonging to somebody else, so a
+        route that takes a guessed id never confirms which of the two it found.
+        """
+        if caller.role == Role.ADMIN:
+            return True
+        return await self._db.get_session_owner(session_id) == caller.user_id
 
     async def start(self):
         self._ready = True

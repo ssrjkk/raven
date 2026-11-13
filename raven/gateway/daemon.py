@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hmac
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -15,10 +16,13 @@ from pydantic import BaseModel
 
 from raven.core._json import json
 from raven.core.auth.auth_handler import auth_handler
+from raven.core.auth.models import Permission, Role
+from raven.core.auth.rbac import rbac
 from raven.core.channel_guardian import TokenBucket
 from raven.core.config import settings
 from raven.core.llm import LLMRouter
 from raven.core.logging import setup_logging
+from raven.core.middleware import MUTATING_METHODS, write_permission
 from raven.core.security.ssrf import binds_every_interface
 from raven.core.sse import sse_stream
 from raven.gateway.routing import RoutingEngine
@@ -104,6 +108,30 @@ async def _validate_token(token: str) -> dict[str, Any] | None:
         return None
 
 
+@dataclass(frozen=True)
+class Identity:
+    user_id: str
+    role: str
+
+
+async def identity(token: str) -> Identity | None:
+    """Who a credential belongs to, or None when this daemon does not accept it.
+
+    The shared secret has no account behind it, so it reads as the operator here exactly as it does
+    on the gateway. Two ports that disagree about what the same credential means end up disagreeing
+    about who owns the rows they both write.
+    """
+    if not token:
+        return None
+    secret = settings.web_secret_key.get_secret_value() if settings.web_secret_key else ""
+    if secret and hmac.compare_digest(token, secret):
+        return Identity(user_id="admin", role=Role.ADMIN.value)
+    payload = await _validate_token(token)
+    if payload is None:
+        return None
+    return Identity(user_id=str(payload.get("sub", "")), role=str(payload.get("role", Role.USER.value)))
+
+
 class RavenFlowDaemon:
     def __init__(self, port: int = 18789, data_dir: Path | None = None, host: str | None = None):
         self.port = port
@@ -137,15 +165,22 @@ class RavenFlowDaemon:
 
             if request.url.path != "/health":
                 auth_header = request.headers.get("Authorization", "")
-                token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
-                payload = await _validate_token(token)
-                if payload is None:
+                bearer = auth_header[7:] if auth_header.startswith("Bearer ") else ""
+                caller = await identity(bearer or request.headers.get("X-Raven-Key", ""))
+                if caller is None:
                     return JSONResponse(
                         status_code=401,
                         content={"error": "Authentication required or invalid token"},
                     )
-                request.state.user_id = payload.get("sub", "anonymous")
-                request.state.role = payload.get("role", "user")
+                request.state.user_id = caller.user_id
+                request.state.role = caller.role
+                if request.method in MUTATING_METHODS:
+                    required = write_permission(request.url.path)
+                    if not rbac.has_permission(caller.role, required):
+                        return JSONResponse(
+                            status_code=403,
+                            content={"error": "Forbidden", "required": required.value},
+                        )
 
             response = await call_next(request)
             response.headers["X-Request-ID"] = request_id
@@ -168,8 +203,9 @@ class RavenFlowDaemon:
             if session.agent is None:
                 return {"error": "agent not initialized", "session_id": session.id}
             if req.mode == "plan":
+                # `plan` decides whether the agent may act, not whether it asks first: the config the
+                # session was built with keeps `confirm_dangerous` on for exactly this mode.
                 session.agent.config.plan_mode = True
-                session.agent.config.confirm_dangerous = False
             session.status = "running"
             session.message_count += 1
             self._mark_dirty(session.id)
@@ -240,12 +276,13 @@ class RavenFlowDaemon:
         @app.websocket("/ws")
         async def websocket_endpoint(ws: WebSocket):
             token = ws.query_params.get("token", "")
-            payload = await _validate_token(token)
-            if payload is None:
+            caller = await identity(token)
+            if caller is None:
                 await ws.close(code=1008, reason="Authentication required")
                 return
-            ws.state.user_id = payload.get("sub", "anonymous")
-            ws.state.role = payload.get("role", "user")
+            ws.state.user_id = caller.user_id
+            ws.state.role = caller.role
+            may_run_agent = rbac.has_permission(caller.role, Permission.TASK_RUN)
             logger.debug("WebSocket authenticated: user_id={}", ws.state.user_id)
 
             await ws.accept()
@@ -256,6 +293,9 @@ class RavenFlowDaemon:
                     msg = json.loads(data)
                     msg_type = msg.get("type", "message")
                     if msg_type == "message":
+                        if not may_run_agent:
+                            await ws.send_text(json.dumps({"type": "error", "content": "Forbidden: requires task:run"}))
+                            continue
                         session_id = str(msg.get("session_id") or "") or str(uuid.uuid4())[:8]
                         try:
                             validate_session_id(session_id)

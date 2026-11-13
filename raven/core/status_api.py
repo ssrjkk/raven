@@ -19,10 +19,6 @@ if TYPE_CHECKING:
     from raven.core.plugin_loader import PluginLoader
 
 
-class AgentAssign(BaseModel):
-    agent_id: str = "default"
-
-
 class RavenRequest(BaseModel):
     action: str
     code: str = ""
@@ -88,10 +84,5 @@ def create_status_router(gateway: Gateway, plugin_loader: PluginLoader, stop_eve
         except Exception as e:
             logger.error("Raven API error: {}", e)
             raise internal_error(e) from e
-
-    @router.post("/api/sessions/{session_id}/agent")
-    def api_set_agent(session_id: str, body: AgentAssign):
-        logger.info("Session {} → agent {}", session_id, body.agent_id)
-        return {"ok": True, "session_id": session_id, "agent_id": body.agent_id}
 
     return router

@@ -164,21 +164,39 @@ actually available.
 
 ## 6. HTTP Authentication and RBAC
 
-`auth_middleware` (`raven/core/middleware.py`) resolves a caller before any route runs, then
-applies four escalating rules:
+`auth_middleware` (`raven/core/middleware.py`) resolves a caller before any route runs, then applies
+the rules below. `scripts/route_surface.py` builds every router both HTTP servers mount (353 routes)
+and `tests/core/test_write_gates.py` / `tests/core/test_read_gates.py` drive the middleware over that
+measured table, so a router mounted next week is covered the day it appears — nobody has to remember
+to add a path to a list.
 
 - **identity** — a `Bearer` token, an `X-Raven-Key` header, or a `?token=` query parameter
   (WebSocket and SSE clients cannot set headers). Session tokens are validated by
   `token_manager`; a raw `WEB_SECRET_KEY` match grants `admin` and is compared with
   `hmac.compare_digest`, never `==`. Gateway logs record `request.url.path` without the query
   string, so a token passed that way is not written to the access log
-- **always-authenticated prefixes** — `/aios`, `/api/tests` and `/mcp` reject anonymous callers
+- **data scopes** — `DATA_SCOPES` (`/api`, `/aios`, `/mcp`, `/events`) is every namespace the gateway
+  answers with data instead of with a file. Below one of them a caller needs an identity in both
+  directions. Outside them sits static delivery (the webchat page, `/assets`, `/dashboard`), which
+  refuses nothing, because the login screen has to load before anybody holds a token
 - **RBAC** — `PATH_PERMISSIONS` maps 19 route prefixes (`/api/admin`, `/api/secrets`,
   `/api/auth/users`, `/aios/exec`, …) to a required `Permission`, checked against the caller's
   role, so a `user`-role token gets `403` on admin surfaces even when authenticated
-- **fail-closed writes** — any `POST`/`PUT`/`PATCH`/`DELETE` under `/api` from an anonymous
-  caller is `401`. The only exemptions are `/api/auth/*` (login itself) and `/api/webhooks/*`,
-  which authenticate by signature instead (section 9)
+- **fail-closed reads** — a read below a data scope is `401` without a credential unless
+  `PUBLIC_READ_PREFIXES` declares it public. The list is the whole exception, two entries:
+  `/api/health` (the container healthcheck is a `curl -f` with nothing to send) and
+  `/api/webhooks/whatsapp` (Meta's `hub.challenge` handshake, which carries its own verify token).
+  Six more paths answer from `_PUBLIC_PATHS`: `/aios/health`, `/aios/metrics`, `/docs`,
+  `/docs/oauth2-redirect`, `/openapi.json`, `/redoc`. `OPTIONS` is exempt because a CORS preflight
+  never carries a credential. Measured: 11 of 167 reads answer an anonymous caller, 156 do not
+- **fail-closed writes** — a write below a data scope is `401` anonymously, and for an identified
+  caller needs whatever `write_permission()` names: `PATH_PERMISSIONS` first, then
+  `USER_MUTATING_PERMISSIONS` — the deliberately short list of writes a non-operator is meant to make
+  (holding a conversation, running tasks, routines and monitors, reading and saving inside the
+  editor). Anything not on it needs `admin:write`, so an omitted new endpoint costs an honest `403`
+  while a careless addition is what costs the installation. The exemptions are `/api/auth/*` (login
+  itself) and `/api/webhooks/*`, which authenticate by signature instead (section 9). Measured: of
+  179 mutating routes, 41 are open to a plain account, 126 need the operator, 12 are public
 - **the first admin is not self-service** — `POST /api/auth/register` writes `role='user'` and
   `/api/auth/users`, the route that changes roles, requires `admin:users`. No HTTP call can therefore
   mint the admin role on a fresh install, which is what `raven security promote USERNAME
@@ -187,13 +205,11 @@ applies four escalating rules:
   `is_active=0`), and revokes the account's sessions because `auth_sessions` stores the role as it
   was at login. `raven doctor` reports the result as `Admin Accounts`
 
-**Secure mode** is what separates a local bench run from a deployed one: as soon as a
-`WEB_SECRET_KEY` is configured, the 27 read prefixes in `_PRIVATE_READ_PREFIXES`
-(chat search, e-mail inbox/config, insights, RAG, voice biometrics, analytics, knowledge
-graph, CI/CD, monitors, tasks, `/api/status`, `/api/metrics`, agent and tool-policy
-introspection, the canvas proxy) also require authentication. Without a secret they stay
-readable so the dashboard works offline. Six paths are public in both modes:
-`/aios/health`, `/aios/metrics`, `/docs`, `/docs/oauth2-redirect`, `/openapi.json`, `/redoc`.
+**There is no unsecured mode to fall back into.** `Settings.model_post_init` mints and persists a
+`WEB_SECRET_KEY` when none is configured, so the rules above are the only rules a running gateway can
+be in. Reads used to be the opposite way round: a hand-kept list of 27 *private* prefixes, which left
+19 data endpoints outside it — among them `/api/dream/stats`, `/api/memory/backups`,
+`/api/v1/patterns/run` (a read that walks up to 500 workspace files) and the session event stream.
 
 ## 7. Rate Limiting
 

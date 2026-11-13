@@ -168,15 +168,16 @@ class TestApiMutationGuard:
         assert client.put("/api/echo").status_code == 401
         assert client.delete("/api/echo").status_code == 401
 
-    def test_anonymous_read_allowed(self) -> None:
+    def test_anonymous_read_is_asked_for_a_credential(self) -> None:
         client = TestClient(_make_full_app())
-        assert client.get("/api/read").status_code == 200
+        assert client.get("/api/read").status_code == 401
 
-    async def test_bearer_token_allowed(self) -> None:
+    async def test_user_token_may_not_write_an_unlisted_path(self) -> None:
+        """A `user` token names a caller, not a key: an unlisted write is refused, not implied."""
         token = await token_manager.create_token("u1", "user")
         client = TestClient(_make_full_app())
         resp = client.post("/api/echo", headers={"Authorization": f"Bearer {token}"})
-        assert resp.status_code == 200
+        assert resp.status_code == 403
 
     def test_raven_key_allowed(self) -> None:
         from raven.core.config import settings
@@ -281,15 +282,6 @@ class TestPrivateReadGuard:
         client = TestClient(_make_full_app())
         assert client.get("/api/tools/policy", headers={"Authorization": f"Bearer {user}"}).status_code == 403
         assert client.get("/api/tools/policy", headers={"Authorization": f"Bearer {admin}"}).status_code == 200
-
-    def test_private_read_open_when_unsecured(self, monkeypatch) -> None:
-        from pydantic import SecretStr
-
-        from raven.core.config import settings
-
-        monkeypatch.setattr(settings, "web_secret_key", SecretStr(""))
-        client = TestClient(_make_full_app())
-        assert client.get("/api/chat/search").status_code == 200
 
 
 def test_sanitize_metric_path_collapses_ids() -> None:

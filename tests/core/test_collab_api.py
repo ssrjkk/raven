@@ -5,8 +5,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
+from starlette.websockets import WebSocketDisconnect
 
 from raven.core.collab_api import create_collab_router
+from raven.core.config import settings
 
 
 @pytest.fixture()
@@ -167,3 +170,37 @@ class TestCollabChanges:
         resp = client.get("/api/collab/sessions/sess-1/content")
         assert resp.status_code == 200
         assert resp.json()["content"] == "hello"
+
+
+class TestCollabWebSocket:
+    """A collab socket opens for a credential, and the credential is what names the caller."""
+
+    @pytest.fixture(autouse=True)
+    def _operator_key(self, monkeypatch):
+        monkeypatch.setattr(settings, "web_secret_key", SecretStr("operator-key-under-test"))
+
+    def test_an_uncertified_socket_never_stays_open(self, client):
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect("/api/collab/sessions/sess-1/ws") as ws:
+                ws.receive_json()
+        assert exc.value.code == 1008
+
+    def test_an_empty_secret_does_not_open_it_either(self, client, monkeypatch):
+        # The guard used to read `if _secure_mode() and not authenticated`, which made the whole
+        # check look skippable. There is no mode in which an anonymous socket is let in.
+        monkeypatch.setattr(settings, "web_secret_key", SecretStr(""))
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect("/api/collab/sessions/sess-1/ws") as ws:
+                ws.receive_json()
+        assert exc.value.code == 1008
+
+    async def test_the_credential_names_the_caller_not_the_first_message(self, client, mock_ws_manager):
+        from raven.core.auth.tokens import token_manager
+
+        token = await token_manager.create_token("u7", "user")
+        with client.websocket_connect(f"/api/collab/sessions/sess-1/ws?token={token}") as ws:
+            # The claim is sent before anything is read: a handler that waits for it first would
+            # deadlock here instead of failing, and a hanging test proves nothing.
+            ws.send_json({"kind": "auth", "user_id": "whoever-i-claim"})
+            assert ws.receive_json()["kind"] == "state"
+        assert mock_ws_manager.connect.await_args.args[:2] == ("sess-1", "u7")

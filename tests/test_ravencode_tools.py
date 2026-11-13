@@ -289,13 +289,31 @@ async def test_verify_file_undecodable(ws: Path) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(shutil.which("ruff") is None, reason="ruff not installed")
-async def test_verify_file_python_lint_problem(ws: Path) -> None:
-    # the dev env has ruff installed, so the real subprocess path runs
+async def test_verify_file_python_lint_problem(ws: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    proc = _FakeProc(out=b"F401 [*] `sys` imported but unused")
+
+    async def _spawn(*args: object, **kwargs: object) -> _FakeProc:
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _spawn)
     (ws / "unused.py").write_text("import sys\n", encoding="utf-8")
     out = await tools.verify_file(str(ws / "unused.py"))
     assert out.startswith("[problems]")
     assert "ruff:" in out
+
+
+@pytest.mark.asyncio
+async def test_verify_file_lint_tool_blocked_by_os_skips(ws: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _raise(*args: object, **kwargs: object) -> object:
+        raise OSError(4551, "This app has been blocked by your system administrator")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _raise)
+    (ws / "good.py").write_text("def ok():\n    return 1\n", encoding="utf-8")
+    out = await tools.verify_file(str(ws / "good.py"))
+    assert "[ok]" in out
+    (ws / "a.js").write_text("const x = 1;\n", encoding="utf-8")
+    out = await tools.verify_file(str(ws / "a.js"))
+    assert "[ok]" in out
 
 
 @pytest.mark.asyncio

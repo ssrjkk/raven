@@ -107,11 +107,3 @@ def test_api_shutdown(client: TestClient, mock_gateway: MagicMock, mock_plugin_l
         assert resp.status_code == 200
         assert resp.json()["ok"] is True
     assert stop_event.is_set()
-
-
-def test_api_set_agent(client: TestClient) -> None:
-    resp = client.post("/api/sessions/sess1/agent", json={"agent_id": "coder"})
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["agent_id"] == "coder"
-    assert data["session_id"] == "sess1"

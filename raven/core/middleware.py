@@ -87,16 +87,108 @@ PATH_PERMISSIONS: dict[str, Permission] = {
     "/aios/agent": Permission.ADMIN_WRITE,
 }
 
-AUTH_REQUIRED_PREFIXES: tuple[str, ...] = ("/aios", "/api/tests", "/mcp")
+MUTATING_METHODS: frozenset[str] = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
-_MUTATING_METHODS: frozenset[str] = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+# Every URL namespace the gateway answers with data instead of with a file. Below one of these a
+# caller needs an identity, in or out; above them sits static delivery (the SPA shell, `/assets`,
+# `/dashboard`), which has to stay open or nobody can reach the login screen. A data-bearing mount
+# outside these four is what the surface guard fails the build on.
+DATA_SCOPES: tuple[str, ...] = ("/api", "/aios", "/mcp", "/events")
 
 # Mutating endpoints that legitimately accept unauthenticated calls.
 # Permission-gated endpoints (PATH_PERMISSIONS) still apply on top.
-_PUBLIC_MUTATING_PREFIXES: tuple[str, ...] = (
+PUBLIC_MUTATING_PREFIXES: tuple[str, ...] = (
     "/api/auth/",  # login / register / logout
     "/api/webhooks/",  # external channel callbacks with their own secrets
 )
+
+# Reads that answer an unauthenticated caller. Anything else under a data scope needs a token from
+# the moment it is mounted, so this list only grows when a deployment really has to answer the
+# public internet; each entry below has one.
+PUBLIC_READ_PREFIXES: tuple[str, ...] = (
+    # The container healthcheck is `curl -f http://localhost:18888/api/health` with no credential
+    # to send (`raven/cli/deploy_cmd.py`), and liveness/readiness ride the same prefix.
+    "/api/health",
+    # Meta's webhook verification handshake: a `GET ?hub.challenge=…` from its servers, which carry
+    # the per-subscription verify token in the query string rather than a Raven credential.
+    "/api/webhooks/whatsapp",
+)
+
+# Writes a non-operator account is meant to be able to make, matched before the operator-only
+# default. The list is deliberately narrow: a route that is not here needs `admin:write`, so the
+# accidental omission of a new endpoint costs an honest 403, while a careless addition to this
+# table is what costs the installation.
+USER_MUTATING_PERMISSIONS: dict[str, Permission] = {
+    # A conversation of one's own: creating and joining sessions, attaching files to them,
+    # and setting the theme the editor renders with.
+    "/api/sessions": Permission.CHAT,
+    "/api/collab/sessions": Permission.CHAT,
+    "/api/media/": Permission.CHAT,
+    "/api/v1/commands/theme": Permission.CHAT,
+    # The agent engines are built for accounts that are not the operator.
+    "/api/agent": Permission.TASK_RUN,
+    "/api/task/": Permission.TASK_RUN,
+    "/api/routine/": Permission.ROUTINE_WRITE,
+    "/api/monitor/": Permission.MONITOR_WRITE,
+    "/api/workflows/templates/": Permission.ROUTINE_WRITE,
+    # The editor reading and saving inside the workspace is what the editor is for.
+    "/aios/completion": Permission.CODE_READ,
+    "/aios/inline-edit": Permission.CODE_READ,
+    "/aios/search": Permission.CODE_READ,
+    "/aios/workspace/write": Permission.CODE_WRITE,
+    "/api/rag/search": Permission.CODE_READ,
+    "/api/rag/index": Permission.CODE_WRITE,
+    "/api/rag/remove": Permission.CODE_WRITE,
+    "/api/knowledge/search": Permission.CODE_READ,
+    "/api/knowledge/": Permission.CODE_WRITE,
+    "/api/v1/scaffold/generate": Permission.CODE_WRITE,
+}
+
+
+def _prefix_match(path: str, prefix: str) -> bool:
+    """Whether `path` is `prefix` or something below it, treating the prefix as a whole segment.
+
+    Plain `startswith` lets `/api/agent` grant `/api/agents`, so a table entry would silently
+    cover a route nobody reviewed. A key ending in `/` says so explicitly; any other key has to
+    end at a `/` in the request path.
+    """
+    if prefix.endswith("/"):
+        return path.startswith(prefix)
+    return path == prefix or path.startswith(prefix + "/")
+
+
+def _in_data_scope(path: str) -> bool:
+    return any(_prefix_match(path, scope) for scope in DATA_SCOPES)
+
+
+def _declared_public(path: str, method: str) -> bool:
+    """Whether a caller with no credential may arrive at this path with this method.
+
+    Reads have to be listed in `PUBLIC_READ_PREFIXES`, writes in `PUBLIC_MUTATING_PREFIXES`.
+    `OPTIONS` is public by definition rather than by a table entry: it answers with nothing but the
+    method list, and a CORS preflight never carries a credential to check.
+    """
+    if method == "OPTIONS":
+        return True
+    prefixes = PUBLIC_MUTATING_PREFIXES if method in MUTATING_METHODS else PUBLIC_READ_PREFIXES
+    return any(_prefix_match(path, prefix) for prefix in prefixes)
+
+
+def write_permission(path: str) -> Permission:
+    """Which permission a write to this path needs.
+
+    `PATH_PERMISSIONS` wins because it is the table that also gates reads on the same prefix, so a
+    route like `/api/media/generate` cannot be loosened by a broader write entry below it.
+    Anything matched by neither table needs the operator.
+    """
+    for prefix, perm in PATH_PERMISSIONS.items():
+        if _prefix_match(path, prefix):
+            return perm
+    for prefix, perm in USER_MUTATING_PERMISSIONS.items():
+        if _prefix_match(path, prefix):
+            return perm
+    return Permission.ADMIN_WRITE
+
 
 _PUBLIC_PATHS: frozenset[str] = frozenset(
     {"/aios/health", "/aios/metrics", "/docs", "/docs/oauth2-redirect", "/openapi.json", "/redoc"}
@@ -106,51 +198,7 @@ _UUID_SEGMENT = re.compile(r"/[0-9a-fA-F]{8,}")
 _DIGIT_SEGMENT = re.compile(r"/\d+")
 _PRIVATE_PEER_PREFIXES: tuple[str, ...] = ("127.", "10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.")
 
-# Read-only endpoints exposing private data (chat history across channels,
-# email content, workspace/insight metadata, RAG stats). Require auth when a
-# web_secret_key is configured (production mode); left open in local mode.
-_PRIVATE_READ_PREFIXES: tuple[str, ...] = (
-    "/api/chat/search",
-    "/api/collab",
-    "/api/email/inbox",
-    "/api/email/config",
-    "/api/insights",
-    "/api/rag",
-    "/api/stream",  # client-side event stream (agent state, tool calls, logs)
-    "/api/canvas",  # canvas image/link proxy (open HTTP proxy otherwise)
-    # Sensitive read endpoints that expose private/internal data. Only auth-gated
-    # in secure mode (web_secret_key set); left open in local mode. Mutating
-    # methods on these are already gated by the generic POST/DELETE rule.
-    "/api/voice",  # biometric speaker registry + session status (PII)
-    "/api/analytics",  # internal metrics / tool usage / aggregated analytics
-    "/api/metrics/project",  # workspace project metrics
-    "/api/knowledge",  # knowledge-graph stats / visualization
-    "/api/ab",  # A/B experiments + results
-    "/api/cicd",  # CI/CD workflows, status, runs
-    "/api/debug",  # debugger state
-    "/api/sse",  # session event stream
-    "/api/workflows",  # workflow templates / categories
-    # Introspection / internal-state read endpoints. Auth-gated only in secure
-    # mode (web_secret_key set); left open in local mode. Mutating methods on
-    # these are already covered by the generic anonymous-mutation rule.
-    "/api/monitor/",  # monitor list / slo / status
-    "/api/routine/",  # routine list
-    "/api/task/",  # task list
-    "/api/code/",  # code session list
-    "/api/status",  # system status / runtime introspection
-    "/api/metrics",  # Prometheus metric endpoints (internal state)
-    "/api/metrics/prometheus",
-    "/api/agents",  # agent registry introspection
-    "/api/tools/policy",  # tool security policy introspection
-    "/api/connections",  # LLM providers (masked keys), contexts, agents
-)
-
 _SLOW_REQUEST_THRESHOLD_S = 2.0
-
-
-def _secure_mode() -> bool:
-    secret = settings.web_secret_key.get_secret_value() if settings.web_secret_key else ""
-    return bool(secret)
 
 
 def _client_ip(request: Request) -> str:
@@ -245,33 +293,22 @@ async def auth_middleware(request: Request, call_next):
     path = request.url.path
     if path in _PUBLIC_PATHS:
         return await call_next(request)
-    if _secure_mode() and request.state.user_id == "anonymous":
-        for prefix in _PRIVATE_READ_PREFIXES:
-            if path.startswith(prefix):
-                return JSONResponse(
-                    status_code=401,
-                    content={"error": "Authentication required", "required": "Bearer token or X-Raven-Key"},
-                )
-    for prefix in AUTH_REQUIRED_PREFIXES:
-        if path.startswith(prefix) and request.state.user_id == "anonymous":
-            return JSONResponse(
-                status_code=401,
-                content={"error": "Authentication required", "required": "Bearer token or X-Raven-Key"},
-            )
-    for prefix, required_perm in PATH_PERMISSIONS.items():
-        if path.startswith(prefix) and not rbac.has_permission(request.state.user_role, required_perm):
-            return JSONResponse(status_code=403, content={"error": "Forbidden", "required": required_perm.value})
 
-    if (
-        request.method in _MUTATING_METHODS
-        and path.startswith("/api")
-        and not path.startswith(_PUBLIC_MUTATING_PREFIXES)
-        and request.state.user_id == "anonymous"
-    ):
+    in_scope = _in_data_scope(path)
+    if request.state.user_id == "anonymous" and in_scope and not _declared_public(path, request.method):
         return JSONResponse(
             status_code=401,
             content={"error": "Authentication required", "required": "Bearer token or X-Raven-Key"},
         )
+
+    for prefix, required_perm in PATH_PERMISSIONS.items():
+        if _prefix_match(path, prefix) and not rbac.has_permission(request.state.user_role, required_perm):
+            return JSONResponse(status_code=403, content={"error": "Forbidden", "required": required_perm.value})
+
+    if request.method in MUTATING_METHODS and in_scope and not _declared_public(path, request.method):
+        required_perm = write_permission(path)
+        if not rbac.has_permission(request.state.user_role, required_perm):
+            return JSONResponse(status_code=403, content={"error": "Forbidden", "required": required_perm.value})
 
     return await call_next(request)
 

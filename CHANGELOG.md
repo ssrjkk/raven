@@ -846,6 +846,59 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
 - The plugin loader published `inspect.getmembers(mod, iscoroutinefunction)`, which returns the coroutines a `plugin.py` merely *imported*: the SSRF helper reached the model as `api.safe_fetch_async` and `browser.safe_fetch_async`, and the code plugin's runner appeared a second time as `memory.run_python` — three tools whose names no operator had written down and no policy rule addressed. The loader now publishes only a coroutine defined in that `plugin.py`, under its own name, and `cron.register_callback` became an ordinary function because its one argument is a Python callable a JSON tool call cannot supply. Surface: 46 tools → 42. 23 of the 46 had no docstring, so their description was the bare function name; all 42 now carry a sentence and every parameter a description (19 had none), `**kwargs` is no longer listed as required (2 of 46 did), and the extractor keeps a description wrapped onto a continuation line instead of cutting it. Three texts that claimed more than the code does were corrected: `memory.forget` said "Forgot" when nothing was stored under the key, `sessions.sessions_send` read as delivery, `files.glob` reported the matches it truncated. `tests/test_plugin_surface_integrity.py` (21 gates) holds the count, the provenance of every handler and the description floor, and four loader mutations — publish imports, drop the bare-name warning, rerequire `**kwargs`, restore the old parameter parser — fail 7, 1, 1 and 3 tests
 
 ### Security
+- Both gateway authorization rules were hand-kept lists, and both had already fallen behind the code.
+  A mutating call under `/api` needed `Permission.ADMIN_WRITE` unless its prefix was written into an
+  allowlist; a read answered an anonymous caller unless its prefix was written into
+  `_PRIVATE_READ_PREFIXES`, which held 27 prefixes and had been kept up to date for 167 routes' worth
+  of surface. `scripts/route_surface.py` measures instead of remembering: it builds every router the
+  gateway mounts plus the RavenFlow daemon and reports **353 routes — 179 mutating, 167 reads**, and
+  `tests/core/test_route_surface.py` (6) runs that audit as a build gate, so a new router is audited the
+  moment it is mounted. The rule is now four `DATA_SCOPES` (`/api`, `/aios`, `/mcp`, `/events`) and two
+  declared-public lists, and the counts come out of the audit: **11 of 167 reads answer an anonymous
+  caller** — `/api/health`, `/api/health/live` and `/api/health/ready` for the container `HEALTHCHECK`, the
+  WhatsApp verification callback that carries Meta's `hub.challenge`, the six `_PUBLIC_PATHS` (the bridge's
+  `/aios/health` and `/aios/metrics`, and the four OpenAPI/doc routes), and `/`, which sits outside the four
+  data scopes because it serves the SPA shell. Each exception carries its evidence in a comment, and
+  **156 ask for a credential**. Writes: **41 are open to a plain
+  account**, each named with the permission it needs in `USER_MUTATING_PERMISSIONS`, and **126 are
+  operator-only**; the remaining 12 are `/api/auth/*` and `/api/webhooks/*`, which have to answer
+  somebody who is not signed in yet. 19 data endpoints had been answering anonymous callers because no
+  prefix in the old list covered them — `/api/dream/stats`, `/api/memory/backups`, `/api/sessions`,
+  `/events/sessions`, `/api/v1/scaffold/plans` and 14 others are named in
+  `tests/core/test_read_gates.py` (37), which drives the real middleware over the measured route
+  inventory. Seven mutations of the read rule all die: gate removed, `PUBLIC_READ_PREFIXES` widened to
+  `/api`, `/events` dropped from `DATA_SCOPES`, `_in_data_scope` and `_declared_public` relaxed back to
+  bare `startswith`, the `OPTIONS` exemption removed, and the secret check reintroduced.
+- There is no unsecured mode to fall back into. `Settings.model_post_init` mints and persists a
+  `WEB_SECRET_KEY` when none is configured, so `_secure_mode()` was always true and the "local/unsecured"
+  branch the docs described was an unreachable state; the switch and the test that pinned its old
+  behaviour are gone, and `TestNoUnsecuredState` asserts both halves — an empty secret does not open a
+  gated read, and a fresh `Settings` always holds a secret of 32+ characters. `raven/core/collab_api.py`
+  carried the same switch on its WebSocket, where it mattered: with the guard skipped, the socket took its
+  identity from a `user_id` in the caller's first message and stamped that on every change and cursor it
+  broadcast. The guard is now unconditional and the identity comes from the token (`_ws_identity`), so an
+  anonymous socket is refused with `1008` and a caller cannot name itself. Both mutations die — removing
+  the refusal costs 2 tests, restoring the claimed identity costs 1 — and the identity test sends its
+  message before reading, so a handler that waits for the claim fails the assertion instead of hanging.
+- `raven flow` subcommands talked to a daemon that answers `401` to everything but `/health`, and none of
+  them sent the credential, so `raven flow sessions` reported an empty list rather than a failed request.
+  `_headers()`/`_daemon_url()` in `raven/cli/flow_cmd.py` carry `X-Raven-Key` and the daemon's port in one
+  place, and both list paths now print `HTTP <status>` instead of reading a body that is an error.
+- A token is only as live as the account behind it. `update_role()` and `update_password()` now revoke the
+  account's sessions — `auth_sessions` stores the role as it was at login, so a demotion was invisible to
+  the tokens already issued, and a password change is what an operator does when a credential leaked — and
+  `create_session()` writes a row for an identity that arrives from outside the table (an OAuth subject),
+  which is what lets `get_session()` treat a missing account row as a dead session instead of a special
+  case. `raven security promote` counts those sessions before it writes, because the writes delete them.
+- The webchat channel stored one global session table, so a second account could read and write the first
+  one's conversations by guessing an id; `Database.get_session_owner()` plus the owner check in
+  `raven/channels/webchat/channel.py` make the owner part of every read and mutation
+  (`tests/channels/test_webchat_ownership.py`, 26).
+- `ravencode/runtime/tools/files.py`'s `verify_file` spawned `ruff`/`mypy`/`node` and caught only
+  `FileNotFoundError`, so on a machine where Windows App Control refuses the unsigned venv shim
+  (`OSError: [WinError 4551]`) the file-verification tool crashed instead of skipping the linter. Both
+  spawn guards catch `OSError` now, and the tests fake the spawn rather than depending on a tool that may
+  not be launchable here.
 - The project selected ruff's `S` family and then ignored nine of its rules (`S101 S102 S104 S106 S307
   S311 S603 S607 S608`, `pyproject.toml:232`) while nothing ran bandit at all — so the `# noqa: S324`
   comments in the tree were silencing switched-off rules, and the checks that read `# nosec` had never
