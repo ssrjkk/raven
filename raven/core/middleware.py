@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import ipaddress
 import re
 import time
 import uuid
@@ -20,50 +21,67 @@ from raven.core.errors import AppError, ErrorCode, classify_error
 from raven.core.logging import set_correlation_id
 from raven.core.metrics import metrics
 
+_PRUNE_INTERVAL_SECONDS = 60.0
+
 
 class RateLimiter:
-    def __init__(self, max_requests: int = 60, window_seconds: float = 60.0, burst_multiplier: float = 1.5):
+    """A sliding-window budget per address.
+
+    The window keeps the timestamps of the requests it allowed, so the budget is exact rather than an
+    average, and a caller that stops sending recovers as soon as its oldest request ages out.
+    """
+
+    def __init__(
+        self,
+        max_requests: int = 60,
+        window_seconds: float = 60.0,
+        prune_interval: float = _PRUNE_INTERVAL_SECONDS,
+    ):
         self.max_requests = max_requests
         self.window = window_seconds
-        self.burst_multiplier = burst_multiplier
+        self.prune_interval = prune_interval
         self._buckets: dict[str, list[float]] = defaultdict(list)
-        self._blocked: dict[str, float] = {}
         self._lock = asyncio.Lock()
+        self._next_prune = 0.0
 
     async def check(self, key: str) -> bool:
         now = time.monotonic()
         async with self._lock:
-            if key in self._blocked:
-                if now - self._blocked[key] < self.window * 2:
-                    return False
-                del self._blocked[key]
+            self._prune(now)
             cutoff = now - self.window
             bucket = self._buckets[key]
             bucket[:] = [t for t in bucket if t > cutoff]
-            burst_limit = int(self.max_requests * self.burst_multiplier)
-            if len(bucket) >= burst_limit:
-                self._blocked[key] = now
-                return False
             if len(bucket) >= self.max_requests:
                 return False
             bucket.append(now)
             return True
 
-    async def cleanup(self):
-        now = time.monotonic()
+    def _prune(self, now: float) -> None:
+        """Forget addresses whose window has fully elapsed.
+
+        The table is keyed by client address, so without this the limiter's footprint is "however many
+        addresses have ever connected" rather than the budget the documentation quotes. The cadence
+        lives here, next to the table: an idle process holds at most one interval of stale keys and a
+        busy process does not pay for the scan on every request.
+        """
+        if now < self._next_prune:
+            return
+        self._next_prune = now + self.prune_interval
         cutoff = now - self.window * 2
-        blocked_cutoff = now - self.window * 4
-        async with self._lock:
-            for key in list(self._buckets.keys()):
-                self._buckets[key] = [t for t in self._buckets[key] if t > cutoff]
-                if not self._buckets[key]:
-                    del self._buckets[key]
-            for key in list(self._blocked.keys()):
-                if now - self._blocked[key] > blocked_cutoff:
-                    del self._blocked[key]
+        for key in list(self._buckets):
+            recent = [t for t in self._buckets[key] if t > cutoff]
+            if recent:
+                self._buckets[key] = recent
+            else:
+                del self._buckets[key]
 
 
-rate_limiter = RateLimiter()
+def build_rate_limiter() -> RateLimiter:
+    """The per-IP budget is a setting, so the limiter has to be constructed from it."""
+    return RateLimiter(max_requests=settings.rate_limit_max, window_seconds=float(settings.rate_limit_window))
+
+
+rate_limiter = build_rate_limiter()
 
 PATH_PERMISSIONS: dict[str, Permission] = {
     "/api/admin": Permission.ADMIN_READ,
@@ -196,17 +214,45 @@ _PUBLIC_PATHS: frozenset[str] = frozenset(
 
 _UUID_SEGMENT = re.compile(r"/[0-9a-fA-F]{8,}")
 _DIGIT_SEGMENT = re.compile(r"/\d+")
-_PRIVATE_PEER_PREFIXES: tuple[str, ...] = ("127.", "10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.")
+_LOCAL_PROXY_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = (
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("fc00::/7"),
+)
+"""Peers we installed ourselves: loopback, RFC1918 and IPv6 ULA.
+
+`172.16.0.0/12` matters for the shipped compose stack, where Traefik reaches the gateway on a Docker
+network address such as 172.20.0.4. Treating it as a stranger would collapse every visitor into one
+bucket keyed by the proxy. Documentation ranges (203.0.113.0/24 and friends) are deliberately *not*
+here even though `ipaddress` calls them private: they are not a proxy anybody runs.
+"""
 
 _SLOW_REQUEST_THRESHOLD_S = 2.0
 
 
-def _client_ip(request: Request) -> str:
-    """Direct peer IP; falls back to the leftmost X-Forwarded-For entry only
-    when the peer is loopback/private (i.e. we sit behind a local proxy)."""
+def is_local_proxy(host: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(addr in network for network in _LOCAL_PROXY_NETWORKS)
+
+
+def client_ip(request: Request) -> str:
+    """The address a request should be attributed to.
+
+    `X-Forwarded-For` is honoured when the direct peer is a proxy we installed (see
+    `_LOCAL_PROXY_NETWORKS`) or when `TRUST_FORWARDED_FOR=1` declares that something else terminates
+    TLS for us. Otherwise the peer's own address wins, because the header is the caller's to write and
+    honouring it would let a client pick the bucket it is rate-limited in and put a chosen IP in the
+    audit log.
+    """
     host = request.client.host if request.client else "unknown"
     forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded and (host == "127.0.0.1" or host == "::1" or host.startswith(_PRIVATE_PEER_PREFIXES)):
+    if forwarded and (settings.trust_forwarded_for or is_local_proxy(host)):
         return forwarded.split(",")[0].strip() or host
     return host
 
@@ -241,12 +287,15 @@ async def request_id_middleware(request: Request, call_next):
 
 
 async def rate_limit_middleware(request: Request, call_next):
-    client_ip = _client_ip(request)
-    allowed = await rate_limiter.check(client_ip)
+    ip = client_ip(request)
+    allowed = await rate_limiter.check(ip)
     if not allowed:
-        metrics.inc("http_rate_limited", {"ip": client_ip})
-        logger.warning("Rate limit exceeded for {}", client_ip)
-        return JSONResponse(status_code=429, content={"error": "Too many requests", "retry_after": 60})
+        metrics.inc("http_rate_limited")
+        logger.warning("Rate limit exceeded for {}", ip)
+        return JSONResponse(
+            status_code=429,
+            content={"error": "Too many requests", "retry_after": max(1, round(rate_limiter.window))},
+        )
     return await call_next(request)
 
 

@@ -31,8 +31,8 @@ def mock_monitor_engine():
     eng.list_monitors = AsyncMock(return_value=[])
     eng.count_monitors = AsyncMock(return_value=0)
     eng.slo_report = AsyncMock(return_value=[])
-    eng.pause_monitor = AsyncMock()
-    eng.resume_monitor = AsyncMock()
+    eng.pause_monitor = AsyncMock(return_value=True)
+    eng.resume_monitor = AsyncMock(return_value=True)
     return eng
 
 
@@ -44,8 +44,8 @@ def mock_routine_engine():
     eng._store.count_routines = AsyncMock(return_value=0)
     eng._store.save_routine = AsyncMock()
     eng._store.delete_routine = AsyncMock()
-    eng.pause_routine = AsyncMock()
-    eng.resume_routine = AsyncMock()
+    eng.pause_routine = AsyncMock(return_value=True)
+    eng.resume_routine = AsyncMock(return_value=True)
     return eng
 
 
@@ -76,12 +76,24 @@ class TestMonitorEndpoints:
     def test_monitor_pause(self, client, mock_monitor_engine):
         resp = client.post("/api/monitor/pause/mon-123")
         assert resp.status_code == 200
+        assert resp.json() == {"ok": True, "action": "pause"}
         mock_monitor_engine.pause_monitor.assert_called_once_with("mon-123")
 
     def test_monitor_resume(self, client, mock_monitor_engine):
         resp = client.post("/api/monitor/resume/mon-123")
         assert resp.status_code == 200
+        assert resp.json() == {"ok": True, "action": "resume"}
         mock_monitor_engine.resume_monitor.assert_called_once_with("mon-123")
+
+    def test_monitor_toggle_rejects_an_action_that_does_not_exist(self, client, mock_monitor_engine):
+        # `pause`/`resume` used to fall through an if/elif and answer `{"ok": true}` for any word at all.
+        assert client.post("/api/monitor/double/mon-123").status_code == 400
+        mock_monitor_engine.pause_monitor.assert_not_called()
+        mock_monitor_engine.resume_monitor.assert_not_called()
+
+    def test_monitor_toggle_reports_a_monitor_that_is_not_there(self, client, mock_monitor_engine):
+        mock_monitor_engine.pause_monitor.return_value = False
+        assert client.post("/api/monitor/pause/mon-999").status_code == 404
 
 
 class TestRoutineEndpoints:
@@ -111,6 +123,14 @@ class TestRoutineEndpoints:
         resp = client.post("/api/routine/resume/routine-123")
         assert resp.status_code == 200
         mock_routine_engine.resume_routine.assert_called_once_with("routine-123")
+
+    def test_routine_toggle_rejects_an_action_that_does_not_exist(self, client, mock_routine_engine):
+        assert client.post("/api/routine/restart/routine-123").status_code == 400
+        mock_routine_engine.pause_routine.assert_not_called()
+
+    def test_routine_toggle_reports_a_routine_that_is_not_there(self, client, mock_routine_engine):
+        mock_routine_engine.pause_routine.return_value = False
+        assert client.post("/api/routine/pause/routine-999").status_code == 404
 
 
 class TestConnectionOwnership:

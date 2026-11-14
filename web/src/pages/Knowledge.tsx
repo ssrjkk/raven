@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, type GraphLink, type GraphNode, type KnowledgeSearchEntry } from "../api/client";
 import PageHeader from "../components/PageHeader";
 import { useApiQuery } from "../hooks/useApiQuery";
+import { errorMessage } from "../lib/errors";
 
 type Tab = "graph" | "extract" | "search" | "stats";
 
@@ -137,13 +138,13 @@ export default function Knowledge() {
       setExtractResult(`Extracted ${r.result.entities.length} entities, ${r.result.relations.length} relations`);
       qc.invalidateQueries({ queryKey: ["knowledgeVis"] });
     },
-    onError: (e: any) => setError(e.message || "Extraction failed"),
+    onError: (e) => setError(errorMessage(e, "Extraction failed")),
   });
 
   const search = useMutation({
     mutationFn: () => api.knowledgeSearch(searchQuery),
     onSuccess: (r) => setSearchResults(r.results),
-    onError: (e: any) => setError(e.message || "Search failed"),
+    onError: (e) => setError(errorMessage(e, "Search failed")),
   });
 
   return (

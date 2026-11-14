@@ -206,22 +206,35 @@ class CollaborationSession:
             return self._apply_change_crdt(change)
         return self._apply_change_fallback(change)
 
+    def _change_range(self, content: str, change: TextChange) -> tuple[int, int] | None:
+        """Resolve a line/column change into offsets into `content`, or None if it is not a range.
+
+        Both apply paths go through here. They used to each check the bounds and disagree about a
+        reversed range: the y-py path inserted at the start without deleting, the fallback refused,
+        so the same change from the same client was applied on one install and dropped on another.
+        """
+        lines = content.split("\n")
+        if not 0 <= change.start_line < len(lines):
+            return None
+        if not 0 <= change.end_line < len(lines):
+            return None
+        start = self._pos_to_offset(lines, change.start_line, change.start_col)
+        end = self._pos_to_offset(lines, change.end_line, change.end_col)
+        if end < start:
+            return None
+        return start, end
+
     def _apply_change_crdt(self, change: TextChange) -> bool:
         try:
-            current = str(self._ytext)
-            lines = current.split("\n")
-            if change.start_line < 0 or change.start_line >= len(lines):
+            rng = self._change_range(str(self._ytext), change)
+            if rng is None:
                 return False
-            if change.end_line < 0 or change.end_line >= len(lines):
-                return False
+            start, end = rng
 
-            start_offset = self._pos_to_offset(lines, change.start_line, change.start_col)
-            end_offset = self._pos_to_offset(lines, change.end_line, change.end_col)
-
-            if end_offset > start_offset:
-                self._ytext.delete(start_offset, end_offset - start_offset)
+            if end > start:
+                self._ytext.delete(start, end - start)
             if change.new_text:
-                self._ytext.insert(start_offset, change.new_text)
+                self._ytext.insert(start, change.new_text)
 
             self.document.content = str(self._ytext)
             self.document.version += 1
@@ -233,31 +246,18 @@ class CollaborationSession:
             return self._apply_change_fallback(change)
 
     def _apply_change_fallback(self, change: TextChange) -> bool:
-        lines = self.document.content.split("\n")
-        if change.start_line < 0 or change.start_line >= len(lines):
+        content = self.document.content
+        rng = self._change_range(content, change)
+        if rng is None:
             return False
-        if change.end_line < 0 or change.end_line >= len(lines):
-            return False
+        start, end = rng
 
-        if change.start_line == change.end_line:
-            line = lines[change.start_line]
-            lines[change.start_line] = line[: change.start_col] + change.new_text + line[change.end_col :]
-        else:
-            start_part = lines[change.start_line][: change.start_col]
-            end_part = lines[change.end_line][change.end_col :]
-            new_lines = change.new_text.split("\n")
+        # One splice. The branch this replaces rebuilt the line list by hand and then popped as many
+        # lines as the replaced range spanned, which deleted the lines it had just inserted: `X\nY`
+        # over lines 1-2 of "a\nb\nc\nd" came back as "a\nbX\nd" -- a client applying the same change
+        # itself would have diverged from the document the server holds.
+        self.document.content = content[:start] + change.new_text + content[end:]
 
-            lines[change.start_line] = start_part + new_lines[0]
-            for i in range(1, len(new_lines) - 1):
-                lines.insert(change.start_line + i, new_lines[i])
-            if len(new_lines) > 1:
-                lines[change.start_line + len(new_lines) - 1] = new_lines[-1] + end_part
-
-            for _ in range(change.end_line - change.start_line):
-                if change.start_line + 1 < len(lines):
-                    lines.pop(change.start_line + 1)
-
-        self.document.content = "\n".join(lines)
         self.document.version += 1
         self.document.changes.append(change)
         self.document.change_count += 1
@@ -419,238 +419,3 @@ class CollaborationManager:
             for uid, name in session.users.items():
                 users[uid] = name  # noqa: PERF403
         return [{"id": uid, "name": name} for uid, name in users.items()]
-
-
-class RealTimeCollaboration:
-    def __init__(self) -> None:
-        self._manager = CollaborationManager()
-        self._ws_manager = WebSocketManager()
-
-    def get_manager(self) -> CollaborationManager:
-        return self._manager
-
-    def get_ws_manager(self) -> WebSocketManager:
-        return self._ws_manager
-
-    async def edit(self, user_id: str, changes: list[TextChange]) -> bool:
-        session_id = self._find_user_session(user_id)
-        if not session_id:
-            logger.warning("Edit failed: no active session for user {}", user_id)
-            return False
-        session = self._manager.get_session(session_id)
-        if not session:
-            return False
-        all_ok = True
-        for change in changes:
-            change.user_id = user_id
-            ok = session.apply_change(change)
-            if ok:
-                await self._ws_manager.broadcast_json(
-                    session_id,
-                    {
-                        "kind": "text_change",
-                        "change": {
-                            "user_id": change.user_id,
-                            "file": change.file,
-                            "start_line": change.start_line,
-                            "start_col": change.start_col,
-                            "end_line": change.end_line,
-                            "end_col": change.end_col,
-                            "old_text": change.old_text,
-                            "new_text": change.new_text,
-                            "version": change.version,
-                        },
-                    },
-                )
-            else:
-                all_ok = False
-        return all_ok
-
-    def _find_user_session(self, user_id: str) -> str | None:
-        for sid, session in self._manager._sessions.items():
-            if user_id in session.users:
-                return sid
-        return None
-
-    def create_session(self, session_id: str, file_path: str) -> CollaborationSession:
-        session = self._manager.create_session(session_id, file_path)
-        logger.info("Session created: {} (file: {})", session_id, file_path)
-        return session
-
-    async def join_session(self, session_id: str, user_id: str, user_name: str) -> CollaborationSession | None:
-        session = self._manager.get_session(session_id)
-        if not session:
-            logger.warning("Join failed: session {} not found", session_id)
-            return None
-        session.add_user(user_id, user_name)
-        await self._ws_manager.broadcast_json(
-            session_id,
-            {"kind": "user_joined", "user_id": user_id, "user_name": user_name, "session_id": session_id},
-        )
-        logger.info("User {} joined session {}", user_id, session_id)
-        return session
-
-    async def leave_session(self, session_id: str, user_id: str) -> bool:
-        session = self._manager.get_session(session_id)
-        if not session:
-            return False
-        session.remove_user(user_id)
-        await self._ws_manager.broadcast_json(
-            session_id,
-            {"kind": "user_left", "user_id": user_id, "session_id": session_id},
-        )
-        logger.info("User {} left session {}", user_id, session_id)
-        return True
-
-    def get_active_sessions(self) -> list[dict[str, Any]]:
-        return self._manager.list_sessions()
-
-    async def apply_change(self, session_id: str, change: TextChange) -> bool:
-        session = self._manager.get_session(session_id)
-        if not session:
-            return False
-        ok = session.apply_change(change)
-        if ok:
-            await self._ws_manager.broadcast_json(
-                session_id,
-                {
-                    "kind": "text_change",
-                    "change": {
-                        "user_id": change.user_id,
-                        "file": change.file,
-                        "start_line": change.start_line,
-                        "start_col": change.start_col,
-                        "end_line": change.end_line,
-                        "end_col": change.end_col,
-                        "old_text": change.old_text,
-                        "new_text": change.new_text,
-                        "version": change.version,
-                    },
-                },
-            )
-        return ok
-
-    async def update_cursor(
-        self, session_id: str, user_id: str, file: str, line: int, column: int
-    ) -> CursorPosition | None:
-        session = self._manager.get_session(session_id)
-        if not session:
-            return None
-        pos = session.update_cursor(user_id, file, line, column)
-        await self._ws_manager.broadcast_json(
-            session_id,
-            {
-                "kind": "cursor_update",
-                "cursor": {
-                    "user_id": user_id,
-                    "file": file,
-                    "line": line,
-                    "column": column,
-                    "timestamp": pos.timestamp,
-                },
-            },
-        )
-        return pos
-
-    async def add_comment(self, session_id: str, user_id: str, file: str, line: int, text: str) -> Comment | None:
-        session = self._manager.get_session(session_id)
-        if not session:
-            return None
-        comment = session.add_comment(user_id, file, line, text)
-        await self._ws_manager.broadcast_json(
-            session_id,
-            {
-                "kind": "comment_added",
-                "comment": {
-                    "id": comment.id,
-                    "user_id": user_id,
-                    "file": file,
-                    "line": line,
-                    "text": text,
-                    "timestamp": comment.timestamp,
-                },
-            },
-        )
-        return comment
-
-    async def add_reply(self, session_id: str, parent_id: str, user_id: str, text: str) -> Comment | None:
-        session = self._manager.get_session(session_id)
-        if not session:
-            return None
-        reply = session.add_reply(parent_id, user_id, text)
-        if reply:
-            await self._ws_manager.broadcast_json(
-                session_id,
-                {
-                    "kind": "reply_added",
-                    "reply": {
-                        "id": reply.id,
-                        "parent_id": parent_id,
-                        "user_id": user_id,
-                        "text": text,
-                        "timestamp": reply.timestamp,
-                    },
-                },
-            )
-        return reply
-
-    async def resolve_comment(self, session_id: str, comment_id: str) -> bool:
-        session = self._manager.get_session(session_id)
-        if not session:
-            return False
-        ok = session.resolve_comment(comment_id)
-        if ok:
-            await self._ws_manager.broadcast_json(
-                session_id,
-                {"kind": "comment_resolved", "comment_id": comment_id},
-            )
-        return ok
-
-    def get_session_summary(self, session_id: str) -> dict[str, Any] | None:
-        session = self._manager.get_session(session_id)
-        if not session:
-            return None
-        return {
-            **session.get_state(),
-            "cursors": [
-                {"user_id": c.user_id, "file": c.file, "line": c.line, "column": c.column}
-                for c in session.get_cursors()
-            ],
-            "comments": [
-                {
-                    "id": c.id,
-                    "user_id": c.user_id,
-                    "text": c.text[:80],
-                    "resolved": c.resolved,
-                    "replies": len(c.replies),
-                }
-                for c in session.get_comments()
-            ],
-            "users": session.get_user_list(),
-            "user_info": session.get_user_info_list(),
-            "connections": self._ws_manager.connection_count(session_id),
-        }
-
-    def sync_crdt_state(self, session_id: str, target_session_id: str | None = None) -> bytes | None:
-        session = self._manager.get_session(session_id)
-        if not session:
-            return None
-        sv = session.get_crdt_state_vector()
-        if sv is None:
-            return None
-        if target_session_id:
-            target = self._manager.get_session(target_session_id)
-            if target and target.get_crdt_state_vector():
-                diff = session.encode_crdt_diff(sv)
-                if diff:
-                    target.apply_crdt_update(diff)
-        return session.encode_crdt_diff(b"")
-
-    def remove_session(self, session_id: str) -> bool:
-        return self._manager.remove_session(session_id)
-
-    def list_sessions(self) -> list[dict[str, Any]]:
-        return self._manager.list_sessions()
-
-    def get_session(self, session_id: str) -> CollaborationSession | None:
-        return self._manager.get_session(session_id)

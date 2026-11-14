@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
+import { errorMessage } from "../lib/errors";
 
 type Tab = "generate" | "edit" | "analyze" | "documents" | "video" | "upload";
 
@@ -52,7 +53,7 @@ export default function Media() {
   const generateMutation = useMutation({
     mutationFn: () => api.mediaGenerate(prompt),
     onSuccess: (r) => { if (r.error) setError(r.error); else setImageUrl(r.url); setError(""); },
-    onError: (e: any) => setError(e.message || "Generation failed"),
+    onError: (e) => setError(errorMessage(e, "Generation failed")),
   });
 
   const editMutation = useMutation({
@@ -65,13 +66,13 @@ export default function Media() {
       quality: parseInt(editQuality) || 85,
     }),
     onSuccess: (r) => { setEditResult(JSON.stringify(r, null, 2)); setError(""); },
-    onError: (e: any) => setError(e.message || "Edit failed"),
+    onError: (e) => setError(errorMessage(e, "Edit failed")),
   });
 
   const analyzeMutation = useMutation({
     mutationFn: () => api.mediaAnalyze(analyzePath, analyzePrompt),
     onSuccess: (d) => { setAnalyzeResult(d.result || JSON.stringify(d)); setError(""); },
-    onError: (e: any) => setError(e.message || "Analysis failed"),
+    onError: (e) => setError(errorMessage(e, "Analysis failed")),
   });
 
   const videoMutation = useMutation({
@@ -88,7 +89,7 @@ export default function Media() {
       if (d) setVideoResult(typeof d.result === "string" ? d.result : JSON.stringify(d, null, 2));
       setError("");
     },
-    onError: (e: any) => setError(e.message || "Video action failed"),
+    onError: (e) => setError(errorMessage(e, "Video action failed")),
   });
 
   const parseMutation = useMutation({
@@ -97,7 +98,7 @@ export default function Media() {
       setDocText(r.text); setDocMeta(r.metadata); setError("");
       if (r.truncated) setError("Output truncated to 50000 chars");
     },
-    onError: (e: any) => setError(e.message || "Parse failed"),
+    onError: (e) => setError(errorMessage(e, "Parse failed")),
   });
 
   async function handleUpload() {
@@ -107,8 +108,8 @@ export default function Media() {
     try {
       const r = await api.mediaUpload(file);
       setUploadResult(JSON.stringify(r, null, 2));
-    } catch (e: any) {
-      setError(e.message || "Upload failed");
+    } catch (e) {
+      setError(errorMessage(e, "Upload failed"));
     }
   }
 

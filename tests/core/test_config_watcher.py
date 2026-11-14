@@ -145,14 +145,13 @@ def test_with_no_path_it_watches_the_file_settings_actually_reads(
 
 @pytest.mark.asyncio
 async def test_a_written_switch_reaches_the_live_settings_without_a_restart(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, switch_names: None
 ) -> None:
     """The whole promise of the switch in one test: write the file, the running process follows."""
     from raven.core.config import refresh_settings_from_env, settings
 
     env = tmp_path / ".env"
     env.write_text("DEFAULT_MODEL=before\n", encoding="utf-8")
-    monkeypatch.delenv("DEFAULT_MODEL", raising=False)
     monkeypatch.setattr(settings, "default_model", "before")
 
     w = ConfigWatcher(str(env), check_interval=0.01)

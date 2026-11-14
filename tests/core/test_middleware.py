@@ -1,13 +1,27 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import uuid
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
+from loguru import logger
 
+from raven.core import middleware
 from raven.core.auth.tokens import token_manager
-from raven.core.middleware import _client_ip, auth_middleware, request_id_middleware, sanitize_metric_path
+from raven.core.config import settings
+from raven.core.metrics import metrics
+from raven.core.middleware import (
+    RateLimiter,
+    auth_middleware,
+    build_rate_limiter,
+    client_ip,
+    request_id_middleware,
+    sanitize_metric_path,
+)
 
 
 def _make_app() -> FastAPI:
@@ -291,33 +305,140 @@ def test_sanitize_metric_path_collapses_ids() -> None:
     assert sanitize_metric_path("/api/code/DEADBEEF1234/steps") == "/api/code/{id}/steps"
 
 
-def test_client_ip_uses_xff_from_loopback_peer() -> None:
-    from fastapi import Request
-
+def _request_from(peer: str, xff: str | None = None) -> Request:
     scope = {
         "type": "http",
         "method": "GET",
         "path": "/",
-        "headers": [(b"x-forwarded-for", b"203.0.113.7, 10.0.0.2")],
-        "client": ("127.0.0.1", 12345),
+        "headers": [] if xff is None else [(b"x-forwarded-for", xff.encode())],
+        "client": (peer, 12345),
         "server": ("test", 80),
         "scheme": "http",
         "query_string": b"",
     }
-    assert _client_ip(Request(scope)) == "203.0.113.7"
+    return Request(scope)
+
+
+def test_client_ip_uses_xff_from_loopback_peer() -> None:
+    assert client_ip(_request_from("127.0.0.1", "203.0.113.7, 10.0.0.2")) == "203.0.113.7"
 
 
 def test_client_ip_ignores_xff_from_external_peer() -> None:
-    from fastapi import Request
+    # 203.0.113.0/24 is a documentation range: `ipaddress` calls it private, but it is not a proxy
+    # anybody installed, so a caller using it as its peer still cannot choose the address we log.
+    assert client_ip(_request_from("203.0.113.9", "198.51.100.7")) == "203.0.113.9"
 
-    scope = {
-        "type": "http",
-        "method": "GET",
-        "path": "/",
-        "headers": [(b"x-forwarded-for", b"203.0.113.7")],
-        "client": ("203.0.113.9", 12345),
-        "server": ("test", 80),
-        "scheme": "http",
-        "query_string": b"",
-    }
-    assert _client_ip(Request(scope)) == "203.0.113.9"
+
+def test_client_ip_uses_xff_from_a_docker_network_peer() -> None:
+    # The shipped compose stack reaches the gateway from Traefik on 172.16.0.0/12, commonly above the
+    # 172.19 the old prefix list stopped at. Treat it as a stranger and every visitor shares one bucket.
+    assert client_ip(_request_from("172.20.0.4", "203.0.113.7")) == "203.0.113.7"
+
+
+def test_client_ip_uses_the_peer_when_there_is_no_proxy_header() -> None:
+    assert client_ip(_request_from("203.0.113.9")) == "203.0.113.9"
+
+
+def test_client_ip_honours_xff_from_a_stranger_once_a_proxy_is_declared(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "trust_forwarded_for", True)
+    assert client_ip(_request_from("8.8.8.8", "203.0.113.7")) == "203.0.113.7"
+
+
+def test_a_peer_that_is_not_an_address_cannot_spoof_one() -> None:
+    assert client_ip(_request_from("unknown", "203.0.113.7")) == "unknown"
+
+
+class TestHttpRateLimiter:
+    async def test_the_budget_comes_from_the_settings(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(settings, "rate_limit_max", 7)
+        monkeypatch.setattr(settings, "rate_limit_window", 13)
+        limiter = build_rate_limiter()
+        assert limiter.max_requests == 7
+        assert limiter.window == 13.0
+
+    async def test_the_allowance_refills_as_the_window_slides(self) -> None:
+        limiter = RateLimiter(max_requests=2, window_seconds=0.05)
+        assert await limiter.check("1.1.1.1")
+        assert await limiter.check("1.1.1.1")
+        assert not await limiter.check("1.1.1.1")
+        # Windows sleep granularity is ~16 ms, so the wait has to dwarf the window rather than edge past it.
+        await asyncio.sleep(0.2)
+        assert await limiter.check("1.1.1.1")
+
+    async def test_one_address_does_not_spend_another_s_budget(self) -> None:
+        limiter = RateLimiter(max_requests=1, window_seconds=60.0)
+        assert await limiter.check("1.1.1.1")
+        assert await limiter.check("2.2.2.2")
+
+    async def test_an_address_that_stopped_talking_is_forgotten(self) -> None:
+        limiter = RateLimiter(max_requests=10, window_seconds=0.01, prune_interval=0.0)
+        assert await limiter.check("1.1.1.1")
+        await asyncio.sleep(0.2)
+        assert await limiter.check("2.2.2.2")
+        assert "1.1.1.1" not in limiter._buckets
+
+    async def test_a_request_still_in_its_window_survives_a_prune(self) -> None:
+        limiter = RateLimiter(max_requests=10, window_seconds=60.0, prune_interval=0.0)
+        assert await limiter.check("1.1.1.1")
+        assert await limiter.check("2.2.2.2")
+        assert "1.1.1.1" in limiter._buckets
+
+    async def test_the_table_is_rescanned_on_the_cadence_not_on_every_request(self) -> None:
+        limiter = RateLimiter(max_requests=10, window_seconds=0.01, prune_interval=3600.0)
+        assert await limiter.check("1.1.1.1")
+        await asyncio.sleep(0.05)
+        assert await limiter.check("2.2.2.2")
+        assert "1.1.1.1" in limiter._buckets, "every request paid for a full scan"
+
+    async def test_a_stale_key_dies_once_the_prune_interval_elapses(self) -> None:
+        limiter = RateLimiter(max_requests=10, window_seconds=0.01, prune_interval=0.02)
+        assert await limiter.check("1.1.1.1")
+        await asyncio.sleep(0.05)
+        assert "1.1.1.1" in limiter._buckets
+        assert await limiter.check("2.2.2.2")
+        assert "1.1.1.1" not in limiter._buckets
+
+
+class TestRateLimitMiddleware:
+    async def test_the_reply_quotes_the_configured_window(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        limiter = RateLimiter(max_requests=1, window_seconds=7.0)
+        monkeypatch.setattr(middleware, "rate_limiter", limiter)
+        metrics.clear()
+
+        async def call_next(_request: Request) -> Response:
+            return JSONResponse({"ok": True})
+
+        allowed = await middleware.rate_limit_middleware(_request_from("203.0.113.5"), call_next)
+        blocked = await middleware.rate_limit_middleware(_request_from("203.0.113.5"), call_next)
+        assert allowed.status_code == 200
+        assert blocked.status_code == 429
+        assert json.loads(blocked.body)["retry_after"] == 7
+
+    async def test_the_blocked_counter_carries_no_per_caller_label(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        limiter = RateLimiter(max_requests=0, window_seconds=60.0)
+        monkeypatch.setattr(middleware, "rate_limiter", limiter)
+        metrics.clear()
+
+        async def call_next(_request: Request) -> Response:
+            return JSONResponse({"ok": True})
+
+        for peer in ("203.0.113.1", "203.0.113.2", "203.0.113.3"):
+            assert (await middleware.rate_limit_middleware(_request_from(peer), call_next)).status_code == 429
+        snapshot = metrics.snapshot()
+        assert snapshot.get("raven_http_rate_limited_total") == 3
+        assert not [key for key in snapshot if "ip=" in key], "one series per address is a memory leak"
+
+    async def test_the_refused_address_still_reaches_the_log(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        limiter = RateLimiter(max_requests=0, window_seconds=60.0)
+        monkeypatch.setattr(middleware, "rate_limiter", limiter)
+        records: list[str] = []
+
+        async def call_next(_request: Request) -> Response:
+            return JSONResponse({"ok": True})
+
+        sink = logger.add(records.append, level="WARNING", format="{message}")
+        try:
+            await middleware.rate_limit_middleware(_request_from("203.0.113.5"), call_next)
+        finally:
+            logger.remove(sink)
+        assert "203.0.113.5" in "".join(records)

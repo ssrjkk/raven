@@ -246,7 +246,7 @@ export default function Layout() {
         {/* Command palette trigger */}
         <button
           onClick={openCommandPalette}
-          className="mx-3 mt-3 flex items-center gap-2 px-3 py-2 rounded-lg border border-default text-sm transition hover:border-accent-muted"
+          className="mx-3 mt-3 flex items-center gap-2 px-3 py-2 rounded-lg border border-default text-sm transition hover:border-accent"
           style={{ backgroundColor: "var(--dt-colors-bg-primary)" }}
         >
           <Search size={14} className="shrink-0" />

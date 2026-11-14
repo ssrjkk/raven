@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
 import { useApiQuery } from "../hooks/useApiQuery";
+import { errorMessage } from "../lib/errors";
 
 interface VoiceSpeaker {
   speaker_id: string;
@@ -74,7 +75,7 @@ export default function Voice() {
       setEnrollId(""); setEnrollSamples("");
       qc.invalidateQueries({ queryKey: ["voiceSpeakers"] });
     },
-    onError: (e: any) => setError(e.message || "Enroll failed"),
+    onError: (e) => setError(errorMessage(e, "Enroll failed")),
   });
 
   const verify = useMutation({
@@ -85,7 +86,7 @@ export default function Voice() {
       return api.voiceVerify(verifyId, audio);
     },
     onSuccess: (r) => { setVerifyResult(r); setError(""); },
-    onError: (e: any) => setError(e.message || "Verify failed"),
+    onError: (e) => setError(errorMessage(e, "Verify failed")),
   });
 
   const identify = useMutation({
@@ -96,7 +97,7 @@ export default function Voice() {
       return api.voiceIdentify(audio);
     },
     onSuccess: (r) => { setIdentifyResult(r.results); setError(""); },
-    onError: (e: any) => setError(e.message || "Identify failed"),
+    onError: (e) => setError(errorMessage(e, "Identify failed")),
   });
 
   const removeSpeaker = useMutation({
@@ -105,13 +106,13 @@ export default function Voice() {
       setMsg(`Speaker '${id}' removed`);
       qc.invalidateQueries({ queryKey: ["voiceSpeakers"] });
     },
-    onError: (e: any) => setError(e.message || "Remove failed"),
+    onError: (e) => setError(errorMessage(e, "Remove failed")),
   });
 
   const continuousStart = useMutation({
     mutationFn: () => api.voiceContinuousStart(contId, parseFloat(contInterval) || 5),
     onSuccess: (r) => setMsg(`Continuous auth started for '${r.speaker_id}' (interval=${r.interval_sec}s)`),
-    onError: (e: any) => setError(e.message || "Failed to start continuous auth"),
+    onError: (e) => setError(errorMessage(e, "Failed to start continuous auth")),
   });
 
   const tabs: { key: Tab; label: string }[] = [

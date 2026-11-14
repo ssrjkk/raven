@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import raven.core.debugger_api as dba
+from raven.core.auth.models import Permission
 from raven.core.config import settings
 from raven.core.debugger_api import BreakpointRequest, _DebugSession
 from raven.core.security.path_guard import confine_path
@@ -130,15 +131,24 @@ def _call_admin(role: object) -> dict[str, str]:
 
 def test_require_admin_allowed() -> None:
     assert _call_admin("admin") == {"role": "admin"}
-    assert _call_admin("superadmin") == {"role": "superadmin"}
 
 
 def test_require_admin_denied() -> None:
-    with pytest.raises(HTTPException) as ei:
-        _call_admin("user")
-    assert ei.value.status_code == 403
+    # `superadmin` is not a Role: the enum has admin/user/viewer/banned. The hand-written list this
+    # guard replaced let the name through, so a token minted with it was an admin at this endpoint.
+    for role in ("user", "viewer", "banned", "superadmin", None, ""):
+        with pytest.raises(HTTPException) as ei:
+            _call_admin(role)
+        assert ei.value.status_code == 403, role
+
+
+def test_require_admin_answers_the_role_table(grant_permission) -> None:
+    """A guard that compared the role name would still deny a role the table just granted."""
+    grant_permission("viewer", Permission.ADMIN_SECRETS)
     with pytest.raises(HTTPException):
-        _call_admin(None)
+        _call_admin("viewer")
+    grant_permission("viewer", Permission.ADMIN_WRITE)
+    assert _call_admin("viewer") == {"role": "viewer"}
 
 
 # --- router endpoint tests ---

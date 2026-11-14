@@ -13,7 +13,7 @@ RUN npm run build
 # hatchling builds the wheel from the build context alone: a package it is asked for is a hard error
 # when the context does not have it, so every directory in pyproject `packages` and `force-include`
 # has to be copied here.
-FROM python:3.15-slim AS wheel-builder
+FROM python:3.12-slim AS wheel-builder
 ARG RAVEN_VERSION
 WORKDIR /build
 COPY pyproject.toml README.md ./
@@ -24,12 +24,13 @@ COPY policy/ policy/
 RUN pip install --no-cache-dir build \
     && python -m build --wheel
 
-FROM python:3.15-slim AS base
+FROM python:3.12-slim AS base
 # curl is for the healthcheck only. Chromium's shared libraries used to be installed here for
 # the optional `browser` extra, which nothing in the image installs; add them back together
 # with `pip install "raven-agent[browser]" && playwright install chromium` if that changes.
-# upgrade обязателен: debian 13 приходит с liblzma5 5.8.1-1+deb13u1 (DSA-6549-1),
-# патч вышел только в deb13u2, и без этого слоя Trivy находит его в образе каждый раз.
+# upgrade обязателен: слой тянет из репозитория Debian пропатченные сборки библиотек, которые
+# базовый образ приносит непропатченными (liblzma5, libpcre2), иначе Trivy приписывает их CVE
+# приложению. Версия интерпретатора здесь не случайна: тесты гейта сверяют её с CI-матрицей.
 RUN apt-get update && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends curl libpcre2-8-0 \
     && rm -rf /var/lib/apt/lists/*

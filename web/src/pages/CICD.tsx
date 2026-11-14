@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
+import { errorMessage } from "../lib/errors";
 
 export default function CICD() {
   const [owner, setOwner] = useState("");
@@ -21,13 +22,13 @@ export default function CICD() {
   const loadWorkflows = useMutation({
     mutationFn: () => api.cicdWorkflows(owner, repo, provider),
     onSuccess: (r) => { setResult(r.text); setError(""); },
-    onError: (e: any) => setError(e.message || "Failed to list workflows"),
+    onError: (e) => setError(errorMessage(e, "Failed to list workflows")),
   });
 
   const loadRuns = useMutation({
     mutationFn: () => api.cicdRuns(owner, repo, branch, statusFilter, provider),
     onSuccess: (r) => { setResult(r.text); setError(""); },
-    onError: (e: any) => setError(e.message || "Failed to list runs"),
+    onError: (e) => setError(errorMessage(e, "Failed to list runs")),
   });
 
   const loadStatus = useMutation({
@@ -36,7 +37,7 @@ export default function CICD() {
       return api.cicdStatus(pipelineId, owner, repo, provider);
     },
     onSuccess: (r) => { setResult(r.text); setError(""); },
-    onError: (e: any) => setError(e.message || "Failed to check status"),
+    onError: (e) => setError(errorMessage(e, "Failed to check status")),
   });
 
   const triggerRun = useMutation({
@@ -45,7 +46,7 @@ export default function CICD() {
       return api.cicdRun(workflowId, owner, repo, ref, inputs, provider);
     },
     onSuccess: (r) => { setResult(r.text); setError(""); },
-    onError: (e: any) => setError(e.message || "Failed to trigger run"),
+    onError: (e) => setError(errorMessage(e, "Failed to trigger run")),
   });
 
   return (

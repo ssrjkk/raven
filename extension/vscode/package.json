@@ -36,7 +36,12 @@
       { "command": "raven.terminalTui", "title": "Raven: Open TUI in Terminal" },
       { "command": "raven.start", "title": "Raven: Start Gateway" },
       { "command": "raven.stop", "title": "Raven: Stop Gateway" },
-      { "command": "raven.status", "title": "Raven: Show Status" }
+      { "command": "raven.status", "title": "Raven: Show Status" },
+      {
+        "command": "raven.setGatewayToken",
+        "title": "Raven: Set Gateway Token",
+        "category": "Raven"
+      }
     ],
     "keybindings": [
       { "command": "raven.chat", "key": "ctrl+shift+r", "mac": "cmd+shift+r" },

@@ -42,7 +42,7 @@ export function useAgentSocket(onEvent: (ev: AgentSocketEvent) => void) {
     const token = getToken();
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
     const query = token ? `?token=${encodeURIComponent(token)}` : "";
-    const ws = new WebSocket(`${protocol}//${location.host}/ws/agent${query}`);
+    const ws = new WebSocket(`${protocol}//${location.host}/aios/ws/agent${query}`);
     ws.onopen = () => {
       setConnected(true);
       attemptRef.current = 0;

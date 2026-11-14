@@ -24,6 +24,13 @@ class _AllKeysDiscovery:
         return True
 
 
+class _OnlyLocalDiscovery:
+    providers_available: ClassVar[list[str]] = ["ollama"]
+
+    def is_available(self, key_name: str) -> bool:
+        return key_name == "OLLAMA_BASE_URL"
+
+
 @pytest.fixture
 def all_keys(monkeypatch):
     import raven.core.config_discovery as discovery
@@ -117,10 +124,27 @@ class TestLLMRouter:
         prov = router._get_provider("unknown/model")
         assert self._unwrapped(prov).__name__ == "OllamaProvider"
 
-    def test_get_provider_empty_default(self):
-        router = LLMRouter()
-        prov = router._get_provider("")
-        assert prov is not None
+    def test_an_empty_model_resolves_the_configured_default(self, all_keys, monkeypatch):
+        """`DEFAULT_MODEL` has to be what an empty model gets, and it has to resolve.
+
+        This asserted only `is not None` against whatever the machine running the suite had in its
+        `.env`, so a `DEFAULT_MODEL` naming a provider with no key made it raise: a property of the
+        install, not of the router.
+        """
+        from raven.core.config import settings
+
+        monkeypatch.setattr(settings, "default_model", "gpt-4o")
+        prov = LLMRouter()._get_provider("")
+        assert self._unwrapped(prov).__name__ == "OpenAIProvider"
+
+    def test_a_default_naming_a_provider_without_a_key_is_refused_loudly(self, monkeypatch):
+        from raven.core import config_discovery
+        from raven.core.config import settings
+
+        monkeypatch.setattr(settings, "default_model", "gpt-4o")
+        monkeypatch.setattr(config_discovery, "get_discovered_keys", lambda *a, **k: _OnlyLocalDiscovery())
+        with pytest.raises(RuntimeError, match="requires OPENAI_API_KEY which is not set"):
+            LLMRouter()._get_provider("")
 
 
 class TestAnthropicPromptCaching:

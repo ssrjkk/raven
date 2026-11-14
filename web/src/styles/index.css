@@ -294,11 +294,13 @@ p code {
 .bg-tertiary { background-color: var(--dt-colors-bg-tertiary); }
 .bg-accent { background-color: var(--dt-colors-accent-default); }
 .bg-accent-muted { background-color: var(--dt-colors-accent-muted); }
+.bg-accent-subtle { background-color: var(--dt-colors-accent-subtle); }
 .bg-success { background-color: var(--dt-colors-status-success); }
 .bg-danger { background-color: var(--dt-colors-status-error); }
 .bg-info { background-color: var(--dt-colors-status-info); }
 
 .border-default { border-color: var(--dt-colors-border-default); }
+.border-accent { border-color: var(--dt-colors-accent-default); }
 
 /* Variant utilities (Tailwind core can't compose plain classes) */
 .hover\:bg-secondary:hover { background-color: var(--dt-colors-bg-secondary); }
@@ -308,6 +310,9 @@ p code {
 .hover\:text-primary:hover { color: var(--dt-colors-text-primary); }
 .hover\:text-secondary:hover { color: var(--dt-colors-text-secondary); }
 .hover\:text-tertiary:hover { color: var(--dt-colors-text-tertiary); }
+.hover\:text-danger:hover { color: var(--dt-colors-status-error); }
+.hover\:border-accent:hover { border-color: var(--dt-colors-border-focus); }
+.focus\:border-accent:focus { border-color: var(--dt-colors-border-focus); }
 
 .text-danger { color: var(--dt-colors-status-error); }
 .text-success { color: var(--dt-colors-status-success); }

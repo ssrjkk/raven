@@ -625,7 +625,7 @@ export default function IDEPage() {
                             Cancel
                           </button>
                           <button onClick={acceptInlineEdit}
-                            className="px-2 py-1 text-xs rounded border border-accent bg-accent/10 text-accent hover:bg-accent/20 cursor-pointer">
+                            className="px-2 py-1 text-xs rounded border border-accent bg-accent-subtle text-accent hover:bg-accent-muted cursor-pointer">
                             Accept
                           </button>
                         </div>
@@ -639,10 +639,10 @@ export default function IDEPage() {
                           onChange={(e) => setInlineEdit(prev => ({ ...prev, instruction: e.target.value }))}
                           onKeyDown={(e) => { if (e.key === "Enter") submitInlineEdit(); if (e.key === "Escape") setInlineEdit(prev => ({ ...prev, visible: false })) }}
                           placeholder="How should this code change?"
-                          className="flex-1 px-2 py-1 text-xs bg-primary border border-default rounded text-primary placeholder:text-quaternary focus:outline-none focus:border-accent"
+                          className="flex-1 px-2 py-1 text-xs bg-primary border border-default rounded text-primary placeholder:text-[var(--dt-colors-text-tertiary)] focus:outline-none focus:border-accent"
                         />
                         <button onClick={submitInlineEdit}
-                          className="px-2 py-1 text-xs rounded border border-accent bg-accent/10 text-accent hover:bg-accent/20 cursor-pointer shrink-0">
+                          className="px-2 py-1 text-xs rounded border border-accent bg-accent-subtle text-accent hover:bg-accent-muted cursor-pointer shrink-0">
                           Go
                         </button>
                       </div>
@@ -835,14 +835,14 @@ export default function IDEPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") runSearch() }}
               placeholder="Search..."
-              className="w-full px-2 py-1.5 text-xs bg-primary border border-default rounded text-primary placeholder:text-quaternary focus:outline-none focus:border-accent"
+              className="w-full px-2 py-1.5 text-xs bg-primary border border-default rounded text-primary placeholder:text-[var(--dt-colors-text-tertiary)] focus:outline-none focus:border-accent"
             />
             {searching && <div className="text-[10px] text-tertiary">Searching...</div>}
             <div className="flex-1 overflow-auto flex flex-col gap-1">
               {searchResults.map((r, i) => (
                 <button key={i}
                   onClick={() => r.file && openFile(r.file)}
-                  className="text-left px-2 py-1 text-xs rounded hover:bg-primary/50 cursor-pointer border-none bg-transparent">
+                  className="text-left px-2 py-1 text-xs rounded hover:bg-[var(--dt-colors-bg-hover)] cursor-pointer border-none bg-transparent">
                   <div className="text-accent font-mono truncate">
                     {r.file}{r.line ? `:${r.line}` : ""}{r.range ? `:${r.range}` : ""}
                   </div>

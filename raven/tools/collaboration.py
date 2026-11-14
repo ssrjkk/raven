@@ -2,21 +2,16 @@ from __future__ import annotations
 
 from loguru import logger
 
+from raven.core.collab_api import get_manager
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
-from raven.unique.collaboration import CollaborationManager
 
-_manager: CollaborationManager | None = None
-
-
-def _get_manager() -> CollaborationManager:
-    global _manager
-    if _manager is None:
-        _manager = CollaborationManager()
-    return _manager
+# `get_manager`, not a manager of this module's own: the tool used to keep a private
+# `CollaborationManager()` singleton, so an agent's `collab_create_session` wrote a registry the
+# gateway never looked at and `/api/collab/sessions` listed none of it.
 
 
 def collab_create_session(session_id: str, file_path: str) -> str:
-    mgr = _get_manager()
+    mgr = get_manager()
     try:
         mgr.create_session(session_id, file_path)
         return f"Session '{session_id}' created for file '{file_path}'."
@@ -26,7 +21,7 @@ def collab_create_session(session_id: str, file_path: str) -> str:
 
 
 def collab_list_sessions() -> str:
-    mgr = _get_manager()
+    mgr = get_manager()
     sessions = mgr.list_sessions()
     if not sessions:
         return "[info] No active sessions."
@@ -37,7 +32,7 @@ def collab_list_sessions() -> str:
 
 
 def collab_join_session(session_id: str, user_id: str, user_name: str) -> str:
-    mgr = _get_manager()
+    mgr = get_manager()
     session = mgr.get_session(session_id)
     if not session:
         return f"[error] Session '{session_id}' not found."
@@ -46,7 +41,7 @@ def collab_join_session(session_id: str, user_id: str, user_name: str) -> str:
 
 
 def collab_leave_session(session_id: str, user_id: str) -> str:
-    mgr = _get_manager()
+    mgr = get_manager()
     session = mgr.get_session(session_id)
     if not session:
         return f"[error] Session '{session_id}' not found."
@@ -64,7 +59,7 @@ def collab_apply_change(
     old_text: str,
     new_text: str,
 ) -> str:
-    mgr = _get_manager()
+    mgr = get_manager()
     session = mgr.get_session(session_id)
     if not session:
         return f"[error] Session '{session_id}' not found."
@@ -87,7 +82,7 @@ def collab_apply_change(
 
 
 def collab_add_comment(session_id: str, user_id: str, file: str, line: int, text: str) -> str:
-    mgr = _get_manager()
+    mgr = get_manager()
     session = mgr.get_session(session_id)
     if not session:
         return f"[error] Session '{session_id}' not found."
@@ -96,7 +91,7 @@ def collab_add_comment(session_id: str, user_id: str, file: str, line: int, text
 
 
 def collab_session_state(session_id: str) -> str:
-    mgr = _get_manager()
+    mgr = get_manager()
     session = mgr.get_session(session_id)
     if not session:
         return f"[error] Session '{session_id}' not found."

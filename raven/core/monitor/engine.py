@@ -322,3 +322,25 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
                 channel=channel_id or "",
                 text=alert_text[:200],
             )
+
+
+async def toggle_monitor(
+    engine: MonitorEngine | None, store: MonitorStore, monitor_id: str, *, pause: bool
+) -> MonitorStatus | None:
+    """Pause or resume one monitor and return the status the store now holds, or None if it has no such row.
+
+    The engine owns the running task, the store owns the status an engine reads back when it starts. With
+    no engine mounted the write still has to reach the store, otherwise the endpoint answers `ok` for work
+    that did not happen and the monitor keeps firing. The status is read back instead of echoed, so the
+    reply describes the row rather than the request.
+    """
+    if engine is not None:
+        changed = await engine.pause_monitor(monitor_id) if pause else await engine.resume_monitor(monitor_id)
+        if not changed:
+            return None
+    else:
+        if not await store.load_monitor(monitor_id):
+            return None
+        await store.update_status(monitor_id, MonitorStatus.PAUSED if pause else MonitorStatus.ACTIVE)
+    saved = await store.load_monitor(monitor_id)
+    return saved.status if saved is not None else None

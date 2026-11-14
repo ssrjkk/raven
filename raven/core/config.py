@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import contextlib
 import os
+from collections.abc import Callable
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from loguru import logger
@@ -122,6 +124,14 @@ class Settings(BaseSettings):
     """Credentialed cross-origin requests. Keep on for the SPA; with it on, `*` is refused below."""
     rate_limit_max: int = 60
     rate_limit_window: int = 60
+    trust_forwarded_for: bool = False
+    """Honour `X-Forwarded-For` from a peer that is not a proxy we installed.
+
+    Set it when a cloud load balancer or an off-host reverse proxy terminates the connection; leaving it
+    off means a caller can choose the address the rate limiter and the login lockout attribute it to.
+    Loopback and private-range peers are honoured either way, which is what the shipped compose stack
+    needs.
+    """
     json_log: bool = True
     log_level: str = "INFO"
     db_path: str = "data/raven.db"
@@ -342,18 +352,6 @@ sanitize_no_proxy_env()
 
 settings = Settings()
 
-# ── Honeytoken watermark check ────────────────────────────────
-_honeytoken_keys = {
-    "openrouter_api_key": "OPENROUTER_API_KEY",
-    "anthropic_api_key": "ANTHROPIC_API_KEY",
-    "openai_api_key": "OPENAI_API_KEY",
-    "groq_api_key": "GROQ_API_KEY",
-}
-for _attr, _env_name in _honeytoken_keys.items():
-    _val = getattr(settings, _attr, SafeSecretStr(""))
-    if _val and is_honeytoken(_env_name, _val.get_secret_value()):
-        logger.warning(honeytoken_warning(_env_name))
-
 if settings.web_secret_key.get_secret_value() in ("", "change-me-in-production"):
     logger.warning(
         "WEB_SECRET_KEY is default or empty — set a random key in .env for auth. "
@@ -408,15 +406,300 @@ def apply_ghost_mode(overrides: dict[str, Any] | None = None) -> None:
 
 _USER_ENV_FILE = Path.home() / ".raven" / ".env"
 
-# Env names a running gateway is expected to honour without a restart. Anything secret, port-shaped
-# or storage-shaped stays out: those need a fresh process because their consumers cache connections.
-_RUNTIME_SWITCHABLE: dict[str, str] = {
-    "DEFAULT_MODEL": "default_model",
-    "MODEL_FAST": "model_fast",
-    "MODEL_BALANCED": "model_balanced",
-    "MODEL_QUALITY": "model_quality",
-    "OLLAMA_BASE_URL": "ollama_base_url",
+_TRUE_WORDS = ("true", "1", "yes", "on")
+_FALSE_WORDS = ("false", "0", "no", "off")
+
+
+@dataclass(frozen=True)
+class RuntimeSwitch:
+    """What one environment name does to a running gateway.
+
+    ``env_name`` is where the value lives, ``attr`` the ``Settings`` field it owns, ``kind`` how a raw
+    string becomes that field's type, ``rebind`` what has to be rebuilt because a consumer cached the
+    old value, and ``restart_required`` the honest answer for anything whose consumer bound the value at
+    startup: uvicorn has the port, so writing it changes the next process, not this one.
+    """
+
+    attr: str
+    env_name: str
+    kind: Literal["str", "int", "bool", "secret"] = "str"
+    choices: Callable[[], tuple[str, ...]] = lambda: ()
+    minimum: int | None = None
+    maximum: int | None = None
+    restart_required: bool = False
+    rebind: tuple[Callable[[], None], ...] = ()
+
+
+def _dm_policy_choices() -> tuple[str, ...]:
+    """The policies the gateway can actually act on — the same set ``validate_settings`` refuses without."""
+    return ("pairing", "open", "closed")
+
+
+def _visibility_choices() -> tuple[str, ...]:
+    from raven.core.security.context_filter import ContextVisibility
+
+    return tuple(str(value) for value in ContextVisibility)
+
+
+def _log_level_choices() -> tuple[str, ...]:
+    """The level names both sinks accept, probed rather than listed.
+
+    loguru raises for a name it does not know and structlog falls back to INFO for anything the stdlib
+    does not export, so the intersection is the real domain; the aliases the stdlib spells twice (WARN /
+    WARNING, FATAL / CRITICAL) collapse onto the one spelling both sinks honour.
+
+    The probe reads the constants the stdlib module exports, not ``getLevelNamesMapping()``: that
+    mapping is a process-global registry any imported library can extend — uvicorn writes ``TRACE = 5``
+    into it at import — so a domain read from it would let the console accept ``LOG_LEVEL=TRACE`` only in
+    a process that had already imported uvicorn, and the same `.env` would be refused in another.
+    """
+    import logging
+
+    from loguru import logger
+
+    by_value: dict[int, str] = {}
+    exported = (
+        (name, value)
+        for name, value in sorted(vars(logging).items())
+        if isinstance(value, int) and not isinstance(value, bool) and name.isupper()
+    )
+    for name, value in exported:
+        try:
+            logger.level(name)
+        except ValueError:
+            continue
+        by_value.setdefault(value, name)
+    return tuple(by_value[value] for value in sorted(by_value))
+
+
+def _rebind_rate_limiter() -> None:
+    """Rebuild the per-IP limiter: the middleware holds one instance for the life of the process."""
+    from raven.core import middleware
+
+    middleware.rate_limiter = middleware.build_rate_limiter()
+
+
+def _rebind_logging() -> None:
+    """Re-open the sinks: loguru keeps the level and the line shape of every handler from setup time."""
+    from raven.core.logging import setup_logging
+
+    setup_logging()
+
+
+# Every switch the console, the CLI and the `.env` watcher can move under a live gateway. The admin
+# screen used to write its keys into `~/.raven/config.json` and answer `{"ok": true}` — a file no
+# running process ever read — so one table now owns both the name space and the effect.
+_RUNTIME_SWITCHES: dict[str, RuntimeSwitch] = {
+    switch.attr: switch
+    for switch in (
+        RuntimeSwitch("default_model", "DEFAULT_MODEL"),
+        RuntimeSwitch("model_fast", "MODEL_FAST"),
+        RuntimeSwitch("model_balanced", "MODEL_BALANCED"),
+        RuntimeSwitch("model_quality", "MODEL_QUALITY"),
+        RuntimeSwitch("ollama_base_url", "OLLAMA_BASE_URL"),
+        RuntimeSwitch("dm_policy", "DM_POLICY", choices=_dm_policy_choices),
+        RuntimeSwitch("context_visibility", "CONTEXT_VISIBILITY", choices=_visibility_choices),
+        RuntimeSwitch("rate_limit_max", "RATE_LIMIT_MAX", "int", minimum=1, rebind=(_rebind_rate_limiter,)),
+        RuntimeSwitch("log_level", "LOG_LEVEL", choices=_log_level_choices, rebind=(_rebind_logging,)),
+        RuntimeSwitch("json_log", "JSON_LOG", "bool", rebind=(_rebind_logging,)),
+        RuntimeSwitch("web_port", "WEB_PORT", "int", minimum=1, maximum=65535, restart_required=True),
+        RuntimeSwitch("openrouter_api_key", "OPENROUTER_API_KEY", "secret"),
+        RuntimeSwitch("anthropic_api_key", "ANTHROPIC_API_KEY", "secret"),
+        RuntimeSwitch("openai_api_key", "OPENAI_API_KEY", "secret"),
+        RuntimeSwitch("groq_api_key", "GROQ_API_KEY", "secret"),
+    )
 }
+
+
+def runtime_switch_keys() -> tuple[str, ...]:
+    """The names a caller may write through the console, the CLI or the env file."""
+    return tuple(_RUNTIME_SWITCHES)
+
+
+def runtime_switches() -> tuple[RuntimeSwitch, ...]:
+    """The table itself, in declaration order — what the documentation and drift gates walk."""
+    return tuple(_RUNTIME_SWITCHES.values())
+
+
+def console_config_keys() -> tuple[str, ...]:
+    """The switches `GET /api/admin/config` answers: everything writable except the credentials."""
+    return tuple(key for key, switch in _RUNTIME_SWITCHES.items() if switch.kind != "secret")
+
+
+def coerce_runtime_switch(key: str, raw: str, *, require_key_shape: bool = True) -> tuple[Any, str]:
+    """The typed value a switch takes and the text that persists for it, refusing what it cannot hold.
+
+    The console used to store whatever string a caller sent, so ``RATE_LIMIT_MAX=0`` came back as a
+    limiter that blocks every request and ``DM_POLICY=opn`` as a policy that is neither open nor closed.
+    ``require_key_shape`` is only true for a human typing a credential: a gateway copying its own
+    environment onto ``Settings`` must not refuse a working key because its prefix is unusual.
+    """
+    switch = _RUNTIME_SWITCHES[key]
+    text = raw.strip()
+    if not text:
+        raise ValueError(f"{switch.env_name} must not be empty")
+    if switch.kind == "int":
+        try:
+            number = int(text)
+        except ValueError:
+            raise ValueError(f"{switch.env_name} must be an integer, got {text!r}") from None
+        if switch.minimum is not None and number < switch.minimum:
+            raise ValueError(f"{switch.env_name} must be >= {switch.minimum}, got {number}")
+        if switch.maximum is not None and number > switch.maximum:
+            raise ValueError(f"{switch.env_name} must be <= {switch.maximum}, got {number}")
+        return number, str(number)
+    if switch.kind == "bool":
+        lowered = text.lower()
+        if lowered in _TRUE_WORDS:
+            return True, "true"
+        if lowered in _FALSE_WORDS:
+            return False, "false"
+        raise ValueError(f"{switch.env_name} must be true or false, got {text!r}")
+    if switch.kind == "secret":
+        # The prefix table lives with the discovery that reads it; a second copy here is how a switch
+        # starts accepting a key the provider will not use.
+        from raven.core.config_discovery import _KEY_PATTERNS, _validate_key
+
+        if require_key_shape and not _validate_key(switch.env_name, text):
+            expected = _KEY_PATTERNS.get(switch.env_name) or []
+            shape = f"one of {', '.join(expected)}" if expected else "at least 16 characters"
+            raise ValueError(f"{switch.env_name} does not look like a real key (expected {shape})")
+        return SafeSecretStr(text), text
+    domain = switch.choices()
+    if domain and text not in domain:
+        raise ValueError(f"{switch.env_name} must be one of {', '.join(domain)}, got {text!r}")
+    return text, text
+
+
+@dataclass(frozen=True)
+class SwitchResult:
+    """What writing a switch did, in the terms a caller can act on and a log can hold."""
+
+    key: str
+    env_name: str
+    value: Any
+    applied: bool
+    restart_required: bool
+    env_file: str
+    warnings: tuple[str, ...] = ()
+    secret: bool = False
+
+    def as_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "key": self.key,
+            "env_name": self.env_name,
+            "applied": self.applied,
+            "restart_required": self.restart_required,
+            "env_file": self.env_file,
+            "warnings": list(self.warnings),
+        }
+        if not self.secret:
+            payload["value"] = self.value
+        return payload
+
+
+async def _forget_cached_provider(env_name: str) -> None:
+    """Drop the provider built with the old credential, and re-read which keys the process now has.
+
+    ``LLMRouter`` caches one client per provider, and the discovery table is cached too, so a rotated
+    key would otherwise sit unused: the next call would keep signing with the old one, or report the
+    provider as unavailable while its new value is already in the environment.
+    """
+    from raven.core.config_discovery import get_discovered_keys
+    from raven.core.llm.router import PROVIDER_ENV_KEYS, default_llm_router
+
+    provider = next((name for name, variable in PROVIDER_ENV_KEYS.items() if variable == env_name), "")
+    if provider:
+        await default_llm_router().invalidate_provider(provider)
+    get_discovered_keys(force=True)
+
+
+async def apply_runtime_switch(key: str, raw: str) -> SwitchResult:
+    """Write one switch where a running gateway reads it, and say honestly what that changed.
+
+    Reading the shadow and the previous value happens before the write: setting the switch also updates
+    this process's environment, after which an export made outside the env files can no longer be told
+    apart from the value just written.
+    """
+    switch = _RUNTIME_SWITCHES[key]
+    value, text = coerce_runtime_switch(key, raw)
+    shadow = overshadowing_env_value(switch.env_name)
+    canary = switch.kind == "secret" and is_honeytoken(switch.env_name, text)
+    env_file = effective_env_file()
+    write_env_value(switch.env_name, text)
+    applied = not switch.restart_required
+    if applied:
+        setattr(get_settings(), switch.attr, value)
+
+    warnings: list[str] = []
+    if shadow is not None and switch.kind != "secret" and shadow != text:
+        warnings.append(
+            f"{switch.env_name}={shadow!r} is exported outside the env files and beats {env_file} at "
+            "next start — clear it there or the switch will not hold"
+        )
+    if canary:
+        logger.warning(honeytoken_warning(switch.env_name))
+        warnings.append(f"{switch.env_name} is a canary this build issued, not a real credential")
+    if switch.restart_required:
+        warnings.append(f"{switch.env_name} needs a restart: the running process already bound it")
+    else:
+        for hook in switch.rebind:
+            try:
+                hook()
+            except Exception as exc:
+                applied = False
+                warnings.append(f"{switch.env_name} was stored but its consumer refused to rebind: {exc}")
+        if switch.kind == "secret":
+            try:
+                await _forget_cached_provider(switch.env_name)
+            except Exception as exc:
+                applied = False
+                warnings.append(f"{switch.env_name} was stored but the cached provider survived: {exc}")
+    return SwitchResult(
+        key=key,
+        env_name=switch.env_name,
+        value=value,
+        applied=applied,
+        restart_required=switch.restart_required,
+        env_file=str(env_file),
+        warnings=tuple(warnings),
+        secret=switch.kind == "secret",
+    )
+
+
+def refresh_settings_from_env() -> list[str]:
+    """Copy the runtime-switchable env names onto the live settings object and name what moved.
+
+    ``Settings`` reads the environment once, at import, so editing ``DEFAULT_MODEL`` in ``.env`` used to
+    change only the next process while the running gateway kept answering from the old model.
+    ``ConfigWatcher`` keeps ``os.environ`` current and calls this. An empty value is skipped: an unset
+    name must not wipe an auto-discovered model, and a value the switch cannot hold is named in the log
+    and left alone rather than pushed into a typed field.
+    """
+    changed: list[str] = []
+    hooks: list[Callable[[], None]] = []
+    s = get_settings()
+    for switch in _RUNTIME_SWITCHES.values():
+        if switch.restart_required:
+            continue
+        raw = os.environ.get(switch.env_name, "").strip()
+        if not raw:
+            continue
+        try:
+            value, _ = coerce_runtime_switch(switch.attr, raw, require_key_shape=False)
+        except ValueError as exc:
+            logger.warning("[config] ignored the environment's {}: {}", switch.env_name, exc)
+            continue
+        if getattr(s, switch.attr, None) == value:
+            continue
+        setattr(s, switch.attr, value)
+        changed.append(switch.env_name)
+        hooks.extend(hook for hook in switch.rebind if hook not in hooks)
+    for hook in hooks:
+        hook()
+    if changed:
+        logger.info("[config] runtime switch applied: {}", ", ".join(changed))
+    return changed
 
 
 def env_file_candidates() -> list[Path]:
@@ -470,27 +753,6 @@ def overshadowing_env_value(env_name: str) -> str | None:
     if not value:
         return None
     return None if value == (read_env_value(env_name) or "").strip() else value
-
-
-def refresh_settings_from_env() -> list[str]:
-    """Copy the runtime-switchable env names onto the live settings object and name what moved.
-
-    ``Settings`` reads the environment once, at import, so editing ``DEFAULT_MODEL`` in ``.env`` used to
-    change only the next process while the running gateway kept answering from the old model.
-    ``ConfigWatcher`` keeps ``os.environ`` current and calls this. An empty value is skipped: an unset
-    name must not wipe an auto-discovered model.
-    """
-    changed: list[str] = []
-    s = get_settings()
-    for env_name, attr in _RUNTIME_SWITCHABLE.items():
-        value = os.environ.get(env_name, "").strip()
-        if not value or getattr(s, attr, None) == value:
-            continue
-        setattr(s, attr, value)
-        changed.append(env_name)
-    if changed:
-        logger.info("[config] runtime switch applied: {}", ", ".join(changed))
-    return changed
 
 
 def _env_lines(path: Path) -> tuple[list[str], str]:
@@ -565,3 +827,30 @@ def drop_env_value(key: str, env_path: Path | None = None) -> None:
         return
     _write_env_lines(path, kept, newline)
     os.environ.pop(key, None)
+
+
+def honeytoken_hits() -> list[str]:
+    """Names among this install's credentials that match a canary the build issued.
+
+    Driven by ``HONEYTOKEN_API_KEYS``, the table that mints the canaries: the copy this replaced listed
+    four names by hand, so ``GITHUB_TOKEN``, ``TELEGRAM_BOT_TOKEN`` and ``SLACK_BOT_TOKEN`` could carry
+    a watermark through the gateway without ever being noticed. Both sources a running process resolves
+    a name from are read — the environment and every env file.
+    """
+    from raven.core.watermark import HONEYTOKEN_API_KEYS
+
+    hits: list[str] = []
+    for name in HONEYTOKEN_API_KEYS:
+        value = os.environ.get(name, "").strip()
+        if not value:
+            for path in env_file_candidates():
+                for line in _env_lines(path)[0]:
+                    if _line_key(line) == name:
+                        value = line.strip().split("=", 1)[1].strip().strip("\"'")
+        if value and is_honeytoken(name, value):
+            hits.append(name)
+    return hits
+
+
+for _honeytoken_name in honeytoken_hits():
+    logger.warning(honeytoken_warning(_honeytoken_name))

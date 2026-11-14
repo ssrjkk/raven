@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { RavenApi } from './api';
-import { getConfig } from './config';
+import { getConfig, TOKEN_SECRET } from './config';
 import { RavenPanel } from './panel';
 import { RavenCodeActionProvider } from './codeAction';
 import { RavenHoverProvider } from './hover';
@@ -16,8 +16,8 @@ let healthTimer: NodeJS.Timeout | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
   const cfg = getConfig();
-  const api = new RavenApi(cfg.endpoint);
-  panel = new RavenPanel(context.extensionUri);
+  const api = new RavenApi(context.secrets);
+  panel = new RavenPanel(context);
 
   // ── Status bar ──────────────────────────────────────────
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -42,7 +42,8 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('raven.terminalTui', () => openTui()),
     vscode.commands.registerCommand('raven.start', () => startGateway()),
     vscode.commands.registerCommand('raven.stop', () => stopGateway()),
-    vscode.commands.registerCommand('raven.status', () => showStatus(api)),
+    vscode.commands.registerCommand('raven.status', () => showStatus(api, context)),
+    vscode.commands.registerCommand('raven.setGatewayToken', () => setGatewayToken(context)),
   );
 
   // ── Providers ───────────────────────────────────────────
@@ -119,10 +120,36 @@ async function updateHealthStatus(api: RavenApi) {
   }
 }
 
-async function showStatus(api: RavenApi) {
+async function setGatewayToken(context: vscode.ExtensionContext) {
+  const token = await vscode.window.showInputBox({
+    title: 'Raven: Set Gateway Token',
+    prompt: 'The key the gateway authenticates with. Leave empty to forget the stored token.',
+    password: true,
+    ignoreFocusOut: true,
+    placeHolder: 'WEB_SECRET_KEY, or a session token from /api/auth/login',
+  });
+  if (token === undefined) return;
+  if (token === '') {
+    await context.secrets.delete(TOKEN_SECRET);
+    void vscode.window.showInformationMessage('Raven: gateway token cleared.');
+  } else {
+    await context.secrets.store(TOKEN_SECRET, token);
+    void vscode.window.showInformationMessage('Raven: gateway token stored for this machine.');
+  }
+  await panel?.pushToken();
+}
+
+async function showStatus(api: RavenApi, context: vscode.ExtensionContext) {
   const ok = await api.health();
+  const token = await context.secrets.get(TOKEN_SECRET);
   const items: vscode.QuickPickItem[] = [
     { label: ok ? '$(check) Gateway: Running' : '$(error) Gateway: Stopped', description: `Endpoint: ${getConfig().endpoint}` },
+    {
+      label: token ? '$(check) Gateway token: stored' : '$(error) Gateway token: not set',
+      description: token
+        ? 'Stored on this machine -- click to replace or clear'
+        : 'Click to store one; a call without it answers 401',
+    },
     { label: '$(terminal) Open REPL', description: 'Open Raven REPL in terminal' },
     { label: '$(terminal) Open TUI', description: 'Open Raven TUI dashboard' },
     { label: '$(play) Start Gateway', description: 'Start Raven gateway' },
@@ -130,7 +157,8 @@ async function showStatus(api: RavenApi) {
   ];
   const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Raven AI Status' });
   if (!pick) return;
-  if (pick.label.includes('REPL')) openRepl();
+  if (pick.label.includes('Gateway token')) await setGatewayToken(context);
+  else if (pick.label.includes('REPL')) openRepl();
   else if (pick.label.includes('TUI')) openTui();
   else if (pick.label.includes('Start')) startGateway();
   else if (pick.label.includes('Stop')) stopGateway();

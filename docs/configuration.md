@@ -21,6 +21,9 @@ Configuration is primarily managed through a `.env` file in the project root or 
 | `OLLAMA_BASE_URL` | Ollama server URL | `http://localhost:11434` |
 | `VLLM_BASE_URL` | vLLM / OpenAI-compatible local server URL | — |
 | `DEFAULT_MODEL` | Default LLM model (empty = auto-discovered) | `openrouter/openai/gpt-4o` |
+| `MODEL_FAST` | Model the `fast` tier answers with; empty falls back to the built-in per-provider tier table | — |
+| `MODEL_BALANCED` | Model the `balanced` tier answers with, same fallback | — |
+| `MODEL_QUALITY` | Model the `quality` tier answers with, same fallback | — |
 
 Supported providers: `openai`, `anthropic`, `openrouter`, `ollama`, `vllm`, `azure`, `groq`, `bedrock`, `vertex`, `copilot`. Failover order is automatic: the first healthy provider wins.
 
@@ -89,6 +92,7 @@ say so instead of letting the switch appear not to hold.
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DM_POLICY` | DM access policy | `pairing` |
+| `CONTEXT_VISIBILITY` | Who the assembled conversation context is shown to: `all` sends it to everyone, `allowlist` replaces it with a filtered placeholder for users outside the allowlist, `allowlist_quote` does the same and tells the user to quote what they need | `allowlist` |
 | `WEB_SECRET_KEY` | Admin web secret | — |
 | `WEB_CORS_ORIGINS` | Allowed CORS origins, comma-separated. `*` is refused while credentials are allowed (Starlette answers a wildcard with the caller's Origin, so any site could read a logged-in user's responses), and a wildcard subdomain is refused too because it is matched literally and matches nothing | `http://localhost:5173,http://localhost:3000,http://localhost:18888` |
 | `WEB_CORS_ALLOW_CREDENTIALS` | Send `Access-Control-Allow-Credentials`. Set `0` for a public API — that is the only configuration where `*` is accepted | `1` |
@@ -101,8 +105,16 @@ say so instead of letting the switch appear not to hold.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `RATE_LIMIT_MAX` | Max requests per window | `60` |
+| `RATE_LIMIT_MAX` | Max requests per window, per client address | `60` |
 | `RATE_LIMIT_WINDOW` | Window in seconds | `60` |
+| `TRUST_FORWARDED_FOR` | Honour `X-Forwarded-For` from a peer that is not a proxy this project installed (see [security/overview.md §7](security/overview.md#7-rate-limiting)) | `0` |
+
+### Web API
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `WEB_HOST` | Bind address. Loopback by default; anything else is reported by `raven doctor` and the security audit until a firewall or reverse proxy guards it | `127.0.0.1` |
+| `WEB_PORT` | Port the web API and console bind. It is the one switch a running gateway cannot move: uvicorn already holds the socket, so writing it changes the next start and the console says so | `18888` |
 
 ### Paths
 
@@ -128,7 +140,36 @@ Persistent configuration is stored in `~/.raven/config.json`:
 }
 ```
 
-Use `config_store.set(key, value)` to update at runtime.
+Nothing that runs reads this file: `raven doctor` shows it, and the gateway reads only the env files
+below.
+
+## Runtime switches
+
+The names in this table can be moved while the gateway runs — from the console
+(`POST /api/admin/config/key`) or by editing the env file:
+
+| Switch | Env name | What writing it does while the gateway runs |
+| --- | --- | --- |
+| `default_model`, `model_fast`, `model_balanced`, `model_quality` | `DEFAULT_MODEL`, `MODEL_FAST`, `MODEL_BALANCED`, `MODEL_QUALITY` | the next call is routed to the new model |
+| `ollama_base_url` | `OLLAMA_BASE_URL` | the next Ollama call goes to the new server |
+| `dm_policy` | `DM_POLICY` | new DMs are admitted or refused by the new policy |
+| `context_visibility` | `CONTEXT_VISIBILITY` | the next assembled context is filtered by the new mode |
+| `rate_limit_max` | `RATE_LIMIT_MAX` | the live per-client limiter is rebuilt with the new budget |
+| `log_level`, `json_log` | `LOG_LEVEL`, `JSON_LOG` | the log sinks are re-opened at the new level and shape |
+| `openrouter_api_key`, `anthropic_api_key`, `openai_api_key`, `groq_api_key` | `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY` | the cached provider for that key is dropped, so the next call signs with the new one |
+| `web_port` | `WEB_PORT` | stored for the next start — the running process already bound the socket, and the answer says `restart_required` |
+
+Every write through the console endpoint goes `raven.core.config.apply_runtime_switch`, which validates
+the value against the switch's own domain (an integer with its bounds, an enum with its members, a
+credential with the provider's key shape), persists it with `write_env_value` into the highest-precedence
+env file the gateway actually reads, updates the live `Settings` object, rebuilds whatever consumer cached
+the old value, and answers with `applied`, `restart_required` and the warnings it collected — including the
+case where the name is also exported in the shell, which outranks the env file at the next start.
+`raven.core.config.refresh_settings_from_env` is the same table read the other way round, which is what
+the config watcher uses when you edit a `.env` file by hand. One difference is worth knowing: a credential
+rotated by hand reaches the live `Settings` object but not a provider the gateway already built, so that
+provider keeps signing with the old key until the next restart. Rotate a key through the console, or
+restart, to have it take effect immediately.
 
 ### Data and Workspace Overrides
 

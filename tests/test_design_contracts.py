@@ -1183,3 +1183,101 @@ def test_the_state_indicator_detector_reads_the_declarations_it_forbids() -> Non
     assert _as_paint("rgba(124, 58, 237, 0.15)", "#1e2140") == "#2c255a"
     assert _as_paint("rgba(124, 58, 237, 0)", "#1e2140") == "#1e2140"
     assert contrast(_as_paint("rgba(124, 58, 237, 0.15)", "#1e2140"), "#1e2140") < LARGE_TEXT_OR_UI
+
+
+# ---------------------------------------------------------------------------------------------
+# Class vocabulary: a name a page writes must be a rule the sheet ships.
+# ---------------------------------------------------------------------------------------------
+
+_SEMANTIC_FAMILIES = ("bg", "text", "border", "on")
+
+
+def _sheet_classes() -> set[str]:
+    r"""Every class the SPA's own sheets define, with a variant selector read back to its class name.
+
+    `.hover\:bg-secondary:hover` is the rule for a class literally called `hover:bg-secondary`: this
+    SPA publishes its semantic colours as plain CSS, so the variant forms are written by hand and have
+    to be recognised as such here.
+    """
+    names: set[str] = set()
+    for path in (WEB / "src" / "styles").glob("*.css"):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        names |= {selector.replace("\\", "") for selector in re.findall(r"\.([a-z](?:\\.|[a-z0-9-])*)", text)}
+    return names
+
+
+def _semantic_words(classes: set[str]) -> dict[str, set[str]]:
+    """The colour words each semantic family already owns, measured from the classes it defines."""
+    words: dict[str, set[str]] = {family: set() for family in _SEMANTIC_FAMILIES}
+    for name in classes:
+        family, _, word = name.split(":")[-1].partition("-")
+        if family in words and word:
+            words[family].add(word)
+    return words
+
+
+def _unshipped_semantic_class(token: str, classes: set[str], words: dict[str, set[str]]) -> bool:
+    """True when a token claims one of our colour words and no rule behind it exists.
+
+    Tailwind cannot compose this SPA's hand-written classes with its own variants or opacity
+    modifiers, because it is never told about them -- there is no `@theme` block. So `bg-accent/10`
+    and `hover:border-accent` render nothing: the control is wired, looks live and does not change.
+    """
+    family, _, word = token.split(":")[-1].split("/")[0].partition("-")
+    if family not in _SEMANTIC_FAMILIES or word not in words[family]:
+        return False
+    return token not in classes
+
+
+def _class_tokens() -> list[tuple[str, str]]:
+    """`(file, token)` for every class-shaped word the SPA writes into a quoted string."""
+    found: list[tuple[str, str]] = []
+    for path in _web_sources():
+        if path.suffix not in {".ts", ".tsx"}:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for literal in re.findall(r'["`]([^"`\n]{1,400})["`]', text):
+            if "var(" in literal:
+                continue
+            for token in re.split(r"[\s\n]+", literal):
+                if token and "--" not in token and not token.startswith("/"):
+                    found.append((str(path.relative_to(WEB)), token))
+    return found
+
+
+def test_no_page_writes_a_semantic_class_the_sheet_never_ships() -> None:
+    classes = _sheet_classes()
+    words = _semantic_words(classes)
+    offenders = {
+        f"{source}: {token}" for source, token in _class_tokens() if _unshipped_semantic_class(token, classes, words)
+    }
+    assert not offenders, "\n".join(sorted(offenders))
+
+
+def test_the_semantic_class_detector_reads_the_compositions_it_forbids() -> None:
+    classes = _sheet_classes()
+    words = _semantic_words(classes)
+
+    def probe(token: str) -> bool:
+        return _unshipped_semantic_class(token, classes, words)
+
+    assert probe("bg-accent/10"), "an opacity modifier on our own colour class ships no rule"
+    assert probe("focus:text-accent"), "a variant Tailwind cannot compose ships no rule"
+    assert not probe("text-accent"), "the plain class the sheet does ship"
+    assert not probe("hover:bg-secondary"), "the variant form the sheet ships by hand"
+    assert not probe("text-xs") and not probe("bg-white/5"), "a word the sheets never claimed is not ours to gate"
+
+
+def test_every_button_class_a_page_writes_is_a_rule_the_sheet_ships() -> None:
+    """A `btn-*` name with no rule behind it renders a button with its text and none of its surface."""
+    classes = _sheet_classes()
+    used = {token for _, token in _class_tokens() if token.startswith("btn-")}
+    missing = sorted(used - classes)
+    assert not missing, f"button classes with no rule behind them: {missing}"
+
+
+def test_no_button_rule_ships_without_a_page_using_it() -> None:
+    defined = {c for c in _sheet_classes() if c.startswith("btn-")}
+    used = {token for _, token in _class_tokens() if token.startswith("btn-")}
+    dead = sorted(defined - used)
+    assert not dead, f"button rules nobody renders: {dead}"

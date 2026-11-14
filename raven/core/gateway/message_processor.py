@@ -187,7 +187,7 @@ class MessageProcessor:
         total = await self._ctxmgr.estimate_tokens(msg_dicts)
         ratio = total / self._ctxmgr._config.max_tokens if self._ctxmgr._config.max_tokens > 0 else 0
 
-        self.metrics.observe("context_window_pct", ratio * 100, {"session_id": session_id})
+        self.metrics.observe("context_window_pct", ratio * 100)
 
         if ratio < self._ctxmgr._config.warning_threshold:
             return msg_dicts
@@ -199,12 +199,12 @@ class MessageProcessor:
             total,
             self._ctxmgr._config.max_tokens,
         )
-        self.metrics.inc("context_window_urgent", {"session_id": session_id})
+        self.metrics.inc("context_window_urgent")
 
         managed = await self._ctxmgr.manage(msg_dicts)
         if managed is not msg_dicts:
             await self.db.replace_session_messages(session_id, managed)
-            self.metrics.inc("context_window_managed", {"session_id": session_id})
+            self.metrics.inc("context_window_managed")
             logger.info(
                 "Context window management applied for session {} ({:.1f}%)",
                 session_id,

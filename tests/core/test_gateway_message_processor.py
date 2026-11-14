@@ -250,7 +250,7 @@ async def test_manage_context_below_threshold() -> None:
     proc, _s, metrics = _processor(ctxmgr=ctxmgr)
     out = await proc._manage_context("sid", [_msg("a")])
     assert out[0]["content"] == "a"
-    metrics.observe.assert_any_call("context_window_pct", 10.0, {"session_id": "sid"})
+    metrics.observe.assert_any_call("context_window_pct", 10.0)
     metrics.inc.assert_not_called()
 
 
@@ -265,8 +265,9 @@ async def test_manage_context_urgent_and_managed() -> None:
     out = await proc._manage_context("sid", [_msg("a")])
     assert out == managed_dicts
     repl.assert_awaited_once_with("sid", managed_dicts)
-    metrics.inc.assert_any_call("context_window_urgent", {"session_id": "sid"})
-    metrics.inc.assert_any_call("context_window_managed", {"session_id": "sid"})
+    # label-free on purpose: one series per chat is a leak, gated by tests/test_metric_cardinality.py
+    metrics.inc.assert_any_call("context_window_urgent")
+    metrics.inc.assert_any_call("context_window_managed")
 
 
 async def test_manage_context_urgent_unmanaged() -> None:
@@ -284,7 +285,7 @@ async def test_manage_context_urgent_unmanaged() -> None:
     repl: Any = proc.db.replace_session_messages
     out = await proc._manage_context("sid", [_msg("a")])
     assert out is msg_dicts_sentinel[0]
-    metrics.inc.assert_any_call("context_window_urgent", {"session_id": "sid"})
+    metrics.inc.assert_any_call("context_window_urgent")
     # no managed replacement happened, so no replace + no managed counter
     repl.assert_not_awaited()
     assert "context_window_managed" not in [c.args[0] for c in metrics.inc.call_args_list]
@@ -297,7 +298,7 @@ async def test_manage_context_zero_max_tokens() -> None:
     proc, _s, metrics = _processor(ctxmgr=ctxmgr)
     out = await proc._manage_context("sid", [_msg("a")])
     # ratio is 0 with zero max_tokens -> below threshold, returns dict form untouched
-    metrics.observe.assert_any_call("context_window_pct", 0.0, {"session_id": "sid"})
+    metrics.observe.assert_any_call("context_window_pct", 0.0)
     assert out[0]["content"] == "a"
 
 

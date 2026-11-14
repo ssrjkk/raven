@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
+import { errorMessage } from "../lib/errors";
 
 type Tab = "inject" | "experiment" | "history";
 
@@ -70,33 +71,33 @@ export default function Chaos() {
       setHistory(r.history);
       const s = await api.chaosSummary();
       setSummary(s);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(errorMessage(e, "Failed to load history"));
     }
   }
 
   const injectMutation = useMutation({
     mutationFn: () => api.chaosInject(faultType, target, duration, intensity),
     onSuccess: (r) => { setMsg(`Fault injected [${r.id}]`); setError(""); loadActive(); },
-    onError: (e: any) => setError(e.message),
+    onError: (e) => setError(errorMessage(e)),
   });
 
   const recoverMutation = useMutation({
     mutationFn: (faultId: string) => api.chaosRecover(faultId),
     onSuccess: (_data, faultId) => { setMsg(`Fault ${faultId} recovered`); setError(""); loadActive(); },
-    onError: (e: any) => setError(e.message),
+    onError: (e) => setError(errorMessage(e)),
   });
 
   const recoverAllMutation = useMutation({
     mutationFn: () => api.chaosRecoverAll(),
     onSuccess: (r) => { setMsg(`Recovered ${r.recovered} faults`); setError(""); loadActive(); },
-    onError: (e: any) => setError(e.message),
+    onError: (e) => setError(errorMessage(e)),
   });
 
   const runExperimentMutation = useMutation({
     mutationFn: () => api.chaosRunExperiment(expName, faultsJson, hypothesis),
     onSuccess: (r) => { setExpResult(r); setMsg(`Experiment '${expName}' completed`); setError(""); },
-    onError: (e: any) => setError(e.message),
+    onError: (e) => setError(errorMessage(e)),
   });
 
   const tabs: { key: Tab; label: string }[] = [

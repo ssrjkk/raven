@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
+import { errorMessage } from "../lib/errors";
 
 const PROVIDERS = [
   { value: "duckduckgo", label: "DuckDuckGo", free: true },
@@ -43,7 +44,7 @@ export default function WebSearch() {
       if (!r.results?.length) setRawOutput("No results found.");
       setError("");
     },
-    onError: (e: any) => setError(e.message || "Search failed"),
+    onError: (e) => setError(errorMessage(e, "Search failed")),
   });
 
   return (

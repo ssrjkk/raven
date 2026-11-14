@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -44,12 +45,16 @@ _SWITCHED_NAMES = (
 
 
 @pytest.fixture(autouse=True)
-def env_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SimpleNamespace:
+def env_files(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, pin_env_names: Callable[[Iterable[str]], None]
+) -> Iterator[SimpleNamespace]:
     """The real cascade pointed at three files in tmp, and the switchable env names cleared.
 
-    ``write_env_value`` also sets ``os.environ``, so anything this module writes has to be undone or
-    the next test in the batch reads the switch. The names are cleared rather than recorded because a
-    value inherited from the machine would decide which branch of the precedence rules a test exercises.
+    ``write_env_value`` also sets ``os.environ``, so anything this module writes has to be undone or the
+    next test in the batch reads the switch — and clearing means the absent-aware pin, because
+    ``monkeypatch.delenv(name, raising=False)`` records nothing for a name the machine does not have. The
+    names are cleared rather than recorded because a value inherited from the machine would decide which
+    branch of the precedence rules a test exercises.
     """
     root_env = tmp_path / "install.env"
     user_env = tmp_path / "home" / ".raven.env"
@@ -57,11 +62,10 @@ def env_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SimpleNamespac
     user_env.parent.mkdir()
     monkeypatch.setattr(config, "_ENV_FILE_CANDIDATES", [str(root_env), str(user_env), str(local_env)])
     monkeypatch.setattr(config, "_USER_ENV_FILE", user_env)
-    for name in _SWITCHED_NAMES:
-        monkeypatch.delenv(name, raising=False)
+    pin_env_names(_SWITCHED_NAMES)
     for attr in ("default_model", "model_fast", "model_balanced", "model_quality"):
         monkeypatch.setattr(config.settings, attr, str(getattr(config.settings, attr) or ""))
-    return SimpleNamespace(root=root_env, user=user_env, local=local_env, tmp=tmp_path)
+    yield SimpleNamespace(root=root_env, user=user_env, local=local_env, tmp=tmp_path)
 
 
 def _present(model: str = HERETIC_HF_REF) -> None:

@@ -216,6 +216,153 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
 ### Fixed
+- Config writes from the admin console changed nothing, and the one key the console actually posted was
+  refused. `POST /api/admin/config/key` stored the value in `~/.raven/config.json` through `config_store`
+  and answered `{"ok": true}` — a file no running process reads, `Settings` being pydantic over the
+  environment and the env files — while `web/src/pages/Admin.tsx` posted `openrouter_api_key` against an
+  allow-list that named a different universe, so the write returned `403` and every other switch on the
+  screen reported success without moving the gateway. Both halves now answer to one declarative table,
+  `_RUNTIME_SWITCHES` in `raven/core/config.py`: 15 switches that own their env name, kind, domain, bounds,
+  whether the running process can apply them at all, and which consumer has to be rebuilt. `apply_runtime_switch`
+  writes through `write_env_value` into the file `Settings` obeys, puts the coerced value on the live
+  settings object, rebinds the 3 switches measured as process-wide singletons (`rate_limit_max` rebuilds
+  `middleware.rate_limiter`, `log_level` and `json_log` rebuild the loguru handlers), drops the cached LLM
+  provider behind a rotated credential, and returns `applied` / `restart_required` / `warnings` instead of
+  `ok`. `WEB_PORT` is honestly restart-bound — uvicorn holds the socket — so it persists without touching
+  the bound value and says so; a value exported outside the env files gets named as the reason the switch
+  may not hold; `GET /config` answers the 11 writable non-secret attrs, so the screen cannot offer a key
+  the endpoint refuses. A credential value is never echoed back: `SwitchResult.as_dict()` omits it, gated by
+  asserting the posted secret is absent from the response body. The same table feeds `refresh_settings_from_env`,
+  so editing `.env` under `ConfigWatcher` moves the same 15 names through the same coercion. The honeytoken
+  tripwire is derived from `watermark.HONEYTOKEN_API_KEYS` (6 names) instead of a 4-name copy that missed
+  `GITHUB_TOKEN`, `TELEGRAM_BOT_TOKEN` and `SLACK_BOT_TOKEN` while carrying a `GROQ_API_KEY` row that could
+  never fire, because the build issues no Groq canary. It now scans the process environment and every env
+  file candidate, so a canary that reaches the install through `.env` is caught at import and on every
+  credential write. 51 tests in `tests/core/test_runtime_switches.py`
+  plus 4 endpoint tests, all against the live effect rather than a fake store: the log-level test asserts the
+  level through a patched `sys.stderr` because loguru captures the stream at `add()` time, and the accepted
+  level names are probed from the constants `logging` exports instead of `getLevelNamesMapping()`, because
+  that mapping is a process-global registry which uvicorn extends with `TRACE = 5` at import — a domain read
+  from it moved with the import order of the process, so one console offered `TRACE` and another refused the
+  same `.env`. Docs parity is gated —
+  the `## Runtime switches` table in `docs/configuration.md` is compared to the code table, so a switch added
+  without a row fails. 8 mutations, all killed: reverting the endpoint to `{"ok": true}` costs 1, answering
+  a refused value with `ok` costs 1, echoing the secret costs 1, claiming a restart-bound switch applied
+  costs 2, dropping `setattr(get_settings(), …)` costs 1, deleting the restart warning costs 1, restoring
+  the old `GET /config` shape costs 1, removing the allow-list check costs 1.
+- One test can no longer decide the request budget or the switch values of the files that run after it. Two
+  switch tests wrote `RATE_LIMIT_MAX=33` and `OPENAI_API_KEY` onto the settings singleton and never put them
+  back, and because `middleware.rate_limiter` is one per-address budget shared by every `TestClient` in the
+  process, the leak reaches the next file as a `429`: measured on a live app, a leaked 33 turns 12 of the next
+  45 requests into refusals. The env half of the same switch leaks invisibly and blames the wrong file:
+  `write_env_value` and `apply_runtime_switch` export the name into `os.environ`, and
+  `monkeypatch.delenv(name, raising=False)` registers no undo for a name the machine does not have, so
+  `tests/core/test_config_watcher.py` left `DEFAULT_MODEL=ollama/hf.co/mradermacher/x:Q4_K_M` exported, two
+  files later `refresh_settings_from_env()` inside an unrelated test adopted it, and gate 146 reported the
+  same teardown error in 3 of its stages for a test that never touched the switch. Reproduced with those two
+  files in 1.8 s. `tests/conftest.py` now snapshots the 15 attrs, the 15 exported names — absent recorded as
+  absent — and the live limiter before every test, restores what moved and names it, so a leak dies on the
+  test that made it; `pin_env_names` is the absent-aware restore the leaking tests take instead of a bare
+  `delenv`. Measured over the whole suite with a hookwrapper probe (3423 + 4668 tests): 4 tests left a switch
+  name exported, 0 do now. 6 mutations, all killed: a guard that restores without failing costs 2, dropping
+  `autouse=True` costs 1, not checking the exported names costs 1, not restoring them costs 1, not restoring
+  the attrs costs 1, not pinning the limiter costs 1.
+- Four toggle routes answered `{"ok": true}` whatever happened. `pause_monitor` and `resume_monitor` return
+  a bool every one of them discarded: `POST /api/admin/monitors/{id}/pause` read
+  `if engine: await engine.pause_monitor(id)` and replied ok, so with no engine mounted the write reached
+  nothing at all, and an id the store had no row for looked like a successful pause. On
+  `POST /api/monitor/{action}/{id}` and `POST /api/routine/{action}/{id}` the action word was matched by an
+  `if/elif` with no `else`, so `pouse` and `double` were successful pauses too while the monitor kept
+  firing on its schedule and the Ops screen showed it stopped. All four now answer 400 for an action no
+  engine implements, 404 for an id that does not exist, and return the state they produced
+  (`status` on the admin pair, `action` on the ops pair). `toggle_monitor` in
+  `raven/core/monitor/engine.py` is the shared half: it moves the engine when one is mounted and the store
+  when one is not — a saved status alone does not stop an already-scheduled task — and reads the row back
+  so the reply describes the stored monitor rather than the request; `PUT /api/admin/monitors/{id}` now
+  goes through it too, because editing a saved status used to change a field nothing re-reads until
+  restart. 4 new route cases in `tests/core/test_ops_api.py` assert the discarded bool and the un-called
+  engine, with the admin half covered in `tests/core/test_admin_api.py`.
+- The rate limiter documented a pruning pass and had nothing call it: `RateLimiter.cleanup()` existed at
+  `raven/core/middleware.py:52` with zero callers in the tree, so the table grew with every address that
+  ever connected. Pruning now happens inside `check()` on a 60 s cadence, which bounds an idle process to
+  one interval of stale keys without paying for a scan on every request. The same rewrite dropped the
+  hidden second budget (`burst_multiplier=1.5` plus a `_blocked` map that held a caller out for
+  `2 × window`) so the ceiling is the documented `RATE_LIMIT_MAX`, made `retry_after` report
+  `rate_limiter.window` instead of the literal 60 while `RATE_LIMIT_WINDOW` is a setting, and added
+  `build_rate_limiter()` so the `RATE_LIMIT_MAX` switch can rebind the singleton at runtime. Attribution
+  moved from a string prefix test (`host.startswith(("127.", "10.", "172.16." …))`, which covered four of
+  the sixteen `/12` secondaries Traefik actually gets on the shipped compose network) to `ipaddress`
+  membership over loopback, RFC1918 and `fc00::/7`, plus a declared `TRUST_FORWARDED_FOR=1` for a proxy on
+  another host — because `X-Forwarded-For` is the caller's to write, and honouring it from a stranger lets
+  a client pick the bucket it is rate-limited in and choose the IP the audit log records. 16 new cases in
+  `tests/core/test_middleware.py`, including a peer string that is not an address.
+- Two metric labels were identifiers, and `MetricsCollector` keys a series by `name{k=v}` and never
+  forgets one: `{"ip": client_ip}` on `http_rate_limited` — one series per visitor, on the very counter a
+  flood trips hardest — and `{"session_id": …}` on three `context_window_*` sites, one series per chat.
+  Measured at 76 labelled call sites over 15 key names before the change. They carry bounded values now,
+  and `tests/test_metric_cardinality.py` parses every `inc`/`observe`/`error` call in `raven/`, `aios/`
+  and `ravencode/` and refuses an identifier-shaped value, with a rule that a `path` label must be a
+  literal or the output of `sanitize_metric_path()` — the two HTTP middleware sites pass it through a
+  local name, which is exactly the shape a copy-paste would turn back into a leak.
+- Eight handlers guarded themselves with `if role not in ("admin", "superadmin")`. `Role` has four
+  members — `admin`, `user`, `viewer`, `banned` — so the literal named a role the store cannot hold, yet
+  `auth_middleware` copies whatever role string a session carries onto `request.state.user_role`, which
+  made a token minted as `superadmin` an admin at those eight endpoints and a stranger everywhere else;
+  and a role the permission table does grant still got a 403, because the check never read the table. All
+  eight now call `require_permission(request, Permission.X, what)` from `raven/core/auth/guards.py`, which
+  answers from `rbac.has_permission` and names the refused right in the 403; `superadmin` appears nowhere
+  in `raven/`, `aios/` or `ravencode/` outside that module's comment, and `tests/test_role_guards.py`
+  fails the build if the literal comes back.
+- 48 error handlers in the SPA typed their parameter as `any` — 44 `onError` callbacks and 4 `catch`
+  blocks — and 16 of them read `.message` with no fallback. `any` switched the type checker off at the one
+  place a failure becomes visible, so a rejection that is not an `Error` settled the error state to
+  `undefined` and the screen showed a button that appeared to do nothing. They answer
+  `errorMessage()` from `web/src/lib/errors.ts` now, `npx tsc --noEmit` reports zero `any`-typed callback
+  parameters in `web/src`, and a grep over the tree finds zero left.
+- The VS Code extension could not reach the gateway it ships with, in three independent ways. The chat
+  panel opened `/ws` and wrote the user's text as the first frame, which `_authenticate_ws` reads as the
+  credential envelope, so the gateway closed 1008 and the panel reconnect-looped every three seconds
+  forever; `health()` probed `/health`, a path no server here answers, and the SPA catch-all returned
+  `index.html` with a 200, so the status bar reported a live connection to whatever process held the port;
+  and no request carried a credential at all while `/api/raven` sits behind `admin:write`. The panel now
+  sends `{"type":"auth","token":…}` and echoes the `webchat:…` session id the gateway hands back — an id
+  the editor invents is outside that namespace and is ignored — a new **Raven: Set Gateway Token** command
+  stores the credential in VS Code `SecretStorage` rather than `settings.json`, `health()` checks a route
+  that answers, and `extension/vscode/out/` (11 files, 1053 lines) is untracked and gitignored, because a
+  committed copy of the compiled extension is a second, silently older extension that the fixes never
+  reach. `tests/test_vscode_extension.py` runs the socket and route paths against the real apps and reads
+  the extension's own source for the rest, since nothing but VS Code executes those files.
+- `/api/collab/sessions/{id}/ws` implemented state/change/ack/cursor broadcast with no client: `web/src`
+  had sockets for `/ws` and `/ws/agent` only, so a second user's edits never appeared and the session tab
+  had no way to show them. The client is `web/src/lib/collab.ts` plus `web/src/hooks/useCollabSocket.ts`,
+  and the dev-server proxy had to learn about it: Vite matches its keys in order, so `/api/collab` is
+  declared before the bare `/api` with `ws: true`, and `/aios` — which carries the agent socket at
+  `/aios/ws/agent`, a path `useAgentSocket` had been writing as `/ws/agent` — likewise; written as a bare
+  string each of them answers a WebSocket upgrade with 426 and the editor retries forever in dev while
+  the same page works in production, where the gateway serves it itself. Two gateway defects surfaced
+  while wiring it: `raven/tools/collaboration.py` kept a private `CollaborationManager()` singleton, so an
+  agent's `collab_create_session` wrote a registry the gateway never looked at and `/api/collab/sessions`
+  listed none of it (it now imports `get_manager`), and the y-py and fallback apply paths each checked the
+  bounds their own way and disagreed about a reversed range — one inserted without deleting, the other
+  refused — so the same change from the same client applied on one install and was dropped on another.
+  Both go through `_change_range()` now, and `tests/fixtures/collab_change_cases.json` (16 cases, 14
+  roundtrips, every value produced by the Python implementation and re-produced by the client) is asserted
+  against `apply_change` in pytest and against `applyChange` in vitest, with
+  `tests/test_collab_protocol.py` comparing what the gateway writes to the wire against what the client
+  parses.
+- The published image ran an interpreter no CI job had ever imported the package under: `Dockerfile` built
+  on `python:3.15-slim` while `ci.yml` tests `["3.11", "3.12"]`. Nothing linked the two, so a dependabot
+  bump could move every customer onto an untested stream and the gate would stay green; it is `3.12-slim`
+  now, and `tests/test_packaging_docker_context.py` reads the `FROM python:` tags and the CI matrix and
+  fails on a base whose `major.minor` no job tests.
+- `web/src/components/Layout.tsx:249` wrote `hover:border-accent-muted` on the command-palette trigger and
+  the sheet shipped no `hover:border-accent*` rule at all: the control was wired, looked live, and changed
+  nothing on hover, because Tailwind is never told about this SPA's hand-written semantic classes (there is
+  no `@theme` block) and so cannot compose them with variants or opacity modifiers. The sheet now ships the
+  five rules the pages already write (`bg-accent-subtle`, `border-accent`, `hover:text-danger`,
+  `hover:border-accent`, `focus:border-accent`), the trigger uses one that exists, and two guards hold the
+  vocabulary in step in both directions: no page may write a semantic class the sheet never ships — 12104
+  class tokens scanned, 0 offenders — and no button rule may ship that no page uses.
 - A `raven doctor` that reported an unreadable database printed its row and then never exited.
   `SQLiteDB._ensure()` calls `aiosqlite.connect()`, which starts its worker thread — not a daemon — before
   the first statement runs; on a file that is not a database the `PRAGMA journal_mode=WAL` raises

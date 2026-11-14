@@ -6,6 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from raven.core.auth.models import Permission
 from raven.core.connection_api import _is_masked, _mask_key, create_connection_router
 
 
@@ -167,3 +168,53 @@ class TestAgents:
         )
         assert resp.status_code == 200
         assert resp.json()["name"] == "New Agent"
+
+
+class TestTheAdminGuard:
+    """`_require_admin` became one permission question, and the fixture above always sends `admin`.
+
+    These cover the other answers: the roles the right excludes, the caller with no role at all, and
+    the read that must stay open because the guard was never on it.
+    """
+
+    @pytest.fixture()
+    def role_client(self, mock_store):
+        import raven.core.connection_api as conn_mod
+
+        original_store = conn_mod._store
+        conn_mod._store = mock_store
+
+        def _build(role: str | None) -> TestClient:
+            app = FastAPI()
+
+            @app.middleware("http")
+            async def _stamp_role(request, call_next):
+                if role is not None:
+                    request.state.user_role = role
+                return await call_next(request)
+
+            app.include_router(create_connection_router())
+            return TestClient(app)
+
+        try:
+            yield _build
+        finally:
+            conn_mod._store = original_store
+
+    def test_mutations_refuse_every_role_the_right_excludes(self, role_client):
+        for role in ("user", "viewer", "banned", "superadmin"):
+            assert role_client(role).delete("/api/connections/providers/test-provider").status_code == 403, role
+
+    def test_a_caller_with_no_role_at_all_is_refused(self, role_client):
+        assert role_client(None).delete("/api/connections/providers/test-provider").status_code == 403
+
+    def test_reads_stay_open_for_a_signed_in_caller(self, role_client):
+        assert role_client("user").get("/api/connections/providers").status_code == 200
+
+    def test_the_guard_answers_the_role_table_not_the_role_name(self, role_client, grant_permission):
+        client = role_client("viewer")
+        assert client.delete("/api/connections/providers/test-provider").status_code == 403
+        grant_permission("viewer", Permission.ADMIN_SECRETS)
+        assert client.delete("/api/connections/providers/test-provider").status_code == 403
+        grant_permission("viewer", Permission.ADMIN_WRITE)
+        assert client.delete("/api/connections/providers/test-provider").status_code == 200

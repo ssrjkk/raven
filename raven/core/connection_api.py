@@ -23,6 +23,8 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from raven.core._json import json
+from raven.core.auth.guards import require_permission
+from raven.core.auth.models import Permission
 
 _T = TypeVar("_T")
 
@@ -194,9 +196,7 @@ def _first_ollama_model(base_url: str) -> str:
 def _require_admin(request: Request) -> None:
     """Mutations change which LLM endpoint receives OTHER (admin) API keys,
     so provider/context/agent management is restricted to admins."""
-    role = getattr(request.state, "user_role", None)
-    if role not in ("admin", "superadmin"):
-        raise HTTPException(403, "Connections management requires admin role")
+    require_permission(request, Permission.ADMIN_WRITE, "Connection management")
 
 
 # --------------------------------------------------------------------------- #

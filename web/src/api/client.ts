@@ -140,7 +140,7 @@ export const api = {
   taskCancel: (id: string) => request<{ ok: boolean }>(`/api/task/${id}/cancel`, { method: "POST" }),
   codeSessions: (limit = 20, offset = 0) =>
     request<{ items: CodingSessionData[]; total: number; limit: number; offset: number }>(`/api/code/list?limit=${limit}&offset=${offset}`).then((r) => r.items),
-  config: () => request<Record<string, string>>("/api/admin/config"),
+  config: () => request<Record<string, string | number | boolean>>("/api/admin/config"),
   shutdown: () => request<{ ok: boolean }>("/api/shutdown", { method: "POST" }),
   login: (username: string, password: string) =>
     request<AuthData>("/api/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),

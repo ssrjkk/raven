@@ -53,7 +53,7 @@ export default function Admin() {
   const [audit, setAudit] = useState<AuditResult[]>([]);
   const [runningAudit, setRunningAudit] = useState(false);
   const [modelKey, setModelKey] = useState("");
-  const [keyFeedback, setKeyFeedback] = useState<{ok: boolean; msg: string} | null>(null);
+  const [keyFeedback, setKeyFeedback] = useState<{ tone: "ok" | "warn" | "error"; msg: string } | null>(null);
   const [modelFeedback, setModelFeedback] = useState<{ok: boolean; msg: string} | null>(null);
   const logEnd = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -119,15 +119,22 @@ export default function Admin() {
         headers: authHeaders(),
         body: JSON.stringify({ key: "openrouter_api_key", value: modelKey }),
       });
-      if (res.ok) {
-        setKeyFeedback({ ok: true, msg: "Key updated successfully" });
-        toast("API key updated", "success");
-      } else {
-        const err = await res.text();
-        setKeyFeedback({ ok: false, msg: `Update failed: ${err}` });
+      const body = await res.json().catch(() => ({} as Record<string, unknown>));
+      if (!res.ok) {
+        setKeyFeedback({ tone: "error", msg: String(body.detail || `HTTP ${res.status}`) });
+        toast("Key refused", "error");
+        return;
       }
+      const note = Array.isArray(body.warnings) ? String(body.warnings[0] ?? "") : "";
+      const applied = Boolean(body.applied);
+      const tone = applied && !note ? "ok" : "warn";
+      setKeyFeedback({ tone, msg: note || `Written to ${String(body.env_file)}` });
+      toast(
+        applied ? (note ? "Key stored, read the note" : "API key live") : "Key stored, not applied",
+        tone === "ok" ? "success" : "info",
+      );
     } catch (e) {
-      setKeyFeedback({ ok: false, msg: `Network error: ${e}` });
+      setKeyFeedback({ tone: "error", msg: `Network error: ${e}` });
       toast("Failed to update key", "error");
     }
   }
@@ -203,7 +210,11 @@ export default function Admin() {
               Update Key
             </button>
             {keyFeedback && (
-              <p className={`text-xs mt-1 ${keyFeedback.ok ? "text-success" : "text-danger"}`}>
+              <p
+                className={`text-xs mt-1 ${
+                  keyFeedback.tone === "error" ? "text-danger" : keyFeedback.tone === "warn" ? "text-warning" : "text-success"
+                }`}
+              >
                 {keyFeedback.msg}
               </p>
             )}

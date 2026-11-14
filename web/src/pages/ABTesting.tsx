@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import type { ABTestData, ABTestResults } from "../api/types";
 import PageHeader from "../components/PageHeader";
 import { useApiQuery } from "../hooks/useApiQuery";
+import { errorMessage } from "../lib/errors";
 
 export default function ABTesting() {
   const qc = useQueryClient();
@@ -30,7 +31,7 @@ export default function ABTesting() {
       setMetricName("conversion"); setMetricType("rate");
       qc.invalidateQueries({ queryKey: ["abExperiments"] });
     },
-    onError: (e: any) => setError(e.message),
+    onError: (e) => setError(errorMessage(e)),
   });
 
   async function selectExperiment(id: string) {
@@ -42,8 +43,8 @@ export default function ABTesting() {
       ]);
       setSelected(exp);
       setResults(res);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(errorMessage(e, "Failed to load experiment"));
     }
   }
 
@@ -60,7 +61,7 @@ export default function ABTesting() {
         console.error("Failed to refresh experiment after status change", e);
       }
     },
-    onError: (e: any) => setError(e.message),
+    onError: (e) => setError(errorMessage(e)),
   });
 
   const deleteExperiment = useMutation({
@@ -70,7 +71,7 @@ export default function ABTesting() {
       if (selected?.id === id) { setSelected(null); setResults(null); }
       qc.invalidateQueries({ queryKey: ["abExperiments"] });
     },
-    onError: (e: any) => setError(e.message),
+    onError: (e) => setError(errorMessage(e)),
   });
 
   const statusColor = (s: string) => {

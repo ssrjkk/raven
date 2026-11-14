@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import { api, setToken } from "../api/client";
 import { useApiQuery } from "../hooks/useApiQuery";
+import { errorMessage } from "../lib/errors";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -73,8 +74,8 @@ export default function Login() {
       };
       oauthHandlerRef.current = handler;
       window.addEventListener("message", handler);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(errorMessage(e, "Sign-in request failed"));
     }
   }
 

@@ -25,27 +25,19 @@ from raven.core.admin.models import (
 )
 from raven.core.api_errors import internal_error
 from raven.core.audit import AuditEventType, audit_logger
+from raven.core.auth.guards import require_permission
+from raven.core.auth.models import Permission
 from raven.core.auth.store import AuthStore
 from raven.core.auth.tokens import token_manager
-from raven.core.config import settings
+from raven.core.config import apply_runtime_switch, console_config_keys, runtime_switch_keys, settings
 from raven.core.health import health
 from raven.core.jobs import job_manager
 from raven.core.metrics import metrics
+from raven.core.middleware import client_ip
+from raven.core.monitor.engine import toggle_monitor
 from raven.core.secrets import secrets
 from raven.core.workflow import BUILTIN_TEMPLATES, WorkflowStore
 from raven.core.workflow.models import TemplateStep
-
-_PRIVATE_PEER_PREFIXES: tuple[str, ...] = ("127.", "10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.")
-
-
-def _client_ip(request: Request) -> str:
-    """Direct peer IP; honors X-Forwarded-For only from loopback/private peers."""
-    host = request.client.host if request.client else "unknown"
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded and (host == "127.0.0.1" or host == "::1" or host.startswith(_PRIVATE_PEER_PREFIXES)):
-        return forwarded.split(",")[0].strip() or host
-    return host
-
 
 _workflow_store = WorkflowStore()
 _workflow_store.register_many(BUILTIN_TEMPLATES)
@@ -175,6 +167,15 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
                 for c in body.conditions
             ]
         await store.save_monitor(existing)
+        if body.status is not None:
+            # A saved status alone does not stop anything: the task the engine already scheduled keeps
+            # running until restart, so the edit has to reach the engine when one is mounted.
+            await toggle_monitor(
+                getattr(gateway, "_monitor_engine", None),
+                store,
+                monitor_id,
+                pause=existing.status is MonitorStatus.PAUSED,
+            )
         await audit_logger.log(AuditEventType.COMMAND, "admin", "monitor.update", detail={"monitor_id": monitor_id})
         return {"ok": True}
 
@@ -195,25 +196,35 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
 
         gateway = get_gateway_fn()
         store = gateway._monitor_store
-        engine = MonitorEngine(store, send_fn=lambda cid, txt: logger.info("Alert[{}]: {}", cid, txt))
+        # The mounted engine delivers an alert the way a scheduled one is delivered. A throwaway engine
+        # would send it to the log only and carry no cooldown history, so it is the fallback, not the path.
+        engine = getattr(gateway, "_monitor_engine", None)
+        if engine is None:
+            engine = MonitorEngine(store, send_fn=lambda cid, txt: logger.info("Alert[{}]: {}", cid, txt))
+        if not await store.load_monitor(monitor_id):
+            raise HTTPException(404, "Monitor not found")
         alert_text = await engine.check_now(monitor_id)
         return {"ok": True, "triggered": alert_text is not None}
 
     @router.post("/monitors/{monitor_id}/pause")
     async def admin_monitor_pause(monitor_id: str):
         gateway = get_gateway_fn()
-        engine = getattr(gateway, "_monitor_engine", None)
-        if engine:
-            await engine.pause_monitor(monitor_id)
-        return {"ok": True}
+        status = await toggle_monitor(
+            getattr(gateway, "_monitor_engine", None), gateway._monitor_store, monitor_id, pause=True
+        )
+        if status is None:
+            raise HTTPException(404, "Monitor not found")
+        return {"ok": True, "status": status.value}
 
     @router.post("/monitors/{monitor_id}/resume")
     async def admin_monitor_resume(monitor_id: str):
         gateway = get_gateway_fn()
-        engine = getattr(gateway, "_monitor_engine", None)
-        if engine:
-            await engine.resume_monitor(monitor_id)
-        return {"ok": True}
+        status = await toggle_monitor(
+            getattr(gateway, "_monitor_engine", None), gateway._monitor_store, monitor_id, pause=False
+        )
+        if status is None:
+            raise HTTPException(404, "Monitor not found")
+        return {"ok": True, "status": status.value}
 
     @router.get("/health")
     async def admin_health():
@@ -346,36 +357,29 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
 
     @router.get("/config")
     def admin_config():
-        return {
-            "model": settings.default_model,
-            "web_port": settings.web_port,
-            "dm_policy": settings.dm_policy,
-            "rate_limit_max": settings.rate_limit_max,
-            "log_level": settings.log_level,
-            "json_log": settings.json_log,
-        }
+        """Every switch the console can write, read back off the live settings object.
+
+        The names are the writable ones (credentials excepted), so the screen cannot show a key the
+        endpoint would refuse and the operator sees what the running process actually obeys — not what
+        an earlier wizard dropped into `~/.raven/config.json`.
+        """
+        return {key: getattr(settings, key) for key in console_config_keys()}
 
     @router.get("/secrets")
     async def admin_secrets(request: Request):
-        user_role = getattr(request.state, "user_role", None)
-        if user_role not in ("admin", "superadmin"):
-            raise HTTPException(403, "Secrets require admin role")
+        require_permission(request, Permission.ADMIN_SECRETS, "Secret access")
         return {"keys": secrets.list_keys()}
 
     @router.post("/secrets/{key}")
     async def admin_set_secret(key: str, body: SecretRequest, request: Request):
-        user_role = getattr(request.state, "user_role", None)
-        if user_role not in ("admin", "superadmin"):
-            raise HTTPException(403, "Secrets require admin role")
+        require_permission(request, Permission.ADMIN_SECRETS, "Secret access")
         await secrets.set(key, body.value)
         await audit_logger.sensitive("secrets.set", "admin", key, True)
         return {"ok": True}
 
     @router.delete("/secrets/{key}")
     async def admin_delete_secret(key: str, request: Request):
-        user_role = getattr(request.state, "user_role", None)
-        if user_role not in ("admin", "superadmin"):
-            raise HTTPException(403, "Secrets require admin role")
+        require_permission(request, Permission.ADMIN_SECRETS, "Secret access")
         await secrets.unset(key)
         return {"ok": True}
 
@@ -447,9 +451,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
 
     @router.post("/shutdown")
     async def admin_shutdown(request: Request):
-        user_role = getattr(request.state, "user_role", None)
-        if user_role not in ("admin", "superadmin"):
-            raise HTTPException(403, "Shutdown requires admin role")
+        require_permission(request, Permission.SYSTEM_SHUTDOWN, "Shutdown")
         logger.warning("Admin shutdown requested")
         await audit_logger.log(AuditEventType.SYSTEM_SHUTDOWN, "admin", "system")
         stop_event = request.app.state.stop_event if hasattr(request.app.state, "stop_event") else None
@@ -538,28 +540,28 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
 
     @router.post("/config/key")
     async def admin_update_config_key(body: ConfigUpdateRequest, request: Request):
-        user_role = getattr(request.state, "user_role", None)
-        if user_role not in ("admin", "superadmin"):
-            raise HTTPException(403, "Config update requires admin role")
-        from raven.core.config_store import config_store
+        """Write one runtime switch where a live gateway reads it, and report what that actually did.
 
-        allowed_config_keys = frozenset(
-            {
-                "default_model",
-                "dm_policy",
-                "rate_limit_max",
-                "log_level",
-                "json_log",
-                "web_port",
-                "context_visibility",
-            }
+        This used to store the value in `~/.raven/config.json` — a file no running process reads — and
+        answer `{"ok": true}`, so seven switches on the admin screen changed nothing until the next
+        restart, and the one key the console really posted was not even in the allowed set. Now the
+        value goes into the env file `Settings` obeys, onto the live settings object, and through the
+        rebind each consumer needs; anything that cannot be applied in-process says so.
+        """
+        require_permission(request, Permission.ADMIN_WRITE, "Config update")
+        if body.key not in runtime_switch_keys():
+            raise HTTPException(403, f"Key '{body.key}' is not a runtime switch the console may write")
+        try:
+            result = await apply_runtime_switch(body.key, body.value)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        await audit_logger.log(
+            AuditEventType.COMMAND,
+            "admin",
+            "config.update",
+            detail={"key": result.key, "restart_required": result.restart_required},
         )
-        if body.key not in allowed_config_keys:
-            raise HTTPException(403, f"Key '{body.key}' is not in the allowed config keys")
-        config_store.set(body.key, body.value)
-        config_store.save()
-        await audit_logger.log(AuditEventType.COMMAND, "admin", "config.update", detail={"key": body.key})
-        return {"ok": True}
+        return result.as_dict()
 
     @router.get("/models/experimental")
     async def admin_experimental_model() -> dict[str, Any]:
@@ -578,9 +580,7 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
 
         from raven.core.heretic_model import disable, enable
 
-        user_role = getattr(request.state, "user_role", None)
-        if user_role not in ("admin", "superadmin"):
-            raise HTTPException(403, "Model switch requires admin role")
+        require_permission(request, Permission.ADMIN_WRITE, "Model switch")
 
         if body.action == "disable":
             result = await asyncio.to_thread(disable)
@@ -708,7 +708,7 @@ def init_auth_routes(app: FastAPI, db_path: str) -> None:
 
     @app.post("/api/auth/login")
     async def auth_login(body: AuthLoginRequest, request: Request):
-        ip = _client_ip(request)
+        ip = client_ip(request)
         if not _check_login_rate(ip, body.username):
             raise HTTPException(429, "Too many login attempts. Try again later.")
         user = await store.authenticate(body.username, body.password)
@@ -731,7 +731,7 @@ def init_auth_routes(app: FastAPI, db_path: str) -> None:
 
     @app.post("/api/auth/register")
     async def auth_register(body: AuthRegisterRequest, request: Request):
-        ip = _client_ip(request)
+        ip = client_ip(request)
         if not _check_login_rate(ip, body.username):
             raise HTTPException(429, "Too many registration attempts. Try again later.")
         display = body.display_name or body.username

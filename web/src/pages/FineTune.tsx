@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
+import { errorMessage } from "../lib/errors";
 
 interface DatasetStats {
   conversations?: number;
@@ -61,7 +62,7 @@ export default function FineTune() {
   const loadDatasetStatsMutation = useMutation({
     mutationFn: () => api.finetuneDatasetStats(),
     onSuccess: (r) => { setDatasetStats(r); setError(""); },
-    onError: (e: any) => setError(e.message),
+    onError: (e) => setError(errorMessage(e)),
   });
 
   const addConversationMutation = useMutation({
@@ -71,7 +72,7 @@ export default function FineTune() {
       setSystemPrompt(""); setMessagesJson("");
       loadDatasetStatsMutation.mutate();
     },
-    onError: (e: any) => setError(e.message),
+    onError: (e) => setError(errorMessage(e)),
   });
 
   const addCodeMutation = useMutation({
@@ -81,13 +82,13 @@ export default function FineTune() {
       setCode(""); setCodeLang("");
       loadDatasetStatsMutation.mutate();
     },
-    onError: (e: any) => setError(e.message),
+    onError: (e) => setError(errorMessage(e)),
   });
 
   const loadModelMutation = useMutation({
     mutationFn: () => api.finetuneLoadModel(modelType, useLora, useQlora),
     onSuccess: (r) => { setModelInfo(r); setMsg(`Model loaded: ${r.model_name}`); setError(""); },
-    onError: (e: any) => setError(e.message),
+    onError: (e) => setError(errorMessage(e)),
   });
 
   const startTrainingMutation = useMutation({
@@ -95,13 +96,13 @@ export default function FineTune() {
     onSuccess: (r) => {
       setTrainingResult(r); setMsg(`Training completed! Loss: ${r.train_loss?.toFixed(4)}`); setError("");
     },
-    onError: (e: any) => setError(e.message),
+    onError: (e) => setError(errorMessage(e)),
   });
 
   const loadCheckpointsMutation = useMutation({
     mutationFn: () => api.finetuneCheckpoints(),
     onSuccess: (r) => { setCheckpoints(r.checkpoints); setError(""); },
-    onError: (e: any) => setError(e.message),
+    onError: (e) => setError(errorMessage(e)),
   });
 
   const tabs: { key: Tab; label: string }[] = [

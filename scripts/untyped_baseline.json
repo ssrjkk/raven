@@ -117,7 +117,7 @@
  "raven/core/memory/session.py": 1,
  "raven/core/memory/working.py": 1,
  "raven/core/metrics.py": 8,
- "raven/core/middleware.py": 9,
+ "raven/core/middleware.py": 8,
  "raven/core/migrations.py": 13,
  "raven/core/monitor/checkers/rss.py": 1,
  "raven/core/monitor/engine.py": 1,

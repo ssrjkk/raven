@@ -39,6 +39,7 @@ data/checkpoints/
 # Build artifacts
 extension/dist/
 extension/node_modules/
+extension/vscode/out/
 web/node_modules/
 web/dist/
 

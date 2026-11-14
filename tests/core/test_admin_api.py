@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from raven.core.auth.models import Permission, Role
 from raven.core.monitor.models import MonitorStatus, MonitorType
 from raven.core.monitor.store import MonitorStore
 
@@ -147,11 +148,11 @@ def _first_body_chunk(app: FastAPI, path: str) -> str:
     return asyncio.run(_run())
 
 
-def _make_client(gateway, registry, channels, admin_role: bool = False) -> TestClient:
+def _make_client(gateway, registry, channels, role: str | None = None) -> TestClient:
     from raven.core.admin_api import create_admin_router
 
     app = FastAPI()
-    state = {"user_role": "admin", "user_id": "admin1"} if admin_role else {}
+    state = {"user_role": role, "user_id": "admin1"} if role else {}
     app.add_middleware(_StateMiddleware, state=state)
     app.include_router(
         create_admin_router(
@@ -250,16 +251,60 @@ class TestMonitors:
         gateway._monitor_engine = MonitorEngine(gateway._monitor_store)
         mid = _create_monitor(gateway._monitor_store)
         client = _make_client(gateway, registry, channels)
-        assert client.post(f"/api/admin/monitors/{mid}/pause").status_code == 200
+        assert client.post(f"/api/admin/monitors/{mid}/pause").json() == {"ok": True, "status": "paused"}
         assert client.get(f"/api/admin/monitors/{mid}").json()["status"] == "paused"
-        assert client.post(f"/api/admin/monitors/{mid}/resume").status_code == 200
+        assert client.post(f"/api/admin/monitors/{mid}/resume").json() == {"ok": True, "status": "active"}
         assert client.get(f"/api/admin/monitors/{mid}").json()["status"] == "active"
 
-    def test_pause_without_engine(self, gateway, registry, channels) -> None:
-        delattr(gateway, "_monitor_engine") if hasattr(gateway, "_monitor_engine") else None
+    def test_pause_without_an_engine_still_reaches_the_store(self, gateway, registry, channels) -> None:
+        # The handler used to answer `{"ok": true}` and write nothing when no engine was mounted, so the
+        # monitor kept firing while the console was told it was paused. The status is what an engine reads
+        # back when it starts, so the write has to happen with or without one.
+        assert not hasattr(gateway, "_monitor_engine")
         mid = _create_monitor(gateway._monitor_store)
         client = _make_client(gateway, registry, channels)
-        assert client.post(f"/api/admin/monitors/{mid}/pause").status_code == 200
+        assert client.post(f"/api/admin/monitors/{mid}/pause").json() == {"ok": True, "status": "paused"}
+        assert client.get(f"/api/admin/monitors/{mid}").json()["status"] == "paused"
+        assert client.post(f"/api/admin/monitors/{mid}/resume").json() == {"ok": True, "status": "active"}
+        assert client.get(f"/api/admin/monitors/{mid}").json()["status"] == "active"
+
+    def test_monitor_commands_on_an_unknown_id_do_not_answer_ok(self, gateway, registry, channels) -> None:
+        client = _make_client(gateway, registry, channels)
+        assert client.post("/api/admin/monitors/nope/pause").status_code == 404
+        assert client.post("/api/admin/monitors/nope/resume").status_code == 404
+        assert client.post("/api/admin/monitors/nope/check").status_code == 404
+
+    def test_editing_a_status_reaches_the_mounted_engine(self, gateway, registry, channels) -> None:
+        calls: list[str] = []
+
+        class _RecordingEngine:
+            async def pause_monitor(self, monitor_id: str) -> bool:
+                calls.append(f"pause:{monitor_id}")
+                return True
+
+            async def resume_monitor(self, monitor_id: str) -> bool:
+                calls.append(f"resume:{monitor_id}")
+                return True
+
+        gateway._monitor_engine = _RecordingEngine()
+        mid = _create_monitor(gateway._monitor_store)
+        client = _make_client(gateway, registry, channels)
+        assert client.put(f"/api/admin/monitors/{mid}", json={"status": "paused"}).status_code == 200
+        assert calls == [f"pause:{mid}"]
+        assert client.put(f"/api/admin/monitors/{mid}", json={"status": "active"}).status_code == 200
+        assert calls == [f"pause:{mid}", f"resume:{mid}"]
+
+    def test_check_now_runs_on_the_mounted_engine(self, gateway, registry, channels, tmp_path: Path) -> None:
+        # A hand-triggered check has to run on the engine the gateway started. The throwaway engine it used
+        # to build keeps its own alert clock, so the cooldown history never reached the scheduled runs.
+        from raven.core.monitor.engine import MonitorEngine
+
+        mid = _create_monitor(gateway._monitor_store, target=str(tmp_path / "gone.log"))
+        engine = MonitorEngine(gateway._monitor_store)
+        gateway._monitor_engine = engine
+        client = _make_client(gateway, registry, channels)
+        assert client.post(f"/api/admin/monitors/{mid}/check").json() == {"ok": True, "triggered": True}
+        assert mid in engine._last_alert_at
 
     def test_full_update_all_fields(self, gateway, registry, channels) -> None:
         client = _make_client(gateway, registry, channels)
@@ -447,9 +492,14 @@ class TestSystem:
         assert "chain" in verify and "signatures" in verify
 
     def test_config(self, gateway, registry, channels) -> None:
+        """The screen renders whatever keys this answers, so the answer has to be the writable set."""
+        from raven.core.config import console_config_keys, settings
+
         client = _make_client(gateway, registry, channels)
         body = client.get("/api/admin/config").json()
-        assert "model" in body and "web_port" in body
+        assert set(body) == set(console_config_keys())
+        assert body["web_port"] == settings.web_port
+        assert not [key for key in body if key.endswith("_api_key")]
 
     def test_system_status(self, gateway, registry, channels) -> None:
         client = _make_client(gateway, registry, channels)
@@ -469,8 +519,13 @@ class TestSystem:
         assert "ok" in resp.json()
 
     def test_shutdown_forbidden_without_role(self, gateway, registry, channels) -> None:
-        client = _make_client(gateway, registry, channels, admin_role=False)
+        client = _make_client(gateway, registry, channels)
         assert client.post("/api/admin/shutdown").status_code == 403
+
+    def test_shutdown_refuses_every_role_the_permission_excludes(self, gateway, registry, channels) -> None:
+        for role in ("user", "viewer", "banned", "superadmin", ""):
+            client = _make_client(gateway, registry, channels, role=role)
+            assert client.post("/api/admin/shutdown").status_code == 403, role
 
     def test_shutdown_allowed_with_admin(self, gateway, registry, channels) -> None:
         from raven.core.admin_api import create_admin_router
@@ -535,17 +590,24 @@ class TestWorkflows:
 
 class TestSecrets:
     def test_secrets_require_admin(self, gateway, registry, channels) -> None:
-        client = _make_client(gateway, registry, channels, admin_role=False)
+        client = _make_client(gateway, registry, channels)
         assert client.get("/api/admin/secrets").status_code == 403
         assert client.post("/api/admin/secrets/KEY", json={"value": "v"}).status_code == 403
         assert client.delete("/api/admin/secrets/KEY").status_code == 403
+
+    def test_secrets_refuse_every_role_the_permission_excludes(self, gateway, registry, channels) -> None:
+        for role in ("user", "viewer", "banned", "superadmin", ""):
+            client = _make_client(gateway, registry, channels, role=role)
+            assert client.get("/api/admin/secrets").status_code == 403, role
+            assert client.post("/api/admin/secrets/KEY", json={"value": "v"}).status_code == 403, role
+            assert client.delete("/api/admin/secrets/KEY").status_code == 403, role
 
     def test_secrets_crud_with_admin(self, gateway, registry, channels, monkeypatch) -> None:
         import raven.core.admin_api as admin_api
 
         fake = FakeSecrets()
         monkeypatch.setattr(admin_api, "secrets", fake)
-        client = _make_client(gateway, registry, channels, admin_role=True)
+        client = _make_client(gateway, registry, channels, role="admin")
         assert client.get("/api/admin/secrets").json() == {"keys": []}
         assert client.post("/api/admin/secrets/API_KEY", json={"value": "sk-test"}).status_code == 200
         assert client.get("/api/admin/secrets").json() == {"keys": ["API_KEY"]}
@@ -555,35 +617,140 @@ class TestSecrets:
 
 class TestConfigKey:
     def test_forbidden_without_role(self, gateway, registry, channels) -> None:
-        client = _make_client(gateway, registry, channels, admin_role=False)
+        client = _make_client(gateway, registry, channels)
         resp = client.post("/api/admin/config/key", json={"key": "default_model", "value": "gpt-4o"})
         assert resp.status_code == 403
 
+    def test_refuses_every_role_the_permission_excludes(self, gateway, registry, channels) -> None:
+        for role in ("user", "viewer", "banned", "superadmin"):
+            client = _make_client(gateway, registry, channels, role=role)
+            resp = client.post("/api/admin/config/key", json={"key": "default_model", "value": "gpt-4o"})
+            assert resp.status_code == 403, role
+
+    def test_the_permission_the_guard_uses_is_admin_only(self, gateway, registry, channels) -> None:
+        """The endpoints became permission checks, so which permission they picked is the contract."""
+        from raven.core.auth.models import ROLE_PERMISSIONS
+        from raven.core.auth.rbac import rbac
+
+        for permission in (Permission.ADMIN_WRITE, Permission.ADMIN_SECRETS, Permission.SYSTEM_SHUTDOWN):
+            granted = [r.value for r in ROLE_PERMISSIONS if rbac.has_permission(r.value, permission)]
+            assert granted == ["admin"], permission
+
     def test_disallowed_key(self, gateway, registry, channels) -> None:
-        client = _make_client(gateway, registry, channels, admin_role=True)
+        client = _make_client(gateway, registry, channels, role="admin")
         resp = client.post("/api/admin/config/key", json={"key": "secret_stuff", "value": "x"})
         assert resp.status_code == 403
 
-    def test_allowed_key_update(self, gateway, registry, channels, monkeypatch) -> None:
-        import raven.core.admin_api as admin_api
+    def test_allowed_key_update(self, gateway, registry, channels, switch_env) -> None:
+        """A write has to move the running gateway, not a file nobody reads."""
+        from raven.core.config import settings
 
-        recorded: dict[str, str] = {}
-        saved = []
-
-        class FakeConfigStore:
-            def set(self, key: str, value: str) -> None:
-                recorded[key] = value
-
-            def save(self) -> None:
-                saved.append(dict(recorded))
-
-        import raven.core.config_store as cs
-
-        monkeypatch.setattr(cs, "config_store", FakeConfigStore())
-        client = _make_client(gateway, registry, channels, admin_role=True)
+        client = _make_client(gateway, registry, channels, role="admin")
         resp = client.post("/api/admin/config/key", json={"key": "default_model", "value": "gpt-4o"})
         assert resp.status_code == 200
-        assert recorded["default_model"] == "gpt-4o"
+        assert resp.json()["applied"] is True
+        assert settings.default_model == "gpt-4o"
+        assert "DEFAULT_MODEL=gpt-4o" in switch_env.read_text(encoding="utf-8")
+
+    def test_a_value_the_gateway_could_not_act_on_answers_400(self, gateway, registry, channels, switch_env) -> None:
+        client = _make_client(gateway, registry, channels, role="admin")
+        resp = client.post("/api/admin/config/key", json={"key": "dm_policy", "value": "sometimes"})
+        assert resp.status_code == 400
+        assert "DM_POLICY must be one of" in resp.json()["detail"]
+        assert switch_env.read_text(encoding="utf-8") == ""
+
+    def test_a_rotated_credential_is_never_echoed_back(self, gateway, registry, channels, switch_env) -> None:
+        """The apply response goes straight to the browser and the audit trail, so the value must not be in it."""
+        client = _make_client(gateway, registry, channels, role="admin")
+        resp = client.post(
+            "/api/admin/config/key",
+            json={"key": "openrouter_api_key", "value": "sk-or-v1-0123456789abcdef0123456789abcdef"},
+        )
+        assert resp.status_code == 200
+        assert "value" not in resp.json()
+        assert "sk-or-v1-0123456789abcdef0123456789abcdef" not in resp.text
+
+    def test_a_restart_bound_switch_says_so_instead_of_claiming_it_applied(
+        self, gateway, registry, channels, switch_env
+    ) -> None:
+        from raven.core.config import settings
+
+        client = _make_client(gateway, registry, channels, role="admin")
+        resp = client.post("/api/admin/config/key", json={"key": "web_port", "value": "9999"})
+        body = resp.json()
+        assert body["applied"] is False
+        assert body["restart_required"] is True
+        assert body["warnings"], body
+        assert settings.web_port != 9999
+        assert "WEB_PORT=9999" in switch_env.read_text(encoding="utf-8")
+
+
+class TestTheGuardAnswersThePermissionTable:
+    """A handler that hard-coded `role == "admin"` still 403s here even though the denial tests pass.
+
+    Granting the permission to `viewer` through the role table is the only way to tell a check that
+    asks the table from one that asks the role name — and the two also differ on which right a caller
+    needs, so each endpoint is offered a neighbouring permission as well.
+    """
+
+    def test_secrets_open_for_a_role_the_table_grants(
+        self, gateway, registry, channels, monkeypatch, grant_permission
+    ) -> None:
+        import raven.core.admin_api as admin_api
+
+        monkeypatch.setattr(admin_api, "secrets", FakeSecrets())
+        grant_permission(Role.VIEWER.value, Permission.ADMIN_SECRETS)
+        client = _make_client(gateway, registry, channels, role="viewer")
+        assert client.get("/api/admin/secrets").status_code == 200
+
+    def test_secrets_stay_closed_for_a_different_admin_right(
+        self, gateway, registry, channels, grant_permission
+    ) -> None:
+        grant_permission(Role.VIEWER.value, Permission.ADMIN_WRITE)
+        client = _make_client(gateway, registry, channels, role="viewer")
+        assert client.get("/api/admin/secrets").status_code == 403
+        assert client.post("/api/admin/secrets/KEY", json={"value": "v"}).status_code == 403
+        assert client.delete("/api/admin/secrets/KEY").status_code == 403
+
+    def test_config_open_for_a_role_the_table_grants(
+        self, gateway, registry, channels, monkeypatch, grant_permission, switch_env
+    ) -> None:
+        """`dm_policy` rather than `log_level`: the guard is the subject, and a log-level write rebuilds
+        the process-wide loguru sinks the rest of the run is still using."""
+        from raven.core.config import settings
+
+        grant_permission(Role.VIEWER.value, Permission.ADMIN_WRITE)
+        client = _make_client(gateway, registry, channels, role="viewer")
+        resp = client.post("/api/admin/config/key", json={"key": "dm_policy", "value": "open"})
+        assert resp.status_code == 200
+        assert settings.dm_policy == "open"
+
+    def test_config_stays_closed_for_a_secrets_right(self, gateway, registry, channels, grant_permission) -> None:
+        grant_permission(Role.VIEWER.value, Permission.ADMIN_SECRETS)
+        client = _make_client(gateway, registry, channels, role="viewer")
+        assert client.post("/api/admin/config/key", json={"key": "log_level", "value": "x"}).status_code == 403
+
+    def test_shutdown_open_for_a_role_the_table_grants(self, gateway, registry, channels, grant_permission) -> None:
+        grant_permission(Role.VIEWER.value, Permission.SYSTEM_SHUTDOWN)
+        client = _make_client(gateway, registry, channels, role="viewer")
+        assert client.post("/api/admin/shutdown").status_code == 200
+
+    def test_shutdown_stays_closed_for_a_write_right(self, gateway, registry, channels, grant_permission) -> None:
+        grant_permission(Role.VIEWER.value, Permission.ADMIN_WRITE)
+        client = _make_client(gateway, registry, channels, role="viewer")
+        assert client.post("/api/admin/shutdown").status_code == 403
+
+    def test_model_switch_answers_the_table(self, gateway, registry, channels, monkeypatch, grant_permission) -> None:
+        """The pull is gigabytes, so the real enable/disable are patched out and only the guard is tested."""
+        import raven.core.heretic_model as hm
+
+        monkeypatch.setattr(hm, "disable", lambda: SimpleNamespace(ok=True, detail="off"))
+        monkeypatch.setattr(hm, "enable", lambda *a, **k: SimpleNamespace(ok=True, detail="on"))
+        body = {"action": "disable", "force": False}
+        client = _make_client(gateway, registry, channels, role="viewer")
+        assert client.post("/api/admin/models/experimental", json=body).status_code == 403
+        grant_permission(Role.VIEWER.value, Permission.ADMIN_WRITE)
+        assert client.post("/api/admin/models/experimental", json=body).status_code == 200
 
 
 class TestOAuth:
@@ -663,6 +830,9 @@ class TestAuthRoutes:
     def test_me_defaults_anonymous(self, auth_client) -> None:
         body = auth_client.get("/api/auth/me").json()
         assert body == {"user_id": "anonymous", "role": "anonymous"}
+        # Only the handler is in this app: the gateway's own surface refuses an anonymous private
+        # read before the route runs, which tests/test_aios_e2e.py asserts over the real middleware.
+        assert auth_client.get("/api/auth/me", headers={"Authorization": "Bearer revoked-token"}).status_code == 200
 
     def test_logout_without_token(self, auth_client) -> None:
         assert auth_client.post("/api/auth/logout").status_code == 200

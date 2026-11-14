@@ -1,3 +1,5 @@
+import type { CollabComment, CollabCursor, CollabUser } from "../lib/collab";
+
 export interface Session {
   id: string;
   channel: string;
@@ -471,22 +473,29 @@ export interface PluginInfo {
   tags?: string[];
 }
 
-export interface CollabUserInfo {
-  id: string;
-  name: string;
-}
+export type CollabUserInfo = CollabUser;
 
+/**
+ * One row of `GET /api/collab/sessions`, which is `CollaborationSession.get_state()`: counts, so a
+ * list never carries a document body. The detail route below answers `users` and `comments` with the
+ * rosters themselves.
+ */
 export interface CollabSessionInfo {
   session_id: string;
   file_path: string;
+  version: number;
+  users: number;
   connected_users: number;
-  users: number | CollabUserInfo[];
-  version: string;
+  changes: number;
+  comments: number;
+  crdt_enabled: boolean;
 }
 
-export interface CollabSessionDetails extends CollabSessionInfo {
-  content?: string;
-  comments?: { id: string; user_id: string; line: number; text: string; resolved: boolean }[];
+export interface CollabSessionDetails extends Omit<CollabSessionInfo, "users" | "comments"> {
+  content: string;
+  users: CollabUser[];
+  comments: CollabComment[];
+  cursors: CollabCursor[];
 }
 
 export interface KnowledgeSearchEntry {

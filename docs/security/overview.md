@@ -182,6 +182,13 @@ to add a path to a list.
 - **RBAC** — `PATH_PERMISSIONS` maps 19 route prefixes (`/api/admin`, `/api/secrets`,
   `/api/auth/users`, `/aios/exec`, …) to a required `Permission`, checked against the caller's
   role, so a `user`-role token gets `403` on admin surfaces even when authenticated
+- **handler-scope rights** — a handler narrower than its route table entry (one secret, a shutdown,
+  the multi-gigabyte model swap) asks `require_permission()` in `raven/core/auth/guards.py`, which
+  answers from the same `ROLE_PERMISSIONS` table. Eight of them used to compare the role string
+  against a list typed at the call site, and all eight lists contained `superadmin` — a name
+  `Role` has never had, so a token minted with it was an admin at those eight endpoints and a
+  stranger everywhere else. `tests/test_role_guards.py` fails the build on the phantom name and on
+  the shape itself, so the pattern cannot come back
 - **fail-closed reads** — a read below a data scope is `401` without a credential unless
   `PUBLIC_READ_PREFIXES` declares it public. The list is the whole exception, two entries:
   `/api/health` (the container healthcheck is a `curl -f` with nothing to send) and
@@ -215,12 +222,30 @@ be in. Reads used to be the opposite way round: a hand-kept list of 27 *private*
 
 Two independent mechanisms, because they protect different surfaces:
 
-- **HTTP middleware** — 60 requests / 60 s per IP (`rate_limit_max`, `rate_limit_window`);
-  exceeding `1.5x` the limit blocks the IP temporarily, and a block auto-releases after
-  twice the window. Counters are pruned so the table cannot grow without bound.
+- **HTTP middleware** — `rate_limit_max` requests per `rate_limit_window` seconds per client address
+  (60/60 by default, and the limiter is built from those settings, so the number the console shows is
+  the number that runs). A sliding window of the timestamps it allowed: the budget is exact rather than
+  averaged, and an address that stops sending recovers as soon as its oldest request ages out. The
+  table is keyed by address and is pruned on the read path — a scan that drops every address whose
+  window has fully elapsed, at most once per 60 s — so it holds the addresses that are talking, not
+  every address that has ever connected.
 - **Channel/user token buckets** — per-transport budgets (Telegram 3/s burst 6, Discord
   5/s burst 10, Slack 8/s burst 16, WebChat 10/s burst 20) plus per-user-category limits,
   both overridable at runtime via `set_channel_limit` / `set_user_limit`.
+
+**Which address a request is billed to.** `X-Forwarded-For` is honoured only when the direct peer is a
+proxy this project installed — loopback, `172.16.0.0/12` (the Docker pool the shipped compose stack
+lands Traefik in), `10.0.0.0/8`, `192.168.0.0/16` or `fc00::/7` — or when `TRUST_FORWARDED_FOR=1`
+declares that something off-host terminates the connection. Otherwise the peer address wins: the header
+is the caller's to write, and honouring it from a stranger would let that caller choose the bucket it
+is rate-limited in and put a chosen address into the audit log and the login lockout counter.
+`client_ip()` in `raven/core/middleware.py` is the only implementation, and both the HTTP limiter and
+`/api/auth/login` go through it.
+
+Metrics carry no per-caller label. The limiter's counter is `http_rate_limited` with no labels (the
+address goes to the log, which rotates, not to a series table that never forgets), and route labels go
+through `sanitize_metric_path()` so a path with an id in it collapses to `{id}`.
+`tests/test_metric_cardinality.py` fails the build on either rule.
 
 ## 8. Input Sanitization and Response Headers
 

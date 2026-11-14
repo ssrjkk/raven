@@ -49,11 +49,12 @@ def create_ops_router(gateway: Gateway, features: FeatureFlags) -> APIRouter:
     @router.post("/api/monitor/{action}/{monitor_id}")
     async def api_monitor_toggle(request: Request, action: str, monitor_id: str):
         eng: MonitorEngine = request.app.state.monitor_engine
-        if action == "pause":
-            await eng.pause_monitor(monitor_id)
-        elif action == "resume":
-            await eng.resume_monitor(monitor_id)
-        return {"ok": True}
+        if action not in ("pause", "resume"):
+            raise HTTPException(400, f"Unknown monitor action '{action}'")
+        changed = await eng.pause_monitor(monitor_id) if action == "pause" else await eng.resume_monitor(monitor_id)
+        if not changed:
+            raise HTTPException(404, f"Monitor '{monitor_id}' not found")
+        return {"ok": True, "action": action}
 
     @router.get("/api/tools/policy")
     async def api_tools_policy():
@@ -140,11 +141,12 @@ def create_ops_router(gateway: Gateway, features: FeatureFlags) -> APIRouter:
     @router.post("/api/routine/{action}/{routine_id}")
     async def api_routine_toggle(request: Request, action: str, routine_id: str):
         eng: RoutineEngine = request.app.state.routine_engine
-        if action == "pause":
-            await eng.pause_routine(routine_id)
-        elif action == "resume":
-            await eng.resume_routine(routine_id)
-        return {"ok": True}
+        if action not in ("pause", "resume"):
+            raise HTTPException(400, f"Unknown routine action '{action}'")
+        changed = await eng.pause_routine(routine_id) if action == "pause" else await eng.resume_routine(routine_id)
+        if not changed:
+            raise HTTPException(404, f"Routine '{routine_id}' not found")
+        return {"ok": True, "action": action}
 
     if features.is_enabled("planner"):
 

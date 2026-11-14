@@ -35,7 +35,10 @@ export default function Settings() {
     },
   });
 
-  const { data: configData, isLoading } = useApiQuery<Record<string, string>>(["config"], () => api.config());
+  const { data: configData, isLoading } = useApiQuery<Record<string, string | number | boolean>>(
+    ["config"],
+    () => api.config(),
+  );
   const config = configData ?? {};
 
   useEffect(() => {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
 import { useApiQuery } from "../hooks/useApiQuery";
+import { errorMessage } from "../lib/errors";
 
 interface RAGResult {
   modality?: string;
@@ -46,7 +47,7 @@ export default function RAG() {
   const search = useMutation({
     mutationFn: () => api.ragSearch(query),
     onSuccess: (r) => { setResults(r.results); setError(""); },
-    onError: (e: any) => setError(e.message || "Search failed"),
+    onError: (e) => setError(errorMessage(e, "Search failed")),
   });
 
   const indexDoc = useMutation({
@@ -56,7 +57,7 @@ export default function RAG() {
       setDocId(""); setDocText(""); setDocSource("");
       qc.invalidateQueries({ queryKey: ["ragStats"] });
     },
-    onError: (e: any) => setError(e.message || "Index failed"),
+    onError: (e) => setError(errorMessage(e, "Index failed")),
   });
 
   const tabs: { key: Tab; label: string }[] = [

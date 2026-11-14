@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
+import { errorMessage } from "../lib/errors";
 
 export default function Tests() {
   const [path, setPath] = useState("");
@@ -16,19 +17,19 @@ export default function Tests() {
   const runTests = useMutation({
     mutationFn: () => api.testsRun(path, marker, parseInt(timeout) || 120, extraArgs),
     onSuccess: (r) => setResult(r.text),
-    onError: (e: any) => setResult(`Error: ${e.message}`),
+    onError: (e) => setResult(`Error: ${errorMessage(e)}`),
   });
 
   const measureCoverage = useMutation({
     mutationFn: () => api.testsCoverage(path, parseInt(timeout) || 180),
     onSuccess: (r) => setResult(r.text),
-    onError: (e: any) => setResult(`Error: ${e.message}`),
+    onError: (e) => setResult(`Error: ${errorMessage(e)}`),
   });
 
   const generateTests = useMutation({
     mutationFn: () => api.testsGenerate(filePath),
     onSuccess: (r) => setResult(r.text),
-    onError: (e: any) => setResult(`Error: ${e.message}`),
+    onError: (e) => setResult(`Error: ${errorMessage(e)}`),
   });
 
   return (

@@ -4,13 +4,14 @@ import ast
 import functools
 import pathlib
 import re
+from collections.abc import Callable, Iterable
 from typing import Any
 
 import pytest
 import yaml
 
 from raven.core.channel_config import _LEGACY_ENV
-from raven.core.config import Settings
+from raven.core.config import Settings, runtime_switches
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -88,7 +89,9 @@ def _consumed() -> frozenset[str]:
     return frozenset(names)
 
 
-def _generated(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+def _generated(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, pin_env_names: Callable[[Iterable[str]], None]
+) -> dict[str, str]:
     """The files the onboarding CLIs actually hand to an operator."""
 
     from raven.cli import init_cmd, setup_cmd
@@ -107,6 +110,9 @@ def _generated(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> dict[
     out["raven init .env"] = real.read_text(encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)
+    # `setup_cmd._write_env` exports every model name it writes into this process, and the sweep is
+    # about the file it produces, not about the environment: the pin keeps the export inside the test.
+    pin_env_names(switch.env_name for switch in runtime_switches())
     out["raven setup --free .env"] = setup_cmd._write_env("llama3").read_text(encoding="utf-8")
 
     out[".env.example"] = (ROOT / ".env.example").read_text(encoding="utf-8")
@@ -135,8 +141,13 @@ def _hint_names() -> set[str]:
     return names
 
 
-def _emitted(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, list[str]]:
-    emitted = {label: sorted(set(_DECLARED.findall(text))) for label, text in _generated(tmp_path, monkeypatch).items()}
+def _emitted(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, pin_env_names: Callable[[Iterable[str]], None]
+) -> dict[str, list[str]]:
+    emitted = {
+        label: sorted(set(_DECLARED.findall(text)))
+        for label, text in _generated(tmp_path, monkeypatch, pin_env_names).items()
+    }
     for label, names in _compose_names().items():
         emitted[label] = sorted(names)
     emitted["raven security audit hints"] = sorted(_hint_names())
@@ -153,13 +164,15 @@ def test_the_sweep_counts_real_switches_on_both_sides() -> None:
 
 
 def test_no_switch_the_tooling_hands_out_is_one_the_application_ignores(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, pin_env_names: Callable[[Iterable[str]], None]
 ) -> None:
-    assert _inert(_emitted(tmp_path, monkeypatch), _consumed()) == []
+    assert _inert(_emitted(tmp_path, monkeypatch, pin_env_names), _consumed()) == []
 
 
-def test_the_sweep_reads_the_files_it_claims_to(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    emitted = _emitted(tmp_path, monkeypatch)
+def test_the_sweep_reads_the_files_it_claims_to(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, pin_env_names: Callable[[Iterable[str]], None]
+) -> None:
+    emitted = _emitted(tmp_path, monkeypatch, pin_env_names)
     assert sum(len(names) for names in emitted.values()) > 120
     assert len(emitted[".env.example"]) > 100
     assert "raven init .env" in emitted and "raven deploy full" in emitted

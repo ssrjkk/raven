@@ -6,7 +6,7 @@ import json
 import os
 import subprocess
 import threading
-from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -103,6 +103,85 @@ def _isolate_token_manager() -> Iterator[None]:
     token_manager._tokens.clear()
 
 
+@pytest.fixture(autouse=True)
+def _runtime_switches_stay_where_the_test_left_them() -> Iterator[None]:
+    """A test that moves a switch moves it for the rest of the run, and the next file pays for it.
+
+    `apply_runtime_switch` and `refresh_settings_from_env` both write the settings singleton and
+    rebuild the consumers that bound their value at import, and `middleware.rate_limiter` is one
+    per-address budget shared by every `TestClient` in the process: the watcher test that set
+    `RATE_LIMIT_MAX=33` left every later batch running on a budget a single test had chosen. Measured
+    with a probe over `tests/test_aios_bridge.py`, `tests/test_aios_e2e.py` and
+    `tests/cli/test_gateway_runner.py` in one process -- 45 limiter checks against the one
+    `testclient` key -- so a leak that spends 45 requests turns later calls into 429s depending on
+    which file ran first, which is how the same suite passes on a slow machine and fails on a fast one.
+
+    The exported names are snapshotted with the settings because they are a second copy of the same
+    switch, and only the env half leaks silently: `monkeypatch.delenv(name, raising=False)` records
+    nothing for a name the machine does not have, so a value `write_env_value` puts into `os.environ`
+    outlives the test that caused it. Measured -- `tests/core/test_config_watcher.py` left
+    `DEFAULT_MODEL` exported, and two files later `refresh_settings_from_env()` inside an unrelated
+    test adopted it and moved `settings.default_model`, so the guard below blamed the innocent file.
+    """
+    from raven.core import middleware
+    from raven.core.config import runtime_switches
+
+    switches = runtime_switches()
+    before = {switch.attr: getattr(settings, switch.attr) for switch in switches}
+    exported = {switch.env_name: os.environ.get(switch.env_name) for switch in switches}
+    limiter = middleware.rate_limiter
+    budget = (limiter.max_requests, limiter.window)
+    yield
+    moved = sorted(attr for attr, value in before.items() if getattr(settings, attr) != value)
+    leaked = {name: value for name, value in exported.items() if os.environ.get(name) != value}
+    for attr in moved:
+        setattr(settings, attr, before[attr])
+    for name, value in leaked.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+    if middleware.rate_limiter is not limiter:
+        moved.append("middleware.rate_limiter")
+        middleware.rate_limiter = limiter
+    if (limiter.max_requests, limiter.window) != budget:
+        moved.append("middleware.rate_limiter budget")
+        (limiter.max_requests, limiter.window) = budget
+    left_behind = sorted(moved + [f"{name} exported" for name in leaked])
+    assert not left_behind, (
+        f"this test left {left_behind} set for the rest of the run; take the `switch_env` fixture from "
+        "tests/core/conftest.py, or pin what the product code exports with `pin_env_names` from this "
+        "file, so the move is undone"
+    )
+
+
+@pytest.fixture
+def pin_env_names() -> Iterator[Callable[[Iterable[str]], None]]:
+    """Take the named env vars out of the process for the test and put back exactly what was there.
+
+    ``monkeypatch.delenv(name, raising=False)`` registers no undo for a name that is absent, so a value
+    the product code exports during the test -- ``write_env_value`` and ``apply_runtime_switch`` both
+    write ``os.environ`` themselves -- survives the test and reaches every file that runs after it. The
+    snapshot records ``None`` for an absent name and deletes it again on the way out.
+    """
+    taken: dict[str, str | None] = {}
+
+    def pin(names: Iterable[str]) -> None:
+        for name in names:
+            if name in taken:
+                continue
+            taken[name] = os.environ.get(name)
+            os.environ.pop(name, None)
+
+    yield pin
+
+    for name, value in taken.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _database_stays_out_of_the_repository(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
     """`create_aios_app()` binds an AuthStore at `settings.resolved_db_path` on startup, and that bind
@@ -167,6 +246,58 @@ def _operator_database_is_not_a_test_fixture() -> Iterator[None]:
         pytest.fail(
             f"this test modified the operator's database at {_REPO_DB} -- point it at a tmp_path "
             "database instead of the repository one"
+        )
+
+
+_OPERATOR_ENV_FILES = (_REPO_ROOT / ".env", Path.home() / ".raven" / ".env")
+
+
+def _operator_env_state() -> tuple[Any, ...]:
+    state: list[Any] = []
+    for path in _OPERATOR_ENV_FILES:
+        try:
+            stat = path.stat()
+        except OSError:
+            state.append(None)
+            continue
+        state.append((stat.st_size, stat.st_mtime_ns))
+    return tuple(state)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _env_files_stay_out_of_the_repository(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
+    """`apply_runtime_switch` writes to the last existing env-file candidate, and on an install that is
+    the operator's own `.env`. Measured: one run of `tests/core/test_admin_api.py` replaced
+    `DEFAULT_MODEL` there with the value a test had just posted, and the file is gitignored, so nothing
+    put it back. Appending this run's temp file to the candidate list makes it the highest precedence,
+    so a write that was never pinned lands where the run can throw it away. A test that pins the file
+    itself still wins, because its monkeypatch is applied after this session patch.
+    """
+    from raven.core import config as config_module
+
+    target = tmp_path_factory.mktemp("runtime-env") / ".env"
+    target.write_text("", encoding="utf-8")
+    before = list(config_module._ENV_FILE_CANDIDATES)
+    config_module._ENV_FILE_CANDIDATES = [*before, str(target)]
+    yield
+    config_module._ENV_FILE_CANDIDATES = before
+
+
+@pytest.fixture(autouse=True)
+def _operator_env_file_is_not_a_test_fixture() -> Iterator[None]:
+    """Fail the test that writes an operator env file, naming it.
+
+    The redirect is what stops the common case; this is what proves it stopped, because a test that
+    hands a repository path straight to `write_env_value(..., env_path=)` bypasses the candidates.
+    """
+    before = _operator_env_state()
+    yield
+    after = _operator_env_state()
+    if after != before:
+        pytest.fail(
+            "this test modified an operator env file ("
+            + ", ".join(str(path) for path in _OPERATOR_ENV_FILES)
+            + ") -- point it at a tmp_path file instead"
         )
 
 
@@ -257,6 +388,30 @@ def mcp_stdio(monkeypatch: pytest.MonkeyPatch) -> Callable[[Any, str], Awaitable
         return [json.loads(line) for line in out.getvalue().splitlines() if line.strip()]
 
     return _serve
+
+
+@pytest.fixture
+def grant_permission() -> Iterator[Callable[[str, Any], None]]:
+    """Hand a permission to a role through the role table, for the duration of one test.
+
+    The narrow request guards answer `rbac.has_permission`, so granting a right to a role that does
+    not normally hold it is the only way to tell a check that asks the table from one that compares
+    the role name at the call site.
+    """
+    from raven.core.auth.models import Permission, Role
+    from raven.core.auth.rbac import rbac
+
+    granted: list[tuple[Role, Permission]] = []
+
+    def _grant(role: str, permission: Permission) -> None:
+        key = Role(role)
+        rbac.add_role_permission(key, permission)
+        granted.append((key, permission))
+
+    yield _grant
+
+    for key, permission in granted:
+        rbac.remove_role_permission(key, permission)
 
 
 def _is_sqlite_worker(thread: threading.Thread) -> bool:

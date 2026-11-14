@@ -1,0 +1,472 @@
+{
+  "cases": [
+    {
+      "name": "single line replace",
+      "content": "hello world",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 0,
+        "end_line": 0,
+        "end_col": 5,
+        "old_text": "hello",
+        "new_text": "HELLO"
+      },
+      "applies": true,
+      "expected": "HELLO world"
+    },
+    {
+      "name": "insert at line start",
+      "content": "a\nb\nc",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 1,
+        "start_col": 0,
+        "end_line": 1,
+        "end_col": 0,
+        "old_text": "",
+        "new_text": ">> "
+      },
+      "applies": true,
+      "expected": "a\n>> b\nc"
+    },
+    {
+      "name": "delete across lines",
+      "content": "a\nb\nc\nd",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 1,
+        "end_line": 3,
+        "end_col": 0,
+        "old_text": "\nb\nc\n",
+        "new_text": ""
+      },
+      "applies": true,
+      "expected": "ad"
+    },
+    {
+      "name": "multi line insert",
+      "content": "a\nb\nc\nd",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 1,
+        "start_col": 1,
+        "end_line": 2,
+        "end_col": 2,
+        "old_text": "\nc\n",
+        "new_text": "X\nY"
+      },
+      "applies": true,
+      "expected": "a\nbX\nYd"
+    },
+    {
+      "name": "splice to a line start",
+      "content": "a\nb\nc",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 2,
+        "end_line": 2,
+        "end_col": 0,
+        "old_text": "b\n",
+        "new_text": "T\nT"
+      },
+      "applies": true,
+      "expected": "a\nT\nTc"
+    },
+    {
+      "name": "whole document",
+      "content": "abc\ndef",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 0,
+        "end_line": 1,
+        "end_col": 3,
+        "old_text": "abc\ndef",
+        "new_text": "zz"
+      },
+      "applies": true,
+      "expected": "zz"
+    },
+    {
+      "name": "delete inside a line",
+      "content": "abcdef",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 2,
+        "end_line": 0,
+        "end_col": 4,
+        "old_text": "cd",
+        "new_text": ""
+      },
+      "applies": true,
+      "expected": "abef"
+    },
+    {
+      "name": "append after trailing newline",
+      "content": "a\nb\n",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 2,
+        "start_col": 0,
+        "end_line": 2,
+        "end_col": 0,
+        "old_text": "",
+        "new_text": "c"
+      },
+      "applies": true,
+      "expected": "a\nb\nc"
+    },
+    {
+      "name": "insert before last line",
+      "content": "a\nb\n",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 1,
+        "start_col": 0,
+        "end_line": 1,
+        "end_col": 0,
+        "old_text": "",
+        "new_text": "Q"
+      },
+      "applies": true,
+      "expected": "a\nQb\n"
+    },
+    {
+      "name": "column past the line end",
+      "content": "ab",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 5,
+        "end_line": 0,
+        "end_col": 5,
+        "old_text": "",
+        "new_text": "X"
+      },
+      "applies": true,
+      "expected": "abX"
+    },
+    {
+      "name": "empty range is a no-op",
+      "content": "abc",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 0,
+        "end_line": 0,
+        "end_col": 0,
+        "old_text": "",
+        "new_text": ""
+      },
+      "applies": true,
+      "expected": "abc"
+    },
+    {
+      "name": "reversed range",
+      "content": "a\nb\nc\nd",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 2,
+        "start_col": 1,
+        "end_line": 1,
+        "end_col": 0,
+        "old_text": "",
+        "new_text": "Z"
+      },
+      "applies": false,
+      "expected": "a\nb\nc\nd"
+    },
+    {
+      "name": "line past the document",
+      "content": "one\nline",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 9,
+        "start_col": 0,
+        "end_line": 9,
+        "end_col": 0,
+        "old_text": "",
+        "new_text": "x"
+      },
+      "applies": false,
+      "expected": "one\nline"
+    },
+    {
+      "name": "negative line",
+      "content": "abc",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": -1,
+        "start_col": 0,
+        "end_line": 0,
+        "end_col": 0,
+        "old_text": "",
+        "new_text": "x"
+      },
+      "applies": false,
+      "expected": "abc"
+    },
+    {
+      "name": "astral character replaced",
+      "content": "a😀b\nc",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 1,
+        "end_line": 0,
+        "end_col": 2,
+        "old_text": "😀",
+        "new_text": ""
+      },
+      "applies": true,
+      "expected": "ab\nc"
+    },
+    {
+      "name": "astral character on an earlier line",
+      "content": "😀\nabc",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 1,
+        "start_col": 1,
+        "end_line": 1,
+        "end_col": 2,
+        "old_text": "b",
+        "new_text": "X"
+      },
+      "applies": true,
+      "expected": "😀\naXc"
+    }
+  ],
+  "roundtrip": [
+    {
+      "name": "upper a word",
+      "prev": "hello",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 0,
+        "end_line": 0,
+        "end_col": 5,
+        "old_text": "hello",
+        "new_text": "HELLO"
+      },
+      "next": "HELLO"
+    },
+    {
+      "name": "insert a line",
+      "prev": "a\nb\nc",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 2,
+        "start_col": 0,
+        "end_line": 2,
+        "end_col": 0,
+        "old_text": "",
+        "new_text": "X\n"
+      },
+      "next": "a\nb\nX\nc"
+    },
+    {
+      "name": "rewrite the first word",
+      "prev": "one\ntwo",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 0,
+        "end_line": 0,
+        "end_col": 3,
+        "old_text": "one",
+        "new_text": "uno"
+      },
+      "next": "uno\ntwo"
+    },
+    {
+      "name": "type into an empty document",
+      "prev": "",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 0,
+        "end_line": 0,
+        "end_col": 0,
+        "old_text": "",
+        "new_text": "print(1)"
+      },
+      "next": "print(1)"
+    },
+    {
+      "name": "delete the trailing newline",
+      "prev": "x\n",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 1,
+        "end_line": 1,
+        "end_col": 0,
+        "old_text": "\n",
+        "new_text": ""
+      },
+      "next": "x"
+    },
+    {
+      "name": "repeat the whole document",
+      "prev": "abc",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 3,
+        "end_line": 0,
+        "end_col": 3,
+        "old_text": "",
+        "new_text": "abc"
+      },
+      "next": "abcabc"
+    },
+    {
+      "name": "drop a line",
+      "prev": "a\nb\nc",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 1,
+        "start_col": 0,
+        "end_line": 2,
+        "end_col": 0,
+        "old_text": "b\n",
+        "new_text": ""
+      },
+      "next": "a\nc"
+    },
+    {
+      "name": "add a line in the middle",
+      "prev": "line1\nline2\nline3",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 2,
+        "start_col": 0,
+        "end_line": 2,
+        "end_col": 0,
+        "old_text": "",
+        "new_text": "extra\n"
+      },
+      "next": "line1\nline2\nextra\nline3"
+    },
+    {
+      "name": "cyrillic text",
+      "prev": "привет мир",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 6,
+        "end_line": 0,
+        "end_col": 10,
+        "old_text": " мир",
+        "new_text": ""
+      },
+      "next": "привет"
+    },
+    {
+      "name": "append a newline",
+      "prev": "x",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 1,
+        "end_line": 0,
+        "end_col": 1,
+        "old_text": "",
+        "new_text": "\n"
+      },
+      "next": "x\n"
+    },
+    {
+      "name": "type an emoji",
+      "prev": "ok",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 2,
+        "end_line": 0,
+        "end_col": 2,
+        "old_text": "",
+        "new_text": "😀"
+      },
+      "next": "ok😀"
+    },
+    {
+      "name": "replace an emoji",
+      "prev": "a😀b",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 1,
+        "end_line": 0,
+        "end_col": 2,
+        "old_text": "😀",
+        "new_text": "🎉"
+      },
+      "next": "a🎉b"
+    },
+    {
+      "name": "astral run with a line break",
+      "prev": "😀first\nsecond",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 1,
+        "start_col": 6,
+        "end_line": 1,
+        "end_col": 6,
+        "old_text": "",
+        "new_text": " line"
+      },
+      "next": "😀first\nsecond line"
+    },
+    {
+      "name": "delete the emoji line",
+      "prev": "😀\nkeep",
+      "change": {
+        "user_id": "fixture",
+        "file": "sample.py",
+        "start_line": 0,
+        "start_col": 0,
+        "end_line": 1,
+        "end_col": 0,
+        "old_text": "😀\n",
+        "new_text": ""
+      },
+      "next": "keep"
+    }
+  ]
+}

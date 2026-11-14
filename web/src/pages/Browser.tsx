@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { api, type BrowserStatusData } from "../api/client";
 import PageHeader from "../components/PageHeader";
+import { errorMessage } from "../lib/errors";
 
 type Tab = "navigate" | "interact" | "tabs" | "network" | "extract";
 
@@ -41,7 +42,7 @@ export default function Browser() {
       setOutput(r.running ? `Browser started — ${r.title || ""} ${r.url || ""}` : "Browser not started");
       setError("");
     },
-    onError: (e: any) => setError(e.message || "Status failed"),
+    onError: (e) => setError(errorMessage(e, "Status failed")),
   });
 
   const startMutation = useMutation({
@@ -51,7 +52,7 @@ export default function Browser() {
       setError("");
       statusMutation.mutate();
     },
-    onError: (e: any) => setError(e.message || "Start failed"),
+    onError: (e) => setError(errorMessage(e, "Start failed")),
   });
 
   const actionMutation = useMutation({
@@ -92,13 +93,13 @@ export default function Browser() {
   const extractMutation = useMutation({
     mutationFn: () => api.browserExtract(extractUrl || undefined),
     onSuccess: (r) => { setOutput(r.text || "No content extracted"); setError(""); },
-    onError: (e: any) => setError(e.message || "Extract failed"),
+    onError: (e) => setError(errorMessage(e, "Extract failed")),
   });
 
   const diffMutation = useMutation({
     mutationFn: () => api.browserVisualDiff(diffUrlA, diffUrlB),
     onSuccess: (r) => { setOutput(JSON.stringify({ diff_percent: r.diff_percent }, null, 2)); setError(""); },
-    onError: (e: any) => setError(e.message || "Visual diff failed"),
+    onError: (e) => setError(errorMessage(e, "Visual diff failed")),
   });
 
   return (

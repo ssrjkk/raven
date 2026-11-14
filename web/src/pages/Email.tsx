@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api/client";
+import { errorMessage } from "../lib/errors";
 
 interface EmailThread {
   from: string;
@@ -44,19 +45,19 @@ export default function EmailPage() {
       setMsg(`Email sent to ${r.to}`);
       setTo(""); setSubject(""); setBody("");
     },
-    onError: (e: any) => setError(e.message || "Send failed"),
+    onError: (e) => setError(errorMessage(e, "Send failed")),
   });
 
   const loadInbox = useMutation({
     mutationFn: () => api.emailInbox(10),
     onSuccess: (r) => { setEmails(r.emails); setTotal(r.total); },
-    onError: (e: any) => setError(e.message || "Failed to load inbox"),
+    onError: (e) => setError(errorMessage(e, "Failed to load inbox")),
   });
 
   const loadConfig = useMutation({
     mutationFn: () => api.emailConfig(),
     onSuccess: (r) => setConfig(r),
-    onError: (e: any) => setError(e.message || "Failed to load config"),
+    onError: (e) => setError(errorMessage(e, "Failed to load config")),
   });
 
   const tabs: { key: Tab; label: string }[] = [

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -53,8 +54,8 @@ def mock_ws_manager():
 
 @pytest.fixture()
 def client(mock_manager, mock_ws_manager):
-    with patch("raven.core.collab_api._get_manager", return_value=mock_manager):
-        with patch("raven.core.collab_api._get_ws_manager", return_value=mock_ws_manager):
+    with patch("raven.core.collab_api.get_manager", return_value=mock_manager):
+        with patch("raven.core.collab_api.get_ws_manager", return_value=mock_ws_manager):
             router = create_collab_router()
             app = FastAPI()
             app.include_router(router)
@@ -204,3 +205,119 @@ class TestCollabWebSocket:
             ws.send_json({"kind": "auth", "user_id": "whoever-i-claim"})
             assert ws.receive_json()["kind"] == "state"
         assert mock_ws_manager.connect.await_args.args[:2] == ("sess-1", "u7")
+
+
+class TestCollabEditsReachEditors:
+    """The console's session tab rendered one REST snapshot and never opened the socket the gateway
+    mounts for the same session, so two editors each saw only their own last save.
+
+    These run against the real stores. A mocked manager answers any frame shape you ask it to, which
+    is precisely the claim that needed proving.
+    """
+
+    SESSION = "live-1"
+
+    @pytest.fixture(autouse=True)
+    def _real_stores(self, monkeypatch):
+        from raven.core import collab_api
+        from raven.unique.collaboration import CollaborationManager, WebSocketManager
+
+        monkeypatch.setattr(collab_api, "_manager", CollaborationManager())
+        monkeypatch.setattr(collab_api, "_ws_manager", WebSocketManager())
+        monkeypatch.setattr(settings, "web_secret_key", SecretStr("operator-key-under-test"))
+
+    @pytest.fixture()
+    def live(self):
+        app = FastAPI()
+        app.include_router(create_collab_router())
+        with TestClient(app) as client:
+            client.post("/api/collab/sessions", json={"session_id": self.SESSION, "file_path": "a.py"})
+            yield client
+
+    def _socket(self, client: TestClient, session: str = SESSION):
+        return client.websocket_connect(f"/api/collab/sessions/{session}/ws?token=operator-key-under-test")
+
+    @staticmethod
+    def _until(ws, kind: str, limit: int = 5) -> dict[str, Any]:
+        """Read frames until `kind` arrives. The gateway also announces joins, so the wanted frame is
+        rarely the first one -- and a limit keeps a missing frame a failure rather than a hang."""
+        for _ in range(limit):
+            frame: dict[str, Any] = ws.receive_json()
+            if frame.get("kind") == kind:
+                return frame
+        pytest.fail(f"no {kind!r} frame in the first {limit} frames")
+
+    def test_an_edit_by_one_editor_reaches_the_other(self, live):
+        change = {
+            "kind": "change",
+            "file": "a.py",
+            "start_line": 0,
+            "start_col": 0,
+            "end_line": 0,
+            "end_col": 0,
+            "old_text": "",
+            "new_text": "alpha",
+        }
+        with self._socket(live) as first, self._socket(live) as second:
+            self._until(first, "state")
+            self._until(second, "state")
+            first.send_json(change)
+            assert self._until(first, "ack")["version"] == 1
+            frame = self._until(second, "change")
+        assert frame["new_text"] == "alpha"
+        assert frame["version"] == 1
+        assert frame["start_line"] == 0 and frame["end_col"] == 0
+
+    def test_an_edit_made_over_http_reaches_the_live_socket(self, live):
+        """REST and socket used to be two different stories about the same document: the HTTP path
+        applied the change and told no socket, so an editor stayed on text a build step had replaced."""
+        with self._socket(live) as ws:
+            assert self._until(ws, "state")["version"] == 0
+            resp = live.post(
+                f"/api/collab/sessions/{self.SESSION}/changes",
+                json={
+                    "session_id": self.SESSION,
+                    "user_id": "ci",
+                    "file": "a.py",
+                    "start_line": 0,
+                    "start_col": 0,
+                    "end_line": 0,
+                    "end_col": 0,
+                    "old_text": "",
+                    "new_text": "beta",
+                },
+            )
+            assert resp.status_code == 200
+            frame = self._until(ws, "change")
+        assert frame["new_text"] == "beta"
+        assert frame["version"] == resp.json()["version"]
+
+    def test_a_change_to_a_session_nobody_opened_is_answered_not_dropped(self, live):
+        with self._socket(live, "not-created") as ws:
+            ws.send_json(
+                {
+                    "kind": "change",
+                    "file": "a.py",
+                    "start_line": 0,
+                    "start_col": 0,
+                    "end_line": 0,
+                    "end_col": 0,
+                    "old_text": "",
+                    "new_text": "x",
+                }
+            )
+            assert "not open" in self._until(ws, "error")["content"]
+
+    def test_a_frame_the_handler_does_not_know_is_answered(self, live):
+        """A client that sends the wrong `kind` used to wait forever with a open socket and no reply."""
+        with self._socket(live) as ws:
+            self._until(ws, "state")
+            ws.send_json({"kind": "typing"})
+            assert "typing" in self._until(ws, "error")["content"]
+
+    def test_a_session_the_agent_tool_creates_is_the_console_session(self, live):
+        from raven.tools.collaboration import collab_create_session
+
+        assert collab_create_session("from-tool", "b.py").startswith("Session 'from-tool' created")
+        listed = {s["session_id"] for s in live.get("/api/collab/sessions").json()["sessions"]}
+        assert "from-tool" in listed

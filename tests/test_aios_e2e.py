@@ -96,8 +96,11 @@ class TestAdminBootstrap:
         assert "role user -> admin" in " ".join(result.output.split())
 
         # auth_sessions stores the role as it was at login, so a session minted before the promotion is
-        # worth nothing to an admin account; the caller has to fall back to anonymous, not to "user".
-        assert who_am_i(old_token)["user_id"] == "anonymous", "the pre-promotion session was revoked"
+        # worth nothing to an admin account. `promote` revokes it, and an unidentifiable caller is not
+        # served a private read at all: `/api/auth/me` sits under a data scope with no public-read
+        # declaration, so the refused token now answers 401 rather than the handler's "anonymous".
+        refused = client.get("/api/auth/me", headers={"Authorization": f"Bearer {old_token}"})
+        assert refused.status_code == 401, refused.text
 
         login = client.post("/api/auth/login", json={"username": name, "password": self.PASSWORD})
         assert login.status_code == 200, login.text

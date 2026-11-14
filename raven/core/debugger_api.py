@@ -13,6 +13,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
 from pydantic import BaseModel
 
+from raven.core.auth.guards import require_permission
+from raven.core.auth.models import Permission
 from raven.core.security.path_guard import confine_path
 from raven.core.workspace import workspace_root
 from raven.tools.file import _check_no_symlinks_in_path
@@ -40,10 +42,7 @@ def _sanitize_traceback(tb_str: str) -> str:
 
 
 async def _require_admin(request: Request) -> dict[str, Any]:
-    user_role = getattr(request.state, "user_role", None)
-    if user_role not in ("admin", "superadmin"):
-        raise HTTPException(403, "Debug endpoints require admin role")
-    return {"role": user_role}
+    return {"role": require_permission(request, Permission.ADMIN_WRITE, "Debug endpoints")}
 
 
 class BreakpointRequest(BaseModel):

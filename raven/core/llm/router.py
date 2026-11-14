@@ -26,6 +26,21 @@ def _tiers_configured() -> bool:
     return bool(settings.model_fast or settings.model_balanced or settings.model_quality)
 
 
+# The credential each hosted provider cannot work without. The router refuses the provider out of this
+# table and the admin console rotates a key into it, so a provider name, its env var and the name the
+# operator writes are one fact rather than three lists that can drift apart.
+PROVIDER_ENV_KEYS: dict[str, str] = {
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "groq": "GROQ_API_KEY",
+    "vertex": "GOOGLE_API_KEY",
+    "bedrock": "AWS_ACCESS_KEY_ID",
+    "copilot": "GITHUB_TOKEN",
+    "azure": "AZURE_API_KEY",
+}
+
+
 class LLMRouter:
     _CACHE_TTL = 5.0
     _CACHE_TOOL_TTL = 3.0
@@ -133,23 +148,12 @@ class LLMRouter:
             key = "groq"
         else:
             key = "ollama"
-        _requires_key = {"openai", "anthropic", "openrouter", "groq", "vertex", "bedrock", "copilot", "azure"}
-        if key in _requires_key:
+        if key in PROVIDER_ENV_KEYS:
             from raven.core.config_discovery import get_discovered_keys
 
             discovery = get_discovered_keys()
-            env_map = {
-                "openai": "OPENAI_API_KEY",
-                "anthropic": "ANTHROPIC_API_KEY",
-                "openrouter": "OPENROUTER_API_KEY",
-                "groq": "GROQ_API_KEY",
-                "vertex": "GOOGLE_API_KEY",
-                "bedrock": "AWS_ACCESS_KEY_ID",
-                "copilot": "GITHUB_TOKEN",
-                "azure": "AZURE_API_KEY",
-            }
-            env_name = env_map.get(key, "")
-            if env_name and not discovery.is_available(env_name):
+            env_name = PROVIDER_ENV_KEYS[key]
+            if not discovery.is_available(env_name):
                 raise RuntimeError(
                     f"Provider '{key}' requires {env_name} which is not set. "
                     f"Available providers: {', '.join(discovery.providers_available) or 'ollama (local)'}. "
@@ -163,6 +167,17 @@ class LLMRouter:
             raw = LLMProviderFactory.create(key, api_key=api_key, **overrides)
             self._providers[key] = InstrumentedLLMProvider(raw, provider_name=key)
         return self._providers[key]
+
+    async def invalidate_provider(self, name: str) -> None:
+        """Forget one cached provider so the next call rebuilds it.
+
+        A provider snapshots its credential when it is constructed, so a key rotated while the gateway
+        runs would keep authenticating with the old one — or keep failing with it — until the client is
+        dropped. The instance being replaced is closed, not orphaned.
+        """
+        stale = self._providers.pop(name, None)
+        if stale is not None:
+            await stale.cleanup()
 
     def _resolve_model(self, messages: list[dict[str, Any]], model: str | None) -> str:
         if model:
@@ -485,7 +500,12 @@ def _parse_retry_after(headers: Any, default: int = 5) -> int:
 _default_router: LLMRouter | None = None
 
 
-def _get_default_router() -> LLMRouter:
+def default_llm_router() -> LLMRouter:
+    """The router the gateway, the tools and the admin console all share.
+
+    One instance is the point: it is what caches the providers, so it is also what has to be told when
+    a credential underneath them changes.
+    """
     global _default_router
     if _default_router is None:
         _default_router = LLMRouter()
@@ -493,7 +513,7 @@ def _get_default_router() -> LLMRouter:
 
 
 async def default_provider_call(messages: list[dict[str, Any]]) -> dict[str, str]:
-    router = _get_default_router()
+    router = default_llm_router()
     resp = await router.complete(messages)
     return {"content": resp.content}
 

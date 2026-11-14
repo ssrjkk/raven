@@ -9,7 +9,6 @@ from raven.unique.collaboration import (
     CollaborationManager,
     CollaborationSession,
     Comment,
-    RealTimeCollaboration,
     SessionNotification,
     TextChange,
     WebSocketManager,
@@ -252,7 +251,7 @@ class TestCollabApiDelete:
         resp = client.delete("/api/collab/sessions/del1")
         assert resp.status_code == 200
         assert resp.json() == {"success": True}
-        assert collab_api._get_manager().get_session("del1") is None
+        assert collab_api.get_manager().get_session("del1") is None
 
         resp = client.delete("/api/collab/sessions/del1")
         assert resp.status_code == 404
@@ -478,131 +477,3 @@ class TestCrdtWithFakeYpy:
         s = self._mk(monkeypatch)
         s._ydoc.raise_on_diff = True
         assert s.encode_crdt_diff(b"x") is None
-
-
-class TestRealTimeCollaboration:
-    async def test_edit_without_session(self):
-        rtc = RealTimeCollaboration()
-        assert await rtc.edit("u1", []) is False
-
-    async def test_edit_no_session_for_manager(self, monkeypatch: pytest.MonkeyPatch):
-        rtc = RealTimeCollaboration()
-        assert rtc.get_manager() is rtc._manager
-        s = rtc.create_session("s1", "a.py")
-        s.document.content = "hello"
-        s.add_user("u1", "Alice")
-        monkeypatch.setattr(rtc._manager, "get_session", lambda sid: None)
-        ch = TextChange(
-            user_id="u1", file="a.py", start_line=0, start_col=0, end_line=0, end_col=0, old_text="", new_text="x"
-        )
-        assert await rtc.edit("u1", [ch]) is False
-
-    async def test_full_join_edit_leave_flow(self, monkeypatch: pytest.MonkeyPatch):
-        rtc = RealTimeCollaboration()
-        s = rtc.create_session("s1", "a.py")
-        s.document.content = "hello world"
-        session = await rtc.join_session("s1", "u1", "Alice")
-        assert session is not None
-        ws = _FakeWS()
-        await rtc.get_ws_manager().connect("s1", "u9", ws)
-        ch = TextChange(
-            user_id="ignored",
-            file="a.py",
-            start_line=0,
-            start_col=0,
-            end_line=0,
-            end_col=5,
-            old_text="hello",
-            new_text="HELLO",
-        )
-        assert await rtc.edit("u1", [ch]) is True
-        assert s.document.content == "HELLO world"
-        assert any("text_change" in m for m in ws.sent)
-        assert await rtc.leave_session("s1", "u1") is True
-
-    async def test_edit_change_failure(self):
-        rtc = RealTimeCollaboration()
-        s = rtc.create_session("s1", "a.py")
-        s.document.content = "one\nline"
-        await rtc.join_session("s1", "u1", "Alice")
-        bad = TextChange(
-            user_id="u1", file="a.py", start_line=9, start_col=0, end_line=9, end_col=0, old_text="", new_text="x"
-        )
-        assert await rtc.edit("u1", [bad]) is False
-
-    async def test_join_missing_session(self):
-        rtc = RealTimeCollaboration()
-        assert await rtc.join_session("nope", "u1", "Alice") is None
-
-    async def test_leave_missing_session(self):
-        rtc = RealTimeCollaboration()
-        assert await rtc.leave_session("nope", "u1") is False
-
-    async def test_apply_change(self):
-        rtc = RealTimeCollaboration()
-        s = rtc.create_session("s1", "a.py")
-        s.document.content = "abc"
-        ch = TextChange(
-            user_id="u1", file="a.py", start_line=0, start_col=0, end_line=0, end_col=1, old_text="a", new_text="X"
-        )
-        assert await rtc.apply_change("s1", ch) is True
-        assert await rtc.apply_change("missing", ch) is False
-
-    async def test_update_cursor(self):
-        rtc = RealTimeCollaboration()
-        rtc.create_session("s1", "a.py")
-        pos = await rtc.update_cursor("s1", "u1", "a.py", 3, 2)
-        assert pos is not None and pos.line == 3
-        assert await rtc.update_cursor("missing", "u1", "a.py", 1, 1) is None
-
-    async def test_add_comment_and_reply(self):
-        rtc = RealTimeCollaboration()
-        rtc.create_session("s1", "a.py")
-        c = await rtc.add_comment("s1", "u1", "a.py", 2, "hi")
-        assert c is not None
-        assert await rtc.add_comment("missing", "u1", "a.py", 1, "x") is None
-        assert await rtc.add_reply("s1", c.id, "u2", "yo") is not None
-        assert await rtc.add_reply("missing", c.id, "u2", "x") is None
-        assert await rtc.add_reply("s1", "badparent", "u2", "x") is None
-
-    async def test_resolve_comment(self):
-        rtc = RealTimeCollaboration()
-        rtc.create_session("s1", "a.py")
-        c = await rtc.add_comment("s1", "u1", "a.py", 2, "hi")
-        assert c is not None
-        assert await rtc.resolve_comment("s1", c.id) is True
-        assert await rtc.resolve_comment("missing", c.id) is False
-        assert await rtc.resolve_comment("s1", "nonexistent") is False
-
-    async def test_summary_and_listings(self):
-        rtc = RealTimeCollaboration()
-        s = rtc.create_session("s1", "a.py")
-        s.document.content = "abc"
-        await rtc.join_session("s1", "u1", "Alice")
-        await rtc.update_cursor("s1", "u1", "a.py", 1, 1)
-        c = await rtc.add_comment("s1", "u1", "a.py", 1, "comment text")
-        assert c is not None
-        await rtc.add_reply("s1", c.id, "u2", "reply")
-        summary = rtc.get_session_summary("s1")
-        assert summary is not None
-        assert summary["cursors"] and summary["comments"] and summary["users"]
-        assert rtc.get_session_summary("missing") is None
-        assert rtc.get_active_sessions() == rtc.list_sessions()
-        assert rtc.get_session("s1") is s
-        assert rtc.remove_session("s1") is True
-
-    def test_sync_crdt_state_without_ydoc(self):
-        rtc = RealTimeCollaboration()
-        rtc.create_session("s1", "a.py")
-        assert rtc.sync_crdt_state("s1") is None
-        assert rtc.sync_crdt_state("missing") is None
-
-    def test_sync_crdt_state_with_ydoc(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.setattr(collab, "HAS_YPY", True)
-        monkeypatch.setattr(collab, "YDoc", _FakeYDoc, raising=False)
-        rtc = RealTimeCollaboration()
-        rtc.create_session("s1", "a.py")
-        rtc.create_session("s2", "b.py")
-        assert rtc.sync_crdt_state("s1") == b"diff-bytes"
-        assert rtc.sync_crdt_state("missing") is None
-        assert rtc.sync_crdt_state("s1", "s2") == b"diff-bytes"

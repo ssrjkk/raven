@@ -126,7 +126,7 @@ export default function AgentConsole() {
     <div className="flex h-[calc(100vh-140px)] min-h-[480px] flex-col gap-4">
       <PageHeader
         title="Agent Console"
-        subtitle="Live /ws/agent session — stream tool calls and artifacts in real time"
+        subtitle="Live /aios/ws/agent session — stream tool calls and artifacts in real time"
         icon={Bot}
         actions={
           <div className="flex items-center gap-2">
@@ -134,7 +134,7 @@ export default function AgentConsole() {
               <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-success" : "bg-danger"}`} />
               {status}
             </span>
-            <button type="button" className="btn-secondary" onClick={clear}>
+            <button type="button" className="btn-outline" onClick={clear}>
               Clear
             </button>
           </div>
