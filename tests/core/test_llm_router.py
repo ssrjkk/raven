@@ -234,6 +234,79 @@ class TestGetProvider:
             await router.cleanup()
 
 
+class TestProviderRebuild:
+    """The cache is only safe to reuse while the client still holds what the configuration says: a
+    provider snapshots its credential and its pool when it is constructed, so a rotated key has to
+    replace the instance and close the one it replaces."""
+
+    def test_a_client_the_router_built_is_kept_while_nothing_moved(self, monkeypatch) -> None:
+        from raven.core.config import settings
+        from raven.core.provider_routing import credential_fingerprint
+
+        monkeypatch.setattr(settings, "ollama_base_url", "http://127.0.0.1:11434")
+        router = LLMRouter()
+        kept = DummyProvider()
+        router._providers["ollama"] = kept
+        router._provider_fingerprints["ollama"] = credential_fingerprint("ollama")
+        with (
+            patch("raven.core.llm.factory.LLMProviderFactory.create") as factory,
+            patch("raven.core.llm.router.settings.ghost_mode", False),
+        ):
+            assert router._get_provider("ollama/llama3") is kept
+        factory.assert_not_called()
+        assert kept.cleanup_called is False, "the client still in use was closed"
+
+    def test_a_client_the_router_built_is_replaced_and_closed_when_what_it_was_built_with_moves(
+        self, monkeypatch
+    ) -> None:
+        from raven.core.config import settings
+        from raven.core.provider_routing import credential_fingerprint
+
+        monkeypatch.setattr(settings, "ollama_base_url", "http://127.0.0.1:11434")
+        router = LLMRouter()
+        retired = DummyProvider()
+        router._providers["ollama"] = retired
+        router._provider_fingerprints["ollama"] = credential_fingerprint("ollama")
+
+        replacement = DummyProvider()
+        monkeypatch.setattr(settings, "ollama_base_url", "http://gpu-box:11434")
+        with (
+            patch("raven.core.llm.factory.LLMProviderFactory.create", return_value=replacement) as factory,
+            patch("raven.core.llm.router.settings.ghost_mode", False),
+        ):
+            got = router._get_provider("ollama/llama3")
+        assert got is not retired, "the next call ran on the retired address"
+        assert isinstance(got, InstrumentedLLMProvider) and got._wrapped is replacement
+        assert retired.cleanup_called is True, "the replaced client was left open"
+        assert factory.call_count == 1
+
+    def test_a_client_the_router_did_not_build_is_left_alone(self) -> None:
+        """A provider put into the cache by someone else carries no fingerprint, and the router has no
+        basis to judge what it was built with."""
+        router = LLMRouter()
+        injected = DummyProvider()
+        router._providers["ollama"] = injected
+        with (
+            patch("raven.core.llm.factory.LLMProviderFactory.create") as factory,
+            patch("raven.core.llm.router.settings.ghost_mode", False),
+        ):
+            assert router._get_provider("ollama/llama3") is injected
+        factory.assert_not_called()
+        assert injected.cleanup_called is False
+
+    async def test_cleanup_forgets_what_the_retired_clients_was_built_with(self, monkeypatch) -> None:
+        from raven.core.config import settings
+        from raven.core.provider_routing import credential_fingerprint
+
+        monkeypatch.setattr(settings, "ollama_base_url", "http://127.0.0.1:11434")
+        router = LLMRouter()
+        router._providers["ollama"] = DummyProvider()
+        router._provider_fingerprints["ollama"] = credential_fingerprint("ollama")
+        await router.cleanup()
+        assert router._providers == {}
+        assert router._provider_fingerprints == {}, "a later client would be judged against a closed one"
+
+
 class TestComplete:
     async def test_returns_response(self):
         router = LLMRouter()

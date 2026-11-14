@@ -19,7 +19,7 @@ from raven.core.instrumented import InstrumentedLLMProvider
 from raven.core.llm.protocol import LLMProvider, LLMResponse
 from raven.core.llm.queue import PRIORITY_NORMAL, LLMQueueTimeoutError, PriorityAdmissionQueue
 from raven.core.metrics import metrics
-from raven.core.provider_routing import missing_requirements, provider_for_model
+from raven.core.provider_routing import credential_fingerprint, missing_requirements, provider_for_model
 from raven.core.tracing import trace_llm_call
 
 
@@ -35,6 +35,8 @@ class LLMRouter:
 
     def __init__(self, providers_config: dict[str, Any] | None = None, llm_cache: LLMCache | None = None):
         self._providers: dict[str, LLMProvider] = {}
+        self._provider_fingerprints: dict[str, str] = {}
+        self._retiring: set[asyncio.Task[None]] = set()
         self._providers_config = providers_config or {}
         self._cache: OrderedDict[str, tuple[float, float, LLMResponse]] = OrderedDict()
         self._cache_lock = asyncio.Lock()
@@ -54,6 +56,9 @@ class LLMRouter:
             except (ConnectionError, TimeoutError):
                 logger.warning("LLM provider cleanup failed: connection error")
         self._providers.clear()
+        self._provider_fingerprints.clear()
+        if self._retiring:
+            await asyncio.gather(*list(self._retiring), return_exceptions=True)
         async with self._cache_lock:
             self._cache.clear()
 
@@ -124,24 +129,48 @@ class LLMRouter:
                 f"Available providers: {available}. "
                 f"Set the key in .env or use an available provider."
             )
-        if key not in self._providers:
-            from raven.core.llm.factory import LLMProviderFactory
+        fingerprint = credential_fingerprint(key, overrides)
+        cached = self._providers.get(key)
+        if cached is not None and self._provider_fingerprints.get(key, fingerprint) == fingerprint:
+            return cached
+        if cached is not None:
+            logger.info("Provider {} is rebuilt: what it was built with is no longer what is configured", key)
+            del self._providers[key]
+            self._retire(cached)
 
-            api_key = overrides.pop("api_key", None)
-            raw = LLMProviderFactory.create(key, api_key=api_key, **overrides)
-            self._providers[key] = InstrumentedLLMProvider(raw, provider_name=key)
+        from raven.core.llm.factory import LLMProviderFactory
+
+        api_key = overrides.pop("api_key", None)
+        raw = LLMProviderFactory.create(key, api_key=api_key, **overrides)
+        self._providers[key] = InstrumentedLLMProvider(raw, provider_name=key)
+        self._provider_fingerprints[key] = fingerprint
         return self._providers[key]
 
-    async def invalidate_provider(self, name: str) -> None:
-        """Forget one cached provider so the next call rebuilds it.
+    def _retire(self, provider: LLMProvider) -> None:
+        """Close the client the router just replaced.
 
-        A provider snapshots its credential when it is constructed, so a key rotated while the gateway
-        runs would keep authenticating with the old one — or keep failing with it — until the client is
-        dropped. The instance being replaced is closed, not orphaned.
+        A provider snapshots its credential and its connection pool when it is constructed, so the
+        instance being replaced is closed, not orphaned. `_get_provider` is synchronous and normally runs
+        inside the caller's event loop, where a close can only be scheduled; the task is kept referenced
+        and its failure logged, because an unretrieved task exception surfaces as a warning at garbage
+        collection. Called from a frame with no running loop, the close simply runs here.
         """
-        stale = self._providers.pop(name, None)
-        if stale is not None:
-            await stale.cleanup()
+        try:
+            loop: asyncio.AbstractEventLoop | None = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is None:
+            asyncio.run(self._close_quietly(provider))
+            return
+        task = loop.create_task(self._close_quietly(provider))
+        self._retiring.add(task)
+        task.add_done_callback(self._retiring.discard)
+
+    async def _close_quietly(self, provider: LLMProvider) -> None:
+        try:
+            await provider.cleanup()
+        except Exception as exc:
+            logger.warning("Retired provider cleanup failed: {}", exc)
 
     def _resolve_model(self, messages: list[dict[str, Any]], model: str | None) -> str:
         if model:

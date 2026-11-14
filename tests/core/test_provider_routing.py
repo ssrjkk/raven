@@ -25,10 +25,12 @@ from raven.core.config import SafeSecretStr, Settings, settings
 from raven.core.llm.factory import LLMProviderFactory
 from raven.core.provider_routing import (
     LOCAL_PROVIDER,
-    PROVIDER_ENV_KEYS,
     PROVIDER_NAMES,
     PROVIDER_REQUIREMENTS,
+    SELF_HOSTED_SETTINGS,
     Requirement,
+    _provider_inputs,
+    credential_fingerprint,
     credential_value,
     missing_requirements,
     provider_for_model,
@@ -116,17 +118,6 @@ def test_the_owner_knows_exactly_the_providers_the_factory_can_build() -> None:
     assert _factory_table_names() == PROVIDER_NAMES
 
 
-def test_the_credential_table_is_the_credential_shaped_slice_of_the_requirements() -> None:
-    """Spelled twice on purpose: this table is what the admin console rotates and what the router's
-    cache maps back to a client, `PROVIDER_REQUIREMENTS` is what a call refuses to run without."""
-    assert {
-        provider: requirement.env[0]
-        for provider, requirements in PROVIDER_REQUIREMENTS.items()
-        for requirement in requirements
-        if requirement.override == "api_key"
-    } == PROVIDER_ENV_KEYS
-
-
 @pytest.fixture
 def built_provider() -> Any:
     """One instance per hosted provider, closed whatever the assertions do."""
@@ -197,7 +188,7 @@ def test_discovery_offers_azure_only_when_both_names_the_class_reads_are_present
 
 
 def test_vertex_is_a_provider_without_a_mandatory_key(no_credentials: None) -> None:
-    assert "vertex" not in PROVIDER_ENV_KEYS
+    assert not [requirement for requirement in PROVIDER_REQUIREMENTS["vertex"] if requirement.override == "api_key"]
     assert not any(name.endswith("_API_KEY") for name in PROVIDER_REQUIREMENTS["vertex"][0].env)
     assert missing_requirements("vertex") == ["VERTEX_AI_PROJECT"]
 
@@ -246,6 +237,90 @@ def test_credential_value_falls_back_to_the_environment_the_class_reads(monkeypa
 
 def test_a_requirement_describes_itself_the_way_an_operator_has_to_write_it() -> None:
     assert Requirement(("GITHUB_TOKEN", "COPILOT_TOKEN")).describe() == "GITHUB_TOKEN or COPILOT_TOKEN"
+
+
+class TestWhatTheProviderWasBuiltWith:
+    """The router may only reuse a cached client when the digest covers everything the provider class
+    read as it was constructed: a value left out of `_provider_inputs` is a change the client never sees,
+    and the call after it is signed with a credential the operator already replaced."""
+
+    def test_a_rotated_credential_moves_the_digest(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(settings, "openrouter_api_key", SafeSecretStr("sk-or-v1-" + "a" * 32))
+        before = credential_fingerprint("openrouter")
+        monkeypatch.setattr(settings, "openrouter_api_key", SafeSecretStr("sk-or-v1-" + "b" * 32))
+        assert credential_fingerprint("openrouter") != before
+
+    def test_a_credential_handed_over_in_the_provider_config_moves_it(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(settings, "openrouter_api_key", SafeSecretStr(""))
+        before = credential_fingerprint("openrouter")
+        handed_over = credential_fingerprint("openrouter", {"api_key": SecretStr("sk-or-v1-" + "c" * 32)})
+        assert handed_over != before
+
+    def test_two_handed_over_keys_are_two_digests(self) -> None:
+        """The digest has to see through a `SecretStr`: a masked restatement would answer the same value
+        for every key, and a deployment rotated through `ravencode.json` would keep its old client."""
+        first = credential_fingerprint("openai", {"api_key": SecretStr("sk-" + "a" * 24)})
+        second = credential_fingerprint("openai", {"api_key": SecretStr("sk-" + "b" * 24)})
+        assert first != second
+
+    def test_a_handed_over_value_the_rule_has_no_requirement_for_moves_it_too(self) -> None:
+        """The provider class is built with everything the config hands over, and `timeout` is one of
+        those: a digest of the names the rule knows would keep a client built with the old timeout."""
+        assert credential_fingerprint("openai", {"timeout": 5}) != credential_fingerprint("openai", {"timeout": 30})
+
+    def test_an_azure_endpoint_moves_it_though_the_key_stayed_put(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AZURE_OPENAI_API_KEY", "azurekey")
+        monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://first.resource.openai.azure.com")
+        before = credential_fingerprint("azure")
+        monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://second.resource.openai.azure.com")
+        assert credential_fingerprint("azure") != before
+
+    def test_a_vertex_project_moves_it_although_vertex_asks_no_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VERTEX_AI_PROJECT", "first-project")
+        before = credential_fingerprint("vertex")
+        monkeypatch.setenv("VERTEX_AI_PROJECT", "second-project")
+        assert credential_fingerprint("vertex") != before
+
+    def test_the_address_a_self_hosted_provider_answers_on_moves_it(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(settings, "ollama_base_url", "http://127.0.0.1:11434")
+        before = credential_fingerprint("ollama")
+        monkeypatch.setattr(settings, "ollama_base_url", "http://gpu-box:11434")
+        assert credential_fingerprint("ollama") != before
+
+    def test_the_adapter_a_local_provider_serves_moves_it(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(settings, "llm_local_adapter_path", "models/first")
+        before = credential_fingerprint("local")
+        monkeypatch.setattr(settings, "llm_local_adapter_path", "models/second")
+        assert credential_fingerprint("local") != before
+
+    def test_another_providers_credential_leaves_this_one_alone(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(settings, "anthropic_api_key", SafeSecretStr("sk-ant-" + "a" * 24))
+        before = credential_fingerprint("anthropic")
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAexample")
+        assert credential_fingerprint("anthropic") == before
+
+    def test_an_unset_name_and_an_empty_one_are_the_same_thing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Otherwise the router would rebuild the client on every call for a name nobody ever set."""
+        monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+        absent = credential_fingerprint("bedrock")
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "")
+        assert credential_fingerprint("bedrock") == absent
+
+    def test_the_digest_is_a_digest_and_not_a_copy_of_the_credential(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        key = "sk-or-v1-" + "d" * 32
+        monkeypatch.setattr(settings, "openrouter_api_key", SafeSecretStr(key))
+        assert key not in credential_fingerprint("openrouter")
+
+    def test_every_provider_the_router_can_build_has_inputs_the_digest_sees(self) -> None:
+        blind = sorted(provider for provider in PROVIDER_NAMES if not _provider_inputs(provider))
+        assert blind == [], f"a client of {blind} would be reused whatever was configured"
+
+    def test_every_self_hosted_setting_is_a_field_the_settings_object_has(self) -> None:
+        """Read with a default, so a name that does not exist is an invisible hole rather than an error."""
+        missing = sorted(
+            field for fields in SELF_HOSTED_SETTINGS.values() for field in fields if field not in Settings.model_fields
+        )
+        assert missing == [], f"self-hosted settings no provider class reads: {missing}"
 
 
 # A provider prefix as the routing rule spells it: the `<provider>/` form and the legacy model ids.

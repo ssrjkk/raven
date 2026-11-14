@@ -7,13 +7,18 @@ import stat
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
 
 from loguru import logger
 
 from raven.core.audit import AUDIT_KEY_FILE, AUDIT_SIGNING_KEY_ENV, audit_logger
 from raven.core.config import _DEFAULT_TOOLS_DENY, _ENV_FILE_CANDIDATES, settings
-from raven.core.provider_routing import PROVIDER_REQUIREMENTS, credential_value, provider_for_model
+from raven.core.provider_routing import (
+    PROVIDER_REQUIREMENTS,
+    SELF_HOSTED_SETTINGS,
+    credential_value,
+    provider_for_model,
+)
 from raven.core.workspace import is_configured, workspace_root
 
 # pip-audit resolves the whole environment over the network; without a ceiling a slow
@@ -314,20 +319,14 @@ class SecurityAudit:
             c.ok("No TLS certificate configured — use reverse proxy (nginx/Caddy) for production")
             c._fix_hint = "Set TLS_KEY_PATH and TLS_CERT_PATH, or front with nginx"
 
-    # Self-hosted providers answer to an address or a local adapter instead of an API key, so the audit
-    # checks the configuration each one is actually reached through.
-    _SELF_HOSTED_CONFIG: ClassVar[dict[str, tuple[str, ...]]] = {
-        "ollama": ("ollama_base_url",),
-        "vllm": ("vllm_base_url",),
-        "local": ("llm_local_base_model", "llm_local_adapter_path"),
-    }
-
     def _check_api_keys(self):
         c = self._add("api_keys", "LLM API keys are configured for default model", "high")
         model = settings.default_model
         provider = provider_for_model(model, ghost_mode=settings.ghost_mode)
 
-        attrs = self._SELF_HOSTED_CONFIG.get(provider)
+        # Self-hosted providers answer to an address or a local adapter instead of an API key, so the
+        # audit checks the configuration each one is actually reached through.
+        attrs = SELF_HOSTED_SETTINGS.get(provider)
         if attrs is not None:
             missing = [attr for attr in attrs if not str(getattr(settings, attr, "") or "")]
             if missing:

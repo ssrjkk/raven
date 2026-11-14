@@ -216,6 +216,32 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
 ### Fixed
+- A provider the gateway already built now notices that what it was built with has moved. The console used
+  to answer for it: `apply_runtime_switch` dropped the cached client whenever the written switch was a
+  secret, and everything else — the config watcher reading a hand-edited `.env`, a credential handed over
+  in `ravencode.json`, an operator exporting a new key between two calls — kept signing with the retired
+  one. `LLMRouter._get_provider` compares `credential_fingerprint` (a sha256 over everything the provider
+  class reads at construction: the effective value of each requirement, the self-hosted settings fields, and
+  every key the config handed over) against what the cached client was built with, rebuilds on a mismatch
+  and closes the replaced client instead of orphaning it; a client someone else put in the cache carries no
+  fingerprint and is left alone. `_forget_cached_provider` and the `switch.kind == "secret"` block are gone,
+  `PROVIDER_ENV_KEYS` went with them (nothing read it once the router stopped being told), and the
+  `rebind=(_rebind_discovery,)` hook on the four credential switches is now what refreshes the discovery
+  scan for both writers — the watcher path never refreshed it, so a key exported outside the env files kept
+  being refused as unset. `security_audit` reads `SELF_HOSTED_SETTINGS` instead of restating it. Proven on
+  the tree first: a rotation left `settings.openrouter_api_key` moved and the cached `OpenRouterProvider`
+  still holding the old key, and `refresh_settings_from_env` moved a credential while the refusal was
+  derived from a scan taken at start. 19 new controls (13 over what a built client was built with, 4 over
+  the router's cache, 2 over the watcher path), one rotation test rewritten to the new contract and one gate
+  over the switch table retargeted; 253 tests pass across the six suites that own routing, the switch table
+  and the audit. 13 mutations, every one killed — reusing the cache whatever is configured costs 2, leaving
+  the replaced client open costs 2, not recording what a rebuilt client was built with costs 1, judging a
+  client the router did not build costs 5 (the injection idiom the router's own tests are built on), keeping
+  the digests through `cleanup()` costs 1, dropping the requirement values from the digest costs 5, dropping
+  the self-hosted fields costs 4, a constant digest costs 10, an invisible handed-over value costs 1, a
+  `SecretStr` restated as its own mask costs 1, the audit answering a self-hosted provider from no table
+  costs 1, and reading the stale scan — both by not forcing it and by never running the hook — costs 1.
+  `docs/configuration.md` no longer claims a hand-rotated credential waits for a restart.
 - One answer to "which provider does this model name ask for, and what does that provider need" replaced
   seven copies that disagreed. `raven/core/provider_routing.py` owns the prefix rule (`provider_for_model`),
   the credential rule (`PROVIDER_REQUIREMENTS`, `missing_requirements`) and what a reporting surface should

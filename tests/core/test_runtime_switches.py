@@ -36,7 +36,7 @@ from raven.core.config import (
     runtime_switches,
     settings,
 )
-from raven.core.provider_routing import PROVIDER_ENV_KEYS
+from raven.core.provider_routing import PROVIDER_REQUIREMENTS
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -130,13 +130,17 @@ class TestSwitchTableContract:
             documented.update(zip(attrs, envs, strict=True))
         assert documented == {s.attr: s.env_name for s in runtime_switches()}
 
-    def test_every_secret_switch_has_a_provider_the_router_can_forget(self) -> None:
-        unbacked = sorted(
-            s.env_name
-            for s in runtime_switches()
-            if s.kind == "secret" and s.env_name not in set(PROVIDER_ENV_KEYS.values())
-        )
-        assert unbacked == [], f"credential switches whose cached provider nothing drops: {unbacked}"
+    def test_every_secret_switch_names_a_credential_the_routing_rule_demands(self) -> None:
+        """A credential switch writing a name the rule does not ask for is stored, exported and read by
+        nothing: the provider it was meant to unlock stays refused, and no client is ever built with it."""
+        demanded = {
+            env_name
+            for requirements in PROVIDER_REQUIREMENTS.values()
+            for requirement in requirements
+            for env_name in requirement.env
+        }
+        unbacked = sorted(s.env_name for s in runtime_switches() if s.kind == "secret" and s.env_name not in demanded)
+        assert unbacked == [], f"credential switches for a provider nothing routes by: {unbacked}"
 
     _CACHED_CONSUMERS: ClassVar[dict[str, tuple[str, str]]] = {
         "rate_limit_max": ("raven.core.middleware", "rate_limiter"),
@@ -332,16 +336,80 @@ class TestApplyChangesTheRunningGateway:
         assert VALID_OPENROUTER_KEY in switch_env.read_text(encoding="utf-8")
         assert settings.openrouter_api_key.get_secret_value() == VALID_OPENROUTER_KEY
 
-    def test_a_rotated_credential_drops_the_provider_built_with_the_old_one(self, switch_env: Path) -> None:
+    def test_a_rotated_credential_reaches_the_next_call(self, switch_env: Path) -> None:
+        """The console used to drop the cached provider itself; the router now compares what its cached
+        client was built with against what is configured, and replaces it on the next call."""
+        from raven.core.instrumented import InstrumentedLLMProvider
+        from raven.core.llm.providers.openai import OpenRouterProvider
         from raven.core.llm.router import default_llm_router
 
         router = default_llm_router()
         asyncio.run(apply_runtime_switch("openrouter_api_key", VALID_OPENROUTER_KEY))
-        router._get_provider("openrouter/deepseek-chat")
-        assert "openrouter" in router._providers, "nothing was cached, so the test proves nothing"
+        first = router._get_provider("openrouter/deepseek-chat")
+        assert router._get_provider("openrouter/deepseek-chat") is first, "the client was rebuilt every call"
 
         asyncio.run(apply_runtime_switch("openrouter_api_key", VALID_OPENROUTER_KEY_2))
-        assert "openrouter" not in router._providers, "the next call would sign with the retired key"
+        second = router._get_provider("openrouter/deepseek-chat")
+        assert second is not first, "the next call signed with the retired key"
+        assert isinstance(first, InstrumentedLLMProvider) and isinstance(second, InstrumentedLLMProvider)
+        assert isinstance(second._wrapped, OpenRouterProvider)
+        assert second._wrapped.api_key.get_secret_value() == VALID_OPENROUTER_KEY_2
+        assert isinstance(first._wrapped, OpenRouterProvider)
+        assert first._wrapped.http.is_closed, "the client built with the retired key was left open"
+
+    def test_a_credential_edited_by_hand_reaches_the_next_call(self, switch_env: Path, monkeypatch) -> None:
+        """Nothing rebinds on this path but the watcher: the value is exported into the process, copied
+        onto the live settings and the router decides the rest for itself."""
+        from raven.core.instrumented import InstrumentedLLMProvider
+        from raven.core.llm.providers.openai import OpenRouterProvider
+        from raven.core.llm.router import LLMRouter
+
+        monkeypatch.setenv("OPENROUTER_API_KEY", VALID_OPENROUTER_KEY)
+        refresh_settings_from_env()
+        router = LLMRouter()
+        try:
+            first = router._get_provider("openrouter/deepseek-chat")
+            assert isinstance(first, InstrumentedLLMProvider)
+            assert isinstance(first._wrapped, OpenRouterProvider)
+            assert first._wrapped.api_key.get_secret_value() == VALID_OPENROUTER_KEY
+
+            monkeypatch.setenv("OPENROUTER_API_KEY", VALID_OPENROUTER_KEY_2)
+            assert "OPENROUTER_API_KEY" in refresh_settings_from_env()
+            second = router._get_provider("openrouter/deepseek-chat")
+            assert second is not first, "the next call signed with the retired key"
+            assert isinstance(second, InstrumentedLLMProvider)
+            assert isinstance(second._wrapped, OpenRouterProvider)
+            assert second._wrapped.api_key.get_secret_value() == VALID_OPENROUTER_KEY_2
+        finally:
+            asyncio.run(router.cleanup())
+
+    def test_a_key_that_appeared_by_hand_stops_being_refused(self, switch_env: Path, monkeypatch) -> None:
+        """Refusing an unset credential is decided from the discovery scan, which only the console
+        refreshed before: an export outside the env files left the gateway answering "is not set" for a
+        key the process already had."""
+        from raven.core import config_discovery
+        from raven.core.instrumented import InstrumentedLLMProvider
+        from raven.core.llm.providers.groq import GroqProvider
+        from raven.core.llm.router import LLMRouter
+
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        # Only the process is asked here: a credential in the operator's own .env would answer for a key
+        # this test does not have.
+        monkeypatch.setattr(config_discovery, "_scan_env_file", lambda: {})
+        monkeypatch.setattr(config_discovery, "_scan_common_locations", lambda: {})
+        config_discovery.get_discovered_keys(force=True)
+        router = LLMRouter()
+        try:
+            with pytest.raises(RuntimeError, match="GROQ_API_KEY"):
+                router._get_provider("groq/openai/gpt-oss-120b")
+
+            monkeypatch.setenv("GROQ_API_KEY", "gsk_" + "c" * 32)
+            refresh_settings_from_env()
+            provider = router._get_provider("groq/openai/gpt-oss-120b")
+            assert isinstance(provider, InstrumentedLLMProvider)
+            assert isinstance(provider._wrapped, GroqProvider)
+        finally:
+            asyncio.run(router.cleanup())
 
     def test_a_canary_credential_is_named_instead_of_being_accepted_quietly(self, switch_env: Path) -> None:
         result = asyncio.run(apply_runtime_switch("openrouter_api_key", "sk-or-v1-honeytoken-abc123456789"))

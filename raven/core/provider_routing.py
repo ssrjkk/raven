@@ -14,6 +14,7 @@ unroutable whatever an operator configured, and `AZURE_API_KEY`, while `AzurePro
 
 from __future__ import annotations
 
+import hashlib
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -26,8 +27,16 @@ from raven.core.config import Settings, settings
 LOCAL_PROVIDER = "ollama"
 
 # Providers an install serves itself: no per-call bill and no credential question. `local` is the
-# in-process LoRA adapter, `vllm` a self-hosted OpenAI-compatible server.
-SELF_HOSTED_PROVIDERS = frozenset({"ollama", "vllm", "local"})
+# in-process LoRA adapter, `vllm` a self-hosted OpenAI-compatible server. The settings fields are what
+# those classes snapshot when the router builds them, which is why they belong to the rule and not to
+# whichever surface reports them.
+SELF_HOSTED_SETTINGS: dict[str, tuple[str, ...]] = {
+    "ollama": ("ollama_base_url",),
+    "vllm": ("vllm_base_url",),
+    "local": ("llm_local_base_model", "llm_local_adapter_path"),
+}
+
+SELF_HOSTED_PROVIDERS = frozenset(SELF_HOSTED_SETTINGS)
 
 
 @dataclass(frozen=True)
@@ -75,20 +84,6 @@ PROVIDER_REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
     "vertex": (Requirement(("VERTEX_AI_PROJECT",), "project"),),
 }
 
-# The credential each provider cannot work without: the router refuses out of this table, the admin
-# console rotates a key into it, and `_forget_cached_provider` maps a rotated name back to the cached
-# client. It is the credential-shaped slice of `PROVIDER_REQUIREMENTS` above — vertex has no row, because
-# rotating a key is not a thing vertex does, and neither has a self-hosted provider.
-PROVIDER_ENV_KEYS: dict[str, str] = {
-    "openai": "OPENAI_API_KEY",
-    "anthropic": "ANTHROPIC_API_KEY",
-    "openrouter": "OPENROUTER_API_KEY",
-    "groq": "GROQ_API_KEY",
-    "copilot": "GITHUB_TOKEN",
-    "bedrock": "AWS_ACCESS_KEY_ID",
-    "azure": "AZURE_OPENAI_API_KEY",
-}
-
 PROVIDER_NAMES: frozenset[str] = frozenset(PROVIDER_REQUIREMENTS) | SELF_HOSTED_PROVIDERS
 
 # Model ids that predate the `<provider>/<model>` contract and stay supported.
@@ -131,6 +126,42 @@ def missing_requirements(provider: str, overrides: Mapping[str, Any] | None = No
         for requirement in PROVIDER_REQUIREMENTS.get(provider, ())
         if not requirement.is_met(supplied)
     ]
+
+
+def _as_text(value: Any) -> str:
+    """The string a provider class would put in its request, whatever shape the switch handed over."""
+    if value is None:
+        return ""
+    secret: Any = getattr(value, "get_secret_value", None)
+    return str(secret()) if callable(secret) else str(value)
+
+
+def _provider_inputs(provider: str, overrides: Mapping[str, Any] | None = None) -> dict[str, str]:
+    """Every value a provider class reads when it is constructed, keyed by where it comes from.
+
+    The classes take the same shape — an override wins, otherwise the settings field or the environment
+    the class itself reads — so this is what a built client snapshotted, and a change here is a change
+    the client cannot see for itself.
+    """
+    supplied = overrides or {}
+    inputs = {f"config:{name}": _as_text(value) for name, value in supplied.items()}
+    for requirement in PROVIDER_REQUIREMENTS.get(provider, ()):
+        override_value = _as_text(supplied.get(requirement.override)) if requirement.override else ""
+        env_value = next((value for value in (credential_value(name) for name in requirement.env) if value), "")
+        inputs["env:" + "|".join(requirement.env)] = override_value or env_value
+    for field in SELF_HOSTED_SETTINGS.get(provider, ()):
+        inputs[f"settings:{field}"] = _as_text(getattr(settings, field, ""))
+    return inputs
+
+
+def credential_fingerprint(provider: str, overrides: Mapping[str, Any] | None = None) -> str:
+    """A digest of `_provider_inputs`, for a caller that has to notice the values moved.
+
+    It is a digest and not the values: the router keeps one per cached provider, and copying a
+    deployment's credentials into that dictionary would only widen where they can be read.
+    """
+    joined = "\0".join(f"{name}={value}" for name, value in sorted(_provider_inputs(provider, overrides).items()))
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
 def credential_value(env_name: str) -> str:

@@ -488,6 +488,19 @@ def _rebind_logging() -> None:
     setup_logging()
 
 
+def _rebind_discovery() -> None:
+    """Re-read which credentials this process has.
+
+    What a provider cannot be built without is answered from the discovery table, which scans the
+    environment, the env files and the config directories once and keeps the result. A credential written
+    by the console or edited into an env file is therefore invisible to that answer — both to the router's
+    refusal and to the failover pool — until something forces the scan again.
+    """
+    from raven.core.config_discovery import get_discovered_keys
+
+    get_discovered_keys(force=True)
+
+
 # Every switch the console, the CLI and the `.env` watcher can move under a live gateway. The admin
 # screen used to write its keys into `~/.raven/config.json` and answer `{"ok": true}` — a file no
 # running process ever read — so one table now owns both the name space and the effect.
@@ -505,10 +518,10 @@ _RUNTIME_SWITCHES: dict[str, RuntimeSwitch] = {
         RuntimeSwitch("log_level", "LOG_LEVEL", choices=_log_level_choices, rebind=(_rebind_logging,)),
         RuntimeSwitch("json_log", "JSON_LOG", "bool", rebind=(_rebind_logging,)),
         RuntimeSwitch("web_port", "WEB_PORT", "int", minimum=1, maximum=65535, restart_required=True),
-        RuntimeSwitch("openrouter_api_key", "OPENROUTER_API_KEY", "secret"),
-        RuntimeSwitch("anthropic_api_key", "ANTHROPIC_API_KEY", "secret"),
-        RuntimeSwitch("openai_api_key", "OPENAI_API_KEY", "secret"),
-        RuntimeSwitch("groq_api_key", "GROQ_API_KEY", "secret"),
+        RuntimeSwitch("openrouter_api_key", "OPENROUTER_API_KEY", "secret", rebind=(_rebind_discovery,)),
+        RuntimeSwitch("anthropic_api_key", "ANTHROPIC_API_KEY", "secret", rebind=(_rebind_discovery,)),
+        RuntimeSwitch("openai_api_key", "OPENAI_API_KEY", "secret", rebind=(_rebind_discovery,)),
+        RuntimeSwitch("groq_api_key", "GROQ_API_KEY", "secret", rebind=(_rebind_discovery,)),
     )
 }
 
@@ -600,23 +613,6 @@ class SwitchResult:
         return payload
 
 
-async def _forget_cached_provider(env_name: str) -> None:
-    """Drop the provider built with the old credential, and re-read which keys the process now has.
-
-    ``LLMRouter`` caches one client per provider, and the discovery table is cached too, so a rotated
-    key would otherwise sit unused: the next call would keep signing with the old one, or report the
-    provider as unavailable while its new value is already in the environment.
-    """
-    from raven.core.config_discovery import get_discovered_keys
-    from raven.core.llm.router import default_llm_router
-    from raven.core.provider_routing import PROVIDER_ENV_KEYS
-
-    provider = next((name for name, variable in PROVIDER_ENV_KEYS.items() if variable == env_name), "")
-    if provider:
-        await default_llm_router().invalidate_provider(provider)
-    get_discovered_keys(force=True)
-
-
 async def apply_runtime_switch(key: str, raw: str) -> SwitchResult:
     """Write one switch where a running gateway reads it, and say honestly what that changed.
 
@@ -652,12 +648,6 @@ async def apply_runtime_switch(key: str, raw: str) -> SwitchResult:
             except Exception as exc:
                 applied = False
                 warnings.append(f"{switch.env_name} was stored but its consumer refused to rebind: {exc}")
-        if switch.kind == "secret":
-            try:
-                await _forget_cached_provider(switch.env_name)
-            except Exception as exc:
-                applied = False
-                warnings.append(f"{switch.env_name} was stored but the cached provider survived: {exc}")
     return SwitchResult(
         key=key,
         env_name=switch.env_name,

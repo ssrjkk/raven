@@ -165,7 +165,7 @@ The names in this table can be moved while the gateway runs — from the console
 | `context_visibility` | `CONTEXT_VISIBILITY` | the next assembled context is filtered by the new mode |
 | `rate_limit_max` | `RATE_LIMIT_MAX` | the live per-client limiter is rebuilt with the new budget |
 | `log_level`, `json_log` | `LOG_LEVEL`, `JSON_LOG` | the log sinks are re-opened at the new level and shape |
-| `openrouter_api_key`, `anthropic_api_key`, `openai_api_key`, `groq_api_key` | `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY` | the cached provider for that key is dropped, so the next call signs with the new one |
+| `openrouter_api_key`, `anthropic_api_key`, `openai_api_key`, `groq_api_key` | `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY` | the next call is signed with the new key: the router compares what its cached client was built with against what is configured now, and builds and closes instead of reusing |
 | `web_port` | `WEB_PORT` | stored for the next start — the running process already bound the socket, and the answer says `restart_required` |
 
 Every write through the console endpoint goes `raven.core.config.apply_runtime_switch`, which validates
@@ -175,10 +175,12 @@ env file the gateway actually reads, updates the live `Settings` object, rebuild
 the old value, and answers with `applied`, `restart_required` and the warnings it collected — including the
 case where the name is also exported in the shell, which outranks the env file at the next start.
 `raven.core.config.refresh_settings_from_env` is the same table read the other way round, which is what
-the config watcher uses when you edit a `.env` file by hand. One difference is worth knowing: a credential
-rotated by hand reaches the live `Settings` object but not a provider the gateway already built, so that
-provider keeps signing with the old key until the next restart. Rotate a key through the console, or
-restart, to have it take effect immediately.
+the config watcher uses when you edit a `.env` file by hand. Both writers end at the same place: a
+provider snapshots the credential and the address it was built with, so the router compares that against
+what is configured now on every call and builds a new client instead of signing with a retired one — a key
+rotated by hand reaches the next call as well as one rotated through the console. What still waits for a
+restart is a credential the gateway has no switch for, such as `AWS_ACCESS_KEY_ID`, `GITHUB_TOKEN` or
+`VERTEX_AI_PROJECT`: those names are read into the provider scan at start.
 
 ### Data and Workspace Overrides
 
