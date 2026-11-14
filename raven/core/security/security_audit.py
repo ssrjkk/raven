@@ -13,6 +13,7 @@ from loguru import logger
 
 from raven.core.audit import AUDIT_KEY_FILE, AUDIT_SIGNING_KEY_ENV, audit_logger
 from raven.core.config import _DEFAULT_TOOLS_DENY, _ENV_FILE_CANDIDATES, settings
+from raven.core.provider_routing import PROVIDER_REQUIREMENTS, credential_value, provider_for_model
 from raven.core.workspace import is_configured, workspace_root
 
 # pip-audit resolves the whole environment over the network; without a ceiling a slow
@@ -313,57 +314,43 @@ class SecurityAudit:
             c.ok("No TLS certificate configured — use reverse proxy (nginx/Caddy) for production")
             c._fix_hint = "Set TLS_KEY_PATH and TLS_CERT_PATH, or front with nginx"
 
-    # Model provider prefix -> Settings attribute holding its API key
-    _PROVIDER_KEY_ATTRS: ClassVar[dict[str, str]] = {
-        "openrouter": "openrouter_api_key",
-        "anthropic": "anthropic_api_key",
-        "openai": "openai_api_key",
-        "groq": "groq_api_key",
-    }
-    # Self-hosted providers are validated by base URL instead of an API key
-    _LOCAL_PROVIDER_BASE_URLS: ClassVar[dict[str, str]] = {
-        "ollama": "ollama_base_url",
-        "vllm": "vllm_base_url",
+    # Self-hosted providers answer to an address or a local adapter instead of an API key, so the audit
+    # checks the configuration each one is actually reached through.
+    _SELF_HOSTED_CONFIG: ClassVar[dict[str, tuple[str, ...]]] = {
+        "ollama": ("ollama_base_url",),
+        "vllm": ("vllm_base_url",),
+        "local": ("llm_local_base_model", "llm_local_adapter_path"),
     }
 
     def _check_api_keys(self):
         c = self._add("api_keys", "LLM API keys are configured for default model", "high")
         model = settings.default_model
-        provider = model.split("/", 1)[0].strip().lower()
+        provider = provider_for_model(model, ghost_mode=settings.ghost_mode)
 
-        key_attr = self._PROVIDER_KEY_ATTRS.get(provider)
-        if key_attr is not None:
-            if getattr(settings, key_attr).get_secret_value():
-                c.ok(f"{provider} API key configured for {model}")
-            else:
+        attrs = self._SELF_HOSTED_CONFIG.get(provider)
+        if attrs is not None:
+            missing = [attr for attr in attrs if not str(getattr(settings, attr, "") or "")]
+            if missing:
+                names = " and ".join(attr.upper() for attr in missing)
                 c.fail(
-                    f"No {provider.upper()}_API_KEY set for default model '{model}'",
-                    fix_hint=f"Set {provider.upper()}_API_KEY in .env or switch DEFAULT_MODEL",
+                    f"Default model {model} asks the self-hosted provider {provider} but {names} is not set",
+                    fix_hint=f"Set {names} in .env, or point DEFAULT_MODEL at a model this machine serves",
                 )
+            else:
+                reached = " ".join(f"{attr}={getattr(settings, attr)}" for attr in attrs)
+                c.ok(f"{provider} configured for {model}: {reached}")
             return
 
-        base_url_attr = self._LOCAL_PROVIDER_BASE_URLS.get(provider)
-        if base_url_attr is not None:
-            base_url = getattr(settings, base_url_attr, "")
-            if base_url:
-                c.ok(f"{provider} base URL configured: {base_url}")
-            else:
-                c.fail(
-                    f"Default model is {provider} but {base_url_attr.upper()} is not set",
-                    fix_hint=f"Set {base_url_attr.upper()}=http://localhost:<port> in .env",
-                )
-            return
-
-        configured = sorted(
-            name for name, attr in self._PROVIDER_KEY_ATTRS.items() if getattr(settings, attr).get_secret_value()
-        )
-        if configured:
-            c.ok(f"Provider '{provider}' has no dedicated key check; configured keys: {', '.join(configured)}")
-        else:
+        requirements = PROVIDER_REQUIREMENTS.get(provider, ())
+        unmet = [req.describe() for req in requirements if not any(credential_value(name) for name in req.env)]
+        if unmet:
+            names = " and ".join(unmet)
             c.fail(
-                f"No API key found for default model '{model}'",
-                fix_hint=f"Set the appropriate API key for {model} in .env",
+                f"No {names} for default model '{model}' (provider {provider})",
+                fix_hint=f"Set {names} in .env or switch DEFAULT_MODEL",
             )
+        else:
+            c.ok(f"{provider} credential configured for {model}")
 
     def _check_config_validation(self):
         c = self._add("config_validation", "Configuration passes validation", "low")

@@ -9,6 +9,7 @@ from raven.core.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from raven.core.config_discovery import auto_model_list, get_discovered_keys
 from raven.core.llm.protocol import LLMClientProtocol, LLMResponse
 from raven.core.metrics import metrics
+from raven.core.provider_routing import LOCAL_PROVIDER, provider_for_model
 
 
 class ModelConfig:
@@ -42,8 +43,8 @@ class ModelFailover:
 
         weights = {"ollama": 1.0, "groq": 0.9, "openrouter": 0.8, "anthropic": 0.7, "openai": 0.6, "vllm": 0.5}
         for full_model in pool:
-            provider = full_model.split("/")[0] if "/" in full_model else "openai"
-            if provider not in available and provider != "ollama":
+            provider = provider_for_model(full_model, ghost_mode=False)
+            if provider not in available and provider != LOCAL_PROVIDER:
                 continue
             weight = weights.get(provider, 0.5)
             models.append(ModelConfig(provider, full_model, weight))

@@ -26,8 +26,10 @@ _KEY_PATTERNS: dict[str, list[str]] = {
     "GOOGLE_CLIENT_SECRET": [],
     "GITHUB_CLIENT_ID": [],
     "GITHUB_CLIENT_SECRET": [],
-    "AZURE_API_KEY": [],
-    "AZURE_ENDPOINT": [],
+    "AZURE_OPENAI_API_KEY": [],
+    "AZURE_OPENAI_ENDPOINT": [],
+    "VERTEX_AI_PROJECT": [],
+    "COPILOT_TOKEN": [],
     "AWS_ACCESS_KEY_ID": ["AKIA"],
     "AWS_SECRET_ACCESS_KEY": [],
 }
@@ -160,7 +162,7 @@ def discover_keys() -> DiscoveryResult:
         k = seen.get(key_name)
         if k and k.valid:
             result.providers_available.append(provider)
-    if seen.get("AZURE_API_KEY"):
+    if seen.get("AZURE_OPENAI_API_KEY") and seen.get("AZURE_OPENAI_ENDPOINT"):
         result.providers_available.append("azure")
     if seen.get("AWS_ACCESS_KEY_ID") or seen.get("AWS_SECRET_ACCESS_KEY"):
         result.providers_available.append("bedrock")

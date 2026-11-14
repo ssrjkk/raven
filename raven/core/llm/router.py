@@ -19,26 +19,12 @@ from raven.core.instrumented import InstrumentedLLMProvider
 from raven.core.llm.protocol import LLMProvider, LLMResponse
 from raven.core.llm.queue import PRIORITY_NORMAL, LLMQueueTimeoutError, PriorityAdmissionQueue
 from raven.core.metrics import metrics
+from raven.core.provider_routing import missing_requirements, provider_for_model
 from raven.core.tracing import trace_llm_call
 
 
 def _tiers_configured() -> bool:
     return bool(settings.model_fast or settings.model_balanced or settings.model_quality)
-
-
-# The credential each hosted provider cannot work without. The router refuses the provider out of this
-# table and the admin console rotates a key into it, so a provider name, its env var and the name the
-# operator writes are one fact rather than three lists that can drift apart.
-PROVIDER_ENV_KEYS: dict[str, str] = {
-    "openai": "OPENAI_API_KEY",
-    "anthropic": "ANTHROPIC_API_KEY",
-    "openrouter": "OPENROUTER_API_KEY",
-    "groq": "GROQ_API_KEY",
-    "vertex": "GOOGLE_API_KEY",
-    "bedrock": "AWS_ACCESS_KEY_ID",
-    "copilot": "GITHUB_TOKEN",
-    "azure": "AZURE_API_KEY",
-}
 
 
 class LLMRouter:
@@ -126,43 +112,21 @@ class LLMRouter:
     def _get_provider(self, model: str) -> LLMProvider:
         if not model:
             model = settings.default_model
-        if settings.ghost_mode:
-            key = "ollama"
-        elif model.startswith("openrouter/"):
-            key = "openrouter"
-        elif model.startswith(("claude", "anthropic/")):
-            key = "anthropic"
-        elif model.startswith("ollama/"):
-            key = "ollama"
-        elif model.startswith(("gpt", "o1", "o3")):
-            key = "openai"
-        elif model.startswith("vllm/"):
-            key = "vllm"
-        elif model.startswith("copilot/"):
-            key = "copilot"
-        elif model.startswith(("vertex/", "gemini/")):
-            key = "vertex"
-        elif model.startswith("bedrock/"):
-            key = "bedrock"
-        elif model.startswith("groq/"):
-            key = "groq"
-        else:
-            key = "ollama"
-        if key in PROVIDER_ENV_KEYS:
+        key = provider_for_model(model, ghost_mode=settings.ghost_mode)
+        overrides = dict(self._providers_config.get(key, {}))
+        missing = missing_requirements(key, overrides)
+        if missing:
             from raven.core.config_discovery import get_discovered_keys
 
-            discovery = get_discovered_keys()
-            env_name = PROVIDER_ENV_KEYS[key]
-            if not discovery.is_available(env_name):
-                raise RuntimeError(
-                    f"Provider '{key}' requires {env_name} which is not set. "
-                    f"Available providers: {', '.join(discovery.providers_available) or 'ollama (local)'}. "
-                    f"Set the key in .env or use an available provider."
-                )
+            available = ", ".join(get_discovered_keys().providers_available) or "ollama (local)"
+            raise RuntimeError(
+                f"Provider '{key}' requires {' and '.join(missing)} which is not set. "
+                f"Available providers: {available}. "
+                f"Set the key in .env or use an available provider."
+            )
         if key not in self._providers:
             from raven.core.llm.factory import LLMProviderFactory
 
-            overrides = dict(self._providers_config.get(key, {}))
             api_key = overrides.pop("api_key", None)
             raw = LLMProviderFactory.create(key, api_key=api_key, **overrides)
             self._providers[key] = InstrumentedLLMProvider(raw, provider_name=key)

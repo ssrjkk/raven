@@ -6,6 +6,7 @@ from typing import Any
 from loguru import logger
 
 from raven.core.config import settings
+from raven.core.provider_routing import provider_for_model
 
 
 class ModelTier(StrEnum):
@@ -36,21 +37,6 @@ TIER_MODELS: dict[str, dict[str, str]] = {
         ModelTier.QUALITY: "claude-3-5-sonnet-latest",
     },
 }
-
-
-def _detect_provider_family() -> str:
-    model = settings.default_model
-    if settings.ghost_mode:
-        return "ollama"
-    if model.startswith(("openrouter/",)):
-        return "openrouter"
-    if model.startswith(("claude", "anthropic/")):
-        return "anthropic"
-    if model.startswith(("gpt", "o1", "o3")):
-        return "openai"
-    if model.startswith(("groq/", "vertex/", "gemini/", "bedrock/", "copilot/", "vllm/", "azure/")):
-        return "unknown"
-    return "ollama"
 
 
 def tiers_configured() -> bool:
@@ -87,10 +73,11 @@ def _resolve_default_model(tier: ModelTier | str) -> str:
     }
     if config_map.get(tier_obj):
         return config_map[tier_obj]
-    family = _detect_provider_family()
-    if family == "unknown":
+    provider = provider_for_model(settings.default_model, ghost_mode=settings.ghost_mode)
+    mapping = TIER_MODELS.get(provider)
+    if mapping is None:
+        # groq, vertex, azure, a local adapter: keep the operator's model rather than another vendor's ids.
         return settings.default_model
-    mapping = TIER_MODELS.get(family, TIER_MODELS["ollama"])
     return mapping.get(tier_obj.value, settings.default_model)
 
 
@@ -121,8 +108,3 @@ def _get_dream_tier_override(messages: list[dict[str, Any]]) -> str | None:
     if last.startswith("/dream") or "[dream]" in last:
         return _resolve_default_model(ModelTier.FAST)
     return None
-
-
-def format_tier_config(provider: str) -> dict[str, str]:
-    mapping = TIER_MODELS.get(provider, TIER_MODELS["ollama"])
-    return {tier.value: mapping.get(tier, "") for tier in ModelTier}

@@ -437,6 +437,12 @@ class TestRemoteTiers:
         monkeypatch.setattr(config.settings, "model_fast", "groq/openai/gpt-oss-120b")
         assert remote_tiers() == {"MODEL_FAST": "groq/openai/gpt-oss-120b"}
 
+    def test_an_in_process_adapter_tier_is_not_billed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(config.settings, "model_fast", "local/unsloth/Qwen2.5-7B")
+        monkeypatch.setattr(config.settings, "model_balanced", "")
+        monkeypatch.setattr(config.settings, "model_quality", "")
+        assert remote_tiers() == {}
+
     def test_the_tier_the_switch_owns_is_never_reported_as_remote(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(config.settings, "default_model", "groq/openai/gpt-oss-120b")
         assert "DEFAULT_MODEL" not in remote_tiers()

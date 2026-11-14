@@ -8,6 +8,7 @@ from rich.table import Table
 
 from raven.core.config import settings
 from raven.core.heretic_model import HERETIC_SIZE_GB, disable, enable, status
+from raven.core.provider_routing import provider_for_model
 
 console = Console()
 
@@ -20,6 +21,7 @@ def models_group():
 @models_group.command("list")
 def models_list():
     """List configured LLM models"""
+    routed = provider_for_model(settings.default_model, ghost_mode=settings.ghost_mode)
     table = Table(title="Configured Models")
     table.add_column("Provider", style="cyan")
     table.add_column("Status")
@@ -27,23 +29,27 @@ def models_list():
     table.add_row(
         "OpenRouter",
         "[OK]" if settings.openrouter_api_key.get_secret_value() else "[NO]",
-        "✓" if settings.default_model.startswith("openrouter/") else "",
+        "✓" if routed == "openrouter" else "",
     )
     table.add_row(
         "Anthropic",
         "[OK]" if settings.anthropic_api_key.get_secret_value() else "[NO]",
-        "✓" if settings.default_model.startswith("claude") else "",
+        "✓" if routed == "anthropic" else "",
     )
-    table.add_row("OpenAI", "[OK]" if settings.openai_api_key.get_secret_value() else "[NO]", "")
+    table.add_row(
+        "OpenAI",
+        "[OK]" if settings.openai_api_key.get_secret_value() else "[NO]",
+        "✓" if routed == "openai" else "",
+    )
     table.add_row(
         "Groq",
         "[OK]" if settings.groq_api_key.get_secret_value() else "[NO]",
-        "✓" if settings.default_model.startswith("groq/") else "",
+        "✓" if routed == "groq" else "",
     )
     table.add_row(
         "Ollama",
         "[OK]" if settings.ollama_base_url else "[NO]",
-        "✓" if settings.default_model.startswith("ollama/") else "",
+        "✓" if routed == "ollama" else "",
     )
     console.print(table)
     console.print(f"\nDefault model: [bold]{settings.default_model}[/bold]")

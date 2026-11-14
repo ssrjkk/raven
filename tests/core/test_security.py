@@ -148,16 +148,31 @@ class TestSecurityAuditCheckFixes:
         assert not check.passed
         assert "VLLM_BASE_URL" in check.message
 
-    def test_api_keys_unknown_provider_with_configured_key(self, monkeypatch):
-        from raven.core.config import SafeSecretStr
+    def test_api_keys_accepts_bedrock_with_its_own_credentials(self, monkeypatch):
         from raven.core.security import security_audit as sa
 
         monkeypatch.setattr(config_module.settings, "default_model", "bedrock/anthropic.claude-v2")
-        monkeypatch.setattr(config_module.settings, "groq_api_key", SafeSecretStr("gsk-test"))
+        monkeypatch.setattr(config_module.settings, "groq_api_key", config_module.SafeSecretStr("gsk-test"))
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAexamplekey123")
         auditor = sa.SecurityAudit()
         auditor._check_api_keys()
         check = self._last(auditor)
         assert check.passed, check.message
+        assert "bedrock" in check.message
+
+    def test_a_key_for_another_provider_does_not_excuse_the_one_the_model_asks_for(self, monkeypatch):
+        """`bedrock/...` used to pass on a configured Groq key: the audit approved a default the router refuses."""
+        from raven.core.security import security_audit as sa
+
+        monkeypatch.setattr(config_module.settings, "default_model", "bedrock/anthropic.claude-v2")
+        monkeypatch.setattr(config_module.settings, "groq_api_key", config_module.SafeSecretStr("gsk-test"))
+        monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+        monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+        auditor = sa.SecurityAudit()
+        auditor._check_api_keys()
+        check = self._last(auditor)
+        assert not check.passed
+        assert "AWS_ACCESS_KEY_ID" in check.message
 
     def test_parse_pip_audit_findings(self):
         from raven.core.security.security_audit import _parse_pip_audit_findings

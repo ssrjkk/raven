@@ -395,7 +395,9 @@ def apply_ghost_mode(overrides: dict[str, Any] | None = None) -> None:
     """
     s = get_settings()
     s.ghost_mode = True
-    if not s.default_model.startswith("ollama/"):
+    from raven.core.provider_routing import LOCAL_PROVIDER, provider_for_model
+
+    if provider_for_model(s.default_model, ghost_mode=False) != LOCAL_PROVIDER:
         s.default_model = _ghost_fallback_model(s.ollama_base_url)
     if overrides:
         for k, v in overrides.items():
@@ -606,7 +608,8 @@ async def _forget_cached_provider(env_name: str) -> None:
     provider as unavailable while its new value is already in the environment.
     """
     from raven.core.config_discovery import get_discovered_keys
-    from raven.core.llm.router import PROVIDER_ENV_KEYS, default_llm_router
+    from raven.core.llm.router import default_llm_router
+    from raven.core.provider_routing import PROVIDER_ENV_KEYS
 
     provider = next((name for name, variable in PROVIDER_ENV_KEYS.items() if variable == env_name), "")
     if provider:

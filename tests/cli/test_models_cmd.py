@@ -64,6 +64,65 @@ def test_models_list_shows_the_bundled_model_and_how_to_turn_it_on(monkeypatch: 
     assert "raven models enable-heretic" in result.output
 
 
+class TestDefaultColumn:
+    """The ✓ is the console's claim about what the gateway will actually call, so it may not be a
+    second, hand-written reading of the model name: OpenAI used to have no ✓ at all, and a bare
+    `claude-*` default was checked as Anthropic while `openai/gpt-4o` was checked as nothing."""
+
+    _ROWS = ("OpenRouter", "Anthropic", "OpenAI", "Groq", "Ollama")
+
+    @staticmethod
+    def _marks(output: str) -> dict[str, str]:
+        """Provider to Default column, read off the three-column `Configured Models` table only."""
+        marks: dict[str, str] = {}
+        for line in output.splitlines():
+            if not line.strip().startswith("│"):
+                continue
+            cells = [cell.strip() for cell in line.strip("│").split("│")]
+            if len(cells) == 3 and cells[0] in TestDefaultColumn._ROWS:
+                marks[cells[0]] = cells[2]
+        return marks
+
+    @pytest.mark.parametrize(
+        ("default_model", "provider"),
+        [
+            ("openrouter/openai/gpt-4o", "OpenRouter"),
+            ("anthropic/claude-3-5-sonnet-latest", "Anthropic"),
+            ("claude-3-5-haiku-latest", "Anthropic"),
+            ("openai/gpt-4o", "OpenAI"),
+            ("gpt-4o", "OpenAI"),
+            ("groq/openai/gpt-oss-120b", "Groq"),
+            ("ollama/llama3", "Ollama"),
+            ("ollama/hf.co/mradermacher/DeepSeek-V4-Pro:Q4_K_M", "Ollama"),
+            ("mystery/model-x", "Ollama"),
+        ],
+    )
+    def test_exactly_the_provider_the_router_will_use_is_checked(
+        self, monkeypatch: pytest.MonkeyPatch, default_model: str, provider: str
+    ) -> None:
+        from raven.core.config import settings
+
+        monkeypatch.setattr(models_cmd, "status", lambda *_a, **_k: _status())
+        monkeypatch.setattr(settings, "default_model", default_model)
+        monkeypatch.setattr(settings, "ghost_mode", False)
+        result = CliRunner().invoke(models_cmd.models_group, ["list"])
+        assert result.exit_code == 0, result.output
+        marks = self._marks(result.output)
+        assert set(marks) == set(self._ROWS), result.output
+        assert marks[provider] == "✓", result.output
+        assert [name for name, mark in marks.items() if mark] == [provider], result.output
+
+    def test_ghost_mode_checks_the_local_row_whatever_the_name_says(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.core.config import settings
+
+        monkeypatch.setattr(models_cmd, "status", lambda *_a, **_k: _status())
+        monkeypatch.setattr(settings, "default_model", "groq/openai/gpt-oss-120b")
+        monkeypatch.setattr(settings, "ghost_mode", True)
+        result = CliRunner().invoke(models_cmd.models_group, ["list"])
+        assert result.exit_code == 0, result.output
+        assert [name for name, mark in self._marks(result.output).items() if mark] == ["Ollama"]
+
+
 class TestEnableHeredic:
     def test_refuses_to_download_without_a_tty_and_without_yes(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(models_cmd, "status", lambda *_a, **_k: _status(present=False))

@@ -18,14 +18,23 @@ Configuration is primarily managed through a `.env` file in the project root or 
 | `ANTHROPIC_API_KEY` | Anthropic API key | — |
 | `OPENAI_API_KEY` | OpenAI API key | — |
 | `GROQ_API_KEY` | Groq API key | — |
+| `AZURE_OPENAI_API_KEY` | Azure OpenAI key — a `azure/...` default needs this *and* the endpoint below, and the refusal names both | — |
+| `AZURE_OPENAI_ENDPOINT` | Azure OpenAI resource URL, e.g. `https://my-resource.openai.azure.com` | — |
+| `VERTEX_AI_PROJECT` | Google Cloud project for a `vertex/...` default. Vertex asks no API key: the client signs with an application-default token from `gcloud auth print-access-token` | — |
+| `AWS_ACCESS_KEY_ID` | AWS access key for a `bedrock/...` default | — |
+| `GITHUB_TOKEN` | GitHub token for a `copilot/...` default (`COPILOT_TOKEN` also answers) | — |
 | `OLLAMA_BASE_URL` | Ollama server URL | `http://localhost:11434` |
 | `VLLM_BASE_URL` | vLLM / OpenAI-compatible local server URL | — |
 | `DEFAULT_MODEL` | Default LLM model (empty = auto-discovered) | `openrouter/openai/gpt-4o` |
-| `MODEL_FAST` | Model the `fast` tier answers with; empty falls back to the built-in per-provider tier table | — |
+| `MODEL_FAST` | Model the `fast` tier answers with; empty falls back to that provider's tier table, or to `DEFAULT_MODEL` when it has none | — |
 | `MODEL_BALANCED` | Model the `balanced` tier answers with, same fallback | — |
 | `MODEL_QUALITY` | Model the `quality` tier answers with, same fallback | — |
 
-Supported providers: `openai`, `anthropic`, `openrouter`, `ollama`, `vllm`, `azure`, `groq`, `bedrock`, `vertex`, `copilot`. Failover order is automatic: the first healthy provider wins.
+Supported providers: `openai`, `anthropic`, `openrouter`, `ollama`, `vllm`, `azure`, `groq`, `bedrock`, `vertex`, `copilot`, `local` (the in-process LoRA adapter). A model name asks for a provider by its
+first path segment — `openrouter/openai/gpt-4o` is OpenRouter and `groq/openai/gpt-oss-120b` is Groq, not
+OpenAI — while a bare `claude-*`, `gpt-*`, `o1-*`, `o3-*` or `gemini/*` id keeps its pre-prefix spelling. A
+name that says none of these is local: `llama3` means Ollama. Failover order is automatic: the first healthy
+provider wins.
 
 ### The bundled free model
 

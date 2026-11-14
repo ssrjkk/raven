@@ -36,7 +36,7 @@ from raven.core.config import (
     runtime_switches,
     settings,
 )
-from raven.core.llm.router import PROVIDER_ENV_KEYS
+from raven.core.provider_routing import PROVIDER_ENV_KEYS
 
 ROOT = Path(__file__).resolve().parents[2]
 

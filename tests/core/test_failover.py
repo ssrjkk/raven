@@ -266,3 +266,34 @@ class TestCompleteWithToolCalls:
         tools = [{"type": "function", "function": {"name": "test"}}]
         await f.complete([{"role": "user", "content": "hi"}], tools=tools)
         assert llm.complete_calls[0]["tools"] == tools
+
+
+class TestPoolLabels:
+    """The pool's provider label picks the circuit breaker and decides whether a model is offered at all,
+    so a bare `claude-*` name labelled OpenAI was dropped from an Anthropic-only install's failover pool."""
+
+    @staticmethod
+    def _pool(monkeypatch, served: list[str], models: list[str]) -> dict[str, str]:
+        from raven.core import failover as failover_module
+
+        class _Disc:
+            providers_available = served
+
+            def is_available(self, key_name: str) -> bool:
+                return True
+
+        monkeypatch.setattr(failover_module, "get_discovered_keys", lambda *a, **k: _Disc())
+        monkeypatch.setattr(failover_module, "auto_model_list", lambda: models)
+        return {cfg.provider: cfg.model for cfg in ModelFailover(FakeLLM())._models}
+
+    def test_a_bare_claude_name_is_anthropic_and_survives_alone(self, monkeypatch):
+        pool = self._pool(monkeypatch, ["anthropic", "ollama"], ["claude-sonnet-4-20250514", "ollama/llama3"])
+        assert pool == {"anthropic": "claude-sonnet-4-20250514", "ollama": "ollama/llama3"}
+
+    def test_a_nested_name_keeps_the_provider_the_prefix_names(self, monkeypatch):
+        pool = self._pool(monkeypatch, ["groq", "openai", "ollama"], ["groq/openai/gpt-oss-120b"])
+        assert pool == {"groq": "groq/openai/gpt-oss-120b"}
+
+    def test_a_model_of_a_provider_that_was_not_discovered_is_left_out(self, monkeypatch):
+        pool = self._pool(monkeypatch, ["ollama"], ["groq/openai/gpt-oss-120b", "ollama/llama3"])
+        assert pool == {"ollama": "ollama/llama3"}

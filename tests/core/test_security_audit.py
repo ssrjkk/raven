@@ -190,11 +190,13 @@ class TestEnvDrivenBranches:
         assert check.passed
         assert "ollama" in check.message
 
-    def test_api_keys_unknown_provider_without_keys_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_a_name_that_names_no_provider_is_validated_as_the_local_one(self, monkeypatch) -> None:
+        """`mystery/model-x` is not a provider nobody has heard of: the router sends it to Ollama."""
         monkeypatch.setattr(config_module.settings, "default_model", "mystery/model-x")
-        for attr in ("openrouter_api_key", "anthropic_api_key", "openai_api_key", "groq_api_key"):
-            monkeypatch.setattr(config_module.settings, attr, SafeSecretStr(""))
-        assert not _run("_check_api_keys").passed
+        monkeypatch.setattr(config_module.settings, "ollama_base_url", "")
+        check = _run("_check_api_keys")
+        assert not check.passed
+        assert "OLLAMA_BASE_URL" in check.message
 
 
 class TestFilePermissionBranches:
@@ -638,12 +640,29 @@ class TestRemainingBranches:
         monkeypatch.setattr(config_module.settings, "ollama_base_url", "")
         assert not _run("_check_api_keys").passed
 
-    def test_api_keys_unknown_with_other_keys_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(config_module.settings, "default_model", "mystery/model-x")
-        monkeypatch.setattr(config_module.settings, "openai_api_key", SafeSecretStr("sk-abc"))
+    def test_a_provider_that_signs_without_a_key_is_validated_by_what_it_needs(self, monkeypatch) -> None:
+        """Vertex signs with an application-default token: `VERTEX_AI_PROJECT` is the whole ask.
+
+        It used to be demanded that no provider class reads a `GOOGLE_API_KEY`, and that name sat in the
+        router's table too, so a configured Vertex install was reported broken and refused on every call.
+        """
+        monkeypatch.setattr(config_module.settings, "default_model", "vertex/gemini-2.0-flash")
+        for attr in ("openrouter_api_key", "anthropic_api_key", "openai_api_key", "groq_api_key"):
+            monkeypatch.setattr(config_module.settings, attr, SafeSecretStr(""))
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.setenv("VERTEX_AI_PROJECT", "example-project-1234")
         check = _run("_check_api_keys")
-        assert check.passed
-        assert "no dedicated key check" in check.message
+        assert check.passed, check.message
+        assert "_API_KEY" not in check.message
+
+    def test_azure_is_refused_by_both_names_its_provider_class_reads(self, monkeypatch) -> None:
+        """`AZURE_API_KEY` was the name in the table; the class reads the key and the endpoint."""
+        monkeypatch.setattr(config_module.settings, "default_model", "azure/gpt-4o")
+        for name in ("AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_API_KEY"):
+            monkeypatch.delenv(name, raising=False)
+        check = _run("_check_api_keys")
+        assert not check.passed
+        assert "AZURE_OPENAI_API_KEY" in check.message and "AZURE_OPENAI_ENDPOINT" in check.message
 
     def test_config_validation_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(type(config_module.settings), "validate_settings", lambda self: True)

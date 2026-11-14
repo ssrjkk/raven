@@ -151,13 +151,14 @@ def remote_tiers() -> dict[str, str]:
     ``os.environ``: a name set only in an env file never reaches the process env.
     """
     from raven.core.config import settings
+    from raven.core.provider_routing import SELF_HOSTED_PROVIDERS, provider_for_model
 
     remote: dict[str, str] = {}
     for env_name, attr in _TIER_FIELDS.items():
         if env_name == "DEFAULT_MODEL":
             continue
         value = str(getattr(settings, attr, "") or "")
-        if value and not value.startswith(("ollama/", "vllm/")):
+        if value and provider_for_model(value, ghost_mode=False) not in SELF_HOSTED_PROVIDERS:
             remote[env_name] = value
     return remote
 

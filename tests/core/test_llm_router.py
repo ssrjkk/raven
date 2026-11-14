@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+from raven.core.instrumented import InstrumentedLLMProvider
 from raven.core.llm.protocol import LLMProvider, LLMResponse
 from raven.core.llm.queue import LLMQueueTimeoutError
 from raven.core.llm.router import LLMRouter
@@ -171,7 +172,19 @@ class TestGetProvider:
             mock_disc.return_value.is_available.return_value = True
             mock_disc.return_value.providers_available = ["openai", "anthropic", "openrouter", "ollama"]
             router = LLMRouter()
-            all_keys = ["openrouter", "anthropic", "ollama", "openai", "vllm", "copilot", "vertex", "bedrock", "groq"]
+            all_keys = [
+                "openrouter",
+                "anthropic",
+                "ollama",
+                "openai",
+                "vllm",
+                "copilot",
+                "vertex",
+                "bedrock",
+                "groq",
+                "azure",
+                "local",
+            ]
             for k in all_keys:
                 router._providers[k] = DummyProvider()
             cases = {
@@ -180,6 +193,7 @@ class TestGetProvider:
                 "anthropic/claude-3": "anthropic",
                 "ollama/llama": "ollama",
                 "gpt-4": "openai",
+                "openai/gpt-4": "openai",
                 "o1-mini": "openai",
                 "vllm/model": "vllm",
                 "copilot/chat": "copilot",
@@ -187,6 +201,8 @@ class TestGetProvider:
                 "gemini/pro": "vertex",
                 "bedrock/model": "bedrock",
                 "groq/mixtral": "groq",
+                "azure/gpt-4": "azure",
+                "local/unsloth/Qwen2.5-7B": "local",
                 "unknown_model": "ollama",
             }
             for model, expected_key in cases.items():
@@ -200,6 +216,22 @@ class TestGetProvider:
             mock_disc.return_value.providers_available = []
             with pytest.raises(RuntimeError, match="requires"):
                 router._get_provider("gpt-4")
+
+    async def test_a_credential_handed_over_with_the_model_config_is_enough(self):
+        """`ravencode.json` and the critical-provider config pass a key inline, and the router refused
+        anyway because the same key was not also exported into the environment."""
+        router = LLMRouter(providers_config={"openai": {"api_key": "sk-" + "a" * 24}})
+        try:
+            with patch("raven.core.config_discovery.get_discovered_keys") as mock_disc:
+                mock_disc.return_value.is_available.return_value = False
+                mock_disc.return_value.providers_available = ["ollama"]
+                provider = router._get_provider("openai/gpt-4o")
+            from raven.core.llm.providers.openai import OpenAIProvider
+
+            assert isinstance(provider, InstrumentedLLMProvider)
+            assert isinstance(provider._wrapped, OpenAIProvider)
+        finally:
+            await router.cleanup()
 
 
 class TestComplete:

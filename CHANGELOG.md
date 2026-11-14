@@ -216,6 +216,36 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
 ### Fixed
+- One answer to "which provider does this model name ask for, and what does that provider need" replaced
+  seven copies that disagreed. `raven/core/provider_routing.py` owns the prefix rule (`provider_for_model`),
+  the credential rule (`PROVIDER_REQUIREMENTS`, `missing_requirements`) and what a reporting surface should
+  read (`credential_value` — a `Settings` field when the project owns one, otherwise the raw environment the
+  provider class itself reads); the router, `model_tiers`, `raven models list`, the failover pool, the free
+  experimental switch, the ghost-mode rewrite and the security audit now ask it. What the copies were doing
+  to real installs: `openai/gpt-4o` and `azure/gpt-4o` — both spellings `ravencode.json` and the console's
+  provider hints advertise — routed to Ollama, so a call billed nothing and answered nothing; a
+  groq/vertex/azure/local install was handed Ollama tier ids by `select_model` and could not make up its own
+  mind per tier; `raven models list` had no way to put a checkmark on an OpenAI default; every bare
+  `claude-*` name was labelled OpenAI in the failover pool and dropped from an Anthropic-only install's pool
+  entirely; the audit derived the provider a fourth time and passed a `bedrock/` default the router refuses.
+  Two credential names in the router's table were read by nothing in the tree: `GOOGLE_API_KEY`, which made
+  `vertex/...` unroutable whatever an operator configured — `VertexAIProvider` signs with an
+  application-default token from `gcloud auth print-access-token`, so vertex now needs `VERTEX_AI_PROJECT`
+  and asks no key — and `AZURE_API_KEY`, while `AzureProvider` reads `AZURE_OPENAI_API_KEY` and
+  `AZURE_OPENAI_ENDPOINT`; azure now refuses naming both of those, and discovery lists azure only when both
+  are present, because a key without an endpoint reaches a placeholder resource URL that answers to no one.
+  A credential handed over in `providers_config` (how `ravencode.json` passes one without exporting it) now
+  satisfies the gate. 88 tests in `tests/core/test_provider_routing.py`, including an AST gate that fails if
+  the prefix rule is written down anywhere in `raven/`, `ravencode/`, `aios/` or `scripts/` again; 382 across
+  the eight suites the rule now serves. All 16 mutations die: a second copy of the rule in a site that asks
+  the owner (2), the legacy `gpt`/`o1`/`o3` ids dropped (4), vertex given a mandatory key (3), azure asked by
+  the name its class does not read (4), the CLI answering for itself (4), the report reading only the raw
+  environment (1), the router ignoring a credential handed with the model config (1), every install handed
+  the Ollama ladder (2), the free switch self-certifying which prefixes it serves (2), the failover pool
+  labelling by its own split (2), the audit excusing an unreachable self-hosted default (1) or asking no
+  credential question (2), discovery offering azure on a key alone (1), the rule forgetting a provider the
+  factory can build (2), an explicit `MODEL_FAST` ignored (1), ghost mode no longer answering for the local
+  provider (23).
 - Config writes from the admin console changed nothing, and the one key the console actually posted was
   refused. `POST /api/admin/config/key` stored the value in `~/.raven/config.json` through `config_store`
   and answered `{"ok": true}` — a file no running process reads, `Settings` being pydantic over the
