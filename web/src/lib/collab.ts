@@ -4,7 +4,7 @@
  * `raven/unique/collaboration.py` applies the same geometry in Python and `raven/core/collab_api.py`
  * emits the frames parsed here. Both sides must resolve a line/column range identically or the editor
  * and the gateway drift apart on the first multi-line edit, so
- * `tests/fixtures/collab_change_cases.json` is one shared table both suites assert against.
+ * `./collab_change_cases.json` is one shared table both suites assert against.
  */
 
 export interface CollabUser {

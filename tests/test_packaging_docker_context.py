@@ -8,6 +8,10 @@ a force-include and the stage kept copying just the three packages.
 The same file decides which interpreter every customer runs, and the suite decides which interpreters
 get tested; nothing linked the two, so dependabot moved the image onto a Python no CI job had ever
 imported the package under.
+
+The `web-builder` stage has the same boundary: it copies `web/` and `tsconfig.base.json` alone, so a
+relative import that climbs out of `web/` names a module the image does not have and `tsc -b` fails
+the build — which the frontend CI job cannot see, because it runs in the full checkout.
 """
 
 from __future__ import annotations
@@ -31,21 +35,21 @@ def wheel_inputs() -> list[str]:
     return sorted(set(inputs))
 
 
-def staged_copies() -> list[str]:
-    """Sources the `wheel-builder` stage copies into `/build`.
+def staged_copies(stage: str = "wheel-builder") -> list[str]:
+    """Sources one stage copies into its working directory.
 
-    Only that stage matters: a `COPY` in the runtime stage cannot put a file inside a wheel that was
-    already built by the time the runtime stage runs.
+    Only the stage that builds an artifact matters: a `COPY` in the runtime stage cannot put a file
+    inside a wheel that was already built by the time the runtime stage runs.
     """
     lines = DOCKERFILE.read_text(encoding="utf-8").splitlines()
-    stage: str | None = None
+    current: str | None = None
     copied: list[str] = []
     for line in lines:
         stripped = line.strip()
         if stripped.startswith("FROM "):
-            stage = stripped.split()[-1]
+            current = stripped.split()[-1]
             continue
-        if stage == "wheel-builder" and stripped.startswith("COPY "):
+        if current == stage and stripped.startswith("COPY "):
             args = [part for part in stripped.split()[1:] if not part.startswith("--")]
             copied.extend(args[:-1])
     return copied
@@ -126,3 +130,76 @@ def test_the_interpreter_detector_reports_a_base_ci_never_tests() -> None:
     assert untested(["3.99-slim"], tested) == ["3.99-slim"]
     assert not untested(tested, tested)
     assert not untested([f"{tested[0]}.4-slim"], tested), "a patch of a tested stream is that stream"
+
+
+WEB_SRC: Final = ROOT / "web" / "src"
+_RELATIVE_IMPORT = re.compile(r"""(?:\bfrom|\bimport)\s*\(?\s*['"](\.[^'"]+)['"]""")
+_EXTENSIONS: Final = (".ts", ".tsx", ".json")
+
+
+def resolve_import(source: pathlib.Path, specifier: str) -> pathlib.Path | None:
+    """The file a relative specifier names, the way `tsc -b` and Vite resolve it."""
+    base = source.parent / specifier
+    for candidate in (base, *(base.with_suffix(ext) for ext in _EXTENSIONS), base / "index.ts", base / "index.tsx"):
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
+def web_imports() -> list[tuple[str, str, str | None]]:
+    """(importing file, specifier, target) for every relative import under `web/src`."""
+    found: list[tuple[str, str, str | None]] = []
+    for source in sorted(WEB_SRC.rglob("*")):
+        if source.suffix not in {".ts", ".tsx"}:
+            continue
+        rel = source.relative_to(ROOT).as_posix()
+        for specifier in _RELATIVE_IMPORT.findall(source.read_text(encoding="utf-8")):
+            target = resolve_import(source, specifier)
+            if target is None:
+                found.append((rel, specifier, None))
+            elif target.is_relative_to(ROOT):
+                found.append((rel, specifier, target.relative_to(ROOT).as_posix()))
+            else:
+                found.append((rel, specifier, str(target)))
+    return found
+
+
+def uncovered_web_imports(copied: list[str]) -> list[str]:
+    offenders: list[str] = []
+    for rel, specifier, target in web_imports():
+        if target is None:
+            offenders.append(f"{rel} -> {specifier} (resolves to no file)")
+        elif unstaged([target], copied):
+            offenders.append(f"{rel} -> {specifier} ({target})")
+    return offenders
+
+
+def test_every_web_import_is_inside_the_web_build_context() -> None:
+    """`npm run build` runs `tsc -b` over all of `web/src`, tests included, from the copied tree alone.
+
+    A specifier that climbs out of `web/` is therefore not a style question: the module is absent in
+    the image, TS2307 fails the build, and no image is published. The frontend CI job cannot see it,
+    because that one runs in the full checkout where the file is still there.
+    """
+    imports = web_imports()
+    assert len(imports) > 200, f"the web import scan covered only {len(imports)} imports - it is vacuous"
+    offenders = uncovered_web_imports(staged_copies("web-builder"))
+    assert not offenders, f"web imports the image build context does not contain: {offenders}"
+
+
+def test_the_web_context_detector_reports_an_import_outside_the_copied_tree() -> None:
+    """The gate must be able to fail, on the shape that actually broke the image."""
+    probe = WEB_SRC / "lib" / "__docker_context_probe__.ts"
+    probe.write_text('import "../../../pyproject.toml";\n', encoding="utf-8")
+    try:
+        offenders = uncovered_web_imports(staged_copies("web-builder"))
+        assert any(probe.name in row and "pyproject.toml" in row for row in offenders), offenders
+    finally:
+        probe.unlink()
+    assert not uncovered_web_imports(staged_copies("web-builder"))
+
+
+def test_dropping_the_web_copy_makes_the_imports_findings() -> None:
+    copied = [src for src in staged_copies("web-builder") if src.rstrip("/") != "web"]
+    assert copied, "the web-builder stage parses to no COPY at all"
+    assert uncovered_web_imports(copied), "dropping `COPY web/ ./` named not one import"

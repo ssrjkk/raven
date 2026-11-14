@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import rawTable from "../../../tests/fixtures/collab_change_cases.json";
 import {
   applyChange,
   type CollabChange,
@@ -15,6 +14,7 @@ import {
   unitsToPoints,
   withSentChange,
 } from "./collab";
+import rawTable from "./collab_change_cases.json";
 
 interface CaseRow {
   name: string;

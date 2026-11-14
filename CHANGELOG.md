@@ -345,7 +345,7 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   listed none of it (it now imports `get_manager`), and the y-py and fallback apply paths each checked the
   bounds their own way and disagreed about a reversed range — one inserted without deleting, the other
   refused — so the same change from the same client applied on one install and was dropped on another.
-  Both go through `_change_range()` now, and `tests/fixtures/collab_change_cases.json` (16 cases, 14
+  Both go through `_change_range()` now, and `web/src/lib/collab_change_cases.json` (16 cases, 14
   roundtrips, every value produced by the Python implementation and re-produced by the client) is asserted
   against `apply_change` in pytest and against `applyChange` in vitest, with
   `tests/test_collab_protocol.py` comparing what the gateway writes to the wire against what the client
@@ -355,6 +355,17 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   bump could move every customer onto an untested stream and the gate would stay green; it is `3.12-slim`
   now, and `tests/test_packaging_docker_context.py` reads the `FROM python:` tags and the CI matrix and
   fails on a base whose `major.minor` no job tests.
+- The published image stopped building over a test fixture living outside the directory the build copies.
+  `web/src/lib/collab.test.ts` imported `../../../tests/fixtures/collab_change_cases.json`, and the
+  `web-builder` stage stages `web/` plus `tsconfig.base.json` alone, so `npm run build` — `tsc -b` typechecks
+  the suite too — died on `TS2307` and CI's `Docker image smoke test` went red on the commit that introduced
+  the table, while the `Frontend build` job ran the identical command in the full checkout and stayed green.
+  The table is `web/src/lib/collab_change_cases.json` now, beside both consumers, and
+  `tests/test_packaging_docker_context.py` resolves all 298 relative imports under `web/src` the way `tsc` and
+  Vite do and checks each target against that stage's own `COPY` list: pointing the real import at
+  `../../../pyproject.toml` makes the gate name `web/src/lib/collab.test.ts -> ../../../pyproject.toml`,
+  dropping `COPY web/ ./` turns every import into a finding, and a scan of fewer than 200 imports fails as
+  vacuous.
 - `web/src/components/Layout.tsx:249` wrote `hover:border-accent-muted` on the command-palette trigger and
   the sheet shipped no `hover:border-accent*` rule at all: the control was wired, looked live, and changed
   nothing on hover, because Tailwind is never told about this SPA's hand-written semantic classes (there is

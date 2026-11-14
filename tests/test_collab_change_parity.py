@@ -1,9 +1,12 @@
 """One change geometry, checked in both languages.
 
-`tests/fixtures/collab_change_cases.json` is asserted here against `CollaborationSession.apply_change`
+`web/src/lib/collab_change_cases.json` is asserted here against `CollaborationSession.apply_change`
 and in `web/src/lib/collab.test.ts` against `applyChange`. A range the two sides resolve differently
 leaves the editor showing a document the gateway does not have, so every value in that table is
 produced by the Python implementation and re-produced by the client -- none of it is typed by hand.
+
+The table lives inside `web/` because the image build copies that directory alone: a fixture under
+`tests/` is not in the Docker context, and `tsc -b` fails the whole image on the missing module.
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ import pytest
 from raven.unique.collaboration import CollaborationSession, TextChange
 
 ROOT = Path(__file__).resolve().parents[1]
-TABLE = json.loads((ROOT / "tests" / "fixtures" / "collab_change_cases.json").read_text(encoding="utf-8"))
+TABLE = json.loads((ROOT / "web" / "src" / "lib" / "collab_change_cases.json").read_text(encoding="utf-8"))
 CHANGE_FIELDS = ("user_id", "file", "start_line", "start_col", "end_line", "end_col", "old_text", "new_text")
 
 
