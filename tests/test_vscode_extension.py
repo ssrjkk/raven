@@ -19,6 +19,7 @@ import json
 import pathlib
 import re
 import subprocess
+from html.parser import HTMLParser
 from types import SimpleNamespace
 
 import pytest
@@ -41,10 +42,36 @@ def _source(name: str) -> str:
     return (EXT / "src" / name).read_text(encoding="utf-8")
 
 
+class _ScriptBlock(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self._inside = False
+        self.chunks: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._inside = self._inside or tag == "script"
+
+    def handle_data(self, data: str) -> None:
+        if self._inside:
+            self.chunks.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script":
+            self._inside = False
+
+
 def _panel_script() -> str:
-    block = re.search(r"<script>([\s\S]*?)</script>", _source("panel.ts"))
-    assert block, "the chat panel has no script block"
-    return block.group(1)
+    """The inline script of the chat panel, read the way a browser reads it.
+
+    `<script>([\\s\\S]*?)</script>` stops at the first `</script>` anywhere in the text, which is the
+    wrong rule for HTML: a script that contains that sequence in a string ends the block early, and the
+    test then greps a fragment of JavaScript for the guard it is meant to be measuring.
+    """
+    parser = _ScriptBlock()
+    parser.feed(_source("panel.ts"))
+    script = "".join(parser.chunks)
+    assert script.strip(), "the chat panel has no script block"
+    return script
 
 
 def _webchat_client() -> TestClient:

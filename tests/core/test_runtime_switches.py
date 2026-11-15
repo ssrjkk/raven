@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import contextlib
 import io
 import json
 import logging
@@ -37,6 +38,11 @@ from raven.core.config import (
     settings,
 )
 from raven.core.provider_routing import PROVIDER_REQUIREMENTS
+from tests.core.switch_fixtures import switch_env, switch_names
+
+# pytest asks for a fixture by name and never reads the import, so ruff would call both bindings unused
+# and every `switch_env` parameter a redefinition of one. The guard below is what keeps the pair imported.
+_FIXTURES = (switch_env, switch_names)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -105,6 +111,49 @@ class TestSwitchTableContract:
         attrs = [s.attr for s in runtime_switches()]
         envs = [s.env_name for s in runtime_switches()]
         assert len(set(attrs)) == len(attrs) and len(set(envs)) == len(envs)
+
+    def test_the_switch_fixtures_are_imported_not_inherited(self) -> None:
+        """A switch fixture must be named by the module that uses it, never served by the directory.
+
+        pytest resolves a fixture through the identity of the node it was parsed against
+        (`_pytest.fixtures._matchfactories` only falls back to the `baseid` string when that node is
+        unset), and a run collecting `tests/core/...` together with a root-level test file rebuilds the
+        `tests/core` package node. Measured on the order
+        `test_config.py test_onboard.py test_runtime_switches.py`: 17 tests died with
+        "fixture 'switch_env' not found" while every single-file run of the same three files was green.
+        A fixture imported into the module is parsed against that module's own node, which is in the
+        chain by construction.
+        """
+        import tests.core.switch_fixtures as fixtures
+
+        provided = {"switch_env", "switch_names"}
+        assert provided <= {name for name in vars(fixtures) if name in provided}
+
+        requesting: list[str] = []
+        unguarded: list[str] = []
+        for path in sorted((ROOT / "tests" / "core").glob("test_*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            used = provided & {
+                arg.arg
+                for node in ast.walk(tree)
+                if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+                for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
+            }
+            if not used:
+                continue
+            requesting.append(path.name)
+            imported = {
+                alias.name
+                for node in ast.walk(tree)
+                if isinstance(node, ast.ImportFrom) and node.module == "tests.core.switch_fixtures"
+                for alias in node.names
+            }
+            # `switch_env` asks for `switch_names`, so importing only the one a test names by hand
+            # leaves the dependency unresolved in exactly the way the directory used to be.
+            if not provided <= imported:
+                unguarded.append(f"{path.name} imports {sorted(imported) or 'nothing'}")
+        assert len(requesting) >= 3, f"the probe found {len(requesting)} consumers — the fixture names moved"
+        assert unguarded == [], f"switch fixtures requested without importing both: {unguarded}"
 
     def test_every_switch_env_name_is_in_the_example_env(self) -> None:
         documented = set(re.findall(r"^([A-Z0-9_]+)=", (ROOT / ".env.example").read_text(encoding="utf-8"), re.M))
@@ -589,3 +638,159 @@ class TestAnUnpinnedWriteCannotReachTheOperator:
         write_env_value("SWITCH_PRECEDENCE_PROBE", "written")
         assert read_env_value("SWITCH_PRECEDENCE_PROBE") == "written"
         assert target.is_file() and target != ROOT / ".env"
+
+
+def _cascade(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *bodies: str) -> list[Path]:
+    """The whole env-file cascade, written here, lowest precedence first.
+
+    The candidate list is replaced rather than appended to: a reader that also walked the operator's own
+    ``.env`` would answer a test about credentials this run does not own, and would then export them into
+    the process through the very function under test.
+    """
+    paths: list[Path] = []
+    for index, body in enumerate(bodies):
+        path = tmp_path / f".env.{index}"
+        path.write_text(body, encoding="utf-8")
+        paths.append(path)
+    monkeypatch.setattr(config_module, "_ENV_FILE_CANDIDATES", [str(path) for path in paths])
+    return paths
+
+
+@contextlib.contextmanager
+def _environment_of_a_fresh_start(*names: str) -> Iterator[None]:
+    """Hold the named values out of the process for the block, exactly as a start that was handed only
+    the files would hold them, and put back what this process had on the way out."""
+    taken = {name: os.environ.pop(name, None) for name in names}
+    try:
+        yield
+    finally:
+        for name, value in taken.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+class TestTheEnvFileIsOneFormatWithOneParser:
+    """The file Settings loads, the file the watcher pushes and the file a switch writes, read one way.
+
+    ``Settings`` reads the env files through pydantic-settings; everything else in the process asked
+    ``os.environ``, and there is no ``load_dotenv`` in this tree -- measured on 2026-11-14, with
+    ``TELEGRAM_BOT_TOKEN`` present in the file its own ``Settings`` had just read, a fresh process answered
+    ``configured_channels() == []``. The fix is one parser and one adoption step, so these tests pin what
+    the parser hands over (quotes gone, ``export`` honoured, non-names refused), which file wins, and what
+    adoption may and may not touch.
+    """
+
+    def test_a_quoted_value_is_handed_over_unquoted(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.core.config import parse_env_file
+
+        path = _cascade(
+            tmp_path,
+            monkeypatch,
+            'PLAIN=value\nDOUBLE="double quoted"\nSINGLE=\'single quoted\'\nPARTIAL=nested="inside"\n# a comment\n\n',
+        )[0]
+        assert parse_env_file(path) == {
+            "PLAIN": "value",
+            "DOUBLE": "double quoted",
+            "SINGLE": "single quoted",
+            "PARTIAL": 'nested="inside"',
+        }
+
+    def test_the_shell_spelling_of_an_assignment_is_read(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """python-dotenv honours ``export NAME=…``; a reader that refused it would drop a real credential."""
+        from raven.core.config import parse_env_file
+
+        path = _cascade(tmp_path, monkeypatch, "export TELEGRAM_BOT_TOKEN=123456:abc\n")[0]
+        assert parse_env_file(path) == {"TELEGRAM_BOT_TOKEN": "123456:abc"}
+
+    def test_a_name_that_is_not_env_shaped_is_refused(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.core.config import parse_env_file
+
+        path = _cascade(tmp_path, monkeypatch, "lower_case=1\n9BAD=2\nOK_NAME=3\nnot-an-assignment\n")[0]
+        assert parse_env_file(path) == {"OK_NAME": "3"}
+
+    def test_a_value_that_would_break_the_reader_is_refused(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from raven.core.config import apply_env_files_to_environ, parse_env_file
+
+        path = _cascade(
+            tmp_path,
+            monkeypatch,
+            "PATH=C:\\Windows\\system32\nPYTHONPATH=/tmp/evil\nHOME=/tmp/home\nRAVEN_SECRET_KEY=abc\nKEEP=1\n",
+        )[0]
+        assert parse_env_file(path) == {"KEEP": "1"}
+        with _environment_of_a_fresh_start("KEEP"):
+            apply_env_files_to_environ()
+            assert os.environ["KEEP"] == "1"
+        assert os.environ.get("PYTHONPATH") != "/tmp/evil"
+
+    def test_the_last_file_to_assign_a_name_wins(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from raven.core.config import env_file_values
+
+        _cascade(
+            tmp_path,
+            monkeypatch,
+            "DEFAULT_MODEL=from/the/root/file\nONLY_LOW=1\n",
+            "DEFAULT_MODEL=from/the/user/file\n",
+        )
+        values = env_file_values()
+        assert values["DEFAULT_MODEL"] == "from/the/user/file"
+        assert values["ONLY_LOW"] == "1"
+
+    def test_adoption_fills_what_the_environment_lacks_and_leaves_an_export_alone(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from raven.core.config import apply_env_files_to_environ
+
+        _cascade(tmp_path, monkeypatch, "FROM_FILE_ONLY=value\nOUTRANKED=from-file\n")
+        monkeypatch.setenv("OUTRANKED", "from-the-shell")
+        with _environment_of_a_fresh_start("FROM_FILE_ONLY"):
+            applied = apply_env_files_to_environ()
+            assert "FROM_FILE_ONLY" in applied
+            assert "OUTRANKED" not in applied
+            assert os.environ["FROM_FILE_ONLY"] == "value"
+            assert os.environ["OUTRANKED"] == "from-the-shell"
+
+    def test_a_channel_credential_in_a_file_reaches_the_channel_only_after_adoption(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from raven.core.channel_config import configured_channels
+        from raven.core.config import apply_env_files_to_environ
+
+        _cascade(tmp_path, monkeypatch, "SIGNAL_API_URL=http://127.0.0.1:8080\n")
+        with _environment_of_a_fresh_start("SIGNAL_API_URL"):
+            assert "signal" not in configured_channels()
+            apply_env_files_to_environ()
+            assert "signal" in configured_channels()
+
+    def test_an_export_agreeing_with_any_file_in_the_cascade_is_not_reported(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The warning is for an export that beats the files, not for one that repeats them.
+
+        The copy this replaced compared only ``effective_env_file()``, so a name the operator set in
+        ``<root>/.env`` -- the file that wins when the user file does not mention it -- was reported as
+        overshadowing its own value, on every write, forever.
+        """
+        from raven.core.config import overshadowing_env_value
+
+        _cascade(tmp_path, monkeypatch, "RATE_LIMIT_MAX=99\n", "WEB_PORT=19000\n")
+        monkeypatch.setenv("RATE_LIMIT_MAX", "99")
+        assert overshadowing_env_value("RATE_LIMIT_MAX") is None
+        monkeypatch.setenv("WEB_PORT", "19000")
+        assert overshadowing_env_value("WEB_PORT") is None
+        monkeypatch.setenv("RATE_LIMIT_MAX", "7")
+        assert overshadowing_env_value("RATE_LIMIT_MAX") == "7"
+
+    def test_a_canary_held_only_in_a_file_still_trips_the_tripwire(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from raven.core.config import honeytoken_hits
+        from raven.core.watermark import HONEYTOKEN_API_KEYS
+
+        name, token = next(iter(HONEYTOKEN_API_KEYS.items()))
+        _cascade(tmp_path, monkeypatch, f'{name}="{token}"\n')
+        with _environment_of_a_fresh_start(name):
+            assert name in honeytoken_hits()

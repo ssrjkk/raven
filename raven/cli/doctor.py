@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from typing import Any
 
 from rich.console import Console
@@ -31,21 +32,25 @@ def _render_security_audit(results: list[Any], fix: bool = False):
 
 
 def _auto_fix(check):
+    """Write the fix where the gateway reads it, and name that file.
+
+    This used to answer "AUTO-FIX: WEB_SECRET_KEY set to a5f3…" while storing the key in
+    ``~/.raven/config.json``, which no running process and no later start ever read — the operator got a
+    success message, a secret in their terminal history and the same failing check on the next run.
+    """
+    from raven.core.config import effective_env_file, write_env_value
+
     name = check.name
+    where = effective_env_file()
     if name == "secret_key_prod":
-        import uuid
-
-        new_key = uuid.uuid4().hex
-        console.print(f"  [green]→ AUTO-FIX: WEB_SECRET_KEY set to {new_key[:16]}...[/green]")
-        from raven.core.config_store import config_store
-
-        config_store._data.setdefault("web_secret_key", new_key)
-        config_store.save()
+        write_env_value("WEB_SECRET_KEY", secrets.token_hex(32))
+        console.print(f"  [green]→ FIXED:[/green] a WEB_SECRET_KEY was written to [bold]{where}[/bold]")
+        console.print("  [dim]it is not repeated here — a start reads it from that file[/dim]")
     elif name == "dm_policy":
-        console.print("  [green]→ AUTO-FIX: Set DM_POLICY=pairing in your .env[/green]")
+        write_env_value("DM_POLICY", "pairing")
+        console.print(f"  [green]→ FIXED:[/green] DM_POLICY=pairing written to [bold]{where}[/bold]")
     elif name == "rate_limiting":
-        console.print("  [green]→ AUTO-FIX: Enabled rate limiting (60 req/min)[/green]")
-    elif name == "channel_allowlist":
-        console.print("  [green]→ AUTO-FIX: Recommend setting CHANNEL_ALLOW_FROM in .env[/green]")
+        write_env_value("RATE_LIMIT_MAX", "60")
+        console.print(f"  [green]→ FIXED:[/green] RATE_LIMIT_MAX=60 written to [bold]{where}[/bold]")
     else:
         console.print(f"  [dim]No auto-fix for '{name}'[/dim]")

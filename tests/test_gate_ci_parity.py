@@ -1,6 +1,6 @@
 """The local gate must fail on exactly what CI fails on.
 
-CI's `frontend` job runs five commands; the local stage ran three of them (npm ci, tsc, build), so a
+CI's `frontend` job runs six commands; the local stage ran three of them (npm ci, tsc, build), so a
 lint violation added while translating the SPA strings merged green at home and red in CI - an
 `simple-import-sort/imports` error in `web/src/hooks/command-keywords.test.ts` that nothing local
 would have caught. This guard reads the job's own `run:` steps and requires each to be present in
@@ -33,7 +33,8 @@ def test_the_ci_frontend_job_runs_the_steps_this_guard_reads() -> None:
     assert commands == [
         "npm ci",
         "npx tsc --noEmit",
-        "npx eslint src",
+        "npx tsc --noEmit -p tsconfig.e2e.json",
+        "npx eslint src e2e",
         "npm test -- --run",
         "npm run build",
     ], commands
@@ -46,4 +47,4 @@ def test_the_local_frontend_stage_checks_everything_ci_checks() -> None:
 
 def test_the_parity_guard_would_notice_a_step_added_to_ci() -> None:
     assert _argv_literal("npx stylelint src") not in GATE
-    assert _argv_literal("npx eslint src") in GATE
+    assert _argv_literal("npx eslint src e2e") in GATE

@@ -118,7 +118,7 @@ class TestSettingsFieldConsumers:
     """
 
     _PROD: ClassVar[tuple[str, ...]] = ("raven", "ravencode", "aios", "scripts", "deploy", "policy", ".github")
-    _DECLARATIONS: ClassVar[frozenset[str]] = frozenset({"raven/core/config.py", "raven/core/config_store.py"})
+    _DECLARATIONS: ClassVar[frozenset[str]] = frozenset({"raven/core/config.py"})
     _SUFFIXES: ClassVar[frozenset[str]] = frozenset(
         {".py", ".ts", ".tsx", ".js", ".mjs", ".json", ".yml", ".yaml", ".toml", ".ps1", ""}
     )
@@ -152,17 +152,20 @@ class TestSettingsFieldConsumers:
         read the same variable straight out of os.environ: Settings.jenkins_url and
         Settings.replicate_api_token were exactly that, a second knob for a knob that already
         worked. Here a field counts as consumed only when something reaches it through Settings
-        (or config.py itself, which derives resolved_* paths) or maps it in config_store."""
+        (or config.py itself, which derives resolved_* paths).
+
+        A third exemption used to be granted to `config_store.py`, whose alias map only ever moved
+        a name into the environment of the process that wrote it; deleting the store is what made
+        this scan able to require a real consumer.
+        """
         files, source = self._production_source()
         assert len(files) > 500, f"scan covered only {len(files)} files - it is vacuous"
         assert not re.search(r"settings\.the_setting_nobody_reads", source), "the pattern is matching everything"
         declarations = (ROOT / "raven" / "core" / "config.py").read_text(encoding="utf-8")
-        alias_map = (ROOT / "raven" / "core" / "config_store.py").read_text(encoding="utf-8")
         orphans = sorted(
             name
             for name in _settings_env_candidates()
-            if f'"{name}"' not in alias_map
-            and not re.search(rf"settings\.{name}([^A-Za-z0-9_]|$)", source)
+            if not re.search(rf"settings\.{name}([^A-Za-z0-9_]|$)", source)
             and not re.search(rf"self\.{name}([^A-Za-z0-9_]|$)", declarations)
         )
         assert orphans == [], f"Settings fields nothing reads through Settings: {orphans}"

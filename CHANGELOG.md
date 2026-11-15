@@ -215,7 +215,89 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
   every env file. Linked from both READMEs, `docs/cli.md` and `docs/getting-started.md`; the docs guard
   now derives the published page list from `docs/` instead of asserting a hand-written count of 11
 
+- CI now runs the browser suite and type-checks it. `web/e2e/` held 18 specs that no CI job executed —
+  `check_all.py --component e2e` is `tests/e2e/`, a Python suite — and `playwright.config.ts` tested the
+  dev server rather than the bundle the image ships. Added: the `console-e2e` job in `.github/workflows/ci.yml`
+  (chromium+firefox+webkit, artifact upload on failure, and the `ml-smoke` job's refuse-a-silent-skip guard,
+  verified against four synthetic logs: a clean pass, `18 passed + 2 skipped`, `No tests ran`, and a
+  `browserType.launch` failure), `web/tsconfig.e2e.json` because `tsconfig.json` is `include: ["src"]` and
+  `playwright test` transpiles specs without checking them (injected `const broken: number = signIn` → exit 2
+  TS2322, so the step is not vacuous), and `e2e/**/*.ts` in the ESLint `files` pattern, which found one real
+  violation on its first run (`simple-import-sort` in `auth.spec.ts`). `check_frontend()` in `scripts/check_all.py`
+  runs the same six steps in the same order, so the local gate and the `frontend` job cannot drift again
+- `.gitignore` refuses the session transcripts the tooling drops at the repository root
+  (`*_2026-11-14_09-12.md` and its siblings, the largest 46,412,860 bytes). The rule is root-anchored on
+  purpose: `docs/` and `web/` keep their own dated files, and a pattern that swallowed those would hide
+  real deliverables to save one accidental `git add`
+- `docs/mcp.md` describes the event stream that now exists instead of the one that was imagined: the credential
+  `/mcp/events` requires, the single `tool_call` event and its `{tool, status}` frame, that arguments and results
+  are never published, the 256-event `max_pending` drop rule and the 30 s ping
+
 ### Fixed
+- The two `/mcp/tools/{name}` halves answered one request differently. `raven/core/mcp/http_transport.py` consulted
+  `mcp_deny_reason` before executing; `ravencode/mcp/http_transport.py` handed the name straight to
+  `execute_tool_public`, so a caller refused on `/mcp/rpc` could run the same tool through the other router — and its
+  own test pinned that behaviour (`endpoint("shell", ...)` expected `{"result": "ok"}` while `shell` sits in
+  `_DEFAULT_TOOLS_DENY`). Both routes now refuse with 403 before the executor is touched and publish the `denied`
+  event; `test_every_mcp_router_refuses_the_rest_call` is parametrized over every module in `raven/`, `ravencode/`
+  and `aios/` that defines `create_mcp_router` — found by scanning the tree, with the count asserted separately so
+  an empty scan cannot pass — which means a third router is audited the day it appears. Cutting the policy call out
+  of the ravencode route turns exactly that parameter and
+  `test_call_tool_refuses_a_name_the_operator_denied` red, verified by mutation.
+- The type gate was red, not green — 4 errors, reproduced over 942 source files. `/mcp/events` returned a 401
+  `JSONResponse` from a route annotated `StreamingResponse` (`raven/core/mcp/http_transport.py:77`, now `Response`);
+  `tests/core/test_sse_transport.py:182` read `Queue._queue`, now `qsize()`/`get_nowait()`;
+  `tests/core/test_tool_policy.py:127` tested membership against `str | None`; and
+  `tests/core/test_mcp_http.py:185` returned `Any` from a function declared `dict[str, str]`.
+- `raven/cli/gateway_runner.py:395-396` called `create_tests_router()` twice back to back and kept the second
+  result, building the `/api/tests/*` router once for nothing.
+- What `raven onboard` collects now reaches the process that acts on it, and there is one place left where
+  an answer can go. Proven on the tree first: the wizard ended in `config_store.save()` — a JSON copy of
+  every answer in `~/.raven/config.json`, a file with no reader anywhere in the tree, created mode 0o666
+  while holding API keys — plus `apply_to_env()`, which exported into the wizard's own process. Measured in a
+  fresh process after a completed wizard: `DEFAULT_MODEL` still the install default, `DM_POLICY` still
+  `pairing`, `WEB_PORT` still `18888`, the written key absent from `Settings`, and `raven onboard` had printed
+  `Setup complete!`. The same gap sat under a correctly written file: with `TELEGRAM_BOT_TOKEN` in the env file
+  its own `Settings` had just read, `configured_channels()` answered `[]` and `DatabaseFactory.create()` opened
+  the default SQLite path, because there is no `load_dotenv` in this tree and `ConfigWatcher` reloads on an
+  mtime advance, which a start never sees; `raven doctor` reported `Channels … None configured` for that same
+  file, telling the operator to configure the channel that was configured. `raven/core/config_store.py` is
+  deleted, and every writer — the wizard, `POST /api/admin/config/key`, `raven models enable-heretic`,
+  `raven doctor --fix` — now goes through `apply_runtime_switch`/`write_env_value` into
+  `effective_env_file()`, the wizard printing that file per answer instead of a generic success.
+  `create_gateway()` runs `adopt_env_files()` before `DatabaseFactory.create()`, and `doctor` adopts before it
+  reports: each file's names go into the environment where the name is not already exported, so `DATABASE_URL`
+  and the channel credentials answer the same at a start as after an edit, and an operator's export still
+  outranks every file. One parser owns the format — `parse_env_file()` honours the `export` spelling
+  python-dotenv accepts, unquotes one matching pair, refuses a name that is not environment-shaped and the nine
+  whose overwrite would break the process doing the reading (`PATH`, `PYTHONPATH`, `VIRTUAL_ENV`,
+  `RAVEN_ADMIN_KEY`, …) — and `ConfigWatcher._reload_env` calls it instead of keeping its own copy of the
+  rules, with its `_BLOCKED_KEYS` and `_ENV_KEY_PATTERN` deleted. `overshadowing_env_value()` compares an
+  export against the whole cascade rather than against the one file a switch writes, so a value inherited from
+  a lower-precedence file no longer warns as if it were a conflict. The wizard refuses an answer no code reads
+  (`channel_reading()` gates the name; the bug it caught was the gate itself, comparing the uppercase name
+  against lowercase `Settings` fields, which refused `WEB_SECRET_KEY` as unread), refuses an answer the switch
+  cannot hold with the reason (`must be an integer`), says when a restart is what applies it, and says when an
+  export will win. Two doctor rows were re-rendered because the report was losing information: the
+  `Env Files` row joined its paths with `", "`, and with two existing files rich cropped the cell so the
+  later — the higher-precedence, winning — file never appeared; each file now gets its own folded line.
+  `raven doctor --fix` writes the key it mints (`secrets.token_hex(32)`) into the file instead of printing it
+  into the terminal and the unread JSON, and the `dm_policy`/`rate_limiting` fixes write `DM_POLICY` and
+  `RATE_LIMIT_MAX` instead of telling the operator to edit something. 341 tests pass across the eight suites
+  that own the env-file cascade, the wizard, the watcher, channel reading and the CLI, plus 43 across
+  `tests/test_cli.py` and `tests/test_doctor_posture.py`: 22 in `tests/test_onboard.py`, 62 in
+  `tests/core/test_runtime_switches.py`, 15 in `tests/core/test_channel_config.py`, 10 in
+  `tests/core/test_config_watcher.py`, 4 in `tests/cli/test_gateway_runner.py`. 11 mutations, every one killed
+  — not adopting at the gateway start costs 1 (the ordering test drives the real `create_gateway()` and reads
+  what the factory saw), refusing the `export` spelling 1, keeping the quotes 1, dropping the blocked-name
+  refusal 1, comparing one file instead of the cascade 1, gating the wizard on the uppercase name 1, letting
+  an unread name through 1, `doctor` reporting before it adopts 1, re-forking the watcher's parser 3,
+  `channel_reading` ignoring the runtime-registered shape 1, bringing the store back 1.
+  `docs/configuration.md` replaces its `Config File` section with the cascade a start reads, the precedence
+  rules and the format; `docs/getting-started.md`, `docs/cli.md` and both READMEs no longer promise a JSON
+  settings file. One measured consequence for the #98/#100 backlog: a name documented as read from the process
+  environment only now also arrives from a file through a start — `RAVEN_POLICY_DIR`, unset in the process and
+  present in the file, resolved `D:/raven/policy` before adoption and the file's directory after.
 - A provider the gateway already built now notices that what it was built with has moved. The console used
   to answer for it: `apply_runtime_switch` dropped the cached client whenever the written switch was a
   secret, and everything else — the config watcher reading a hand-edited `.env`, a credential handed over
@@ -1059,7 +1141,13 @@ Condensed summary of ~400 commits since the 0.4.0 baseline (2026-06-05 → 2026-
 - `raven doctor` reported configuration without saying what it decided. It now adds a posture block: the exec class `EXEC_SECURITY` refuses, `ask` combined with `EXEC_ASK_MODE=off` flagged as running without asking anyone, an impossible `EXEC_SECURITY` value named as the crash it is, workspace confinement (the first run on this machine caught `WORKSPACE_ONLY=true` with `WORKSPACE_PATH` unset — a control with nothing to confine to), whether `tool_policy.json` overrides exist, and the enabled feature list with telemetry's state
 - The plugin loader published `inspect.getmembers(mod, iscoroutinefunction)`, which returns the coroutines a `plugin.py` merely *imported*: the SSRF helper reached the model as `api.safe_fetch_async` and `browser.safe_fetch_async`, and the code plugin's runner appeared a second time as `memory.run_python` — three tools whose names no operator had written down and no policy rule addressed. The loader now publishes only a coroutine defined in that `plugin.py`, under its own name, and `cron.register_callback` became an ordinary function because its one argument is a Python callable a JSON tool call cannot supply. Surface: 46 tools → 42. 23 of the 46 had no docstring, so their description was the bare function name; all 42 now carry a sentence and every parameter a description (19 had none), `**kwargs` is no longer listed as required (2 of 46 did), and the extractor keeps a description wrapped onto a continuation line instead of cutting it. Three texts that claimed more than the code does were corrected: `memory.forget` said "Forgot" when nothing was stored under the key, `sessions.sessions_send` read as delivery, `files.glob` reported the matches it truncated. `tests/test_plugin_surface_integrity.py` (21 gates) holds the count, the provenance of every handler and the description floor, and four loader mutations — publish imports, drop the bare-name warning, rerequire `**kwargs`, restore the old parameter parser — fail 7, 1, 1 and 3 tests
 
+- `/mcp/events` was documented as a live tool-call stream and could not deliver a single event. `SSETransport` set `_running = False` in `__init__` and only `start()` flipped it, which no caller did, so `send()` returned on its first line for every publisher; subscriber queues were unbounded, so a client that stopped reading grew the gateway's memory without limit; `raven/core/mcp/http_transport.py` and `ravencode/mcp/http_transport.py` each instantiated their own transport, so a tool called over REST published into a registry no reader was subscribed to; and `client_id` was `id(request)`, which CPython hands to the next request object as soon as the previous one is freed — a new subscriber could be attached to another client's queue. One registry now (`shared_transport()`), queues bounded at `max_pending=256` with the wedged subscriber dropped and named in the log rather than buffered forever, `ok`/`denied` published from the REST path, the JSON-RPC path and ravencode's copy, an unsubscribe that wakes a parked reader (an async generator's `finally` does not run on cancellation, so without the sentinel the reader held its task for the whole 30 s ping timeout), and a real stop wired into `_shutdown`. 106 passed across the seven MCP/SSE files; six mutations each fail at least one — including `_running = False`, the original defect, which the old `test_ping_on_timeout` asserted around for years without ever checking that a ping frame arrived. `ravencode/mcp/http_transport.py` got the same auth and registry fixes but still has no tool-policy check, and is not mounted by any app: dead surface, listed as a known gap rather than half-secured
+- `web/e2e/` went from 10 failing / 4 passing to 18 passing on chromium (10.4 s warm, 37.5 s cold) and 36 passing across chromium + firefox (1.9 min). Three independent causes, each measured rather than guessed: the specs wrote their auth token under a localStorage key the app never reads (`raven_auth_token` is the real one), so every spec ran as a logged-out visitor; the built bundle registers `/sw.js`, and requests a service worker issues are not interceptable by `page.route` — with the worker running, 0 of 5 `/api/*` calls reached a stub, so each assertion ran against the offline page — now `serviceWorkers: "block"`; and `route.onMessage` hands its handler a `string | Buffer`, so the WebSocket stub's `message.text()` threw inside the handler and no reply ever reached the transcript. Also: `baseURL` and the readiness probe moved from `127.0.0.1` to `localhost`, because vite binds the preview server to the loopback its host name resolves to and on this machine that is `::1`, and the monitors stub now uses the `{items, total, limit, offset}` shape `src/api/client.ts` declares
+- `tests/core/conftest.py` resolved two shared fixtures (`switch_names`, `switch_env`) by conftest lookup order, so which definition a test got depended on collection order rather than on the test. They are `tests/core/switch_fixtures.py` now, imported by name by the five files that use them
+- `tests/test_vscode_extension.py` pulled the panel script out of the extension source with a non-greedy `<script>` regex, which CodeQL reports as `py/bad-tag-filter` and which matches the wrong span as soon as a script tag carries attributes. It feeds `html.parser.HTMLParser` now; the extracted block is byte-identical to before (5040 chars), so the guard still guards the same text
+
 ### Security
+- The tool policy answered an unreadable ruleset by quoting it. `PolicyLoadError` carries the ruleset path and a fragment of the text that failed to parse, and that string was returned as the denial reason — which the MCP call path puts in the 403 body, so an unauthenticated-by-policy caller could read where the rules live and what the last malformed line said (CodeQL `py/stack-trace-exposure`). The reason is now the fixed text `policy ruleset unreadable (see the gateway log)` and the detail stays in the log; the refusal itself is unchanged, still fail-closed. Two gates hold it: `tests/test_mcp_policy_enforcement.py` posts through the real route and asserts `/etc/raven` and `Expecting` are absent from the body, and `tests/core/test_tool_policy.py` asserts the reason names no file. With the leak restored both fail (2 failed / 2 passed fixed) — the first run of that check misread a collection error as a pass because the node id pointed at the wrong class, so it was re-run with the counts printed.
 - Both gateway authorization rules were hand-kept lists, and both had already fallen behind the code.
   A mutating call under `/api` needed `Permission.ADMIN_WRITE` unless its prefix was written into an
   allowlist; a read answered an anonymous caller unless its prefix was written into

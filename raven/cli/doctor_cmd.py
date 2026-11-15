@@ -10,9 +10,9 @@ from loguru import logger
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
-from raven.core.config import Settings, settings
-from raven.core.config_store import config_store
+from raven.core.config import Settings, apply_env_files_to_environ, env_file_candidates, settings
 from raven.core.security.policy_engine import PolicyLoadError, policy_engine
 from raven.core.workspace import workspace_root, workspace_source
 
@@ -243,53 +243,51 @@ def _plugin_posture_row() -> tuple[str, str]:
 def doctor():
     """Diagnose configuration, dependencies, and service health"""
     console.print(Panel.fit("[bold]Raven AI Doctor[/bold]"))
-    checks = []
+    checks: list[tuple[str, str | Text]] = []
 
-    config_store.load()
-    cfg = config_store._data
+    # What a start would read, not only what this terminal happened to export: the channel row below
+    # answers from the environment, and a credential that lives in an env file was invisible here.
+    apply_env_files_to_environ()
 
-    checks.append(
-        ("Config Store", f"[OK] {config_store.path}" if config_store.path.exists() else "[!]️  Not initialized")
-    )
     checks.append(("Python", sys.version))
+    # One line per file: joined with ", " the cell ellipsises a long path, and the later — the higher
+    # precedence, and so the winning — files can be cropped out of the report entirely.
+    files_a_start_reads = [str(p) for p in env_file_candidates() if p.is_file()]
+    checks.append(("Env Files", Text("\n".join(files_a_start_reads) or "—", overflow="fold", justify="left")))
     checks.append(("DB Path", str(settings.resolved_db_path)))
 
     has_any_key = bool(
-        cfg.get("openrouter_api_key")
-        or settings.openrouter_api_key.get_secret_value()
-        or cfg.get("anthropic_api_key")
+        settings.openrouter_api_key.get_secret_value()
         or settings.anthropic_api_key.get_secret_value()
-        or cfg.get("openai_api_key")
         or settings.openai_api_key.get_secret_value()
-        or cfg.get("ollama_base_url")
         or settings.ollama_base_url
     )
     checks.append(("LLM Provider", "[OK] Configured" if has_any_key else "[!]️  No provider configured"))
 
     provider_names = []
-    if cfg.get("openrouter_api_key") or settings.openrouter_api_key.get_secret_value():
+    if settings.openrouter_api_key.get_secret_value():
         provider_names.append("OpenRouter")
-    if cfg.get("anthropic_api_key") or settings.anthropic_api_key.get_secret_value():
+    if settings.anthropic_api_key.get_secret_value():
         provider_names.append("Anthropic")
-    if cfg.get("openai_api_key") or settings.openai_api_key.get_secret_value():
+    if settings.openai_api_key.get_secret_value():
         provider_names.append("OpenAI")
-    if cfg.get("ollama_base_url") or settings.ollama_base_url:
+    if settings.ollama_base_url:
         provider_names.append("Ollama")
     if provider_names:
         checks.append(("Providers", ", ".join(provider_names)))
 
-    checks.append(("Default Model", cfg.get("default_model") or settings.default_model or "—"))
+    checks.append(("Default Model", settings.default_model or "—"))
     from raven.core.channel_config import configured_channels
 
     channel_list = configured_channels()
     checks.append(("Author", "ssrjkk (https://github.com/ssrjkk)"))
     checks.append(("Channels", ", ".join(channel_list) if channel_list else "[!]️  None configured"))
-    checks.append(("DM Policy", cfg.get("dm_policy", "pairing")))
-    checks.append(("Web Port", str(cfg.get("web_port") or settings.web_port)))
+    checks.append(("DM Policy", settings.dm_policy))
+    checks.append(("Web Port", str(settings.web_port)))
     checks.append(
         (
             "Web Secret Key",
-            "[OK] Set" if (cfg.get("web_secret_key") or settings.web_secret_key.get_secret_value()) else "[!]️  Not set",
+            "[OK] Set" if settings.web_secret_key.get_secret_value() else "[!]️  Not set",
         )
     )
 

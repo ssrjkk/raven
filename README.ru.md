@@ -45,7 +45,7 @@ cd raven
 pip install -e .
 
 cp .env.example .env        # впишите хотя бы один API-ключ LLM
-raven onboard               # интерактивный мастер настройки
+raven onboard               # интерактивный мастер настройки; ответы пишутся в .env
 raven start                 # шлюз + веб-интерфейс на http://localhost:18888
 ```
 

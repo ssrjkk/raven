@@ -38,7 +38,7 @@ from raven.core.chat_api import set_database as set_chat_database
 from raven.core.cicd_api import create_cicd_router
 from raven.core.collab_api import create_collab_router
 from raven.core.commands_api import create_commands_router
-from raven.core.config import refresh_settings_from_env, settings
+from raven.core.config import apply_env_files_to_environ, refresh_settings_from_env, settings
 from raven.core.config_watcher import ConfigWatcher
 from raven.core.connection_api import create_connection_router
 from raven.core.cost_management_api import create_cost_management_router
@@ -57,6 +57,7 @@ from raven.core.http_client import client_manager
 from raven.core.insights_api import create_insights_router
 from raven.core.kg_api import create_knowledge_router
 from raven.core.mcp.http_transport import create_mcp_router
+from raven.core.mcp.sse_transport import shared_transport
 from raven.core.media_api import create_media_router
 from raven.core.memory.manager import MemoryManager as _MemoryManager
 from raven.core.middleware import (
@@ -121,7 +122,21 @@ def request_gateway_stop() -> bool:
     return True
 
 
+def adopt_env_files() -> list[str]:
+    """Make this process's environment say what its env files say, before it builds anything from it.
+
+    Every gateway start path goes through here, and the readers that consult ``os.environ`` instead of
+    ``Settings`` — ``DATABASE_URL``, and every channel's credentials among them — only ever saw what
+    somebody happened to export.
+    """
+    applied = apply_env_files_to_environ()
+    if applied:
+        logger.info("[config] {} env-file value(s) now in this process: {}", len(applied), ", ".join(sorted(applied)))
+    return applied
+
+
 def create_gateway() -> Gateway:
+    adopt_env_files()
     db = DatabaseFactory.create()
     if hasattr(db, "dsn"):
         logger.info("Using PostgreSQL database")
@@ -378,7 +393,6 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     api_app.include_router(create_sse_router())
 
     tests_router = create_tests_router()
-    tests_router = create_tests_router()
     api_app.include_router(tests_router)
 
     api_app.include_router(create_mcp_router())
@@ -493,6 +507,8 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             logger.warning("Shutdown audit_logger: {}", e)
         with contextlib.suppress(Exception):
             await sse_stream.stop()
+        with contextlib.suppress(Exception):
+            await shared_transport().stop()
         register_routine_engine(None)
         sv_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):

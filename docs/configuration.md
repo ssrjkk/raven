@@ -1,5 +1,5 @@
 ---
-description: "Every environment variable Raven reads, grouped by provider, channel, security, rate limits and paths, plus the config file."
+description: "Every environment variable Raven reads, grouped by provider, channel, security, rate limits and paths, plus the env-file cascade a start reads them from."
 ---
 
 # Configuration
@@ -135,22 +135,37 @@ say so instead of letting the switch appear not to hold.
 | `LOG_LEVEL` | Console level; the file sinks always keep `DEBUG` and `WARNING` regardless | `INFO` |
 | `JSON_LOG` | Write the log files as JSON lines (`raven logs` renders both shapes) | `true` |
 | `WORKSPACE_PATH` | The workspace root — see [The workspace root](#the-workspace-root) | unset, so the working directory |
-| `RAVEN_POLICY_DIR` | Directory holding the tool ruleset (`tools.json`) — read from the **process** environment (`export`, `docker run -e`), not from the env file, because the policy engine is deliberately free of the config stack. Unset, the engine reads `policy/` next to the source tree, or `raven/policy/` inside an installed wheel | the directory the package ships |
+| `RAVEN_POLICY_DIR` | Directory holding the tool ruleset (`tools.json`) — the policy engine asks the **process** environment, never `Settings`, so a file value reaches it only through the adoption step a start runs (measured: an unset process name plus the line in the file resolves to the file's directory after `create_gateway()`, and to the packaged `policy/` before it). Unset, the engine reads `policy/` next to the source tree, or `raven/policy/` inside an installed wheel | the directory the package ships |
 
-## Config File
+## Env files
 
-Persistent configuration is stored in `~/.raven/config.json`:
+There is one place a name is persisted: an env file. `raven onboard`, the Admin console and
+`raven models enable-heretic` all write through the same function into the same file, and nothing keeps a
+second copy of an answer in JSON — an earlier build wrote `~/.raven/config.json`, which no running process
+and no later start ever read.
 
-```json
-{
-  "openrouter_api_key": "sk-or-v1-...",
-  "dm_policy": "pairing",
-  "pairing_code_length": 6
-}
-```
+A start reads three files, lowest precedence first:
 
-Nothing that runs reads this file: `raven doctor` shows it, and the gateway reads only the env files
-below.
+| Order | File | Where it is |
+| --- | --- | --- |
+| 1 | `<package root>/.env` | next to the installed or checked-out `raven` package |
+| 2 | `~/.raven/.env` | the user-global file |
+| 3 | `./.env` | the working directory the process was started in |
+
+A later file overrides an earlier one, and a name **exported in the shell overrides every file** — pydantic-
+settings applies the process environment last, and `write_env_value` warns about it rather than letting the
+write look like it did not hold. `raven doctor` prints the files it read, and the write target —
+`effective_env_file()` — is the last file that exists, or `~/.raven/.env` when none does.
+
+The format is the one `python-dotenv` accepts: `NAME=value`, an optional `export ` prefix, `#` comments, and
+one pair of matching quotes stripped from a value. Lines whose name is not env-shaped (`^[A-Za-z_][A-Za-z0-9_]*$`)
+are refused, as are names that would hijack the process (`PATH`, `PYTHONPATH`, `VIRTUAL_ENV`, …).
+
+`Settings` reads the files itself; a reader that asks the **process environment** — `DATABASE_URL`, and every
+channel's bot token — only sees what a start adopted. Every path that builds a gateway (`raven start`, the
+Windows service, `raven plugins`) runs one adoption step first: each file's names are put into the environment
+where the name is not already exported. Editing a file while the gateway runs is handled separately by the
+config watcher, which reloads `Settings` on an mtime change.
 
 ## Runtime switches
 

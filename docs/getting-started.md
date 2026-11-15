@@ -141,9 +141,11 @@ docker compose up -d
 
 ## Configuration
 
-Configuration is managed through:
-- `.env` file for environment variables
-- `~/.raven/config.json` for persistent settings
+One place persists a name: an env file. A start reads `~/.raven/.env` and the `.env` next to the package,
+in that order, and the `.env` in the working directory outranks both; a name exported in the shell outranks
+every file. `raven onboard` writes its answers into the file a start will read and names it in the output.
+
+- `.env` for configuration
 - CLI flags for runtime options
 
 See the [Configuration](configuration.md) page for all options.

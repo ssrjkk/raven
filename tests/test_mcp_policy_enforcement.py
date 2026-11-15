@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -137,6 +138,66 @@ def test_the_http_route_refuses_before_the_handler_runs(probes: None, monkeypatc
     assert CALLS == []
 
 
+def _scan_mcp_router_modules() -> list[str]:
+    """Every module in the shipped packages that builds an `/mcp` router, found by reading the tree.
+
+    A list kept by hand is how the second router stayed permissive: the pair that had to agree was
+    remembered, not measured.
+    """
+    root = Path(__file__).resolve().parents[1]
+    defines = re.compile(r"^def create_mcp_router\(", re.MULTILINE)
+    found: list[str] = []
+    for package in ("raven", "ravencode", "aios"):
+        for path in sorted((root / package).rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            if defines.search(text):
+                found.append(".".join(path.relative_to(root).with_suffix("").parts))
+    return found
+
+
+MCP_ROUTER_MODULES = _scan_mcp_router_modules()
+
+
+def test_the_mcp_router_scan_measures_the_surface() -> None:
+    """A scan that returns nothing would make the gate below vacuously green."""
+    assert len(MCP_ROUTER_MODULES) >= 2, MCP_ROUTER_MODULES
+
+
+@pytest.mark.parametrize("module_name", MCP_ROUTER_MODULES)
+def test_every_mcp_router_refuses_the_rest_call(
+    module_name: str, probes: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No `/mcp` router may execute a tool the operator denied.
+
+    `raven/core/mcp/http_transport.py` consulted `mcp_deny_reason`; `ravencode/mcp/http_transport.py`
+    handed the name straight to the executor, so a caller refused on one half ran the same tool on the
+    other. This route shape existed twice with two different answers.
+    """
+    import importlib
+
+    monkeypatch.setattr("raven.core.config.settings.tools_deny", "policy_probe")
+    CALLS.clear()
+    module = importlib.import_module(module_name)
+    app = FastAPI()
+    app.include_router(module.create_mcp_router())
+    with patch("raven.core.mcp.auth.token_manager") as token_manager:
+        token_manager.validate_token = AsyncMock(return_value={"user_id": "u1", "role": "viewer"})
+        with TestClient(app) as client:
+            response = client.post(
+                "/mcp/tools/policy_probe",
+                json={"arguments": {}},
+                headers={"Authorization": "Bearer test-token"},
+            )
+    assert response.status_code == 403, (module_name, response.status_code, response.text)
+    assert "TOOLS_DENY" in response.text, (module_name, response.text)
+    assert CALLS == [], f"{module_name} ran a tool the operator denied"
+
+
 def test_the_rpc_endpoint_refuses_too(probes: None, monkeypatch: pytest.MonkeyPatch) -> None:
     from raven.core.mcp.http_transport import create_mcp_router
 
@@ -154,6 +215,38 @@ def test_the_rpc_endpoint_refuses_too(probes: None, monkeypatch: pytest.MonkeyPa
     payload = json.loads(response.text)
     assert payload["result"]["isError"] is True
     assert payload["result"]["content"][0]["text"].startswith("[denied]")
+    assert CALLS == []
+
+
+def test_an_unreadable_ruleset_refuses_without_leaking_its_detail(
+    probes: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The refusal a caller reads must stay actionable without being the load error.
+
+    `PolicyLoadError` names the ruleset path and the fragment of text that failed to parse, and the 403
+    body used to interpolate it — CodeQL `py/stack-trace-exposure` alert #436 on this exact route.
+    """
+    from raven.core.mcp.http_transport import create_mcp_router
+    from raven.core.security.policy_engine import PolicyEngine, PolicyLoadError
+
+    def boom(self, name, data):
+        raise PolicyLoadError("/etc/raven/policy/tools.json line 4: Expecting ',' delimiter")
+
+    monkeypatch.setattr(PolicyEngine, "evaluate", boom)
+    app = FastAPI()
+    app.include_router(create_mcp_router())
+    with patch("raven.core.mcp.auth.token_manager") as token_manager:
+        token_manager.validate_token = AsyncMock(return_value={"user_id": "u1", "role": "viewer"})
+        with TestClient(app) as client:
+            response = client.post(
+                "/mcp/tools/policy_probe",
+                json={"arguments": {}},
+                headers={"Authorization": "Bearer test-token"},
+            )
+    assert response.status_code == 403
+    assert "unreadable" in response.text
+    assert "/etc/raven" not in response.text, response.text
+    assert "Expecting" not in response.text, response.text
     assert CALLS == []
 
 

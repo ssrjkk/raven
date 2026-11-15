@@ -150,7 +150,7 @@ def _runtime_switches_stay_where_the_test_left_them() -> Iterator[None]:
     left_behind = sorted(moved + [f"{name} exported" for name in leaked])
     assert not left_behind, (
         f"this test left {left_behind} set for the rest of the run; take the `switch_env` fixture from "
-        "tests/core/conftest.py, or pin what the product code exports with `pin_env_names` from this "
+        "tests/core/switch_fixtures.py, or pin what the product code exports with `pin_env_names` from this "
         "file, so the move is undone"
     )
 

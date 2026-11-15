@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -35,6 +36,16 @@ class TestMCPHttpTransport:
     def authorized(self):
         with patch("ravencode.mcp.http_transport.authorize_request", new=AsyncMock(return_value=True)) as mock_auth:
             yield mock_auth
+
+    @pytest.fixture(autouse=True)
+    def _no_subscriber_is_left_behind(self):
+        """The event registry is one process-wide object shared with the gateway transport, so a client
+        this file subscribed is a client every later file publishes to."""
+        before = dict(http_transport._sse_transport._subscribers)
+        yield
+        subscribers = http_transport._sse_transport._subscribers
+        subscribers.clear()
+        subscribers.update(before)
 
     def test_router_routes(self, router) -> None:
         routes = {r.path for r in router.routes}
@@ -87,15 +98,30 @@ class TestMCPHttpTransport:
         req = _req(json=AsyncMock(return_value={"arguments": {"cmd": "echo hi"}}))
         with patch("ravencode.mcp.http_transport.execute_tool_public", new_callable=AsyncMock, return_value="hi"):
             endpoint = find_route(router, "/mcp/tools/{name}", "POST")
-            resp = await endpoint("shell", request=req)
+            resp = await endpoint("read", request=req)
         assert json.loads(resp.body) == {"result": "hi"}
 
     async def test_call_tool_default_body(self, router) -> None:
         req = _req(json=AsyncMock(return_value={}))
         with patch("ravencode.mcp.http_transport.execute_tool_public", new_callable=AsyncMock, return_value="ok"):
             endpoint = find_route(router, "/mcp/tools/{name}", "POST")
-            resp = await endpoint("shell", request=req)
+            resp = await endpoint("read", request=req)
         assert json.loads(resp.body) == {"result": "ok"}
+
+    async def test_call_tool_refuses_a_name_the_operator_denied(self, router, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The REST half answers from the policy the RPC half already consulted.
+
+        `/mcp/tools/{name}` handed `execute_tool_public` any name it was given, so a caller refused on
+        `/mcp/rpc` could run the same tool by POSTing to this route instead.
+        """
+        monkeypatch.setattr("raven.core.config.settings.tools_deny", "shell")
+        req = _req(json=AsyncMock(return_value={"arguments": {"cmd": "id"}}))
+        with patch("ravencode.mcp.http_transport.execute_tool_public", new_callable=AsyncMock) as executor:
+            endpoint = find_route(router, "/mcp/tools/{name}", "POST")
+            resp = await endpoint("shell", request=req)
+        assert resp.status_code == 403
+        assert "TOOLS_DENY" in json.loads(resp.body)["error"]
+        executor.assert_not_awaited()
 
     async def test_call_tool_requires_auth(self, router, authorized) -> None:
         authorized.return_value = False
@@ -120,30 +146,32 @@ class TestMCPHttpTransport:
             await endpoint(request=_req())
         assert exc.value.status_code == 401
 
+    async def test_events_requires_auth(self, router, authorized) -> None:
+        authorized.return_value = False
+        endpoint = find_route(router, "/mcp/events", "GET")
+        with pytest.raises(HTTPException) as exc:
+            await endpoint(request=_req())
+        assert exc.value.status_code == 401
+
     async def test_events(self, router) -> None:
         endpoint = find_route(router, "/mcp/events", "GET")
-        req = MagicMock(spec=Request)
-        resp = await endpoint(request=req)
+        resp = await endpoint(request=_req())
         assert resp.media_type == "text/event-stream"
 
-    async def test_events_stream_yields_and_unsubscribes(self, router) -> None:
+    async def test_the_stream_delivers_what_the_transport_published(self, router) -> None:
+        """Not a patched `stream()`: the frame has to come out of the queue the route subscribed."""
         endpoint = find_route(router, "/mcp/events", "GET")
-        req = MagicMock(spec=Request)
-
-        async def fake_stream(client_id: str):
-            yield "data: one\n\n"
-            yield "data: two\n\n"
-
-        with (
-            patch("ravencode.mcp.http_transport._sse_transport.stream", new=fake_stream),
-            patch("ravencode.mcp.http_transport._sse_transport.subscribe") as sub,
-            patch("ravencode.mcp.http_transport._sse_transport.unsubscribe") as unsub,
-        ):
-            resp = await endpoint(request=req)
-            chunks = [c async for c in resp.body_iterator]
-        assert chunks == ["data: one\n\n", "data: two\n\n"]
-        sub.assert_called_once()
-        unsub.assert_called_once()
+        resp = await endpoint(request=_req())
+        frames = resp.body_iterator
+        reading = asyncio.ensure_future(frames.__anext__())
+        for _ in range(200):
+            if http_transport._sse_transport._subscribers:
+                break
+            await asyncio.sleep(0)
+        await http_transport._sse_transport.send("tool_call", {"tool": "read", "status": "ok"})
+        frame = await asyncio.wait_for(reading, timeout=2)
+        assert frame == 'event: tool_call\ndata: {"tool": "read", "status": "ok"}\n\n'
+        await frames.aclose()
 
 
 class TestMCPServer:

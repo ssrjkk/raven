@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from raven.core.mcp.auth import authorize_request
 from raven.core.mcp.server import MCPServer
-from raven.core.mcp.sse_transport import SSETransport
+from raven.core.mcp.sse_transport import publish_tool_event, shared_transport
 from raven.core.security.tool_policy import mcp_deny_reason
 from ravencode.runtime.tools import execute_tool_public, get_mcp_tool_definitions
 
 _mcp_server = MCPServer()
-_sse_transport = SSETransport()
+_sse_transport = shared_transport()
 
 
 def create_mcp_router() -> APIRouter:
@@ -64,13 +65,20 @@ def create_mcp_router() -> APIRouter:
         args = body.get("arguments", body) if isinstance(body, dict) else {}
         denial = await mcp_deny_reason(name, args)
         if denial:
+            await publish_tool_event(name, "denied")
             return JSONResponse({"error": denial, "denied": True}, status_code=403)
         result = await execute_tool_public(name, args)
+        await publish_tool_event(name, "ok")
         return JSONResponse({"result": result})
 
     @router.get("/events")
-    async def mcp_events(request: Request) -> StreamingResponse:
-        client_id = f"mcp_{id(request)}"
+    async def mcp_events(request: Request) -> Response:
+        if not await authorize_request(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        # `id(request)` is only unique among live objects; two clients connected at once could be
+        # handed the same key, and the second `subscribe()` would replace the first one's queue, so
+        # one of them would stream the other's events and the loser would receive nothing.
+        client_id = f"mcp_{uuid4().hex}"
         _sse_transport.subscribe(client_id)
 
         async def _event_stream() -> Any:

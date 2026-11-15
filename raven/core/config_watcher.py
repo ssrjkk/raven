@@ -3,26 +3,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-import re
 from collections.abc import Callable
 from pathlib import Path
 
 from loguru import logger
-
-_ENV_KEY_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_]*$")
-_BLOCKED_KEYS = frozenset(
-    {
-        "PATH",
-        "HOME",
-        "USER",
-        "SHELL",
-        "COMSPEC",
-        "PYTHONPATH",
-        "VIRTUAL_ENV",
-        "RAVEN_ADMIN_KEY",
-        "RAVEN_SECRET_KEY",
-    }
-)
 
 
 class ConfigWatcher:
@@ -82,20 +66,9 @@ class ConfigWatcher:
     def _reload_env(self):
         if not self._env_path.exists():
             return
-        with self._env_path.open(encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                key, value = line.split("=", 1)
-                key = key.strip()
-                if not _ENV_KEY_PATTERN.match(key):
-                    logger.warning("[config] skipping invalid env key: {}", key)
-                    continue
-                if key in _BLOCKED_KEYS:
-                    logger.warning("[config] skipping blocked env key: {}", key)
-                    continue
-                os.environ[key] = value.strip()
+        from raven.core.config import parse_env_file
+
+        os.environ.update(parse_env_file(self._env_path))
 
     async def stop(self):
         self._running = False

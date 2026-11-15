@@ -7,6 +7,12 @@ from pathlib import Path
 import pytest
 
 from raven.core.config_watcher import ConfigWatcher
+from tests.core.switch_fixtures import switch_env, switch_names
+
+# pytest asks for a fixture by name and never reads the import, so ruff would call both bindings unused
+# and every `switch_env` parameter a redefinition of one. `test_the_switch_fixtures_are_imported_not_inherited`
+# in test_runtime_switches.py requires a module that requests either name to import both.
+_FIXTURES = (switch_env, switch_names)
 
 _TEST_KEYS = ["RAVEN_CW_FOO", "RAVEN_CW_BAR"]
 
@@ -48,6 +54,35 @@ def test_reload_env_sets_valid_skips_invalid_and_blocked(tmp_path: Path) -> None
 def test_reload_env_missing_file_returns(tmp_path: Path) -> None:
     w = ConfigWatcher(str(tmp_path / "absent.env"))
     w._reload_env()  # must not raise
+
+
+def test_a_quoted_value_reloads_as_the_value_settings_reads(tmp_path: Path) -> None:
+    """The watcher pushes the file into ``os.environ`` and ``Settings`` reads the same file through
+    python-dotenv, which hands a quoted value over unquoted. The watcher's own inline parser kept the
+    quotes, so an operator who wrote ``TELEGRAM_BOT_TOKEN="123:abc"`` got a channel rebuilt on a token two
+    characters longer than the one the next restart builds.
+    """
+    _cleanup_env()
+    env = tmp_path / ".env"
+    env.write_text("RAVEN_CW_FOO=\"bar\"\nRAVEN_CW_BAR='baz'\n")
+    w = ConfigWatcher(str(env))
+    try:
+        w._reload_env()
+        assert os.environ["RAVEN_CW_FOO"] == "bar"
+        assert os.environ["RAVEN_CW_BAR"] == "baz"
+    finally:
+        _cleanup_env()
+
+
+def test_the_watcher_has_no_second_copy_of_the_format() -> None:
+    """One parser, because two is what let a switch mean one thing at boot and another after an edit."""
+    import inspect
+
+    from raven.core import config_watcher
+
+    assert "parse_env_file" in inspect.getsource(config_watcher.ConfigWatcher._reload_env)
+    assert "_BLOCKED_KEYS" not in vars(config_watcher)
+    assert not hasattr(config_watcher, "_ENV_KEY_PATTERN")
 
 
 @pytest.mark.asyncio

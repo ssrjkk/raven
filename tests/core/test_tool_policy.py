@@ -121,7 +121,10 @@ class TestPolicyEngineDeny:
         p = ToolPolicyEvaluator(exec_security=ExecSecurity.FULL)
         allowed, reason = await p.check_exec("anything")
         assert allowed is False
-        assert "unreadable" in (reason or "")
+        assert reason is not None and "unreadable" in reason
+        # The load error itself stays out of the answer: it carries the ruleset name and the parse
+        # detail, and this string reaches a tool caller verbatim.
+        assert "tools.json" not in reason and "is not a readable" not in reason, reason
 
     def test_is_tool_allowed_denied_by_policy_engine(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(PolicyEngine, "evaluate", lambda self, name, data: ("deny", "no-anything"))

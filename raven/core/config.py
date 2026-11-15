@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -740,12 +741,14 @@ def overshadowing_env_value(env_name: str) -> str | None:
     pydantic-settings applies the real environment after every dotenv file. A service unit, a Windows
     service environment or a shell profile that exports the name therefore keeps beating whatever a
     runtime switch writes, which is how a switch looks dead. None means the switch wins: the name is
-    unset in the environment, or the environment already agrees with the file.
+    unset in the environment, or the environment already agrees with what the files resolve. The whole
+    cascade is compared, not only the file a switch writes — a value inherited from a lower-precedence
+    file is the value the next start resolves too, so there is nothing to warn about.
     """
     value = os.environ.get(env_name, "").strip()
     if not value:
         return None
-    return None if value == (read_env_value(env_name) or "").strip() else value
+    return None if value == (env_file_values().get(env_name) or "").strip() else value
 
 
 def _env_lines(path: Path) -> tuple[list[str], str]:
@@ -772,6 +775,97 @@ def _line_key(line: str) -> str:
     if stripped.startswith("#") or "=" not in stripped:
         return ""
     return stripped.split("=", 1)[0].strip()
+
+
+def _assignment_value(line: str) -> str:
+    value = line.strip().split("=", 1)[1].strip()
+    # python-dotenv, and therefore pydantic-settings, hand a quoted value unquoted. A reader that kept
+    # the quotes would build a token that is one pair of characters longer than the one Settings uses.
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1]
+    return value
+
+
+_ENV_KEY_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+_BLOCKED_ENV_KEYS = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "USER",
+        "SHELL",
+        "COMSPEC",
+        "PYTHONPATH",
+        "VIRTUAL_ENV",
+        "RAVEN_ADMIN_KEY",
+        "RAVEN_SECRET_KEY",
+    }
+)
+
+
+def parse_env_file(path: Path) -> dict[str, str]:
+    """The assignments one env file makes, in the shape a reader of ``os.environ`` would expect.
+
+    One parser for a format two readers used to implement separately: this is the file
+    :class:`Settings` loads through pydantic-settings and the file
+    :class:`~raven.core.config_watcher.ConfigWatcher` pushes into the environment, and a value that
+    parses differently in the two is a switch that means one thing at boot and another after an edit.
+    Names that are not environment-variable shaped are refused, and so are the few whose overwrite
+    would break the interpreter that is doing the reading.
+    """
+    parsed: dict[str, str] = {}
+    for line in _env_lines(path)[0]:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key = _line_key(stripped)
+        # python-dotenv accepts the shell spelling, so a credential written as `export NAME=…` is one
+        # Settings honours; a reader that refused the prefix would build a channel out of nothing.
+        if key.startswith("export "):
+            key = key[len("export ") :].strip()
+        if not _ENV_KEY_PATTERN.match(key):
+            logger.warning("[config] skipping invalid env key: {}", key)
+            continue
+        if key in _BLOCKED_ENV_KEYS:
+            logger.warning("[config] skipping blocked env key: {}", key)
+            continue
+        parsed[key] = _assignment_value(stripped)
+    return parsed
+
+
+def env_file_values() -> dict[str, str]:
+    """Everything every env file holds, the file that outranks its predecessors winning.
+
+    ``read_env_value`` answers for the one file a switch has to write. This answers for the cascade, which
+    is what a reader that only wants the effective value of a name needs: a credential in a lower-precedence
+    file is still a credential the operator configured.
+    """
+    merged: dict[str, str] = {}
+    for path in env_file_candidates():
+        merged.update(parse_env_file(path))
+    return merged
+
+
+def apply_env_files_to_environ() -> list[str]:
+    """Put the env files' values into this process's environment, and name what was written.
+
+    ``Settings`` reads the env files itself; a reader that consults ``os.environ`` does not, and there is no
+    ``load_dotenv`` in this tree. Measured on 2026-11-14 with ``TELEGRAM_BOT_TOKEN`` in the file its own
+    ``Settings`` had read: a fresh process answered ``channel_config.configured_channels() == []`` and built
+    a ``TelegramChannel`` with an empty token, and the credential became visible only when
+    :class:`~raven.core.config_watcher.ConfigWatcher` reloaded the file — which happens on an edit, never on
+    a start. So the file could be right and the gateway could still have no channel.
+
+    The precedence is the one pydantic-settings uses: an export made outside the env files outranks every
+    file and is left alone, and among the files a later candidate outranks an earlier one. Call this at a
+    process start, before anything reads the environment to decide what to build.
+    """
+    applied: list[str] = []
+    for key, value in env_file_values().items():
+        if key in os.environ:
+            continue
+        os.environ[key] = value
+        applied.append(key)
+    return applied
 
 
 def read_env_value(key: str, env_path: Path | None = None) -> str | None:
@@ -832,14 +926,10 @@ def honeytoken_hits() -> list[str]:
     """
     from raven.core.watermark import HONEYTOKEN_API_KEYS
 
+    resolved = env_file_values()
     hits: list[str] = []
     for name in HONEYTOKEN_API_KEYS:
-        value = os.environ.get(name, "").strip()
-        if not value:
-            for path in env_file_candidates():
-                for line in _env_lines(path)[0]:
-                    if _line_key(line) == name:
-                        value = line.strip().split("=", 1)[1].strip().strip("\"'")
+        value = os.environ.get(name, "").strip() or resolved.get(name, "")
         if value and is_honeytoken(name, value):
             hits.append(name)
     return hits
