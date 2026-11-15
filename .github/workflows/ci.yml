@@ -174,13 +174,15 @@ jobs:
       - name: Run the console specs
         run: |
           set -o pipefail
-          mkdir -p test-results
-          npx playwright test --reporter=line | tee test-results/console-e2e.log
+          # Playwright wipes its output dir when the run starts, deleting the file tee
+          # has just opened (the shell keeps writing to the unlinked inode), so the
+          # log lives next to the config, outside the output dir.
+          npx playwright test --reporter=line | tee console-e2e.log
 
       - name: Refuse a silent skip
         run: |
-          grep -qE "[0-9]+ passed" test-results/console-e2e.log
-          ! grep -qE "[0-9]+ skipped|no tests ran" test-results/console-e2e.log
+          grep -qE "[0-9]+ passed" console-e2e.log
+          ! grep -qE "[0-9]+ skipped|no tests ran" console-e2e.log
 
       - name: Upload the trace and report on failure
         if: failure()
