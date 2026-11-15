@@ -70,7 +70,6 @@
  "raven/core/coder/session.py": 1,
  "raven/core/collab_api.py": 10,
  "raven/core/commands_api.py": 1,
- "raven/core/config_store.py": 1,
  "raven/core/config_watcher.py": 5,
  "raven/core/cost_management_api.py": 9,
  "raven/core/db.py": 3,

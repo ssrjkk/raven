@@ -4,10 +4,14 @@ from pathlib import Path
 
 import raven.channels
 from raven.core.channel_config import (
+    _CHANNEL_FIELDS,
+    _LEGACY_ENV,
     all_channel_names,
+    channel_reading,
     configured_channels,
     get_channel_config,
     has_any_channel,
+    register_channel_fields,
 )
 
 _GATEWAY_RUNNER = Path(raven.channels.__file__).parent.parent / "cli" / "gateway_runner.py"
@@ -78,6 +82,43 @@ def test_all_channel_names():
 def test_get_channel_config_no_env():
     cfg = get_channel_config("nonexistent")
     assert cfg == {}
+
+
+def test_channel_reading_names_the_channel_that_reads_a_variable() -> None:
+    assert channel_reading("TELEGRAM_BOT_TOKEN") == "telegram"
+    assert channel_reading("SLACK_SIGNING_SECRET") == "slack"
+    assert channel_reading("SIGNAL_API_URL") == "signal"
+    assert channel_reading("EMAIL_IMAP_PASS") == "email"
+
+
+def test_channel_reading_refuses_the_spelling_that_looks_obvious() -> None:
+    """A writer that trusts a name it invented stores a credential and never builds a channel from it.
+
+    ``TELEGRAM_TOKEN`` was exactly such an answer: written, printed back as saved, absent from the map
+    every channel reads itself out of.
+    """
+    for name in ("TELEGRAM_TOKEN", "TG_BOT_TOKEN", "DISCORD_TOKEN", "SLACK_TOKEN", "BOT_TOKEN", "TOKEN"):
+        assert channel_reading(name) is None, f"{name} is not a name any channel reads"
+
+
+def test_channel_reading_answers_for_every_name_in_the_map() -> None:
+    unread = sorted(
+        (channel, var) for channel, fields in _LEGACY_ENV.items() for var in fields if channel_reading(var) != channel
+    )
+    assert unread == []
+
+
+def test_channel_reading_names_a_runtime_registered_channel() -> None:
+    """``_CHANNEL_FIELDS`` is keyed the other way round from ``_LEGACY_ENV`` — field name to env var — and
+    that is the shape ``get_channel_config`` iterates, so a writer that names a channel has to agree with
+    the same order or it refuses a name a channel does read.
+    """
+    register_channel_fields("mattermost", {"url": "MATTERMOST_URL"})
+    try:
+        assert get_channel_config("mattermost") == {}
+        assert channel_reading("MATTERMOST_URL") == "mattermost"
+    finally:
+        _CHANNEL_FIELDS.pop("mattermost", None)
 
 
 def test_every_channel_package_is_wired_into_the_gateway():

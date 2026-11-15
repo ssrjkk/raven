@@ -32,7 +32,10 @@ Show channel, agent, and plugin status.
 
 ### `raven onboard`
 
-Interactive setup wizard.
+Interactive setup wizard. Every answer is written into the env file a start reads — the last file of the
+cascade that already exists, or `~/.raven/.env` — and the line reporting it names that file. An answer no
+code reads is refused instead of saved, and an answer a shell export outranks is written with a warning
+saying the export wins.
 
 ### `raven init`
 

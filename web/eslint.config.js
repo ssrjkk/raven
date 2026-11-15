@@ -4,7 +4,7 @@ import simpleImportSort from "eslint-plugin-simple-import-sort";
 export default [
   { ignores: ["dist/", "node_modules/"] },
   {
-    files: ["src/**/*.{ts,tsx}"],
+    files: ["src/**/*.{ts,tsx}", "e2e/**/*.ts"],
     languageOptions: { parser: tsParser },
     plugins: { "simple-import-sort": simpleImportSort },
     rules: {

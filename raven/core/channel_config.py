@@ -78,6 +78,21 @@ def has_any_channel(name: str) -> bool:
     return any(os.environ.get(var) for var in _CHANNEL_FIELDS.get(name, {}).values())
 
 
+def channel_reading(env_name: str) -> str | None:
+    """The channel that reads ``env_name`` out of the environment, or None when none does.
+
+    A writer needs to ask this before it invents a name: ``TELEGRAM_TOKEN`` is the obvious spelling and
+    nothing in this module reads it, so the credential is stored, reported as saved and never used.
+    """
+    for name, fields in _LEGACY_ENV.items():
+        if env_name in fields:
+            return name
+    for name, fields in _CHANNEL_FIELDS.items():
+        if env_name in fields.values():
+            return name
+    return None
+
+
 def configured_channels() -> list[str]:
     seen: set[str] = set()
     for name in _LEGACY_ENV:

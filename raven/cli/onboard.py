@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import sys
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -14,8 +14,16 @@ from rich.table import Table
 from rich.text import Text
 
 from raven.channels.telegram.channel import TelegramChannel
-from raven.core.config import settings
-from raven.core.config_store import config_store
+from raven.core.channel_config import channel_reading
+from raven.core.config import (
+    Settings,
+    apply_runtime_switch,
+    effective_env_file,
+    overshadowing_env_value,
+    runtime_switch_keys,
+    settings,
+    write_env_value,
+)
 from raven.core.models import IncomingMessage
 
 console = Console()
@@ -45,14 +53,63 @@ async def _test_telegram_token(token: str) -> str | None:
         return None
 
 
-def _mask(val: str) -> str:
-    if len(val) <= 8:
-        return val
-    return val[:4] + "****" + val[-4:]
+def _persist_target() -> Path:
+    """The one file a start reads these answers from.
+
+    Resolved once per answer and handed to ``write_env_value``, so the report cannot name a file other
+    than the one the value went into.
+    """
+    return effective_env_file()
 
 
-def _get_noninteractive() -> bool:
-    return "--non-interactive" in sys.argv or "--yes" in sys.argv
+async def _persist(config: dict[str, Any]) -> list[tuple[str, str, bool]]:
+    """Write every answer where a gateway reads it, and report each write as its own outcome.
+
+    The wizard used to finish with ``config_store.save`` and ``apply_to_env`` — a JSON file no process ever
+    read, plus exports into the wizard's own environment. It printed ``Setup complete!`` and the next
+    ``raven start`` came up with the defaults it had always had.
+    """
+    rows: list[tuple[str, str, bool]] = []
+    switches = set(runtime_switch_keys())
+    for key, value in config.items():
+        text = str(value).strip()
+        env_name = key.upper()
+        if not text:
+            rows.append((env_name, "[dim]left alone — nothing was answered[/dim]", False))
+            continue
+        if key in switches:
+            try:
+                result = await apply_runtime_switch(key, text)
+            except ValueError as exc:
+                rows.append((env_name, f"[red]refused[/red] — {exc}", False))
+                continue
+            rows.append((env_name, f"[green]written[/green] to {result.env_file}", True))
+            rows.extend(("", f"[yellow]![/yellow] {warning}", True) for warning in result.warnings)
+            if result.restart_required:
+                rows.append(("", "[yellow]![/yellow] a restart applies it: the running process bound it already", True))
+            continue
+        if channel_reading(env_name) is None and key not in Settings.model_fields:
+            rows.append((env_name, "[red]not written[/red] — no code reads that name", False))
+            continue
+        shadow = overshadowing_env_value(env_name)
+        target = _persist_target()
+        write_env_value(env_name, text, env_path=target)
+        note = f"[green]written[/green] to {target}"
+        if shadow is not None and shadow != text:
+            note += f" [yellow]— {env_name} is also exported, and the export wins until it is cleared[/yellow]"
+        rows.append((env_name, note, True))
+    return rows
+
+
+def _show_written(rows: list[tuple[str, str, bool]]) -> None:
+    if not rows:
+        return
+    table = Table(title="Where each answer went", title_style="bold", show_header=True, header_style="dim")
+    table.add_column("Name", style="cyan")
+    table.add_column("Result")
+    for name, note, _saved in rows:
+        table.add_row(name, note)
+    console.print(table)
 
 
 def _prompt_llm(config: dict[str, Any]) -> dict[str, Any]:
@@ -151,11 +208,8 @@ def _prompt_security(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def _prompt_port(config: dict[str, Any]) -> dict[str, Any]:
-    port_str = Prompt.ask("Web UI port", default=str(settings.web_port))
-    try:
-        config["web_port"] = int(port_str)
-    except ValueError:
-        config["web_port"] = settings.web_port
+    """Keep the answer as it was typed: the switch decides what a port is, and says why when it is not one."""
+    config["web_port"] = Prompt.ask("Web UI port", default=str(settings.web_port))
     return config
 
 
@@ -198,7 +252,6 @@ async def onboard() -> None:
     )
     console.print()
 
-    config_store.load()
     config: dict[str, Any] = {}
 
     config = _prompt_llm(config)
@@ -207,20 +260,24 @@ async def onboard() -> None:
     config = _prompt_security(config)
     config = _prompt_port(config)
 
-    config_store.save(config)
-    config_store.apply_to_env()
+    rows = await _persist(config)
 
     console.print()
     _show_summary(config)
+    _show_written(rows)
     console.print()
 
     if config.get("telegram_bot_token") and Confirm.ask("Send a test message to Telegram?", default=True):
         await _test_send(config)
 
     console.print()
+    saved = [name for name, _note, was_saved in rows if name and was_saved]
     console.print(
         Panel.fit(
-            "[bold green]Setup complete![/bold green]\n\n"
+            f"[bold green]Setup complete[/bold green] — {len(saved)} of {len(config)} answer(s) stored\n\n"
+            f"Answers live in [bold]{_persist_target()}[/bold]. A gateway that is already running takes a\n"
+            "written name within five seconds; a channel is built when the gateway starts, so a token\n"
+            "answered here needs a start before that channel exists.\n\n"
             "Next steps:\n"
             "  [bold]raven start[/bold]         Launch Raven\n"
             "  [bold]raven status[/bold]        Check status\n"

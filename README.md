@@ -41,7 +41,7 @@ cd raven
 pip install -e .
 
 cp .env.example .env        # add at least one LLM API key
-raven onboard               # interactive setup wizard
+raven onboard               # interactive setup wizard; the answers go into .env
 raven start                 # gateway + web UI on http://localhost:18888
 ```
 

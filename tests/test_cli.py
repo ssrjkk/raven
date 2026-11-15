@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -12,6 +13,30 @@ from raven.cli.main import cli
 @pytest.fixture
 def runner():
     return CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _a_command_adopts_only_this_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pin_env_names: Callable[[Iterable[str]], None],
+) -> Path:
+    """Aim the env-file cascade at a file this test owns.
+
+    ``raven doctor`` adopts the files, and every command that builds a gateway adopts them through
+    ``create_gateway`` — that is the whole of wave #143, and it is what a standalone process needs. In a
+    shared test process it would export the operator's own ``GROQ_API_KEY``, ``LOG_LEVEL`` and
+    ``TELEGRAM_BOT_TOKEN`` into every later test, so the cascade is redirected here and the switch names are
+    handed to ``pin_env_names``, which takes them out of the run and puts back what the run had.
+    """
+    from raven.core import config as config_module
+    from raven.core.config import runtime_switches
+
+    env = tmp_path / ".env-cli-run"
+    env.write_text("", encoding="utf-8")
+    monkeypatch.setattr(config_module, "_ENV_FILE_CANDIDATES", [str(env)])
+    pin_env_names(switch.env_name for switch in runtime_switches())
+    return env
 
 
 @pytest.fixture
@@ -59,6 +84,27 @@ class TestCliDoctor:
         result = runner.invoke(cli, ["doctor"])
         assert result.exit_code == 0
         assert "DB Path" in result.output
+
+    def test_the_doctor_names_the_files_a_start_reads(self, runner, _a_command_adopts_only_this_run):
+        result = runner.invoke(cli, ["doctor"])
+        assert "Env Files" in result.output
+        # the table cell is narrower than a pytest temp path, so rich breaks the name at its hyphens
+        assert _a_command_adopts_only_this_run.name in "".join(result.output.split())
+
+    def test_a_channel_only_a_file_configures_is_reported_as_configured(
+        self, runner, _a_command_adopts_only_this_run, pin_env_names
+    ):
+        """The row used to answer from this process's exports only.
+
+        Measured 2026-11-14: with ``TELEGRAM_BOT_TOKEN`` in the file its own ``Settings`` had read, a fresh
+        ``raven doctor`` printed ``Channels … None configured`` — the report told the operator to go and
+        configure the channel that was already configured.
+        """
+        _a_command_adopts_only_this_run.write_text("TELEGRAM_BOT_TOKEN=123456:SENTINEL\n", encoding="utf-8")
+        pin_env_names(["TELEGRAM_BOT_TOKEN"])
+        result = runner.invoke(cli, ["doctor"])
+        assert result.exit_code == 0
+        assert "telegram" in result.output
 
 
 class TestCliService:

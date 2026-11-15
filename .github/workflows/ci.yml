@@ -123,9 +123,14 @@ jobs:
       - name: TypeScript check
         working-directory: web
         run: npx tsc --noEmit
+      # tsconfig.json is `include: ["src"]` and `playwright test` transpiles specs without checking
+      # them, so without this step a type error in web/e2e/ failed nothing anywhere.
+      - name: TypeScript check (e2e specs)
+        working-directory: web
+        run: npx tsc --noEmit -p tsconfig.e2e.json
       - name: ESLint
         working-directory: web
-        run: npx eslint src
+        run: npx eslint src e2e
       - name: Frontend unit tests
         working-directory: web
         run: npm test -- --run
@@ -137,6 +142,54 @@ jobs:
         with:
           name: web-dist
           path: web/dist/
+          retention-days: 7
+
+  console-e2e:
+    name: Console E2E (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [frontend]
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install browsers
+        run: npx playwright install --with-deps
+
+      # The specs drive `vite preview` over the built bundle (playwright.config.ts webServer), so this
+      # job needs no gateway: every /api and /ws call is stubbed in web/e2e/support.ts. Before it, the
+      # 18 specs under web/e2e ran in no CI job at all — `check_all.py --component e2e` is tests/e2e/,
+      # a different (Python) suite.
+      - name: Run the console specs
+        run: |
+          set -o pipefail
+          mkdir -p test-results
+          npx playwright test --reporter=line | tee test-results/console-e2e.log
+
+      - name: Refuse a silent skip
+        run: |
+          grep -qE "[0-9]+ passed" test-results/console-e2e.log
+          ! grep -qE "[0-9]+ skipped|no tests ran" test-results/console-e2e.log
+
+      - name: Upload the trace and report on failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-console-e2e
+          path: |
+            web/playwright-report/
+            web/test-results/
           retention-days: 7
 
   postgres-integration:

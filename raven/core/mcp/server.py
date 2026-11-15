@@ -7,6 +7,7 @@ from typing import Any
 
 from loguru import logger
 
+from raven.core.mcp.sse_transport import publish_tool_event
 from raven.core.security.tool_policy import mcp_deny_reason
 from ravencode.runtime.tools import execute_tool_public, get_mcp_tool_definitions
 
@@ -63,6 +64,7 @@ class MCPServer:
             denial = await mcp_deny_reason(name, args)
             if denial:
                 logger.warning("MCP tools/call refused: {}", denial)
+                await publish_tool_event(name, "denied")
                 return {
                     "jsonrpc": "2.0",
                     "id": req_id,
@@ -72,6 +74,7 @@ class MCPServer:
                     },
                 }
             result = await execute_tool_public(name, args)
+            await publish_tool_event(name, "ok")
             return {"jsonrpc": "2.0", "id": req_id, "result": {"content": [{"type": "text", "text": result}]}}
         return _error(req_id, -32601, f"Method not found: {method}")
 

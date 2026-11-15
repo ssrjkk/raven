@@ -159,8 +159,11 @@ class ToolPolicyEvaluator:
         try:
             effect, rule_name = policy_engine.evaluate("tools", input_data)
         except PolicyLoadError as exc:
+            # The load error carries the ruleset path and a fragment of the text that failed to parse,
+            # and this string is what a tool caller reads back in the 403 body and in the `[denied]`
+            # MCP result. The detail belongs in the log the operator can open, not in the answer.
             logger.error("Tool policy ruleset unreadable, refusing: {}", exc)
-            return f"policy ruleset unreadable ({exc})"
+            return "policy ruleset unreadable (see the gateway log)"
 
         if effect == "deny":
             return f"denied by policy rule '{rule_name}'"

@@ -157,7 +157,21 @@ The gateway also exposes the same protocol over HTTP when `raven start` is runni
 | `GET /mcp/events` | Server-sent events stream |
 
 HTTP access requires a token: pass your `web_secret_key` as `X-Raven-Key: <key>` or
-`Authorization: Bearer <token>`. A minimal remote-client config:
+`Authorization: Bearer <token>`. `/mcp/events` needs it too, on the request that opens the stream.
+
+The stream carries one event type today, `tool_call`, published by both `tools/call` and
+`POST /mcp/tools/{name}`:
+
+```
+event: tool_call
+data: {"tool": "read", "status": "ok"}
+```
+
+`status` is `ok` or `denied`. The frame names the tool and gives the verdict — never the arguments and
+never the result: one stream fans out to every connected client, so a frame that echoed what was read
+would show one observer another's file contents. A client that stops reading is dropped after
+`max_pending` (256 by default) undelivered frames rather than buffering without limit, and an idle
+stream gets an `event: ping` every 30 seconds so a proxy does not close it. A minimal remote-client config:
 
 ```json
 {

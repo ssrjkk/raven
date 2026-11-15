@@ -1,4 +1,14 @@
-"""Isolation for the tests that move a runtime switch on a live settings object."""
+"""Isolation for the tests that move a runtime switch on a live settings object.
+
+These fixtures are imported by name into the modules that use them rather than served from a
+directory ``conftest.py``. pytest 9 resolves a fixture by the identity of the node it was parsed
+against (``_pytest.fixtures._matchfactories`` takes the ``baseid`` string only as an ``elif`` to a
+failed identity test), and when one run collects both ``tests/core/<file>.py`` and
+``tests/test_onboard.py`` the ``tests/core`` package node gets rebuilt -- the conftest's fixture then
+names a node that is no longer in the item's parent chain and every test using it dies with
+"fixture not found" before it starts. A fixture imported into the test module is parsed against that
+module's own node, which is always in the chain.
+"""
 
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path

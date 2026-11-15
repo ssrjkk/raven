@@ -16,6 +16,12 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from raven.core.auth.models import Permission, Role
 from raven.core.monitor.models import MonitorStatus, MonitorType
 from raven.core.monitor.store import MonitorStore
+from tests.core.switch_fixtures import switch_env, switch_names
+
+# pytest asks for a fixture by name and never reads the import, so ruff would call both bindings unused
+# and every `switch_env` parameter a redefinition of one. `test_the_switch_fixtures_are_imported_not_inherited`
+# in test_runtime_switches.py requires a module that requests either name to import both.
+_FIXTURES = (switch_env, switch_names)
 
 
 class _StateMiddleware:
