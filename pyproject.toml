@@ -80,7 +80,7 @@ stt = [
     "vosk>=0.3.45,<0.4",
     "SpeechRecognition>=3.10,<4.0",
     "openai-whisper>=20240930",
-    "azure-cognitiveservices-speech>=1.40,<2.0",
+    "azure-cognitiveservices-speech>=1.53.0,<2.0",
 ]
 speaker = ["librosa>=0.10,<2.0", "speechbrain>=1.0,<2.0"]
 search = ["duckduckgo-search>=6.1,<9.0"]
