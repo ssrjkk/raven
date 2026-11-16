@@ -14,23 +14,28 @@ from raven.core._json import json
 from raven.core.llm.protocol import LLMResponse, ToolCall
 
 
-def _parse_retry_after(headers: Any, default: int = 5) -> int:
+def _parse_retry_after(headers: Any, default: int = 5, cap: float | None = None) -> int:
+    """Seconds to wait, clamped to `[0, cap]`.
+
+    The value is provider-controlled and used to come back unbounded, so `Retry-After: 86400` parked
+    one of the router's admission slots for a day: the retry sleep runs inside the acquired region.
+    """
     raw = headers.get("Retry-After")
-    if raw is None:
-        return default
-    try:
-        return int(raw)
-    except (ValueError, TypeError):
-        pass
-    try:
-        parsed = email.utils.parsedate_to_datetime(raw)
-        if parsed is None:
-            return default
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=UTC)
-        return max(int(parsed.timestamp() - time.time()), 0)
-    except (ValueError, TypeError):
-        return default
+    seconds = default
+    if raw is not None:
+        try:
+            seconds = int(raw)
+        except (ValueError, TypeError):
+            try:
+                parsed = email.utils.parsedate_to_datetime(raw)
+            except (ValueError, TypeError):
+                parsed = None
+            if parsed is not None:
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=UTC)
+                seconds = int(parsed.timestamp() - time.time())
+    seconds = max(0, seconds)
+    return seconds if cap is None else min(seconds, int(cap))
 
 
 def _read_json_file(path: str) -> dict[str, Any]:

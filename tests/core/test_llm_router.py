@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import email.utils
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,8 +11,10 @@ import pytest
 
 from raven.core.instrumented import InstrumentedLLMProvider
 from raven.core.llm.protocol import LLMProvider, LLMResponse
+from raven.core.llm.providers.base import _parse_retry_after
 from raven.core.llm.queue import LLMQueueTimeoutError
 from raven.core.llm.router import LLMRouter
+from raven.core.llm.router import _parse_retry_after as router_retry_after
 
 
 class DummyProvider(LLMProvider):
@@ -50,6 +54,44 @@ class FailProvider(LLMProvider):
 
     async def cleanup(self):
         pass
+
+
+def _rate_limited(retry_after: str) -> httpx.HTTPStatusError:
+    resp = MagicMock(spec=httpx.Response)
+    resp.status_code = 429
+    resp.headers = {"Retry-After": retry_after}
+    return httpx.HTTPStatusError("rate limited", request=MagicMock(), response=resp)
+
+
+class AlwaysRateLimited(LLMProvider):
+    def __init__(self, retry_after: str = "7") -> None:
+        self.retry_after = retry_after
+        self.calls = 0
+
+    async def complete(self, messages, model, tools=None):
+        self.calls += 1
+        raise _rate_limited(self.retry_after)
+
+    async def complete_stream(self, messages, model, tools=None):
+        self.calls += 1
+        if False:
+            yield ""
+        raise _rate_limited(self.retry_after)
+
+    async def cleanup(self):
+        pass
+
+
+class _NoFailover:
+    """The primary path is what these tests measure; the real chain would retry the same provider."""
+
+    async def complete(self, messages, tools=None):
+        raise RuntimeError("all fail")
+
+    async def complete_stream(self, messages, tools=None):
+        if False:
+            yield ""
+        raise RuntimeError("all fail")
 
 
 def _patch_provider(provider: LLMProvider | None = None, key: str = "ollama"):
@@ -378,8 +420,88 @@ class TestComplete:
         with patch("raven.core.llm.router.settings") as mock_settings:
             mock_settings.llm_retry_max = 2
             mock_settings.llm_retry_delay = 0
+            mock_settings.llm_retry_after_cap = 30.0
             resp = await router.complete([{"role": "user", "content": "hi"}], model="ollama/test")
         assert resp.content == "ok"
+
+    async def test_a_provider_cannot_park_an_admission_slot_for_a_day(self, monkeypatch):
+        sleeps: list[float] = []
+
+        async def fake_sleep(delay: float) -> None:
+            sleeps.append(delay)
+
+        monkeypatch.setattr("raven.core.llm.router.asyncio.sleep", fake_sleep)
+
+        class OnceRateLimited(LLMProvider):
+            def __init__(self) -> None:
+                self.calls = 0
+
+            async def complete(self, messages, model, tools=None):
+                self.calls += 1
+                if self.calls == 1:
+                    raise _rate_limited("86400")
+                return LLMResponse(content="ok")
+
+            async def complete_stream(self, messages, model, tools=None):
+                if False:
+                    yield ""
+
+            async def cleanup(self):
+                pass
+
+        router = LLMRouter()
+        router._providers["ollama"] = OnceRateLimited()
+        with patch("raven.core.llm.router.settings") as mock_settings:
+            mock_settings.llm_retry_max = 2
+            mock_settings.llm_retry_delay = 0
+            mock_settings.llm_retry_after_cap = 30.0
+            resp = await router.complete([{"role": "user", "content": "hi"}], model="ollama/test")
+        assert resp.content == "ok"
+        assert sleeps == [30.0]
+        assert router._admission.active == 0
+
+    async def test_the_final_attempt_fails_without_sleeping(self, monkeypatch):
+        sleeps: list[float] = []
+
+        async def fake_sleep(delay: float) -> None:
+            sleeps.append(delay)
+
+        monkeypatch.setattr("raven.core.llm.router.asyncio.sleep", fake_sleep)
+        provider = AlwaysRateLimited("7")
+        router = LLMRouter()
+        router._providers["ollama"] = provider
+        monkeypatch.setattr(router, "_get_failover", lambda: _NoFailover())
+        with patch("raven.core.llm.router.settings") as mock_settings:
+            mock_settings.llm_retry_max = 3
+            mock_settings.llm_retry_delay = 0
+            mock_settings.llm_retry_after_cap = 30.0
+            with pytest.raises(RuntimeError, match="All LLM providers exhausted"):
+                await router.complete([{"role": "user", "content": "hi"}], model="ollama/test")
+        assert provider.calls == 3
+        assert len(sleeps) == provider.calls - 1, "the last attempt cannot retry, so its wait only delays the error"
+        assert router._admission.active == 0
+
+    async def test_the_stream_fails_without_sleeping_on_the_final_attempt(self, monkeypatch):
+        sleeps: list[float] = []
+
+        async def fake_sleep(delay: float) -> None:
+            sleeps.append(delay)
+
+        monkeypatch.setattr("raven.core.llm.router.asyncio.sleep", fake_sleep)
+        provider = AlwaysRateLimited("7")
+        router = LLMRouter()
+        router._providers["ollama"] = provider
+        monkeypatch.setattr(router, "_get_failover", lambda: _NoFailover())
+        with patch("raven.core.llm.router.settings") as mock_settings:
+            mock_settings.llm_retry_max = 2
+            mock_settings.llm_retry_delay = 0
+            mock_settings.llm_retry_after_cap = 30.0
+            with pytest.raises(RuntimeError, match="All LLM providers exhausted for streaming"):
+                async for _ in router.complete_stream([{"role": "user", "content": "hi"}], model="ollama/test"):
+                    pass
+        assert provider.calls == 2
+        assert len(sleeps) == provider.calls - 1
+        assert router._admission.active == 0
 
     async def test_exhausted_raises(self):
         router = LLMRouter()
@@ -514,3 +636,34 @@ class TestAdmissionIntegration:
             async for tok in router.complete_stream([{"role": "user", "content": "hi"}], model="ollama/test"):
                 parts.append(tok)
             assert "".join(parts) == "backup ok"
+
+
+class TestRetryAfterParsing:
+    def test_an_absent_header_falls_back_to_the_default(self):
+        assert _parse_retry_after({}) == 5
+        assert _parse_retry_after({}, default=2) == 2
+
+    def test_a_negative_wait_is_clamped_to_zero(self):
+        assert _parse_retry_after({"Retry-After": "-30"}) == 0
+
+    def test_the_cap_bounds_the_integer_form(self):
+        assert _parse_retry_after({"Retry-After": "86400"}, cap=30) == 30
+        assert _parse_retry_after({"Retry-After": "86400"}) == 86400
+
+    def test_the_cap_bounds_the_http_date_form(self):
+        future = email.utils.format_datetime(datetime.now(UTC) + timedelta(days=1))
+        assert _parse_retry_after({"Retry-After": future}, cap=30) == 30
+        assert _parse_retry_after({"Retry-After": future}) > 3600
+
+    def test_a_past_date_is_zero_not_negative(self):
+        past = email.utils.format_datetime(datetime.now(UTC) - timedelta(days=1))
+        assert _parse_retry_after({"Retry-After": past}) == 0
+
+    def test_an_unparseable_header_falls_back_to_the_capped_default(self):
+        assert _parse_retry_after({"Retry-After": "soon"}) == 5
+        assert _parse_retry_after({"Retry-After": "soon"}, cap=1) == 1
+
+    def test_the_router_passes_the_configured_cap(self):
+        with patch("raven.core.llm.router.settings") as mock_settings:
+            mock_settings.llm_retry_after_cap = 12.0
+            assert router_retry_after({"Retry-After": "86400"}) == 12

@@ -305,7 +305,8 @@ class LLMRouter:
         self, messages: list[dict[str, Any]], model: str, tools: list[dict[str, Any]] | None, key: str
     ) -> LLMResponse:
         primary_exc: Exception | None = None
-        for attempt in range(max(1, settings.llm_retry_max)):
+        attempts = max(1, settings.llm_retry_max)
+        for attempt in range(attempts):
             try:
                 provider = self._get_provider(model)
                 with trace_llm_call(model=model):
@@ -318,22 +319,25 @@ class LLMRouter:
             except (RuntimeError, httpx.HTTPStatusError, httpx.TimeoutException, httpx.NetworkError) as e:
                 primary_exc = e
                 if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429:
+                    if attempt >= attempts - 1:
+                        logger.warning("Primary model '{}' rate limited on the final attempt: {}", model, e)
+                        break
                     retry_after = _parse_retry_after(e.response.headers, 5)
                     logger.warning("LLM rate limited (429), retrying in {}s", retry_after)
                     await asyncio.sleep(retry_after)
                     continue
-                if attempt < settings.llm_retry_max - 1:
+                if attempt < attempts - 1:
                     delay = settings.llm_retry_delay * (2**attempt)
                     logger.warning(
                         "LLM call failed (attempt {}/{}): {}, retrying in {}s",
                         attempt + 1,
-                        settings.llm_retry_max,
+                        attempts,
                         e,
                         delay,
                     )
                     await asyncio.sleep(delay)
                 else:
-                    logger.warning("Primary model '{}' failed after {} attempts: {}", model, settings.llm_retry_max, e)
+                    logger.warning("Primary model '{}' failed after {} attempts: {}", model, attempts, e)
             except Exception as e:
                 primary_exc = e
                 logger.warning("LLM call failed: {}", e)
@@ -369,7 +373,8 @@ class LLMRouter:
     ) -> AsyncIterator[str]:
         last_exc: Exception | None = None
         yielded = False
-        for attempt in range(max(1, settings.llm_retry_max)):
+        attempts = max(1, settings.llm_retry_max)
+        for attempt in range(attempts):
             try:
                 provider = self._get_provider(model)
                 metrics.inc("llm_stream_start", {"model": model, "provider": type(provider).__name__})
@@ -384,22 +389,26 @@ class LLMRouter:
                     raise RuntimeError(f"Stream '{model}' failed after {attempt + 1} attempt(s) mid-stream") from e
                 last_exc = e
                 if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429:
+                    if attempt >= attempts - 1:
+                        logger.warning("Primary stream '{}' rate limited on the final attempt: {}", model, e)
+                        metrics.inc("llm_stream_error", {"model": model, "error": type(e).__name__})
+                        break
                     retry_after = _parse_retry_after(e.response.headers, 5)
                     logger.warning("LLM rate limited (429), retrying in {}s", retry_after)
                     await asyncio.sleep(retry_after)
                     continue
-                if attempt < settings.llm_retry_max - 1:
+                if attempt < attempts - 1:
                     delay = settings.llm_retry_delay * (2**attempt)
                     logger.warning(
                         "LLM stream failed (attempt {}/{}): {}, retrying in {}s",
                         attempt + 1,
-                        settings.llm_retry_max,
+                        attempts,
                         e,
                         delay,
                     )
                     await asyncio.sleep(delay)
                 else:
-                    logger.warning("Primary stream '{}' failed after {} attempts: {}", model, settings.llm_retry_max, e)
+                    logger.warning("Primary stream '{}' failed after {} attempts: {}", model, attempts, e)
                     metrics.inc("llm_stream_error", {"model": model, "error": type(e).__name__})
             except Exception as e:
                 raise RuntimeError(f"Primary stream '{model}' failed: {e}") from e
@@ -410,7 +419,8 @@ class LLMRouter:
     ) -> AsyncIterator[dict[str, Any]]:
         last_exc: Exception | None = None
         yielded = False
-        for attempt in range(max(1, settings.llm_retry_max)):
+        attempts = max(1, settings.llm_retry_max)
+        for attempt in range(attempts):
             try:
                 provider = self._get_provider(model)
                 metrics.inc("llm_stream_start", {"model": model, "provider": type(provider).__name__})
@@ -427,16 +437,20 @@ class LLMRouter:
                     ) from e
                 last_exc = e
                 if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429:
+                    if attempt >= attempts - 1:
+                        logger.warning("Primary delta stream '{}' rate limited on the final attempt: {}", model, e)
+                        metrics.inc("llm_stream_error", {"model": model, "error": type(e).__name__})
+                        break
                     retry_after = _parse_retry_after(e.response.headers, 5)
                     logger.warning("LLM rate limited (429), retrying in {}s", retry_after)
                     await asyncio.sleep(retry_after)
                     continue
-                if attempt < settings.llm_retry_max - 1:
+                if attempt < attempts - 1:
                     delay = settings.llm_retry_delay * (2**attempt)
                     logger.warning(
                         "LLM delta stream failed (attempt {}/{}): {}, retrying in {}s",
                         attempt + 1,
-                        settings.llm_retry_max,
+                        attempts,
                         e,
                         delay,
                     )
@@ -445,7 +459,7 @@ class LLMRouter:
                     logger.warning(
                         "Primary delta stream '{}' failed after {} attempts: {}",
                         model,
-                        settings.llm_retry_max,
+                        attempts,
                         e,
                     )
                     metrics.inc("llm_stream_error", {"model": model, "error": type(e).__name__})
@@ -487,7 +501,7 @@ def _as_runtime_error(exc: Exception | None, fallback_msg: str) -> RuntimeError:
 def _parse_retry_after(headers: Any, default: int = 5) -> int:
     from raven.core.llm.providers.base import _parse_retry_after as _parse
 
-    return _parse(headers, default)
+    return _parse(headers, default, cap=settings.llm_retry_after_cap)
 
 
 _default_router: LLMRouter | None = None
