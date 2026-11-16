@@ -87,7 +87,7 @@ search = ["duckduckgo-search>=6.1,<9.0"]
 nlp = ["presidio-analyzer>=2.2,<3.0"]
 logging = ["structlog>=24.1,<27.0"]
 tracking = ["wandb>=0.17,<1.0"]
-rag = ["sentence-transformers>=3.0,<4.0"]
+rag = ["sentence-transformers>=6.3.0,<7.0"]
 ml = [
     "torch>=2.0,<3.0",
     # the floor is the version the smoke test in tests/ml actually runs against: fine_tuning.py
