@@ -28,6 +28,12 @@ function reconnectDelay(attempt: number, base = 1000, cap = 30000): number {
   return Math.min(base * Math.pow(2, attempt), cap);
 }
 
+// A reconnect takes up to 30s, and `send` used to return without a word when the socket was not OPEN:
+// the operator pressed Run, the button did nothing, and `running` stayed false so the console looked
+// idle. Outbound frames wait here instead, and the cap is what makes a full queue a visible refusal
+// rather than the same silent drop one level down.
+export const AGENT_PENDING_LIMIT = 32;
+
 export function useAgentSocket(onEvent: (ev: AgentSocketEvent) => void) {
   const wsRef = useRef<WebSocket | null>(null);
   const handlerRef = useRef(onEvent);
@@ -35,8 +41,22 @@ export function useAgentSocket(onEvent: (ev: AgentSocketEvent) => void) {
   const timerRef = useRef<number | null>(null);
   const attemptRef = useRef(0);
   const mountedRef = useRef(true);
+  const pendingRef = useRef<string[]>([]);
   const [connected, setConnected] = useState(false);
   const [running, setRunning] = useState(false);
+  const [queued, setQueued] = useState(0);
+
+  const enqueue = useCallback((payload: string): boolean => {
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(payload);
+      return true;
+    }
+    if (pendingRef.current.length >= AGENT_PENDING_LIMIT) return false;
+    pendingRef.current.push(payload);
+    setQueued(pendingRef.current.length);
+    return true;
+  }, []);
 
   const connect = useCallback(() => {
     const token = getToken();
@@ -46,10 +66,15 @@ export function useAgentSocket(onEvent: (ev: AgentSocketEvent) => void) {
     ws.onopen = () => {
       setConnected(true);
       attemptRef.current = 0;
+      const waiting = pendingRef.current;
+      pendingRef.current = [];
+      setQueued(0);
+      for (const payload of waiting) ws.send(payload);
     };
     ws.onclose = () => {
       setConnected(false);
-      setRunning(false);
+      // A prompt still waiting for the reconnect is a run the operator asked for, not a finished one.
+      if (pendingRef.current.length === 0) setRunning(false);
       if (!mountedRef.current) return;
       const delay = reconnectDelay(attemptRef.current);
       attemptRef.current += 1;
@@ -83,30 +108,33 @@ export function useAgentSocket(onEvent: (ev: AgentSocketEvent) => void) {
     };
   }, [connect]);
 
-  const send = useCallback((prompt: string, opts?: AgentRunOptions) => {
-    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
-    setRunning(true);
-    wsRef.current.send(
-      JSON.stringify({
-        prompt,
-        max_steps: opts?.maxSteps ?? 30,
-        diff_preview: opts?.diffPreview ?? true,
-        proactive_scan: opts?.proactiveScan ?? true,
-        max_tool_retries: opts?.maxToolRetries ?? 3,
-      }),
-    );
-  }, []);
+  const send = useCallback(
+    (prompt: string, opts?: AgentRunOptions): boolean => {
+      const accepted = enqueue(
+        JSON.stringify({
+          prompt,
+          max_steps: opts?.maxSteps ?? 30,
+          diff_preview: opts?.diffPreview ?? true,
+          proactive_scan: opts?.proactiveScan ?? true,
+          max_tool_retries: opts?.maxToolRetries ?? 3,
+        }),
+      );
+      if (accepted) setRunning(true);
+      return accepted;
+    },
+    [enqueue],
+  );
 
-  const respond = useCallback((payload: Record<string, unknown>) => {
-    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(JSON.stringify(payload));
-  }, []);
+  const respond = useCallback(
+    (payload: Record<string, unknown>): boolean => enqueue(JSON.stringify(payload)),
+    [enqueue],
+  );
 
-  const cancel = useCallback(() => {
-    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(JSON.stringify({ type: "cancel" }));
-    setRunning(false);
-  }, []);
+  const cancel = useCallback((): boolean => {
+    const accepted = enqueue(JSON.stringify({ type: "cancel" }));
+    if (accepted) setRunning(false);
+    return accepted;
+  }, [enqueue]);
 
-  return { connected, running, send, respond, cancel };
+  return { connected, running, queued, send, respond, cancel };
 }
