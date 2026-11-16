@@ -155,6 +155,10 @@ class CollaborationSession:
         self.comments: list[Comment] = []
         self.user_info: dict[str, UserSessionInfo] = {}
         self._notifications: asyncio.Queue[SessionNotification] = asyncio.Queue()
+        # Set when the CRDT path throws and the session falls back to a last-write-wins splice. The
+        # fallback does not merge concurrent edits, so a session that reached it must stop claiming
+        # otherwise: `crdt_enabled` is what the console and the collab client read.
+        self._crdt_degraded = False
 
         if HAS_YPY:
             self._ydoc = YDoc()
@@ -202,7 +206,7 @@ class CollaborationSession:
         change.timestamp = time.time()
         change.version = self.document.version + 1
 
-        if HAS_YPY and self._ytext is not None:
+        if HAS_YPY and self._ytext is not None and not self._crdt_degraded:
             return self._apply_change_crdt(change)
         return self._apply_change_fallback(change)
 
@@ -242,7 +246,12 @@ class CollaborationSession:
             self.document.change_count += 1
             return True
         except Exception as exc:
-            logger.error("CRDT apply_change failed: {}", exc)
+            self._crdt_degraded = True
+            logger.error(
+                "CRDT apply_change failed in session {}, degrading to last-write-wins for the rest of it: {}",
+                self.session_id,
+                exc,
+            )
             return self._apply_change_fallback(change)
 
     def _apply_change_fallback(self, change: TextChange) -> bool:
@@ -270,12 +279,12 @@ class CollaborationSession:
         return offset + col
 
     def get_crdt_state_vector(self) -> bytes | None:
-        if HAS_YPY and self._ydoc is not None:
+        if HAS_YPY and self._ydoc is not None and not self._crdt_degraded:
             return self._ydoc.encode_state_vector()  # type: ignore[no-any-return]
         return None
 
     def apply_crdt_update(self, update: bytes) -> bool:
-        if HAS_YPY and self._ydoc is not None:
+        if HAS_YPY and self._ydoc is not None and not self._crdt_degraded:
             try:
                 self._ydoc.apply(update)
                 self.document.content = str(self._ytext)
@@ -286,7 +295,7 @@ class CollaborationSession:
         return False
 
     def encode_crdt_diff(self, state_vector: bytes) -> bytes | None:
-        if HAS_YPY and self._ydoc is not None:
+        if HAS_YPY and self._ydoc is not None and not self._crdt_degraded:
             try:
                 return self._ydoc.encode_diff(state_vector)  # type: ignore[no-any-return]
             except Exception as exc:
@@ -295,12 +304,12 @@ class CollaborationSession:
         return None
 
     def get_crdt_content(self) -> str:
-        if HAS_YPY and self._ytext is not None:
+        if HAS_YPY and self._ytext is not None and not self._crdt_degraded:
             return str(self._ytext)
         return self.document.content
 
     def set_crdt_content(self, content: str) -> None:
-        if HAS_YPY and self._ytext is not None:
+        if HAS_YPY and self._ytext is not None and not self._crdt_degraded:
             current = str(self._ytext)
             if current:
                 self._ytext.delete(0, len(current))
@@ -382,7 +391,7 @@ class CollaborationSession:
             "connected_users": sum(1 for u in self.user_info.values() if u.connected),
             "changes": self.document.change_count,
             "comments": len(self.comments),
-            "crdt_enabled": HAS_YPY and self._ydoc is not None,
+            "crdt_enabled": HAS_YPY and self._ydoc is not None and not self._crdt_degraded,
         }
 
     async def poll_notifications(self) -> SessionNotification | None:

@@ -120,3 +120,51 @@ def test_the_table_covers_the_ranges_the_two_sides_used_to_disagree_about() -> N
         "no astral character left"
     )
     assert any(row["prev"] == "" for row in roundtrip), "no edit into an empty document left"
+
+
+class _BrokenYText(_YTextStub):
+    def insert(self, index: int, text: str) -> None:
+        raise RuntimeError("y-py transport died")
+
+
+def _crdt_session(monkeypatch: pytest.MonkeyPatch, ytext: Any) -> CollaborationSession:
+    # built before HAS_YPY is patched: the constructor would otherwise call the unimported YDoc
+    session = _session("a\nb\nc")
+    monkeypatch.setattr("raven.unique.collaboration.HAS_YPY", True)
+    session._ydoc = object()
+    session._ytext = ytext
+    return session
+
+
+def _replace_b() -> TextChange:
+    return TextChange(
+        user_id="u", file="sample.py", start_line=1, start_col=0, end_line=1, end_col=1, old_text="b", new_text="X"
+    )
+
+
+def test_a_healthy_crdt_session_keeps_reporting_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = _crdt_session(monkeypatch, _YTextStub("a\nb\nc"))
+
+    assert session.apply_change(_replace_b()) is True
+    assert session.get_crdt_content() == "a\nX\nc"
+    assert session.get_state()["crdt_enabled"] is True
+
+
+def test_a_failing_crdt_stops_claiming_crdt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The fallback is a last-write-wins splice: it does not merge, so the session must stop saying it does."""
+    session = _crdt_session(monkeypatch, _BrokenYText("a\nb\nc"))
+    assert session.get_state()["crdt_enabled"] is True
+
+    assert session.apply_change(_replace_b()) is True
+    assert session.document.content == "a\nX\nc"
+    assert session.get_state()["crdt_enabled"] is False
+
+
+def test_a_degraded_session_hands_out_no_crdt_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = _crdt_session(monkeypatch, _BrokenYText("a\nb\nc"))
+    session.apply_change(_replace_b())
+
+    assert session.get_crdt_state_vector() is None
+    assert session.encode_crdt_diff(b"") is None
+    assert session.apply_crdt_update(b"") is False
+    assert session.get_crdt_content() == session.document.content

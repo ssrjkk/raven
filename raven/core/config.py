@@ -140,6 +140,9 @@ class Settings(BaseSettings):
     llm_timeout: int = 120
     llm_retry_max: int = 3
     llm_retry_delay: float = 1.0
+    llm_retry_after_cap: float = 30.0
+    """Upper bound on a provider's `Retry-After`. The retry sleep runs inside the admission slot, so an
+    unbounded header lets one response park a tenth of the gateway's capacity for as long as it likes."""
     llm_max_concurrent: int = 10
     llm_queue_timeout: float = 5.0
     agent_token_timeout: float = 30.0
@@ -322,6 +325,8 @@ class Settings(BaseSettings):
             errors.append(f"RATE_LIMIT_MAX must be >= 1, got {self.rate_limit_max}")
         if self.llm_retry_max < 0:
             errors.append(f"LLM_RETRY_MAX must be >= 0, got {self.llm_retry_max}")
+        if self.llm_retry_after_cap < 0:
+            errors.append(f"LLM_RETRY_AFTER_CAP must be >= 0, got {self.llm_retry_after_cap}")
         if errors:
             for err in errors:
                 logger.error("Config validation error: {}", err)
