@@ -85,8 +85,17 @@ models/*.gguf
 # commit is already in main's history, and 125k files here must never reach `git add -A`.
 raven_old*/
 
-# Session exports the chat UI writes into the working tree, named `<topic>_<date>_<hh-mm>.md`. They are
-# conversation transcripts, not documentation, and the one present while this rule was added weighed
-# 46,412,860 bytes at the repository root — untracked, so a single `git add -A` would have put it in
-# history permanently, where no later checkout can drop it. Root-anchored: `docs/` keeps its own dates.
-/*_20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]_[0-9][0-9]-[0-9][0-9].md
+# Session exports the chat UI writes into the working tree are conversation transcripts, not
+# documentation. One weighed 46,412,860 bytes; a later one named `raven!!!.md` (1,665,107 bytes)
+# reached a public commit anyway, because the rule here remembered the exporter's naming convention
+# (`<topic>_<date>_<hh-mm>.md`) and that file had been renamed by hand. A name cannot be predicted, so
+# root Markdown is opt-in instead: publishing a new root doc takes its own `!` line, a deliberate act,
+# while a transcript under any name stays out. `docs/` is untouched and keeps its own dated files.
+/*.md
+!AGENTS.md
+!CHANGELOG.md
+!CODE_OF_CONDUCT.md
+!CONTRIBUTING.md
+!README.md
+!README.ru.md
+!SECURITY.md
