@@ -10,14 +10,20 @@ export function computeReconnectDelay(attempt: number, base = 1000, cap = 30000)
   return Math.min(exponential * jitter, cap);
 }
 
+// Same silent drop as the agent socket: a message typed during the up-to-30s reconnect window was
+// discarded by `send` with no signal to the operator. Frames wait here; a full queue refuses visibly.
+export const WS_PENDING_LIMIT = 32;
+
 export function useWebSocket(onMessage: Handler) {
   const wsRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
+  const [queued, setQueued] = useState(0);
   const handlerRef = useRef(onMessage);
   handlerRef.current = onMessage;
   const reconnectAttempt = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const pendingRef = useRef<string[]>([]);
 
   const connect = useCallback(() => {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
@@ -29,6 +35,11 @@ export function useWebSocket(onMessage: Handler) {
       }
       setConnected(true);
       reconnectAttempt.current = 0;
+      // After the auth frame: the server reads the first frame as the credential.
+      const waiting = pendingRef.current;
+      pendingRef.current = [];
+      setQueued(0);
+      for (const payload of waiting) ws.send(payload);
     };
     ws.onclose = () => {
       setConnected(false);
@@ -69,11 +80,18 @@ export function useWebSocket(onMessage: Handler) {
     };
   }, [connect]);
 
-  const send = useCallback((text: string, sessionId: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ text, session_id: sessionId }));
+  const send = useCallback((text: string, sessionId: string): boolean => {
+    const payload = JSON.stringify({ text, session_id: sessionId });
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(payload);
+      return true;
     }
+    if (pendingRef.current.length >= WS_PENDING_LIMIT) return false;
+    pendingRef.current.push(payload);
+    setQueued(pendingRef.current.length);
+    return true;
   }, []);
 
-  return { connected, send };
+  return { connected, queued, send };
 }
