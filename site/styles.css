@@ -5,9 +5,10 @@
    Utility: IBM Plex Mono (code, tool names, JSON, metadata)
    ============================================================ */
 
-/* Self-hosted latin subsets — no third-party request. Only the weights the page renders
-   are declared: IBM Plex Mono ships one static instance per weight, IBM Plex Sans and
-   Space Grotesk are variable, so both share one file and pin wght per declaration. */
+/* Self-hosted latin subsets — no third-party request. IBM Plex Mono ships one static instance
+   per weight, so it is three faces. IBM Plex Sans and Space Grotesk are variable files: one face
+   each, declaring the weight *range* the file covers, so any weight a rule asks for is drawn from
+   the axis instead of falling back to the nearest pinned face. */
 @font-face {
     font-family: 'IBM Plex Mono';
     font-style: normal;
@@ -35,23 +36,7 @@
 @font-face {
     font-family: 'IBM Plex Sans';
     font-style: normal;
-    font-weight: 400;
-    font-display: swap;
-    src: url('fonts/IBMPlexSans-latin.woff2') format('woff2');
-}
-
-@font-face {
-    font-family: 'IBM Plex Sans';
-    font-style: normal;
-    font-weight: 500;
-    font-display: swap;
-    src: url('fonts/IBMPlexSans-latin.woff2') format('woff2');
-}
-
-@font-face {
-    font-family: 'IBM Plex Sans';
-    font-style: normal;
-    font-weight: 600;
+    font-weight: 400 600;
     font-display: swap;
     src: url('fonts/IBMPlexSans-latin.woff2') format('woff2');
 }
@@ -59,7 +44,7 @@
 @font-face {
     font-family: 'Space Grotesk';
     font-style: normal;
-    font-weight: 700;
+    font-weight: 300 700;
     font-display: swap;
     src: url('fonts/SpaceGrotesk-latin.woff2') format('woff2');
 }
@@ -123,6 +108,10 @@
     --fs-h3: 1.125rem;
     --fs-subhead: 1.3rem;
     --fs-h2: clamp(1.6rem, 2.4vw, 2.1rem);
+    /* The step the scale was missing: h2 topped out at 33.6px and h1 started at 46.4, so the one
+       sentence that carries the pitch had no tier to sit in and rendered at body size. It sizes to
+       its own column, so the line is as large as the space it has and never breaks mid-clause. */
+    --fs-display: clamp(1.5rem, 6cqi, 2.4rem);
     --fs-h1: clamp(2.9rem, 9vw, 5.4rem);
     --target: 24px;
 }
@@ -427,11 +416,14 @@ a {
 }
 
 .hero-tagline {
-    font-family: var(--font-mono);
-    font-size: var(--fs-lede);
-    color: var(--violet-text);
-    letter-spacing: -0.01em;
-    margin-bottom: 0.9rem;
+    font-family: var(--font-display);
+    font-size: var(--fs-display);
+    font-weight: 500;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+    color: var(--ink);
+    margin: 0.75rem 0 1.15rem;
 }
 
 /* One caret, on the wordmark. The tagline used to blink its own bar next to it, and two
@@ -2132,6 +2124,34 @@ footer {
     display: flex;
     flex-direction: column;
     justify-content: center;
+    container-type: inline-size;
+}
+
+/* ---------- the opening sequence ---------- */
+
+/* The claim lands before the evidence: the six lines of the pitch arrive one after another and the
+   console is already on screen when they finish. `both` carries the hidden state through the delay,
+   so no rule needs an `opacity: 0` that a killed animation would strand on the page. */
+.js .hero-copy > * {
+    animation: hero-in var(--dur-slow) var(--ease-out) both;
+}
+
+.js .hero-copy > :nth-child(2) { animation-delay: 90ms; }
+.js .hero-copy > :nth-child(3) { animation-delay: 180ms; }
+.js .hero-copy > :nth-child(4) { animation-delay: 270ms; }
+.js .hero-copy > :nth-child(5) { animation-delay: 360ms; }
+.js .hero-copy > :nth-child(6) { animation-delay: 450ms; }
+
+/* The wordmark takes the entrance and keeps its own crawl: a plain `> *` selector outranks
+   `.hero h1`, so without this line the sequence would quietly delete the sheen. */
+.js .hero h1 {
+    animation: hero-in var(--dur-slow) var(--ease-out) both, sheen 14s linear infinite;
+    animation-delay: 90ms, 0s;
+}
+
+@keyframes hero-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: none; }
 }
 
 /* ---------- the recorded client: glass, transport switch, typed replay ---------- */
@@ -2740,7 +2760,9 @@ html:not(.js) .composition {
     }
 
     .hero h1,
+    .js .hero h1,
     .live-dot,
+    .js .hero-copy > *,
     .js .section-inner.visible .stat,
     .js .section-inner.visible .feature-card,
     .js .section-inner.visible .door,
