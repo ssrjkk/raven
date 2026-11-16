@@ -107,7 +107,7 @@ redis = ["redis>=5.0,<6.0"]
 dev = [
     # 9.0.3 carries the PYSEC-2026-1845 fix; 9.2 drops Function._nodeid,
     # which pytest-benchmark 5.x still reads
-    "pytest>=9.0.3,<9.2",
+    "pytest>=9.2.0,<9.3",
     "pytest-asyncio>=0.24,<2.0",
     "pytest-cov>=7.1.0,<8.0",
     "pytest-timeout>=2.3,<4.0",
