@@ -25,7 +25,7 @@ site/
 ├── terminal-demo.js          # replays the recorded frames, explains the ones missing
 ├── procedural-animation.js   # static hero canvas painted from the palette
 ├── favicon.svg
-├── og-image.png              # Open Graph social preview image (1200x630)
+├── og-image.png              # Open Graph social preview, 1200x630, shot from the live page
 ├── robots.txt
 └── sitemap.xml
 ```
@@ -56,6 +56,18 @@ Regenerate after any change to the tool registry or the protocol handler:
 python scripts/record_site_frames.py
 ```
 
+Two images come from the rendered page rather than from a file someone updates by hand.
+`scripts/capture_og_image.py` opens the landing page at the size each consumer needs and clips the
+viewport: 1200x630 for `site/og-image.png`, the figure Open Graph asks for, and 1440x1030 for
+`docs/screenshots/hero.png`, the height the hero section ends at — at 900 the frame cut the client
+config through its closing braces. The shot is refused if a line of the pitch is still fading, if a
+block that card has to hold whole is cut, or if the PNG header reports a different size than the one
+asked for. Re-shoot both after any change to the hero:
+
+```bash
+python scripts/capture_og_image.py --only both --channel chrome
+```
+
 `tests/test_site_landing.py` fails if the committed generated files no longer match the
 registry, if a hand-written count on any page (tool count, version, channel adapters, the
 hero's preview list) disagrees with the code, if a preset button has no recording behind
@@ -68,7 +80,10 @@ the page, on a footer without the documentation link, on docs navigation without
 back to the landing page, and on a registry that stopped reading its state from the hash.
 It also fails if a group named on the install page is not published in
 `pyproject.toml`, if the optional-group count the page states drifts from the packaging, or if
-the page stops explaining what a missing group does to a control.
+the page stops explaining what a missing group does to a control. It fails too if either committed
+screenshot stops being the size `scripts/capture_og_image.py` declares, or if the social card's alt
+names a block its frame cuts — at 1200 wide the install row starts at 655, so the 630px card never
+showed it.
 The markup is held to its own policy as well: no inline script, `on*` handler or `style`
 attribute may ship while the meta tag forbids them, every page has one `h1` and no skipped
 heading level, and `lang` plus the four landmarks are declared. Every code block has a
@@ -91,18 +106,25 @@ past 130 KB.
 Three families, latin subsets, all served from `fonts/` — the page makes no request to a
 font host and needs no `preconnect` for one.
 
-| family | used for | weights | file |
+| family | used for | faces declared | file |
 | --- | --- | --- | --- |
-| IBM Plex Sans | prose, labels | 400, 500, 600 | `fonts/IBMPlexSans-latin.woff2` |
-| Space Grotesk | wordmark, headings, figures | 700 | `fonts/SpaceGrotesk-latin.woff2` |
+| IBM Plex Sans | prose, labels | `400 600` | `fonts/IBMPlexSans-latin.woff2` |
+| Space Grotesk | wordmark, headings, the pitch line | `300 700` | `fonts/SpaceGrotesk-latin.woff2` |
 | IBM Plex Mono | code, tool names, JSON | 400, 500, 600 | `fonts/IBMPlexMono-latin-<weight>.woff2` |
 
-124 KB in five files. Plex Sans and Space Grotesk are variable files, so one file per
-family carries all the weights and each `@font-face` pins its own `font-weight`; IBM Plex
-Mono ships a static instance per weight, so it is three files. Only the weights a rule in
-`styles.css` actually asks for are declared — a declared face the browser never loads is
-dead weight. Every face sets `font-display: swap`. All three families are licensed under
-the SIL Open Font License 1.1.
+113 KB across five files. Plex Sans and Space Grotesk are variable files: one face each, declaring
+the *range* the axis covers. A pinned `font-weight: 700` matches exactly one weight, and Chrome
+answers any other ask with the nearest face it has — so the 18 `font-weight: 600` headings on
+the page rendered at 700, one tier that looked like the tier above it. A range face instantiates
+the axis instead, which costs no extra byte: the whole file is already downloaded. IBM Plex Mono
+ships one static instance per weight, so it stays three faces. Every face sets `font-display:
+swap`. All three families are licensed under the SIL Open Font License 1.1.
+
+Two gates hold that line in opposite directions: `test_every_weight_a_rule_asks_for_is_covered_by_a_face`
+walks the stylesheet for every `(family, weight)` a rule asks for and fails on any ask no declared
+face covers, and `test_no_static_instance_ships_for_a_weight_the_page_never_asks_for` fails a static
+file nothing loads. The range form is exempt from the second one — an unused weight inside a range
+is the same bytes, not an unused file.
 
 One caveat of the latin subset: it stops before U+2190, so the `←`/`→` used in the console
 line prefixes and in the connector label render from the system fallback rather than from
@@ -151,6 +173,17 @@ curl -s -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 - Section reveal is progressive enhancement: `main.js` adds a `js` class to `<html>` and
   only then does CSS hide a section before it is in view. With JavaScript off, every
   section is visible and the registry falls back to a `<noscript>` note.
+- The pitch line sits in a display tier of its own, `--fs-display: clamp(1.5rem, 6cqi, 2.4rem)`,
+  measured against `.hero-copy`'s own width (`container-type: inline-size`) rather than the
+  viewport: that column is 515px at 1440 and 852px at 900, so one viewport-relative size that
+  fits the first breaks the second mid-clause. With no container the unit silently resolves
+  against the viewport instead, which is why the gate checks the parent as well as the number.
+- On load the six lines of the hero arrive 90ms apart, so the claim is on screen before the
+  evidence finishes. `.js .hero-copy > *` carries two classes and outranks `.hero h1`, so the
+  wordmark has its own rule running the entrance *and* the 14s sheen; both selectors are stopped
+  by name under `prefers-reduced-motion: reduce`. Nothing needs an `opacity: 0` — the hidden
+  state lives in the keyframe, carried through the delay by `both`, so an animation that never
+  starts leaves the line readable instead of stranding it transparent.
 - The hero console says which transport carried the frames, and a two-option switch rewrites
   the two route labels under the title: stdio names the pipe `python -m raven.core.mcp`
   reads, HTTP names `POST /mcp/rpc` and the bearer header that authorises it. Only the labels

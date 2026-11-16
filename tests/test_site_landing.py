@@ -61,6 +61,8 @@ FRAMES_DATA = SITE / "mcp-frames.js"
 STATS_DATA = SITE / "stats.js"
 LANDING_JS = SITE / "landing.js"
 OG_IMAGE = SITE / "og-image.png"
+README_SHOT = ROOT / "docs" / "screenshots" / "hero.png"
+CAPTURE_SCRIPT = ROOT / "scripts" / "capture_og_image.py"
 GENERATOR = ROOT / "scripts" / "record_site_frames.py"
 OFFSITE_AUDIT = ROOT / "scripts" / "check_docs_offsite.py"
 MKDOCS_YML = ROOT / "mkdocs.yml"
@@ -69,7 +71,7 @@ DEPLOY_SITE = WORKFLOWS / "deploy-site.yml"
 
 PUBLISHED_URL = "https://ssrjkk.github.io/raven/"
 DOCS_URL = f"{PUBLISHED_URL}docs/"
-SOCIAL_ALT = "Raven landing page: the hero, a recorded MCP handshake, and the install commands."
+SOCIAL_ALT = "Raven landing page: the hero, a recorded MCP handshake, and the transport switch."
 CSP_POLICY = (
     "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; "
     "img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; "
@@ -920,6 +922,94 @@ def test_faces_point_at_fonts_that_ship() -> None:
     assert used == {"IBM Plex Mono", "IBM Plex Sans", "Space Grotesk"}
 
 
+def _font_families(css: str) -> dict[str, str]:
+    """``var(--font-display)`` -> ``Space Grotesk``, read from the token block that defines them."""
+    root = re.search(r":root \{(.*?)\n\}", css, re.S)
+    assert root is not None, "no :root block"
+    families: dict[str, str] = {}
+    for name, value in re.findall(r"(--font-[a-z]+): ([^;]+);", root.group(1)):
+        match = re.search(r"'([^']+)'", value)
+        assert match is not None, name
+        families[f"var({name})"] = match.group(1)
+    return families
+
+
+def _declared_spans(css: str) -> dict[str, list[tuple[float, float]]]:
+    """Each family against the weight spans its ``@font-face`` blocks actually cover."""
+    spans: dict[str, list[tuple[float, float]]] = {}
+    for face in re.findall(r"@font-face \{(.*?)\}", css, re.S):
+        family, weights = re.search(r"font-family: '([^']+)'", face), re.search(r"font-weight: ([^;]+);", face)
+        assert family is not None and weights is not None, "face without a family or a weight"
+        ends = [float(w) for w in weights.group(1).split()]
+        spans.setdefault(family.group(1), []).append((ends[0], ends[-1]))
+    return spans
+
+
+def _fmt_weight(weight: float) -> str:
+    return f"{weight:g}"
+
+
+def _weight_asks(css: str) -> dict[str, set[float]]:
+    """Every ``(family, weight)`` a rule asks for in the same declaration block.
+
+    A block that names a family but no weight is read as asking for 400, the document default.
+    Weights reached only by inheritance from a nested rule are outside what a source scan can see,
+    which is why the range form matters: it covers them without being asked.
+    """
+    families = _font_families(css)
+    declared = _declared_spans(css)
+    asks: dict[str, set[float]] = {}
+    for body in re.findall(r"\{([^{}]*)\}", css):
+        if "src:" in body:
+            continue
+        named = re.search(r"font-family:\s*([^;]+);", body)
+        if named is None:
+            continue
+        first = named.group(1).split(",")[0].strip()
+        family = families.get(first, first.strip("'\""))
+        if family not in declared:
+            continue
+        asked = re.search(r"font-weight:\s*(\d+);", body)
+        asks.setdefault(family, set()).add(float(asked.group(1)) if asked else 400.0)
+    return asks
+
+
+def test_every_weight_a_rule_asks_for_is_covered_by_a_face() -> None:
+    """Eighteen headings on the landing page ask for Space Grotesk 600 -- thirteen ``.section h3``,
+    four ``.stage h3`` and five ``.explore-title``, counted distinct in the rendered DOM -- and the
+    stylesheet declared a single pinned face at 700. Chrome answers an unmatched weight with the
+    nearest face it has, so all eighteen rendered bold: the same
+    weight as the wordmark, one tier below it in the scale and indistinguishable from it in the
+    browser. A pinned ``@font-face`` is the right form for a static file and the wrong form for a
+    variable one, which has to declare the range the axis covers."""
+    css = read(STYLES)
+    spans = _declared_spans(css)
+    assert spans, "no @font-face blocks"
+    uncovered = {
+        f"{family} {_fmt_weight(weight)}"
+        for family, asked in _weight_asks(css).items()
+        for weight in asked
+        if not any(low <= weight <= high for low, high in spans[family])
+    }
+    assert uncovered == set(), sorted(uncovered)
+
+
+def test_no_static_instance_ships_for_a_weight_the_page_never_asks_for() -> None:
+    """IBM Plex Mono is three files, one per weight, so a face no rule names is a declaration that
+    describes a file nothing loads. The variable families are covered by the range gate above and
+    share one file, so they are not checked here."""
+    css = read(STYLES)
+    static = {
+        family: [weight for low, high in spans for weight in [low] if low == high]
+        for family, spans in _declared_spans(css).items()
+        if all(low == high for low, high in spans)
+    }
+    assert "IBM Plex Mono" in static, static
+    for family, weights in static.items():
+        asked = _weight_asks(css).get(family, set())
+        assert set(weights) <= asked, (family, sorted(_fmt_weight(w) for w in set(weights) - asked))
+
+
 def test_every_page_preloads_both_faces_and_the_stylesheet() -> None:
     preloaded = {"fonts/SpaceGrotesk-latin.woff2", "fonts/IBMPlexSans-latin.woff2"}
     for name in ALL_PAGES:
@@ -965,6 +1055,52 @@ def test_social_metadata_is_complete_on_every_content_page() -> None:
         assert f'<meta name="theme-color" content="{brand_token("bg")}">' in html, name
     assert len(titles) == len(CONTENT_PAGES), "two pages share a title"
     assert len(descriptions) == len(CONTENT_PAGES), "two pages share a description"
+
+
+CARD_ALT_CLAIMS = {
+    ".hero-copy": "the hero",
+    ".console": "a recorded MCP handshake",
+    ".transport-switch": "the transport switch",
+}
+
+
+def _capture_table(source: str, table: str) -> dict[str, str]:
+    """One of the two literal tables in ``scripts/capture_og_image.py``, as name -> source of value."""
+    block = re.search(rf"\n{table}: .*?= \{{(.*?)\n\}}", source, re.S)
+    assert block is not None, table
+    return dict(re.findall(r'"([a-z]+)": \(([^()]*)\)', block.group(1)))
+
+
+def _card_size(value: str) -> tuple[int, int]:
+    width, height = re.findall(r"\d+", value)[-2:]
+    return int(width), int(height)
+
+
+def test_both_hero_shots_are_the_frame_their_consumer_asks_for() -> None:
+    """Two consumers, two fixed sizes: the social card is 1200x630 because that is the figure Open
+    Graph asks for, the README band is 1440x1030 because that is where the hero section ends at 1440
+    wide. Both sizes are read out of the capture script, so the script, the bytes it wrote and this
+    gate cannot drift apart -- which is how the pair went stale once: an element shot is whatever
+    height the box happens to be, and a 900px README frame saw the client config through its closing
+    braces."""
+    cards = _capture_table(read(CAPTURE_SCRIPT), "CARDS")
+    assert _card_size(cards["og"]) == png_size(OG_IMAGE) == (1200, 630)
+    assert _card_size(cards["readme"]) == png_size(README_SHOT) == (1440, 1030)
+    for readme in ("README.md", "README.ru.md"):
+        assert "docs/screenshots/hero.png" in read(ROOT / readme), readme
+
+
+def test_the_social_card_alt_claims_only_what_the_frame_holds() -> None:
+    """The alt used to end "and the install commands". At 1200 wide the install row starts at 655, so
+    the card never showed them: an alt describing a block the frame cuts is the same defect as a
+    figure the page typed by hand. The claims are checked against the capture script's own REQUIRED
+    list, which is exactly the set of blocks it refuses to let the frame cut."""
+    blocks = _capture_table(read(CAPTURE_SCRIPT), "REQUIRED")
+    held = {name: re.findall(r'"([^"]+)"', value) for name, value in blocks.items()}
+    assert set(held["og"]) == set(CARD_ALT_CLAIMS), held
+    for selector, phrase in CARD_ALT_CLAIMS.items():
+        assert phrase in SOCIAL_ALT, selector
+    assert "install" not in SOCIAL_ALT.lower(), SOCIAL_ALT
 
 
 def test_each_inner_page_publishes_its_breadcrumb() -> None:
@@ -1257,11 +1393,19 @@ def test_the_offsite_audit_fails_on_a_stylesheet_url(tmp_path: Path, capsys: pyt
 def test_documentation_loads_no_third_party_font() -> None:
     """Material fetches Roboto from Google Fonts unless the theme says otherwise, and a product
     that advertises a server you run yourself should not hand every visitor's IP address to
-    Google on the documentation side either."""
+    Google on the documentation side either. What gets scanned is a reference a browser would
+    follow, not the hostname as a word: the archived changelog contains a sentence about taking
+    Google Fonts out of the site, and a gate that cannot tell a `<link>` from a description of one
+    gets rewritten around rather than obeyed."""
     assert mkdocs_config()["theme"].get("font") is False
     assert "fonts.googleapis.com" not in read(MKDOCS_YML)
     for doc in sorted((ROOT / "docs").rglob("*.md")):
-        assert "fonts.googleapis.com" not in read(doc), doc
+        offenders = [
+            line.strip()[:120]
+            for line in read(doc).splitlines()
+            if "fonts.googleapis.com" in line and re.search(r"(?:href|src)=|[\"'(]@import|url\(", line)
+        ]
+        assert offenders == [], (doc, offenders)
 
 
 def test_documentation_carries_the_brand_palette() -> None:
@@ -1842,3 +1986,124 @@ def test_recorded_frames_wrap_like_every_other_code_block() -> None:
     for prop in ("white-space", "overflow-wrap"):
         assert _decl(stage, prop) == _decl(block, prop), prop
     assert _decl(stage, "white-space") == "pre-wrap"
+
+
+# Measured in Chrome on the rendered line: Space Grotesk 500 at -0.025em sets
+# "66 tools. One server. Two transports." 16.467px wide for every 1px of font size — the same to
+# three decimals at 22px and at 40px, and the same in a 358px column as in an 852px one.
+PITCH_ADVANCE_RATIO = 16.467
+
+# The width the tagline's own column actually gets, read from .hero-copy's box at five viewports.
+PITCH_COLUMNS = {390: 358, 768: 720, 900: 852, 1280: 515, 1440: 515}
+
+
+def _fs_scale(css: str) -> dict[str, str]:
+    return dict(re.findall(r"^\s*(--fs-[a-z0-9-]+): ([^;]+);", css, re.MULTILINE))
+
+
+def _font_span(value: str, scale: dict[str, str]) -> tuple[float, float]:
+    """The ``(smallest, largest)`` pixels a ``font-size`` value is allowed to resolve to."""
+    args = value[6:-1].split(",") if value.startswith("clamp(") else [value, value]
+    low, high = _font_floor(args[0], scale), _font_floor(args[-1], scale)
+    assert low is not None and high is not None, value
+    return low, high
+
+
+def test_the_pitch_has_a_tier_of_its_own_above_the_section_title() -> None:
+    """``66 tools. One server. Two transports.`` is the sentence the page exists to make, and the
+    scale had nowhere to put it: ``--fs-h2`` stopped at 33.6px while ``--fs-h1`` started at 46.4px,
+    so the claim fell through to ``--fs-lede`` and rendered at 17px / 1.65 / weight 400 in the
+    browser — the same size, the same line-height and the same weight as the paragraph beneath it,
+    which read as one undifferentiated block of body copy instead of as the pitch."""
+    css = read(STYLES)
+    scale = _fs_scale(css)
+    h2 = _font_span(scale["--fs-h2"], scale)
+    display = _font_span(scale["--fs-display"], scale)
+    h1 = _font_span(scale["--fs-h1"], scale)
+    lede = _font_span(scale["--fs-lede"], scale)
+    assert h2[1] < display[1] < h1[0], (h2, display, h1)
+    assert display[0] >= 1.4 * lede[0], (display[0], lede[0])
+
+    tagline = css_rule(".hero-tagline")
+    assert _decl(tagline, "font-size") == "var(--fs-display)", tagline
+    assert _decl(tagline, "font-family") == "var(--font-display)", tagline
+    assert _decl(tagline, "font-weight") == "500", tagline
+    assert _decl(tagline, "color") == "var(--ink)", tagline
+    assert "balance" in (_decl(tagline, "text-wrap") or ""), tagline
+
+
+def test_the_display_size_stays_inside_the_column_it_is_measured_against() -> None:
+    """``--fs-display`` is sized in container units because the hero column is 515px wide at 1440 and
+    852px at 900: one viewport-relative size that fits the first cuts the second mid-clause. The
+    coefficient is only safe while the line stays inside the column it is measured against, and with
+    no container on the parent ``cqi`` resolves against the *viewport* instead — 86px of pitch in a
+    515px column, which a browser hides by wrapping rather than by failing."""
+    css = read(STYLES)
+    scale = _fs_scale(css)
+    value = scale["--fs-display"]
+    preferred = re.search(r"([\d.]+)cqi", value)
+    assert preferred is not None, value
+    coefficient = float(preferred.group(1)) / 100
+    assert coefficient * PITCH_ADVANCE_RATIO < 1.0, coefficient
+
+    low, high = _font_span(value, scale)
+    for width, column in PITCH_COLUMNS.items():
+        size = min(high, max(low, coefficient * column))
+        if size > low:
+            assert size * PITCH_ADVANCE_RATIO <= column, (width, column, size)
+
+    assert _decl(css_rule(".hero-copy"), "container-type") == "inline-size"
+    html = page("index.html")
+    assert html.index('class="hero-copy"') < html.index('class="hero-tagline"')
+
+
+def _opening_sequence_delays() -> dict[int, float]:
+    """The per-child delays of the hero entrance, keyed by ``:nth-child`` index."""
+    css = read(STYLES)
+    return {
+        int(order): float(value)
+        for order, value in re.findall(r"\.js \.hero-copy > :nth-child\((\d)\) \{ animation-delay: ([\d.]+)ms; \}", css)
+    }
+
+
+def test_the_opening_sequence_arrives_in_order_and_leaves_nothing_hidden() -> None:
+    """The sections below the fold already reveal themselves on scroll, so a hero that merely
+    appeared read as a page that had finished loading before anyone got to it. The six lines of the
+    pitch now arrive one after another. ``both`` is what makes this safe to write without an
+    ``opacity: 0`` on the element: it carries the keyframe's hidden state through the delay, while an
+    animation the browser never starts leaves the line visible instead of stranding it transparent."""
+    rule = css_rule(".js .hero-copy > *")
+    animation = _decl(rule, "animation") or ""
+    assert "hero-in" in animation and "both" in animation, animation
+    assert "opacity" not in rule, rule
+
+    delays = _opening_sequence_delays()
+    assert sorted(delays) == [2, 3, 4, 5, 6], delays
+    steps = [delays[order] for order in sorted(delays)]
+    assert all(later > earlier for earlier, later in pairwise(steps)), steps
+    assert steps[-1] - steps[0] <= 400, steps
+
+
+def test_the_wordmark_keeps_its_crawl_through_the_opening_sequence() -> None:
+    """``.js .hero-copy > *`` carries two classes and outranks ``.hero h1``'s one, so the first
+    version of the sequence did not delay the wordmark — it replaced the 14s sheen with the entrance
+    and the brand stopped moving. A specificity collision reads as a design decision, so the delay
+    here is the one the sequence gives the h1 as the second child, not a copy of it."""
+    delays = _opening_sequence_delays()
+    rule = css_rule(".js .hero h1")
+    animation = _decl(rule, "animation") or ""
+    assert "hero-in" in animation and "sheen" in animation, animation
+    assert _decl(rule, "animation-delay") == f"{delays[2]:g}ms, 0s", rule
+
+
+def test_reduced_motion_stops_the_opening_sequence_by_name() -> None:
+    """The blanket ``animation-duration: .001ms`` in the reduced-motion block already ends the
+    sequence instantly, which is only the same outcome as stopping it because ``both`` lands every
+    line on the visible keyframe. Naming the rule is the durable half: it keeps a later change to the
+    fill mode from turning the pitch into six lines that never arrive."""
+    block = at_block("@media (prefers-reduced-motion: reduce)")
+    stopped: set[str] = set()
+    for selectors, body in rules_in(block):
+        if "animation: none" in body:
+            stopped |= selectors
+    assert {".js .hero-copy > *", ".js .hero h1"} <= stopped, sorted(stopped)

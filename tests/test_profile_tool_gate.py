@@ -296,9 +296,24 @@ def test_the_dead_names_have_no_reference_left_anywhere() -> None:
         for path in (ROOT / base).rglob("*"):
             if not path.is_file() or path.suffix not in {".py", ".md"}:
                 continue
+            relative = path.relative_to(ROOT)
+            # `docs/archive` is verbatim history, which is what `AGENTS.md` promises it holds. The
+            # changelog entry that removed a field names it, so the archive is the one place a dead
+            # term has to survive; rewriting it to satisfy this scan would destroy the only record of
+            # why the field went, and the tree that has to be clean is the one that runs.
+            if relative.parts[:2] == ("docs", "archive"):
+                continue
             if pattern.search(path.read_text(encoding="utf-8", errors="ignore")):
-                hits.append(str(path.relative_to(ROOT)))
+                hits.append(str(relative))
     assert not hits, f"references to deleted profile fields remain: {hits}"
+    # The exclusion above is only honest while it is holding something real: if the archive stops
+    # naming a dead term, the skip is dead code and must go with it.
+    archived = [
+        path.name
+        for path in (ROOT / "docs" / "archive").glob("*.md")
+        if pattern.search(path.read_text(encoding="utf-8", errors="ignore"))
+    ]
+    assert archived, "no archive file names a dead term: the docs/archive skip above is dead code"
     # Non-vacuity: the same scan finds a field that is still live.
     live = re.compile("|".join(["allowed_to", "ols"]))
     assert live.search((ROOT / "raven/core/agents/profiles.py").read_text(encoding="utf-8"))
