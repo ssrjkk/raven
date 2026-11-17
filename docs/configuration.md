@@ -137,6 +137,28 @@ say so instead of letting the switch appear not to hold.
 | `WORKSPACE_PATH` | The workspace root — see [The workspace root](#the-workspace-root) | unset, so the working directory |
 | `RAVEN_POLICY_DIR` | Directory holding the tool ruleset (`tools.json`) — the policy engine asks the **process** environment, never `Settings`, so a file value reaches it only through the adoption step a start runs (measured: an unset process name plus the line in the file resolves to the file's directory after `create_gateway()`, and to the packaged `policy/` before it). Unset, the engine reads `policy/` next to the source tree, or `raven/policy/` inside an installed wheel | the directory the package ships |
 
+### Data Retention
+
+The gateway sweeps its own tables. Without it a monitor polled every minute writes 1 440 rows a day
+forever, and a year later the console reads its history screens out of millions of rows it never shows.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `RETENTION_ENABLED` | Turn the sweep off. Rows then grow for as long as the install runs; the switch exists for a database being preserved as evidence, not for normal operation | `1` |
+| `RETENTION_INTERVAL_SECONDS` | How often the sweep runs. It deletes in one transaction per table, so a pass costs the writes it performs and nothing else; below 60 is refused at load | `21600` (6 h) |
+| `RETENTION_TELEMETRY_DAYS` | Age after which monitor checks, routine runs and metric snapshots go away. `0` keeps telemetry until the row cap removes it | `90` |
+| `RETENTION_TELEMETRY_ROWS` | Newest rows kept per monitor, per routine and per metric name, whatever their age — the bound that matters for a monitor polled every minute, whose 90 days is 130k rows. `0` disables the cap; anything between `0` and `50` is refused, because it would cut a chart shorter than the console draws | `2000` |
+| `RETENTION_HISTORY_DAYS` | Age after which conversations, coding sessions and stored entities are deleted. `0` — the default — keeps everything a person wrote forever: removing their words has to be a decision, not a side effect | `0` |
+
+Two things the sweep never does: it does not touch a table another owner already bounds (the task
+purger, the outbox worker and the session store each delete their own rows), and it does not age a
+table this install never created — a store makes its table on first write, and one absent table used to
+abort the whole pass, so the telemetry that *was* there stopped aging too.
+
+Every table in the schema declares which of these it is in `raven/core/retention.py`, and the build
+fails when a `CREATE TABLE` appears with no lifecycle decision next to it.
+
+
 ## Env files
 
 There is one place a name is persisted: an env file. `raven onboard`, the Admin console and

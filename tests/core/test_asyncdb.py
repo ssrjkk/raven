@@ -91,6 +91,15 @@ def test_connect_backend_requires_path_without_dsn():
             raise AssertionError("expected ValueError for missing db_path")
 
 
+def _aiosqlite_workers() -> set[int]:
+    """Live non-daemon aiosqlite worker threads: one per connection the process opened and did not close."""
+    return {
+        id(t)
+        for t in threading.enumerate()
+        if not t.daemon and getattr(getattr(t, "_target", None), "__qualname__", "") == "_connection_worker_thread"
+    }
+
+
 class TestFailedOpenReleasesItsWorker:
     """`aiosqlite.connect()` starts a non-daemon worker thread, and that thread only stops when
     `close()` hands it the stop sentinel. A file that is not a database fails inside `_ensure`,
@@ -150,3 +159,71 @@ class TestFailedOpenReleasesItsWorker:
             return self._workers() & opened
 
         assert asyncio.run(_open_then_close()) == set()
+
+
+class TestConcurrentOpensShareOneConnection:
+    """`_ensure()` checked `_conn is None`, then awaited `aiosqlite.connect()` before assigning it.
+
+    Two coroutines reaching an unopened handle therefore both opened a connection to the same file,
+    and the second assignment dropped the first: the loser's WAL pragma answered `database is locked`
+    inside its worker thread, and its non-daemon worker had no owner left to close it. `Database` in
+    `raven/core/db.py` already serialises this with a connect lock; this handle has to as well.
+    """
+
+    def test_eight_concurrent_opens_leave_one_worker(self, tmp_path: Path) -> None:
+        path = tmp_path / "shared.db"
+        before = _aiosqlite_workers()
+
+        async def _race() -> set[int]:
+            db = connect_backend(str(path))
+            await asyncio.gather(*(db.connect() for _ in range(8)))
+            opened = _aiosqlite_workers() - before
+            await db.close()
+            for thread in threading.enumerate():
+                if id(thread) in opened:
+                    thread.join(timeout=5.0)
+            assert not _aiosqlite_workers() & opened, "a connection the handle forgot to keep was never closed"
+            return opened
+
+        opened = asyncio.run(_race())
+        assert len(opened) == 1, f"{len(opened)} connections opened for one handle"
+
+    def test_the_statement_path_never_opens_a_second_connection(self, tmp_path: Path) -> None:
+        """Statements already queue behind the writer gate, so the fix must not be needed there."""
+        path = tmp_path / "shared-statements.db"
+        before = _aiosqlite_workers()
+
+        async def _race() -> int:
+            db = connect_backend(str(path))
+            values = await asyncio.gather(*(db.fetchval("SELECT 1") for _ in range(8)))
+            assert values == [1] * 8, "the racing statements did not all reach a working connection"
+            opened = _aiosqlite_workers() - before
+            await db.close()
+            for thread in threading.enumerate():
+                if id(thread) in opened:
+                    thread.join(timeout=5.0)
+            return len(opened)
+
+        assert asyncio.run(_race()) == 1, "the statement path opened more than one connection"
+
+    def test_racing_opens_build_one_pool(self) -> None:
+        """The Postgres handle has the same check-await-assign shape, so it gets the same lock."""
+        asyncpg = pytest.importorskip("asyncpg")
+        built: list[int] = []
+
+        class FakePool:
+            async def close(self) -> None:
+                pass
+
+        async def create_pool(*_args: object, **_kwargs: object) -> FakePool:
+            built.append(1)
+            await asyncio.sleep(0)
+            return FakePool()
+
+        async def _race() -> int:
+            db = PostgresDB("postgresql://u:p@localhost:5432/raven")
+            with patch.object(asyncpg, "create_pool", create_pool):
+                await asyncio.gather(*(db.connect() for _ in range(8)))
+            return len(built)
+
+        assert asyncio.run(_race()) == 1, f"{len(built)} pools built for one handle"

@@ -69,6 +69,7 @@ class SQLiteDB(AsyncDB):
     def __init__(self, db_path: str | Path) -> None:
         self._path = str(db_path)
         self._conn: aiosqlite.Connection | None = None
+        self._connect_lock = asyncio.Lock()
         self._write_gate = asyncio.Lock()
         self._tx_owner: asyncio.Task[Any] | None = None
         self._tx_depth = 0
@@ -77,7 +78,16 @@ class SQLiteDB(AsyncDB):
         await self._ensure()
 
     async def _ensure(self) -> aiosqlite.Connection:
-        if self._conn is None:
+        conn = self._conn
+        if conn is not None:
+            return conn
+        # The check and the assignment are separated by an await, so without this lock two coroutines
+        # reaching an unopened handle each opened a connection: the second `_conn =` dropped the first,
+        # its WAL pragma answered "database is locked", and its non-daemon worker was left with no
+        # owner to close it, which blocks the interpreter at exit.
+        async with self._connect_lock:
+            if self._conn is not None:
+                return self._conn
             # isolation_level=None gives each statement its own transaction, so a write is durable
             # the moment it runs instead of waiting for whichever caller reaches commit() first -
             # and no stale implicit transaction can make a later BEGIN fail. Grouped writes use
@@ -102,7 +112,7 @@ class SQLiteDB(AsyncDB):
                     await connection.close()
                 raise
             self._conn = connection
-        return self._conn
+            return self._conn
 
     @contextlib.asynccontextmanager
     async def _writer(self) -> AsyncIterator[None]:
@@ -259,6 +269,7 @@ class PostgresDB(AsyncDB):
     def __init__(self, dsn: str | None = None, pool: Any | None = None) -> None:
         self.dsn = dsn
         self._pool: Any = pool
+        self._connect_lock = asyncio.Lock()
         self._owns_pool = pool is None
         # The open transaction belongs to the caller that opened it, not to the handle: as
         # instance state it leaked into every other task's execute(), which then ran inside a
@@ -279,26 +290,31 @@ class PostgresDB(AsyncDB):
     async def connect(self) -> None:
         if self._pool is not None:
             return
-        import asyncpg
-
-        last_error: Exception | None = None
-        for attempt in range(1, self._MAX_CONNECT_RETRIES + 1):
-            try:
-                self._pool = await asyncpg.create_pool(self.dsn, min_size=1, max_size=10)
+        # Same shape as the SQLite handle: the check and the assignment sit on either side of an
+        # await, so racing callers would each build a pool and only the last one would be closed.
+        async with self._connect_lock:
+            if self._pool is not None:
                 return
-            except (TimeoutError, OSError, asyncpg.PostgresError) as e:
-                last_error = e
-                if attempt < self._MAX_CONNECT_RETRIES:
-                    logger.warning(
-                        "Postgres connect attempt {}/{} failed: {} — retrying in {}s",
-                        attempt,
-                        self._MAX_CONNECT_RETRIES,
-                        e,
-                        self._CONNECT_RETRY_DELAY_S,
-                    )
-                    await asyncio.sleep(self._CONNECT_RETRY_DELAY_S)
-        msg = f"Postgres connect failed after {self._MAX_CONNECT_RETRIES} attempts"
-        raise RuntimeError(msg) from last_error
+            import asyncpg
+
+            last_error: Exception | None = None
+            for attempt in range(1, self._MAX_CONNECT_RETRIES + 1):
+                try:
+                    self._pool = await asyncpg.create_pool(self.dsn, min_size=1, max_size=10)
+                    return
+                except (TimeoutError, OSError, asyncpg.PostgresError) as e:
+                    last_error = e
+                    if attempt < self._MAX_CONNECT_RETRIES:
+                        logger.warning(
+                            "Postgres connect attempt {}/{} failed: {} — retrying in {}s",
+                            attempt,
+                            self._MAX_CONNECT_RETRIES,
+                            e,
+                            self._CONNECT_RETRY_DELAY_S,
+                        )
+                        await asyncio.sleep(self._CONNECT_RETRY_DELAY_S)
+            msg = f"Postgres connect failed after {self._MAX_CONNECT_RETRIES} attempts"
+            raise RuntimeError(msg) from last_error
 
     @staticmethod
     def _rewrite(sql: str, params: Sequence[Any]) -> tuple[str, list[Any]]:

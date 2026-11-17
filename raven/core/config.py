@@ -153,6 +153,23 @@ class Settings(BaseSettings):
     channel_sandbox_policy: str = ""
     """JSON mapping channel_id to sandbox policy name, e.g. {"telegram":"non-main","discord":"code-exec"}"""
 
+    # --- Data retention ---
+    retention_enabled: bool = True
+    """Turn the lifecycle sweep off. Rows then grow for as long as the install runs; the switch exists for
+    the case where the database is being preserved as evidence, not for normal operation."""
+    retention_interval_seconds: float = 21_600.0
+    """How often the sweep runs. It deletes in one transaction per table, so a pass costs the writes it
+    performs and nothing otherwise."""
+    retention_telemetry_days: float = 90.0
+    """Age after which monitor checks, routine runs and metric snapshots go away. Zero keeps telemetry
+    until the per-parent row cap removes it."""
+    retention_telemetry_rows: int = 2_000
+    """Newest rows kept per monitor, per routine and per metric name, whatever their age. This is the bound
+    that matters for a monitor polled every minute: 90 days of it is 130k rows."""
+    retention_history_days: float = 0.0
+    """Age after which conversations, coding sessions and stored entities are deleted. Zero — the default —
+    keeps everything a person wrote forever; removing their words has to be a decision, not a side effect."""
+
     # --- Search Integration ---
     brave_search_api_key: SafeSecretStr = SafeSecretStr("")
     perplexity_api_key: SafeSecretStr = SafeSecretStr("")
@@ -249,6 +266,30 @@ class Settings(BaseSettings):
                 except OSError as exc:
                     logger.warning("Failed to persist WEB_SECRET_KEY to {}: {}", key_file, exc)
         self._check_cors_policy()
+        self._check_retention_policy()
+
+    def _check_retention_policy(self) -> None:
+        """Refuse a retention configuration that would delete more, or sooner, than it claims to.
+
+        The sweep is the only code in the install that removes rows nobody asked for by id, so the
+        bounds on it are checked here rather than discovered by an operator on their first morning.
+        """
+        if self.retention_interval_seconds < 60:
+            raise ValueError(
+                f"RETENTION_INTERVAL_SECONDS={self.retention_interval_seconds} would run the sweep more than "
+                "once a minute; it deletes in one transaction per table and there is nothing to gain that often"
+            )
+        for name, days in (
+            ("RETENTION_TELEMETRY_DAYS", self.retention_telemetry_days),
+            ("RETENTION_HISTORY_DAYS", self.retention_history_days),
+        ):
+            if days < 0:
+                raise ValueError(f"{name}={days} is not a lifetime; use 0 to mean 'no age rule'")
+        if self.retention_telemetry_rows != 0 and self.retention_telemetry_rows < 50:
+            raise ValueError(
+                f"RETENTION_TELEMETRY_ROWS={self.retention_telemetry_rows} would cap a monitor's visible history "
+                "below any chart the console draws; use 0 to disable the row cap, or 50 and above"
+            )
 
     def _check_cors_policy(self) -> None:
         """Refuse a CORS configuration that cannot mean what it says.

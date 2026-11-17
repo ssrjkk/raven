@@ -78,6 +78,7 @@ from raven.core.project_insights_api import create_project_insights_router
 from raven.core.project_metrics_api import create_project_metrics_router
 from raven.core.project_metrics_api import set_workspace as set_metrics_workspace
 from raven.core.rag_api import create_rag_router
+from raven.core.retention import RetentionSweeper
 from raven.core.routine.engine import RoutineEngine, register_routine_engine
 from raven.core.routine.store import RoutineStore
 from raven.core.scaffold_api import create_scaffold_router
@@ -440,6 +441,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
     from raven.tools.analytics import set_analytics_engine as set_tool_analytics
 
     set_tool_analytics(analytics_engine)
+    retention_sweeper = RetentionSweeper(settings.resolved_db_path)
 
     memory_manager = _MemoryManager(db=gateway.db, workspace=root)
     dream_engine = _DreamEngine(memory=memory_manager, event_bus=gateway.event_bus)
@@ -458,6 +460,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
         await monitor_engine.start()
         await routine_engine.start()
         await analytics_engine.start()
+        await retention_sweeper.start()
         await dream_engine.start()
         sse_stream.start_cleanup()
         if binds_every_interface(settings.web_host):
@@ -487,6 +490,7 @@ async def _run_gateway(gateway: Gateway, web_port: int):
             ("routine engine", routine_engine.stop()),
             ("routine store", routine_store.close()),
             ("analytics engine", analytics_engine.stop()),
+            ("retention sweep", retention_sweeper.stop()),
             ("plugin workers", shutdown_plugins()),
             ("LLM cleanup", gw.llm.cleanup()),
             ("gateway stop", gw.stop()),

@@ -20,6 +20,7 @@ asks: the changelog is not a fix log.
 - MCP tool annotations state what each tool can do, taken from the policy that knows it rather than a hand-kept copy
 - The fine-tuning loop runs, and its numbers mean what they claim
 - The landing site is six pages; the gateway page publishes the command registry instead of a copy of it, and the docs audit fails on drift
+- Every table says how it stops growing: `raven/core/retention.py` gives each of the 22 a lifecycle kind and the gateway sweeps telemetry on a timer behind five validated `RETENTION_*` knobs, while the build fails on a `CREATE TABLE` that has no decision next to it. What a person wrote is the conservative side — `RETENTION_HISTORY_DAYS=0` ships, so conversations, coding sessions and stored entities are deleted only when that knob is pulled
 
 ### Changed
 - One UI language, with a command palette that still answers in Russian
@@ -33,6 +34,7 @@ asks: the changelog is not a fix log.
 
 ### Fixed
 - Console controls that reported success and changed nothing now reach real endpoints, and the palette navigates
+- One handle could open two connections. `connect()` checked `_conn is None` and then awaited the open before assigning it, so a second coroutine reaching the same handle built its own connection — its WAL pragma answered `database is locked`, and the connection the handle dropped had no owner left to close it, which is what blocked the interpreter at exit. Both backends now serialise the open, and an absent table no longer aborts a whole retention pass
 - The operator's tool switches bite on webchat and on task steps, not only on the path that had a test
 - The shipped image can build the SPA it ships
 - `raven service` on Windows installs a service that exists
