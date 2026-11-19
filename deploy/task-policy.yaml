@@ -37,7 +37,6 @@ allowed_tools:
       - ".yml"
       - ".md"
       - ".txt"
-      - ".env"
 
   - name: "network"
     allowed: true

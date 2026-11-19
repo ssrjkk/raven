@@ -10,7 +10,9 @@ from pathlib import Path
 from loguru import logger
 
 from raven.core.security.code_sandbox import PYTHON_RUNNER_MODULE, untrusted_child_env, validate_python_code
+from raven.core.security.secret_paths import credential_in_args
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
+from raven.core.workspace import workspace_root
 
 _UNIX_COMMANDS = frozenset(
     {
@@ -134,8 +136,17 @@ async def shell_command(command: str, timeout: int = 30) -> str:
             return f"[denied] {e}"
         args = ["cmd", "/c", *args]
 
+    root = workspace_root()
+    refusal = credential_in_args(args[1:], root)
+    if refusal is not None:
+        return f"[denied] {refusal}. Credentials stay out of what the agent can read."
+
     proc = await asyncio.create_subprocess_exec(
         *args,
+        # The same contract the sandboxed Python child already has: it works in the workspace, and the
+        # gateway's `*_KEY`/`*_TOKEN`/`*_SECRET` names stay out of the child that a prompt can write to.
+        cwd=str(root),
+        env=untrusted_child_env(),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )

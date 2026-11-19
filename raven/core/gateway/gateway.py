@@ -754,6 +754,24 @@ class Gateway:
 
         return await handle_intent(self, event)
 
+    async def _record_pairing_request(self, event: IncomingMessage, user: dict[str, Any]) -> None:
+        """Log that somebody wants in, and tell them nothing they can spend on themselves.
+
+        The code is the operator's credential, not the stranger's: it only travels to the host,
+        where `raven pairing list` shows it and `raven pairing approve <code>` turns it into access.
+        A user who already has a live code keeps it, so nagging does not roll a new one.
+        """
+        if not user.get("pairing_code"):
+            code = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
+            await self.db.set_pairing_code(user["id"], code)
+            await audit_logger.sensitive("pairing_request", event.user_id, user["id"], True)
+            metrics.inc("pairing_requested", {"channel": event.channel})
+        await self._send(
+            event.channel,
+            event.session_id,
+            "Access request recorded. The operator approves it on this host: `raven pairing approve`.",
+        )
+
     async def _is_user_allowed(self, event: IncomingMessage, user: dict[str, Any]) -> bool:
         policy = settings.dm_policy
         allow_from_raw = settings.channel_allow_from
@@ -774,27 +792,7 @@ class Gateway:
             return False
 
         if policy == "pairing" and not user.get("is_allowed"):
-            if event.text.startswith("/pair"):
-                code = event.text.split()[-1] if len(event.text.split()) > 1 else ""
-                matched = await self.db.get_user_by_pairing_code(code)
-                if matched and matched["id"] == user["id"]:
-                    await self.db.set_user_allowed(user["id"], True)
-                    await self.db.set_pairing_code(user["id"], "")
-                    await audit_logger.sensitive(
-                        "pairing_approve", event.user_id, f"{event.channel}:{event.user_id}", True
-                    )
-                    await self._send(event.channel, event.session_id, "You are now authorized!")
-                    metrics.inc("pairing_approved", {"channel": event.channel})
-                    return False
-            code = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
-            await self.db.find_or_create_user(event.channel, event.user_id)
-            await self.db.set_pairing_code(f"{event.channel}:{event.user_id}", code)
-            await self._send(
-                event.channel,
-                event.session_id,
-                f"Welcome! Your pairing code is: `{code}`\nPlease send `/pair {code}` to authorize.",
-            )
-            metrics.inc("pairing_codes_sent", {"channel": event.channel})
+            await self._record_pairing_request(event, user)
             return False
 
         return True

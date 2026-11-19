@@ -33,7 +33,9 @@ instead of accepting it.
 
 `dm_policy` (default `pairing`) is validated at startup and accepts only:
 
-- **pairing** — unknown senders get a pairing code and are ignored until approved
+- **pairing** — an unknown sender is told their request was recorded, and ignored until `raven pairing approve <code>`
+  runs on the host. The code is minted for the operator's `raven pairing list`, never sent to the channel that asked
+  for access: a stranger holding a DM open with the bot used to be handed the code and then accept it back.
 - **open** — all messages processed (requires an allowlist)
 - **closed** — only explicitly allowed senders
 
@@ -118,12 +120,29 @@ that one root:
   system temp directory, and a refusal names both.
 - `ravencode/runtime/workspace.py:confine` — the coding agent's own tools: workspace only, no temp
   directory, deliberately the strictest of the three.
+- `raven/core/security/tool_policy.py:ToolPolicyEvaluator.path_denial_reason` — the check the policy
+  layer runs over every path-shaped argument before `EXEC_SECURITY` lets a tool start.
+
+The four of them refuse the same names, from one list in
+`raven/core/security/secret_paths.py:credential_reason`: `.env` and its per-environment variants,
+`id_rsa`/`id_ecdsa`/`id_ed25519`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.kdbx`,
+`.git-credentials`, `.npmrc`, `.pypirc`, `netrc`, the `web_secret_key` file Raven writes its own HMAC
+secret into, and anything under `.ssh`, `.aws`, `.gnupg` or `.azure`. Templates and public halves stay
+readable (`.env.example`, `id_rsa.pub`, `*.template`), because the setup step is `cp .env.example .env`.
+
+The rule is by name, before the read, because whatever a tool returns is put into a model prompt and
+then into a channel answer: a key the agent can open is a key the agent can send. Only the segments
+below the root are judged, so a checkout that happens to live under a directory in the list still
+works. `tests/core/test_secret_paths.py` drives all four resolvers over the same names.
 
 Where a tool names a directory, that directory is confined before the process starts:
 `raven/tools/tests.py:run_tests` and `test_coverage` collect from the workspace root rather than
 wherever the gateway happened to launch, and `raven/plugins/git/plugin.py:_run_git`, the coding
 agent's git tools and `ravencode/runtime/autogit.py` run `git` inside the confined root. A tool with
-no directory argument (`raven/tools/shell.py`) inherits the process's own working directory.
+no directory argument (`raven/tools/shell.py`, `ravencode/runtime/tools/bash.py`) is started in the
+workspace root with `code_sandbox.untrusted_child_env()`, so `pwd` answers with the boundary and
+`env` answers without the gateway's provider keys, and an argument that names a credential is
+refused before the process starts.
 `WORKSPACE_ONLY=false` switches the policy-layer check off, which `raven doctor` reports as a
 warning; it does not change the tools' own confinement above.
 

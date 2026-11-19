@@ -7,19 +7,18 @@ from raven.core.gateway.commands.base import CommandContext, CommandHandler
 if TYPE_CHECKING:
     from raven.core.gateway.commands.registry import CommandRegistry
 
-# Pairing is approved inside the gateway's allowlist check, before the registry is consulted, so
-# it has no handler that could list itself. The guard in tests/core/test_gateway_commands.py fails
-# if a line here stops being dispatched.
-EXTERNAL_COMMANDS = (("/pair <code>", "Authorize with pairing code"),)
-
 
 def command_entries(registry: CommandRegistry) -> list[tuple[str, str]]:
-    """One entry per command the gateway will actually accept, taken from the handlers themselves."""
-    entries = [
+    """One entry per command the gateway will actually accept, taken from the handlers themselves.
+
+    Pairing used to be the exception that needed its own line: the allowlist check answered `/pair`
+    before the registry was consulted, and /help advertised a command that admitted the stranger it
+    had just mailed the code to. Approval now happens on the host with `raven pairing approve`.
+    """
+    return [
         ("/" + handler.name + (f" {handler.usage}" if handler.usage else ""), handler.description)
         for handler in sorted(registry.list_commands(), key=lambda h: h.name)
     ]
-    return entries + list(EXTERNAL_COMMANDS)
 
 
 def help_body(registry: CommandRegistry) -> str:

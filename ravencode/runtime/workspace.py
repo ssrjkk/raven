@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from raven.core.security.secret_paths import credential_reason
 from raven.core.workspace import (
     get_workspace_root,
     reset_workspace_root,
@@ -30,4 +31,8 @@ def confine(path: str) -> Path:
     except ValueError as exc:
         msg = f"Path {path} is outside workspace {ws}"
         raise PermissionError(msg) from exc
+    reason = credential_reason(p, ws)
+    if reason is not None:
+        msg = f"Path {path} {reason}. Credentials stay out of what the agent can read."
+        raise PermissionError(msg)
     return p

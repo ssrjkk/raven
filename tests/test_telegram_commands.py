@@ -135,26 +135,6 @@ class TestCmdReset:
         assert event.session_id == "telegram:12345:default"
 
 
-class TestCmdPair:
-    async def test_cmd_pair_with_code(self, channel):
-        handler = AsyncMock()
-        channel._handler = handler
-        update, context = _make_update("/pair abc123", args=["abc123"])
-        await channel._cmd_pair(update, context)
-        handler.assert_awaited_once()
-        event = handler.call_args[0][0]
-        assert "abc123" in event.text
-
-    async def test_cmd_pair_no_code(self, channel):
-        handler = AsyncMock()
-        channel._handler = handler
-        update, context = _make_update("/pair", args=[])
-        await channel._cmd_pair(update, context)
-        handler.assert_awaited_once()
-        event = handler.call_args[0][0]
-        assert "/pair" in event.text
-
-
 class TestCmdMenu:
     async def test_cmd_menu_sends_menu(self, channel):
         mock_app = MagicMock()

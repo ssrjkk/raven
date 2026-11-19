@@ -7,6 +7,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from raven.core.security.secret_paths import credential_reason
+
 WORKING_DIRECTORY = "the working directory"
 
 _override: contextvars.ContextVar[str | None] = contextvars.ContextVar("raven_workspace_root", default=None)
@@ -84,8 +86,15 @@ def is_within(path: str) -> bool:
 
 
 def confine(path: str) -> Path:
-    if is_within(path):
-        return resolve(path)
+    resolved = resolve(path)
+    for root in allowed_roots():
+        if resolved != root and root not in resolved.parents:
+            continue
+        reason = credential_reason(resolved, root)
+        if reason is not None:
+            msg = f"Access denied: {path} {reason}. Credentials stay out of what the model can read."
+            raise PermissionError(msg)
+        return resolved
     roots = " or ".join(str(root) for root in allowed_roots())
     msg = f"Access denied: {path} (outside {roots})"
     raise PermissionError(msg)

@@ -16,7 +16,7 @@ from raven.core.gateway import commands as commands_package
 from raven.core.gateway.commands.agent import AgentCommand, AgentStatusCommand
 from raven.core.gateway.commands.base import CommandContext, CommandHandler
 from raven.core.gateway.commands.compact import CompactCommand
-from raven.core.gateway.commands.help import EXTERNAL_COMMANDS, HelpCommand, command_entries, help_body
+from raven.core.gateway.commands.help import HelpCommand, command_entries, help_body
 from raven.core.gateway.commands.mcp import MCPCommand
 from raven.core.gateway.commands.new_session import NewSessionCommand
 from raven.core.gateway.commands.registry import CommandRegistry
@@ -541,7 +541,7 @@ async def test_help_lists_every_command_the_gateway_registers() -> None:
     listed = {call.split(" ")[0].lstrip("/") for call, _ in entries}
     names = {handler.name for handler in registry.list_commands()}
     assert len(names) >= 20, names
-    assert listed == names | {call.split(" ")[0].lstrip("/") for call, _ in EXTERNAL_COMMANDS}
+    assert listed == names
     assert {"think", "verbose", "trace", "usage", "activation", "restart", "agent", "agent_status"} <= names
 
 
@@ -553,13 +553,13 @@ async def test_help_shows_the_arguments_the_handler_accepts() -> None:
     assert "/usage <off|tokens|full>" in text
 
 
-async def test_pair_is_listed_because_the_gateway_dispatches_it() -> None:
-    """`/pair` has no handler: the allowlist check answers it. If that branch ever stops matching
-    the text, the help line becomes a lie and this test has to fail."""
-    source = (COMMANDS_DIR.parent / "gateway.py").read_text(encoding="utf-8")
-    for call, _description in EXTERNAL_COMMANDS:
-        name = call.split(" ")[0]
-        assert f'startswith("{name}")' in source, name
+async def test_no_help_line_offers_a_way_to_authorize_yourself() -> None:
+    """`/pair <code>` used to be listed because the allowlist check answered it - and the code it
+    took came from the welcome message the same check had just sent to the person typing it. Approval
+    lives on the host now, so no command surface may name it."""
+    text = help_body(production_registry(MagicMock()))
+    assert "/pair" not in text
+    assert 'startswith("/pair' not in (COMMANDS_DIR.parent / "gateway.py").read_text(encoding="utf-8")
 
 
 async def test_task_list_shows_the_stored_tasks_and_plans_nothing(monkeypatch: pytest.MonkeyPatch) -> None:

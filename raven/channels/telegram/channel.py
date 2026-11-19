@@ -66,7 +66,6 @@ class TelegramChannel(BaseChannel):
         app.add_handler(CommandHandler("start", self._cmd_start))
         app.add_handler(CommandHandler("new", self._cmd_new))
         app.add_handler(CommandHandler("reset", self._cmd_reset))
-        app.add_handler(CommandHandler("pair", self._cmd_pair))
         app.add_handler(CommandHandler("menu", self._cmd_menu))
         app.add_handler(TGMessageHandler(filters.TEXT & ~filters.COMMAND, self._on_text))
         app.add_handler(TGMessageHandler(filters.COMMAND, self._on_command))
@@ -353,10 +352,6 @@ class TelegramChannel(BaseChannel):
 
     async def _cmd_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await self._incoming(update, "/new")
-
-    async def _cmd_pair(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        code = " ".join(context.args) if context.args else ""
-        await self._incoming(update, f"/pair {code}")
 
     async def _cmd_reset(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.message is None:

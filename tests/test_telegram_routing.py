@@ -40,7 +40,7 @@ ADAPTER_COMMANDS = (
     ("/start", "_cmd_start"),
     ("/new", "_cmd_new"),
     ("/reset", "_cmd_reset"),
-    ("/pair ABC", "_cmd_pair"),
+    ("/pair ABC", "_on_command"),
     ("/menu", "_cmd_menu"),
 )
 

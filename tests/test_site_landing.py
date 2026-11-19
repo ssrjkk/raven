@@ -598,18 +598,22 @@ def test_console_screens_are_the_routes_the_spa_registers() -> None:
 
 def test_pairing_reply_quotes_the_gateway_verbatim() -> None:
     """The page shows the message a stranger receives. Copy edited to sound better would no
-    longer be what the gateway sends, and the six-character alphabet is a security claim."""
+    longer be what the gateway sends, and the six-character alphabet is a security claim: the code
+    exists to be read off the host by the operator, so no surface may hand it to the person asking."""
+    page_text = page("gateway.html")
     gateway = read(ROOT / "raven" / "core" / "gateway" / "gateway.py")
-    sample = next(s for s in code_samples("gateway.html") if "pairing code" in s)
+    sample = next(s for s in code_samples("gateway.html") if "Access request recorded" in s)
     for line in sample.splitlines():
-        assert line.replace("H7KQ2M", "{code}") in gateway, line
+        assert line in gateway, line
+    assert "H7KQ2M" not in sample
+    assert "/pair" not in page_text
     assert "secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6)" in gateway
 
 
 def test_pairing_commands_the_page_shows_are_registered_in_the_cli() -> None:
     group = read(ROOT / "raven" / "cli" / "pairing_cmd.py")
     main = read(ROOT / "raven" / "cli" / "main.py")
-    sample = next(s for s in code_samples("gateway.html") if "raven pairing" in s)
+    sample = next(s for s in code_samples("gateway.html") if "raven doctor" in s)
     assert sample.splitlines() == ["raven pairing list", "raven pairing approve H7KQ2M", "raven doctor"]
     for name in ("list", "approve"):
         assert f'pairing_group.command("{name}")' in group, name

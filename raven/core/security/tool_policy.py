@@ -6,6 +6,7 @@ from typing import Any
 
 from loguru import logger
 
+from raven.core.security.secret_paths import credential_reason
 from raven.core.workspace import allowed_roots
 
 ALLOWED_PROFILES = frozenset({"messaging", "minimal", "full"})
@@ -205,7 +206,22 @@ class ToolPolicyEvaluator:
         return (self._workspace_root,) if self._workspace_root is not None else allowed_roots()
 
     def _confined(self, path_str: str) -> bool:
-        return any(resolve_within_root(path_str, root) is not None for root in self._roots())
+        return self.path_denial_reason(path_str) is None
+
+    def path_denial_reason(self, path_str: str) -> str | None:
+        """Why containment refuses a path argument, or None when it admits it.
+
+        Containment alone let `.env` through inside the root, so the credential names are judged here
+        too: this is the layer the task engine and the MCP-facing checks ask, and a rule only some of
+        the resolvers know is a rule that can be walked past by calling the others.
+        """
+        for root in self._roots():
+            resolved = resolve_within_root(path_str, root)
+            if resolved is None:
+                continue
+            reason = credential_reason(resolved, root)
+            return None if reason is None else f"names a credential ({reason})"
+        return "is outside the workspace root"
 
     async def check_exec(
         self,
@@ -235,8 +251,9 @@ class ToolPolicyEvaluator:
 
         if self.workspace_only:
             for key, value in path_args(args):
-                if not self._confined(value):
-                    return False, f"argument '{key}'='{value}' is outside the workspace root"
+                reason = self.path_denial_reason(value)
+                if reason is not None:
+                    return False, f"argument '{key}'='{value}' {reason}"
 
         if self.exec_security == ExecSecurity.FULL:
             return True, None

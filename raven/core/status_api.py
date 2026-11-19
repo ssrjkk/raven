@@ -25,8 +25,34 @@ class RavenRequest(BaseModel):
     context: str = ""
 
 
-def create_status_router(gateway: Gateway, plugin_loader: PluginLoader, stop_event: asyncio.Event) -> APIRouter:
+def create_health_router() -> APIRouter:
+    """Liveness and readiness, mounted by every app a healthcheck can point at.
+
+    `raven start` builds the full gateway and `raven aios gateway` builds the bridge alone, and both
+    are documented entry points: an orchestrator curling `localhost:PORT/api/health` gets an answer
+    from either, not a 404 that reads like the process is dead. `raven/core/middleware.py` keeps the
+    whole prefix unauthenticated, which is why these three routes return status and nothing else the
+    gateway knows.
+    """
     router = APIRouter()
+
+    @router.get("/api/health")
+    async def api_health():
+        return await health.check_all()
+
+    @router.get("/api/health/ready")
+    async def api_ready():
+        return await health.check_readiness()
+
+    @router.get("/api/health/live")
+    def api_live():
+        return {"status": "ok"}
+
+    return router
+
+
+def create_status_router(gateway: Gateway, plugin_loader: PluginLoader, stop_event: asyncio.Event) -> APIRouter:
+    router = create_health_router()
 
     @router.get("/api/status")
     async def api_status():
@@ -42,18 +68,6 @@ def create_status_router(gateway: Gateway, plugin_loader: PluginLoader, stop_eve
     @router.get("/api/agents")
     def api_agents():
         return gateway.registry.list_agents()
-
-    @router.get("/api/health")
-    async def api_health():
-        return await health.check_all()
-
-    @router.get("/api/health/ready")
-    async def api_ready():
-        return await health.check_readiness()
-
-    @router.get("/api/health/live")
-    def api_live():
-        return {"status": "ok"}
 
     @router.get("/api/metrics")
     def api_metrics():

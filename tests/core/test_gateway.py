@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from raven.core.gateway.gateway import Gateway
@@ -51,7 +53,9 @@ class TestGateway:
         assert "not authorized" in last.content.lower()
         await gateway.stop()
 
-    async def test_pairing_policy_sends_code(self, gateway: Gateway, monkeypatch: pytest.MonkeyPatch):
+    async def test_pairing_records_the_request_and_keeps_the_code_off_the_channel(
+        self, gateway: Gateway, monkeypatch: pytest.MonkeyPatch
+    ):
         monkeypatch.setattr("raven.core.gateway.gateway.settings.dm_policy", "pairing")
         await gateway.start()
         channel = gateway.channels["mock"]
@@ -59,8 +63,48 @@ class TestGateway:
         event = IncomingMessage(channel="mock", user_id="new_user", session_id="mock:new_user", text="hello")
         await gateway.handle_message(event)
         assert len(channel.sent_messages) > 0
-        last = channel.sent_messages[-1]
-        assert "pairing code" in last.content.lower()
+        reply = channel.sent_messages[-1].content.lower()
+        assert "pairing code" not in reply
+        assert "raven pairing approve" in reply
+        row = await gateway.db.find_or_create_user("mock", "new_user")
+        assert not row["is_allowed"]
+        assert re.fullmatch(r"[A-Z0-9]{6}", str(row["pairing_code"])), "the operator needs a code to approve"
+        await gateway.stop()
+
+    async def test_pairing_does_not_admit_the_sender_who_repeats_the_code(
+        self, gateway: Gateway, monkeypatch: pytest.MonkeyPatch
+    ):
+        """The welcome used to print the code and the same check accepted it back from the stranger who
+        was sent it, so an unsolicited DM was a key: two messages, no operator, whole agent behind them."""
+        monkeypatch.setattr("raven.core.gateway.gateway.settings.dm_policy", "pairing")
+        await gateway.start()
+        channel = gateway.channels["mock"]
+        assert isinstance(channel, MockChannel)
+        await gateway.handle_message(
+            IncomingMessage(channel="mock", user_id="intruder", session_id="mock:intruder", text="hello")
+        )
+        code = str((await gateway.db.find_or_create_user("mock", "intruder"))["pairing_code"])
+        await gateway.handle_message(
+            IncomingMessage(channel="mock", user_id="intruder", session_id="mock:intruder", text=f"/pair {code}")
+        )
+        assert not (await gateway.db.find_or_create_user("mock", "intruder"))["is_allowed"]
+        assert all("authorized" not in m.content.lower() for m in channel.sent_messages)
+        await gateway.stop()
+
+    async def test_pairing_code_survives_the_requests_that_follow_it(
+        self, gateway: Gateway, monkeypatch: pytest.MonkeyPatch
+    ):
+        """One request, one code: re-prompting must not roll the credential the operator is reading."""
+        monkeypatch.setattr("raven.core.gateway.gateway.settings.dm_policy", "pairing")
+        await gateway.start()
+        await gateway.handle_message(
+            IncomingMessage(channel="mock", user_id="noisy", session_id="mock:noisy", text="hello")
+        )
+        first = str((await gateway.db.find_or_create_user("mock", "noisy"))["pairing_code"])
+        await gateway.handle_message(
+            IncomingMessage(channel="mock", user_id="noisy", session_id="mock:noisy", text="hello again")
+        )
+        assert str((await gateway.db.find_or_create_user("mock", "noisy"))["pairing_code"]) == first
         await gateway.stop()
 
     async def test_double_start_raises(self, gateway: Gateway):

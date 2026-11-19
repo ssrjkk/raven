@@ -78,7 +78,7 @@ docker compose up -d
 
 **Talk** — Telegram (with inline buttons and voice messages), Discord, Slack, WhatsApp, Matrix,
 Teams, Signal, IRC, LINE, Feishu, Google Chat, GitHub, GitLab, email, and a built-in web chat.
-Direct messages are gated by a pairing code; group behaviour is configurable per channel.
+Direct messages are gated by pairing, which the operator approves on the host; group behaviour is configurable per channel.
 
 **Code** — the agent reads your repository, enriches context through language servers
 (pyright, tsserver, gopls, rust-analyzer), edits files, runs tests, commits. Sessions are

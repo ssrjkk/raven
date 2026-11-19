@@ -204,10 +204,9 @@
                                     <span class="code-lang">reply</span>
                                     <button class="copy-btn" type="button" aria-label="Copy the pairing reply">Copy</button>
                                 </div>
-                                <pre><code>Welcome! Your pairing code is: `H7KQ2M`
-Please send `/pair H7KQ2M` to authorize.</code></pre>
+                                <pre><code>Access request recorded. The operator approves it on this host: `raven pairing approve`.</code></pre>
                             </div>
-                            <p class="step-note">Six characters from <code>A–Z0–9</code>, minted per address while <code>DM_POLICY=pairing</code></p>
+                            <p class="step-note">Six characters from <code>A–Z0–9</code> stand behind that request, minted per address while <code>DM_POLICY=pairing</code> and shown only to <code>raven pairing list</code></p>
                         </div>
                     </div>
                     <div class="step">
@@ -251,10 +250,10 @@ raven doctor</code></pre>
                 </p>
                 <!-- commands:start -->
                 <details class="matrix">
-                    <summary>The 21 commands you can type on any channel, by name</summary>
+                    <summary>The 20 commands you can type on any channel, by name</summary>
                     <div class="table-wrap">
                         <table>
-                            <caption>The 21 chat commands the gateway dispatches</caption>
+                            <caption>The 20 chat commands the gateway dispatches</caption>
                             <thead>
                                 <tr>
                                     <th scope="col">You type</th>
@@ -341,10 +340,6 @@ raven doctor</code></pre>
                                 <tr>
                                     <th scope="row"><code>/voice tts &lt;text&gt; | providers</code></th>
                                     <td>Voice/TTS commands</td>
-                                </tr>
-                                <tr>
-                                    <th scope="row"><code>/pair &lt;code&gt;</code></th>
-                                    <td>Authorize with pairing code</td>
                                 </tr>
                             </tbody>
                         </table>

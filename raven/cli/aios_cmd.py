@@ -39,6 +39,7 @@ def create_aios_app() -> FastAPI:
         request_id_middleware,
         security_headers_middleware,
     )
+    from raven.core.status_api import create_health_router
     from raven.core.watermark import install_fastapi_watermark
 
     app = FastAPI(title="AI-OS-MVP Gateway", lifespan=_lifespan)
@@ -54,6 +55,9 @@ def create_aios_app() -> FastAPI:
     app.middleware("http")(security_headers_middleware)
     app.include_router(get_aios_adapter().get_bridge_router())
     init_auth_routes(app, str(settings.resolved_db_path))
+    # The documented way to start this app is also the one a container healthcheck curls, so it answers
+    # /api/health the way `raven start` does instead of a 404 that reads as a dead process.
+    app.include_router(create_health_router())
     return app
 
 
