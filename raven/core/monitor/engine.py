@@ -154,7 +154,7 @@ class MonitorEngine(PeriodicEngine[Monitor, MonitorStatus, MonitorStore]):
             elif monitor.type == MonitorType.PRICE:
                 alert_text = await check_price(monitor)
             elif monitor.type == MonitorType.RSS:
-                alert_text = await check_rss(monitor)
+                alert_text = await check_rss(monitor, self._store)
             elif monitor.type == MonitorType.FILE:
                 alert_text = await self._check_file(monitor)
             elif monitor.type == MonitorType.PROCESS:

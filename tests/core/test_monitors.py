@@ -438,31 +438,33 @@ class TestCheckerSignatures:
             result = None
         assert result is None or isinstance(result, str)
 
-    async def test_rss_checker_returns_str_or_none(self):
+    async def test_rss_checker_returns_str_or_none(self, store: MonitorStore):
         from raven.core.monitor.checkers.rss import check_rss
 
         m = Monitor(name="test-rss", type=MonitorType.RSS, target="https://invalid.example.test/rss")
         try:
-            result = await check_rss(m)
+            result = await check_rss(m, store)
         except Exception:
             result = None
         assert result is None or isinstance(result, str)
 
-    async def test_rss_checker_parses_xml_feed(self, monkeypatch):
+    async def test_rss_checker_parses_xml_feed(self, store: MonitorStore, monkeypatch: pytest.MonkeyPatch):
         import httpx
 
         from raven.core.monitor.checkers import rss
 
-        rss._seen_guids.clear()
-
-        xml = (
-            '<?xml version="1.0"?><rss version="2.0"><channel><item>'
-            "<title>New post</title><link>https://example.com/1</link><guid>g1</guid>"
-            "</item></channel></rss>"
-        )
+        feeds = {
+            "xml": (
+                '<?xml version="1.0"?><rss version="2.0"><channel><item>'
+                "<title>New post</title><link>https://example.com/1</link><guid>g1</guid>"
+                "</item></channel></rss>"
+            )
+        }
 
         class _Resp:
-            text = xml
+            @property
+            def text(self) -> str:
+                return feeds["xml"]
 
         async def fake_request(method: str, url: str, **kwargs) -> httpx.Response:
             return _Resp()  # type: ignore[return-value]
@@ -470,12 +472,22 @@ class TestCheckerSignatures:
         monkeypatch.setattr("raven.core.monitor.checkers.rss.client_manager.request", fake_request)
         monkeypatch.setattr("raven.core.monitor.checkers.rss.validate_url", lambda _url: None)
         m = Monitor(id="m1", name="test-rss", type=MonitorType.RSS, target="https://example.com/feed.xml")
-        result = await rss.check_rss(m)
-        assert isinstance(result, str)
-        assert "New post" in result
 
-        result_again = await rss.check_rss(m)
-        assert result_again is None, "same entry must not alert twice"
+        # The first poll has nothing to compare a feed against, so it records the entries and stays quiet.
+        assert await rss.check_rss(m, store) is None, "a first poll must baseline the feed, not alert it"
+        assert await rss.check_rss(m, store) is None, "the same entry must not alert twice"
+
+        feeds["xml"] = (
+            '<?xml version="1.0"?><rss version="2.0"><channel>'
+            "<item><title>New post</title><guid>g1</guid></item>"
+            "<item><title>Second post</title><guid>g2</guid></item>"
+            "</channel></rss>"
+        )
+        result = await rss.check_rss(m, store)
+        assert isinstance(result, str), "an entry newer than the seen state went unreported"
+        assert "Second post" in result
+        assert "New post" not in result, "the checker re-alerted an entry the table already had"
+        assert await rss.check_rss(m, store) is None
 
 
 class TestEngineFromDb:

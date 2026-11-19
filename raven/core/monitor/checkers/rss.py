@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import asyncio
-import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -11,37 +9,35 @@ from raven.core.security.ssrf import validate_url
 
 if TYPE_CHECKING:
     from raven.core.monitor.models import Monitor
+    from raven.core.monitor.store import MonitorStore
 
-_seen_guids: dict[str, set[str]] = {}
-_seen_lock = asyncio.Lock()
-_SEEN_TTL_SECONDS: int = 86400 * 7  # 7 days
-_seen_timestamps: dict[str, float] = {}
-
-
-async def _mark_seen(monitor_id: str, guid: str):
-    async with _seen_lock:
-        if monitor_id not in _seen_guids:
-            _seen_guids[monitor_id] = set()
-        _seen_guids[monitor_id].add(guid)
-        _seen_timestamps[f"{monitor_id}:{guid}"] = time.time()
+_MAX_ENTRIES = 10
+"""How much of the feed one poll reads; the alert names at most five of those."""
 
 
-async def _is_seen(monitor_id: str, guid: str) -> bool:
-    async with _seen_lock:
-        return guid in _seen_guids.get(monitor_id, set())
+def _feed_entries(feed: Any) -> list[tuple[str, str]]:
+    """`(guid, title)` for the polled slice in feed order; an entry with no identity cannot be deduped."""
+    entries: list[tuple[str, str]] = []
+    for entry in feed.entries[:_MAX_ENTRIES]:
+        guid = entry.get("id", entry.get("link", ""))
+        if not guid:
+            continue
+        entries.append((guid, entry.get("title", "(no title)")))
+    return entries
 
 
-async def _cleanup_stale_guids() -> None:
-    now = time.time()
-    stale_keys = [k for k, ts in _seen_timestamps.items() if now - ts > _SEEN_TTL_SECONDS]
-    for k in stale_keys:
-        monitor_id, guid = k.split(":", 1)
-        _seen_guids.get(monitor_id, set()).discard(guid)
-        _seen_timestamps.pop(k, None)
+async def check_rss(monitor: Monitor, store: MonitorStore) -> str | None:
+    """Report the feed entries this monitor has not been shown before.
 
+    The seen set is `rss_seen_items`, one row per (entry, monitor), so a gateway restart reads the same
+    rows back instead of treating the whole feed as new; the row's `seen_at` is what the retention sweep
+    ages and caps, which makes the memory of a past entry last as long as the operator's telemetry window
+    rather than a TTL baked in here.
 
-async def check_rss(monitor: Monitor) -> str | None:
-    await _cleanup_stale_guids()
+    A monitor with no rows yet is baselined: its current entries are recorded and nothing is reported.
+    Without that rule the first poll after this table existed — and the first poll of every monitor
+    created from now on — would alert the entire feed as though it had just arrived.
+    """
     url = monitor.config.get("target", monitor.target)
     error = validate_url(url)
     if error:
@@ -50,22 +46,20 @@ async def check_rss(monitor: Monitor) -> str | None:
         import feedparser
 
         resp = await client_manager.request("GET", url)
-        raw_text = resp.text
-        feed = feedparser.parse(raw_text)
+        feed = feedparser.parse(resp.text)
     except Exception as exc:
         logger.error("RSS check failed for {}: {}", url, exc)
         return f"RSS check failed for {url}"
 
-    new_entries: list[str] = []
-    for entry in feed.entries[:10]:
-        guid = entry.get("id", entry.get("link", ""))
-        if not guid:
-            continue
-        if not await _is_seen(monitor.id, guid):
-            await _mark_seen(monitor.id, guid)
-            new_entries.append(entry.get("title", "(no title)"))
+    entries = _feed_entries(feed)
+    if not await store.rss_has_seen_items(monitor.id):
+        for guid, _title in entries:
+            await store.rss_mark_seen(monitor.id, guid)
+        logger.info("RSS monitor {} baselined {} feed entries", monitor.id, len(entries))
+        return None
 
-    if new_entries:
-        return f"📰 New RSS entries from {url[:50]}:\n" + "\n".join(f"  • {t}" for t in new_entries[:5])
+    new_titles = [title for guid, title in entries if await store.rss_mark_seen(monitor.id, guid)]
+    if new_titles:
+        return f"📰 New RSS entries from {url[:50]}:\n" + "\n".join(f"  • {t}" for t in new_titles[:5])
 
     return None

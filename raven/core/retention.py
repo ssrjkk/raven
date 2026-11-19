@@ -78,9 +78,14 @@ POLICIES: dict[str, TablePolicy] = {
         ),
         TablePolicy(
             "rss_seen_items",
-            "unused",
-            why="created on both backends and never read or written: RSS dedupe lives in a process-local "
-            "dict with a 7-day TTL (raven/core/monitor/checkers/rss.py), so it resets on every restart",
+            "telemetry",
+            "seen_at",
+            {"sqlite": "sql_datetime", "postgresql": "timestamp"},
+            parent_column="monitor_id",
+            id_column="guid",
+            why="one row per feed entry per monitor: the dedupe an RSS monitor reads after a restart, so "
+            "aging it out is the operator's call on how long an entry stays seen. The primary key is "
+            "(guid, monitor_id) and there is no id column, which is why the cap names guid",
         ),
         TablePolicy(
             "messages",
