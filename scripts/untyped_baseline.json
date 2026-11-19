@@ -14,7 +14,7 @@
  "raven/channels/signal/channel.py": 3,
  "raven/channels/slack/channel.py": 4,
  "raven/channels/teams/channel.py": 3,
- "raven/channels/telegram/channel.py": 20,
+ "raven/channels/telegram/channel.py": 19,
  "raven/channels/webchat/channel.py": 15,
  "raven/channels/whatsapp/channel.py": 3,
  "raven/cli/aios_cmd.py": 6,
