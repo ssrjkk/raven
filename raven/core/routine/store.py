@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS routine_logs (
 CREATE INDEX IF NOT EXISTS idx_routine_status ON routines(status);
 CREATE INDEX IF NOT EXISTS idx_routine_user_id ON routines(user_id);
 CREATE INDEX IF NOT EXISTS idx_routine_logs_routine_id ON routine_logs(routine_id);
-CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT NOW());
 """
 
 

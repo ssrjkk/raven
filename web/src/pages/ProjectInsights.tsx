@@ -4,6 +4,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { api } from "../api/client";
 import type { ProjectInsightsData } from "../api/types";
 import { ChartCard } from "../components/ChartCard";
+import { ChartTooltip } from "../components/ChartTooltip";
 import PageHeader from "../components/PageHeader";
 import { Skeleton } from "../components/Skeleton";
 import { useApiQuery } from "../hooks/useApiQuery";
@@ -106,10 +107,7 @@ export default function ProjectInsights() {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
                   <XAxis stroke="var(--dt-colors-text-secondary)" dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v: string) => v.slice(5)} minTickGap={24} />
                   <YAxis stroke="var(--dt-colors-text-secondary)" allowDecimals={false} tick={{ fontSize: 10 }} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: "var(--dt-colors-bg-tertiary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
-                    labelFormatter={(v) => String(v)}
-                  />
+                  <Tooltip content={<ChartTooltip />} />
                   <Area type="monotone" dataKey="commits" stroke="var(--dt-colors-accent-default)" fill="url(#commitFill)" strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>

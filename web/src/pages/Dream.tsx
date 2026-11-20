@@ -46,7 +46,7 @@ export default function Dream() {
         subtitle="Autonomous skill discovery from usage patterns"
         actions={
           <span className={`flex items-center gap-2 text-sm ${d?.running ? "text-success" : "text-danger"}`}>
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: d?.running ? "var(--dt-colors-status-success)" : "var(--dt-colors-status-error)" }} />
+            <span className={`w-2 h-2 rounded-full ${d?.running ? "dot-success" : "dot-error"}`} />
             {d?.running ? "Running" : "Stopped"}
           </span>
         }
@@ -130,7 +130,7 @@ export default function Dream() {
                   <span className="text-primary font-medium">{skill.name}</span>
                   <p className="text-tertiary text-xs mt-0.5">{skill.description}</p>
                 </div>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent-muted text-accent">
+                <span className="text-micro px-2 py-0.5 rounded-full bg-accent-muted text-accent">
                   {skill.source}
                 </span>
               </div>

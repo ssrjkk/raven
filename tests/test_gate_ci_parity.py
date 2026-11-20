@@ -1,10 +1,12 @@
 """The local gate must fail on exactly what CI fails on.
 
-CI's `frontend` job runs six commands; the local stage ran three of them (npm ci, tsc, build), so a
+CI's `frontend` job runs eight commands; the local stage ran three of them (npm ci, tsc, build), so a
 lint violation added while translating the SPA strings merged green at home and red in CI - an
 `simple-import-sort/imports` error in `web/src/hooks/command-keywords.test.ts` that nothing local
 would have caught. This guard reads the job's own `run:` steps and requires each to be present in
-`scripts/check_all.py`, so the two cannot drift apart again without failing the build.
+`scripts/check_all.py`, so the two cannot drift apart again without failing the build. The last two
+are the editor extension's: `vsce` type-checks only while packaging a VSIX, so without them a type
+error in `extension/vscode/src` passed every gate in the workflow and the local one alike.
 """
 
 from __future__ import annotations
@@ -37,6 +39,8 @@ def test_the_ci_frontend_job_runs_the_steps_this_guard_reads() -> None:
         "npx eslint src e2e",
         "npm test -- --run",
         "npm run build",
+        "npm ci --no-audit --no-fund",
+        "npx tsc -p . --noEmit",
     ], commands
 
 

@@ -32,6 +32,7 @@ from aios.api.bridge import (
     aios_websocket,
     router,
 )
+from raven.core.version import __version__
 from ravencode.runtime.agent_core import AgentEvent, EventEmitter
 
 
@@ -392,7 +393,7 @@ class TestAiosBridgeEndpoints:
     @pytest.mark.asyncio
     async def test_health(self) -> None:
         resp = await aios_health()
-        assert resp == {"status": "ok", "module": "ai-os-mvp", "version": "0.1.0"}
+        assert resp == {"status": "ok", "module": "ai-os-mvp", "version": __version__}
 
     @pytest.mark.asyncio
     async def test_metrics(self, monkeypatch) -> None:

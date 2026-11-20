@@ -36,6 +36,7 @@ from raven.core.metrics import metrics
 from raven.core.middleware import client_ip
 from raven.core.monitor.engine import toggle_monitor
 from raven.core.secrets import secrets
+from raven.core.version import __version__
 from raven.core.workflow import BUILTIN_TEMPLATES, WorkflowStore
 from raven.core.workflow.models import TemplateStep
 
@@ -245,36 +246,44 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         return PlainTextResponse(metrics.prometheus())
 
     @router.get("/channels")
-    def admin_channels():
+    async def admin_channels():
         channels = get_channels_fn()
-        return [
-            {
-                "id": cid,
-                "type": type(ch).__name__,
-                "ready": ch._ready if hasattr(ch, "_ready") else True,
-                "stats": ch.stats() if hasattr(ch, "stats") else {},
-            }
-            for cid, ch in channels.items()
-        ]
+        listed = []
+        for cid in await channels.list_ids():
+            ch = await channels.get(cid)
+            if ch is None:
+                continue
+            listed.append(
+                {
+                    "id": cid,
+                    "type": type(ch).__name__,
+                    # The channel's own probe, not a flag read off it: `TelegramChannel`, `IRCChannel` and
+                    # `DiscordChannel` answer with their handle as well as `_ready`, and `start()` leaves that
+                    # flag set when the transport goes. `Admin.tsx` paints its dot from this field.
+                    "ready": await ch.health_check(),
+                    "stats": ch.stats() if hasattr(ch, "stats") else {},
+                }
+            )
+        return listed
 
     @router.get("/channels/{channel_id}")
-    def admin_channel(channel_id: str):
+    async def admin_channel(channel_id: str):
         channels = get_channels_fn()
-        ch = channels.get(channel_id)
-        if not ch:
+        ch = await channels.get(channel_id)
+        if ch is None:
             raise HTTPException(404, "Channel not found")
         return {
             "id": channel_id,
             "type": type(ch).__name__,
-            "ready": ch._ready if hasattr(ch, "_ready") else False,
+            "ready": await ch.health_check(),
             "stats": ch.stats() if hasattr(ch, "stats") else {},
         }
 
     @router.post("/channels/{channel_id}/restart")
     async def admin_channel_restart(channel_id: str):
         channels = get_channels_fn()
-        ch = channels.get(channel_id)
-        if not ch:
+        ch = await channels.get(channel_id)
+        if ch is None:
             raise HTTPException(404, "Channel not found")
         try:
             await ch.stop()
@@ -460,14 +469,14 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
         return {"ok": True}
 
     @router.get("/system/status")
-    def admin_system_status():
+    async def admin_system_status():
         gateway = get_gateway_fn()
         channels = get_channels_fn()
         return {
-            "channels": len(channels),
+            "channels": len(await channels.list_ids()),
             "agents": len(get_registry_fn().list_agents()),
-            "running": gateway._running if hasattr(gateway, "_running") else False,
-            "version": "1.0.0",
+            "running": gateway.is_running,
+            "version": __version__,
         }
 
     @router.get("/logs/stream")

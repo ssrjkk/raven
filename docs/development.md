@@ -145,14 +145,22 @@ author's monitor:
   `index.css` may hold no `[data-theme="…"] .class` remaps — the theme lives in the tokens
 - shipped web surfaces — the SPA, the extension popup, the no-Node fallback page — reference no
   off-origin `src`/`href`, self-host their fonts with a Cyrillic subset, keep a visible focus ring,
-  and stop animation under `prefers-reduced-motion`
-- the two surfaces that never load the SPA bundle — the gateway's no-Node webchat page and the
-  extension popup — embed a generated token region (`python scripts/gen_theme_css.py --print-surface`,
-  delimited by `design-tokens:start`/`end` sentinels). A gate compares both regions byte for byte with
-  the generator, requires every `var(--dt-*)` they reference to be declared inside the region, forbids
-  any other colour literal in those files, forbids an alias no rule uses, and computes their contrast
-  pairs from `tokens.json` rather than from hexes copied into the test — including pairs that only
-  exist because the page renders markdown in *user* rows too
+  and stop animation under `prefers-reduced-motion`. Every script those sheets hand a browser is compiled
+  by a JS engine with the type its own tag declares — a module read as a classic script fails, and a `src`
+  or an `import` naming a file that does not ship fails — and the extension's webview is cooked from its
+  template literal first, because the host consumes the escapes written there before any document exists
+- the four sheets that never load the SPA bundle — the gateway's no-Node webchat page, the extension
+  popup, the offline shell and the VS Code chat panel — embed a generated token region
+  (`python scripts/gen_theme_css.py --print-surface`, delimited by `design-tokens:start`/`end`
+  sentinels), and `--sync-surface-regions` rewrites those copies instead of retyping them. A gate
+  compares each region byte for byte with the generator, requires every `var(--dt-*)` a sheet references
+  to be declared inside it, forbids the region from carrying a token no sheet reads any more, forbids any
+  other colour literal in those files, forbids an alias no rule uses, sweeps the source tree for a
+  document that pastes a region nothing registered, and computes their contrast pairs from `tokens.json`
+  rather than from hexes copied into the test — including pairs that only exist because the page renders
+  markdown in *user* rows too. The panel leads its font stacks with `--vscode-font-family` and
+  `--vscode-editor-font-family` and falls through to the brand stacks: inside someone's editor, overwriting
+  the type they chose is wrong in the other direction
 - the storefront (`site/styles.css`) is gated too: any rule that declares a label and a background is
   measured at AA against each dark panel its wash could land on (worst case kept), and no colour literal
   may appear outside its `:root` scale
@@ -195,8 +203,11 @@ see `.github/workflows/pypi.yml`; the Docker image builds it in a dedicated stag
 ## Icons
 
 ```bash
-python scripts/make_icon.py                 # scripts/raven.ico (skipped if present)
-python scripts/make_extension_icons.py      # extension/icons/*.png + extension/vscode/icon.png
+python scripts/make_icon.py                 # scripts/raven.ico, rewritten on every run
+python scripts/make_extension_icons.py      # extension/icons/*.png + extension/vscode/icon.png, missing only
+python scripts/make_extension_icons.py --force   # regenerate every extension icon
+python scripts/make_web_icons.py            # web/public/favicon.{svg,ico} + icons/icon-{192,512}.{svg,png}
+python scripts/make_web_icons.py --check    # fail if an app icon is not the mark the site ships
 ```
 
 ## Building

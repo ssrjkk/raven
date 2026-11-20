@@ -43,7 +43,7 @@ export default function ChatHistory() {
     const parts = text.split(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"));
     return parts.map((part, i) =>
       part.toLowerCase() === q.toLowerCase()
-        ? <strong key={i} style={{ color: "var(--dt-colors-accent-default)" }}>{part}</strong>
+        ? <strong key={i} className="text-accent">{part}</strong>
         : part
     );
   }
@@ -68,7 +68,7 @@ export default function ChatHistory() {
         <div className="flex-1 overflow-y-auto space-y-1">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: "var(--dt-colors-accent-default)", borderTopColor: "transparent" }} />
+              <div className="w-5 h-5 border-2 rounded-full animate-spin spinner-accent" />
             </div>
           ) : searched && results.length === 0 ? (
             <div className="text-center py-12 text-sm text-tertiary">
@@ -82,22 +82,18 @@ export default function ChatHistory() {
               </div>
               {results.map((r) => (
                 <button key={r.id} onClick={() => setSelected(r)}
-                  className="w-full text-left p-2.5 rounded-lg text-sm transition"
-                  style={{
-                    backgroundColor: selected?.id === r.id ? "var(--dt-colors-bg-tertiary)" : "transparent",
-                    border: selected?.id === r.id ? "1px solid var(--dt-colors-border-default)" : "1px solid transparent",
-                  }}>
+                  className={`w-full text-left p-2.5 rounded-lg text-sm transition border ${selected?.id === r.id ? "bg-tertiary border-default" : "border-transparent"}`}>
                   <div className="flex items-center gap-1.5 mb-1">
-                    {r.role === "user" ? <User className="w-3 h-3" style={{ color: "var(--dt-colors-accent-default)" }} /> : <Bot className="w-3 h-3 text-tertiary" />}
-                    <span className="text-[10px] uppercase text-tertiary">{r.role}</span>
-                    {r.session_name && <span className="text-[10px] truncate flex-1 text-right text-tertiary">{r.session_name}</span>}
+                    {r.role === "user" ? <User className="w-3 h-3 text-accent" /> : <Bot className="w-3 h-3 text-tertiary" />}
+                    <span className="text-micro uppercase text-tertiary">{r.role}</span>
+                    {r.session_name && <span className="text-micro truncate flex-1 text-right text-tertiary">{r.session_name}</span>}
                   </div>
                   <div className="text-xs line-clamp-2 leading-relaxed text-secondary">
                     {highlightText(r.content, query)}
                   </div>
                   <div className="flex items-center gap-1 mt-1">
                     <Clock className="w-2.5 h-2.5 text-tertiary" />
-                    <span className="text-[10px] text-tertiary">
+                    <span className="text-micro text-tertiary">
                       {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
                     </span>
                   </div>
@@ -121,7 +117,7 @@ export default function ChatHistory() {
             <div className="p-4 border-b shrink-0 border-default">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  {selected.role === "user" ? <User className="w-4 h-4" style={{ color: "var(--dt-colors-accent-default)" }} /> : <Bot className="w-4 h-4 text-tertiary" />}
+                  {selected.role === "user" ? <User className="w-4 h-4 text-accent" /> : <Bot className="w-4 h-4 text-tertiary" />}
                   <span className="text-sm font-medium capitalize">{selected.role}</span>
                 </div>
                 <span className="text-xs text-tertiary">
@@ -134,7 +130,7 @@ export default function ChatHistory() {
                 </div>
               )}
               <div className="text-xs mt-0.5 text-tertiary">
-                Session ID: <code className="text-[10px] font-mono">{selected.session_id}</code>
+                Session ID: <code className="text-micro font-mono">{selected.session_id}</code>
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4">

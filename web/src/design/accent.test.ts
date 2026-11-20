@@ -5,6 +5,7 @@ import {
   type AccentTheme,
   contrastRatio,
   generateAccentPalette,
+  linkGrounds,
   relativeLuminance,
   THEME_BACKGROUND,
   THEME_CARD,
@@ -64,6 +65,25 @@ describe("accent palette generation", () => {
         contrastRatio(palette.borderFocus, CARDS[theme]),
         `focus on card ${preset.name}/${theme}`
       ).toBeGreaterThanOrEqual(3);
+    }
+  );
+
+  it.each(ACCENT_PRESETS.flatMap((preset) => THEMES.map((theme) => [preset, theme] as const)))(
+    "keeps the link readable on every ground it is painted on for %s on %s",
+    (preset, theme) => {
+      // The picker's link role is not drawn on the page alone: a selected nav item, a soft button and an
+      // accent badge all raise a translucent chip of the same accent underneath the very same ink, and the
+      // chip is lighter than the page in the dark themes, which is where the ramp used to stop short.
+      const palette = generateAccentPalette(preset.hex, theme);
+      for (const ground of linkGrounds(theme, palette.default)) {
+        expect(contrastRatio(palette.textLink, ground), `link on ${ground} ${preset.name}/${theme}`).toBeGreaterThanOrEqual(
+          4.5
+        );
+        expect(
+          contrastRatio(palette.textLinkHover, ground),
+          `link hover on ${ground} ${preset.name}/${theme}`
+        ).toBeGreaterThanOrEqual(4.5);
+      }
     }
   );
 

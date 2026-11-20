@@ -23,6 +23,7 @@ import {
   ListTodo,
   type LucideIcon,
   Mail,
+  Menu,
   MessageSquare,
   Mic,
   Moon,
@@ -41,6 +42,7 @@ import {
   Users,
   Wallet,
   Workflow,
+  X,
 } from "lucide-react";
 import { Suspense, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -157,11 +159,8 @@ function ThemeToggleButton({ theme, onClick }: { theme: Theme; onClick: () => vo
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition"
-      style={{
-        color: "var(--dt-colors-text-secondary)",
-        backgroundColor: "var(--dt-colors-bg-tertiary)",
-      }}
+      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition text-secondary bg-tertiary"
+
       title={`Switch to ${target.label} theme`}
     >
       <Icon size={15} className="shrink-0" />
@@ -198,56 +197,46 @@ export default function Layout() {
 
   return (
     <div
-      className="flex h-screen"
-      style={{ backgroundColor: "var(--dt-colors-bg-primary)", color: "var(--dt-colors-text-primary)" }}
+      className="flex h-screen bg-primary text-primary"
+
     >
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-10 md:hidden"
-          style={{ backgroundColor: "var(--dt-colors-overlay-scrim)", backdropFilter: "blur(2px)" }}
+          className="fixed inset-0 z-10 md:hidden bg-scrim"
+          style={{ backdropFilter: "blur(2px)" }}
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       <aside
-        className={`fixed md:static z-20 w-60 flex flex-col flex-shrink-0 border-r transition-transform duration-200 ${
+        className={`shell-aside fixed md:static z-20 w-60 flex flex-col flex-shrink-0 border-r border-default transition-transform duration-200 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
-        style={{
-          backgroundColor: "var(--dt-colors-bg-secondary)",
-          borderColor: "var(--dt-colors-border-default)",
-        }}
       >
         {/* Brand */}
         <div className="flex items-center gap-2.5 px-4 py-4 border-b border-default">
-          <div
-            className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center on-accent font-black text-lg shadow-lg"
-            style={{
-              backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-brand-secondary))",
-              boxShadow: "0 4px 14px var(--dt-colors-accent-muted)",
-            }}
-          >
+          <div className="brand-surface w-8 h-8 shrink-0 rounded-lg flex items-center justify-center on-accent font-bold text-lg">
             R
           </div>
           <div className="min-w-0">
             <h1 className="text-base font-bold leading-tight tracking-tight">Raven AI</h1>
-            <span className="text-[10px] text-tertiary">command & control</span>
+            <span className="text-micro text-tertiary">command & control</span>
           </div>
           <button
             className="md:hidden ml-auto text-tertiary text-sm"
             onClick={() => setSidebarOpen(false)}
             aria-label="Close sidebar"
           >
-            ✕
+            <X size={16} />
           </button>
         </div>
 
         {/* Command palette trigger */}
         <button
           onClick={openCommandPalette}
-          className="mx-3 mt-3 flex items-center gap-2 px-3 py-2 rounded-lg border border-default text-sm transition hover:border-accent"
-          style={{ backgroundColor: "var(--dt-colors-bg-primary)" }}
+          className="mx-3 mt-3 flex items-center gap-2 px-3 py-2 rounded-lg border border-default text-sm transition hover:border-accent bg-primary"
+
         >
           <Search size={14} className="shrink-0" />
           <span className="text-xs text-tertiary flex-1 text-left">Search…</span>
@@ -267,7 +256,7 @@ export default function Layout() {
                     end={item.end}
                     onClick={() => setSidebarOpen(false)}
                     className={({ isActive }) =>
-                      `relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition group ${
+                      `relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition group ${
                         isActive ? "nav-item-active" : "nav-item"
                       }`
                     }
@@ -276,8 +265,8 @@ export default function Layout() {
                       <>
                         {isActive && (
                           <span
-                            className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full"
-                            style={{ backgroundColor: "var(--dt-colors-accent-default)" }}
+                            className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-accent"
+
                           />
                         )}
                         <item.icon size={16} className="shrink-0" />
@@ -303,25 +292,27 @@ export default function Layout() {
           <button
             onClick={handleRevokeAll}
             disabled={revoking}
-            className="w-full text-center text-[10px] transition text-tertiary hover:text-danger"
+            className="w-full text-center text-micro transition text-tertiary hover:text-danger"
             title="Revoke all sessions on all devices"
           >
             {revoking ? "Revoking…" : "Logout everywhere"}
           </button>
-          <div className="text-[10px] text-center" style={{ color: "var(--dt-colors-border-hover)" }}>
+          <div className="text-micro text-center text-tertiary">
             Raven AI v{version} · by ssrjkk
           </div>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto min-w-0 bg-primary">
+      {/* No ground here: `body` paints the page colour and the ambient glow, and an opaque panel on
+          top of both is what hid the storefront's lighting behind a flat rectangle. */}
+      <main className="flex-1 overflow-y-auto min-w-0">
         <div className="flex items-center gap-2 p-2 md:hidden border-b border-default">
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-1 rounded text-lg text-secondary"
             aria-label="Open sidebar"
           >
-            ☰
+            <Menu size={18} />
           </button>
           <span className="text-sm font-semibold">Raven AI</span>
         </div>

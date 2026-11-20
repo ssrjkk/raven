@@ -74,12 +74,12 @@ export default function ABTesting() {
     onError: (e) => setError(errorMessage(e)),
   });
 
-  const statusColor = (s: string) => {
+  const statusInk = (s: string) => {
     switch (s) {
-      case "running": return "var(--dt-colors-success-default)";
-      case "paused": return "var(--dt-colors-warning-default)";
-      case "completed": return "var(--dt-colors-accent-default)";
-      default: return "var(--dt-colors-text-tertiary)";
+      case "running": return "text-success";
+      case "paused": return "text-warning";
+      case "completed": return "text-accent";
+      default: return "text-tertiary";
     }
   };
 
@@ -137,11 +137,11 @@ export default function ABTesting() {
                 {experiments.map((e) => (
                   <div key={e.id}
                     onClick={() => selectExperiment(e.id)}
-                    className="p-2 rounded-lg text-sm cursor-pointer transition"
-                    style={{ backgroundColor: selected?.id === e.id ? "var(--dt-colors-bg-tertiary)" : "transparent", border: selected?.id === e.id ? "1px solid var(--dt-colors-accent-subtle)" : "1px solid transparent" }}>
+                    className={`p-2 rounded-lg text-sm cursor-pointer transition border ${selected?.id === e.id ? "bg-tertiary border-accent-subtle" : "border-transparent hover:bg-hover"}`}
+                    >
                     <div className="flex justify-between items-center">
                       <span className="font-medium">{e.name}</span>
-                      <span className="text-xs" style={{ color: statusColor(e.status) }}>{e.status}</span>
+                      <span className={`text-xs ${statusInk(e.status)}`}>{e.status}</span>
                     </div>
                     <div className="text-xs mt-1 text-tertiary">
                       {e.variants?.map((v) => v.name).join(" vs ")} | {e.metric}
@@ -168,12 +168,12 @@ export default function ABTesting() {
                 </div>
                 <div className="flex gap-2 mb-3">
                   {selected.status === "draft" && (
-                    <button onClick={() => changeStatus.mutate({ id: selected.id, action: "running" })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: "var(--dt-colors-success-default)", color: "var(--dt-colors-text-on-accent)" }}>
+                    <button onClick={() => changeStatus.mutate({ id: selected.id, action: "running" })} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-success on-status-success">
                       Start
                     </button>
                   )}
                   {selected.status === "running" && (
-                    <button onClick={() => changeStatus.mutate({ id: selected.id, action: "paused" })} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: "var(--dt-colors-warning-default)", color: "var(--dt-colors-text-on-accent)" }}>
+                    <button onClick={() => changeStatus.mutate({ id: selected.id, action: "paused" })} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-warning on-status-warning">
                       Pause
                     </button>
                   )}
@@ -259,7 +259,7 @@ export default function ABTesting() {
                   </div>
 
                   {(results.srm?.imbalanced || (results.warnings?.length ?? 0) > 0 || results.events_dropped > 0 || results.events_orphaned > 0) && (
-                    <div className="mt-3 p-3 rounded-lg text-xs space-y-1" style={{ background: "var(--dt-colors-status-warning-bg)" }}>
+                    <div className="mt-3 p-3 rounded-lg text-xs space-y-1 bg-warning-muted">
                       {results.srm?.imbalanced && (
                         <p className="text-danger">Sample ratio mismatch: the split itself is broken (χ² {results.srm.chi2.toFixed(2)}, p {results.srm.p_value.toExponential(2)}) — read no comparison from this experiment.</p>
                       )}

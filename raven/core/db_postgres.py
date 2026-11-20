@@ -26,7 +26,7 @@ class _PostgresMigrator:
     async def get_current_version(self) -> int:
         db = self._shared_db()
         await db.execute(
-            "CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW())"
+            "CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT NOW())"
         )
         current = await db.fetchval("SELECT COALESCE(MAX(version), 0) FROM _migrations") or 0
         return int(current)
@@ -93,8 +93,8 @@ class PostgresDatabase:
                     agent_id TEXT DEFAULT 'default',
                     agent_skills TEXT DEFAULT '[]',
                     system_prompt TEXT,
-                    created_at TIMESTAMP DEFAULT NOW(),
-                    updated_at TIMESTAMP DEFAULT NOW()
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
                 )
                 """,
                 """
@@ -105,7 +105,7 @@ class PostgresDatabase:
                     role TEXT CHECK(role IN ('user','assistant','system','tool')),
                     content TEXT NOT NULL,
                     metadata TEXT DEFAULT '{}',
-                    created_at TIMESTAMP DEFAULT NOW()
+                    created_at TIMESTAMPTZ DEFAULT NOW()
                 )
                 """,
                 """
@@ -117,7 +117,7 @@ class PostgresDatabase:
                     is_allowed INTEGER DEFAULT 0,
                     role TEXT NOT NULL DEFAULT 'user',
                     pairing_code TEXT,
-                    created_at TIMESTAMP DEFAULT NOW()
+                    created_at TIMESTAMPTZ DEFAULT NOW()
                 )
                 """,
                 """
@@ -132,8 +132,8 @@ class PostgresDatabase:
                 CREATE TABLE IF NOT EXISTS secrets (
                     key TEXT PRIMARY KEY,
                     value_enc TEXT NOT NULL,
-                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
                 """,
                 """
@@ -161,7 +161,7 @@ class PostgresDatabase:
                 CREATE TABLE IF NOT EXISTS rss_seen_items (
                     guid TEXT NOT NULL,
                     monitor_id TEXT NOT NULL,
-                    seen_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     PRIMARY KEY (guid, monitor_id)
                 )
                 """,

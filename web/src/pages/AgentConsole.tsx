@@ -155,7 +155,7 @@ export default function AgentConsole() {
             )}
             {traces.map((t) => (
               <div key={t.id} className="rounded-lg border border-default bg-tertiary p-2.5">
-                <div className="mb-1 flex items-center gap-2 text-[11px] text-secondary">
+                <div className="mb-1 flex items-center gap-2 text-caption text-secondary">
                   <TraceIcon kind={t.kind} />
                   <span className="font-medium uppercase tracking-wider">{traceTitle(t.kind)}</span>
                   {t.step !== undefined && <span className="text-tertiary">step {t.step}</span>}

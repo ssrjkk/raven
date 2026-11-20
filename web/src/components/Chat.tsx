@@ -211,17 +211,11 @@ export default function Chat() {
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div
-              className="rounded-2xl rounded-bl-sm px-4 py-3"
-              style={{
-                backgroundColor: "var(--dt-colors-bg-tertiary)",
-                border: "1px solid var(--dt-colors-border-default)",
-              }}
-            >
+            <div className="bubble-assistant rounded-2xl rounded-bl-sm px-4 py-3">
               <span className="inline-flex gap-1">
-                <span className="typing-dot w-2 h-2 rounded-full" style={{ backgroundColor: "var(--dt-colors-text-tertiary)" }} />
-                <span className="typing-dot w-2 h-2 rounded-full" style={{ backgroundColor: "var(--dt-colors-text-tertiary)" }} />
-                <span className="typing-dot w-2 h-2 rounded-full" style={{ backgroundColor: "var(--dt-colors-text-tertiary)" }} />
+                <span className="typing-dot w-2 h-2 rounded-full" />
+                <span className="typing-dot w-2 h-2 rounded-full" />
+                <span className="typing-dot w-2 h-2 rounded-full" />
               </span>
             </div>
           </div>
@@ -231,17 +225,11 @@ export default function Chat() {
 
       {showWelcome && (
         <div className="flex-1 flex flex-col items-center justify-center text-center px-4 msg-enter">
-          <div
-            className="w-16 h-16 rounded-2xl flex items-center justify-center on-accent text-2xl font-black mb-5"
-            style={{
-              backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-brand-secondary))",
-              boxShadow: "0 10px 32px var(--dt-colors-accent-muted)",
-            }}
-          >
+          <div className="brand-surface w-16 h-16 rounded-2xl flex items-center justify-center on-accent text-2xl font-bold mb-5">
             R
           </div>
           <h2 className="text-2xl font-bold tracking-tight gradient-text">What can I help with today?</h2>
-          <p className="text-sm mt-2 mb-7" style={{ color: "var(--dt-colors-text-tertiary)" }}>
+          <p className="text-sm mt-2 mb-7 text-tertiary">
             Start a conversation with an agent or pick a quick scenario
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-xl">
@@ -255,11 +243,8 @@ export default function Chat() {
                 className="suggestion-card"
               >
                 <span
-                  className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center"
-                  style={{
-                    backgroundColor: "var(--dt-colors-accent-muted)",
-                    color: "var(--dt-colors-accent-default)",
-                  }}
+                  className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center bg-accent-muted text-accent"
+
                 >
                   <Icon size={15} />
                 </span>
@@ -282,11 +267,11 @@ export default function Chat() {
           rows={1}
           disabled={!connected}
           placeholder={connected ? "Message… (Enter to send, Shift+Enter for a new line)" : "Connecting to the server…"}
-          className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm outline-none text-primary placeholder:text-[var(--dt-colors-text-tertiary)] disabled:opacity-60"
+          className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm outline-none text-primary placeholder:text-tertiary disabled:opacity-60"
           style={{ maxHeight: 160 }}
         />
         <div className="flex items-center justify-between gap-2 px-3 pb-2.5">
-          <span className="text-[11px]" style={{ color: "var(--dt-colors-text-tertiary)" }}>
+          <span className="text-caption text-tertiary">
             {connected ? "Enter to send · Shift+Enter for a new line" : "Waiting for the connection…"}
           </span>
           <button

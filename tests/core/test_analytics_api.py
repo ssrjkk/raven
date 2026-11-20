@@ -38,16 +38,32 @@ class TestAnalyticsEngineSetup:
 
 
 class TestAnalyticsRouter:
+    """The endpoints forward, and what they forward is the shape `/analytics` reads.
+
+    `test_analytics_metric_names.py` drives these handlers over a real engine; the mocks here carry
+    production-shaped payloads so a future edit to one of them is compared against something the browser
+    actually consumes.
+    """
+
     @pytest.fixture
     def client(self):
         app = FastAPI()
         engine = MagicMock()
+        point = {"ts": 123, "avg": 42.0, "max": 42.0, "min": 42.0, "count": 1}
         engine.query_metrics_list = AsyncMock(return_value=["metric1", "metric2"])
-        engine.query_series = AsyncMock(return_value=[{"ts": 123, "value": 42}])
-        engine.query_summary = AsyncMock(return_value={"total": 100})
-        engine.query_aggregated = AsyncMock(return_value={"sum": 500})
-        engine.query_tool_usage = AsyncMock(return_value={"bash": 10, "read": 5})
-        engine.query_tool_breakdown = AsyncMock(return_value=[{"tool": "bash", "count": 10}])
+        engine.query_series = AsyncMock(return_value=[point])
+        engine.query_summary = AsyncMock(
+            return_value={"metrics": [{"name": "metric1", "avg": 42.0, "max": 42.0, "samples": 1}], "total_data_points": 1}
+        )
+        engine.query_aggregated = AsyncMock(
+            return_value={"received": 500, "errors": 0, "error_rate": 0, "message_series": [point], "error_series": []}
+        )
+        engine.query_tool_usage = AsyncMock(
+            return_value=[{"name": "bash", "category": "exec", "total": 10, "series": [point]}]
+        )
+        engine.query_tool_breakdown = AsyncMock(
+            return_value={"success": 9, "errors": 1, "total": 10, "success_series": [point], "error_series": []}
+        )
         set_analytics_engine(engine)
         app.include_router(create_analytics_router())
         return TestClient(app)
@@ -71,7 +87,7 @@ class TestAnalyticsRouter:
     def test_get_summary(self, client):
         response = client.get("/api/analytics/summary")
         assert response.status_code == 200
-        assert response.json() == {"total": 100}
+        assert response.json()["total_data_points"] == 1
 
     def test_get_summary_with_since(self, client):
         response = client.get("/api/analytics/summary?since=1000000")
@@ -80,7 +96,7 @@ class TestAnalyticsRouter:
     def test_get_aggregated(self, client):
         response = client.get("/api/analytics/aggregated")
         assert response.status_code == 200
-        assert response.json() == {"sum": 500}
+        assert response.json()["received"] == 500
 
     def test_get_overview(self, client):
         response = client.get("/api/analytics/overview")

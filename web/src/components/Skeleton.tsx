@@ -1,50 +1,38 @@
 import { memo } from "react";
 
-const SHIMMER = "shimmer";
-const BG = "var(--dt-colors-bg-tertiary)";
-const HIGHLIGHT = "var(--dt-colors-skeleton-highlight)";
-
-function shimmerStyle() {
-  return {
-    backgroundImage: `linear-gradient(90deg, ${BG} 0%, ${HIGHLIGHT} 50%, ${BG} 100%)`,
-    backgroundSize: "400px 100%",
-    backgroundRepeat: "no-repeat",
-    animation: `${SHIMMER} 1.4s ease-in-out infinite`,
-  } as const;
-}
-
 interface SkeletonProps {
   width?: string | number;
   height?: string | number;
-  rounded?: string;
+  rounded?: "none" | "sm" | "md" | "lg" | "xl" | "full";
   className?: string;
 }
 
+/* The corner the block is cut with, named rather than composed at the call site: a class string built from a
+   variable is one Tailwind cannot see, so the block would ship without the radius it asked for. */
+const ROUNDED: Record<NonNullable<SkeletonProps["rounded"]>, string> = {
+  none: "rounded-none",
+  sm: "rounded-sm",
+  md: "rounded-md",
+  lg: "rounded-lg",
+  xl: "rounded-xl",
+  full: "rounded-full",
+};
+
+/** The block's measure is the page's; the shimmer's paint is the sheet's. */
 export const Skeleton = memo(function Skeleton({ width, height = 16, rounded = "lg", className = "" }: SkeletonProps) {
   return (
     <div
-      className={`${className}`}
+      className={`skeleton ${ROUNDED[rounded]} ${className}`}
       style={{
-        ...shimmerStyle(),
         width: typeof width === "number" ? `${width}px` : width,
         height: typeof height === "number" ? `${height}px` : height,
-        borderRadius: `var(--dt-radius-${rounded}, 0.5rem)`,
       }}
     />
   );
 });
 
 export const SkeletonCircle = memo(function SkeletonCircle({ size = 40 }: { size?: number }) {
-  return (
-    <div
-      style={{
-        ...shimmerStyle(),
-        width: size,
-        height: size,
-        borderRadius: "9999px",
-      }}
-    />
-  );
+  return <div className="skeleton rounded-full" style={{ width: size, height: size }} />;
 });
 
 export const SkeletonText = memo(function SkeletonText({ lines = 3, lastWidth = "60%" }: { lines?: number; lastWidth?: string }) {
@@ -59,14 +47,7 @@ export const SkeletonText = memo(function SkeletonText({ lines = 3, lastWidth = 
 
 export const SkeletonCard = memo(function SkeletonCard({ height = 96 }: { height?: number }) {
   return (
-    <div
-      className="rounded-xl p-4"
-      style={{
-        height,
-        backgroundColor: "var(--dt-colors-surface-card)",
-        border: "1px solid var(--dt-colors-border-default)",
-      }}
-    >
+    <div className="card-bordered p-4" style={{ height }}>
       <div className="flex items-start gap-3">
         <SkeletonCircle size={40} />
         <div className="flex-1 space-y-2">
@@ -80,7 +61,7 @@ export const SkeletonCard = memo(function SkeletonCard({ height = 96 }: { height
 
 export const SkeletonTableRow = memo(function SkeletonTableRow({ cols = 4 }: { cols?: number }) {
   return (
-    <div className="flex items-center gap-4 p-3 rounded-xl" style={{ backgroundColor: BG }}>
+    <div className="flex items-center gap-4 p-3 rounded-xl bg-tertiary">
       {Array.from({ length: cols }).map((_, i) => (
         <Skeleton key={i} height={12} width={i === 0 ? "30%" : `${15 + ((i * 7) % 15)}%`} />
       ))}
@@ -90,7 +71,7 @@ export const SkeletonTableRow = memo(function SkeletonTableRow({ cols = 4 }: { c
 
 export const SkeletonCodeBlock = memo(function SkeletonCodeBlock({ lines = 5 }: { lines?: number }) {
   return (
-    <div className="rounded-xl p-4 space-y-2.5" style={{ backgroundColor: BG }}>
+    <div className="rounded-xl p-4 space-y-2.5 bg-tertiary">
       {Array.from({ length: lines }).map((_, i) => (
         <Skeleton key={i} height={10} width={i === lines - 1 ? "40%" : `${60 + ((i * 9) % 35)}%`} />
       ))}

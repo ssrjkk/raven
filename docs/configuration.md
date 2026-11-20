@@ -137,6 +137,15 @@ say so instead of letting the switch appear not to hold.
 | `WORKSPACE_PATH` | The workspace root — see [The workspace root](#the-workspace-root) | unset, so the working directory |
 | `RAVEN_POLICY_DIR` | Directory holding the tool ruleset (`tools.json`) — the policy engine asks the **process** environment, never `Settings`, so a file value reaches it only through the adoption step a start runs (measured: an unset process name plus the line in the file resolves to the file's directory after `create_gateway()`, and to the packaged `policy/` before it). Unset, the engine reads `policy/` next to the source tree, or `raven/policy/` inside an installed wheel | the directory the package ships |
 
+### Running against Postgres
+
+`pytest tests/integration -m integration` with `DATABASE_URL` set executes the same 22 cases the CI
+`Postgres integration tests` job does: the schema a fresh install bootstraps, migration 13 converting the
+columns an older install made, and every store's read-write path. Use a scratch database — the run creates
+tables and applies the pending migrations in whichever database it is pointed at. With nothing listening,
+that command fails rather than reporting a field of skips, because a selection that proved nothing has twice
+been mistaken for a pass: once in CI, and once on a machine where the gateway could not write a session row.
+
 ### Data Retention
 
 The gateway sweeps its own tables. Without it a monitor polled every minute writes 1 440 rows a day
@@ -146,8 +155,8 @@ forever, and a year later the console reads its history screens out of millions 
 |----------|-------------|---------|
 | `RETENTION_ENABLED` | Turn the sweep off. Rows then grow for as long as the install runs; the switch exists for a database being preserved as evidence, not for normal operation | `1` |
 | `RETENTION_INTERVAL_SECONDS` | How often the sweep runs. It deletes in one transaction per table, so a pass costs the writes it performs and nothing else; below 60 is refused at load | `21600` (6 h) |
-| `RETENTION_TELEMETRY_DAYS` | Age after which monitor checks, routine runs and metric snapshots go away. `0` keeps telemetry until the row cap removes it | `90` |
-| `RETENTION_TELEMETRY_ROWS` | Newest rows kept per monitor, per routine and per metric name, whatever their age — the bound that matters for a monitor polled every minute, whose 90 days is 130k rows. `0` disables the cap; anything between `0` and `50` is refused, because it would cut a chart shorter than the console draws | `2000` |
+| `RETENTION_TELEMETRY_DAYS` | Age after which monitor checks, routine runs, metric snapshots and an RSS monitor's memory of the entries it already reported go away. `0` keeps telemetry until the row cap removes it | `90` |
+| `RETENTION_TELEMETRY_ROWS` | Newest rows kept per monitor, per routine and per metric name, whatever their age — the bound that matters for a monitor polled every minute, whose 90 days is 130k rows, and for a feed that publishes faster than anyone reads it. Past either bound an entry is unseen again and can alert a second time. `0` disables the cap; anything between `0` and `50` is refused, because it would cut a chart shorter than the console draws | `2000` |
 | `RETENTION_HISTORY_DAYS` | Age after which conversations, coding sessions and stored entities are deleted. `0` — the default — keeps everything a person wrote forever: removing their words has to be a decision, not a side effect | `0` |
 
 Two things the sweep never does: it does not touch a table another owner already bounds (the task

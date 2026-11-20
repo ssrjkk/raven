@@ -280,7 +280,7 @@ export default function Browser() {
                 </button>
               ) : (
                 <button onClick={() => { actionMutation.mutate({ action: "intercept", body: { action: "stop" } }); setInterceptActive(false); }} disabled={actionMutation.isPending}
-                  className="btn-outline" style={{ color: "var(--dt-colors-status-error)", borderColor: "var(--dt-colors-status-error)", backgroundColor: "transparent" }}>
+                  className="btn-outline btn-outline-danger">
                   Stop Capture
                 </button>
               )}

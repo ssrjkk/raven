@@ -424,13 +424,13 @@ def test_a_cutoff_is_shaped_the_way_the_column_stores_time() -> None:
     assert isinstance(text, str) and re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d", text)
 
     stamp = cutoff(POLICIES["messages"], 30, "postgresql")
-    assert isinstance(stamp, datetime) and stamp.tzinfo is None, "asyncpg binds a TIMESTAMP as a naive datetime"
+    assert isinstance(stamp, datetime) and stamp.tzinfo is UTC, "a TIMESTAMPTZ column holds an instant"
 
 
 def test_the_columns_stamped_differently_per_dialect_say_so() -> None:
     """These pairs are why a cutoff needs a dialect: the same column holds a different type."""
     assert unit_for(POLICIES["messages"], "sqlite") == "iso"
-    assert unit_for(POLICIES["messages"], "postgresql") == "timestamp"
+    assert unit_for(POLICIES["messages"], "postgresql") == "timestamptz"
     assert unit_for(POLICIES["entities"], "sqlite") == "sql_datetime"
     assert unit_for(POLICIES["entities"], "postgresql") == "epoch_s"
     for table in ("monitor_checks", "routine_logs", "analytics_snapshots", "coding_sessions"):

@@ -79,7 +79,7 @@ class TestMetricsCollector:
     def test_inc_without_labels(self):
         mc = MetricsCollector()
         mc.inc("raw_count")
-        assert mc._counters.get("raw_count") == 1
+        assert mc.snapshot()["raven_raw_count_total"] == 1, "a metric with no labels carries no label block in its key"
 
 
 class TestChannelGuardianRateLimitConfig:

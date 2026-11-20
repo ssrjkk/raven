@@ -102,11 +102,11 @@ export default function WebSearch() {
               <div key={i} className="card p-4">
                 {href ? (
                   <a href={href} target="_blank" rel="noopener noreferrer"
-                    className="text-sm font-semibold hover:underline" style={{ color: "var(--dt-colors-accent-default)" }}>
+                    className="text-sm font-semibold hover:underline text-accent">
                     {r.title || r.url}
                   </a>
                 ) : (
-                  <span className="text-sm font-semibold" style={{ color: "var(--dt-colors-accent-default)" }}>
+                  <span className="text-sm font-semibold text-accent">
                     {r.title || r.url}
                   </span>
                 )}

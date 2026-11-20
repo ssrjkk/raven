@@ -23,28 +23,18 @@ export function useToast() {
 const AUTO_DISMISS_MS = 4000;
 const EXIT_MS = 220;
 
-const TOAST_STYLE: Record<ToastType, { icon: typeof Info; border: string; bg: string; color: string; bar: string }> = {
-  success: {
-    icon: CheckCircle2,
-    border: "var(--dt-colors-status-success)",
-    bg: "var(--dt-colors-status-success-bg)",
-    color: "var(--dt-colors-status-success)",
-    bar: "var(--dt-colors-status-success)",
-  },
-  error: {
-    icon: XCircle,
-    border: "var(--dt-colors-status-error)",
-    bg: "var(--dt-colors-status-error-bg)",
-    color: "var(--dt-colors-status-error)",
-    bar: "var(--dt-colors-status-error)",
-  },
-  info: {
-    icon: Info,
-    border: "var(--dt-colors-border-default)",
-    bg: "var(--dt-colors-bg-secondary)",
-    color: "var(--dt-colors-text-primary)",
-    bar: "var(--dt-colors-accent-default)",
-  },
+const TOAST_ICON: Record<ToastType, typeof Info> = {
+  success: CheckCircle2,
+  error: XCircle,
+  info: Info,
+};
+
+/** Written as names, not as values: the pair a toast ships with is the pair the sheet publishes, and a
+ *  class list is something the design gates can read. */
+const TOAST_TONE: Record<ToastType, string> = {
+  success: "toast-success",
+  error: "toast-error",
+  info: "toast-info",
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -80,18 +70,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
         {toasts.map((t) => {
-          const s = TOAST_STYLE[t.type];
-          const Icon = s.icon;
+          const Icon = TOAST_ICON[t.type];
           return (
             <div
               key={t.id}
               role="status"
-              className={`overflow-hidden rounded-xl border shadow-lg backdrop-blur ${t.leaving ? "toast-exit" : "toast-enter"}`}
-              style={{ backgroundColor: s.bg, borderColor: s.border }}
+              className={`toast overflow-hidden rounded-xl border backdrop-blur ${TOAST_TONE[t.type]} ${t.leaving ? "toast-exit" : "toast-enter"}`}
             >
               <div className="flex items-start gap-2.5 px-3.5 py-3">
-                <Icon size={16} className="mt-0.5 shrink-0" style={{ color: s.color }} />
-                <p className="flex-1 text-sm font-medium" style={{ color: "var(--dt-colors-text-primary)" }}>
+                <Icon size={16} className="toast-icon mt-0.5 shrink-0" />
+                <p className="flex-1 text-sm font-medium text-primary">
                   {t.message}
                 </p>
                 <button
@@ -100,10 +88,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   className="shrink-0 opacity-50 hover:opacity-100 transition-opacity"
                   aria-label="Dismiss notification"
                 >
-                  <X size={14} style={{ color: "var(--dt-colors-text-tertiary)" }} />
+                  <X size={14} className="text-tertiary" />
                 </button>
               </div>
-              <div className="toast-progress" style={{ backgroundColor: s.bar, animationDuration: `${AUTO_DISMISS_MS}ms` }} />
+              <div className="toast-progress" style={{ animationDuration: `${AUTO_DISMISS_MS}ms` }} />
             </div>
           );
         })}

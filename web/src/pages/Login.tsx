@@ -81,34 +81,13 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden px-4">
-      <div
-        className="absolute -top-32 -right-24 w-96 h-96 rounded-full pointer-events-none"
-        style={{
-          backgroundImage: "radial-gradient(closest-side, var(--dt-colors-accent-muted), transparent)",
-        }}
-      />
-      <div
-        className="absolute -bottom-40 -left-24 w-[28rem] h-[28rem] rounded-full pointer-events-none"
-        style={{
-          backgroundImage: "radial-gradient(closest-side, var(--dt-colors-accent-subtle), transparent)",
-        }}
-      />
-      <div
-        className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[36rem] h-[24rem] rounded-full pointer-events-none"
-        style={{
-          backgroundImage: "radial-gradient(closest-side, var(--dt-colors-accent-subtle), transparent)",
-        }}
-      />
+      <div className="ambient absolute -top-32 -right-24 w-96 h-96 rounded-full pointer-events-none" />
+      <div className="ambient-quiet absolute -bottom-40 -left-24 w-[28rem] h-[28rem] rounded-full pointer-events-none" />
+      <div className="ambient-quiet absolute top-1/3 left-1/2 -translate-x-1/2 w-[36rem] h-[24rem] rounded-full pointer-events-none" />
 
-      <div className="card rounded-2xl p-8 w-full max-w-sm space-y-6 relative" style={{ boxShadow: "0 20px 60px var(--dt-colors-overlay-scrim)" }}>
+      <div className="card card-raised rounded-2xl p-8 w-full max-w-sm space-y-6 relative">
         <div className="text-center space-y-2">
-          <div
-            className="mx-auto w-12 h-12 rounded-xl flex items-center justify-center on-accent font-black text-2xl shadow-lg"
-            style={{
-              backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-brand-secondary))",
-              boxShadow: "0 8px 24px var(--dt-colors-accent-muted)",
-            }}
-          >
+          <div className="brand-surface mx-auto w-12 h-12 rounded-xl flex items-center justify-center on-accent font-bold text-2xl">
             R
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Raven AI</h1>
@@ -125,14 +104,14 @@ export default function Login() {
                 onClick={() => handleOAuth(p.name)}
                 className="btn-outline w-full"
               >
-                <span className="font-bold" style={{ color: "var(--dt-colors-accent-default)" }}>{p.icon}</span>
+                <span className="font-bold text-accent">{p.icon}</span>
                 <span>Continue with {p.name.charAt(0).toUpperCase() + p.name.slice(1)}</span>
               </button>
             ))}
             <div className="flex items-center gap-3 py-2">
-              <div className="flex-1 h-px" style={{ backgroundColor: "var(--dt-colors-border-default)" }} />
+              <div className="hairline flex-1 h-px" />
               <span className="text-xs text-tertiary">or</span>
-              <div className="flex-1 h-px" style={{ backgroundColor: "var(--dt-colors-border-default)" }} />
+              <div className="hairline flex-1 h-px" />
             </div>
           </div>
         )}
@@ -178,14 +157,7 @@ export default function Login() {
             />
           </div>
           {error && (
-            <p
-              className="text-xs rounded-lg px-3 py-2 flex items-center gap-2"
-              style={{
-                color: "var(--dt-colors-status-error)",
-                backgroundColor: "var(--dt-colors-status-error-bg)",
-                border: "1px solid var(--dt-colors-status-error)",
-              }}
-            >
+            <p className="text-xs rounded-lg px-3 py-2 flex items-center gap-2 border border-error bg-danger-muted text-danger">
               <AlertCircle size={14} className="shrink-0" />
               {error}
             </p>
@@ -203,8 +175,8 @@ export default function Login() {
           {isRegister ? "Already have an account? " : "Don't have an account? "}
           <button
             onClick={() => setIsRegister(!isRegister)}
-            className="font-medium"
-            style={{ color: "var(--dt-colors-accent-default)" }}
+            className="font-medium text-accent"
+
           >
             {isRegister ? "Sign in" : "Register"}
           </button>

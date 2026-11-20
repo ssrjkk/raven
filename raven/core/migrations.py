@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -13,7 +14,7 @@ MIGRATIONS_TABLE_SQLITE = (
     "(version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
 )
 MIGRATIONS_TABLE_POSTGRES = (
-    "CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW())"
+    "CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT NOW())"
 )
 
 MigrateFn = Callable[[AsyncDB], Awaitable[None]]
@@ -503,6 +504,35 @@ async def _migration_12(db: AsyncDB) -> None:
     await db.run_script("DELETE FROM auth_sessions")
     await db.run_script("CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions(user_id)")
     logger.warning("Revoked {} session(s): they were stored as plaintext bearer tokens", outstanding or 0)
+
+
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+@register(13, "Give Postgres timestamp columns the zone they were written in")
+async def _migration_13(db: AsyncDB) -> None:
+    """Every writer binds `datetime.now(UTC)`, and asyncpg answers an aware datetime against a column
+    declared `timestamp without time zone` with a DataError, so a Postgres install could not store a
+    message at all. The schema says TIMESTAMPTZ now; this converts the columns an install already
+    created. The catalog is the list, so a table that arrived after this migration was written is
+    converted by the same pass on the next start, and a naive row becomes the UTC instant it was
+    stored as rather than a reading of the server's own `TimeZone`.
+    """
+    if db.dialect != "postgresql":
+        return
+    stale = await db.fetchall(
+        "SELECT table_name, column_name FROM information_schema.columns "
+        "WHERE table_schema = current_schema() AND data_type = 'timestamp without time zone'"
+    )
+    for row in stale:
+        table, column = str(row["table_name"]), str(row["column_name"])
+        if not (_IDENTIFIER.fullmatch(table) and _IDENTIFIER.fullmatch(column)):
+            logger.warning("Migration 13: not converting the oddly named column {}.{}", table, column)
+            continue
+        await db.execute(  # both names came from this database's catalog and passed the identifier check
+            f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMPTZ USING {column} AT TIME ZONE 'UTC'"
+        )
+        logger.info("Migration 13: {}.{} now carries its zone", table, column)
 
 
 async def apply_pending_migrations(db: AsyncDB) -> None:

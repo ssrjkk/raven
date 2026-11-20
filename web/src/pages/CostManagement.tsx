@@ -77,9 +77,9 @@ export default function CostManagement() {
                   { label: "Monthly Cost", value: `$${summary.monthly_cost?.toFixed(4)}`, danger: summary.monthly_cost > 10 },
                   { label: "LLM Calls", value: summary.total_calls },
                 ].map((c) => (
-                  <div key={c.label} className="stat-card">
+                  <div key={c.label} className={`stat-card ${c.danger ? "stat-card-danger" : ""}`}>
                     <div className="stat-card-label">{c.label}</div>
-                    <div className="stat-card-value" style={{ color: c.danger ? "var(--dt-colors-danger-default)" : "inherit" }}>
+                    <div className="stat-card-value">
                       {String(c.value)}
                     </div>
                   </div>
@@ -141,7 +141,7 @@ export default function CostManagement() {
                               <span>Monthly: ${(b.current_monthly || 0).toFixed(2)} / ${b.monthly_limit?.toFixed(2)}</span>
                             </div>
                             <div className="w-full h-1.5 rounded-full mt-1 bg-primary">
-                              <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(dailyPct, 100)}%`, backgroundColor: dailyPct > 80 ? "var(--dt-colors-danger-default)" : dailyPct > 50 ? "var(--dt-colors-warning-default)" : "var(--dt-colors-success-default)" }} />
+                              <div className={`h-full rounded-full transition-all ${dailyPct > 80 ? "bg-danger" : dailyPct > 50 ? "bg-warning" : "bg-success"}`} style={{ width: `${Math.min(dailyPct, 100)}%` }} />
                             </div>
                           </div>
                         );

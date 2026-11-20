@@ -24,9 +24,9 @@ class TestGateway:
 
     async def test_start_stop(self, gateway: Gateway):
         await gateway.start()
-        assert gateway._running is True
+        assert gateway.is_running is True
         await gateway.stop()
-        assert gateway._running is False
+        assert gateway.is_running is False
 
     async def test_handle_message_sends_response(self, gateway: Gateway):
         await gateway.start()

@@ -15,11 +15,8 @@ export default function PageHeader({ title, subtitle, description, icon: Icon, a
       <div className="flex items-start gap-3 min-w-0">
         {Icon && (
           <div
-            className="mt-0.5 w-9 h-9 shrink-0 rounded-xl flex items-center justify-center"
-            style={{
-              backgroundColor: "var(--dt-colors-accent-muted)",
-              color: "var(--dt-colors-accent-default)",
-            }}
+            className="mt-0.5 w-9 h-9 shrink-0 rounded-xl flex items-center justify-center bg-accent-muted text-accent"
+
           >
             <Icon size={18} />
           </div>

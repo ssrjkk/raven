@@ -128,7 +128,13 @@ def test_shipped_web_pages_load_nothing_from_another_host() -> None:
 
     spa = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
     popup = (ROOT / "extension" / "src" / "popup" / "index.html").read_text(encoding="utf-8")
-    for label, markup in (("SPA", spa), ("webchat fallback", INDEX_HTML), ("extension popup", popup)):
+    offline = (ROOT / "web" / "public" / "offline.html").read_text(encoding="utf-8")
+    for label, markup in (
+        ("SPA", spa),
+        ("webchat fallback", INDEX_HTML),
+        ("extension popup", popup),
+        ("offline shell", offline),
+    ):
         assert not _external_refs(markup), f"{label} references an off-origin asset: {_external_refs(markup)}"
 
 
@@ -149,7 +155,16 @@ def test_spa_fonts_are_vendored_with_a_cyrillic_subset() -> None:
         found = re.search(r"font-family: '([^']+)'", rule)
         assert found is not None
         families.add(found.group(1))
-    assert families == {"Inter", "JetBrains Mono"}, "the cyrillic subset must cover both families"
+
+    # The two families that draw text, read from the tokens rather than remembered here. Space Grotesk
+    # is excluded on purpose: Google ships it without a Cyrillic subset, so it is the display token and
+    # every Russian label set in it would reflow into the body face mid-sentence.
+    typography = json.loads((ROOT / "web" / "src" / "design" / "tokens.json").read_text(encoding="utf-8"))[
+        "typography"
+    ]["font-family"]
+    lead = {role: typography[role].split(",")[0].strip().strip("\"'") for role in ("sans", "mono", "display")}
+    assert families == {lead["sans"], lead["mono"]}, "the cyrillic subset must cover both text families"
+    assert lead["display"] not in families, f"{lead['display']} has no Cyrillic release and must not carry body text"
 
 
 def test_extension_manifest_forbids_remote_and_inline_code() -> None:

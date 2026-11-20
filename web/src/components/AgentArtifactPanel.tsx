@@ -44,7 +44,7 @@ function ArtifactBody({ artifact }: { artifact: AgentArtifact }) {
         sandbox="allow-scripts"
         srcDoc={sandboxedSrcDoc(artifact.content)}
         title={artifact.title}
-        className="h-64 w-full rounded border border-default bg-white"
+        className="h-64 w-full rounded border border-default bg-paper"
       />
     );
   }
@@ -85,16 +85,16 @@ function ArtifactCard({ artifact }: { artifact: AgentArtifact }) {
       <div className="flex items-center gap-2 border-b border-default bg-tertiary px-3 py-2 text-xs">
         <span className="text-accent">{artifactIcon(artifact.type)}</span>
         <span className="truncate font-medium text-primary">{artifact.title || "Artifact"}</span>
-        <span className="rounded bg-tertiary px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-secondary border border-default">
+        <span className="rounded bg-tertiary px-1.5 py-0.5 text-micro uppercase tracking-wider text-secondary border border-default">
           {artifact.type || "code"}
         </span>
         {artifact.file_path && (
-          <span className="truncate font-mono text-[10px] text-tertiary">{artifact.file_path}</span>
+          <span className="truncate font-mono text-micro text-tertiary">{artifact.file_path}</span>
         )}
         <button
           type="button"
           onClick={copy}
-          className="ml-auto flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-secondary transition-opacity hover:opacity-70"
+          className="ml-auto flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-micro text-secondary transition-opacity hover:opacity-70"
           aria-label="Copy artifact content"
         >
           {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}

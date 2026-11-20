@@ -12,7 +12,7 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
         category=TemplateCategory.DAILY,
         trigger=TemplateTrigger.SCHEDULED,
         default_schedule="0 8 * * *",
-        icon="🌅",
+        icon="sunrise",
         config_schema={
             "type": "object",
             "properties": {
@@ -34,7 +34,7 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
         description="Review pull request or code changes with automated analysis",
         category=TemplateCategory.DEV,
         default_schedule=None,
-        icon="🔍",
+        icon="search",
         config_schema={
             "type": "object",
             "properties": {
@@ -55,7 +55,7 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
         category=TemplateCategory.MONITORING,
         trigger=TemplateTrigger.INTERVAL,
         default_interval=3600,
-        icon="📈",
+        icon="trending-up",
         config_schema={
             "type": "object",
             "properties": {
@@ -76,7 +76,7 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
         category=TemplateCategory.DAILY,
         trigger=TemplateTrigger.SCHEDULED,
         default_schedule="0 18 * * *",
-        icon="📋",
+        icon="clipboard",
         config_schema={
             "type": "object",
             "properties": {
@@ -95,7 +95,7 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
         category=TemplateCategory.MONITORING,
         trigger=TemplateTrigger.INTERVAL,
         default_interval=300,
-        icon="❤️",
+        icon="activity",
         config_schema={
             "type": "object",
             "properties": {
@@ -120,7 +120,7 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
         category=TemplateCategory.DATA,
         trigger=TemplateTrigger.SCHEDULED,
         default_schedule="0 2 * * *",
-        icon="💾",
+        icon="database",
         config_schema={
             "type": "object",
             "properties": {
@@ -141,7 +141,7 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
         category=TemplateCategory.DATA,
         trigger=TemplateTrigger.INTERVAL,
         default_interval=86400,
-        icon="🕸️",
+        icon="globe",
         config_schema={
             "type": "object",
             "properties": {
@@ -163,7 +163,7 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
         category=TemplateCategory.COMMUNICATION,
         trigger=TemplateTrigger.SCHEDULED,
         default_schedule="0 9 * * *",
-        icon="📱",
+        icon="megaphone",
         config_schema={
             "type": "object",
             "properties": {
@@ -186,7 +186,7 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
         category=TemplateCategory.DAILY,
         trigger=TemplateTrigger.SCHEDULED,
         default_schedule="0 17 * * 5",
-        icon="📊",
+        icon="bar-chart",
         config_schema={
             "type": "object",
             "properties": {
@@ -206,7 +206,7 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
         category=TemplateCategory.DAILY,
         trigger=TemplateTrigger.SCHEDULED,
         default_schedule="0 3 * * *",
-        icon="💭",
+        icon="brain",
         config_schema={
             "type": "object",
             "properties": {
@@ -223,7 +223,7 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
         name="Delegate to Agent",
         description="Route a complex task to a specialized AI agent profile",
         category=TemplateCategory.PRODUCTIVITY,
-        icon="🤖",
+        icon="bot",
         config_schema={
             "type": "object",
             "properties": {
@@ -245,7 +245,7 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
         name="Parallel Security + Code Review",
         description="Run security audit and code review in parallel delegation",
         category=TemplateCategory.DEV,
-        icon="🛡️",
+        icon="shield",
         config_schema={
             "type": "object",
             "properties": {
@@ -262,7 +262,7 @@ BUILTIN_TEMPLATES: list[WorkflowTemplate] = [
         name="Incident Response",
         description="Run diagnostics and collect data when a service incident is detected",
         category=TemplateCategory.DEV,
-        icon="🚨",
+        icon="siren",
         config_schema={
             "type": "object",
             "properties": {

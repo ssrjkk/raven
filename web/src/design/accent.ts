@@ -1,3 +1,7 @@
+import darkTokens from "./tokens.json";
+import lightTokens from "./tokens.light.json";
+import midnightTokens from "./tokens.midnight.json";
+
 function hexToRgb(hex: string): [number, number, number] {
   const c = hex.replace("#", "");
   return [
@@ -67,20 +71,30 @@ const UI_PART = 3.0;
 const WHITE = "#ffffff";
 
 /** The page background of each theme: the accent is measured against a surface, not in the abstract.
- * Single source for ThemeContext's meta theme-color as well, so the two cannot drift apart. */
+ * Read from the token files rather than written here -- these maps used to remember `#0f1117` while
+ * tokens.json had already been repainted, so every palette generated for a chosen accent was being
+ * measured against a background the application no longer painted. */
 export const THEME_BACKGROUND: Record<AccentTheme, string> = {
-  dark: "#0f1117",
-  light: "#f6f7fb",
-  midnight: "#050507",
+  dark: darkTokens.colors.bg.primary,
+  light: lightTokens.colors.bg.primary,
+  midnight: midnightTokens.colors.bg.primary,
 };
 
 /** The panel a card or input border is drawn on. Focus and hover borders are measured against this
  * rather than the page: every interactive surface in the app sits on a card, and the card is the
  * lighter of the two in dark, so it is the stricter of the two requirements. */
 export const THEME_CARD: Record<AccentTheme, string> = {
-  dark: "#1e2140",
-  light: "#ffffff",
-  midnight: "#0e0e14",
+  dark: darkTokens.colors.surface.card,
+  light: lightTokens.colors.surface.card,
+  midnight: midnightTokens.colors.surface.card,
+};
+
+/** The colour the shell's sidebar is painted before it is made translucent over the page. The nav labels
+ *  are the most-read ink in the console, so their ground belongs in the measurement. */
+export const SHELL_PAINT: Record<AccentTheme, string> = {
+  dark: darkTokens.colors.bg.secondary,
+  light: lightTokens.colors.bg.secondary,
+  midnight: midnightTokens.colors.bg.secondary,
 };
 
 /**
@@ -109,19 +123,56 @@ export function readableAgainst(hex: string, background: string, target: number)
   return current;
 }
 
-export function generateAccentPalette(hex: string, theme: AccentTheme = "dark"): AccentPalette {
+/** The alpha the accent chip is raised at, and therefore the alpha every measurement of ink painted on
+ *  that chip has to use. One definition: the generator paints it here and the gate measures it there. */
+const MUTED_ALPHA = 0.15;
+
+/** What a reader actually sees where `hex` is painted at `alpha` over `back`. Translucent paints are the
+ *  norm in this design system -- the accent chip, the shell's glass, the corner wash -- and the flattened
+ *  value in the stylesheet is not the colour underneath a letter. */
+export function blendOver(back: string, hex: string, alpha: number): string {
+  const [fr, fg, fb] = hexToRgb(hex);
+  const [br, bg, bb] = hexToRgb(back);
+  return rgbToHex(lerp(br, fr, alpha), lerp(bg, fg, alpha), lerp(bb, fb, alpha));
+}
+
+/** The grounds the accent's text roles are drawn on, in the order the ramp reads them: the page, the card
+ *  a panel is built from, the shell's translucent sidebar, and the accent chip a selected nav item, a soft
+ *  button or an accent badge raises underneath the same ink. A link tuned to the page alone lands under AA
+ *  inside its own chip, which is the surface a reader looks at most. */
+export function linkGrounds(theme: AccentTheme, surface: string): string[] {
   const background = THEME_BACKGROUND[theme];
+  const shell = blendOver(background, SHELL_PAINT[theme], 0.88);
+  return [background, THEME_CARD[theme], shell].flatMap((ground) => [ground, blendOver(ground, surface, MUTED_ALPHA)]);
+}
+
+/** Steps a colour away from every ground it is painted on until the tightest of them clears the target.
+ *  `readableAgainst` answers one surface; the direction is read off the first ground, which is the page. */
+function readableAgainstAll(hex: string, grounds: string[], target: number): string {
+  const tightest = (candidate: string) => Math.min(...grounds.map((ground) => contrastRatio(candidate, ground)));
+  if (tightest(hex) >= target) return hex;
+  const towardsWhite = relativeLuminance(grounds[0]) < 0.5;
+  let current = hex;
+  for (let step = 1; step <= 100; step += 1) {
+    current = towardsWhite ? lighten(hex, step / 100) : darken(hex, step / 100);
+    if (tightest(current) >= target) return current;
+  }
+  return current;
+}
+
+export function generateAccentPalette(hex: string, theme: AccentTheme = "dark"): AccentPalette {
   const surface = readableOnWhite(hex, NORMAL_TEXT);
-  const link = readableAgainst(surface, background, NORMAL_TEXT);
+  const grounds = linkGrounds(theme, surface);
+  const link = readableAgainstAll(surface, grounds, NORMAL_TEXT);
   return {
     default: surface,
     hover: darken(surface, 0.08),
     active: darken(surface, 0.16),
-    muted: toRgba(surface, 0.15),
-    subtle: toRgba(surface, 0.08),
+    muted: toRgba(surface, MUTED_ALPHA),
+    subtle: toRgba(surface, 0.10),
     borderFocus: readableAgainst(surface, THEME_CARD[theme], UI_PART),
     textLink: link,
-    textLinkHover: readableAgainst(lighten(link, 0.1), background, NORMAL_TEXT),
+    textLinkHover: readableAgainstAll(lighten(link, 0.1), grounds, NORMAL_TEXT),
     glow: toRgba(surface, 0.4),
   };
 }

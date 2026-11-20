@@ -7,10 +7,10 @@ import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 import { useApiQuery } from "../hooks/useApiQuery";
 
-const monitorStatusIcon: Record<string, { icon: typeof Activity; color: string }> = {
-  active: { icon: Activity, color: "var(--dt-colors-status-success)" },
-  paused: { icon: Pause, color: "var(--dt-colors-status-warning)" },
-  error: { icon: AlertCircle, color: "var(--dt-colors-status-error)" },
+const monitorStatusIcon: Record<string, { icon: typeof Activity; ink: string }> = {
+  active: { icon: Activity, ink: "text-success" },
+  paused: { icon: Pause, ink: "text-warning" },
+  error: { icon: AlertCircle, ink: "text-danger" },
 };
 
 export default function Monitors() {
@@ -59,11 +59,8 @@ export default function Monitors() {
             <div key={m.id} className="card p-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <span
-                    className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center"
-                    style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}
-                  >
-                    <StatusIcon size={16} style={{ color: cfg.color }} />
+                  <span className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center bg-tertiary">
+                    <StatusIcon size={16} className={cfg.ink} />
                   </span>
                   <div>
                     <div className="text-sm font-medium">{m.name}</div>
@@ -75,19 +72,19 @@ export default function Monitors() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-tertiary">{m.interval_seconds}s</span>
                   {m.last_check && (
-                    <span className="flex items-center gap-1 text-xs" style={{ color: m.last_check.status === "up" ? "var(--dt-colors-status-success)" : "var(--dt-colors-status-error)" }}>
+                    <span className={`flex items-center gap-1 text-xs ${m.last_check.status === "up" ? "text-success" : "text-danger"}`}>
                       {m.last_check.status === "up" ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
                       {m.last_check.status}
                     </span>
                   )}
                     {m.status === "active" ? (
                     <button onClick={() => toggle.mutate({ action: "pause", id: m.id })}
-                      className="btn-soft px-2.5 py-1 text-xs" style={{ color: "var(--dt-colors-status-warning)", backgroundColor: "var(--dt-colors-status-warning-bg)" }}>
+                      className="btn-soft btn-soft-warning px-2.5 py-1 text-xs">
                       Pause
                     </button>
                   ) : (
                     <button onClick={() => toggle.mutate({ action: "resume", id: m.id })}
-                      className="btn-soft px-2.5 py-1 text-xs" style={{ color: "var(--dt-colors-status-success)", backgroundColor: "var(--dt-colors-status-success-bg)" }}>
+                      className="btn-soft btn-soft-success px-2.5 py-1 text-xs">
                       Resume
                     </button>
                   )}

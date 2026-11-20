@@ -1,12 +1,12 @@
 import { useMutation } from "@tanstack/react-query";
 import { Moon, MoonStar, Sun } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
 import { Skeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
-import { ACCENT_PRESETS } from "../design/accent";
+import { ACCENT_PRESETS, toRgba } from "../design/accent";
 import { applyThemeScheme } from "../design/scheme";
 import { type Theme, useTheme } from "../design/ThemeContext";
 import { useApiQuery } from "../hooks/useApiQuery";
@@ -97,21 +97,7 @@ export default function Settings() {
                 type="button"
                 onClick={() => setTheme(id)}
                 aria-pressed={active}
-                className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl text-sm font-medium transition-transform hover:scale-[1.02] active:scale-95"
-                style={
-                  active
-                    ? {
-                        backgroundColor: "var(--dt-colors-accent-muted)",
-                        color: "var(--dt-colors-accent-default)",
-                        border: "1px solid var(--dt-colors-accent-muted)",
-                        boxShadow: "inset 0 1px 0 var(--dt-colors-skeleton-highlight)",
-                      }
-                    : {
-                        backgroundColor: "var(--dt-colors-bg-tertiary)",
-                        color: "var(--dt-colors-text-secondary)",
-                        border: "1px solid var(--dt-colors-border-default)",
-                      }
-                }
+                className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl text-sm font-medium transition-transform hover:scale-[1.02] active:scale-95 ${active ? "pick-active" : "pick"}`}
               >
                 <Icon size={18} className="shrink-0" />
                 {label}
@@ -135,22 +121,20 @@ export default function Settings() {
                 key={p.hex}
                 type="button"
                 onClick={() => handleAccentChange(p.hex)}
-                className="flex flex-col items-center gap-1.5 rounded-lg px-1 py-2 transition-colors"
-                style={{
-                  backgroundColor: active ? "var(--dt-colors-accent-subtle)" : "transparent",
-                }}
+                className={`flex flex-col items-center gap-1.5 rounded-lg px-1 py-2 transition-colors ${active ? "bg-accent-subtle" : ""}`}
                 title={p.name}
               >
                 <span
-                  className="w-6 h-6 rounded-full transition-transform hover:scale-110 active:scale-95"
-                  style={{
-                    backgroundColor: p.hex,
-                    boxShadow: active
-                      ? `0 0 0 2px var(--dt-colors-bg-primary), 0 0 0 4px ${p.hex}, 0 0 10px ${p.hex}80`
-                      : "none",
-                  }}
+                  className={`w-6 h-6 rounded-full transition-transform hover:scale-110 active:scale-95 ${active ? "swatch-active" : ""}`}
+                  style={
+                    {
+                      backgroundColor: p.hex,
+                      "--swatch-color": p.hex,
+                      "--swatch-glow": toRgba(p.hex, 0.5),
+                    } as CSSProperties
+                  }
                 />
-                <span className="text-[10px] leading-none" style={{ color: "var(--dt-colors-text-tertiary)" }}>
+                <span className="text-micro leading-none text-tertiary">
                   {p.name}
                 </span>
               </button>
@@ -178,7 +162,7 @@ export default function Settings() {
                 handleAccentChange(customHex);
               }
             }}
-            placeholder="var(--dt-colors-accent-default)"
+            placeholder="#rrggbb"
             className="input-base flex-1 font-mono"
           />
           <button
@@ -224,7 +208,6 @@ export default function Settings() {
           <button
             onClick={() => {
               resetScheme();
-              setAccentColor("var(--dt-colors-accent-default)");
               toast("Theme reset to defaults", "info");
             }}
             className="btn-ghost"
@@ -239,7 +222,7 @@ export default function Settings() {
         <h2 className="text-sm font-semibold mb-3 text-primary">Configuration</h2>
         <div className="space-y-2 text-sm">
           {Object.entries(config).map(([k, v]) => (
-            <div key={k} className="flex justify-between py-1" style={{ borderBottom: "1px solid var(--dt-colors-border-muted)" }}>
+            <div key={k} className="flex justify-between py-1 row-rule">
               <span className="text-tertiary">{k}</span>
               <span className="font-mono text-primary">{String(v).slice(0, 40)}</span>
             </div>
@@ -248,7 +231,7 @@ export default function Settings() {
       </div>
 
       <button onClick={() => shutdown.mutate()} disabled={shutdown.isPending}
-        className="btn-soft px-5 py-2 text-danger" style={{ backgroundColor: "var(--dt-colors-status-error-bg)" }}>
+        className="btn-soft px-5 py-2 text-danger bg-danger-muted">
         {shutdown.isPending ? "Shutting down..." : "Shutdown Raven"}
       </button>
     </div>

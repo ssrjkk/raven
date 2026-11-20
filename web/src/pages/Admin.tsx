@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, type ChannelInfo, getToken } from "../api/client";
 import PageHeader from "../components/PageHeader";
 import { Skeleton } from "../components/Skeleton";
+import { StatusMark } from "../components/StatusMark";
 import { useToast } from "../components/Toast";
 import { useApiQuery } from "../hooks/useApiQuery";
 
@@ -178,9 +179,9 @@ export default function Admin() {
               {channels.map((ch) => (
                 <div key={ch.id} className="flex items-center justify-between py-2 px-3 bg-tertiary rounded-lg">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: ch.ready ? "var(--dt-colors-status-success)" : "var(--dt-colors-status-error)" }} />
+                    <span className={`w-2 h-2 rounded-full ${ch.ready ? "dot-success" : "dot-error"}`} />
                     <span className="text-sm text-primary">{ch.id}</span>
-                    <span className="text-[10px] text-tertiary">{ch.type}</span>
+                    <span className="text-micro text-tertiary">{ch.type}</span>
                   </div>
                   <span className="text-xs text-tertiary">
                     sent:{ch.stats?.sent ?? 0} failed:{ch.stats?.failed ?? 0}
@@ -269,7 +270,7 @@ export default function Admin() {
               </div>
             </div>
 
-            <p className="text-[10px] text-tertiary font-mono break-all">{model.ref}</p>
+            <p className="text-micro text-tertiary font-mono break-all">{model.ref}</p>
 
             {model.blockers.map((b, i) => (
               <p key={`b${i}`} className="text-xs bg-danger-muted text-danger rounded-lg px-3 py-2">
@@ -298,8 +299,8 @@ export default function Admin() {
               {model.blockers.length > 0 && !model.busy && (
                 <button
                   onClick={() => switchModel("enable", true)}
-                  className="btn-outline disabled:opacity-40"
-                  style={{ color: "var(--dt-colors-status-warning)", borderColor: "var(--dt-colors-status-warning)" }}
+                  className="btn-outline disabled:opacity-40 text-warning border-warning"
+
                 >
                   Switch on anyway
                 </button>
@@ -317,7 +318,7 @@ export default function Admin() {
             {modelFeedback && (
               <p className={`text-xs ${modelFeedback.ok ? "text-success" : "text-danger"}`}>{modelFeedback.msg}</p>
             )}
-            <p className="text-[10px] text-tertiary">Written to {model.env_file}; a running gateway picks it up within 5 s.</p>
+            <p className="text-micro text-tertiary">Written to {model.env_file}; a running gateway picks it up within 5 s.</p>
           </div>
         )}
       </div>
@@ -326,8 +327,8 @@ export default function Admin() {
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-primary">Security Audit</h2>
           <button onClick={runAudit} disabled={runningAudit}
-            className="btn-outline disabled:opacity-40"
-            style={{ color: "var(--dt-colors-status-warning)", borderColor: "var(--dt-colors-status-warning)" }}>
+            className="btn-outline disabled:opacity-40 text-warning border-warning"
+>
             {runningAudit ? "Running..." : "Run Audit"}
           </button>
         </div>
@@ -337,7 +338,9 @@ export default function Admin() {
               <div key={i} className={`flex items-start gap-2 px-3 py-2 rounded-lg text-xs ${
                 c.passed ? "bg-success-muted text-success" : "bg-danger-muted text-danger"
               }`}>
-                <span className="mt-0.5">{c.passed ? "✓" : "✗"}</span>
+                <span className="mt-0.5 inline-flex">
+                  <StatusMark ok={!!c.passed} />
+                </span>
                 <div className="flex-1">
                   <span className="font-medium">{c.check}</span>
                   {!c.passed && (

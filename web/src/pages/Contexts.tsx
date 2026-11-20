@@ -164,14 +164,14 @@ export default function Contexts() {
         {contexts.map((c) => (
           <div key={c.id} className="card p-3 flex items-center justify-between">
             <div className="flex items-center gap-3 min-w-0">
-              <span className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center"
-                style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}>
-                <FolderGit2 size={16} style={{ color: "var(--dt-colors-accent-default)" }} />
+              <span className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center bg-tertiary"
+>
+                <FolderGit2 size={16} className="text-accent" />
               </span>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{c.name}</span>
-                  {c.provider && <span className="text-[10px] px-1.5 py-0.5 rounded bg-tertiary text-tertiary">{c.provider}</span>}
+                  {c.provider && <span className="text-micro px-1.5 py-0.5 rounded bg-tertiary text-tertiary">{c.provider}</span>}
                 </div>
                 <div className="text-xs text-tertiary truncate max-w-lg">
                   {[
@@ -187,8 +187,8 @@ export default function Contexts() {
               <button className="btn-soft px-2.5 py-1 text-xs" onClick={() => openEdit(c)}>
                 <Pencil size={13} className="mr-1" /> Edit
               </button>
-              <button className="btn-soft px-2.5 py-1 text-xs text-danger"
-                style={{ backgroundColor: "var(--dt-colors-status-error-bg)" }}
+              <button className="btn-soft px-2.5 py-1 text-xs text-danger bg-danger-muted"
+
                 onClick={() => { if (window.confirm(`Delete context ${c.name}?`)) del.mutate(c.id); }}>
                 <Trash2 size={13} className="mr-1" /> Delete
               </button>

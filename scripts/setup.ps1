@@ -26,6 +26,7 @@ if (Test-Path "$WebDir\package.json") {
 Write-Host "`n[3/5] Generating icons..." -ForegroundColor Yellow
 python (Join-Path $ProjectRoot "scripts\make_icon.py")
 python (Join-Path $ProjectRoot "scripts\make_extension_icons.py")
+python (Join-Path $ProjectRoot "scripts\make_web_icons.py")
 
 Write-Host "`n[4/5] Preparing runtime directories..." -ForegroundColor Yellow
 New-Item -ItemType Directory -Force -Path $RavenDir | Out-Null

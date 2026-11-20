@@ -117,6 +117,13 @@ export interface StatusData {
   model: string;
 }
 
+export interface SystemStatusData {
+  channels: number;
+  agents: number;
+  running: boolean;
+  version: string;
+}
+
 export interface ChannelInfo {
   id: string;
   type: string;
@@ -125,15 +132,14 @@ export interface ChannelInfo {
 }
 
 export interface HealthCheck {
-  name: string;
   ok: boolean;
-  latency_ms: number;
-  critical: boolean;
+  detail: string;
 }
 
 export interface HealthData {
-  overall: boolean;
-  checks: HealthCheck[];
+  status: "ok" | "degraded";
+  checks: Record<string, HealthCheck>;
+  timestamp: number;
 }
 
 export interface MetricsSnapshot {
@@ -148,6 +154,13 @@ export interface MonitorData {
   interval_seconds: number;
   status: string;
   last_check: { status: string; checked_at: number } | null;
+}
+
+export interface MonitorListData {
+  items: MonitorData[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface RoutineData {
@@ -315,22 +328,56 @@ export interface AnalyticsTimePoint {
   max: number;
 }
 
+/**
+ * One collector key split into the parts a label is built from, by the side that knows the grammar.
+ *
+ * `raven_llm_request{model=ollama/llama3,provider=ollama}_p99` is what the store holds, and the page has no
+ * way to know where it splits: the `name.replace("raven_", "")` that assumed it did painted
+ * `llm_request{model=olla...` on an axis. The key itself stays on the record as `name`/`metric` because
+ * `/api/analytics/series/{metric_name}` is called with it and a metrics table has to answer the real spelling.
+ */
+export interface AnalyticsMetricParts {
+  family: string;
+  stat: string;
+  /** Which labels a series carries depends on its family, so no key here can be promised. */
+  labels: Record<string, string | undefined>;
+}
+
+export interface AnalyticsMetricEntry extends AnalyticsMetricParts {
+  name: string;
+  avg: number;
+  max: number;
+  samples: number;
+}
+
+/** One latency series: the collector key, its parts, and the points to plot. */
+export interface AnalyticsLatencySeries extends AnalyticsMetricParts {
+  metric: string;
+  series: AnalyticsTimePoint[];
+}
+
+export interface AnalyticsToolUsageItem {
+  name: string;
+  category?: string;
+  total: number;
+}
+
 export interface AnalyticsRangeData {
   received?: number;
   errors?: number;
   error_rate?: number;
   message_series?: AnalyticsTimePoint[];
   error_series?: AnalyticsTimePoint[];
-  latency_series?: Record<string, AnalyticsTimePoint[]>;
+  latency_series?: AnalyticsLatencySeries[];
 }
 
 export interface AnalyticsFullData {
   last_hour?: AnalyticsRangeData;
   last_24h?: AnalyticsRangeData;
-  summary?: { metrics: { name: string; avg: number; max: number; samples: number }[] };
-  tool_breakdown?: { total: number; success_series?: AnalyticsTimePoint[]; error_series?: AnalyticsTimePoint[] };
-  tool_usage_1h?: { name: string; total: number }[];
-  tool_usage?: { name: string; total: number }[];
+  summary?: { metrics: AnalyticsMetricEntry[] };
+  tool_breakdown?: AnalyticsToolBreakdownData;
+  tool_usage_1h?: AnalyticsToolUsageItem[];
+  tool_usage?: AnalyticsToolUsageItem[];
 }
 
 export interface AnalyticsSeriesData {
@@ -338,21 +385,22 @@ export interface AnalyticsSeriesData {
   data: AnalyticsTimePoint[];
 }
 
+/** `/api/analytics/summary` answers one row per metric key the collector stored. */
 export interface AnalyticsSummaryData {
-  metrics: { name: string; avg: number; max: number; samples: number }[];
+  metrics: AnalyticsMetricEntry[];
 }
 
-export interface AnalyticsAggregatedData {
-  metrics: Record<string, number>;
-}
+/** `/api/analytics/aggregated` answers the same window payload `full` embeds as `last_hour` and `last_24h`. */
+export type AnalyticsAggregatedData = AnalyticsRangeData;
 
 export interface AnalyticsToolUsageData {
-  tools: { name: string; total: number; category?: string }[];
+  tools: AnalyticsToolUsageItem[];
 }
 
 export interface AnalyticsToolBreakdownData {
+  success: number;
+  errors: number;
   total: number;
-  by_tool: Record<string, { calls: number; errors: number }>;
   success_series?: AnalyticsTimePoint[];
   error_series?: AnalyticsTimePoint[];
 }

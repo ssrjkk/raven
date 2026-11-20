@@ -18,6 +18,7 @@ import asyncio
 import json
 import pathlib
 import re
+import shutil
 import subprocess
 from html.parser import HTMLParser
 from types import SimpleNamespace
@@ -60,15 +61,145 @@ class _ScriptBlock(HTMLParser):
             self._inside = False
 
 
+# The expressions the webview template interpolates, with the value the extension host holds for each
+# when the panel opens. `fontRoot` is printed by the host from the granted asset directory, so its real
+# shape is a `vscode-webview://` URI whose authority is a per-install secret hash -- the reader and node
+# are both fed the same preview of it, which is what makes the byte-for-byte comparison below about the
+# template and not about the machine it ran on.
+PREVIEW_WS_URL = "ws://127.0.0.1:8790/ws"
+PREVIEW_FONT_ROOT = "vscode-webview://0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d/assets/fonts"
+_EXPRESSION = re.compile(r"\$\{([^}]*)\}")
+_ESCAPES_THAT_MEAN_THEMSELVES = {"\\", "`", "$"}
+_CONTROL_ESCAPES = {"n": "\n", "r": "\r", "t": "\t"}
+
+
+def _interpolations(ws_url: str) -> dict[str, str]:
+    return {"JSON.stringify(wsUrl)": json.dumps(ws_url), "fontRoot": PREVIEW_FONT_ROOT}
+
+
+_NODE_RENDERER = """
+// Cook panel.ts's webview template with the engine that evaluates it, then parse every script block the
+// produced document carries, which is what the webview has to do with it.
+import { readFileSync, writeFileSync } from "node:fs";
+import vm from "node:vm";
+
+const [panelPath, outPath, wsUrl, fontRoot] = process.argv.slice(2);
+const src = readFileSync(panelPath, "utf8");
+const start = src.indexOf("`<!DOCTYPE html");
+if (start < 0) {
+  console.log("no webview template in " + panelPath);
+  process.exit(2);
+}
+let html = "";
+try {
+  html = vm.runInNewContext(src.slice(start, src.lastIndexOf("`") + 1), { wsUrl, fontRoot, JSON });
+} catch (err) {
+  console.log("the template does not evaluate: " + err.message);
+  process.exit(1);
+}
+const blocks = [...html.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)];
+for (const [i, m] of blocks.entries()) {
+  try {
+    new vm.Script(m[1]);
+  } catch (err) {
+    console.log("script " + i + " of the shipped document does not parse: " + err.message);
+    process.exit(1);
+  }
+}
+writeFileSync(outPath, html);
+console.log("ok blocks=" + blocks.length + " bytes=" + html.length);
+"""
+
+
+def _webview_literal(source: str) -> str:
+    """The body of the template literal the panel returns, ended where a JS engine ends one: at the first
+    backtick that is not escaped. A comment carrying one cuts the document in half, and this is where the
+    reader notices."""
+    start = source.index("`<!DOCTYPE html")
+    i = start + 1
+    while True:
+        if i >= len(source):
+            raise AssertionError("the webview template never closes")
+        ch = source[i]
+        if ch == "\\":
+            i += 2
+            continue
+        if ch == "`":
+            return source[start + 1 : i]
+        if source.startswith("${", i):
+            close = source.index("}", i + 2)
+            assert "`" not in source[i + 2 : close], "the webview interpolates a nested literal"
+            i = close + 1
+            continue
+        i += 1
+
+
+def _cook(literal: str, interpolated: dict[str, str]) -> tuple[str, list[str]]:
+    """The text a JS engine makes of a template literal body, plus the escapes it consumed on the way."""
+    out: list[str] = []
+    hazards: list[str] = []
+    i = 0
+    while i < len(literal):
+        ch = literal[i]
+        if ch == "\\":
+            following = literal[i + 1 : i + 2]
+            if following in _ESCAPES_THAT_MEAN_THEMSELVES:
+                out.append(following)
+            else:
+                line = literal[:i].count("\n") + 1
+                hazards.append(f"line {line}: a backslash before {following!r}")
+                out.append(_CONTROL_ESCAPES.get(following, following))
+            i += 2
+            continue
+        if literal.startswith("${", i):
+            close = literal.index("}", i + 2)
+            expression = literal[i + 2 : close]
+            if expression not in interpolated:
+                raise AssertionError(
+                    f"the webview template interpolates {expression!r}, which this reader does not model"
+                )
+            out.append(interpolated[expression])
+            i = close + 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out), hazards
+
+
+def render_webview(source: str, *, ws_url: str = PREVIEW_WS_URL) -> str:
+    """The document the extension host hands the webview, cooked the way the host cooks it."""
+    document, hazards = _cook(_webview_literal(source), _interpolations(ws_url))
+    assert not hazards, "the escapes the panel writes are not the ones the document gets: " + "; ".join(hazards)
+    assert document.endswith("</html>"), "the webview template ends inside the document, so the panel ships half a page"
+    return document
+
+
+def _node_cook(panel_path: pathlib.Path, tmp_path: pathlib.Path, ws_url: str = PREVIEW_WS_URL) -> bytes:
+    renderer = tmp_path / "cook.mjs"
+    rendered = tmp_path / "panel.html"
+    renderer.write_text(_NODE_RENDERER, encoding="utf-8")
+    cooked = subprocess.run(
+        ["node", str(renderer), str(panel_path), str(rendered), ws_url, PREVIEW_FONT_ROOT],
+        capture_output=True,
+        timeout=120,
+        check=False,
+    )
+    assert cooked.returncode == 0, cooked.stdout.decode("utf-8", "replace") + cooked.stderr.decode("utf-8", "replace")
+    return rendered.read_bytes()
+
+
 def _panel_script() -> str:
     """The inline script of the chat panel, read the way a browser reads it.
 
-    `<script>([\\s\\S]*?)</script>` stops at the first `</script>` anywhere in the text, which is the
-    wrong rule for HTML: a script that contains that sequence in a string ends the block early, and the
-    test then greps a fragment of JavaScript for the guard it is meant to be measuring.
+    Two things stand between `panel.ts` and the bytes the webview executes: the host evaluates a template
+    literal, so every escape in it is consumed before the document exists, and HTML closes a script block
+    at the matching tag, not at the first `</script>` anywhere in the text. Grepping the source for the
+    shipped behaviour measures neither: the `\\n` the source writes inside `split('...')` is a real newline
+    by the time the document has it, which is a syntax error the browser refuses to run while the suite
+    stayed green.
     """
     parser = _ScriptBlock()
-    parser.feed(_source("panel.ts"))
+    parser.feed(render_webview(_source("panel.ts")))
     script = "".join(parser.chunks)
     assert script.strip(), "the chat panel has no script block"
     return script
@@ -138,6 +269,73 @@ def test_the_panel_never_reports_connected_before_the_gateway_names_a_session() 
     onopen = next(line for line in script.splitlines() if "ws.onopen" in line)
     assert "setStatus" not in onopen
     assert re.search(r"data\.type === 'session'[\s\S]{0,140}setStatus\('connected'\)", script)
+
+
+# --- what the webview is handed, as opposed to what the source says ---
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_the_document_the_host_makes_matches_the_document_the_reader_cooks(tmp_path: pathlib.Path) -> None:
+    """The cook above is a re-implementation of a JS engine's rule, so it is measured against that engine
+    on the same file: byte for byte, and every script block of the produced document has to parse.
+
+    Measured before this guard existed: the panel's stylesheet carried a comment with backticks in it,
+    which ended the literal where the host evaluates it, and `split('\\n')` in the source is a split on a
+    raw newline in the document. Both left the shipped extension with a page whose script never runs -- the
+    socket is opened by that script -- while every assertion in this file stayed green on the source text.
+
+    Both sides are handed the same preview values, and a wsUrl neither side has hardcoded, so the equality
+    below can only hold if each cook really reads the interpolation out of the template.
+    """
+    ws_url = "ws://127.0.0.1:8799/ws"
+    cooked = _node_cook(EXT / "src" / "panel.ts", tmp_path, ws_url)
+    assert cooked == render_webview(_source("panel.ts"), ws_url=ws_url).encode("utf-8")
+
+
+def test_the_reader_models_every_expression_the_template_interpolates() -> None:
+    """An expression the reader does not model is a value the document ships with the reader's guess in
+    its place, and the byte-for-byte guard would then be comparing two cooks of the same wrong document.
+    So the modelled set is checked against the template in both directions."""
+    found = set(_EXPRESSION.findall(_webview_literal(_source("panel.ts"))))
+    modelled = set(_interpolations(PREVIEW_WS_URL))
+    assert found == modelled, f"template {sorted(found)} vs reader {sorted(modelled)}"
+
+
+def test_the_document_reader_notices_an_interpolation_it_does_not_model() -> None:
+    source = _source("panel.ts")
+    planted = source.replace("${fontRoot}", "${webviewUriOfFontRoot}", 1)
+    assert planted != source, "panel.ts no longer interpolates fontRoot, so nothing was planted"
+    with pytest.raises(AssertionError, match="does not model"):
+        render_webview(planted)
+
+
+def test_the_fence_the_panel_renders_survives_the_template_being_evaluated() -> None:
+    """A backslash written once inside a template literal is consumed there, so a regex class or a newline
+    escape has to be doubled to reach the document at all."""
+    script = _panel_script()
+    assert r"/(```\w*\n?[\s\S]*?```)/g" in script, "the fence split reaches the browser without its classes"
+    assert r"/^```(\w*)\n?([\s\S]*?)```$/" in script, "the fence match reaches the browser without its classes"
+    assert r"part.split('\n')" in script, "the line split reaches the browser as a literal newline"
+
+
+def test_the_document_reader_notices_an_escape_the_engine_consumes() -> None:
+    planted = {
+        "a newline the engine eats before the document gets it": (r"part.split('\\n')", r"part.split('\n')"),
+        "a regex class the engine eats": (r"\`\`\`\\w*\\n?", r"\`\`\`\w*\n?"),
+    }
+    source = _source("panel.ts")
+    for label, (written, broken) in planted.items():
+        assert written in source, f"panel.ts no longer writes {written}, so {label} was never planted"
+        with pytest.raises(AssertionError, match="backslash"):
+            render_webview(source.replace(written, broken))
+
+
+def test_a_backtick_in_the_pages_own_css_cuts_the_shipped_document_short() -> None:
+    source = _source("panel.ts")
+    planted = source.replace("#header h1 {", "`#header h1` {", 1)
+    assert planted != source, "panel.ts no longer styles the header, so nothing was planted"
+    with pytest.raises(AssertionError, match="ends inside the document"):
+        render_webview(planted)
 
 
 # --- the health probe, against the port the extension points at ---

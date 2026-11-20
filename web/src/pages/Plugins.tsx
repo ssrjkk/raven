@@ -1,8 +1,8 @@
+import { Star } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
-import { labelOn, readToken } from "../design/paint";
 
 interface PluginManifest {
   id?: string;
@@ -90,21 +90,17 @@ export default function Plugins() {
     }
   }
 
-  const categoryColor = (cat: string) => {
+  /** The hue a category is tagged with, written as device names: which label a hue can carry is the sheet's
+   *  and each theme's own, so the tag is painted the same way here as in every other theme. */
+  const categoryTag = (cat: string) => {
     const scale: Record<string, string> = {
-      coding: "var(--dt-colors-category-blue)",
-      automation: "var(--dt-colors-category-green)",
-      unique: "var(--dt-colors-category-amber)",
-      voice: "var(--dt-colors-category-violet)",
-      channel: "var(--dt-colors-category-pink)",
+      coding: "tag-blue",
+      automation: "tag-green",
+      unique: "tag-amber",
+      voice: "tag-violet",
+      channel: "tag-pink",
     };
-    return scale[cat] ?? "var(--dt-colors-category-grey)";
-  };
-
-  /** A tag is a solid fill from the categorical scale, so its label is measured against that fill. */
-  const categoryBadge = (cat: string) => {
-    const fill = readToken(categoryColor(cat).slice(4, -1));
-    return { backgroundColor: categoryColor(cat), color: labelOn(fill) };
+    return scale[cat] ?? "tag-grey";
   };
 
   return (
@@ -138,7 +134,7 @@ export default function Plugins() {
                   <div>
                     <span className="font-semibold">{p.name}</span>
                     <span className="ml-2 text-xs text-tertiary">v{p.version}</span>
-                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={categoryBadge(p.category ?? "")}>{p.category}</span>
+                    <span className={`ml-2 text-xs px-1.5 py-0.5 rounded font-medium ${categoryTag(p.category ?? "")}`}>{p.category}</span>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => handleUpdate(p.name)}
@@ -146,7 +142,7 @@ export default function Plugins() {
                       Update
                     </button>
                     <button onClick={() => handleUninstall(p.name)}
-                      className="btn-soft px-2.5 py-1 text-xs text-danger" style={{ backgroundColor: "var(--dt-colors-status-error-bg)" }}>
+                      className="btn-soft px-2.5 py-1 text-xs text-danger bg-danger-muted">
                       Uninstall
                     </button>
                   </div>
@@ -174,8 +170,11 @@ export default function Plugins() {
                     <div className="font-semibold">{p.name}</div>
                     <div className="text-xs text-tertiary">{(p.description ?? "").slice(0, 100)}</div>
                     <div className="mt-1 flex items-center gap-2 text-xs text-tertiary">
-                      <span className="text-warning">★ {(p.rating ?? 0).toFixed(1)}</span>
-                      <span className="px-1 py-0.5 rounded text-[10px]" style={categoryBadge(p.category ?? "")}>{p.category}</span>
+                      <span className="flex items-center gap-1 text-warning">
+                        <Star size={11} className="flex-shrink-0 fill-current" />
+                        {(p.rating ?? 0).toFixed(1)}
+                      </span>
+                      <span className={`px-1 py-0.5 rounded text-micro font-medium ${categoryTag(p.category ?? "")}`}>{p.category}</span>
                     </div>
                   </div>
                 ))}
@@ -194,7 +193,7 @@ export default function Plugins() {
                     <div>
                       <span className="font-semibold">{p.name}</span>
                       <span className="ml-2 text-xs text-tertiary">v{p.version}</span>
-                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={categoryBadge(p.category ?? "")}>{p.category}</span>
+                      <span className={`ml-2 text-xs px-1.5 py-0.5 rounded font-medium ${categoryTag(p.category ?? "")}`}>{p.category}</span>
                     </div>
                     <button onClick={() => { setInstallUrl(p.id ?? ""); setTab("install"); }}
                       className="btn-soft px-3 py-1 text-xs">
@@ -205,7 +204,7 @@ export default function Plugins() {
                   {p.tags && p.tags.length > 0 && (
                     <div className="mt-1 flex gap-1">
                       {p.tags.map((t: string) => (
-                        <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-tertiary text-tertiary">{t}</span>
+                        <span key={t} className="text-micro px-1.5 py-0.5 rounded bg-tertiary text-tertiary">{t}</span>
                       ))}
                     </div>
                   )}

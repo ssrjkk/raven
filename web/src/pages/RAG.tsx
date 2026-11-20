@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Check, Image, Minus } from "lucide-react";
 import { useState } from "react";
 
 import { api } from "../api/client";
@@ -104,7 +105,12 @@ export default function RAG() {
                     <span className="text-tertiary">{r.document_id}</span>
                   </div>
                   <p className="text-sm">{r.text?.slice(0, 300)}</p>
-                  {r.image_path && <p className="text-xs mt-1 text-tertiary">📷 {r.image_path}</p>}
+                  {r.image_path && (
+                    <p className="mt-1 flex items-center gap-1 text-xs text-tertiary">
+                      <Image size={12} className="flex-shrink-0" />
+                      <span className="truncate">{r.image_path}</span>
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
@@ -143,9 +149,9 @@ export default function RAG() {
                 { label: "Total Chars", value: stats.total_chars },
                 { label: "Total Images", value: stats.total_images },
                 { label: "Dimension", value: stats.dimension },
-                { label: "SentenceTransformer", value: stats.sentence_transformer ? "✓" : "—" },
-                { label: "CLIP", value: stats.clip_available ? "✓" : "—" },
-                { label: "ChromaDB", value: stats.chroma_available ? "✓" : "—" },
+                { label: "SentenceTransformer", value: stats.sentence_transformer ? <Check size={22} className="text-success" /> : <Minus size={22} className="text-tertiary" /> },
+                { label: "CLIP", value: stats.clip_available ? <Check size={22} className="text-success" /> : <Minus size={22} className="text-tertiary" /> },
+                { label: "ChromaDB", value: stats.chroma_available ? <Check size={22} className="text-success" /> : <Minus size={22} className="text-tertiary" /> },
               ].map(s => (
                 <div key={s.label} className="stat-card text-center">
                   <div className="stat-card-value">{s.value ?? "—"}</div>

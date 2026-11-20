@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { AlertTriangle, Bug, CheckCircle, ChevronDown, ChevronRight,FileCode, Info, RefreshCw, Search, XCircle } from "lucide-react";
+import { AlertTriangle, Bug, CheckCircle, ChevronDown, ChevronRight,FileCode, Info, Lightbulb, RefreshCw, Search, XCircle } from "lucide-react";
 import { useState } from "react";
 
 import { api, type PatternCheckInfo, type PatternRunResponse,type PatternViolation } from "../api/client";
@@ -22,8 +22,8 @@ export default function CodeQuality() {
   const severityIcon = (sev: string) => {
     switch (sev) {
       case "error": return <XCircle className="w-3.5 h-3.5 text-danger" />;
-      case "warning": return <AlertTriangle className="w-3.5 h-3.5" style={{ color: "var(--dt-colors-warning-default)" }} />;
-      default: return <Info className="w-3.5 h-3.5" style={{ color: "var(--dt-colors-accent-default)" }} />;
+      case "warning": return <AlertTriangle className="w-3.5 h-3.5 text-warning" />;
+      default: return <Info className="w-3.5 h-3.5 text-accent" />;
     }
   };
 
@@ -40,7 +40,7 @@ export default function CodeQuality() {
         subtitle="Pattern checking and convention enforcement"
         actions={
           <div className="flex items-center gap-2">
-            <Bug className="w-5 h-5" style={{ color: "var(--dt-colors-accent-default)" }} />
+            <Bug className="w-5 h-5 text-accent" />
             <button onClick={() => runChecks.mutate()} disabled={runChecks.isPending} className="btn-primary">
               <RefreshCw className={`w-4 h-4 ${runChecks.isPending ? "animate-spin" : ""}`} />
               Run Checks
@@ -51,20 +51,12 @@ export default function CodeQuality() {
 
       <div className="flex gap-2 flex-wrap mb-4">
         <button onClick={() => setActiveCheck("")}
-          className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
-          style={{
-            backgroundColor: !activeCheck ? "var(--dt-colors-accent-default)" : "var(--dt-colors-bg-tertiary)",
-            color: !activeCheck ? "var(--dt-colors-text-on-accent)" : "var(--dt-colors-text-secondary)",
-          }}>
+          className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-all ${!activeCheck ? "bg-accent on-accent" : "bg-tertiary text-secondary"}`}>
           All checks
         </button>
         {checks.map((c) => (
           <button key={c.id} onClick={() => setActiveCheck(c.id)}
-            className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
-            style={{
-              backgroundColor: activeCheck === c.id ? "var(--dt-colors-accent-default)" : "var(--dt-colors-bg-tertiary)",
-              color: activeCheck === c.id ? "var(--dt-colors-text-on-accent)" : "var(--dt-colors-text-secondary)",
-            }}>
+            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-all ${activeCheck === c.id ? "bg-accent on-accent" : "bg-tertiary text-secondary"}`}>
             {c.name}
           </button>
         ))}
@@ -72,7 +64,7 @@ export default function CodeQuality() {
 
       {runChecks.isPending && (
         <div className="flex items-center justify-center py-12">
-          <div className="w-6 h-6 border-2 rounded-full animate-spin" style={{ borderColor: "var(--dt-colors-accent-default)", borderTopColor: "transparent" }} />
+          <div className="w-6 h-6 border-2 rounded-full animate-spin spinner-accent" />
           <span className="ml-3 text-sm text-tertiary">Scanning project...</span>
         </div>
       )}
@@ -81,13 +73,13 @@ export default function CodeQuality() {
         <>
           <div className="flex gap-3 mb-6">
             {[
-              { label: "Files", value: results.files_checked, color: "var(--dt-colors-text-primary)" },
-              { label: "Errors", value: results.by_severity?.error || 0, color: "var(--dt-colors-danger-default)" },
-              { label: "Warnings", value: results.by_severity?.warning || 0, color: "var(--dt-colors-warning-default)" },
-              { label: "Info", value: results.by_severity?.info || 0, color: "var(--dt-colors-accent-default)" },
+              { label: "Files", value: results.files_checked, tone: "" },
+              { label: "Errors", value: results.by_severity?.error || 0, tone: "stat-card-danger" },
+              { label: "Warnings", value: results.by_severity?.warning || 0, tone: "stat-card-warning" },
+              { label: "Info", value: results.by_severity?.info || 0, tone: "stat-card-accent" },
             ].map((s) => (
-              <div key={s.label} className="stat-card flex-1 text-center">
-                <div className="stat-card-value" style={{ color: s.color }}>{s.value}</div>
+              <div key={s.label} className={`stat-card flex-1 text-center ${s.tone}`}>
+                <div className="stat-card-value">{s.value}</div>
                 <div className="stat-card-label">{s.label}</div>
               </div>
             ))}
@@ -106,10 +98,9 @@ export default function CodeQuality() {
                 return (
                   <div key={file} className="card overflow-hidden">
                     <button onClick={() => setExpanded({ ...expanded, [file]: !isOpen })}
-                      className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium"
-                      style={{ borderBottom: isOpen ? "1px solid var(--dt-colors-border-default)" : "none" }}>
+                      className={`w-full flex items-center gap-2 px-4 py-3 text-sm font-medium ${isOpen ? "border-b border-default" : ""}`}>
                       {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                      <FileCode className="w-4 h-4" style={{ color: "var(--dt-colors-accent-default)" }} />
+                      <FileCode className="w-4 h-4 text-accent" />
                       <span className="flex-1 truncate font-mono text-xs">{file}</span>
                       <div className="flex gap-1.5 text-xs">
                         <span className="badge badge-error">
@@ -139,11 +130,12 @@ export default function CodeQuality() {
                                   </span>
                                 </div>
                                 <p className="text-primary">{v.message}</p>
-                                <pre className="mt-1 text-xs font-mono px-2 py-1 rounded overflow-x-auto" style={{ backgroundColor: "var(--dt-colors-bg-primary)", color: "var(--dt-colors-text-tertiary)" }}>
+                                <pre className="mt-1 text-xs font-mono px-2 py-1 rounded overflow-x-auto bg-primary text-tertiary">
                                   {v.line_content}
                                 </pre>
-                                <p className="mt-1 text-xs text-tertiary">
-                                  💡 {v.fix_hint}
+                                <p className="mt-1 flex items-start gap-1 text-xs text-tertiary">
+                                  <Lightbulb size={12} className="mt-0.5 flex-shrink-0" />
+                                  <span>{v.fix_hint}</span>
                                 </p>
                               </div>
                             </div>

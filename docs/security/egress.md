@@ -116,6 +116,7 @@ scan stays honest about what it found.
 | `t.me` | `raven/cli/onboard.py` | a link printed for the user to open |
 | `git-scm.com` | `raven/plugins/git/plugin.py` | text inside a "git not found" message |
 | `www.apple.com` | `raven/cli/service.py` | the public DTD identifier of a launchd plist; nothing fetches it |
+| `www.w3.org` | `raven/channels/webchat/channel.py`, `raven/core/scaffold_api.py` | the `xmlns` of the inline SVG inside the grain `data:` URI; a namespace name is not an address, and the same string in `site/styles.css`, `web/public/offline.html` and the popup sheet sits in a percent-encoded value no resolver touches |
 | `registry.example.com` | `ravencode/runtime/tools/definitions.py` | a placeholder inside a documented example |
 | `localhost` | 18 modules | loopback only: the gateway's own port, Ollama, LM Studio, the Signal daemon |
 
@@ -127,10 +128,19 @@ scan stays honest about what it found.
 - **Telemetry is off by default** (`FeatureFlags.telemetry = False`, `raven/core/features.py`) and even
   when enabled it writes to the local database; the analytics and A/B routers serve read queries over
   the gateway's own authenticated HTTP surface.
-- **The web UI loads nothing from a third-party host.** Inter and JetBrains Mono are vendored as woff2
-  under `web/public/fonts/` (`web/src/styles/fonts.css`), the browser-extension popup ships its own
-  CSS and JS (`extension/src/popup/`, with `script-src 'self'` pinned in the manifest), and the
-  no-Node fallback page served by the gateway (`raven/channels/webchat/channel.py`) is a single
-  document with no subresources. The test asserts all three carry no external `src`/`href`.
+- **The web UI loads nothing from a third-party host.** IBM Plex Sans, IBM Plex Mono and Space Grotesk
+  are vendored as nine woff2 subsets under `web/public/fonts/` (`web/src/styles/fonts.css`); the eight
+  the offline surfaces paint with are copied byte-for-byte into the two packages that cannot reach an
+  origin — `extension/src/popup/fonts/` and `extension/vscode/assets/fonts/` — by
+  `scripts/gen_theme_css.py --sync-package-fonts`, and the files `site/fonts/` shares a name with are
+  the same bytes. The browser-extension popup ships its own CSS and JS (`extension/src/popup/`, with
+  `script-src 'self'` pinned in the manifest). The gateway's no-Node chat page
+  (`raven/channels/webchat/channel.py`) and the offline shell (`web/public/offline.html`) fetch only
+  same-origin fonts, under `font-src 'self' data:`. The VS Code panel's webview reads files only through
+  `vscode-webview://` URIs, and the one root it is granted is that assets directory: its `@font-face`
+  region is generated against the `${fontRoot}` placeholder the extension host interpolates, so no URL
+  in the document can name a host at all. The tests assert none of these documents carries an external
+  `src`/`href`, and that every brand family a document leads a font stack with is a face that document
+  delivers and ships the bytes for.
 - **Provider keys, chats and embeddings stay on the machine**: `data/` for SQLite, `WORKSPACE_PATH`
   for files, and outbound calls carry only the prompt, query or message the feature was asked to send.

@@ -1,36 +1,21 @@
 import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { metrics, status, systemStatus } from "../../e2e/fixtures/api";
+import { healthDegraded } from "../../e2e/fixtures/health";
 import { renderWithProviders } from "../test/test-utils";
 import Dashboard from "./Dashboard";
 
+// The payloads are the answers of the routes themselves (scripts/gen_api_fixtures.py). They used to be typed
+// here by hand, and the hand-written ones were fictions the page could not fail on: metric keys
+// `requests_total`/`avg_latency_ms` that `metrics.snapshot()` has never emitted, a `version` of its own, and a
+// channel list that disagreed with what `/api/admin/system/status` counted one line below it.
 vi.mock("../api/client", () => ({
   api: {
-    status: vi.fn().mockResolvedValue({
-      status: "running",
-      channels: ["telegram", "webchat"],
-      plugins: 3,
-      agents: [{ id: "a1", system_prompt: "helpful", model: "ollama/llama3" }],
-      model: "ollama/llama3",
-    }),
-    health: vi.fn().mockResolvedValue({
-      overall: true,
-      checks: [
-        { name: "nats", ok: true, latency_ms: 5, critical: true },
-        { name: "db", ok: true, latency_ms: 2, critical: true },
-      ],
-    }),
-    metrics: vi.fn().mockResolvedValue({
-      requests_total: 150,
-      errors_total: 3,
-      avg_latency_ms: 42,
-    }),
-    systemStatus: vi.fn().mockResolvedValue({
-      channels: 2,
-      agents: 1,
-      running: true,
-      version: "0.4.0",
-    }),
+    status: vi.fn().mockResolvedValue(status),
+    health: vi.fn().mockResolvedValue(healthDegraded),
+    metrics: vi.fn().mockResolvedValue(metrics),
+    systemStatus: vi.fn().mockResolvedValue(systemStatus),
   },
   isAuthenticated: vi.fn().mockReturnValue(true),
   getToken: vi.fn().mockReturnValue(null),
@@ -61,12 +46,11 @@ describe("Dashboard Page", () => {
     expect(screen.getByText("Model")).toBeInTheDocument();
   });
 
-  it("renders channel names", async () => {
+  it("renders the channels the gateway reports", async () => {
     renderDashboard();
-    await waitFor(() => {
-      expect(screen.getByText("telegram")).toBeInTheDocument();
-    });
-    expect(screen.getByText("webchat")).toBeInTheDocument();
+    for (const channel of status.channels) {
+      expect(await screen.findByText(channel)).toBeInTheDocument();
+    }
   });
 
   it("shows running status indicator", async () => {
@@ -81,8 +65,12 @@ describe("Dashboard Page", () => {
     await waitFor(() => {
       expect(screen.getByText("Health Checks")).toBeInTheDocument();
     });
-    expect(screen.getByText("nats")).toBeInTheDocument();
-    expect(screen.getByText("db")).toBeInTheDocument();
+    // The payload is the route's own answer (scripts/gen_health_fixture.py), so these are the checks
+    // production registers and the `detail` the registry puts on a passing probe versus a failed one.
+    expect(screen.getByText("database")).toBeInTheDocument();
+    expect(screen.getByText("llm")).toBeInTheDocument();
+    expect(screen.getByText("ok")).toBeInTheDocument();
+    expect(screen.getByText("no route to host")).toBeInTheDocument();
   });
 
   it("displays key metrics", async () => {

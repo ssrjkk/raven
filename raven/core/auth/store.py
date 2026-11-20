@@ -48,6 +48,39 @@ CREATE INDEX IF NOT EXISTS idx_auth_email_tokens_expires_at ON auth_email_tokens
 CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 """
 
+SCHEMA_POSTGRES = """
+CREATE TABLE IF NOT EXISTS auth_users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    display_name TEXT DEFAULT '',
+    email TEXT DEFAULT '',
+    email_verified INTEGER DEFAULT 0,
+    role TEXT DEFAULT 'user',
+    password_hash TEXT DEFAULT '',
+    api_tokens TEXT DEFAULT '[]',
+    is_active INTEGER DEFAULT 1,
+    created_at DOUBLE PRECISION NOT NULL,
+    updated_at DOUBLE PRECISION NOT NULL
+);
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    created_at DOUBLE PRECISION NOT NULL,
+    expires_at DOUBLE PRECISION NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires_at ON auth_sessions(expires_at);
+CREATE TABLE IF NOT EXISTS auth_email_tokens (
+    token_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    created_at DOUBLE PRECISION NOT NULL,
+    expires_at DOUBLE PRECISION NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_auth_email_tokens_expires_at ON auth_email_tokens(expires_at);
+CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT NOW());
+"""
+
 _TOKEN_TTL_SECONDS = 86400
 _PURGE_SESSIONS = "DELETE FROM auth_sessions WHERE expires_at <= ?"
 _PURGE_EMAIL_TOKENS = "DELETE FROM auth_email_tokens WHERE expires_at <= ?"
@@ -72,6 +105,7 @@ def _token_digest(token: str) -> str:
 
 class AuthStore(BaseStore):
     SCHEMA = SCHEMA
+    SCHEMA_POSTGRES = SCHEMA_POSTGRES
 
     def __init__(self, db_path: Path | str):
         super().__init__(db_path)

@@ -1,9 +1,10 @@
 """Postgres parity for the lifecycle sweep: one policy, two backends, four timestamp shapes.
 
 The sweep's SQL is written once against `?` placeholders and translated for Postgres, and its cutoff
-changes type per dialect — an epoch float for `monitor_checks`, a naive `datetime` for `messages`.
-Neither of those is testable on SQLite, so they run here against the CI Postgres service and skip when
-no server answers.
+changes type per dialect — an epoch float for `monitor_checks`, an aware instant for `messages`.
+Neither of those is testable on SQLite, so they run here against a real server: the one the CI Postgres job
+starts, or any `DATABASE_URL` names. A run that selects them with no server answering is a failure, not a
+field of skips.
 
 Rows are namespaced by a per-run prefix and removed by their own owner; nothing in this file deletes
 another test's data.
@@ -18,39 +19,47 @@ from typing import Any
 
 import pytest
 
-from raven.core.asyncdb import connect_backend, postgres_dsn
+from raven.core.analytics import AnalyticsEngine
+from raven.core.asyncdb import connect_backend
+from raven.core.auth.store import AuthStore
+from raven.core.coder.session import CodingSessionManager
 from raven.core.db_postgres import PostgresDatabase
 from raven.core.models import Message
 from raven.core.monitor.models import Monitor, MonitorCheck, MonitorType
 from raven.core.monitor.store import MonitorStore
 from raven.core.retention import RetentionSweeper, _present_tables
+from raven.core.routine.store import RoutineStore
+from raven.core.task_engine.store import TaskStore
 
 pytestmark = pytest.mark.integration
 
-_DEFAULT_DSN = "postgresql://raven:raven@localhost:5432/raven"
 _DAY = 86_400.0
 
 
 @pytest.fixture(scope="session")
-async def pg_dsn() -> str:
-    dsn = postgres_dsn() or _DEFAULT_DSN
-    try:
-        import asyncpg
-    except ImportError:
-        pytest.skip("asyncpg not installed (install raven-agent[postgres])")
-    try:
-        conn = await asyncpg.connect(dsn, timeout=3)
-        await conn.close()
-    except Exception as e:
-        pytest.skip(f"Postgres not available at {dsn}: {e}")
-    return dsn
-
-
-@pytest.fixture(scope="session")
 async def pg_schema(pg_dsn: str) -> None:
-    db = PostgresDatabase(pg_dsn)
-    await db.connect()
-    await db.disconnect()
+    """Create the schema the way each owner does, because the sweep's table list is only ever as complete
+    as the owners that ran. `PostgresDatabase` bootstraps the core tables alone, and every table owned by a
+    store — `monitor_checks`, `analytics_snapshots`, `tasks` — appears only when that store connects, so a
+    fixture that ran one bootstrap would let the probe test assert about tables no owner had created here."""
+    core = PostgresDatabase(pg_dsn)
+    await core.connect()
+    await core.disconnect()
+
+    stores: list[Any] = [
+        MonitorStore(pg_dsn),
+        RoutineStore(pg_dsn),
+        TaskStore(pg_dsn),
+        AuthStore(pg_dsn),
+        CodingSessionManager(pg_dsn),
+    ]
+    for store in stores:
+        await store._conn()
+        await store.close()
+
+    analytics = AnalyticsEngine(pg_dsn)
+    await analytics.start()
+    await analytics.stop()
 
 
 def _run_prefix() -> str:
@@ -99,7 +108,9 @@ async def test_the_sweep_ages_telemetry_on_postgres(pg_dsn: str, pg_schema: None
 
 
 async def test_the_history_cutoff_binds_a_datetime_on_postgres(pg_dsn: str, pg_schema: None) -> None:
-    """`messages.created_at` is a TIMESTAMP there and ISO text on SQLite, so the bind cannot be a string."""
+    """`messages.created_at` is a TIMESTAMPTZ there and ISO text on SQLite, so the cutoff has to bind as an
+    instant: a float would compare a number against a time and a naive datetime would be read in the server's
+    own zone instead of the UTC the writer meant."""
     session_id = f"{_run_prefix()}-s1"
     db = PostgresDatabase(pg_dsn)
     sweeper = RetentionSweeper(pg_dsn, telemetry_days=0, telemetry_rows=0, history_days=30)
@@ -130,7 +141,9 @@ async def test_the_history_cutoff_binds_a_datetime_on_postgres(pg_dsn: str, pg_s
 
 
 async def test_the_present_table_probe_reads_the_postgres_catalog(pg_dsn: str, pg_schema: None) -> None:
-    """The sweep skips what is not there, so on Postgres that list comes from pg_catalog."""
+    """The sweep skips the tables an installation never created, so on Postgres that list comes from the
+    catalog rather than a guess. `pg_schema` is what makes the assertion mean anything: the tables it names
+    were created here, by the owners that create them in production."""
     db = connect_backend(pg_dsn)
     await db.connect()
     try:

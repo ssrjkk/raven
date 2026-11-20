@@ -80,7 +80,7 @@ export default function Scaffold() {
   return (
     <div className="max-w-3xl mx-auto">
       <h1 className="page-title flex items-center gap-2 mb-6">
-        <Sparkles className="w-6 h-6" style={{ color: "var(--dt-colors-accent-default)" }} />
+        <Sparkles className="w-6 h-6 text-accent" />
         Project Scaffold
       </h1>
 
@@ -90,7 +90,7 @@ export default function Scaffold() {
             <button key={plan.id} onClick={() => startPlan(plan)}
               className="card card-hover p-5 text-left transition-all hover:scale-[1.02]">
               <div className="flex items-start justify-between mb-2">
-                <FileCode className="w-5 h-5" style={{ color: "var(--dt-colors-accent-default)" }} />
+                <FileCode className="w-5 h-5 text-accent" />
                 <ChevronRight className="w-4 h-4 text-tertiary" />
               </div>
               <h3 className="font-semibold mb-1">{plan.name}</h3>
@@ -132,11 +132,7 @@ export default function Scaffold() {
                   <div className="flex gap-2">
                     {[true, false].map(v => (
                       <button key={String(v)} onClick={() => setAnswers({ ...answers, [q.key]: v })}
-                        className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
-                        style={{
-                          backgroundColor: answers[q.key] === v ? "var(--dt-colors-accent-default)" : "var(--dt-colors-bg-tertiary)",
-                          color: answers[q.key] === v ? "var(--dt-colors-text-on-accent)" : "var(--dt-colors-text-secondary)",
-                        }}>
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${answers[q.key] === v ? "bg-accent on-accent" : "bg-tertiary text-secondary"}`}>
                         {v ? "Yes" : "No"}
                       </button>
                     ))}
@@ -146,11 +142,7 @@ export default function Scaffold() {
                   <div className="flex gap-2 flex-wrap">
                     {q.options.map(o => (
                       <button key={o} onClick={() => setAnswers({ ...answers, [q.key]: o })}
-                        className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all capitalize"
-                        style={{
-                          backgroundColor: answers[q.key] === o ? "var(--dt-colors-accent-default)" : "var(--dt-colors-bg-tertiary)",
-                          color: answers[q.key] === o ? "var(--dt-colors-text-on-accent)" : "var(--dt-colors-text-secondary)",
-                        }}>
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all capitalize ${answers[q.key] === o ? "bg-accent on-accent" : "bg-tertiary text-secondary"}`}>
                         {o}
                       </button>
                     ))}
@@ -178,7 +170,7 @@ export default function Scaffold() {
 
       {step === "generating" && (
         <div className="flex flex-col items-center justify-center py-16 gap-4">
-          <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: "var(--dt-colors-accent-default)", borderTopColor: "transparent" }} />
+          <div className="w-8 h-8 border-2 rounded-full animate-spin spinner-accent" />
           <p className="text-tertiary">Generating your project...</p>
         </div>
       )}
@@ -197,14 +189,14 @@ export default function Scaffold() {
               <h3 className="text-xs font-semibold uppercase flex items-center gap-1.5 mb-2 text-tertiary">
                 <FolderTree className="w-3.5 h-3.5" /> File Tree
               </h3>
-              <pre className="p-3 rounded-lg text-xs font-mono leading-relaxed overflow-x-auto" style={{ backgroundColor: "var(--dt-colors-bg-primary)", color: "var(--dt-colors-text-secondary)", border: "1px solid var(--dt-colors-border-default)" }}>
+              <pre className="p-3 rounded-lg text-xs font-mono leading-relaxed overflow-x-auto border border-default bg-primary text-secondary">
                 {result.tree}
               </pre>
             </div>
             <div className="space-y-1 max-h-48 overflow-y-auto">
               {result.files?.map((f) => (
                 <div key={f.path} className="flex items-center gap-2 text-xs py-1">
-                  <FileCode className="w-3 h-3 shrink-0" style={{ color: "var(--dt-colors-accent-default)" }} />
+                  <FileCode className="w-3 h-3 shrink-0 text-accent" />
                   <span className="font-mono text-secondary">{f.path}</span>
                 </div>
               ))}

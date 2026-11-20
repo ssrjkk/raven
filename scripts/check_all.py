@@ -186,6 +186,140 @@ def _print_section(title: str) -> None:
     print(f"{BOLD}{CYAN}{'-' * 60}{RESET}")
 
 
+# -- Environment -------------------------------------------------------------
+
+MIN_FREE_COMMIT_MB = 2048.0
+MIN_FREE_DISK_MB = 1024.0
+REPORTER_PROBE_WRITES = 40
+"""Floors for the machine under the gate, not for the code in it.
+
+Every stage prints `[FAIL]` with a test count next to it, which reads as a verdict about the tree whatever
+else is true. Gate #2 was measured to be wrong about that: it printed five failures — mypy, tests/full,
+tests/core, tests/unit and the frontend's `npm ci` — and the tree had nothing to do with any of them. Six
+log tailers left attached to finished runs had taken this box from 8 GB of free commit charge to 0.67 GB,
+and from there `os.replace` answers `WinError 1450 Недостаточно системных ресурсов`, the reporter's
+`io.open` answers `[Errno 22] Invalid argument` for a path with nothing wrong with it, and V8 gives up
+inside its own garbage collector while installing the frontend's dependencies. All three are an allocation
+that failed, reported as something else. The box gets measured and named as its own stage so that a red
+stage can be read as the code's before anything is concluded from it.
+
+2048 MB is what the full suite needs to hold its coverage trace and still write a result per test; the
+numbers were read off the starved run (670 MB free, dying) and a healthy one (8.5 GB free, finished)."""
+
+
+def free_commit_mb() -> float | None:
+    """How much more memory the machine will still promise, which is what a long run actually runs out of.
+
+    Not free physical RAM: the failures above came from the commit charge, RAM plus pagefile minus what
+    every process has already reserved, and a process can exhaust that while the box still shows gigabytes
+    of memory "free" because it is sitting in another process's cache.
+    """
+    if sys.platform == "win32":
+        import ctypes
+
+        class MemoryStatusEx(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong),
+                ("dwMemoryLoad", ctypes.c_ulong),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+
+        status = MemoryStatusEx()
+        status.dwLength = ctypes.sizeof(MemoryStatusEx)
+        if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+            return None
+        return float(status.ullAvailPageFile) / 1024 / 1024
+    try:
+        lines = Path("/proc/meminfo").read_text(encoding="utf-8").splitlines()
+        limits = {line.split(":", 1)[0]: line.split(":", 1)[1].split()[0] for line in lines if ":" in line}
+        return (int(limits["CommitLimit"]) - int(limits["Committed_AS"])) / 1024
+    except (OSError, IndexError, KeyError, ValueError):
+        return None
+
+
+def _probe_reporter_writes() -> None:
+    """Write and rename result files the way the test reporter does, in the directory it uses.
+
+    The gate died on a rename inside the reporter, which no counter predicted and this cannot: a run that
+    cannot record what it measured has to say so before it spends eighteen minutes measuring."""
+    results = ROOT / "allure-results"
+    results.mkdir(parents=True, exist_ok=True)
+    try:
+        for index in range(REPORTER_PROBE_WRITES):
+            tmp = results / f"capacity-probe-{index}.json.tmp"
+            with tmp.open("w", encoding="utf8") as handle:
+                handle.write("{}")
+            final = results / f"capacity-probe-{index}.json"
+            tmp.replace(final)
+    finally:
+        for leftover in results.glob("capacity-probe-*"):
+            with contextlib.suppress(OSError):
+                leftover.unlink()
+
+
+def check_environment() -> CheckResult:
+    _print_section("Environment (whether this machine can hold the run)")
+    t0 = time.time()
+    commit = free_commit_mb()
+    disk_mb = shutil.disk_usage(ROOT).free / 1024 / 1024
+    readings = f"commit={'unknown' if commit is None else f'{commit:.0f}MB'} free  disk={disk_mb:.0f}MB free"
+    problems: list[str] = []
+    if commit is not None and commit < MIN_FREE_COMMIT_MB:
+        problems.append(
+            f"{commit:.0f} MB of commit charge free, under the {MIN_FREE_COMMIT_MB:.0f} MB the test stages need"
+        )
+    if disk_mb < MIN_FREE_DISK_MB:
+        problems.append(
+            f"{disk_mb:.0f} MB free on the volume holding the tree, under the {MIN_FREE_DISK_MB:.0f} MB it needs"
+        )
+    try:
+        _probe_reporter_writes()
+    except OSError as error:
+        problems.append(f"the test reporter cannot write and rename its own results: {error}")
+    dt = time.time() - t0
+    if problems:
+        return CheckResult("environment", "fail", dt, readings + "\n         " + "\n         ".join(problems))
+    return CheckResult("environment", "pass", dt, f"{readings}  reporter wrote {REPORTER_PROBE_WRITES} files")
+
+
+# Every error string that means the machine gave up rather than the code. Measured from the runs this gate
+# died in: an allocation failure arrives as an invalid argument, a resource shortage, or a garbage-collector
+# epitaph — never as anything that names memory.
+STARVATION_SIGNATURES = (
+    ("WinError 1450", "ERROR_NO_SYSTEM_RESOURCES: the machine refused the write"),
+    ("[Errno 12]", "the machine was out of memory"),
+    ("MemoryError", "the interpreter ran out of memory"),
+    ("Errno 28", "the volume holding the tree filled up"),
+    ("No space left on device", "the volume holding the tree filled up"),
+    ("Reached heap limit", "V8 ran out of memory"),
+    ("Last few GCs", "V8 spent its last allocations in garbage collection"),
+)
+
+
+def _starvation_note(output: str) -> str:
+    """A line on a failed stage saying the failure looks like the machine, with the numbers read right then.
+
+    The stage still fails. A gate that forgave a starved run would hide the one defect class that will not
+    reproduce on a healthier box, and whoever reads the log needs the numbers to tell the two apart."""
+    hits = [why for needle, why in STARVATION_SIGNATURES if needle in output]
+    if "allure_commons" in output and "[Errno 22]" in output:
+        hits.append("the reporter could not open a result file (EINVAL here is a failed allocation)")
+    if not hits:
+        return ""
+    commit = free_commit_mb()
+    return (
+        f"ENVIRONMENT: {'; '.join(dict.fromkeys(hits))} — read after the stage: "
+        f"commit={'unknown' if commit is None else f'{commit:.0f} MB'} free, "
+        f"disk={shutil.disk_usage(ROOT).free / 1024 / 1024:.0f} MB free"
+    )
+
+
 # -- Checks ------------------------------------------------------------------
 
 
@@ -597,6 +731,56 @@ def check_cli_imports() -> CheckResult:
     return CheckResult("CLI imports", "pass", dt, f"all {len(clis)} CLIs")
 
 
+#: The DSN the CI `postgres-integration` service answers on, and the one
+#: `tests/integration/conftest.py` falls back to when `DATABASE_URL` names no backend. A test asserts the
+#: two stay equal: a probe that disagrees with the suite about where the server lives would deselect
+#: Postgres cases on a machine that could have run them, or nominate them on one that cannot.
+POSTGRES_DEFAULT_DSN = "postgresql://raven:raven@localhost:5432/raven"
+
+#: Asks one Postgres connection the same question the fixture asks it, and answers in the exit code.
+_POSTGRES_PROBE = """
+import asyncio, sys
+from raven.core.asyncdb import postgres_dsn
+try:
+    import asyncpg
+except ImportError:
+    print("asyncpg is not installed (pip install -e '.[postgres]')", file=sys.stderr)
+    raise SystemExit(2)
+dsn = postgres_dsn() or sys.argv[1]
+async def ask():
+    conn = await asyncpg.connect(dsn, timeout=3)
+    await conn.close()
+try:
+    asyncio.run(ask())
+except Exception as exc:
+    print(f"no Postgres answered at {dsn}: {type(exc).__name__}: {exc}", file=sys.stderr)
+    raise SystemExit(1)
+print(f"Postgres answered at {dsn}")
+"""
+
+
+def postgres_answers() -> tuple[bool, str]:
+    """Whether this machine can prove the Postgres suite, settled before the gate nominates it.
+
+    The suite refuses to be a field of skips when it is asked for by name — which is right, and which made
+    the gate red on any box without a server: `check_component("integration")` types the directory, so the
+    conftest reads that as a request, and 17 cases whose only fault is the missing server came back as
+    failures. A server is a property of the machine, so the gate now asks the machine first.
+    """
+    r = _run([sys.executable, "-c", _POSTGRES_PROBE, POSTGRES_DEFAULT_DSN], timeout=60)
+    if r.returncode == 0:
+        return True, _strip_ansi(r.stdout).strip()
+    return False, _strip_ansi(r.stderr).strip() or f"the probe exited {r.returncode}"
+
+
+def _parse_deselected(line: str) -> int:
+    for part in _strip_ansi(line).split(","):
+        if "deselected" in part:
+            with contextlib.suppress(ValueError, IndexError):
+                return int(part.strip().split()[0])
+    return 0
+
+
 COMPONENTS: dict[str, dict[str, Any]] = {
     "core": {
         "paths": ["tests/core/"],
@@ -693,6 +877,15 @@ def check_component(name: str) -> CheckResult:
     if "mark" in cfg:
         cmd.extend(["-m", cfg["mark"]])
 
+    # Postgres cases are only nominated where a server can answer them; see `postgres_answers`.
+    no_server = ""
+    if name == "integration":
+        reachable, why = postgres_answers()
+        if not reachable:
+            no_server = why
+            cmd.extend(["-m", "not postgres"])
+            print(f"  {YELLOW}note{RESET}  Postgres cases are not run here: {why}")
+
     r = _run(cmd, timeout=int(cfg.get("timeout", DEFAULT_COMPONENT_TIMEOUT)))
     dt = time.time() - t0
 
@@ -728,6 +921,19 @@ def check_component(name: str) -> CheckResult:
             detail = f"{errors} ERRORS -- {summary}"
         else:
             detail = _failure_detail(summary, output, r.returncode, r.stderr)
+        note = _starvation_note(output)
+        if note:
+            detail = f"{detail}\n         {note}"
+
+    if no_server:
+        deselected = _parse_deselected(summary)
+        counts["deselected"] = deselected
+        if not deselected:
+            # A deselection that deselects nothing covers nothing, and the stage would read as a pass over a
+            # suite nobody ran. The marker is derived from the `pg_dsn` fixture, so it goes missing when the
+            # fixture is renamed rather than when the cases are.
+            return CheckResult(f"tests/{name}", "fail", dt, f"0 POSTGRES CASES MARKED -- {summary}", counts)
+        detail = f"{detail}\n         {deselected} Postgres cases not run here (no server): {no_server}"
 
     return CheckResult(f"tests/{name}", status, dt, detail, counts)
 
@@ -778,6 +984,9 @@ def check_full_tests() -> CheckResult:
 
     status: Status = "pass" if r.returncode == 0 else "fail"
     detail = summary if r.returncode == 0 else _failure_detail(summary, output, r.returncode, r.stderr)
+    note = _starvation_note(output)
+    if note:
+        detail = f"{detail}\n         {note}"
     return CheckResult("tests/full", status, dt, detail, counts)
 
 
@@ -789,41 +998,60 @@ def check_frontend() -> CheckResult:
 
     t0 = time.time()
 
+    def _fail(label: str, text: str) -> CheckResult:
+        # The note reads the whole output, not the 500 characters quoted: node prints what killed it after
+        # the lines that survive the cut.
+        note = _starvation_note(text)
+        return CheckResult(label, "fail", time.time() - t0, text[:500] + (f"\n         {note}" if note else ""))
+
     # Measured on this box with nothing else running: npm ci 43s, tsc 9s, tsc e2e 4s, eslint 2s, vitest 12s,
     # build 11s. The machine shares up to eight concurrent sessions, so each step gets a multiple
     # of its idle cost rather than a cap that a loaded machine blows through and reports as a code
-    # failure. The six steps are the six the `frontend` job in ci.yml runs, in that order: the
+    # failure. Every step is one the `frontend` job in ci.yml runs, in that order: the
     # stage used to stop at tsc and build, so an eslint error added by a translated string landed on
     # main green locally and red in CI (simple-import-sort in command-keywords.test.ts).
     r = _run(["npm", "ci"], timeout=600, env={"CI": "true"}, cwd=web_dir)
     if r.returncode != 0:
-        return CheckResult("frontend npm ci", "fail", time.time() - t0, r.stderr[:500])
+        return _fail("frontend npm ci", r.stderr + r.stdout)
 
     r = _run(["npx", "tsc", "--noEmit"], timeout=300, cwd=web_dir)
     if r.returncode != 0:
-        return CheckResult("frontend tsc", "fail", time.time() - t0, r.stderr[:500])
+        return _fail("frontend tsc", r.stderr + r.stdout)
 
     # tsconfig.json is `include: ["src"]`, and `playwright test` transpiles specs without checking them,
     # so before this step a type error in web/e2e/ failed nothing anywhere. Verified non-vacuous: an
     # injected `const broken: number = signIn` makes it exit 2 (TS2322).
     r = _run(["npx", "tsc", "--noEmit", "-p", "tsconfig.e2e.json"], timeout=300, cwd=web_dir)
     if r.returncode != 0:
-        return CheckResult("frontend tsc e2e", "fail", time.time() - t0, r.stderr[:500])
+        return _fail("frontend tsc e2e", r.stderr + r.stdout)
 
     r = _run(["npx", "eslint", "src", "e2e"], timeout=300, cwd=web_dir)
     if r.returncode != 0:
-        return CheckResult("frontend eslint", "fail", time.time() - t0, (r.stdout + r.stderr)[:500])
+        return _fail("frontend eslint", r.stdout + r.stderr)
 
     r = _run(["npm", "test", "--", "--run"], timeout=600, cwd=web_dir)
     if r.returncode != 0:
-        return CheckResult("frontend vitest", "fail", time.time() - t0, (r.stdout + r.stderr)[:500])
+        return _fail("frontend vitest", r.stdout + r.stderr)
 
     r = _run(["npm", "run", "build"], timeout=300, cwd=web_dir)
-    dt = time.time() - t0
     if r.returncode != 0:
-        return CheckResult("frontend build", "fail", dt, r.stderr[:500])
+        return _fail("frontend build", r.stderr + r.stdout)
 
-    return CheckResult("frontend build", "pass", dt)
+    # The editor extension is a shipped package that nothing compiled: `vsce` runs `tsc` at publish
+    # time only, so a type error in extension/vscode/src reached no gate at all -- measured here at
+    # npm ci 12s and tsc --noEmit 4s. Verified non-vacuous by injecting `const broken: number =
+    # this._panel !== undefined` into panel.ts, which exits 2 with TS2322.
+    editor_dir = ROOT / "extension" / "vscode"
+    if (editor_dir / "package.json").exists():
+        r = _run(["npm", "ci", "--no-audit", "--no-fund"], timeout=600, env={"CI": "true"}, cwd=editor_dir)
+        if r.returncode != 0:
+            return _fail("editor extension npm ci", r.stderr + r.stdout)
+
+        r = _run(["npx", "tsc", "-p", ".", "--noEmit"], timeout=300, cwd=editor_dir)
+        if r.returncode != 0:
+            return _fail("editor extension tsc", r.stdout + r.stderr)
+
+    return CheckResult("frontend build", "pass", time.time() - t0)
 
 
 # -- Main --------------------------------------------------------------------
@@ -853,6 +1081,9 @@ def main() -> int:
 
     results: list[CheckResult] = []
     t_start = time.time()
+
+    # Read first, because every verdict below describes the tree only if the machine could hold the run.
+    results.append(check_environment())
 
     # Always run these
     if args.annotations:

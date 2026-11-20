@@ -16,7 +16,7 @@ type ThemeContextValue = {
   resetScheme: () => void;
 };
 
-const DEFAULT_ACCENT = "#7c3aed";
+const DEFAULT_ACCENT = darkTokens.colors.accent.default;
 
 const THEME_ORDER: Theme[] = ["dark", "light", "midnight"];
 
@@ -59,11 +59,17 @@ function getInitialTheme(): Theme {
 function getInitialAccent(): string {
   const stored = safeGetItem("raven-accent");
   if (stored && /^#[0-9a-f]{6}$/i.test(stored)) return stored;
-  return DEFAULT_ACCENT;
+  return tokensFor(getInitialTheme()).colors.accent.default;
+}
+
+/** The token file a theme is painted from. Read through one function so the accent a reset hands back is
+ *  the one the theme the reader is looking at actually ships, rather than whichever file was first. */
+function tokensFor(theme: Theme) {
+  return theme === "dark" ? darkTokens : theme === "light" ? lightTokens : midnightTokens;
 }
 
 function applyTokens(theme: Theme) {
-  const tokens = theme === "dark" ? darkTokens : theme === "light" ? lightTokens : midnightTokens;
+  const tokens = tokensFor(theme);
   const root = document.documentElement;
   root.setAttribute("data-theme", theme);
   const flatten = (obj: Record<string, unknown>, prefix = "--dt") => {
@@ -128,7 +134,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const resetScheme = useCallback(() => {
     applyTokens(theme);
-  }, [theme]);
+    // Reset means the theme's own defaults, and the accent is painted from the same palette maths as the
+    // rest: leaving it at whatever the reader generated last would repaint the tokens a moment later and
+    // show a swatch grid with nothing chosen.
+    setAccentColor(tokensFor(theme).colors.accent.default);
+  }, [theme, setAccentColor]);
 
   return (
     <ThemeContext.Provider value={{ theme, accentColor, toggleTheme, setTheme, setAccentColor, resetScheme }}>

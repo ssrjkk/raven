@@ -24,6 +24,7 @@ echo ""
 echo "[3/5] Generating icons..."
 python "$ROOT/scripts/make_icon.py"
 python "$ROOT/scripts/make_extension_icons.py"
+python "$ROOT/scripts/make_web_icons.py"
 
 echo ""
 echo "[4/5] Preparing runtime directories..."

@@ -31,7 +31,7 @@ from raven.core.asyncdb import AsyncDB, connect_backend, is_postgres_dsn
 from raven.core.config import settings
 
 PolicyKind = Literal["telemetry", "history", "owner_purged", "bounded", "unused"]
-AgeUnit = Literal["epoch_s", "iso", "sql_datetime", "timestamp"]
+AgeUnit = Literal["epoch_s", "iso", "sql_datetime", "timestamptz"]
 Dialect = Literal["sqlite", "postgresql"]
 
 _DELETE_CHUNK = 500
@@ -78,22 +78,27 @@ POLICIES: dict[str, TablePolicy] = {
         ),
         TablePolicy(
             "rss_seen_items",
-            "unused",
-            why="created on both backends and never read or written: RSS dedupe lives in a process-local "
-            "dict with a 7-day TTL (raven/core/monitor/checkers/rss.py), so it resets on every restart",
+            "telemetry",
+            "seen_at",
+            {"sqlite": "sql_datetime", "postgresql": "timestamptz"},
+            parent_column="monitor_id",
+            id_column="guid",
+            why="one row per feed entry per monitor: the dedupe an RSS monitor reads after a restart, so "
+            "aging it out is the operator's call on how long an entry stays seen. The primary key is "
+            "(guid, monitor_id) and there is no id column, which is why the cap names guid",
         ),
         TablePolicy(
             "messages",
             "history",
             "created_at",
-            {"sqlite": "iso", "postgresql": "timestamp"},
+            {"sqlite": "iso", "postgresql": "timestamptz"},
             why="the conversation itself; only `retention_history_days` makes this deletable",
         ),
         TablePolicy(
             "sessions",
             "history",
             "created_at",
-            {"sqlite": "iso", "postgresql": "timestamp"},
+            {"sqlite": "iso", "postgresql": "timestamptz"},
             why="a session row is the index into a conversation, so it dies with the messages, not before "
             "them; `Database.get_or_create_session` writes the column as ISO text, not as the DDL default",
         ),
@@ -191,9 +196,10 @@ def cutoff(policy: TablePolicy, days: float, dialect: Dialect) -> float | str | 
             return moment.isoformat()
         case "sql_datetime":
             return moment.strftime("%Y-%m-%d %H:%M:%S")
-        case "timestamp":
-            # asyncpg binds a TIMESTAMP parameter as a naive datetime and rejects the string form.
-            return moment.replace(tzinfo=None)
+        case "timestamptz":
+            # A TIMESTAMPTZ column holds an instant, so the cutoff has to be one too: asyncpg binds an aware
+            # datetime as that instant and would only guess at a naive one.
+            return moment
     raise AssertionError(f"unreachable unit for {policy.table}")
 
 

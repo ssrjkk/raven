@@ -45,6 +45,14 @@ TEXT_PAIRS = (
     (("text", "on-status-warning"), ("status", "warning"), NORMAL_TEXT),
     (("text", "on-status-error"), ("status", "error"), NORMAL_TEXT),
     (("text", "on-status-info"), ("status", "info"), NORMAL_TEXT),
+    # The label a category tag ships with: the hue is the ground, and the light theme darkens every hue for AA
+    # on the page, which moves the label to the light side of the same pair.
+    (("text", "on-category-blue"), ("category", "blue"), NORMAL_TEXT),
+    (("text", "on-category-green"), ("category", "green"), NORMAL_TEXT),
+    (("text", "on-category-amber"), ("category", "amber"), NORMAL_TEXT),
+    (("text", "on-category-violet"), ("category", "violet"), NORMAL_TEXT),
+    (("text", "on-category-pink"), ("category", "pink"), NORMAL_TEXT),
+    (("text", "on-category-grey"), ("category", "grey"), NORMAL_TEXT),
     # The second stop of the brand gradient carries text in .gradient-text, so it needs text contrast.
     (("brand", "secondary"), ("bg", "primary"), NORMAL_TEXT),
     # Canvas text and canvas edges in the knowledge graph are painted from these, once a frame, and
@@ -203,6 +211,28 @@ def test_no_component_asks_for_a_token_the_theme_never_defines() -> None:
     assert not unresolved, f"tokens used but published by no theme: {unresolved}"
 
 
+_SHELL_SHEET = WEB / "src" / "styles" / "index.css"
+_TOKEN_DECLARATION = re.compile(r"^\s*(--dt-[a-zA-Z0-9-]+)\s*:", re.M)
+
+
+def test_the_console_sheet_declares_no_token_of_its_own() -> None:
+    """Measured while retiring the last of them: the shell's own `:root` carried five status aliases and a
+    `--dt-version: 1.0.0`, and no file in the tree read any of the six. A hand-written alias is a second
+    scale the token files do not own, and the guard above cannot see it -- it asks whether a name a component
+    reads is *declared* somewhere, and an alias declares itself, which is exactly how a name no theme
+    publishes resolves while a recolour misses it. `themes.css` and `tailwind-theme.css` are generated from
+    `tokens.json`; the sheet that is not generated declares nothing."""
+    offenders = sorted(set(_TOKEN_DECLARATION.findall(_SHELL_SHEET.read_text(encoding="utf-8"))))
+    assert offenders == [], f"{_SHELL_SHEET.relative_to(ROOT)} hand-declares tokens no theme publishes: {offenders}"
+
+
+def test_the_shell_sheet_guard_reads_declarations_not_uses() -> None:
+    planted = "  --dt-colors-success-default: var(--dt-colors-status-success);"
+    assert _TOKEN_DECLARATION.findall(planted) == ["--dt-colors-success-default"]
+    assert _TOKEN_DECLARATION.findall("  color: var(--dt-colors-accent-default);") == []
+    assert _TOKEN_DECLARATION.findall("  --dt-version: 1.0.0;") == ["--dt-version"]
+
+
 @pytest.mark.parametrize("theme", THEME_FILES)
 def test_every_status_color_is_readable_on_the_page_background(theme: str) -> None:
     colors = _palette(theme)
@@ -227,6 +257,54 @@ def test_text_pairs_meet_aa_in_every_theme(theme: str) -> None:
             failures.append(
                 f"{fg_group}.{fg_key} {foreground} on {bg_group}.{bg_key} {background} = {ratio:.2f} < {minimum}"
             )
+    assert not failures, f"{theme}:\n  " + "\n  ".join(failures)
+
+
+# The devices the storefront's language brings into the console lift a panel before any ink lands on it: a card
+# is a translucent ramp, a selected nav item raises an accent chip under the violet it writes its label with, and
+# a stat card catches the accent in its corner, exactly where its caption is. A role can clear AA on the flat
+# token and fall under it on the lifted ground, so the grounds below are what gets measured.
+INK_ROLES = ("primary", "secondary", "tertiary", "link")
+PANELS = (("bg", "primary"), ("bg", "secondary"), ("surface", "card"))
+LIFTS = ("subtle", "muted")
+
+
+@pytest.mark.parametrize("theme", THEME_FILES)
+def test_ink_roles_clear_aa_on_the_grounds_the_devices_lift(theme: str) -> None:
+    colors = _palette(theme)
+    grounds: dict[str, str] = {}
+    for group, key in PANELS:
+        panel = colors[group][key]
+        grounds[f"{group}.{key}"] = panel
+        for lift in LIFTS:
+            grounds[f"{group}.{key} + accent.{lift}"] = _as_paint(colors["accent"][lift], panel)
+    failures = []
+    for role in INK_ROLES:
+        ink = colors["text"][role]
+        for name, ground in grounds.items():
+            ratio = contrast(ink, ground)
+            if ratio < NORMAL_TEXT:
+                failures.append(f"text.{role} {ink} on {name} {ground} = {ratio:.2f} < {NORMAL_TEXT}")
+    assert not failures, f"{theme}:\n  " + "\n  ".join(failures)
+
+
+# A status pill paints its own tint behind its own colour: the ink is the status, the ground is that same
+# status at 10% over whichever panel the pill was dropped on. Checking the ink against the bare page hides the
+# pair a reader actually sees -- every light-theme status ink shipped at 4.2-4.55:1 inside its own badge.
+@pytest.mark.parametrize("theme", THEME_FILES)
+def test_status_inks_clear_aa_on_their_own_tint(theme: str) -> None:
+    colors = _palette(theme)
+    status = colors["status"]
+    failures = []
+    for (name,) in STATUS_ON_BG:
+        ink = status[name]
+        for group, key in PANELS:
+            ground = _as_paint(status[f"{name}-bg"], colors[group][key])
+            ratio = contrast(ink, ground)
+            if ratio < NORMAL_TEXT:
+                failures.append(
+                    f"status.{name} {ink} on {group}.{key} + its own tint {ground} = {ratio:.2f} < {NORMAL_TEXT}"
+                )
     assert not failures, f"{theme}:\n  " + "\n  ".join(failures)
 
 
@@ -545,7 +623,7 @@ def _web_sources() -> list[Path]:
         for path in (WEB / "src").rglob("*")
         if path.suffix in {".css", ".tsx", ".ts"}
         and ".test." not in path.name
-        and path.name != "themes.css"
+        and path.name not in {"themes.css", "tailwind-theme.css"}
         and "design" not in path.parts
     ]
 
@@ -576,9 +654,11 @@ def test_the_fallback_scanner_reads_the_nesting_the_rule_has_to_see_through() ->
     assert _var_fallbacks("box-shadow: 0 0 3px var(--dt-colors-accent-default)") == []
 
 
-def test_the_generated_sheet_equals_the_token_files_and_is_loaded() -> None:
+def test_the_generated_sheets_equal_the_token_files_and_are_loaded() -> None:
     """A generated sheet is only trustworthy while the generator still agrees with it, and a sheet the
-    SPA never imports paints nothing."""
+    SPA never imports paints nothing. Both sheets are compared byte for byte: `themes.css` carries the
+    three colour scales and `tailwind-theme.css` carries the radius, type and easing utilities that
+    would otherwise stay on Tailwind's own defaults, so a stale one of those paints a stale half."""
     import importlib.util
 
     spec = importlib.util.spec_from_file_location("gen_theme_css", ROOT / "scripts" / "gen_theme_css.py")
@@ -586,12 +666,20 @@ def test_the_generated_sheet_equals_the_token_files_and_is_loaded() -> None:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    sheet = WEB / "src" / "styles" / "themes.css"
+    index = (WEB / "src" / "styles" / "index.css").read_text(encoding="utf-8")
     rendered = module.render()
+    sheet = WEB / "src" / "styles" / "themes.css"
     assert sheet.read_text(encoding="utf-8") == rendered, "themes.css is stale — run python scripts/gen_theme_css.py"
-    assert '@import "./themes.css";' in (WEB / "src" / "styles" / "index.css").read_text(encoding="utf-8")
+    assert '@import "./themes.css";' in index
     for selector in (':root,\n[data-theme="dark"]', '[data-theme="light"]', '[data-theme="midnight"]'):
         assert selector in rendered, f"{selector} block missing from the sheet"
+
+    tailwind = module.render_tailwind()
+    tailwind_sheet = WEB / "src" / "styles" / "tailwind-theme.css"
+    assert tailwind_sheet.read_text(encoding="utf-8") == tailwind, (
+        "tailwind-theme.css is stale — run python scripts/gen_theme_css.py"
+    )
+    assert '@import "./tailwind-theme.css";' in index
 
 
 def test_token_files_validate_against_their_schema() -> None:
@@ -650,6 +738,24 @@ def _load_theme_generator() -> Any:
 OFFLINE_SHEETS = {
     "webchat": ROOT / "raven" / "channels" / "webchat" / "channel.py",
     "extension popup": ROOT / "extension" / "src" / "popup" / "popup.css",
+    "offline shell": ROOT / "web" / "public" / "offline.html",
+    # The webview the editor hosts: a document of this product that loads no bundle, so it is exactly as
+    # unable to drift quietly as the other three.
+    "VS Code chat panel": ROOT / "extension" / "vscode" / "src" / "panel.ts",
+}
+
+#: A sheet's own literals are the ones outside *any* generated region: the token block, and the face
+#: block that has to name a `font-family` to do its job at all.
+_GENERATED_REGION = re.compile(r"/\* (?:design-tokens|brand-fonts):start.*?:end \*/", re.S)
+
+#: A document that inlines the brand mark carries the vector's own fills. They are not a private palette:
+#: `test_a_document_that_inlines_the_mark_inlines_this_one` compares that drawing with `site/favicon.svg`
+#: byte for byte, which is a stronger claim than "this hex is in the tokens".
+_INLINED_MARK = re.compile(r"<!-- brand-mark:start -->.*?<!-- brand-mark:end -->", re.S)
+
+SHEETS_WITHOUT_THEIR_OWN_COLOUR = {
+    **OFFLINE_SHEETS,
+    "offline worker": ROOT / "web" / "public" / "sw.js",
 }
 
 
@@ -659,10 +765,65 @@ def _region_of(text: str, generator: Any) -> str:
     return text[start:end]
 
 
+def _own_text(text: str) -> str:
+    """The sheet with every generated region blanked, line count intact so messages still point."""
+    blanked = _GENERATED_REGION.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    return _INLINED_MARK.sub(lambda m: "\n" * m.group(0).count("\n"), blanked)
+
+
+def _region_bodies(generator: Any) -> dict[str, str]:
+    """Each host document with its own generated region cut out, keyed by the command that prints it."""
+    bodies: dict[str, str] = {}
+    for command, hosts in generator.REGION_HOSTS.items():
+        start, end = generator._surface_sentinels(command)
+        for rel in hosts:
+            _, marker, tail = (ROOT / rel).read_text(encoding="utf-8", errors="replace").partition(start)
+            assert marker, f"{rel} is registered as a {command} host and holds no region"
+            _, _, after = tail.partition(end)
+            bodies[command] = bodies.get(command, "") + after
+    return bodies
+
+
+def test_the_region_carries_no_token_the_surfaces_never_read() -> None:
+    """The region is shared, which makes it easy to keep a declaration after the rule that read it is
+    gone -- and an alias no rule reads is a colour someone will later assume is live. The list of what
+    belongs is therefore measured off the host documents, not typed next to the generator."""
+    gen = _load_theme_generator()
+    bodies = _region_bodies(gen)
+    declared = set(gen.SURFACE_TOKENS)
+    scaffold_declared = {name for name in declared if "font-family" not in name}
+
+    for command, allowed in (("--print-surface", declared), ("--print-scaffold", scaffold_declared)):
+        referenced = set(re.findall(r"var\(\s*(--dt-[a-zA-Z0-9-]+)", bodies[command]))
+        dangling = sorted(referenced - allowed)
+        assert not dangling, f"a {command} host reads tokens its region does not declare: {dangling}"
+
+    unread = sorted(declared - set(re.findall(r"var\(\s*(--dt-[a-zA-Z0-9-]+)", bodies["--print-surface"])))
+    assert not unread, f"the shared region declares tokens no surface reads any more: {unread}"
+
+
+def test_the_region_reader_notices_a_declaration_no_rule_reads() -> None:
+    """The premise of the guard above: a token has to stop counting as read when the rules stop reading
+    it, or the unused list is a list of nothing and the gate passes on whatever the tree holds."""
+    gen = _load_theme_generator()
+    surface = _region_bodies(gen)["--print-surface"]
+    declared = set(gen.SURFACE_TOKENS)
+
+    def read(text: str) -> set[str]:
+        return set(re.findall(r"var\(\s*(--dt-[a-zA-Z0-9-]+)", text))
+
+    assert read(surface) <= declared, "a shipped host already reads more than the region declares"
+    dropped = re.sub(r"var\(\s*--dt-colors-border-focus\s*[,)][^;]*[;)]?", "", surface)
+    assert "--dt-colors-border-focus" not in read(dropped), "the reader kept a token nothing asks for"
+    assert sorted(declared - read(dropped)) == ["--dt-colors-border-focus"], sorted(declared - read(dropped))
+
+
 @pytest.mark.parametrize("label", sorted(OFFLINE_SHEETS))
 def test_offline_surfaces_embed_the_generated_token_region(label: str) -> None:
-    """The two surfaces never load the SPA bundle, so they used to hand-copy a palette. The copy
-    drifted: the webchat page invented #8b5cf6 as its button surface and put white on it at 4.23:1.
+    """Every sheet below is a document that never loads the SPA bundle, so each one hand-copied a
+    palette until a generator printed it. The copies drifted: the webchat page invented #8b5cf6 as its
+    button surface and put white on it at 4.23:1, and the editor's panel kept a navy of its own while
+    the site painted violet.
     The region between the sentinels is generated output, checked byte for byte, and every token the
     sheet references has to be declared inside it."""
     generator = _load_theme_generator()
@@ -686,17 +847,271 @@ def test_offline_surfaces_embed_the_generated_token_region(label: str) -> None:
     assert not unused, f"{label} declares aliases nothing uses: {unused}"
 
 
-@pytest.mark.parametrize("label", sorted(OFFLINE_SHEETS))
+@pytest.mark.parametrize("label", sorted(SHEETS_WITHOUT_THEIR_OWN_COLOUR))
 def test_offline_surfaces_carry_no_colour_of_their_own(label: str) -> None:
     """Outside the generated region these sheets may not name a colour: that is how the private
     palette got written in the first place."""
-    generator = _load_theme_generator()
-    text = OFFLINE_SHEETS[label].read_text(encoding="utf-8", errors="replace")
-    body = text.replace(_region_of(text, generator), "")
+    text = SHEETS_WITHOUT_THEIR_OWN_COLOUR[label].read_text(encoding="utf-8", errors="replace")
+    body = _own_text(text)
     offenders = [
         f"{label}:{i}: {hit}" for i, line in enumerate(body.splitlines(), 1) for hit in _COLOUR_LITERAL.findall(line)
     ]
     assert not offenders, "\n".join(offenders)
+
+
+# `em` sizes are deliberately absent: `.bubble code` at .8em scales with the message it sits in, which
+# is what a relative unit is for. Absolute lengths and font stacks are the part that must come from the
+# embedded region, because nothing else on those pages can be retuned by a theme.
+_OFFLINE_TYPE_LITERAL = re.compile(
+    r"(font-size:\s*[0-9.]+(?:px|rem)\b)|(font:\s*[0-9.]+px)|(font-family:(?!\s*var\()[^;]+)"
+)
+
+
+@pytest.mark.parametrize("label", sorted(OFFLINE_SHEETS))
+def test_the_offline_surfaces_take_their_corners_and_type_from_the_region(label: str) -> None:
+    """The same argument the colour guard makes, for the numbers that were left behind.
+
+    Both sheets used to carry their own corners (`.9rem`, `12px 12px 4px 12px`, `.35rem`) and their own
+    type (`font: 14px/1.55 system-ui`), so the gateway chat page rendered the product's strings in the
+    operating system's font while the SPA rendered them in IBM Plex Sans. The region is now the only
+    place either sheet may get a length or a family from."""
+    text = OFFLINE_SHEETS[label].read_text(encoding="utf-8", errors="replace")
+    body = _own_text(text)
+    offenders = [f"{label}: border-radius: {hit}" for hit in _off_scale_corners(body)]
+    offenders += [
+        f"{label}:{i}: {hit.group(0).strip()}"
+        for i, line in enumerate(body.splitlines(), 1)
+        if (hit := _OFFLINE_TYPE_LITERAL.search(line))
+    ]
+    offenders += [
+        f"{label}: {token} still carries the literal fallback {fallback!r}" for token, fallback in _var_fallbacks(body)
+    ]
+    assert not offenders, "\n".join(offenders)
+
+
+def test_the_offline_type_reader_flags_a_stack_and_not_a_token() -> None:
+    r"""The lookahead has to sit before the whitespace: `\s*(?!var\()` backtracks to zero spaces and
+    reports `font-family: var(--dt-…)`, which is the one thing the rule exists to allow."""
+    assert _OFFLINE_TYPE_LITERAL.search("body { font: 14px/1.5 system-ui, sans-serif; }")
+    assert _OFFLINE_TYPE_LITERAL.search("code { font-family: ui-monospace, monospace; }")
+    assert _OFFLINE_TYPE_LITERAL.search("h1 { font-size: 0.9rem; }")
+    assert not _OFFLINE_TYPE_LITERAL.search("code { font-size: .85em; }")
+    assert not _OFFLINE_TYPE_LITERAL.search("body { font-family: var(--dt-typography-font-family-sans); }")
+    assert not _OFFLINE_TYPE_LITERAL.search("button { font: inherit; }")
+
+
+# The storefront's devices, and the surfaces that are expected to paint them. A device is identified by the
+# rule that publishes it in the sheet plus the declarations that make it, and the recipe is read out of
+# web/src/styles/index.css at test time rather than retyped here -- this file cannot be the place a device
+# quietly changes meaning.
+DEVICE_RULES = {
+    "glass card": ((".card", "background-image"),),
+    "inset light": ((".card, .card-bordered, .stat-card", "box-shadow"),),
+    "pointer light": (
+        (".card::before, .card-bordered::before, .stat-card::before", "background"),
+        (".card::before, .card-bordered::before, .stat-card::before", "transition"),
+    ),
+    "translucent chrome": ((".shell-aside", "background-color"), (".shell-aside", "backdrop-filter")),
+    "grain": (
+        ("body::after", "background-image"),
+        ("body::after", "opacity"),
+        ("body::after", "background-size"),
+    ),
+    "lit headline": (
+        (".page-title", "background-image"),
+        (".page-title", "background-size"),
+        (".page-title", "animation"),
+    ),
+    "primary action": (
+        (".btn-primary", "background-image"),
+        (".btn-primary", "transition"),
+        (".btn-primary:hover", "filter"),
+        (".btn-primary:hover", "box-shadow"),
+        (".btn-primary:active", "transform"),
+    ),
+    "kicker": (
+        (".nav-section-label", "letter-spacing"),
+        (".nav-section-label", "color"),
+        (".nav-section-label::before", "width"),
+        (".nav-section-label::before", "background"),
+    ),
+    "card wash": ((".card-wash", "background-image"),),
+}
+
+#: What each surface of this product is expected to carry, and why the rest of the vocabulary is absent
+#: from it. A device with no reason and no recipe in the surface is a gap this gate reports.
+DEVICE_SURFACES: dict[str, tuple[Path, dict[str, str]]] = {
+    "VS Code chat panel": (
+        ROOT / "extension" / "vscode" / "src" / "panel.ts",
+        {
+            "glass card": "",
+            "inset light": "",
+            "pointer light": "",
+            "translucent chrome": "",
+            "grain": "",
+            "lit headline": "",
+            "primary action": "",
+            "kicker": "the panel has no labelled sections to announce: a header, a log, a composer",
+            "card wash": "the replies are the lit surface, as on every other chat here",
+        },
+    ),
+    "extension popup": (
+        ROOT / "extension" / "src" / "popup" / "popup.css",
+        {
+            "glass card": "",
+            "inset light": "",
+            "pointer light": "",
+            "translucent chrome": "",
+            "grain": "",
+            "lit headline": "",
+            "primary action": "",
+            "kicker": "",
+            "card wash": "the popup is a column of replies, the same reason the gateway page has none",
+        },
+    ),
+    "gateway chat page": (
+        ROOT / "raven" / "channels" / "webchat" / "channel.py",
+        {
+            "glass card": "",
+            "inset light": "",
+            "pointer light": "",
+            "translucent chrome": "",
+            "grain": "",
+            "lit headline": "",
+            "primary action": "",
+            "kicker": "",
+            "card wash": "the reply bubbles are the lit surface here and they answer the cursor; a wash "
+            "sized to a card nobody hovers is the flatter thing",
+        },
+    ),
+    "generated starter": (
+        ROOT / "raven" / "core" / "scaffold_api.py",
+        {
+            "glass card": "",
+            "inset light": "",
+            "pointer light": "a starter ships no pointer wiring, and a light that never moves is the static "
+            "wash, which the starter does carry",
+            "translucent chrome": "the starter is one centred card, not a shell with bars",
+            "grain": "",
+            "lit headline": "",
+            "primary action": "",
+            "kicker": "",
+            "card wash": "",
+        },
+    ),
+    "offline shell": (
+        ROOT / "web" / "public" / "offline.html",
+        {
+            "glass card": "",
+            "inset light": "",
+            "pointer light": "the page a reader reaches when the bundle cannot load has one card and no "
+            "cursor work to reward; the static wash is the device that reaches it",
+            "translucent chrome": "there is no bar over content: the shell is a single centred card",
+            "grain": "",
+            "lit headline": "",
+            "primary action": "",
+            "kicker": "",
+            "card wash": "",
+        },
+    ),
+}
+
+
+def _canon(text: str) -> str:
+    """Whitespace collapsed, and the spaces a wrapped value hangs off its parentheses removed: the sheet
+    breaks the card ramp over five lines and every host writes it on one, and that layout is not drift."""
+    text = " ".join(text.split())
+    text = re.sub(r"\(\s+", "(", text)
+    return re.sub(r"\s+\)", ")", text)
+
+
+def _sheet_blocks(css: str) -> dict[str, dict[str, str]]:
+    """`selector -> declaration -> value` for every flat rule in a sheet. Comments go first because they
+    sit between rules and would otherwise be read as part of the selector; at-rules go next, because a
+    reduce block's paraphrase is not the device and letting it answer here would put the exception in
+    charge of the default."""
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    css = re.sub(r"@[a-z-]+[^{]*\{(?:[^{}]|\{[^{}]*\})*\}", "", css)
+    blocks: dict[str, dict[str, str]] = {}
+    for raw_selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+        selector = " ".join(raw_selector.split())
+        if not selector or selector.startswith("@"):
+            continue
+        declarations = blocks.setdefault(selector, {})
+        for declaration in body.split(";"):
+            prop, sep, value = declaration.partition(":")
+            if sep:
+                declarations[" ".join(prop.split()).lower()] = " ".join(value.split())
+    return blocks
+
+
+def _device_recipes(css: str) -> dict[str, list[str]]:
+    """The exact declarations the sheet publishes for each device, as `property: value`."""
+    blocks = _sheet_blocks(css)
+    recipes: dict[str, list[str]] = {}
+    for device, wanted in DEVICE_RULES.items():
+        lines = []
+        for selector, prop in wanted:
+            assert selector in blocks, f"the sheet no longer publishes {selector}, the rule {device} is made of"
+            assert prop in blocks[selector], f"{selector} no longer declares {prop}, which {device} is made of"
+            lines.append(_canon(f"{prop}: {blocks[selector][prop]}"))
+        recipes[device] = lines
+    return recipes
+
+
+def _sheet_css() -> str:
+    return (WEB / "src" / "styles" / "index.css").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("label", sorted(DEVICE_SURFACES))
+def test_a_surface_paints_the_storefront_devices_it_is_expected_to_carry(label: str) -> None:
+    """A paraphrase is how these surfaces drifted before: the gateway page invented its own bubble ramp and
+    the popup pulled its chrome from a CDN it was never allowed to reach, and each one still read as "glass"
+    to whoever wrote it. So the recipe is matched as the sheet writes it -- byte for byte after whitespace --
+    and a surface has to say why it carries less than the storefront does."""
+    path, expected = DEVICE_SURFACES[label]
+    flat = _canon(_own_text(path.read_text(encoding="utf-8", errors="replace")))
+    recipes = _device_recipes(_sheet_css())
+
+    offenders = []
+    for device, reason in expected.items():
+        absent = [line for line in recipes[device] if line not in flat]
+        if reason:
+            # The excuse has to stay true: a surface that quietly starts carrying the device it claims to
+            # skip is the same drift in the other direction, with a comment now lying about it.
+            if not absent:
+                offenders.append(f"{label} claims it carries no {device}, and the recipe is there: {reason}")
+            continue
+        if absent:
+            offenders.append(f"{label} does not paint {device}: {absent}")
+    assert not offenders, "\n".join(offenders)
+
+
+def test_the_device_reader_notices_a_paraphrased_recipe() -> None:
+    """A gate that only ever sees the shipped strings proves nothing about its own reading. Re-tuning the
+    glass card's mix is the change that used to pass: the surface stayed "glass" and drifted two points of
+    transparency away from the storefront."""
+    recipe = _device_recipes(_sheet_css())["glass card"]
+    assert len(recipe) == 1, "the glass card is one declaration; the paraphrase below assumes so"
+    shipped = _canon(_own_text(DEVICE_SURFACES["gateway chat page"][0].read_text(encoding="utf-8", errors="replace")))
+    assert recipe[0] in shipped, "the premise is gone: the gateway page no longer carries this recipe"
+
+    paraphrased = shipped.replace("surface-card) 88%", "surface-card) 90%", 1)
+    assert recipe[0] not in paraphrased, "a re-tuned ramp still counted as the sheet's own"
+
+
+def test_the_device_recipes_move_when_the_sheet_moves() -> None:
+    """Were the recipe a string typed next to the test, editing the sheet would not move the guard and the
+    two would drift apart in silence. Paraphrase the sheet in memory and the device it publishes changes."""
+    css = _sheet_css()
+    shipped = _device_recipes(css)["lit headline"]
+    edited = css.replace(
+        "linear-gradient(110deg, var(--dt-colors-text-primary) 35%",
+        "linear-gradient(110deg, var(--dt-colors-text-primary) 30%",
+        1,
+    )
+    assert edited != css, "the headline ramp this gate reads is not the one the sheet publishes"
+    assert _device_recipes(edited)["lit headline"] != shipped
 
 
 def test_shipped_chat_pages_declare_their_colour_contrast() -> None:
@@ -725,6 +1140,14 @@ def test_shipped_chat_pages_declare_their_colour_contrast() -> None:
         ("live status dot", token("status-success"), page, LARGE_TEXT_OR_UI),
         ("down status dot", token("status-error"), page, LARGE_TEXT_OR_UI),
         ("focus border on a panel", token("border-focus"), surface, LARGE_TEXT_OR_UI),
+        # The editor's panel carries its connection state in a pill and its composer in a real button,
+        # so those are the pairs a reader of that surface actually looks at.
+        ("connected pill", token("status-success"), _as_paint(token("status-success-bg"), surface), NORMAL_TEXT),
+        ("waiting pill", token("status-warning"), _as_paint(token("status-warning-bg"), surface), NORMAL_TEXT),
+        ("disconnected pill", token("status-error"), _as_paint(token("status-error-bg"), surface), NORMAL_TEXT),
+        ("label on a hovered accent", token("text-on-accent"), token("accent-hover"), NORMAL_TEXT),
+        ("label on a pressed accent", token("text-on-accent"), token("accent-active"), NORMAL_TEXT),
+        ("muted placeholder on a well", token("text-secondary"), page, NORMAL_TEXT),
     )
     for label, foreground, background, minimum in pairs:
         ratio = contrast(foreground, background)
@@ -781,15 +1204,32 @@ def test_no_chart_axis_falls_back_to_the_library_default_colour() -> None:
     assert not offenders, "\n".join(offenders)
 
 
+def _tooltip_box_offenders(tags: list[tuple[str, int, str]]) -> list[str]:
+    """Tooltip tags that paint their box outside the sheet. The library's default panel is a white card with
+    black text and answers to no theme; a page-supplied `contentStyle` answers to the theme only through token
+    names written into a JS object, which no rule reads back and no theme can restyle."""
+    offenders: list[str] = []
+    for file, line, tag in tags:
+        if "contentStyle" in tag:
+            offenders.append(f"{file}:{line}: <Tooltip> paints its own box: contentStyle")
+        elif "content={<ChartTooltip" not in tag:
+            offenders.append(f"{file}:{line}: <Tooltip> left to the library's default box")
+    return offenders
+
+
 def test_no_tooltip_is_left_to_the_library_default_box() -> None:
-    """The default recharts tooltip is a white box with black text: on a dark theme it is the one part
-    of the chart that ignores it entirely."""
-    offenders = [
-        f"{file}:{line}: <Tooltip> without a themed contentStyle"
-        for file, line, tag in _jsx_tags("Tooltip")
-        if "contentStyle" not in tag and "content=" not in tag
-    ]
+    offenders = _tooltip_box_offenders(_jsx_tags("Tooltip"))
     assert not offenders, "\n".join(offenders)
+
+
+def test_the_tooltip_reader_notices_a_box_painted_outside_the_sheet() -> None:
+    assert _tooltip_box_offenders(
+        [("p.tsx", 1, '<Tooltip contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)" }} />')]
+    ) == ["p.tsx:1: <Tooltip> paints its own box: contentStyle"]
+    assert _tooltip_box_offenders([("p.tsx", 2, "<Tooltip />")]) == [
+        "p.tsx:2: <Tooltip> left to the library's default box"
+    ]
+    assert _tooltip_box_offenders([("p.tsx", 3, "<Tooltip content={<ChartTooltip />} />")]) == []
 
 
 def _css_rules(css: str) -> list[tuple[str, str]]:
@@ -859,12 +1299,13 @@ def _hex(rgb: tuple[float, float, float]) -> str:
 
 
 def test_landing_labels_are_readable_on_every_panel_they_paint_on() -> None:
-    """The storefront is the surface a buyer reads first, and it keeps its own brand scale rather than
-    the SPA tokens, so nothing else in this suite would notice it regressing. Every rule that declares a
-    label and a background is measured: a translucent surface is composited over each dark panel it
-    could sit on and the worst answer is the one kept, because the rule does not say which ancestor it
-    lands on. This is what found white on --violet at 4.23:1 in ::selection and in the primary button's
-    gradient stop."""
+    """The storefront is the surface a buyer reads first. It now shares one scale with the SPA --
+    `test_site_app_parity.py` holds the two files to the same values -- but value equality says nothing
+    about which colour a storefront rule actually puts on which, so this measures the declarations
+    themselves. Every rule that declares a label and a background is read: a translucent surface is
+    composited over each dark panel it could sit on and the worst answer is the one kept, because the
+    rule does not say which ancestor it lands on. This is what found white on --violet at 4.23:1 in
+    ::selection and in the primary button's gradient stop."""
     css = (ROOT / "site" / "styles.css").read_text(encoding="utf-8")
     variables = _landing_variables(css)
     panels = []
@@ -1050,8 +1491,8 @@ def test_no_component_reaches_past_the_theme_for_a_colour() -> None:
 @pytest.mark.parametrize("theme", THEME_FILES)
 def test_the_categorical_scale_is_readable_on_the_panel_it_is_drawn_on(theme: str) -> None:
     """Fifteen named hues, shared by the knowledge graph (a canvas, so no gate but this one sees it)
-    and the plugin tag badges. Each is a fill -- a UI part at 3:1 -- and also the label colour of a
-    soft badge, so the scale is held to the text minimum of 4.5:1 against the panel it is drawn on."""
+    and the plugin tags. Each is a fill -- a UI part at 3:1 -- and every one of them also clears the text
+    minimum of 4.5:1 against the panel it is drawn on, so a hue never has to be lightened to be read."""
     colors = _palette(theme)
     card = colors["surface"]["card"]
     category = colors["category"]
@@ -1079,8 +1520,10 @@ def test_the_categorical_scale_is_readable_on_the_panel_it_is_drawn_on(theme: st
     hues = [_hsl(value)[0] for value in category.values()]
     assert max(hues) - min(hues) >= 120, f"{theme}: the categorical hues do not span the wheel"
 
-    # paint.ts picks the badge label from the theme's two inverses, whichever reads better on the
-    # fill; the picker is only safe if at least one of them clears AA for every slot of the scale.
+    # Six of the fifteen hues fill a tag in the console, and each of those publishes the label it carries as
+    # text.on-category-*, measured above. The rest are drawn by the knowledge graph, where a node's label is the
+    # theme's own ink beside the node rather than on it -- kept to the same minimum, because a hue that reads as
+    # a fill today is a hue a tag could be given tomorrow.
     light_label = colors["bg"]["inverse"]
     dark_label = colors["text"]["inverse"]
     for name, value in category.items():
@@ -1281,3 +1724,414 @@ def test_no_button_rule_ships_without_a_page_using_it() -> None:
     used = {token for _, token in _class_tokens() if token.startswith("btn-")}
     dead = sorted(defined - used)
     assert not dead, f"button rules nobody renders: {dead}"
+
+
+# Tailwind resolves a size or weight utility from its own default theme whenever the generated sheet
+# stays silent about that step, so `text-7xl` ships 7.25rem in a product whose largest token is
+# 1.875rem, and `font-black` asks for 900 from faces whose variable axes stop at 700 -- the browser
+# answers with the heaviest cut it has and nothing reports the lie. The two detectors below read what
+# the scale declares and what the shipped files can draw, which is the only pair that can tell.
+_DEFAULT_SIZE_STEPS = frozenset(
+    {"xs", "sm", "base", "lg", "xl", "2xl", "3xl", "4xl", "5xl", "6xl", "7xl", "8xl", "9xl"}
+)
+_TAILWIND_WEIGHTS = {
+    "thin": 100,
+    "extralight": 200,
+    "light": 300,
+    "normal": 400,
+    "medium": 500,
+    "semibold": 600,
+    "bold": 700,
+    "extrabold": 800,
+    "black": 900,
+}
+
+
+def _declared_text_steps() -> set[str]:
+    sheet = (WEB / "src" / "styles" / "tailwind-theme.css").read_text(encoding="utf-8")
+    return {name[len("--text-") :] for name in re.findall(r"--text-[a-zA-Z0-9-]+", sheet)}
+
+
+def _off_scale_type(text: str, scale: set[str]) -> list[str]:
+    """Size utilities whose step the generated sheet never declared.
+
+    `text-[var(--dt-…)]` is the house form for a token colour and is not a size, so the arbitrary
+    value scan skips it; `text-[10px]` is a size nobody owns and is reported.
+    """
+    names = "|".join(sorted(_DEFAULT_SIZE_STEPS | scale, key=len, reverse=True))
+    asked = {f"text-{step}" for step in re.findall(rf"\btext-({names})\b", text)}
+    asked |= set(re.findall(r"\btext-\[(?!var\()[^\]]+\]", text))
+    return sorted(asked - {f"text-{step}" for step in scale})
+
+
+def _renderable_weight_intervals(css: str) -> list[tuple[int, int]]:
+    """The [min, max] weights the declared `@font-face` blocks can actually draw."""
+    return [(int(low), int(high or low)) for low, high in re.findall(r"font-weight:\s*(\d+)(?:\s+(\d+))?\s*[;}]", css)]
+
+
+def _impossible_weights(text: str, intervals: list[tuple[int, int]]) -> list[str]:
+    ceiling = max(high for _, high in intervals)
+    floor = min(low for low, _ in intervals)
+    asked = {
+        f"font-{name} ({weight})"
+        for name, weight in _TAILWIND_WEIGHTS.items()
+        if re.search(rf"\bfont-{name}\b", text) and not floor <= weight <= ceiling
+    }
+    asked |= {
+        f"font-weight: {weight}"
+        for weight in re.findall(r"font-weight:\s*(\d+)\b", text)
+        if not any(low <= int(weight) <= high for low, high in intervals)
+    }
+    return sorted(asked)
+
+
+def test_no_component_asks_a_type_step_the_scale_does_not_declare() -> None:
+    scale = _declared_text_steps()
+    offenders = [
+        f"{path.relative_to(WEB)}: {step}"
+        for path in _web_sources()
+        for step in _off_scale_type(path.read_text(encoding="utf-8", errors="replace"), scale)
+    ]
+    assert not offenders, "\n".join(offenders)
+
+
+def test_no_component_asks_a_font_weight_no_shipped_face_can_draw() -> None:
+    faces = (WEB / "src" / "styles" / "fonts.css").read_text(encoding="utf-8")
+    intervals = _renderable_weight_intervals(faces)
+    assert intervals, "fonts.css declares no @font-face weight, so nothing below can be measured"
+    published = json.loads((DESIGN / "tokens.json").read_text(encoding="utf-8"))["typography"]["font-weight"]
+    unreachable = [
+        f"tokens.json publishes {name}={weight} outside {[f'{lo}-{hi}' for lo, hi in intervals]}"
+        for name, weight in published.items()
+        if not any(low <= int(weight) <= high for low, high in intervals)
+    ]
+    assert not unreachable, "\n".join(unreachable)
+    # fonts.css is the capability, not a request for it.
+    sources = [path for path in _web_sources() if path.name != "fonts.css"]
+    offenders = [
+        f"{path.relative_to(WEB)}: {ask}"
+        for path in sources
+        for ask in _impossible_weights(path.read_text(encoding="utf-8", errors="replace"), intervals)
+    ]
+    assert not offenders, "\n".join(offenders)
+
+
+def test_the_type_and_weight_detectors_read_the_forms_they_forbid() -> None:
+    scale = {"micro", "sm", "display"}
+    assert _off_scale_type('className="text-7xl text-[10px] text-micro"', scale) == ["text-7xl", "text-[10px]"]
+    assert _off_scale_type('className="text-sm text-[var(--dt-colors-text-link)]"', scale) == []
+    assert _off_scale_type('className="text-lg"', scale) == ["text-lg"]
+    intervals = _renderable_weight_intervals("@font-face { font-weight: 400 700; }")
+    assert intervals == [(400, 700)]
+    assert _impossible_weights('className="font-bold font-black"', intervals) == ["font-black (900)"]
+    assert _impossible_weights("h1 { font-weight: 900; }", intervals) == ["font-weight: 900"]
+    assert _impossible_weights('className="font-semibold"', intervals) == []
+
+
+_RADIUS_DECLARATION = re.compile(r"border-radius:\s*([^;}\n]+)")
+
+
+def _off_scale_corners(css: str) -> list[str]:
+    """A corner an authored rule paints from a number the token scale never declared.
+
+    `0`, `inherit` and percentages are geometry the scale has no word for (a hard edge, a circle), so
+    they pass; a four-part corner is read part by part, because `0 0 var(--dt-…) var(--dt-…)` is one
+    declaration in which only some of the parts are owned.
+    """
+    offenders: list[str] = []
+    for value in _RADIUS_DECLARATION.findall(css):
+        parts = [part for part in value.strip().split() if part not in {"0", "inherit"} and not part.endswith("%")]
+        if any(not part.startswith("var(") for part in parts):
+            offenders.append(value.strip())
+    return offenders
+
+
+def test_no_component_paints_a_corner_the_scale_does_not_own() -> None:
+    """The sheet hands Tailwind every radius utility, so a component that writes `0.625rem` by hand is
+    a corner no theme owns and no gate can move: five button and input rules carried 10px through the
+    whole repaint while the landing painted the same control at 4px."""
+    offenders: list[str] = []
+    for path in _web_sources():
+        text = path.read_text(encoding="utf-8", errors="replace")
+        rel = path.relative_to(WEB)
+        if path.suffix == ".css":
+            offenders += [f"{rel}: border-radius: {hit}" for hit in _off_scale_corners(text)]
+        offenders += [f"{rel}: {hit}" for hit in re.findall(r"\brounded-\[(?!var\()[^\]]+\]", text)]
+    assert not offenders, "\n".join(offenders)
+
+
+def test_the_corner_detector_reads_the_forms_it_forbids() -> None:
+    assert _off_scale_corners("button { border-radius: 0.625rem; }") == ["0.625rem"]
+    assert _off_scale_corners(".panel { border-radius: 1rem 1rem 0 0; }") == ["1rem 1rem 0 0"]
+    assert _off_scale_corners(".chip { border-radius: var(--dt-border-radius-full); }") == []
+    assert _off_scale_corners(".m { border-radius: 0 0 var(--radius) var(--radius); }") == []
+    assert _off_scale_corners(".a { border-radius: 50%; }\n.b { border-radius: inherit; }") == []
+
+
+# `var(--dt-radius-${rounded})` is invisible to the token-existence check above: no literal token name
+# appears in the source, so nothing resolves it and a whole private namespace could hide there. The
+# skeleton did exactly that -- it interpolated `--dt-radius-*`, an alias block index.css kept alive for
+# no other user, and carried a `0.5rem` fallback that no theme can retune.
+_DYNAMIC_VAR = re.compile(r"var\((--[a-z0-9-]+)-\$\{[^}]+\}([^)]*)\)")
+
+
+def _dynamic_token_uses(text: str) -> list[tuple[str, str]]:
+    return [(f"{m.group(1)}-", m.group(2).strip()) for m in _DYNAMIC_VAR.finditer(text)]
+
+
+def test_a_dynamic_token_name_stays_inside_a_namespace_the_theme_owns() -> None:
+    published = {theme: set(_theme_tokens(theme)) for theme in THEME_FILES}
+    offenders: list[str] = []
+    for path in _web_sources():
+        for namespace, tail in _dynamic_token_uses(path.read_text(encoding="utf-8", errors="replace")):
+            rel = path.relative_to(WEB)
+            if not all(any(token.startswith(namespace) for token in tokens) for tokens in published.values()):
+                offenders.append(f"{rel}: {namespace}${{…}} interpolates a namespace no theme publishes")
+            if tail.startswith(","):
+                offenders.append(f"{rel}: {namespace}${{…}} keeps the literal fallback {tail[1:].strip()!r}")
+    assert not offenders, "\n".join(offenders)
+
+
+def test_the_dynamic_token_reader_sees_the_alias_it_forbids() -> None:
+    assert _dynamic_token_uses("borderRadius: `var(--dt-radius-${rounded}, 0.5rem)`") == [("--dt-radius-", ", 0.5rem")]
+    assert _dynamic_token_uses("borderRadius: `var(--dt-border-radius-${rounded})`") == [("--dt-border-radius-", "")]
+    assert _dynamic_token_uses("color: var(--dt-colors-accent-default)") == []
+
+
+_STYLE_OBJECT = re.compile(r"\b([A-Za-z]*[sS]tyle)=\{\{")
+_INLINE_SCALE_PROP = re.compile(r"\b(borderRadius|fontSize):\s*([^,}\n]+)")
+
+
+def _object_body(text: str, open_at: int) -> str:
+    """The declarations between the braces an attribute opened at `open_at`, one past the `{{`."""
+    depth, cursor = 0, open_at - 2
+    while cursor < len(text):
+        char = text[cursor]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_at:cursor]
+        cursor += 1
+    raise AssertionError(f"style object at offset {open_at} is never closed")
+
+
+def _inline_scale_literals(text: str) -> list[str]:
+    """Corners and type sizes handed to a JSX style object as numbers or px strings.
+
+    A style object becomes CSS, so a bare number is a value no theme and no token file can move. The
+    ladder changed `border-radius.lg` and `xl` underneath ten chart tooltips that named 8 directly, and
+    they kept painting the old corner while every card around them moved. Props a library consumes as
+    data — Monaco's `options={{ fontSize: 14 }}`, a recharts axis tick — are not style objects, so they
+    stay outside this reader rather than being forced into a string the library cannot parse.
+    """
+    offenders: list[str] = []
+    for match in _STYLE_OBJECT.finditer(text):
+        for prop in _INLINE_SCALE_PROP.finditer(_object_body(text, match.end())):
+            value = prop.group(2).strip().strip("\"'`")
+            if not value.startswith("var("):
+                offenders.append(f"{prop.group(1)}: {prop.group(2).strip()}")
+    return offenders
+
+
+def test_no_component_hands_a_style_object_a_corner_or_type_size_the_tokens_cannot_move() -> None:
+    offenders = [
+        f"{path.relative_to(WEB)}: {offender}"
+        for path in _web_sources()
+        for offender in _inline_scale_literals(path.read_text(encoding="utf-8", errors="replace"))
+    ]
+    assert not offenders, "JSX style objects carry literals the scale cannot retarget:\n" + "\n".join(offenders)
+
+
+def test_the_style_object_reader_skips_props_a_library_needs_as_a_number() -> None:
+    assert _inline_scale_literals("contentStyle={{ borderRadius: 8, fontSize: 12 }}") == [
+        "borderRadius: 8",
+        "fontSize: 12",
+    ]
+    assert _inline_scale_literals('style={{ borderRadius: "var(--dt-border-radius-lg)", fontSize: 12 }}') == [
+        "fontSize: 12"
+    ]
+    assert _inline_scale_literals("options={{ fontSize: 14, padding: { top: 16 }, inlineSuggest: true }}") == []
+    assert _inline_scale_literals("style={{ borderRadius: `var(--dt-border-radius-${rounded})` }}") == []
+
+
+# ---------------------------------------------------------------------------
+# Shadow tokens
+# ---------------------------------------------------------------------------
+
+#: A `--dt-shadow-*` token is a whole shadow, not a colour a rule can add its own offset to: every one of
+#: them is printed from `tokens.json` as `offset-x offset-y [blur] [spread] color`. Composing one with a
+#: length substitutes six or seven components into a grammar that takes five, which the engine then drops
+#: at computed-value time -- `box-shadow: 0 0 16px var(--dt-shadow-glow-accent)` measures as `none` in a
+#: live browser. The declaration is valid CSS text, so a bundler, a token diff and a screenshot taken
+#: without a pointer on the element all agree with it; only the reader ever notices the elevation is gone.
+_SHADOW_TOKEN_USE = re.compile(r"var\(--dt-shadow-[a-z0-9-]+\)")
+_SHADOW_DECLARATION = re.compile(r"box-shadow\s*:\s*([^;{}]+)")
+
+
+def _split_shadow_list(value: str) -> list[str]:
+    """The items of a shadow list, split on the commas that separate them and not on the commas inside an
+    `rgba()` colour -- Chromium reads the former as new shadows and the latter as one argument."""
+    items: list[str] = []
+    depth = 0
+    current = ""
+    for char in value:
+        if char == "," and depth == 0:
+            items.append(current)
+            current = ""
+            continue
+        depth += char == "("
+        depth -= char == ")"
+        current += char
+    items.append(current)
+    return items
+
+
+def _composed_shadows(css: str) -> list[str]:
+    """Shadow declarations that spend a whole-shadow token as if it were one more component.
+
+    A comma opens a new item of the list, and there the token substitutes into slots of its own: measured in
+    Chromium, `inset 0 1px 0 <colour>, var(--dt-shadow-xl)` computes as the two shadows it names. Components
+    sharing the token's item substitute six or seven into a grammar that reads five, and the engine drops the
+    whole declaration. Only the second shape is an offender.
+    """
+    offenders: list[str] = []
+    for match in _SHADOW_DECLARATION.finditer(css):
+        for item in _split_shadow_list(match.group(1)):
+            if not _SHADOW_TOKEN_USE.search(item):
+                continue
+            if re.search(r"\d", _SHADOW_TOKEN_USE.sub("", item)):
+                offenders.append(" ".join(item.split()))
+    return offenders
+
+
+def _shipped_css_surfaces() -> dict[str, str]:
+    """Every document this product ships CSS in: the SPA's sheets, the landing, and each surface whose
+    stylesheet lives inside a Python, TypeScript or HTML file rather than a `.css`."""
+    surfaces = {str(path.relative_to(ROOT)): path for path in (WEB / "src").rglob("*.css")}
+    surfaces["site/styles.css"] = ROOT / "site" / "styles.css"
+    surfaces.update(OFFLINE_SHEETS)
+    return {
+        label: path.read_text(encoding="utf-8", errors="replace") for label, path in surfaces.items() if path.is_file()
+    }
+
+
+def test_no_rule_spends_a_shadow_token_as_if_it_were_a_colour() -> None:
+    offenders: list[str] = []
+    for label, css in _shipped_css_surfaces().items():
+        offenders.extend(f"{label}: box-shadow: {offender}" for offender in _composed_shadows(css))
+    assert not offenders, "these shadows substitute to an invalid list and compute to none:\n" + "\n".join(offenders)
+
+
+def test_the_shadow_reader_sees_the_composition_it_forbids() -> None:
+    assert _composed_shadows("box-shadow: 0 0 16px var(--dt-shadow-glow-accent);") == [
+        "0 0 16px var(--dt-shadow-glow-accent)"
+    ]
+    assert _composed_shadows("box-shadow: var(--dt-shadow-glow-accent);") == []
+    # A list is not a composition: each item keeps its own slots, and the browser computes both shadows.
+    assert (
+        _composed_shadows("box-shadow: inset 0 1px 0 var(--dt-colors-surface-inset-highlight), var(--dt-shadow-xl);")
+        == []
+    )
+    # The commas of an rgba() colour belong to one argument, not to a second item of the list.
+    assert _composed_shadows("box-shadow: 0 0 16px rgba(139, 92, 246, 0.25) var(--dt-shadow-glow-accent);") == [
+        "0 0 16px rgba(139, 92, 246, 0.25) var(--dt-shadow-glow-accent)"
+    ]
+    assert _composed_shadows("box-shadow: var(--dt-shadow-sm), var(--dt-shadow-float);") == []
+    # A colour token inside a hand-written shadow is the ordinary case and stays legal.
+    assert _composed_shadows("box-shadow: 0 1px 2px var(--dt-colors-accent-muted);") == []
+    assert _composed_shadows("box-shadow: none;") == []
+
+
+# ---------------------------------------------------------------------------
+# Colour written into an element's own `style` attribute
+# ---------------------------------------------------------------------------
+
+#: React turns `style={{…}}` into the element's `style` attribute, and an attribute outranks every rule
+#: in the sheet: the tint a `.btn-soft-*` publishes, the `:hover` edge, the `:focus` ring, the disabled
+#: treatment. The pair a contrast gate measures for that class is then not the pair a reader sees -- one
+#: of these on a Pause button is what shipped a 4.38:1 label that every static rule in this file called
+#: compliant. A colour the sheet already names has to be asked for by name.
+_DOM_STYLE_OBJECT = re.compile(r"(?<![\w-])style=\{\{")
+_COLOUR_PROPERTY = re.compile(
+    r"\b(?:color|background|backgroundImage|backgroundColor|borderColor|border(?:Top|Right|Bottom|Left)Color"
+    r"|outlineColor|boxShadow|textShadow)\s*:\s*([^,}\n]*)"
+)
+_TOKEN_IN_VALUE = re.compile(r"--dt-(?:colors|shadow)")
+
+
+def _inline_token_colours(text: str) -> list[str]:
+    offenders: list[str] = []
+    for match in _DOM_STYLE_OBJECT.finditer(text):
+        for declaration in _COLOUR_PROPERTY.finditer(_object_body(text, match.end())):
+            if _TOKEN_IN_VALUE.search(declaration.group(1)):
+                offenders.append(declaration.group(0).strip())
+    return offenders
+
+
+def test_no_dom_element_carries_a_colour_that_outranks_the_sheet() -> None:
+    offenders: list[str] = []
+    for path in _web_sources():
+        if path.suffix != ".tsx":
+            continue
+        offenders.extend(
+            f"{path.relative_to(WEB)}: {offender}"
+            for offender in _inline_token_colours(path.read_text(encoding="utf-8", errors="replace"))
+        )
+    assert not offenders, "\n".join(offenders)
+
+
+def test_the_inline_colour_reader_reads_the_forms_it_forbids() -> None:
+    assert _inline_token_colours('<button style={{ color: "var(--dt-colors-status-warning)" }} />') == [
+        'color: "var(--dt-colors-status-warning)"'
+    ]
+    assert _inline_token_colours('<div style={{ backgroundColor: s.bg, color: "var(--dt-colors-text-link)" }} />') == [
+        'color: "var(--dt-colors-text-link)"'
+    ]
+    # Geometry and data are not colours the sheet ships.
+    assert _inline_token_colours('<div style={{ width: "50%", backgroundColor: p.hex }} />') == []
+    # A library's own style object and its paint props are not attributes this sheet can reach.
+    assert _inline_token_colours('<Tooltip contentStyle={{ color: "var(--dt-colors-x)" }} />') == []
+    assert _inline_token_colours('<Area stroke="var(--dt-colors-accent-default)" fill="url(#grad)" />') == []
+
+
+# ---------------------------------------------------------------------------
+# A token spent as an arbitrary class value
+# ---------------------------------------------------------------------------
+
+#: `bg-[var(--dt-colors-bg-hover)]` asks Tailwind to mint a utility whose colour the sheet already publishes
+#: under a name. The pair a contrast gate measures for `bg-hover` never reaches the element: the value is a
+#: string inside a bracket, and a theme that changes the token changes nothing on the page.
+_CLASS_TOKEN_BRACKET = re.compile(r"[\w-]*-\[(?:var\()?--dt-(?:colors|shadow)[^\]]*\]")
+
+
+def _class_token_brackets(text: str) -> list[str]:
+    """Class values that spend a colour or a shadow token by value."""
+    return [match.group(0) for match in _CLASS_TOKEN_BRACKET.finditer(text)]
+
+
+def test_no_class_bracket_spends_a_colour_token_by_value() -> None:
+    offenders: list[str] = []
+    for path in _web_sources():
+        if path.suffix not in {".tsx", ".ts"}:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        offenders.extend(f"{path.relative_to(WEB)}: {offender}" for offender in _class_token_brackets(text))
+    assert not offenders, "\n".join(offenders)
+
+
+def test_the_class_bracket_reader_notices_a_token_spent_by_value() -> None:
+    assert _class_token_brackets('<div className="bg-[var(--dt-colors-bg-hover)]" />') == [
+        "bg-[var(--dt-colors-bg-hover)]"
+    ]
+    assert _class_token_brackets('<div className="hover:text-[--dt-colors-text-link]" />') == [
+        "text-[--dt-colors-text-link]"
+    ]
+    assert _class_token_brackets("<div className={`border-[var(--dt-colors-accent-muted)] p-2`} />") == [
+        "border-[var(--dt-colors-accent-muted)]"
+    ]
+    # Geometry from the scale is what the bracket exists for; a colour is not.
+    assert (
+        _class_token_brackets('<div className="rounded-[var(--dt-border-radius-lg)] w-[var(--dt-spacing-4)]" />') == []
+    )

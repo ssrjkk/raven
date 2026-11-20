@@ -12,12 +12,12 @@ const statusBadge: Record<string, string> = {
   pending: "badge badge-warning", running: "badge badge-info", completed: "badge badge-success", failed: "badge badge-error", cancelled: "badge badge-accent",
 };
 
-const statusIcon: Record<string, { icon: typeof Clock; color: string }> = {
-  pending: { icon: Clock, color: "var(--dt-colors-status-warning)" },
-  running: { icon: RefreshCw, color: "var(--dt-colors-status-info)" },
-  completed: { icon: CheckCircle2, color: "var(--dt-colors-status-success)" },
-  failed: { icon: XCircle, color: "var(--dt-colors-status-error)" },
-  cancelled: { icon: Ban, color: "var(--dt-colors-text-tertiary)" },
+const statusIcon: Record<string, { icon: typeof Clock; ink: string }> = {
+  pending: { icon: Clock, ink: "text-warning" },
+  running: { icon: RefreshCw, ink: "text-info" },
+  completed: { icon: CheckCircle2, ink: "text-success" },
+  failed: { icon: XCircle, ink: "text-danger" },
+  cancelled: { icon: Ban, ink: "text-tertiary" },
 };
 
 export default function Tasks() {
@@ -83,13 +83,13 @@ export default function Tasks() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <span
-                    className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center"
-                    style={{ backgroundColor: "var(--dt-colors-accent-muted)", color: "var(--dt-colors-accent-default)" }}
+                    className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center bg-accent-muted text-accent"
+
                   >
                     {(() => {
                       const cfg = statusIcon[t.status] ?? statusIcon.cancelled;
                       const Icon = cfg.icon;
-                      return <Icon size={16} style={{ color: cfg.color }} className={t.status === "running" ? "animate-spin" : ""} />;
+                      return <Icon size={16} className={`${cfg.ink} ${t.status === "running" ? "animate-spin" : ""}`} />;
                     })()}
                   </span>
                   <div>
@@ -117,11 +117,7 @@ export default function Tasks() {
                   {t.steps.map((s) => (
                     <div key={s.order} className="flex items-center gap-2 text-xs text-tertiary">
                       <span
-                        className="w-4 h-4 shrink-0 rounded-full flex items-center justify-center"
-                        style={{
-                          backgroundColor: "var(--dt-colors-accent-muted)",
-                          color: s.status === "completed" ? "var(--dt-colors-status-success)" : "var(--dt-colors-accent-default)",
-                        }}
+                        className={`w-4 h-4 shrink-0 rounded-full flex items-center justify-center bg-accent-muted ${s.status === "completed" ? "text-success" : "text-accent"}`}
                       >
                         <StepIcon size={9} />
                       </span>

@@ -138,8 +138,13 @@ _EXTENSIONS: Final = (".ts", ".tsx", ".json")
 
 
 def resolve_import(source: pathlib.Path, specifier: str) -> pathlib.Path | None:
-    """The file a relative specifier names, the way `tsc -b` and Vite resolve it."""
-    base = source.parent / specifier
+    """The file a relative specifier names, the way `tsc -b` and Vite resolve it.
+
+    Vite carries a loader in the specifier's query (`?raw`, `?url`, `?worker`), and the file it names is
+    still the file the build context has to contain -- the SPA's first-paint contract reads
+    `../../index.html?raw`, so a resolver that stops at the `?` reports a real import as a missing one.
+    """
+    base = source.parent / specifier.split("?")[0]
     for candidate in (base, *(base.with_suffix(ext) for ext in _EXTENSIONS), base / "index.ts", base / "index.tsx"):
         if candidate.is_file():
             return candidate.resolve()
@@ -194,6 +199,36 @@ def test_the_web_context_detector_reports_an_import_outside_the_copied_tree() ->
     try:
         offenders = uncovered_web_imports(staged_copies("web-builder"))
         assert any(probe.name in row and "pyproject.toml" in row for row in offenders), offenders
+    finally:
+        probe.unlink()
+    assert not uncovered_web_imports(staged_copies("web-builder"))
+
+
+def test_the_web_context_detector_reads_a_loader_query_as_the_same_file() -> None:
+    """`?raw` changes how Vite delivers the file, not which file the image has to contain.
+
+    A resolver that treats the query as part of the name reports the SPA's own first-paint import as
+    missing, and one that strips the query without checking where it points would stop reporting an
+    out-of-context `?raw` import -- so both directions are measured here.
+    """
+    assert (
+        resolve_import(WEB_SRC / "design" / "themeBoot.test.tsx", "../../index.html?raw")
+        == (ROOT / "web" / "index.html").resolve()
+    )
+    assert (
+        resolve_import(WEB_SRC / "lib" / "probe.ts", "../../../pyproject.toml?raw")
+        == (ROOT / "pyproject.toml").resolve()
+    )
+    probe = WEB_SRC / "lib" / "__docker_context_query_probe__.ts"
+    probe.write_text('const SHELL = "../../../pyproject.toml?raw";\nexport default SHELL;\n', encoding="utf-8")
+    try:
+        assert not any("query_probe" in row for row in uncovered_web_imports(staged_copies("web-builder")))
+    finally:
+        probe.unlink()
+    probe.write_text('import SHELL from "../../../pyproject.toml?raw";\nexport default SHELL;\n', encoding="utf-8")
+    try:
+        offenders = uncovered_web_imports(staged_copies("web-builder"))
+        assert any("query_probe" in row and "pyproject.toml" in row for row in offenders), offenders
     finally:
         probe.unlink()
     assert not uncovered_web_imports(staged_copies("web-builder"))

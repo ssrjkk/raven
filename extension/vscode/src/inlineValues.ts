@@ -21,16 +21,16 @@ export class RavenInlineValuesProvider implements vscode.InlineValuesProvider {
 
       if (text.startsWith('def ') || text.startsWith('async def ')) {
         const range = new vscode.Range(line, 0, line, 0);
-        values.push(new vscode.InlineValueText(range, '🔍 Explain with Raven'));
+        values.push(new vscode.InlineValueText(range, 'Explain with Raven'));
       } else if (text.startsWith('class ')) {
         const range = new vscode.Range(line, 0, line, 0);
-        values.push(new vscode.InlineValueText(range, '🔍 Review with Raven'));
+        values.push(new vscode.InlineValueText(range, 'Review with Raven'));
       } else if (text.startsWith('fn ') || text.startsWith('pub fn ')) {
         const range = new vscode.Range(line, 0, line, 0);
-        values.push(new vscode.InlineValueText(range, '🔍 Explain with Raven'));
+        values.push(new vscode.InlineValueText(range, 'Explain with Raven'));
       } else if (text.startsWith('function ') || text.startsWith('export function ') || text.startsWith('export async function ')) {
         const range = new vscode.Range(line, 0, line, 0);
-        values.push(new vscode.InlineValueText(range, '🔍 Explain with Raven'));
+        values.push(new vscode.InlineValueText(range, 'Explain with Raven'));
       }
     }
 

@@ -158,9 +158,9 @@ export default function Agents() {
           <div key={a.id}>
             <div className="card p-3 flex items-center justify-between">
               <div className="flex items-center gap-3 min-w-0">
-                <span className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center"
-                  style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}>
-                  <Bot size={16} style={{ color: "var(--dt-colors-accent-default)" }} />
+                <span className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center bg-tertiary"
+>
+                  <Bot size={16} className="text-accent" />
                 </span>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -186,8 +186,8 @@ export default function Agents() {
                 <button className="btn-soft px-2.5 py-1 text-xs" onClick={() => openEdit(a)}>
                   <Pencil size={13} className="mr-1" /> Edit
                 </button>
-                <button className="btn-soft px-2.5 py-1 text-xs text-danger"
-                  style={{ backgroundColor: "var(--dt-colors-status-error-bg)" }}
+                <button className="btn-soft px-2.5 py-1 text-xs text-danger bg-danger-muted"
+
                   onClick={() => { if (window.confirm(`Delete agent ${a.name}?`)) del.mutate(a.id); }}>
                   <Trash2 size={13} className="mr-1" /> Delete
                 </button>
@@ -200,8 +200,7 @@ export default function Agents() {
                 {a.history && a.history.length > 0 ? (
                   <div className="space-y-1 max-h-64 overflow-y-auto">
                     {a.history.map((h, i) => (
-                      <div key={i} className="text-xs border-l-2 pl-3 py-0.5"
-                        style={{ borderColor: h.role === "user" ? "var(--dt-colors-accent-default)" : "var(--dt-colors-border-default)" }}>
+                      <div key={i} className={`text-xs border-l-2 pl-3 py-0.5 ${h.role === "user" ? "border-accent" : "border-default"}`}>
                         <span className="text-tertiary">{new Date(h.ts * 1000).toLocaleString()}</span>{" "}
                         <span className="font-medium">{h.role}</span>
                         <div className="text-secondary whitespace-pre-wrap">{h.content}</div>

@@ -321,18 +321,13 @@ export default function GitHub() {
             <button
               key={r.id}
               onClick={() => selectRepo(r.full_name)}
-              className="w-full text-left p-2 rounded text-xs transition border"
-              style={{
-                backgroundColor: selectedRepo === r.full_name ? "var(--dt-colors-accent-muted)" : "var(--dt-colors-bg-secondary)",
-                borderColor: selectedRepo === r.full_name ? "var(--dt-colors-accent-subtle)" : "transparent",
-                color: "var(--dt-colors-text-primary)",
-              }}
+              className={`w-full text-left p-2 rounded text-xs transition border ${selectedRepo === r.full_name ? "bg-accent-muted border-accent-subtle text-accent" : "bg-secondary border-transparent text-primary"}`}
             >
               <div className="font-medium text-sm truncate">{r.full_name}</div>
               {r.description && <div className="truncate mt-0.5 text-tertiary">{r.description}</div>}
               <div className="flex gap-2 mt-1">
                 {r.language && <span className="chip">{r.language}</span>}
-                <span className="text-[10px] text-tertiary">S {r.stargazers_count}</span>
+                <span className="text-micro text-tertiary">S {r.stargazers_count}</span>
               </div>
             </button>
           ))}
@@ -366,11 +361,7 @@ export default function GitHub() {
               <div className="flex gap-1 mb-3 border-b pb-1 border-default">
                 {(["files", "pulls", "issues", "new-pr", "new-issue", "search"] as const).map((t) => (
                   <button key={t} onClick={() => setTab(t)}
-                    className="px-3 py-1 text-xs rounded-t transition"
-                    style={{
-                      backgroundColor: tab === t ? "var(--dt-colors-accent-muted)" : "transparent",
-                      color: tab === t ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)",
-                    }}>
+                    className={`px-3 py-1 text-xs rounded-t transition ${tab === t ? "bg-accent-muted text-accent" : "text-secondary hover:bg-hover"}`}>
                     {t === "files" ? "Files" : t === "pulls" ? `PRs (${pulls.length})` : t === "issues" ? `Issues (${issues.length})` : t === "new-pr" ? "New PR" : t === "new-issue" ? "New Issue" : "Code"}
                   </button>
                 ))}
@@ -392,8 +383,8 @@ export default function GitHub() {
                     <>
                       {contentPath && (
                         <button onClick={goUp}
-                          className="w-full text-left p-2 rounded text-sm transition"
-                          style={{ backgroundColor: "var(--dt-colors-bg-secondary)", color: "var(--dt-colors-text-secondary)" }}>
+                          className="w-full text-left p-2 rounded text-sm transition bg-secondary text-secondary"
+>
                           ../
                         </button>
                       )}
@@ -406,7 +397,7 @@ export default function GitHub() {
                           <span>{item.type === "dir" ? "D" : "F"}</span>
                           <span className="flex-1">{item.name}</span>
                           {item.type === "file" && (
-                            <span className="text-[10px] text-tertiary">{(item.size / 1024).toFixed(1)} KB</span>
+                            <span className="text-micro text-tertiary">{(item.size / 1024).toFixed(1)} KB</span>
                           )}
                         </div>
                       ))}
@@ -425,7 +416,7 @@ export default function GitHub() {
                     <div key={pr.number} className="card p-3">
                       <div className="flex items-center justify-between">
                         <div>
-                          <div className="font-medium text-sm" style={{ color: "var(--dt-colors-accent-default)" }}>
+                          <div className="font-medium text-sm text-accent">
                             #{pr.number} {pr.title}
                           </div>
                           <div className="text-xs mt-0.5 text-tertiary">
@@ -433,11 +424,7 @@ export default function GitHub() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="badge" style={
-                            pr.state === "open"
-                              ? { color: "var(--dt-colors-status-success)", backgroundColor: "var(--dt-colors-status-success-bg)" }
-                              : { color: "var(--dt-colors-text-secondary)", backgroundColor: "var(--dt-colors-bg-tertiary)" }
-                          }>
+                          <span className={`badge ${pr.state === "open" ? "badge-success" : "bg-tertiary text-secondary"}`}>
                             {pr.state}
                           </span>
                           {pr.state === "open" && (
@@ -465,7 +452,7 @@ export default function GitHub() {
                         </div>
                         <div className="flex gap-1">
                           {iss.labels?.map((l) => (
-                            <span key={l.name} className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `#${l.color}22`, color: `#${l.color}` }}>
+                            <span key={l.name} className="text-micro px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `#${l.color}22`, color: `#${l.color}` }}>
                               {l.name}
                             </span>
                           ))}
@@ -559,7 +546,7 @@ export default function GitHub() {
                     <div className="space-y-1">
                       {codeResults.map((item, i) => (
                         <div key={i} className="p-2 rounded text-xs bg-secondary text-primary">
-                          <span style={{ color: "var(--dt-colors-accent-default)" }}>{item.path}</span>
+                          <span className="text-accent">{item.path}</span>
                           <span className="ml-2 text-tertiary">{item.name}</span>
                         </div>
                       ))}

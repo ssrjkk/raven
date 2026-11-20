@@ -1,102 +1,90 @@
 /*
- * Inter and JetBrains Mono, vendored from Google Fonts as the static instance per weight, for the
- * latin and cyrillic subsets only. The SPA used to fetch these from fonts.googleapis.com at view
- * time; it now reaches no third-party host, so the CSP can keep font-src at 'self'.
+ * The landing's three faces, vendored so the SPA reaches no third-party host and `font-src` stays
+ * at 'self'. Cyrillic subsets are included because the product speaks Russian: the storefront ships
+ * latin-only files, and an app that named these families without them would have quietly rendered
+ * every Cyrillic label in the system font, which is what the landing's own Space Grotesk does.
+ *
+ * IBM Plex Sans and Space Grotesk are variable on Google Fonts: one woff2 per subset for the whole
+ * weight axis. Declaring a discrete `font-weight` per face would pin every weight to the default
+ * instance, so each variable family gets one face with a `font-weight: min max` range. IBM Plex Mono
+ * is still static, hence one file per weight.
+ *
+ * Space Grotesk has no Cyrillic, so it is the display face only and always sits in a stack whose
+ * next entry can draw Russian: the wordmark and the Latin headings get it, everything else falls
+ * through to IBM Plex Sans without a per-glyph reflow.
  */
 
 @font-face {
-  font-family: 'Inter';
+  font-family: 'IBM Plex Sans';
   font-style: normal;
-  font-weight: 400;
+  font-weight: 400 700;
   font-display: swap;
-  src: url('/fonts/Inter-400-latin.woff2') format('woff2');
+  src: url('/fonts/IBMPlexSans-latin.woff2') format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
-  font-family: 'Inter';
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/IBMPlexSans-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/fonts/Inter-400-cyrillic.woff2') format('woff2');
-  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
-}
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('/fonts/Inter-500-latin.woff2') format('woff2');
+  src: url('/fonts/IBMPlexMono-400-latin.woff2') format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
-  font-family: 'Inter';
+  font-family: 'IBM Plex Mono';
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('/fonts/Inter-500-cyrillic.woff2') format('woff2');
-  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+  src: url('/fonts/IBMPlexMono-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
-  font-family: 'Inter';
+  font-family: 'IBM Plex Mono';
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url('/fonts/Inter-600-latin.woff2') format('woff2');
+  src: url('/fonts/IBMPlexMono-600-latin.woff2') format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
-  font-family: 'Inter';
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/IBMPlexMono-400-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/IBMPlexMono-500-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url('/fonts/Inter-600-cyrillic.woff2') format('woff2');
+  src: url('/fonts/IBMPlexMono-600-cyrillic.woff2') format('woff2');
   unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
 }
+
 @font-face {
-  font-family: 'Inter';
+  font-family: 'Space Grotesk';
   font-style: normal;
-  font-weight: 700;
+  font-weight: 300 700;
   font-display: swap;
-  src: url('/fonts/Inter-700-latin.woff2') format('woff2');
+  src: url('/fonts/SpaceGrotesk-latin.woff2') format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/fonts/Inter-700-cyrillic.woff2') format('woff2');
-  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
-}
-@font-face {
-  font-family: 'JetBrains Mono';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts/JetBrainsMono-400-latin.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: 'JetBrains Mono';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts/JetBrainsMono-400-cyrillic.woff2') format('woff2');
-  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
-}
-@font-face {
-  font-family: 'JetBrains Mono';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('/fonts/JetBrainsMono-500-latin.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: 'JetBrains Mono';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('/fonts/JetBrainsMono-500-cyrillic.woff2') format('woff2');
-  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
 }

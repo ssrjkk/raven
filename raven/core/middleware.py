@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import ipaddress
+import math
 import re
 import time
 import uuid
@@ -11,6 +12,8 @@ from collections import defaultdict
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from loguru import logger
+from starlette.routing import Match
+from starlette.types import Scope
 
 from raven.core.audit import AuditEventType, audit_logger
 from raven.core.auth.models import Permission, Role
@@ -20,6 +23,7 @@ from raven.core.config import settings
 from raven.core.errors import AppError, ErrorCode, classify_error
 from raven.core.logging import set_correlation_id
 from raven.core.metrics import metrics
+from raven.core.spa import BUNDLE_SERVED_ATTR
 
 _PRUNE_INTERVAL_SECONDS = 60.0
 
@@ -55,6 +59,24 @@ class RateLimiter:
                 return False
             bucket.append(now)
             return True
+
+    async def retry_after(self, key: str) -> float:
+        """Seconds until this address frees its oldest charge, 0 while it still has budget.
+
+        A refusal has to name the moment the caller can come back, and with a sliding window that moment is
+        the oldest surviving timestamp plus the window — not the whole window, which is what the response used
+        to promise and could be a minute later than the truth.
+        """
+        now = time.monotonic()
+        async with self._lock:
+            bucket = [t for t in self._buckets.get(key, ()) if t > now - self.window]
+        if len(bucket) < self.max_requests:
+            return 0.0
+        if not bucket:
+            # Reachable only with a budget of zero, where nothing ever ages out and waiting cannot admit the
+            # caller. The window is then the only answer that is not a promise the limiter cannot keep.
+            return self.window
+        return max(0.0, min(bucket) + self.window - now)
 
     def _prune(self, now: float) -> None:
         """Forget addresses whose window has fully elapsed.
@@ -286,15 +308,47 @@ async def request_id_middleware(request: Request, call_next):
     return response
 
 
+def _answers_from_bundle(app: object, scope: Scope) -> bool:
+    """Whether the route Starlette will hand this request to declared itself bundle-served.
+
+    Asked before the budget is spent, because the answer decides whether the request should be charged at all.
+    Measured over http on the live gateway on 2026-11-18: one cold console navigation is 15 requests, 10 of them
+    files already on disk, so two reloads consumed the whole per-IP budget and the third answered the
+    application *shell* with a 429 — the operator's browser showed raw JSON instead of the console, and no
+    amount of waiting inside the window helped.
+
+    The router is read rather than a list of paths, and anything the scan does not recognise is charged as
+    usual, so a surface escapes the budget only by marking itself in `raven.core.spa` — never by being named
+    here.
+    """
+    partial: object | None = None
+    for route in getattr(app, "routes", ()):
+        match, _ = route.matches(scope)
+        if match == Match.FULL:
+            return _is_bundle_handler(route)
+        if match == Match.PARTIAL and partial is None:
+            partial = route
+    return partial is not None and _is_bundle_handler(partial)
+
+
+def _is_bundle_handler(route: object) -> bool:
+    handler = getattr(route, "endpoint", None) or getattr(route, "app", None)
+    return bool(getattr(handler, BUNDLE_SERVED_ATTR, False))
+
+
 async def rate_limit_middleware(request: Request, call_next):
+    if _answers_from_bundle(request.scope.get("app"), request.scope):
+        return await call_next(request)
     ip = client_ip(request)
     allowed = await rate_limiter.check(ip)
     if not allowed:
+        wait = max(1, math.ceil(await rate_limiter.retry_after(ip)))
         metrics.inc("http_rate_limited")
-        logger.warning("Rate limit exceeded for {}", ip)
+        logger.warning("Rate limit exceeded for {} ({}s)", ip, wait)
         return JSONResponse(
             status_code=429,
-            content={"error": "Too many requests", "retry_after": max(1, round(rate_limiter.window))},
+            content={"error": "Too many requests", "retry_after": wait},
+            headers={"Retry-After": str(wait)},
         )
     return await call_next(request)
 

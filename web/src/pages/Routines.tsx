@@ -7,10 +7,10 @@ import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 import { useApiQuery } from "../hooks/useApiQuery";
 
-const routineStatusIcon: Record<string, { icon: typeof Activity; color: string }> = {
-  active: { icon: Activity, color: "var(--dt-colors-status-success)" },
-  paused: { icon: Pause, color: "var(--dt-colors-status-warning)" },
-  error: { icon: AlertCircle, color: "var(--dt-colors-status-error)" },
+const routineStatusIcon: Record<string, { icon: typeof Activity; ink: string }> = {
+  active: { icon: Activity, ink: "text-success" },
+  paused: { icon: Pause, ink: "text-warning" },
+  error: { icon: AlertCircle, ink: "text-danger" },
 };
 
 export default function Routines() {
@@ -58,10 +58,10 @@ export default function Routines() {
             <div key={r.id} className="card flex items-center justify-between p-3">
               <div className="flex items-center gap-3">
                 <span
-                  className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center"
-                  style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}
+                  className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center bg-tertiary"
+
                 >
-                  <StatusIcon size={16} style={{ color: cfg.color }} />
+                  <StatusIcon size={16} className={cfg.ink} />
                 </span>
                 <div>
                   <div className="font-medium">{r.name}</div>
@@ -72,20 +72,19 @@ export default function Routines() {
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <span
-                  className="text-[10px] font-semibold uppercase tracking-wider"
-                  style={{ color: cfg.color }}
+                  className={`text-micro font-semibold uppercase tracking-wider ${cfg.ink}`}
                 >
                   {r.status}
                 </span>
                 {r.status === "active" ? (
                   <button onClick={() => toggle.mutate({ action: "pause", id: r.id })}
-                    className="btn-soft px-2.5 py-1 text-xs" style={{ color: "var(--dt-colors-status-warning)", backgroundColor: "var(--dt-colors-status-warning-bg)" }}>
+                    className="btn-soft px-2.5 py-1 text-xs text-warning bg-warning-muted">
                     <Pause size={11} />
                     Pause
                   </button>
                 ) : (
                   <button onClick={() => toggle.mutate({ action: "resume", id: r.id })}
-                    className="btn-soft px-2.5 py-1 text-xs" style={{ color: "var(--dt-colors-status-success)", backgroundColor: "var(--dt-colors-status-success-bg)" }}>
+                    className="btn-soft px-2.5 py-1 text-xs text-success bg-success-muted">
                     <Play size={11} />
                     Resume
                   </button>

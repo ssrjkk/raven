@@ -13,7 +13,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from raven.channels.base import BaseChannel, MessageHandler
 from raven.core.auth.models import Permission, Role
+from raven.core.gateway.channel_manager import ChannelManager
+from raven.core.models import Message
 from raven.core.monitor.models import MonitorStatus, MonitorType
 from raven.core.monitor.store import MonitorStore
 from tests.core.switch_fixtures import switch_env, switch_names
@@ -47,18 +50,51 @@ class FakeDb:
 
 
 class FakeGateway:
+    """The gateway as the shipped routes see it: `is_running` is the surface `Gateway` publishes.
+
+    The lookalike used to carry `_running`, and `/system/status` read that private attribute behind a
+    `hasattr` fallback -- so a gateway whose state the route could not see was answered `running: false`
+    while it was running, and the suite stayed green because the double happened to have the private name.
+    """
+
     def __init__(self, db_path: Path) -> None:
         self._monitor_store = MonitorStore(str(db_path))
         self.db = FakeDb()
-        self._running = True
+        self.is_running = True
 
 
-class FakeChannel:
-    def __init__(self, ready: bool = True) -> None:
+class FakeChannel(BaseChannel):
+    """A channel the admin surface can list, describe and restart.
+
+    A `BaseChannel`, because `ChannelManager.register` is typed for the contract and stores what it is given:
+    the lookalike this used to be is the shape that let the suite stay green while the live gateway 500ed. The
+    traffic methods are declared empty -- no route here opens, closes or sends through a channel.
+    """
+
+    def __init__(self, channel_id: str = "telegram", ready: bool = True) -> None:
+        self.channel_id = channel_id
         self._ready = ready
+        self.restarts = 0
 
     def stats(self) -> dict[str, int]:
         return {"messages": 3}
+
+    async def health_check(self) -> bool:
+        return self._ready
+
+    async def start(self) -> None:
+        self.restarts += 1
+
+    async def stop(self) -> None:
+        self.restarts += 1
+
+    async def connect(self) -> None: ...
+
+    async def disconnect(self) -> None: ...
+
+    async def send(self, session_id: str, message: Message) -> None: ...
+
+    async def on_message(self, handler: MessageHandler) -> None: ...
 
 
 class FakeRegistry:
@@ -107,8 +143,21 @@ def registry() -> FakeRegistry:
 
 
 @pytest.fixture
-def channels() -> dict[str, FakeChannel]:
-    return {"telegram": FakeChannel(ready=True), "web": FakeChannel(ready=False)}
+def channels() -> ChannelManager:
+    """The handle the shipped routes are built with.
+
+    `gateway_runner` hands these routes `gateway.channels`, which is a `ChannelManager`: no `.items()`, no
+    `__len__`, and `get()` is a coroutine. This fixture used to be a plain dict, so every channel route here
+    passed while the live gateway answered 500 -- see tests/core/test_admin_channel_surface.py.
+    """
+    manager = ChannelManager()
+
+    async def register() -> None:
+        for channel in (FakeChannel("telegram", ready=True), FakeChannel("web", ready=False)):
+            await manager.register(channel)
+
+    asyncio.run(register())
+    return manager
 
 
 def _first_body_chunk(app: FastAPI, path: str) -> str:
@@ -168,6 +217,10 @@ def _make_client(gateway, registry, channels, role: str | None = None) -> TestCl
         )
     )
     return TestClient(app)
+
+
+def _add_channel(manager: ChannelManager, channel: FakeChannel) -> None:
+    asyncio.run(manager.register(channel))
 
 
 def _create_monitor(store: MonitorStore, name: str = "disk", target: str = "/tmp/x") -> str:
@@ -378,8 +431,6 @@ class TestSystem:
         assert client.get("/api/admin/channels/unknown").status_code == 404
 
     def test_channel_restart(self, gateway, registry, channels) -> None:
-        import asyncio
-
         class RestartChannel(FakeChannel):
             async def start(self) -> None:
                 self._ready = True
@@ -387,8 +438,8 @@ class TestSystem:
             async def stop(self) -> None:
                 self._ready = False
 
-        ch = RestartChannel(ready=False)
-        channels["rc"] = ch
+        ch = RestartChannel("rc", ready=False)
+        _add_channel(channels, ch)
         client = _make_client(gateway, registry, channels)
         resp = client.post("/api/admin/channels/rc/restart")
         assert resp.status_code == 200
@@ -404,7 +455,7 @@ class TestSystem:
             async def stop(self) -> None:
                 return None
 
-        channels["bad"] = BadChannel()
+        _add_channel(channels, BadChannel("bad"))
         client = _make_client(gateway, registry, channels)
         assert client.post("/api/admin/channels/bad/restart").status_code == 500
 
@@ -513,6 +564,10 @@ class TestSystem:
         assert body["channels"] == 2
         assert body["agents"] == 1
         assert body["running"] is True
+        gateway.is_running = False
+        assert client.get("/api/admin/system/status").json()["running"] is False, (
+            "the answer does not follow the gateway's own state"
+        )
 
     def test_jobs_list(self, gateway, registry, channels) -> None:
         client = _make_client(gateway, registry, channels)

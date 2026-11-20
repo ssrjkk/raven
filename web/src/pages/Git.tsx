@@ -181,12 +181,8 @@ export default function Git() {
     }
   }
 
-  const sevColor = (s: string) =>
-    s === "error"
-      ? "var(--dt-colors-status-error)"
-      : s === "warning"
-        ? "var(--dt-colors-status-warning)"
-        : "var(--dt-colors-status-info)";
+  const sevInk = (s: string) =>
+    s === "error" ? "text-danger" : s === "warning" ? "text-warning" : "text-info";
 
   return (
     <div className="space-y-6">
@@ -307,7 +303,7 @@ export default function Git() {
                 onClick={() => openCommit(entry.hash)}
                 className="commit-card w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left group"
               >
-                <span className="font-mono text-xs px-2 py-0.5 rounded flex-shrink-0" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-accent-default)" }}>
+                <span className="font-mono text-xs px-2 py-0.5 rounded flex-shrink-0 bg-tertiary text-accent">
                   {entry.hash}
                 </span>
                 <div className="flex-1 min-w-0">
@@ -330,7 +326,7 @@ export default function Git() {
           {selectedCommit && (
             <div className="mb-3 p-3 rounded-xl card-bordered">
               <div className="flex items-center gap-2 mb-1">
-                <span className="font-mono text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-accent-default)" }}>
+                <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-tertiary text-accent">
                   {selectedCommit.hash}
                 </span>
                 <span className="text-sm font-medium">{selectedCommit.message}</span>
@@ -365,17 +361,17 @@ export default function Git() {
           </div>
 
           {blameData?.lines && (
-            <div className="overflow-auto rounded-xl border" style={{ maxHeight: "70vh", borderColor: "var(--dt-colors-border-default)" }}>
+            <div className="overflow-auto rounded-xl border border-default" style={{ maxHeight: "70vh" }}>
               <table className="w-full text-xs font-mono border-collapse">
                 <tbody>
                   {blameData.lines.map((line, i) => {
                     const shortHash = line.hash?.slice(0, 7) || "???????";
                     return (
                       <tr key={i}>
-                        <td className="px-2 py-0 align-top whitespace-nowrap select-none" style={{ color: "var(--dt-colors-text-tertiary)", backgroundColor: "var(--dt-colors-bg-secondary)", borderRight: "1px solid var(--dt-colors-border-default)" }}>
+                        <td className="diff-gutter px-2 py-0 align-top whitespace-nowrap select-none">
                           {i + 1}
                         </td>
-                        <td className="px-2 py-0 align-top whitespace-nowrap select-none" style={{ color: "var(--dt-colors-accent-default)", backgroundColor: "var(--dt-colors-bg-secondary)" }}>
+                        <td className="px-2 py-0 align-top whitespace-nowrap select-none text-accent bg-secondary">
                           {shortHash}
                         </td>
                         <td className="px-2 py-0 align-top whitespace-nowrap select-none text-tertiary">
@@ -405,7 +401,7 @@ export default function Git() {
                 reviewResult.comments.map((c, i) => (
                   <div key={i} className="p-3 rounded border text-sm bg-secondary border-default">
                     <div className="flex gap-3 mb-1">
-                      <span className="font-medium" style={{ color: sevColor(c.severity) }}>{c.severity}</span>
+                      <span className={`font-medium ${sevInk(c.severity)}`}>{c.severity}</span>
                       <span className="text-tertiary">{c.file}:{c.line}</span>
                     </div>
                     <div>{c.message}</div>

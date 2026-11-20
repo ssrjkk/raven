@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS coding_sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_cs_user ON coding_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_cs_status ON coding_sessions(status);
-CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT NOW());
 """
 
 

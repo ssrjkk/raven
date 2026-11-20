@@ -5,46 +5,24 @@ Line,   LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, } 
 
 import { api } from "../api/client";
 import { ChartCard } from "../components/ChartCard";
+import { ChartTooltip } from "../components/ChartTooltip";
 import PageHeader from "../components/PageHeader";
 import { Skeleton } from "../components/Skeleton";
+import type { AnalyticsFullData, AnalyticsMetricParts, AnalyticsMetricEntry } from "../api/types";
 import { useApiQuery } from "../hooks/useApiQuery";
 
 type Range = "1h" | "24h" | "7d";
 
-interface MetricEntry {
-  name: string;
-  avg: number;
-  max: number;
-  samples: number;
-}
-
-interface AnalyticsData {
-  last_hour?: AnalyticsRangeData;
-  last_24h?: AnalyticsRangeData;
-  summary?: { metrics: MetricEntry[] };
-  tool_breakdown?: { total: number; success_series?: TimeSeriesPoint[]; error_series?: TimeSeriesPoint[] };
-  tool_usage_1h?: ToolUsageItem[];
-  tool_usage?: ToolUsageItem[];
-}
-
-interface AnalyticsRangeData {
-  received?: number;
-  errors?: number;
-  error_rate?: number;
-  message_series?: TimeSeriesPoint[];
-  error_series?: TimeSeriesPoint[];
-  latency_series?: Record<string, TimeSeriesPoint[]>;
-}
-
-interface TimeSeriesPoint {
-  ts: number;
-  avg: number;
-  max: number;
-}
-
-interface ToolUsageItem {
-  name: string;
-  total: number;
+/**
+ * What a reader is told a series is, from the parts the engine resolved.
+ *
+ * `provider=ollama` inside `model=ollama/llama3` says the thing twice, so a label already carried by another
+ * one is dropped; the rest are kept because two `tool_calls` series differ only by them.
+ */
+function metricLabel(metric: AnalyticsMetricParts): string {
+  const values = Object.values(metric.labels).filter((value): value is string => Boolean(value));
+  const identity = values.filter((value) => !values.some((other) => other !== value && other.includes(value)));
+  return [metric.family, ...identity, metric.stat].filter(Boolean).join(" · ");
 }
 
 interface CostData {
@@ -82,13 +60,13 @@ const COLORS = Array.from({ length: 10 }, (_, i) => `var(--dt-colors-chart-serie
 export default function Analytics() {
   const [range, setRange] = useState<Range>("1h");
 
-  const { data: full, isLoading: loading } = useApiQuery<AnalyticsData | null>(["analyticsFull"], () => api.analyticsFull().catch((e) => { console.error("analytics load failed:", e); return null; }));
+  const { data: full, isLoading: loading } = useApiQuery<AnalyticsFullData | null>(["analyticsFull"], () => api.analyticsFull().catch((e) => { console.error("analytics load failed:", e); return null; }));
   const { data: costData } = useApiQuery<CostData | null>(["costSummary"], () => api.costSummary(24).catch(() => null));
   const { data: projectMetrics } = useApiQuery<ProjectMetrics | null>(["projectMetrics"], () => api.projectMetrics().catch(() => null));
 
   const data = range === "1h" ? full?.last_hour : full?.last_24h;
   const summaryData = full?.summary;
-  const metricMap: Record<string, MetricEntry> = {};
+  const metricMap: Record<string, AnalyticsMetricEntry> = {};
   if (summaryData?.metrics) {
     for (const m of summaryData.metrics) {
       metricMap[m.name] = m;
@@ -98,7 +76,7 @@ export default function Analytics() {
   const messageSeries = data?.message_series;
   const errorSeries = data?.error_series;
   const errorRate = data?.error_rate ?? 0;
-  const toolBd = full?.tool_breakdown ?? { total: 0, success_series: [], error_series: [] };
+  const toolBd = full?.tool_breakdown ?? { total: 0, success: 0, errors: 0, success_series: [], error_series: [] };
   const toolUsage = range === "1h" ? full?.tool_usage_1h : full?.tool_usage;
   const summaryMetrics = summaryData?.metrics?.slice(0, 30) ?? [];
 
@@ -120,7 +98,7 @@ export default function Analytics() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card)", border: "1px solid var(--dt-colors-border-default)" }}>
+            <div key={i} className="card-bordered p-4">
               <Skeleton width={64} height={12} rounded="md" />
               <Skeleton width={48} height={32} rounded="md" className="mt-2" />
             </div>
@@ -128,7 +106,7 @@ export default function Analytics() {
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {[1, 2].map((i) => (
-            <div key={i} className="rounded-xl p-4" style={{ backgroundColor: "var(--dt-colors-surface-card)", border: "1px solid var(--dt-colors-border-default)" }}>
+            <div key={i} className="card-bordered p-4">
               <Skeleton height={220} rounded="lg" />
             </div>
           ))}
@@ -152,11 +130,7 @@ export default function Analytics() {
               <button
                 key={r.key}
                 onClick={() => setRange(r.key)}
-                className="px-3 py-1.5 rounded-md text-sm font-medium transition"
-                style={{
-                  backgroundColor: range === r.key ? "var(--dt-colors-accent-default)" : "transparent",
-                  color: range === r.key ? "var(--dt-colors-text-on-accent)" : "var(--dt-colors-text-secondary)",
-                }}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${range === r.key ? "bg-accent on-accent" : "text-secondary"}`}
               >
                 {r.label}
               </button>
@@ -198,7 +172,7 @@ export default function Analytics() {
                     <XAxis dataKey="name" stroke="var(--dt-colors-text-secondary)" fontSize={10} />
                     <YAxis stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                     <Tooltip
-                      contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
+                      content={<ChartTooltip />}
                     />
                     <Bar dataKey="code" fill="var(--dt-colors-chart-series-1)" radius={[4, 4, 0, 0]} name="Code Lines" />
                   </BarChart>
@@ -218,7 +192,7 @@ export default function Analytics() {
                     <XAxis type="number" stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                     <YAxis type="category" dataKey="name" stroke="var(--dt-colors-text-secondary)" fontSize={10} width={100} />
                     <Tooltip
-                      contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
+                      content={<ChartTooltip />}
                     />
                     <Bar dataKey="count" fill="var(--dt-colors-chart-series-4)" radius={[0, 4, 4, 0]} name="References" />
                   </BarChart>
@@ -264,8 +238,7 @@ export default function Analytics() {
                 <XAxis dataKey="ts" tickFormatter={(v) => new Date(Number(v) * 1000).toLocaleTimeString()} stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                 <YAxis stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
-                  labelFormatter={(v) => new Date(Number(v) * 1000).toLocaleString()}
+                  content={<ChartTooltip formatLabel={(v) => new Date(Number(v) * 1000).toLocaleString()} />}
                 />
                 <Line type="monotone" dataKey="avg" stroke="var(--dt-colors-chart-series-1)" strokeWidth={2} dot={false} name="Avg" activeDot={{ r: 4 }} />
                 <Line type="monotone" dataKey="max" stroke="var(--dt-colors-chart-series-5)" strokeWidth={1} dot={false} name="Max" strokeDasharray="4 2" />
@@ -283,8 +256,7 @@ export default function Analytics() {
                 <XAxis dataKey="ts" tickFormatter={(v) => new Date(Number(v) * 1000).toLocaleTimeString()} stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                 <YAxis stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
-                  labelFormatter={(v) => new Date(Number(v) * 1000).toLocaleString()}
+                  content={<ChartTooltip formatLabel={(v) => new Date(Number(v) * 1000).toLocaleString()} />}
                 />
                 <Line type="monotone" dataKey="avg" stroke="var(--dt-colors-status-error)" strokeWidth={2} dot={false} name="Avg" activeDot={{ r: 4 }} />
                 <Line type="monotone" dataKey="max" stroke="var(--dt-colors-chart-series-5)" strokeWidth={1} dot={false} name="Max" strokeDasharray="4 2" />
@@ -306,8 +278,7 @@ export default function Analytics() {
                 <XAxis dataKey="ts" tickFormatter={(v) => new Date(Number(v) * 1000).toLocaleTimeString()} stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                 <YAxis stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
-                  labelFormatter={(v) => new Date(Number(v) * 1000).toLocaleString()}
+                  content={<ChartTooltip formatLabel={(v) => new Date(Number(v) * 1000).toLocaleString()} />}
                 />
                 <Line type="monotone" dataKey="success" stroke="var(--dt-colors-status-success)" strokeWidth={2} dot={false} name="Success" />
                 <Line type="monotone" dataKey="error" stroke="var(--dt-colors-status-error)" strokeWidth={2} dot={false} name="Error" />
@@ -322,10 +293,11 @@ export default function Analytics() {
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
                 <Pie
-                  data={toolUsage.slice(0, 10).map((t, i: number) => {
-                    const short = t.name.replace("raven_tool_calls_total{tool=", "").replace(/}$/, "").replace(/,category=.*/, "");
-                    return { name: short.length > 25 ? short.slice(0, 22) + "..." : short, value: t.total, fill: COLORS[i % COLORS.length] };
-                  })}
+                  data={toolUsage.slice(0, 10).map((t, i: number) => ({
+                    name: t.name.length > 25 ? t.name.slice(0, 22) + "..." : t.name,
+                    value: t.total,
+                    fill: COLORS[i % COLORS.length],
+                  }))}
                   dataKey="value"
                   nameKey="name"
                   cx="50%"
@@ -338,7 +310,7 @@ export default function Analytics() {
                   ))}
                 </Pie>
                 <Tooltip
-                  contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
+                  content={<ChartTooltip />}
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -350,17 +322,17 @@ export default function Analytics() {
           <ChartCard title="Top Tools by Call Count">
             <ResponsiveContainer width="100%" height={280}>
               <BarChart
-                data={toolUsage.slice(0, 15).map((t) => {
-                  const short = t.name.replace("raven_tool_calls_total{tool=", "").replace(/}$/, "").replace(/,category=.*/, "");
-                  return { name: short.length > 20 ? short.slice(0, 17) + "..." : short, calls: t.total };
-                })}
+                data={toolUsage.slice(0, 15).map((t) => ({
+                  name: t.name.length > 20 ? t.name.slice(0, 17) + "..." : t.name,
+                  calls: t.total,
+                }))}
                 layout="vertical"
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
                 <XAxis type="number" stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                 <YAxis type="category" dataKey="name" stroke="var(--dt-colors-text-secondary)" fontSize={10} width={150} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
+                  content={<ChartTooltip />}
                 />
                 <Bar dataKey="calls" fill="var(--dt-colors-chart-series-1)" radius={[0, 4, 4, 0]} />
               </BarChart>
@@ -373,20 +345,16 @@ export default function Analytics() {
           <ChartCard title="Latency / Response Time (avg)">
             <ResponsiveContainer width="100%" height={250}>
               <BarChart
-                data={latencyMetrics.slice(0, 15).map((m) => ({
-                  name: m.name.replace("raven_", "").length > 25
-                    ? m.name.replace("raven_", "").slice(0, 22) + "..."
-                    : m.name.replace("raven_", ""),
-                  fullName: m.name,
-                  value: m.avg,
-                }))}
+                data={latencyMetrics.slice(0, 15).map((m) => {
+                  const label = metricLabel(m);
+                  return { name: label.length > 25 ? `${label.slice(0, 22)}...` : label, fullName: m.name, value: m.avg };
+                })}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
                 <XAxis dataKey="name" stroke="var(--dt-colors-text-secondary)" fontSize={10} angle={-30} textAnchor="end" height={60} />
                 <YAxis stroke="var(--dt-colors-text-secondary)" fontSize={11} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
-                  labelFormatter={(v, payload: readonly { payload?: { fullName?: string } }[]) => payload?.[0]?.payload?.fullName || v}
+                  content={<ChartTooltip formatLabel={(v, items) => String(items[0]?.payload?.fullName ?? v ?? "")} />}
                 />
                 <Bar dataKey="value" fill="var(--dt-colors-chart-series-3)" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -417,7 +385,7 @@ export default function Analytics() {
                   ))}
                 </Pie>
                 <Tooltip
-                  contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 12 }}
+                  content={<ChartTooltip />}
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -433,7 +401,7 @@ export default function Analytics() {
             <MetricCard label="Total Cost" value={costData.total_cost != null ? `$${costData.total_cost.toFixed(4)}` : "—"} />
             <MetricCard label="Daily Cost" value={costData.daily_cost != null ? `$${costData.daily_cost.toFixed(4)}` : "—"} />
             <MetricCard label="Monthly Cost" value={costData.monthly_cost != null ? `$${costData.monthly_cost.toFixed(4)}` : "—"} />
-            <MetricCard label="Budget Exceeded" value={costData.budget_exceeded ? "⚠  Yes" : "No"} danger={costData.budget_exceeded} />
+            <MetricCard label="Budget Exceeded" value={costData.budget_exceeded ? "Yes" : "No"} danger={costData.budget_exceeded} />
           </div>
         </div>
       )}
@@ -446,10 +414,10 @@ export default function Analytics() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-tertiary">
-                  <th className="text-left pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card)" }}>Metric Name</th>
-                  <th className="text-right pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card)" }}>Avg</th>
-                  <th className="text-right pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card)" }}>Max</th>
-                  <th className="text-right pb-2 font-medium sticky top-0" style={{ backgroundColor: "var(--dt-colors-surface-card)" }}>Samples</th>
+                  <th className="text-left pb-2 font-medium sticky top-0 bg-card">Metric Name</th>
+                  <th className="text-right pb-2 font-medium sticky top-0 bg-card">Avg</th>
+                  <th className="text-right pb-2 font-medium sticky top-0 bg-card">Max</th>
+                  <th className="text-right pb-2 font-medium sticky top-0 bg-card">Samples</th>
                 </tr>
               </thead>
               <tbody>
@@ -468,20 +436,20 @@ export default function Analytics() {
       )}
 
       {/* Latency Series Detail */}
-      {data?.latency_series && Object.keys(data.latency_series).length > 0 && (
+      {data?.latency_series && data.latency_series.length > 0 && (
         <div className="card">
           <h2 className="text-lg font-semibold mb-3">Latency Detail Series</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {Object.entries(data.latency_series).slice(0, 4).map(([name, series]) =>
-              series?.length > 0 ? (
-                <ChartCard key={name} title={`Latency series ${name}`} className="">
+            {data.latency_series.slice(0, 4).map((entry) =>
+              entry.series.length > 0 ? (
+                <ChartCard key={entry.metric} title={metricLabel(entry)} className="">
                   <ResponsiveContainer width="100%" height={150}>
-                    <LineChart data={series}>
+                    <LineChart data={entry.series}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--dt-colors-border-default)" />
                       <XAxis dataKey="ts" tickFormatter={(v: number) => new Date(Number(v) * 1000).toLocaleTimeString()} stroke="var(--dt-colors-text-secondary)" fontSize={10} />
                       <YAxis stroke="var(--dt-colors-text-secondary)" fontSize={10} />
                       <Tooltip
-                        contentStyle={{ backgroundColor: "var(--dt-colors-bg-secondary)", border: "1px solid var(--dt-colors-border-default)", borderRadius: 8, fontSize: 11 }}
+                        content={<ChartTooltip />}
                       />
                       <Line type="monotone" dataKey="avg" stroke="var(--dt-colors-chart-series-2)" strokeWidth={1.5} dot={false} name="Avg" />
                       <Line type="monotone" dataKey="max" stroke="var(--dt-colors-chart-series-6)" strokeWidth={1} dot={false} name="Max" strokeDasharray="3 1" />
@@ -499,14 +467,9 @@ export default function Analytics() {
 
 function MetricCard({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
   return (
-    <div className="stat-card">
+    <div className={`stat-card ${danger ? "stat-card-danger" : ""}`}>
       <div className="stat-card-label">{label}</div>
-      <div
-        className="stat-card-value"
-        style={{ color: danger ? "var(--dt-colors-danger-default)" : "inherit" }}
-      >
-        {value}
-      </div>
+      <div className="stat-card-value">{value}</div>
     </div>
   );
 }

@@ -30,13 +30,13 @@ export default function ComponentLibrary() {
           <p className="text-xs mt-0.5 text-tertiary">{desc}</p>
         </div>
         <button onClick={() => copyCode(code, title)}
-          className="text-[11px] px-2 py-1 rounded shrink-0 transition bg-tertiary text-tertiary">
+          className="text-caption px-2 py-1 rounded shrink-0 transition bg-tertiary text-tertiary">
           {copied === title ? "Copied!" : "Code"}
         </button>
       </div>
       {children}
       {copied === title && (
-        <div className="mt-3 p-2 rounded text-xs font-mono whitespace-pre-wrap max-h-48 overflow-auto" style={{ backgroundColor: "var(--dt-colors-bg-primary)", color: "var(--dt-colors-text-secondary)", border: "1px solid var(--dt-colors-border-default)" }}>
+        <div className="mt-3 p-2 rounded text-xs font-mono whitespace-pre-wrap max-h-48 overflow-auto border border-default bg-primary text-secondary">
           {code}
         </div>
       )}
@@ -47,7 +47,7 @@ export default function ComponentLibrary() {
     <div className="max-w-4xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Layers className="w-6 h-6" style={{ color: "var(--dt-colors-accent-default)" }} />
+          <Layers className="w-6 h-6 text-accent" />
           Component Library
         </h1>
         <p className="text-sm mt-1 text-tertiary">
@@ -64,7 +64,7 @@ export default function ComponentLibrary() {
             <h3 className="text-lg font-semibold">Heading 3 (text-lg font-semibold)</h3>
             <p className="text-sm">Body text (text-sm) — the standard paragraph style.</p>
             <p className="text-xs text-tertiary">Caption (text-xs, tertiary colour)</p>
-            <p className="text-[11px] font-mono px-1.5 py-0.5 rounded inline-block bg-tertiary">Tag / badge text (11px monospace)</p>
+            <p className="text-caption font-mono px-1.5 py-0.5 rounded inline-block bg-tertiary">Tag / badge text (11px monospace)</p>
           </div>
         ), `<h1 className="text-2xl font-bold">...</h1>\n<h2 className="text-xl font-semibold">...</h2>\n<p className="text-sm">...</p>\n<p className="text-xs text-tertiary">...</p>`)}
 
@@ -72,7 +72,7 @@ export default function ComponentLibrary() {
         {section("Buttons", "Primary, secondary, ghost, and danger variants", (
           <div className="flex flex-wrap gap-3 items-center">
             <button className="px-4 py-2 rounded-lg text-sm font-medium bg-accent on-accent">Primary</button>
-            <button className="px-4 py-2 rounded-lg text-sm font-medium bg-tertiary text-primary border-default">Secondary</button>
+            <button className="px-4 py-2 rounded-lg text-sm font-medium bg-tertiary text-primary border border-default">Secondary</button>
             <button className="px-4 py-2 rounded-lg text-sm font-medium text-secondary">Ghost</button>
             <button className="px-4 py-2 rounded-lg text-sm font-medium bg-danger-subtle text-danger">Danger</button>
             <button disabled className="px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 bg-accent on-accent">Disabled</button>
@@ -85,26 +85,26 @@ export default function ComponentLibrary() {
         {/* Inputs */}
         {section("Inputs & Forms", "Text inputs, selects, and textareas with theme-aware styling", (
           <div className="space-y-3 max-w-sm">
-            <input placeholder="Text input" className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
-            <input type="number" placeholder="Number" className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
-            <select className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default">
+            <input placeholder="Text input" className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border border-default" />
+            <input type="number" placeholder="Number" className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border border-default" />
+            <select className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border border-default">
               <option>Option A</option>
               <option>Option B</option>
             </select>
-            <textarea placeholder="Textarea" rows={3} className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border-default" />
+            <textarea placeholder="Textarea" rows={3} className="w-full px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border border-default" />
           </div>
-        ), `<input className="px-3 py-2 rounded-lg text-sm"\n  style={{ backgroundColor: "var(--dt-colors-bg-tertiary)",\n    color: "var(--dt-colors-text-primary)",\n    border: "1px solid var(--dt-colors-border-default)" }} />`)}
+        ), `<input className="px-3 py-2 rounded-lg text-sm bg-tertiary text-primary border border-default" />`)}
 
         {/* Badges */}
         {section("Badges & Tags", "Inline status and label indicators", (
           <div className="flex flex-wrap gap-2 items-center">
-            <span className="text-[11px] px-1.5 py-0.5 rounded bg-accent on-accent">Primary</span>
-            <span className="text-[11px] px-1.5 py-0.5 rounded btn-secondary-text">Default</span>
-            <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "color-mix(in srgb, var(--dt-colors-status-success) 15%, transparent)", color: "var(--dt-colors-success-default)" }}>Success</span>
-            <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "color-mix(in srgb, var(--dt-colors-status-warning) 15%, transparent)", color: "var(--dt-colors-warning-default)" }}>Warning</span>
-            <span className="text-[11px] px-1.5 py-0.5 rounded bg-danger-subtle text-danger">Danger</span>
+            <span className="text-caption px-1.5 py-0.5 rounded bg-accent on-accent">Primary</span>
+            <span className="text-caption px-1.5 py-0.5 rounded btn-secondary-text">Default</span>
+            <span className="text-caption px-1.5 py-0.5 rounded bg-success-muted text-success">Success</span>
+            <span className="text-caption px-1.5 py-0.5 rounded bg-warning-muted text-warning">Warning</span>
+            <span className="text-caption px-1.5 py-0.5 rounded bg-danger-muted text-danger">Danger</span>
           </div>
-        ), `<span className="text-[11px] px-1.5 py-0.5 rounded bg-accent on-accent">Label</span>\n<span className="badge badge-success">Success</span>\n<span className="badge badge-warning">Warning</span>`)}
+        ), `<span className="text-caption px-1.5 py-0.5 rounded bg-accent on-accent">Primary</span>\n<span className="text-caption px-1.5 py-0.5 rounded bg-success-muted text-success">Success</span>\n<span className="text-caption px-1.5 py-0.5 rounded bg-warning-muted text-warning">Warning</span>`)}
 
         {/* Skeleton variants */}
         {section("Skeletons", "Loading placeholders for all content shapes", (
@@ -131,17 +131,17 @@ export default function ComponentLibrary() {
             </div>
             <div className="rounded-xl p-4 card-bordered">
               <div className="text-xs uppercase tracking-wider text-tertiary">Cost</div>
-              <div className="text-xl font-bold mt-1" style={{ color: "var(--dt-colors-accent-default)" }}>$12.34</div>
+              <div className="text-xl font-bold mt-1 text-accent">$12.34</div>
             </div>
             <div className="rounded-xl p-4 card-bordered">
               <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4" style={{ color: "var(--dt-colors-accent-default)" }} />
+                <Activity className="w-4 h-4 text-accent" />
                 <span className="text-sm font-medium">Metric</span>
               </div>
               <div className="text-2xl font-bold mt-2">89%</div>
             </div>
           </div>
-        ), `<div className="rounded-xl p-4"\n  style={{ backgroundColor: "var(--dt-colors-bg-secondary)",\n    border: "1px solid var(--dt-colors-border-default)" }}>\n  <div className="text-xl font-bold">...</div>\n</div>`)}
+        ), `<div className="rounded-xl p-4 card-bordered">\n  <div className="text-xl font-bold">...</div>\n</div>`)}
 
         {/* TokenUsageBar */}
         {section("TokenUsageBar", "Compact and expanded token/cost/duration display", (
@@ -161,7 +161,7 @@ export default function ComponentLibrary() {
             {iconList.map((Icon, i) => (
               <div key={i} className="flex flex-col items-center gap-1 p-2 rounded-lg bg-tertiary">
                 <Icon className="w-4 h-4 text-secondary" />
-                <span className="text-[10px] text-tertiary">{Icon.displayName || Icon.name || "?"}</span>
+                <span className="text-micro text-tertiary">{Icon.displayName || Icon.name || "?"}</span>
               </div>
             ))}
           </div>
@@ -179,40 +179,39 @@ export default function ComponentLibrary() {
         {section("Alerts & Messages", "Status messages with icons", (
           <div className="space-y-2">
             {[
-              { icon: Info, text: "Info message", color: "var(--dt-colors-accent-default)" },
-              { icon: CheckCircle, text: "Success message", color: "var(--dt-colors-success-default)" },
-              { icon: AlertTriangle, text: "Warning message", color: "var(--dt-colors-warning-default)" },
-              { icon: XCircle, text: "Error message", color: "var(--dt-colors-danger-default)" },
-            ].map(({ icon: Icon, text, color }, i) => (
-              <div key={i} className="flex items-center gap-2 p-3 rounded-lg text-sm" style={{ backgroundColor: `${color}15` }}>
-                <Icon className="w-4 h-4 shrink-0" style={{ color }} />
+              { icon: Info, text: "Info message", ink: "text-info", tint: "bg-info-muted" },
+              { icon: CheckCircle, text: "Success message", ink: "text-success", tint: "bg-success-muted" },
+              { icon: AlertTriangle, text: "Warning message", ink: "text-warning", tint: "bg-warning-muted" },
+              { icon: XCircle, text: "Error message", ink: "text-danger", tint: "bg-danger-muted" },
+            ].map(({ icon: Icon, text, ink, tint }, i) => (
+              <div key={i} className={`flex items-center gap-2 p-3 rounded-lg text-sm ${tint}`}>
+                <Icon className={`w-4 h-4 shrink-0 ${ink}`} />
                 <span>{text}</span>
               </div>
             ))}
           </div>
-        ), `<div className="flex items-center gap-2 p-3 rounded-lg text-sm"\n  style={{ backgroundColor: "color-mix(in srgb, var(--dt-colors-accent-default) 10%, transparent)" }}>\n  <Info className="w-4 h-4" style={{ color: "var(--dt-colors-accent-default)" }} />\n  <span>Info message</span>\n</div>`)}
+        ), `<div className="flex items-center gap-2 p-3 rounded-lg text-sm bg-info-muted">\n  <Info className="w-4 h-4 text-info" />\n  <span>Info message</span>\n</div>`)}
 
         {/* Progress bars */}
         {section("Progress Bars", "Determinate and indeterminate bars", (
           <div className="space-y-2 max-w-md">
             <div className="w-full h-2 rounded-full bg-primary">
-              <div className="h-full rounded-full transition-all" style={{ width: "65%", backgroundColor: "var(--dt-colors-accent-default)" }} />
+              <div className="h-full rounded-full transition-all bg-accent" style={{ width: "65%" }} />
             </div>
             <div className="w-full h-2 rounded-full bg-primary">
-              <div className="h-full rounded-full" style={{ width: "30%", backgroundColor: "var(--dt-colors-warning-default)" }} />
+              <div className="h-full rounded-full bg-warning" style={{ width: "30%" }} />
             </div>
             <div className="w-full h-2 rounded-full bg-primary">
-              <div className="h-full rounded-full" style={{ width: "85%", backgroundColor: "var(--dt-colors-success-default)" }} />
+              <div className="h-full rounded-full bg-success" style={{ width: "85%" }} />
             </div>
           </div>
-        ), `<div className="w-full h-2 rounded-full bg-primary">\n  <div className="h-full rounded-full" style={{ width: "65%", backgroundColor: "var(--dt-colors-accent-default)" }} />\n</div>`)}
+        ), `<div className="w-full h-2 rounded-full bg-primary">\n  <div className="h-full rounded-full bg-accent" style={{ width: "65%" }} />\n</div>`)}
 
         {/* Tab bar */}
         {section("Tab Bar", "Segmented control / tab switcher", (
           <div className="flex gap-1 p-1 rounded-lg max-w-sm bg-tertiary">
             {["Tab 1", "Tab 2", "Tab 3"].map((t, i) => (
-              <button key={t} className="flex-1 px-4 py-1.5 rounded-md text-sm font-medium transition-all"
-                style={{ backgroundColor: i === 0 ? "var(--dt-colors-accent-default)" : "transparent", color: i === 0 ? "var(--dt-colors-text-on-accent)" : "var(--dt-colors-text-secondary)" }}>
+              <button key={t} className={`flex-1 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${i === 0 ? "bg-accent on-accent" : "text-secondary"}`}>
                 {t}
               </button>
             ))}
@@ -222,8 +221,8 @@ export default function ComponentLibrary() {
         {/* Code block */}
         {section("Code Block", "Inline and block code styling", (
           <div className="space-y-2 max-w-lg">
-            <p>Inline code: <code className="px-1.5 py-0.5 rounded text-xs font-mono" style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-accent-default)" }}>npm run dev</code></p>
-            <pre className="p-3 rounded-lg text-xs font-mono overflow-x-auto" style={{ backgroundColor: "var(--dt-colors-bg-primary)", color: "var(--dt-colors-text-secondary)", border: "1px solid var(--dt-colors-border-default)" }}>
+            <p>Inline code: <code className="px-1.5 py-0.5 rounded text-xs font-mono bg-tertiary text-accent">npm run dev</code></p>
+            <pre className="p-3 rounded-lg text-xs font-mono overflow-x-auto border border-default bg-primary text-secondary">
 {`function hello() {
   console.log("Hello, World!");
 }`}

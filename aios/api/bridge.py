@@ -17,6 +17,7 @@ from aios.runtime.adapter import RuntimeAdapter
 from raven.core.agents.truthful_orchestrator import TruthfulResult
 from raven.core.config import data_path, settings
 from raven.core.llm.protocol import LLMClientProtocol
+from raven.core.version import __version__
 from ravencode.agents.multi import MultiAgentOrchestrator, SubTask
 from ravencode.agents.orchestrator import AgentType, Orchestrator
 from ravencode.api.client import AIOSClient
@@ -493,7 +494,7 @@ async def aios_agent_ws(ws: WebSocket):
 
 @router.get("/health")
 async def aios_health():
-    return {"status": "ok", "module": "ai-os-mvp", "version": "0.1.0"}
+    return {"status": "ok", "module": "ai-os-mvp", "version": __version__}
 
 
 @router.get("/metrics")

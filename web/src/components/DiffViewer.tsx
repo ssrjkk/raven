@@ -1,3 +1,4 @@
+import { FileDiff } from "lucide-react";
 import { memo, useMemo } from "react";
 
 interface DiffLine {
@@ -20,13 +21,20 @@ interface Props {
   maxHeight?: string;
 }
 
+/** The three states a diff row has, each with the tint, the ink and the sign it reports with. */
+const DIFF_KIND: Record<DiffLine["type"], { tint: string; ink: string; sign: string }> = {
+  add: { tint: "diff-add", ink: "text-success", sign: "+" },
+  del: { tint: "diff-del", ink: "text-danger", sign: "-" },
+  ctx: { tint: "", ink: "text-primary", sign: " " },
+};
+
 const DiffViewer = memo(function DiffViewer({ diff, files, singlePane, maxHeight = "70vh" }: Props) {
   const parsed = useMemo(() => parseDiff(diff), [diff]);
 
   if (!diff) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-sm text-tertiary">
-        <span className="text-2xl mb-2">⇄</span>
+        <FileDiff size={22} className="mb-2" />
         <span>No diff to display</span>
       </div>
     );
@@ -42,8 +50,8 @@ const DiffViewer = memo(function DiffViewer({ diff, files, singlePane, maxHeight
           {files.map((f) => (
             <span key={f.path} className="font-mono text-tertiary">
               {f.path}
-              {f.added > 0 && <span className="ml-1" style={{ color: "var(--dt-colors-status-success)" }}>+{f.added}</span>}
-              {f.deleted > 0 && <span className="ml-1" style={{ color: "var(--dt-colors-status-error)" }}>-{f.deleted}</span>}
+              {f.added > 0 && <span className="ml-1 text-success">+{f.added}</span>}
+              {f.deleted > 0 && <span className="ml-1 text-danger">-{f.deleted}</span>}
             </span>
           ))}
         </div>
@@ -51,7 +59,7 @@ const DiffViewer = memo(function DiffViewer({ diff, files, singlePane, maxHeight
 
       <div className="overflow-auto" style={{ maxHeight }}>
         {parsed.length === 0 ? (
-          <pre className="p-4 text-xs font-mono whitespace-pre-wrap" style={{ color: "var(--dt-colors-text-secondary)", backgroundColor: "var(--dt-colors-bg-primary)" }}>
+          <pre className="p-4 text-xs font-mono whitespace-pre-wrap text-secondary bg-primary">
             {diff.slice(0, 10000)}
           </pre>
         ) : singlePane ? (
@@ -71,21 +79,18 @@ function SinglePaneView({ lines }: { lines: DiffLine[] }) {
     <table className="w-full text-xs font-mono border-collapse">
       <tbody>
         {lines.map((line, i) => {
-          let bg = "transparent";
-          let prefix = " ";
-          if (line.type === "add") { bg = "var(--dt-colors-status-success-bg)"; prefix = "+"; }
-          else if (line.type === "del") { bg = "var(--dt-colors-status-error-bg)"; prefix = "-"; }
+          const kind = DIFF_KIND[line.type];
           return (
             <tr key={i}>
-              <td className="select-none text-right px-2 py-0 w-12 align-top" style={{ color: "var(--dt-colors-text-tertiary)", backgroundColor: "var(--dt-colors-bg-secondary)", borderRight: "1px solid var(--dt-colors-border-default)" }}>
+              <td className="diff-gutter select-none text-right px-2 py-0 w-12 align-top">
                 {line.type === "ctx" ? line.oldLine : ""}
               </td>
-              <td className="select-none text-right px-2 py-0 w-12 align-top" style={{ color: "var(--dt-colors-text-tertiary)", backgroundColor: "var(--dt-colors-bg-secondary)", borderRight: "1px solid var(--dt-colors-border-default)" }}>
+              <td className="diff-gutter select-none text-right px-2 py-0 w-12 align-top">
                 {line.type === "ctx" ? line.newLine : ""}
               </td>
-              <td className="px-2 py-0 align-top whitespace-pre" style={{ backgroundColor: bg }}>
-                <span style={{ color: line.type === "add" ? "var(--dt-colors-status-success)" : line.type === "del" ? "var(--dt-colors-status-error)" : "var(--dt-colors-text-primary)" }}>
-                  {prefix}{escapeHtml(line.content)}
+              <td className={`px-2 py-0 align-top whitespace-pre ${kind.tint}`}>
+                <span className={kind.ink}>
+                  {kind.sign}{line.content}
                 </span>
               </td>
             </tr>
@@ -101,55 +106,41 @@ function SideBySideView({ lines }: { lines: DiffLine[] }) {
     <table className="w-full text-xs font-mono border-collapse">
       <thead>
         <tr className="bg-secondary">
-          <th className="text-right px-2 py-1 w-12 font-normal" style={{ color: "var(--dt-colors-text-tertiary)", borderRight: "1px solid var(--dt-colors-border-default)" }}>Old</th>
-          <th className="text-right px-2 py-1 w-12 font-normal" style={{ color: "var(--dt-colors-text-tertiary)", borderRight: "1px solid var(--dt-colors-border-default)" }}>New</th>
+          <th className="diff-gutter text-right px-2 py-1 w-12 font-normal">Old</th>
+          <th className="diff-gutter text-right px-2 py-1 w-12 font-normal">New</th>
           <th className="text-left px-2 py-1 font-normal text-tertiary">&nbsp;</th>
-          <th className="text-right px-2 py-1 w-12 font-normal" style={{ color: "var(--dt-colors-text-tertiary)", borderRight: "1px solid var(--dt-colors-border-default)" }}>Old</th>
-          <th className="text-right px-2 py-1 w-12 font-normal" style={{ color: "var(--dt-colors-text-tertiary)", borderRight: "1px solid var(--dt-colors-border-default)" }}>New</th>
+          <th className="diff-gutter text-right px-2 py-1 w-12 font-normal">Old</th>
+          <th className="diff-gutter text-right px-2 py-1 w-12 font-normal">New</th>
           <th className="text-left px-2 py-1 font-normal text-tertiary">&nbsp;</th>
         </tr>
       </thead>
       <tbody>
         {chunkLines(lines).map((chunk, ci) => (
           <tr key={ci}>
-            {chunk.left ? (
-              <>
-                <td className="text-right px-2 py-0 align-top w-12 select-none" style={{ color: "var(--dt-colors-text-tertiary)", backgroundColor: "var(--dt-colors-bg-secondary)", borderRight: "1px solid var(--dt-colors-border-default)" }}>
-                  {chunk.left.oldLine || ""}
-                </td>
-                <td className="text-right px-2 py-0 align-top w-12 select-none" style={{ color: "var(--dt-colors-text-tertiary)", backgroundColor: "var(--dt-colors-bg-secondary)", borderRight: "1px solid var(--dt-colors-border-default)" }}>
-                  {chunk.left.newLine || ""}
-                </td>
-                <td className="px-2 py-0 align-top whitespace-pre" style={{ backgroundColor: chunk.left.type === "add" ? "var(--dt-colors-status-success-bg)" : chunk.left.type === "del" ? "var(--dt-colors-status-error-bg)" : "transparent" }}>
-                  <span style={{ color: chunk.left.type === "add" ? "var(--dt-colors-status-success)" : chunk.left.type === "del" ? "var(--dt-colors-status-error)" : "var(--dt-colors-text-primary)" }}>
-                    {chunk.left.type === "add" ? "+" : chunk.left.type === "del" ? "-" : " "}{escapeHtml(chunk.left.content)}
-                  </span>
-                </td>
-              </>
-            ) : (
-              <td colSpan={3} />
-            )}
-            {chunk.right ? (
-              <>
-                <td className="text-right px-2 py-0 align-top w-12 select-none" style={{ color: "var(--dt-colors-text-tertiary)", backgroundColor: "var(--dt-colors-bg-secondary)", borderRight: "1px solid var(--dt-colors-border-default)" }}>
-                  {chunk.right.oldLine || ""}
-                </td>
-                <td className="text-right px-2 py-0 align-top w-12 select-none" style={{ color: "var(--dt-colors-text-tertiary)", backgroundColor: "var(--dt-colors-bg-secondary)", borderRight: "1px solid var(--dt-colors-border-default)" }}>
-                  {chunk.right.newLine || ""}
-                </td>
-                <td className="px-2 py-0 align-top whitespace-pre" style={{ backgroundColor: chunk.right.type === "add" ? "var(--dt-colors-status-success-bg)" : chunk.right.type === "del" ? "var(--dt-colors-status-error-bg)" : "transparent" }}>
-                  <span style={{ color: chunk.right.type === "add" ? "var(--dt-colors-status-success)" : chunk.right.type === "del" ? "var(--dt-colors-status-error)" : "var(--dt-colors-text-primary)" }}>
-                    {chunk.right.type === "add" ? "+" : chunk.right.type === "del" ? "-" : " "}{escapeHtml(chunk.right.content)}
-                  </span>
-                </td>
-              </>
-            ) : (
-              <td colSpan={3} />
-            )}
+            <DiffCells line={chunk.left} />
+            <DiffCells line={chunk.right} />
           </tr>
         ))}
       </tbody>
     </table>
+  );
+}
+
+/** One half of a side-by-side row: the two gutter numbers and the line itself, or the gap where they would be. */
+function DiffCells({ line }: { line: DiffLine | null }) {
+  if (!line) return <td colSpan={3} />;
+  const kind = DIFF_KIND[line.type];
+  return (
+    <>
+      <td className="diff-gutter text-right px-2 py-0 w-12 select-none align-top">{line.oldLine || ""}</td>
+      <td className="diff-gutter text-right px-2 py-0 w-12 select-none align-top">{line.newLine || ""}</td>
+      <td className={`px-2 py-0 align-top whitespace-pre ${kind.tint}`}>
+        <span className={kind.ink}>
+          {kind.sign}
+          {line.content}
+        </span>
+      </td>
+    </>
   );
 }
 
@@ -213,8 +204,4 @@ function chunkLines(lines: DiffLine[]): Chunk[] {
     right.length = 0;
   }
   return result;
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

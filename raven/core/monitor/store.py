@@ -54,6 +54,14 @@ CREATE TABLE IF NOT EXISTS monitor_checks (
 CREATE INDEX IF NOT EXISTS idx_monitor_status ON monitors(status);
 CREATE INDEX IF NOT EXISTS idx_monitor_checks_monitor_id ON monitor_checks(monitor_id);
 CREATE INDEX IF NOT EXISTS idx_monitor_checks_mid_at ON monitor_checks(monitor_id, checked_at);
+
+CREATE TABLE IF NOT EXISTS rss_seen_items (
+    guid TEXT NOT NULL,
+    monitor_id TEXT NOT NULL,
+    seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (guid, monitor_id)
+);
+CREATE INDEX IF NOT EXISTS idx_rss_seen_items_monitor_seen ON rss_seen_items(monitor_id, seen_at);
 CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 """
 
@@ -91,7 +99,15 @@ CREATE TABLE IF NOT EXISTS monitor_checks (
 CREATE INDEX IF NOT EXISTS idx_monitor_status ON monitors(status);
 CREATE INDEX IF NOT EXISTS idx_monitor_checks_monitor_id ON monitor_checks(monitor_id);
 CREATE INDEX IF NOT EXISTS idx_monitor_checks_mid_at ON monitor_checks(monitor_id, checked_at);
-CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW());
+
+CREATE TABLE IF NOT EXISTS rss_seen_items (
+    guid TEXT NOT NULL,
+    monitor_id TEXT NOT NULL,
+    seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (guid, monitor_id)
+);
+CREATE INDEX IF NOT EXISTS idx_rss_seen_items_monitor_seen ON rss_seen_items(monitor_id, seen_at);
+CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT NOW());
 """
 
 _MONITOR_ADDED_COLUMNS = (
@@ -313,6 +329,27 @@ class MonitorStore(BaseStore):
             response_time_ms=check.response_time_ms,
         )
         await self.save_check(mc)
+
+    async def rss_mark_seen(self, monitor_id: str, guid: str) -> bool:
+        """Record one feed entry for one monitor; True means the monitor had never seen it.
+
+        The upsert is the dedupe, so there is no read-then-write window and nothing to keep in a process:
+        a restart reads the same rows back. `seen_at` is stamped by the database, which is also the column
+        the retention sweep ages and caps this table by.
+        """
+        inserted = await self._execute(
+            "INSERT INTO rss_seen_items (guid, monitor_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+            (guid, monitor_id),
+        )
+        return bool(inserted)
+
+    async def rss_has_seen_items(self, monitor_id: str) -> bool:
+        """Whether this monitor has ever recorded a feed entry, which is what separates a first poll from
+        a restarted one: the first poll baselines the feed instead of alerting the whole of it."""
+        row = await self._fetchone(
+            "SELECT 1 AS present FROM rss_seen_items WHERE monitor_id = ? LIMIT 1", (monitor_id,)
+        )
+        return row is not None
 
     def _row_to_monitor(self, row: Any) -> Monitor | None:
         try:

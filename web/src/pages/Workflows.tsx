@@ -1,7 +1,55 @@
-import { useEffect, useRef,useState } from "react";
+import {
+  Activity,
+  BarChart3,
+  Bot,
+  Brain,
+  Calendar,
+  ChevronDown,
+  ClipboardList,
+  Database,
+  Globe,
+  GripVertical,
+  type LucideIcon,
+  Megaphone,
+  Play,
+  Plus,
+  Save,
+  Search,
+  Shield,
+  Siren,
+  Sliders,
+  Sparkles,
+  Sunrise,
+  TrendingUp,
+  Workflow,
+  X,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
+
+const TEMPLATE_ICONS: Record<string, LucideIcon> = {
+  activity: Activity,
+  "bar-chart": BarChart3,
+  bot: Bot,
+  brain: Brain,
+  clipboard: ClipboardList,
+  database: Database,
+  globe: Globe,
+  megaphone: Megaphone,
+  search: Search,
+  shield: Shield,
+  siren: Siren,
+  sunrise: Sunrise,
+  "trending-up": TrendingUp,
+};
+
+/** The mark a template asks for by name; `Workflow` is what an unknown name gets. */
+function TemplateMark({ icon }: { icon?: string }) {
+  const Mark = TEMPLATE_ICONS[icon ?? ""] ?? Workflow;
+  return <Mark size={18} className="flex-shrink-0 text-secondary" />;
+}
 
 interface TemplateStep {
   description: string;
@@ -228,14 +276,12 @@ export default function Workflows() {
           {/* Category filter */}
           <div className="flex gap-2 flex-wrap">
             <button onClick={() => setActiveCat("all")}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${activeCat === "all" ? "border" : ""}`}
-              style={{ backgroundColor: activeCat === "all" ? "var(--dt-colors-accent-muted)" : "var(--dt-colors-bg-secondary)", color: activeCat === "all" ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)", borderColor: activeCat === "all" ? "var(--dt-colors-accent-subtle)" : "transparent" }}>
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition pill ${activeCat === "all" ? "pill-active" : ""}`}>
               All
             </button>
             {categories.map((cat) => (
               <button key={cat} onClick={() => setActiveCat(cat)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${activeCat === cat ? "border" : ""}`}
-                style={{ backgroundColor: activeCat === cat ? "var(--dt-colors-accent-muted)" : "var(--dt-colors-bg-secondary)", color: activeCat === cat ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)", borderColor: activeCat === cat ? "var(--dt-colors-accent-subtle)" : "transparent" }}>
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition pill ${activeCat === cat ? "pill-active" : ""}`}>
                 {cat.charAt(0).toUpperCase() + cat.slice(1)}
               </button>
             ))}
@@ -250,7 +296,7 @@ export default function Workflows() {
                   className="w-full flex items-center justify-between p-4 text-left"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-xl">{t.icon || "⚙"}</span>
+                    <TemplateMark icon={t.icon} />
                     <div>
                       <div className="font-semibold">{t.name}</div>
                       <div className="text-sm text-tertiary">{t.description}</div>
@@ -265,7 +311,7 @@ export default function Workflows() {
                     <span className="chip">
                       {t.trigger}
                     </span>
-                    <span className={`text-lg transition text-tertiary ${expanded === t.id ? "rotate-180" : ""}`}>▾</span>
+                    <ChevronDown size={16} className={`transition text-tertiary ${expanded === t.id ? "rotate-180" : ""}`} />
                   </div>
                 </button>
 
@@ -301,12 +347,12 @@ export default function Workflows() {
                               </span>
                               <span className="text-primary">{step.description}</span>
                               {step.tool && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] bg-tertiary text-tertiary">
+                                <span className="px-1.5 py-0.5 rounded text-micro bg-tertiary text-tertiary">
                                   {step.tool}
                                 </span>
                               )}
                               {Object.keys(step.params).length > 0 && (
-                                <span className="text-[10px] text-tertiary">
+                                <span className="text-micro text-tertiary">
                                   {Object.entries(step.params).map(([k, v]) => `${k}=${v}`).join(", ")}
                                 </span>
                               )}
@@ -350,15 +396,15 @@ export default function Workflows() {
                     {/* Actions */}
                     <div className="flex gap-3 pt-2 flex-wrap">
                       <button onClick={() => runNow(t)} className="btn-primary">
-                        ▶ Run Now
+                        <Play size={15} className="mr-1" /> Run Now
                       </button>
                       {(t.trigger === "scheduled" || t.trigger === "interval") && (
                         <button onClick={() => schedule(t)} className="btn-outline">
-                          📅 Schedule
+                          <Calendar size={15} className="mr-1" /> Schedule
                         </button>
                       )}
                       <button onClick={() => openBuilder(t)} className="btn-outline">
-                        🎨 Edit Steps
+                        <Sliders size={15} className="mr-1" /> Edit Steps
                       </button>
                     </div>
 
@@ -371,20 +417,23 @@ export default function Workflows() {
                             {t.steps_goal && (
                               <button onClick={() => generateSteps(t)}
                                 className="px-3 py-1 text-xs rounded transition bg-accent-muted text-accent">
-                                Auto-generate
+                                <Sparkles size={13} className="mr-1" /> Auto-generate
                               </button>
                             )}
                             <button onClick={addStep}
                               className="px-3 py-1 text-xs rounded transition bg-tertiary text-secondary">
-                              + Add Step
+                              <Plus size={13} className="mr-1" /> Add Step
                             </button>
                             <button onClick={() => saveSteps(t)}
                               className="px-3 py-1 text-xs rounded transition bg-accent-muted text-accent">
-                              💾 Save
+                              <Save size={13} className="mr-1" /> Save
                             </button>
-                            <button onClick={closeBuilder}
-                              className="px-3 py-1 text-xs rounded transition bg-tertiary text-tertiary">
-                              ✕
+                            <button
+                              onClick={closeBuilder}
+                              aria-label="Close step builder"
+                              className="px-2 py-1 text-xs rounded transition bg-tertiary text-tertiary"
+                            >
+                              <X size={13} />
                             </button>
                           </div>
                         </div>
@@ -403,14 +452,10 @@ export default function Workflows() {
                               onDragOver={(e) => onDragOver(e, idx)}
                               onDrop={onDrop}
                               onDragEnd={() => { setDragIdx(null); dragOverIdx.current = null; }}
-                              className="flex items-start gap-2 p-3 rounded border"
-                              style={{
-                                backgroundColor: "var(--dt-colors-bg-secondary)",
-                                borderColor: dragIdx === idx ? "var(--dt-colors-accent-default)" : "var(--dt-colors-border-default)",
-                                opacity: dragIdx === idx ? 0.5 : 1,
-                              }}
+                              className={`flex items-start gap-2 p-3 rounded border bg-secondary ${dragIdx === idx ? "border-accent" : "border-default"}`}
+                              style={{ opacity: dragIdx === idx ? 0.5 : 1 }}
                             >
-                              <span className="text-xs font-medium mt-2 w-5 text-center text-tertiary">⠿</span>
+                              <GripVertical size={14} className="mt-2 flex-shrink-0 cursor-grab text-tertiary" />
                               <div className="flex-1 space-y-2">
                                 <div className="flex items-center gap-2">
                                   <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 bg-accent-muted text-accent">
@@ -429,9 +474,12 @@ export default function Workflows() {
                                     value={step.tool ?? ""}
                                     onChange={(e) => updateStep(idx, "tool", e.target.value || null)}
                                   />
-                                  <button onClick={() => removeStep(idx)}
-                                    className="text-xs px-2 py-1 rounded text-tertiary">
-                                    ✕
+                                  <button
+                                    onClick={() => removeStep(idx)}
+                                    aria-label="Remove step"
+                                    className="px-1 py-1 rounded text-tertiary transition hover:text-danger"
+                                  >
+                                    <X size={13} />
                                   </button>
                                 </div>
 
@@ -440,8 +488,8 @@ export default function Workflows() {
                                   {Object.entries(step.params).map(([k, v]) => (
                                     <div key={k} className="flex items-center gap-1">
                                       <input
-                                        className="w-16 px-1.5 py-0.5 rounded border text-[10px]"
-                                        style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+                                        className="w-16 px-1.5 py-0.5 rounded border text-micro bg-primary border-default text-primary"
+
                                         value={k}
                                         onChange={(e) => {
                                           const newKey = e.target.value;
@@ -451,22 +499,25 @@ export default function Workflows() {
                                         }}
                                         placeholder="key"
                                       />
-                                      <span className="text-[10px] text-tertiary">=</span>
+                                      <span className="text-micro text-tertiary">=</span>
                                       <input
-                                        className="w-20 px-1.5 py-0.5 rounded border text-[10px]"
-                                        style={{ backgroundColor: "var(--dt-colors-bg-primary)", borderColor: "var(--dt-colors-border-default)", color: "var(--dt-colors-text-primary)" }}
+                                        className="w-20 px-1.5 py-0.5 rounded border text-micro bg-primary border-default text-primary"
+
                                         value={v}
                                         onChange={(e) => updateStepParam(idx, k, e.target.value)}
                                         placeholder="value"
                                       />
-                                      <button onClick={() => removeStepParam(idx, k)}
-                                        className="text-[10px] text-tertiary">
-                                        ✕
+                                      <button
+                                        onClick={() => removeStepParam(idx, k)}
+                                        aria-label="Remove parameter"
+                                        className="px-1 text-micro text-tertiary transition hover:text-danger"
+                                      >
+                                        <X size={11} />
                                       </button>
                                     </div>
                                   ))}
                                   <button onClick={() => addStepParam(idx)}
-                                    className="text-[10px] px-1.5 py-0.5 rounded text-tertiary bg-tertiary">
+                                    className="text-micro px-1.5 py-0.5 rounded text-tertiary bg-tertiary">
                                     + param
                                   </button>
                                 </div>

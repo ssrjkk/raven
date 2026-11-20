@@ -7,14 +7,20 @@ guard for the "version bump across all modules" promise in CHANGELOG.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import struct
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -44,6 +50,76 @@ VERSION_SURFACES: tuple[tuple[str, str], ...] = (
 def _project_version() -> str:
     data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     return str(data["project"]["version"])
+
+
+# A declaring file can carry the right version and still answer with a different one: `/api/status` and
+# `/api/admin/system/status` reported the string `"1.0.0"`, and `/aios/health` reported `"0.1.0"`, while every
+# file the list above pins said `0.4.8`. These are the answers the console puts on screen, so they are asked,
+# not read out of a source file.
+VERSION_ANSWERS: tuple[tuple[str, Callable[[], str]], ...] = (
+    ("/api/status", lambda: _status_client().get("/api/status").json()["version"]),
+    ("/api/admin/system/status", lambda: _admin_client().get("/api/admin/system/status").json()["version"]),
+    ("/aios/health", lambda: asyncio.run(_aios_health())["version"]),
+)
+
+
+def _status_client() -> TestClient:
+    from raven.core.status_api import create_status_router
+
+    gateway = MagicMock()
+    gateway.channels.list_ids = AsyncMock(return_value=[])
+    gateway.registry.list_agents.return_value = []
+    loader = MagicMock()
+    loader.tools = []
+    app = FastAPI()
+    app.include_router(create_status_router(gateway, loader, asyncio.Event()))
+    return TestClient(app)
+
+
+def _admin_client() -> TestClient:
+    from raven.core.admin_api import create_admin_router
+
+    channels = SimpleNamespace(list_ids=AsyncMock(return_value=[]))
+    registry = SimpleNamespace(list_agents=lambda: [])
+    gateway = SimpleNamespace(is_running=False)
+    app = FastAPI()
+    app.include_router(create_admin_router(lambda: channels, lambda: registry, lambda: gateway))
+    return TestClient(app)
+
+
+async def _aios_health() -> dict[str, Any]:
+    from aios.api.bridge import aios_health
+
+    return cast("dict[str, Any]", await aios_health())
+
+
+@pytest.mark.parametrize(("route", "answer"), VERSION_ANSWERS, ids=[route for route, _ in VERSION_ANSWERS])
+def test_the_version_an_http_surface_answers_is_the_running_products_own(route: str, answer: Callable[[], str]) -> None:
+    expected = _project_version()
+    found = answer()
+    assert found == expected, f"{route} answers version {found!r}, the running package is {expected!r}"
+
+
+#: Sites whose answer must be `raven.core.version` rather than a version typed into the return statement. A
+#: literal here is correct until the next release and silently wrong after it, which is what these two routes
+#: were: the pin fails the moment the literal is written back, not when the version moves.
+VERSION_DERIVED_SITES: tuple[tuple[str, str], ...] = (
+    ("raven/core/status_api.py", r'"version": __version__'),
+    ("raven/core/admin_api.py", r'"version": __version__'),
+    ("aios/api/bridge.py", r'"version": __version__'),
+    ("raven/channels/webchat/channel.py", r'"__VERSION__", __version__'),
+)
+
+
+@pytest.mark.parametrize(
+    ("rel_path", "pattern"), VERSION_DERIVED_SITES, ids=[path for path, _ in VERSION_DERIVED_SITES]
+)
+def test_the_version_answer_is_read_from_the_version_module(rel_path: str, pattern: str) -> None:
+    text = (ROOT / rel_path).read_text(encoding="utf-8")
+    assert re.search(pattern, text), f"{rel_path} no longer answers with raven.core.version.__version__"
+    assert not re.search(r'version"?\s*[:=]\s*"[0-9]+\.[0-9]+\.[0-9]+"', text), (
+        f"{rel_path} both derives the version and carries a version literal"
+    )
 
 
 def _png_size(path: Path) -> tuple[int, int]:
@@ -85,6 +161,81 @@ def test_chrome_manifest_assets_exist() -> None:
     assert missing == [], f"Chrome manifest references missing files: {missing}"
     for declared_size, rel in icons.items():
         assert _png_size(ext_dir / str(rel)) == (int(declared_size), int(declared_size))
+
+
+#: An unpacked extension has no bundler between the source and the browser: a document that asks for a
+#: file the package does not hold gets a silent 404 at load time, and the surface arrives without its
+#: stylesheet, its mark or its type.
+POPUP_DIR = ROOT / "extension" / "src" / "popup"
+#: A `url()` value, quoted or bare. The quoted alternatives have to be matched first and whole: the grain
+#: filter these surfaces inline as `url("data:image/svg+xml,…")` carries its own `filter='url(%23n)'`
+#: inside the quotes, and a value class that stops at the first `)` reads that fragment as a file the
+#: package must ship — which is how the popup was accused of asking for `%23n`.
+_ASSET_REQUEST = re.compile(
+    r"""(?:src|href)="(?P<attr>[^"]+)"|url\(\s*(?:"(?P<dq>[^"]*)"|'(?P<sq>[^']*)'|(?P<bare>[^'")\s]+))\s*\)"""
+)
+_NOT_A_PACKAGED_FILE = re.compile(r"(?:[a-z]+:)?(?://|#|data:)", re.IGNORECASE)
+
+
+def asset_requests(document_text: str) -> list[str]:
+    """The packaged files one popup document asks for, ignoring remote, runtime and inlined URLs."""
+    found: list[str] = []
+    for match in _ASSET_REQUEST.finditer(document_text):
+        ref = next((group for group in match.groups() if group), "")
+        if ref and not _NOT_A_PACKAGED_FILE.match(ref):
+            found.append(ref)
+    return found
+
+
+def popup_documents() -> list[Path]:
+    return sorted(path for path in POPUP_DIR.iterdir() if path.suffix in {".html", ".css", ".js"})
+
+
+def test_the_popup_ships_every_file_its_documents_ask_for() -> None:
+    documents = popup_documents()
+    assert documents, f"{POPUP_DIR.relative_to(ROOT)} holds no documents, so this guard reads nothing"
+    missing = [
+        f"{document.name} asks for {ref}"
+        for document in documents
+        for ref in asset_requests(document.read_text(encoding="utf-8"))
+        if not (POPUP_DIR / ref).is_file()
+    ]
+    assert not missing, "the popup would load these and get nothing:\n" + "\n".join(missing)
+    asked = {ref for document in documents for ref in asset_requests(document.read_text(encoding="utf-8"))}
+    assert "raven.svg" in asked, "the popup header no longer asks for the brand mark the site ships"
+
+
+def test_the_asset_reader_notices_a_request_that_points_nowhere() -> None:
+    markup = (POPUP_DIR / "index.html").read_text(encoding="utf-8")
+    renamed = markup.replace('src="raven.svg"', 'src="bird.svg"')  # the mistake: an asset renamed or edited out
+    assert renamed != markup, "the popup no longer asks for raven.svg, so this proof tests nothing"
+    assert "bird.svg" in asset_requests(renamed), "a renamed asset escaped the reader"
+    assert not (POPUP_DIR / "bird.svg").is_file(), "bird.svg exists, so the planted reference is no violation"
+
+
+def test_the_asset_reader_reads_a_fragment_inside_an_inlined_url_as_bytes_not_as_a_file() -> None:
+    """The grain filter ships inside the stylesheet, and it nests a `url(%23n)` of its own.
+
+    Measured: the popup was failed for asking after `%23n`, a fragment identifier inside a `data:` URI the
+    browser never resolves as a request. Refusing to descend into a quoted value is what this proves, and the
+    bare form still has to be read — otherwise the reader would pass a stylesheet whose fonts were renamed."""
+    css = (POPUP_DIR / "popup.css").read_text(encoding="utf-8")
+    assert 'url("data:' in css and "url(%23n)" in css, (
+        "the popup no longer inlines a URI with a nested url(), so this reads nothing"
+    )
+    assert not [ref for ref in asset_requests(css) if "%23" in ref], (
+        "a fragment inside an inlined URI was read as a packaged file"
+    )
+    assert "fonts/IBMPlexSans-latin.woff2" in asset_requests(css), (
+        "a real font ask stopped being read, so the case above proves nothing"
+    )
+
+    dropped = css.replace("url('fonts/IBMPlexSans-latin.woff2')", "url('fonts/IBMPlexSans-gone.woff2')")
+    assert dropped != css, "the font ask no longer has the shape this proof renames"
+    assert "fonts/IBMPlexSans-gone.woff2" in asset_requests(dropped), "a renamed font file escaped the reader"
+    assert not (POPUP_DIR / "fonts/IBMPlexSans-gone.woff2").is_file(), (
+        "the planted file exists, so the reference is no violation"
+    )
 
 
 def test_vscode_icon_matches_manifest() -> None:

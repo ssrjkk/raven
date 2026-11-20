@@ -133,7 +133,7 @@ export default function DebugPanel() {
     <div className="h-full flex flex-col text-xs font-mono bg-primary text-secondary">
       <div className="px-3 py-1.5 text-xs text-tertiary border-b border-default bg-tertiary flex items-center justify-between">
         <span>Debugger</span>
-        {sessionActive && <span className={`w-2 h-2 rounded-full ${isPaused ? "bg-[var(--dt-colors-status-warning)]" : "bg-[var(--dt-colors-status-success)]"}`} />}
+        {sessionActive && <span className={`w-2 h-2 rounded-full ${isPaused ? "dot-warning" : "dot-success"}`} />}
       </div>
 
       <div className="px-2 py-1.5 border-b border-default flex gap-1 items-center">
@@ -147,26 +147,26 @@ export default function DebugPanel() {
               onKeyDown={e => e.key === "Enter" && startSession()}
             />
             <button onClick={startSession}
-              className="flex items-center gap-1 on-status-success bg-[var(--dt-colors-status-success)] hover:brightness-110 border-none rounded px-2 py-1 cursor-pointer text-xs transition">
+              className="flex items-center gap-1 on-status-success bg-success hover:brightness-110 border-none rounded px-2 py-1 cursor-pointer text-xs transition">
               <Play className="w-3 h-3" /> Start
             </button>
           </div>
         ) : (
           <>
             <button onClick={resume} disabled={!isPaused}
-              className="flex items-center gap-1 bg-tertiary hover:bg-[var(--dt-colors-bg-hover)] disabled:opacity-30 disabled:cursor-not-allowed text-primary border-none rounded px-2 py-1 cursor-pointer text-xs transition">
+              className="flex items-center gap-1 bg-tertiary hover:bg-hover disabled:opacity-30 disabled:cursor-not-allowed text-primary border-none rounded px-2 py-1 cursor-pointer text-xs transition">
               <Play className="w-3 h-3" /> Cont
             </button>
             <button onClick={stepOver} disabled={!isPaused}
-              className="flex items-center gap-1 bg-tertiary hover:bg-[var(--dt-colors-bg-hover)] disabled:opacity-30 disabled:cursor-not-allowed text-primary border-none rounded px-2 py-1 cursor-pointer text-xs transition">
+              className="flex items-center gap-1 bg-tertiary hover:bg-hover disabled:opacity-30 disabled:cursor-not-allowed text-primary border-none rounded px-2 py-1 cursor-pointer text-xs transition">
               <SkipForward className="w-3 h-3" /> Over
             </button>
             <button onClick={stepInto} disabled={!isPaused}
-              className="flex items-center gap-1 bg-tertiary hover:bg-[var(--dt-colors-bg-hover)] disabled:opacity-30 disabled:cursor-not-allowed text-primary border-none rounded px-2 py-1 cursor-pointer text-xs transition">
+              className="flex items-center gap-1 bg-tertiary hover:bg-hover disabled:opacity-30 disabled:cursor-not-allowed text-primary border-none rounded px-2 py-1 cursor-pointer text-xs transition">
               <CornerDownRight className="w-3 h-3" /> Into
             </button>
             <button onClick={stopSession}
-              className="flex items-center gap-1 on-status-error bg-[var(--dt-colors-status-error)] hover:brightness-110 border-none rounded px-2 py-1 cursor-pointer text-xs transition ml-auto">
+              className="flex items-center gap-1 on-status-error bg-danger hover:brightness-110 border-none rounded px-2 py-1 cursor-pointer text-xs transition ml-auto">
               <Square className="w-3 h-3" /> Stop
             </button>
           </>
@@ -175,7 +175,7 @@ export default function DebugPanel() {
 
       {!sessionActive && (
         <div className="px-2 py-1.5 border-b border-default">
-          <div className="text-[10px] text-tertiary mb-1">Breakpoints</div>
+          <div className="text-micro text-tertiary mb-1">Breakpoints</div>
           {breakpoints.map((bp, i) => (
             <div key={i} className="flex items-center gap-1 py-0.5">
               <span className="text-secondary">{bp.file}:{bp.line}</span>
@@ -184,23 +184,23 @@ export default function DebugPanel() {
           ))}
           <div className="flex gap-1 mt-1">
             <input value={bpFile} onChange={e => setBpFile(e.target.value)} placeholder="file.py"
-              className="flex-1 bg-secondary border border-default rounded px-1.5 py-0.5 text-[10px] outline-none text-primary" />
+              className="flex-1 bg-secondary border border-default rounded px-1.5 py-0.5 text-micro outline-none text-primary" />
             <input value={bpLine} onChange={e => setBpLine(e.target.value)} placeholder="line"
-              className="w-14 bg-secondary border border-default rounded px-1.5 py-0.5 text-[10px] outline-none text-primary"
+              className="w-14 bg-secondary border border-default rounded px-1.5 py-0.5 text-micro outline-none text-primary"
               onKeyDown={e => e.key === "Enter" && addBreakpoint()} />
             <button onClick={addBreakpoint}
-              className="bg-tertiary hover:bg-[var(--dt-colors-bg-hover)] text-primary border-none rounded px-1.5 py-0.5 cursor-pointer text-[10px] transition">+</button>
+              className="bg-tertiary hover:bg-hover text-primary border-none rounded px-1.5 py-0.5 cursor-pointer text-micro transition">+</button>
           </div>
         </div>
       )}
 
       {isPaused && (
         <div className="flex-1 overflow-auto">
-          <div className="px-2 py-1 text-[10px] text-tertiary border-b border-default uppercase tracking-wider">Call Stack</div>
+          <div className="px-2 py-1 text-micro text-tertiary border-b border-default uppercase tracking-wider">Call Stack</div>
           <div className="border-b border-default">
             {state?.frames?.map((frame, i) => (
               <button key={i} onClick={() => setSelectedFrame(i)}
-                className={`w-full text-left px-2 py-1 border-none cursor-pointer text-[11px] font-mono transition ${
+                className={`w-full text-left px-2 py-1 border-none cursor-pointer text-caption font-mono transition ${
                   i === selectedFrame ? "bg-accent-muted text-accent" : "bg-transparent text-secondary hover:bg-secondary"
                 }`}>
                 <span className="text-tertiary">#{(state.frames?.length ?? 1) - 1 - i}</span>{" "}
@@ -210,11 +210,11 @@ export default function DebugPanel() {
               </button>
             ))}
             {(!state?.frames || state.frames.length === 0) && (
-              <div className="px-2 py-1 text-tertiary italic text-[10px]">No frames</div>
+              <div className="px-2 py-1 text-tertiary italic text-micro">No frames</div>
             )}
           </div>
 
-          <div className="px-2 py-1 text-[10px] text-tertiary uppercase tracking-wider">Variables</div>
+          <div className="px-2 py-1 text-micro text-tertiary uppercase tracking-wider">Variables</div>
           <div className="px-1">
             {currentFrame?.locals && Object.keys(currentFrame.locals).length > 0 ? (
               Object.entries(currentFrame.locals).map(([key, val]) => {
@@ -232,7 +232,7 @@ export default function DebugPanel() {
                       <span className="text-accent">{key}</span>
                       <span className="text-tertiary">=</span>
                       {isObject && isExpanded ? (
-                        <pre className="text-[10px] text-secondary whitespace-pre-wrap break-all ml-4">{val}</pre>
+                        <pre className="text-micro text-secondary whitespace-pre-wrap break-all ml-4">{val}</pre>
                       ) : (
                         <span className="text-secondary truncate max-w-[200px] block">{val}</span>
                       )}
@@ -241,12 +241,12 @@ export default function DebugPanel() {
                 )
               })
             ) : (
-              <div className="px-2 py-1 text-tertiary italic text-[10px]">No variables</div>
+              <div className="px-2 py-1 text-tertiary italic text-micro">No variables</div>
             )}
           </div>
 
-          <div className="mt-2 px-2 py-1 bg-warning-muted border-t border-[var(--dt-colors-status-warning)]">
-            <div className="text-[10px] text-warning">
+          <div className="mt-2 px-2 py-1 bg-warning-muted border-t border-warning">
+            <div className="text-micro text-warning">
               Paused at {state?.paused_file}:{state?.paused_line}
             </div>
           </div>
@@ -254,8 +254,8 @@ export default function DebugPanel() {
       )}
 
       {state?.error && (
-        <div className="px-2 py-1 bg-danger-muted border-t border-[var(--dt-colors-status-error)]">
-          <pre className="text-[10px] text-danger whitespace-pre-wrap">{state.error}</pre>
+        <div className="px-2 py-1 bg-danger-muted border-t border-error">
+          <pre className="text-micro text-danger whitespace-pre-wrap">{state.error}</pre>
         </div>
       )}
     </div>

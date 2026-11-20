@@ -205,14 +205,14 @@ export default function Providers() {
         {providers.map((p) => (
           <div key={p.name} className="card p-3 flex items-center justify-between">
             <div className="flex items-center gap-3 min-w-0">
-              <span className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center"
-                style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}>
-                <Plug size={16} style={{ color: p.enabled ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-tertiary)" }} />
+              <span className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center bg-tertiary"
+>
+                <Plug size={16} className={p.enabled ? "text-accent" : "text-tertiary"} />
               </span>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{p.name}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-tertiary text-tertiary">{p.type}</span>
+                  <span className="text-micro px-1.5 py-0.5 rounded bg-tertiary text-tertiary">{p.type}</span>
                   {p.enabled ? (
                     <span className="badge badge-success">enabled</span>
                   ) : (
@@ -234,8 +234,8 @@ export default function Providers() {
               <button className="btn-soft px-2.5 py-1 text-xs" onClick={() => openEdit(p)}>
                 <Pencil size={13} className="mr-1" /> Edit
               </button>
-              <button className="btn-soft px-2.5 py-1 text-xs text-danger"
-                style={{ backgroundColor: "var(--dt-colors-status-error-bg)" }}
+              <button className="btn-soft px-2.5 py-1 text-xs text-danger bg-danger-muted"
+
                 onClick={() => { if (window.confirm(`Delete provider ${p.name}?`)) del.mutate(p.name); }}>
                 <Trash2 size={13} className="mr-1" /> Delete
               </button>

@@ -13,6 +13,7 @@ from raven.core.audit import AuditEventType, audit_logger
 from raven.core.config import settings
 from raven.core.health import health
 from raven.core.metrics import metrics
+from raven.core.version import __version__
 
 if TYPE_CHECKING:
     from raven.core.gateway.gateway import Gateway
@@ -36,7 +37,7 @@ def create_status_router(gateway: Gateway, plugin_loader: PluginLoader, stop_eve
             "plugins": len(plugin_loader.tools),
             "agents": gateway.registry.list_agents(),
             "model": settings.default_model,
-            "version": "1.0.0",
+            "version": __version__,
         }
 
     @router.get("/api/agents")

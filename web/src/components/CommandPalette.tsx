@@ -78,7 +78,7 @@ export const CommandPalette = ({ isOpen, onClose }: Props) => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            className="fixed inset-0 bg-scrim backdrop-blur-sm z-50"
           />
 
           <motion.div
@@ -88,7 +88,7 @@ export const CommandPalette = ({ isOpen, onClose }: Props) => {
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
             className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl z-50"
           >
-            <div className="bg-secondary border border-default rounded-xl shadow-[var(--dt-shadow-xl)] overflow-hidden ring-1 ring-white/10">
+            <div className="bg-secondary panel-raised overflow-hidden">
               <div className="flex items-center px-4 py-3 border-b border-default">
                 <Search className="w-5 h-5 text-tertiary mr-3" />
                 <input
@@ -97,10 +97,10 @@ export const CommandPalette = ({ isOpen, onClose }: Props) => {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Type a command or describe what you want to do..."
-                  className="flex-1 bg-transparent text-primary placeholder:text-[var(--dt-colors-text-tertiary)] outline-none text-lg"
+                  className="flex-1 bg-transparent text-primary placeholder:text-tertiary outline-none text-lg"
                 />
                 {isLoading && (
-                  <div className="w-4 h-4 border-2 border-[var(--dt-colors-border-default)] border-t-[var(--dt-colors-accent-default)] rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 rounded-full animate-spin spinner-lit" />
                 )}
               </div>
 
@@ -119,11 +119,11 @@ export const CommandPalette = ({ isOpen, onClose }: Props) => {
                       onClick={() => { cmd.action(); onClose(); }}
                       className={`w-full flex items-center px-3 py-3 rounded-lg text-left transition-colors ${
                         index === selectedIndex
-                          ? "bg-accent-muted text-primary ring-1 ring-[var(--dt-colors-accent-muted)]"
-                          : "text-secondary hover:bg-[var(--dt-colors-bg-hover)]"
+                          ? "bg-accent-muted text-primary"
+                          : "text-secondary hover:bg-hover"
                       }`}
                     >
-                      <div className={`p-2 rounded-md mr-3 ${index === selectedIndex ? "bg-[var(--dt-colors-accent-muted)]" : "bg-tertiary"}`}>
+                      <div className={`p-2 rounded-md mr-3 ${index === selectedIndex ? "bg-accent-muted" : "bg-tertiary"}`}>
                         {cmd.icon}
                       </div>
                       <div className="flex-1">

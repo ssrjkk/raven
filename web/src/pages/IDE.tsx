@@ -534,7 +534,7 @@ export default function IDEPage() {
       <div className="border-r border-default flex flex-col bg-secondary overflow-hidden">
         <div className="px-3 py-1.5 text-xs font-semibold text-tertiary border-b border-default bg-tertiary flex items-center justify-between">
           <span>Explorer</span>
-          <button onClick={loadTree} className="text-[10px] text-tertiary hover:text-secondary cursor-pointer border-none bg-transparent">Refresh</button>
+          <button onClick={loadTree} className="text-micro text-tertiary hover:text-secondary cursor-pointer border-none bg-transparent">Refresh</button>
         </div>
         <div className="flex-1 overflow-auto py-1">
           {fileTree ? renderTreeNode(fileTree, 0) : (
@@ -542,7 +542,7 @@ export default function IDEPage() {
           )}
         </div>
         {treeRoot && (
-          <div className="px-2 py-1 text-[10px] text-tertiary border-t border-default truncate" title={treeRoot}>
+          <div className="px-2 py-1 text-micro text-tertiary border-t border-default truncate" title={treeRoot}>
             {treeRoot}
           </div>
         )}
@@ -579,11 +579,11 @@ export default function IDEPage() {
         <div className="flex-1 flex flex-col min-h-0">
           {activeFile ? (
             <>
-              <div className="border-b border-default px-4 py-1 text-[11px] text-tertiary bg-tertiary truncate flex items-center justify-between">
+              <div className="border-b border-default px-4 py-1 text-caption text-tertiary bg-tertiary truncate flex items-center justify-between">
                 <span className="truncate">{activeFile.path}</span>
                 {activeFile.dirty && (
                   <button onClick={() => saveFile(activeFile.path)}
-                    className="ml-2 text-[10px] text-accent hover:text-primary cursor-pointer border-none bg-transparent shrink-0">
+                    className="ml-2 text-micro text-accent hover:text-primary cursor-pointer border-none bg-transparent shrink-0">
                     Save
                   </button>
                 )}
@@ -609,8 +609,8 @@ export default function IDEPage() {
                       </div>
                     ) : inlineEdit.diff ? (
                       <>
-                        <div className="text-[10px] text-tertiary px-1">Review changes</div>
-                        <div className="max-h-[200px] overflow-auto font-mono text-[11px] bg-primary rounded px-2 py-1">
+                        <div className="text-micro text-tertiary px-1">Review changes</div>
+                        <div className="max-h-[200px] overflow-auto font-mono text-caption bg-primary rounded px-2 py-1">
                           {inlineEdit.diff.split("\n").map((line, i) => (
                             <div key={i} className={
                               line.startsWith("+") ? "text-success" :
@@ -632,14 +632,14 @@ export default function IDEPage() {
                       </>
                     ) : (
                       <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-accent font-medium shrink-0">Edit:</span>
+                        <span className="text-micro text-accent font-medium shrink-0">Edit:</span>
                         <input
                           autoFocus
                           value={inlineEdit.instruction}
                           onChange={(e) => setInlineEdit(prev => ({ ...prev, instruction: e.target.value }))}
                           onKeyDown={(e) => { if (e.key === "Enter") submitInlineEdit(); if (e.key === "Escape") setInlineEdit(prev => ({ ...prev, visible: false })) }}
                           placeholder="How should this code change?"
-                          className="flex-1 px-2 py-1 text-xs bg-primary border border-default rounded text-primary placeholder:text-[var(--dt-colors-text-tertiary)] focus:outline-none focus:border-accent"
+                          className="flex-1 px-2 py-1 text-xs bg-primary border border-default rounded text-primary placeholder:text-tertiary focus:outline-none focus:border-accent"
                         />
                         <button onClick={submitInlineEdit}
                           className="px-2 py-1 text-xs rounded border border-accent bg-accent-subtle text-accent hover:bg-accent-muted cursor-pointer shrink-0">
@@ -680,7 +680,7 @@ export default function IDEPage() {
               className="flex-1 input-base font-mono text-xs"
             />
             <button onClick={runTerminal}
-              className="btn-outline" style={{ padding: "0.25rem 0.75rem", fontSize: "0.75rem" }}>
+              className="btn-outline px-3 py-1 text-xs">
               Run
             </button>
           </div>
@@ -714,7 +714,7 @@ export default function IDEPage() {
             <div className="p-3 border-b border-default flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold">AI Agent</div>
-                <div className="flex items-center gap-1.5 text-[10px] text-tertiary">
+                <div className="flex items-center gap-1.5 text-micro text-tertiary">
                   <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-success" : "bg-danger"}`} />
                   {connected ? (running ? "working" : "idle") : "offline"}
                 </div>
@@ -732,7 +732,7 @@ export default function IDEPage() {
                   </button>
                 ))}
               </div>
-              <div className="text-[10px] text-tertiary">{AGENT_MODES.find(m => m.value === agentMode)?.desc}</div>
+              <div className="text-micro text-tertiary">{AGENT_MODES.find(m => m.value === agentMode)?.desc}</div>
               <button onClick={() => setTruthfulMode(v => !v)}
                 className={`flex items-center justify-center gap-1.5 text-xs px-2.5 py-1.5 rounded border-none cursor-pointer transition ${
                   truthfulMode
@@ -759,7 +759,7 @@ export default function IDEPage() {
               )}
               {traces.length > 0 && (
                 <div className="card p-3 flex flex-col gap-1.5">
-                  <div className="text-[10px] text-accent uppercase tracking-wider">Agent trace</div>
+                  <div className="text-micro text-accent uppercase tracking-wider">Agent trace</div>
                   {traces.map(t => (
                     <div key={t.id} className={`font-mono text-xs whitespace-pre-wrap ${t.kind === "tool_call" ? "text-accent" : "text-tertiary"}`}>
                       {t.text}
@@ -775,7 +775,7 @@ export default function IDEPage() {
               )}
               {thinkingProcess && (
                 <details className="card p-3">
-                  <summary className="text-[10px] text-accent cursor-pointer uppercase tracking-wider">
+                  <summary className="text-micro text-accent cursor-pointer uppercase tracking-wider">
                     Verification thinking
                   </summary>
                   <pre className="text-xs text-tertiary whitespace-pre-wrap mt-2 font-mono">{thinkingProcess}</pre>
@@ -802,7 +802,7 @@ export default function IDEPage() {
                 )}
                 {running ? (
                   <button onClick={cancel}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded border-none cursor-pointer text-xs font-semibold bg-[var(--dt-colors-status-error)] hover:brightness-110 on-status-error transition">
+                    className="flex items-center gap-1 px-3 py-1.5 rounded border-none cursor-pointer text-xs font-semibold bg-danger hover:brightness-110 on-status-error transition">
                     <Square className="w-3 h-3" /> Stop
                   </button>
                 ) : (
@@ -813,7 +813,7 @@ export default function IDEPage() {
                 )}
               </div>
               {speech.error && (
-                <div className="text-[10px] text-warning">Voice input error: {speech.error}</div>
+                <div className="text-micro text-warning">Voice input error: {speech.error}</div>
               )}
 
             </div>
@@ -835,14 +835,14 @@ export default function IDEPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") runSearch() }}
               placeholder="Search..."
-              className="w-full px-2 py-1.5 text-xs bg-primary border border-default rounded text-primary placeholder:text-[var(--dt-colors-text-tertiary)] focus:outline-none focus:border-accent"
+              className="w-full px-2 py-1.5 text-xs bg-primary border border-default rounded text-primary placeholder:text-tertiary focus:outline-none focus:border-accent"
             />
-            {searching && <div className="text-[10px] text-tertiary">Searching...</div>}
+            {searching && <div className="text-micro text-tertiary">Searching...</div>}
             <div className="flex-1 overflow-auto flex flex-col gap-1">
               {searchResults.map((r, i) => (
                 <button key={i}
                   onClick={() => r.file && openFile(r.file)}
-                  className="text-left px-2 py-1 text-xs rounded hover:bg-[var(--dt-colors-bg-hover)] cursor-pointer border-none bg-transparent">
+                  className="text-left px-2 py-1 text-xs rounded hover:bg-hover cursor-pointer border-none bg-transparent">
                   <div className="text-accent font-mono truncate">
                     {r.file}{r.line ? `:${r.line}` : ""}{r.range ? `:${r.range}` : ""}
                   </div>
@@ -856,7 +856,7 @@ export default function IDEPage() {
         )}
 
         {pendingConfirm && (
-          <div className="absolute inset-0 z-20 bg-black/50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 z-20 bg-scrim flex items-center justify-center p-4">
             <div className="card p-4 w-full max-w-lg bg-tertiary max-h-[80vh] flex flex-col">
               <div className="flex items-center gap-2 text-sm font-semibold text-primary mb-2">
                 <ShieldAlert className="h-4 w-4 text-warning" />
@@ -870,7 +870,7 @@ export default function IDEPage() {
                 {pendingConfirm.arguments.path ? ` — ${String(pendingConfirm.arguments.path)}` : null}
               </div>
               {pendingConfirm.diff ? (
-                <div className="font-mono text-[11px] bg-primary rounded px-2 py-1.5 overflow-auto flex-1 min-h-0 mb-4 border border-default">
+                <div className="font-mono text-caption bg-primary rounded px-2 py-1.5 overflow-auto flex-1 min-h-0 mb-4 border border-default">
                   {pendingConfirm.diff.split("\n").map((line, i) => {
                     if (line.startsWith("+") && !line.startsWith("+++")) return <div key={i} className="bg-success-muted text-success">{line}</div>
                     if (line.startsWith("-") && !line.startsWith("---")) return <div key={i} className="bg-danger-muted text-danger">{line}</div>
@@ -879,7 +879,7 @@ export default function IDEPage() {
                   })}
                 </div>
               ) : (
-                <div className="font-mono text-[10px] text-tertiary mb-4 bg-primary rounded px-2 py-1.5 whitespace-pre-wrap max-h-28 overflow-auto">
+                <div className="font-mono text-micro text-tertiary mb-4 bg-primary rounded px-2 py-1.5 whitespace-pre-wrap max-h-28 overflow-auto">
                   {JSON.stringify(pendingConfirm.arguments, null, 2)}
                 </div>
               )}

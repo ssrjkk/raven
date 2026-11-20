@@ -8,6 +8,7 @@
 
 import { safeExternalUrl } from './popup-security.js';
 import { gatewayOriginPatterns, normalizeGatewayEndpoint } from './popup-gateway.js';
+import { wirePointerLight } from './popup-pointer.js';
 
 const DEFAULT_ENDPOINT = "http://localhost:18888";
 
@@ -30,9 +31,9 @@ let retries = 0;
 let config = { endpoint: DEFAULT_ENDPOINT, token: "" };
 
 function setStatus(text, cls) {
-  statusDot.textContent = cls === "live" ? "●" : "○";
   statusDot.className = "dot " + cls;
   statusDot.title = text;
+  statusDot.setAttribute("aria-label", text);
 }
 
 function editableReady(isReady) {
@@ -252,6 +253,10 @@ composer.addEventListener("submit", (event) => {
   socket.send(JSON.stringify({ text, session_id: sessionId }));
   draft.value = "";
 });
+
+/* One delegated listener for the whole list, so a bubble that arrives later is lit without wiring of its own
+   and nothing accumulates while the panel stays open. */
+wirePointerLight(".bubble.ai");
 
 chrome.storage.local.get("raven", (stored) => {
   config = {

@@ -24,6 +24,8 @@ jobs:
         run: |
           node --check extension/src/popup/popup.js
           node --check extension/src/popup/popup-security.js
+          node --check extension/src/popup/popup-gateway.js
+          node --check extension/src/popup/popup-pointer.js
 
       - name: Test popup link policy
         run: node --test extension/tests/*.test.mjs

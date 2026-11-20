@@ -7,7 +7,6 @@ from typing import Any
 import pytest
 
 from raven.core.analytics import AnalyticsEngine
-from raven.core.asyncdb import postgres_dsn
 from raven.core.metrics import metrics
 from raven.core.monitor.models import Monitor, MonitorCheck, MonitorStatus, MonitorType
 from raven.core.outbox import Outbox
@@ -15,8 +14,6 @@ from raven.core.routine.models import Routine, RoutineAction, RoutineLog, Routin
 from raven.core.task_engine.models import Task, TaskPriority, TaskStatus, TaskStep
 
 pytestmark = pytest.mark.integration
-
-_DEFAULT_DSN = "postgresql://raven:raven@localhost:5432/raven"
 
 
 async def _clean_table(dsn: str, table: str) -> None:
@@ -27,21 +24,6 @@ async def _clean_table(dsn: str, table: str) -> None:
         await conn.execute(f"DELETE FROM {table}")
     finally:
         await conn.close()
-
-
-@pytest.fixture(scope="session")
-async def pg_dsn() -> str:
-    dsn = postgres_dsn() or _DEFAULT_DSN
-    try:
-        import asyncpg
-    except ImportError:
-        pytest.skip("asyncpg not installed (install raven-agent[postgres])")
-    try:
-        conn = await asyncpg.connect(dsn, timeout=3)
-        await conn.close()
-    except Exception as e:
-        pytest.skip(f"Postgres not available at {dsn}: {e}")
-    return dsn
 
 
 @pytest.fixture(scope="session")

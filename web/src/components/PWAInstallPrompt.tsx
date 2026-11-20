@@ -1,3 +1,4 @@
+import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -37,14 +38,11 @@ export default function PWAInstallPrompt() {
 
   return (
     <div
-      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 p-4 rounded-xl shadow-lg border text-sm max-w-sm w-full"
-      style={{
-        backgroundColor: "var(--dt-colors-bg-secondary)",
-        borderColor: "var(--dt-colors-border-default)",
-      }}
+      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 p-4 rounded-xl shadow-lg border text-sm max-w-sm w-full bg-secondary border-default"
+
     >
       <div className="flex items-center gap-3 mb-3">
-        <span className="text-2xl">📲</span>
+        <Download size={22} className="flex-shrink-0 text-accent" />
         <div>
           <div className="font-medium">Install Raven AI</div>
           <div className="text-tertiary">

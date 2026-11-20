@@ -51,6 +51,7 @@ Function parameters become the tool's JSON schema from the type hints. A `*args`
 ```python
 """Weather plugin for Raven AI."""
 
+
 async def get_weather(city: str, units: str = "celsius") -> str:
     """Get current weather for a city.
 
@@ -257,6 +258,7 @@ in `raven/plugins/file_search/`.
 
 ```python
 """File search plugin for Raven AI."""
+
 from pathlib import Path
 
 

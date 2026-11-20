@@ -10,9 +10,9 @@ DreamStatsData, DreamStatusData,
 EmailConfigInfo,
 EmailThreadEntry, GraphData,
 HealthData, KnowledgeSearchEntry, LLMProviderInfo, MessageData, MetricsSnapshot, ModelInfoData,
-MonitorData,
+MonitorListData,
 OAuthProviderInfo, PatternCheckInfo, PatternRunResponse,
-PluginInfo, RAGResultEntry, RAGStatsData,   RoutineData, Session,   StatusData, TaskData, ThemeScheme, TrainingResultData,   TruthfulResult, VoiceSpeakerInfo, VoiceStatsData, WebSearchProvider,   WebSearchResult,  } from "./types";
+PluginInfo, RAGResultEntry, RAGStatsData,   RoutineData, Session,   StatusData, SystemStatusData, TaskData, ThemeScheme, TrainingResultData,   TruthfulResult, VoiceSpeakerInfo, VoiceStatsData, WebSearchProvider,   WebSearchResult,  } from "./types";
 
 export type {
 ABCreateResponse,
@@ -33,11 +33,11 @@ GitHubFileTreeItem,   GitHubIssue, GitHubMergeResult,
 GitHubPull, GitHubRateLimit, GitHubRepo, GitHubReview,   GitHubSearchCodeResult, GitHubSearchReposResult,
 GitHubTokenStatus,   GitHubUser, GitHubWorkflowDispatch,
   GitStatusData, GraphData,
-GraphLink, GraphNode, HealthCheck, HealthData,   KnowledgeSearchEntry, LLMProviderInfo, MessageData, MetricsSnapshot, ModelInfoData, MonitorData,
+GraphLink, GraphNode, HealthCheck, HealthData,   KnowledgeSearchEntry, LLMProviderInfo, MessageData, MetricsSnapshot, ModelInfoData, MonitorData, MonitorListData,
 OAuthProviderInfo,
   PatternCheckInfo, PatternRunResponse, PatternViolation,   PluginInfo,   PricingInfo, ProjectMetrics,
 RAGResultEntry, RAGStatsData,
-  RoutineData,   Session,   StatusData, TaskData, TrainingResultData,
+  RoutineData,   Session,   StatusData, SystemStatusData, TaskData, TrainingResultData,
 TruthfulResult,   VoiceSpeakerInfo, VoiceStatsData, WebSearchProvider,   WebSearchResult, WsMessage,  } from "./types";
 
 const BASE = "";
@@ -64,6 +64,32 @@ export function isAuthenticated(): boolean {
 }
 
 const REQUEST_TIMEOUT_MS = 15000;
+
+const RATE_LIMIT_RETRY_MAX_MS = 5000;
+
+/**
+ * The seconds the gateway said the budget needs to refill, or null when the refusal did not say.
+ *
+ * `raven.core.middleware.rate_limit_middleware` measures the moment the caller's oldest charge ages out and
+ * puts it in `Retry-After`, so a wait below a few seconds is a slot genuinely about to open — while anything
+ * longer belongs to the window, not to this request.
+ */
+function rateLimitWaitMs(res: Response): number | null {
+  const header = res.headers.get("retry-after");
+  return header && /^\d+$/.test(header) ? Number(header) * 1000 : null;
+}
+
+/**
+ * A refusal as the error it deserves: the wait it named, read from the response that actually refused.
+ *
+ * After a retry the second refusal is what the caller hears about, so quoting the first one's promise would
+ * send them back on a schedule the gateway no longer offered.
+ */
+function rateLimited(path: string, res: Response): Error {
+  const wait = rateLimitWaitMs(res);
+  if (wait === null) return new Error(`API ${path}: 429 rate limited`);
+  return new Error(`API ${path}: 429 rate limited, retry in ${Math.ceil(wait / 1000)}s`);
+}
 
 /**
  * Requests the server runs to completion before it answers: fault experiments, training, pytest,
@@ -94,12 +120,22 @@ export async function request<T>(path: string, init?: RequestInit, timeoutMs: nu
     externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
   }
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(`${BASE}${path}`, {
+  const send = () =>
+    fetch(`${BASE}${path}`, {
       headers,
       signal: controller.signal,
       ...safeInit,
     });
+  try {
+    let res = await send();
+    if (res.status === 429) {
+      const promised = rateLimitWaitMs(res);
+      if (promised !== null && promised <= RATE_LIMIT_RETRY_MAX_MS) {
+        await new Promise((resolve) => setTimeout(resolve, promised));
+        res = await send();
+      }
+      if (res.status === 429) throw rateLimited(path, res);
+    }
     if (res.status === 401) {
       clearToken();
       if (!window.location.pathname.startsWith("/login")) {
@@ -124,9 +160,9 @@ export const api = {
   health: () => request<HealthData>("/api/health"),
   metrics: () => request<MetricsSnapshot>("/api/metrics"),
   channels: () => request<ChannelInfo[]>("/api/admin/channels"),
-  systemStatus: () => request<{ channels: number; agents: number; running: boolean; version: string }>("/api/admin/system/status"),
+  systemStatus: () => request<SystemStatusData>("/api/admin/system/status"),
   monitors: (limit = 50, offset = 0) =>
-    request<{ items: MonitorData[]; total: number; limit: number; offset: number }>(`/api/monitor/list?limit=${limit}&offset=${offset}`).then((r) => r.items),
+    request<MonitorListData>(`/api/monitor/list?limit=${limit}&offset=${offset}`).then((r) => r.items),
   monitorToggle: (action: string, id: string) => request<{ ok: boolean }>(`/api/monitor/${action}/${id}`, { method: "POST" }),
   routines: (limit = 50, offset = 0) =>
     request<{ items: RoutineData[]; total: number; limit: number; offset: number }>(`/api/routine/list?limit=${limit}&offset=${offset}`).then((r) => r.items),

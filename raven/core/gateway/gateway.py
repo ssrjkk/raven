@@ -328,6 +328,10 @@ class Gateway:
         except Exception as e:
             logger.warning("Artifact commands not loaded: {}", e)
 
+    @property
+    def is_running(self) -> bool:
+        return self._running
+
     async def start(self):
         if self._running:
             raise RuntimeError("Gateway already running")

@@ -68,14 +68,14 @@ function phaseOf(event: AgentEvent): Phase {
 
 const TONE_CLASSES: Record<EventMeta["tone"], string> = {
   default: "text-secondary bg-tertiary border-default",
-  accent: "text-accent bg-accent-muted border-[var(--dt-colors-accent-muted)]",
-  success: "text-success bg-success-muted border-[var(--dt-colors-status-success)]",
-  error: "text-danger bg-danger-muted border-[var(--dt-colors-status-error)]",
+  accent: "text-accent bg-accent-muted border-accent-muted",
+  success: "text-success bg-success-muted border-success",
+  error: "text-danger bg-danger-muted border-error",
 };
 
 function ProfileBadge({ profile }: { profile: string }) {
   return (
-    <span className="px-1.5 py-0.5 rounded-md bg-tertiary border border-default text-[10px] font-mono uppercase tracking-wide text-secondary">
+    <span className="px-1.5 py-0.5 rounded-md bg-tertiary border border-default text-micro font-mono uppercase tracking-wide text-secondary">
       {PROFILE_LABELS[profile] ?? profile}
     </span>
   );
@@ -94,7 +94,7 @@ function PlanSteps({ steps }: { steps: unknown }) {
           transition={{ delay: i * 0.05 }}
           className="flex items-start gap-2 text-sm text-secondary"
         >
-          <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-accent-muted text-[10px] font-bold text-accent">
+          <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-accent-muted text-micro font-bold text-accent">
             {i + 1}
           </span>
           {step}
@@ -183,11 +183,11 @@ function PhaseTracker({ events }: { events: AgentEvent[] }) {
     <div className="flex items-center gap-1.5">
       {phases.map((phase, i) => (
         <div key={phase} className="flex items-center gap-1.5">
-          {i > 0 && <div className="h-px w-4 bg-[var(--dt-colors-border-default)]" />}
+          {i > 0 && <div className="h-px w-4 hairline" />}
           <div
-            className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+            className={`rounded-full px-2.5 py-0.5 text-caption font-medium transition-colors ${
               orderIndex(phase) <= currentIndex
-                ? "bg-accent-muted text-accent border border-[var(--dt-colors-accent-muted)]"
+                ? "bg-accent-muted text-accent border border-accent-muted"
                 : "bg-tertiary text-tertiary border border-default"
             }`}
           >
@@ -217,11 +217,11 @@ export function AgentStream({ events }: { events: AgentEvent[] }) {
         <div className="flex items-center gap-2">
           <span className="flex h-2 w-2">
             {isRunning && (
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--dt-colors-accent-default)]">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--dt-colors-accent-default)] opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-accent">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
               </span>
             )}
-            {!isRunning && <span className="h-2 w-2 rounded-full bg-[var(--dt-colors-status-success)]" />}
+            {!isRunning && <span className="h-2 w-2 rounded-full bg-success" />}
           </span>
           <span className="text-sm font-semibold text-primary">Flow State</span>
         </div>

@@ -85,6 +85,12 @@ models/*.gguf
 # commit is already in main's history, and 125k files here must never reach `git add -A`.
 raven_old*/
 
+# `raven/core/memory/long_term.py` writes an agent's notes (`general.md`, `lessons.md`, `project.md`,
+# `user.md`) under the process's working directory, so a gateway started from a checkout puts what one
+# person wrote about their own work where `git add -A` reaches it. Anchored to the root: an unanchored
+# `memory/` would also hide `raven/core/memory/` and `raven/plugins/memory/`, where real modules live.
+/memory/
+
 # Session exports the chat UI writes into the working tree are conversation transcripts, not
 # documentation. One weighed 46,412,860 bytes; a later one named `raven!!!.md` (1,665,107 bytes)
 # reached a public commit anyway, because the rule here remembered the exporter's naming convention

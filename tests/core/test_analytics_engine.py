@@ -18,6 +18,10 @@ def _now() -> int:
 
 
 async def _seed(engine: AnalyticsEngine, rows: list[tuple[int, str, float]]) -> None:
+    """Put rows in the table the way `_snapshot()` would, with the keys the collector spells.
+
+    The birth of those keys is `test_analytics_metric_names.py`'s job; this file tests the aggregation.
+    """
     db = engine._db
     assert db is not None
     await db.executemany(
@@ -155,18 +159,20 @@ async def test_query_aggregated(engine: AnalyticsEngine) -> None:
     await _seed(
         engine,
         [
-            (base + 10, "raven_messages_received_total", 0.0),
-            (base + 20, "raven_messages_received_total", 10.0),
-            (base + 10, "raven_message_errors_total", 0.0),
-            (base + 20, "raven_message_errors_total", 2.0),
-            (base + 10, "raven_response_latency_avg", 5.0),
+            (base + 10, "raven_messages_received{channel=webchat}_total", 0.0),
+            (base + 20, "raven_messages_received{channel=webchat}_total", 10.0),
+            (base + 10, "raven_message_errors{channel=webchat}_total", 0.0),
+            (base + 20, "raven_message_errors{channel=webchat}_total", 2.0),
+            (base + 10, "raven_llm_latency{model=qwen}_avg", 5.0),
         ],
     )
     agg = await engine.query_aggregated(since=base)
     assert agg["received"] == 10
     assert agg["errors"] == 2
     assert agg["error_rate"] == 20.0
-    assert "raven_response_latency_avg" in agg["latency_series"]
+    assert [(e["family"], e["stat"], e["labels"]) for e in agg["latency_series"]] == [
+        ("llm_latency", "avg", {"model": "qwen"})
+    ], "the chart is given the parts of a title, not the metric key it would have to parse"
 
 
 @pytest.mark.asyncio
@@ -182,16 +188,15 @@ async def test_query_tool_usage(engine: AnalyticsEngine) -> None:
     await _seed(
         engine,
         [
-            (base + 10, "read_tool_calls_total", 3.0),
-            (base + 20, "read_tool_calls_total", 5.0),
-            (base + 10, "zero_tool_calls_total", 0.0),
-            (base + 10, "not_a_tool_total", 9.0),
+            (base + 10, "raven_tool_calls{category=fs,tool=read}_total", 0.0),
+            (base + 20, "raven_tool_calls{category=fs,tool=read}_total", 5.0),
+            (base + 10, "raven_tool_calls{category=fs,tool=zero}_total", 0.0),
+            (base + 20, "raven_tool_calls_success{tool=read}_total", 4.0),
+            (base + 20, "raven_not_a_tool{thing=x}_total", 9.0),
         ],
     )
     usage = await engine.query_tool_usage(since=base)
-    names = {u["name"] for u in usage}
-    assert names == {"read_tool_calls_total"}
-    assert usage[0]["total"] == 8  # avg 4 * count 2
+    assert [(u["name"], u["category"], u["total"]) for u in usage] == [("read", "fs", 5)]
 
 
 @pytest.mark.asyncio
@@ -200,10 +205,10 @@ async def test_query_tool_breakdown(engine: AnalyticsEngine) -> None:
     await _seed(
         engine,
         [
-            (base + 10, "raven_tool_calls_success_total", 1.0),
-            (base + 20, "raven_tool_calls_success_total", 4.0),
-            (base + 10, "raven_tool_calls_error_total", 0.0),
-            (base + 20, "raven_tool_calls_error_total", 1.0),
+            (base + 10, "raven_tool_calls_success{tool=read}_total", 0.0),
+            (base + 20, "raven_tool_calls_success{tool=read}_total", 3.0),
+            (base + 10, "raven_tool_calls_error{reason=timeout,tool=run}_total", 0.0),
+            (base + 20, "raven_tool_calls_error{reason=timeout,tool=run}_total", 1.0),
         ],
     )
     bd = await engine.query_tool_breakdown(since=base)

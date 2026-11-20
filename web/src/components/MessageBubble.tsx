@@ -19,14 +19,7 @@ const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProp
   if (isSystem) {
     return (
       <div className="flex justify-center">
-        <div
-          className="rounded-full px-3 py-1.5 text-xs max-w-[80%] text-center"
-          style={{
-            backgroundColor: "var(--dt-colors-bg-tertiary)",
-            color: "var(--dt-colors-text-tertiary)",
-            border: "1px solid var(--dt-colors-border-default)",
-          }}
-        >
+        <div className="bubble-system rounded-full px-3 py-1.5 text-xs max-w-[80%] text-center">
           {message.content}
         </div>
       </div>
@@ -36,17 +29,10 @@ const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProp
   if (isTool) {
     return (
       <div className="flex justify-start">
-        <div
-          className="rounded-xl px-3 py-2 text-xs max-w-[80%] font-mono"
-          style={{
-            backgroundColor: "var(--dt-colors-bg-tertiary)",
-            color: "var(--dt-colors-text-secondary)",
-            border: "1px dashed var(--dt-colors-border-default)",
-          }}
-        >
+        <div className="bubble-tool rounded-xl px-3 py-2 text-xs max-w-[80%] font-mono">
           <span
-            className="block mb-1 text-[10px] uppercase tracking-wider"
-            style={{ color: "var(--dt-colors-text-tertiary)" }}
+            className="block mb-1 text-micro uppercase tracking-wider text-tertiary"
+
           >
             Tool Output
           </span>
@@ -61,25 +47,13 @@ const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProp
       {!isUser && <Avatar role="assistant" />}
       <div
         className={`group relative max-w-[78%] rounded-2xl px-4 py-2.5 ${
-          isUser ? "on-accent rounded-br-sm" : "rounded-bl-sm"
+          isUser ? "bubble-user on-accent rounded-br-sm" : "bubble-assistant rounded-bl-sm"
         }`}
-        style={
-          isUser
-            ? {
-                backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-accent-hover))",
-                boxShadow: "0 4px 16px var(--dt-colors-accent-muted)",
-              }
-            : {
-                backgroundColor: "var(--dt-colors-bg-tertiary)",
-                color: "var(--dt-colors-text-primary)",
-                border: "1px solid var(--dt-colors-border-default)",
-              }
-        }
       >
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[11px] font-medium opacity-60">{isUser ? "You" : "Raven"}</span>
+          <span className="text-caption font-medium opacity-60">{isUser ? "You" : "Raven"}</span>
           {ts && (
-            <span className="text-[10px] opacity-0 transition-opacity duration-150 group-hover:opacity-50">
+            <span className="text-micro opacity-0 transition-opacity duration-150 group-hover:opacity-50">
               {ts}
             </span>
           )}
@@ -106,24 +80,11 @@ export default MessageBubble;
 
 function Avatar({ role }: { role: "user" | "assistant" }) {
   return (
-    <div
-      className="w-7 h-7 shrink-0 rounded-full flex items-center justify-center on-accent shadow-md"
-      style={
-        role === "user"
-          ? {
-              backgroundImage: "linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-brand-secondary))",
-              boxShadow: "0 2px 10px var(--dt-colors-accent-muted)",
-            }
-          : {
-              backgroundColor: "var(--dt-colors-bg-tertiary)",
-              border: "1px solid var(--dt-colors-border-default)",
-            }
-      }
-    >
+    <div className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center on-accent ${role === "user" ? "brand-surface" : "avatar-assistant"}`}>
       {role === "user" ? (
         <User size={14} className="on-accent" />
       ) : (
-        <Bot size={14} style={{ color: "var(--dt-colors-accent-default)" }} />
+        <Bot size={14} className="text-accent" />
       )}
     </div>
   );
@@ -144,8 +105,8 @@ function CopyButton({ content }: { content: string }) {
     <button
       type="button"
       onClick={copy}
-      className="inline-flex items-center gap-1 text-[10px]"
-      style={{ color: "var(--dt-colors-text-tertiary)" }}
+      className="inline-flex items-center gap-1 text-micro text-tertiary"
+
       aria-label="Copy response"
     >
       {copied ? <Check size={11} /> : <Copy size={11} />}

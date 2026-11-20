@@ -219,6 +219,62 @@ class TestFormatStage:
         assert result.status == "pass", result.detail
 
 
+class TestPostgresIsNominatedOnlyWhereItAnswers:
+    """The gate typed `tests/integration/` at a machine that has no Postgres, and the suite answered the way
+    it was taught to: a run that names the Postgres cases and cannot reach a server fails them rather than
+    skipping them, which is right for an operator asking and wrong for a stage that never meant to ask.
+    Measured on this box: `17 ERRORS -- 5 passed`. Whether a server exists is a fact about the machine, so
+    the gate now asks it, and says out loud how many cases it left unproven."""
+
+    def _stub(self, monkeypatch: pytest.MonkeyPatch, calls: list[list[str]], *, reachable: bool, summary: str) -> None:
+        def _inner(cmd: list[str], timeout: int = 0, env: dict[str, str] | None = None, cwd: Any = None) -> Any:
+            calls.append(cmd)
+            if len(cmd) > 1 and cmd[1] == "-c":
+                if reachable:
+                    return subprocess.CompletedProcess(cmd, 0, stdout="Postgres answered at x\n", stderr="")
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="no Postgres answered at x: OSError\n")
+            return subprocess.CompletedProcess(cmd, 0, stdout=summary, stderr="")
+
+        monkeypatch.setattr(ca, "_run", _inner)
+
+    def test_a_server_means_the_whole_directory_is_nominated(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[list[str]] = []
+        self._stub(monkeypatch, calls, reachable=True, summary="22 passed in 9.00s")
+        result = ca.check_component("integration")
+        assert result.status == "pass"
+        pytest_cmd = calls[-1]
+        assert "not postgres" not in pytest_cmd, pytest_cmd
+        assert "Postgres cases not run here" not in result.detail
+
+    def test_no_server_deselects_the_marked_cases_and_says_how_many(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[list[str]] = []
+        self._stub(monkeypatch, calls, reachable=False, summary="5 passed, 17 deselected in 0.53s")
+        result = ca.check_component("integration")
+        pytest_cmd = calls[-1]
+        assert pytest_cmd[-2:] == ["-m", "not postgres"], pytest_cmd
+        assert result.status == "pass", result.detail
+        assert "17 Postgres cases not run here" in result.detail
+        assert result.counts["deselected"] == 17
+
+    def test_a_deselection_that_found_nothing_fails_the_stage(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The marker is derived from the `pg_dsn` fixture, so it goes missing when that fixture is renamed --
+        and a stage whose deselection deselected nothing is a green stage over an unrun suite."""
+        calls: list[list[str]] = []
+        self._stub(monkeypatch, calls, reachable=False, summary="5 passed, 0 deselected in 0.51s")
+        result = ca.check_component("integration")
+        assert result.status == "fail"
+        assert "0 POSTGRES CASES MARKED" in result.detail
+
+    def test_the_gate_and_the_suite_agree_on_where_the_server_is(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "raven_integration_conftest", ROOT / "tests" / "integration" / "conftest.py"
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert ca.POSTGRES_DEFAULT_DSN == module._DEFAULT_DSN
+
+
 class TestAnnotationRatchet:
     """The mandate is the first line of `agents.md` — "type hints required for all Python functions" —
     and mypy ran strict with `disallow_untyped_defs = false`, so nothing measured it. The ratchet holds

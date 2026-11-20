@@ -93,42 +93,23 @@ function ArtifactCard({ artifact }: { artifact: ArtifactPayload }) {
   };
 
   return (
-    <div
-      className="rounded-xl overflow-hidden my-2 text-left"
-      style={{
-        border: "1px solid var(--dt-colors-border-default)",
-        backgroundColor: "var(--dt-colors-bg-secondary)",
-      }}
-    >
-      <div
-        className="flex items-center gap-2 px-3 py-2 text-xs"
-        style={{
-          backgroundColor: "var(--dt-colors-bg-tertiary)",
-          borderBottom: "1px solid var(--dt-colors-border-default)",
-        }}
-      >
-        <span style={{ color: "var(--dt-colors-accent-default)" }}>{artifactIcon(type)}</span>
-        <span className="font-medium" style={{ color: "var(--dt-colors-text-primary)" }}>
+    <div className="rounded-xl overflow-hidden my-2 text-left border border-default bg-secondary">
+      <div className="flex items-center gap-2 px-3 py-2 text-xs bg-tertiary border-b border-default">
+        <span className="text-accent">{artifactIcon(type)}</span>
+        <span className="font-medium text-primary">
           {artifact.title || "Artifact"}
         </span>
-        <span
-          className="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider"
-          style={{
-            color: "var(--dt-colors-text-secondary)",
-            backgroundColor: "var(--dt-colors-bg-tertiary)",
-            border: "1px solid var(--dt-colors-border-default)",
-          }}
-        >
+        <span className="rounded px-1.5 py-0.5 text-micro uppercase tracking-wider text-secondary bg-secondary border border-default">
           {type}
         </span>
         {artifact.file_path && (
-          <span className="font-mono text-[10px] opacity-60 truncate">{artifact.file_path}</span>
+          <span className="font-mono text-micro opacity-60 truncate">{artifact.file_path}</span>
         )}
         <button
           type="button"
           onClick={copy}
-          className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-opacity hover:opacity-70"
-          style={{ color: "var(--dt-colors-text-secondary)" }}
+          className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-micro transition-opacity hover:opacity-70 text-secondary"
+
           aria-label="Copy artifact content"
         >
           {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
@@ -141,19 +122,19 @@ function ArtifactCard({ artifact }: { artifact: ArtifactPayload }) {
             <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{artifact.content}</ReactMarkdown>
           </div>
         ) : type === "mermaid" ? (
-          <div className="text-xs" style={{ color: "var(--dt-colors-text-secondary)" }}>
+          <div className="text-xs text-secondary">
             <p className="mb-2">Diagram preview requires a Mermaid renderer. Source:</p>
             <pre
-              className="whitespace-pre-wrap font-mono text-xs p-2 rounded"
-              style={{ backgroundColor: "var(--dt-colors-bg-tertiary)" }}
+              className="whitespace-pre-wrap font-mono text-xs p-2 rounded bg-tertiary"
+
             >
               {artifact.content}
             </pre>
           </div>
         ) : (
           <pre
-            className="whitespace-pre-wrap overflow-auto font-mono text-xs max-h-80 p-2 rounded"
-            style={{ backgroundColor: "var(--dt-colors-bg-tertiary)", color: "var(--dt-colors-text-primary)" }}
+            className="whitespace-pre-wrap overflow-auto font-mono text-xs max-h-80 p-2 rounded bg-tertiary text-primary"
+
           >
             {artifact.content}
           </pre>

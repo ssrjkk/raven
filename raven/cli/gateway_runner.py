@@ -269,9 +269,9 @@ async def _run_gateway(gateway: Gateway, web_port: int):
 
     web_dist = resolve_web_dist()
     if web_dist is not None:
-        from fastapi.staticfiles import StaticFiles
+        from raven.core.spa import BundleFiles
 
-        api_app.mount("/dashboard", StaticFiles(directory=str(web_dist), html=True), name="dashboard")
+        api_app.mount("/dashboard", BundleFiles(directory=str(web_dist), html=True), name="dashboard")
 
     def _get_channels():
         return gateway.channels

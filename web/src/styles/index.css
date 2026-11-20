@@ -1,16 +1,10 @@
 @import "tailwindcss";
+@import "./tailwind-theme.css";
 @import "./fonts.css";
 @import "./themes.css";
 
 :root {
-  --dt-version: 1.0.0;
   color-scheme: dark;
-  /* Legacy status aliases used across pages */
-  --dt-colors-success-default: var(--dt-colors-status-success);
-  --dt-colors-warning-default: var(--dt-colors-status-warning);
-  --dt-colors-danger-default: var(--dt-colors-status-error);
-  --dt-colors-error-default: var(--dt-colors-status-error);
-  --dt-colors-info-default: var(--dt-colors-status-info);
 }
 
 /* Smooth theme switching — applied briefly by ThemeContext */
@@ -19,12 +13,12 @@ html.theme-anim *,
 html.theme-anim *::before,
 html.theme-anim *::after {
   transition:
-    background-color 280ms var(--dt-animation-easing-default),
-    color 280ms var(--dt-animation-easing-default),
-    border-color 280ms var(--dt-animation-easing-default),
-    box-shadow 280ms var(--dt-animation-easing-default),
-    fill 280ms var(--dt-animation-easing-default),
-    stroke 280ms var(--dt-animation-easing-default) !important;
+    background-color var(--dt-animation-duration-normal) var(--dt-animation-easing-default),
+    color var(--dt-animation-duration-normal) var(--dt-animation-easing-default),
+    border-color var(--dt-animation-duration-normal) var(--dt-animation-easing-default),
+    box-shadow var(--dt-animation-duration-normal) var(--dt-animation-easing-default),
+    fill var(--dt-animation-duration-normal) var(--dt-animation-easing-default),
+    stroke var(--dt-animation-duration-normal) var(--dt-animation-easing-default) !important;
 }
 
 /* ------------------------------------------------------------------ */
@@ -41,14 +35,21 @@ html {
 }
 
 body {
-  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  font-family: var(--dt-typography-font-family-sans);
   background-color: var(--dt-colors-bg-primary);
   color: var(--dt-colors-text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   min-height: 100vh;
+}
+
+/* The landing's display face, kept for the largest type only: Space Grotesk draws no Cyrillic, so
+   Russian headings fall through to IBM Plex Sans while Latin words get the storefront's letterforms. */
+h1,
+h2 {
+  font-family: var(--dt-typography-font-family-display);
+  letter-spacing: -0.02em;
 }
 
 /* Ambient accent glow behind everything */
@@ -81,7 +82,9 @@ select:not(:disabled) {
 
 .tab-active,
 .tab-inactive {
-  transition: color 150ms ease, border-color 150ms ease;
+  transition:
+    color var(--dt-animation-duration-fast) var(--dt-animation-easing-out),
+    border-color var(--dt-animation-duration-fast) var(--dt-animation-easing-out);
 }
 
 ::-webkit-scrollbar {
@@ -90,7 +93,7 @@ select:not(:disabled) {
 }
 ::-webkit-scrollbar-thumb {
   background: var(--dt-colors-border-hover);
-  border-radius: 9999px;
+  border-radius: var(--dt-border-radius-full);
   border: 2px solid transparent;
   background-clip: content-box;
 }
@@ -110,7 +113,7 @@ pre {
   overflow-x: auto;
 }
 code {
-  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-family: var(--dt-typography-font-family-mono);
   font-size: var(--dt-typography-font-size-sm);
 }
 p code {
@@ -128,22 +131,10 @@ p code {
 }
 
 /* ------------------------------------------------------------------ */
-/* Radius aliases (ThemeContext flattens tokens to --dt-border-radius-*) */
-/* ------------------------------------------------------------------ */
-
-:root {
-  --dt-radius-sm: var(--dt-border-radius-sm);
-  --dt-radius-md: var(--dt-border-radius-md);
-  --dt-radius-lg: var(--dt-border-radius-lg);
-  --dt-radius-xl: var(--dt-border-radius-xl);
-  --dt-radius-full: var(--dt-border-radius-full);
-}
-
-/* ------------------------------------------------------------------ */
 /* Animations                                                         */
 /* ------------------------------------------------------------------ */
 
-.typing-dot { animation: blink 1.4s infinite both; }
+.typing-dot { animation: blink 1.4s infinite both; background-color: var(--dt-colors-text-tertiary); }
 .typing-dot:nth-child(2) { animation-delay: 0.2s; }
 .typing-dot:nth-child(3) { animation-delay: 0.4s; }
 @keyframes blink { 0%, 80%, 100% { opacity: 0; } 40% { opacity: 1; } }
@@ -152,9 +143,9 @@ p code {
 .composer {
   background-color: var(--dt-colors-bg-secondary);
   border: 1px solid var(--dt-colors-border-default);
-  border-radius: 1rem;
+  border-radius: var(--dt-border-radius-lg);
   box-shadow: var(--dt-shadow-md);
-  transition: border-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+  transition: border-color var(--dt-animation-duration-fast) var(--dt-animation-easing-out), box-shadow var(--dt-animation-duration-fast) var(--dt-animation-easing-out), opacity var(--dt-animation-duration-fast) var(--dt-animation-easing-out);
 }
 .composer:focus-within {
   border-color: var(--dt-colors-border-focus);
@@ -165,14 +156,41 @@ p code {
 /* Message bubbles */
 .msg-enter { animation: fadeUp 0.28s var(--dt-animation-easing-out) both; }
 
+/* The conversation's own surfaces. The assistant answers from a panel and the user speaks in the brand
+   ramp, so a message reads as part of the product rather than as a rectangle painted at the call site —
+   and a theme switch reaches the chat the same second it reaches the shell. */
+.bubble-system {
+  background-color: var(--dt-colors-bg-tertiary);
+  color: var(--dt-colors-text-tertiary);
+  border: 1px solid var(--dt-colors-border-default);
+}
+.bubble-tool {
+  background-color: var(--dt-colors-bg-tertiary);
+  color: var(--dt-colors-text-secondary);
+  border: 1px dashed var(--dt-colors-border-default);
+}
+.bubble-assistant {
+  background-color: var(--dt-colors-bg-tertiary);
+  color: var(--dt-colors-text-primary);
+  border: 1px solid var(--dt-colors-border-default);
+}
+.bubble-user {
+  background-image: linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-accent-hover));
+  box-shadow: 0 4px 16px var(--dt-colors-accent-muted);
+}
+.avatar-assistant {
+  background-color: var(--dt-colors-bg-tertiary);
+  border: 1px solid var(--dt-colors-border-default);
+}
+
 /* Chat welcome suggestion cards */
 .suggestion-card {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   padding: 0.625rem 0.875rem;
-  border-radius: 0.875rem;
-  font-size: 0.875rem;
+  border-radius: var(--dt-border-radius-xl);
+  font-size: var(--dt-typography-font-size-sm);
   font-weight: 500;
   text-align: left;
   color: var(--dt-colors-text-secondary);
@@ -180,26 +198,42 @@ p code {
   border: 1px solid var(--dt-colors-border-default);
   cursor: pointer;
   transition:
-    border-color 160ms ease,
-    transform 160ms ease,
-    box-shadow 200ms ease,
-    background-color 160ms ease,
-    color 160ms ease;
+    border-color var(--dt-animation-duration-fast) var(--dt-animation-easing-out),
+    transform var(--dt-animation-duration-fast) var(--dt-animation-easing-out),
+    box-shadow var(--dt-animation-duration-normal) var(--dt-animation-easing-out),
+    background-color var(--dt-animation-duration-fast) var(--dt-animation-easing-out),
+    color var(--dt-animation-duration-fast) var(--dt-animation-easing-out);
 }
 .suggestion-card:hover {
   border-color: var(--dt-colors-border-focus);
   background-color: var(--dt-colors-bg-secondary);
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px var(--dt-shadow-lg);
+  box-shadow: var(--dt-shadow-lg);
   color: var(--dt-colors-text-primary);
 }
 .suggestion-card:active { transform: translateY(0); }
 
 /* Toasts */
 .toast-enter { animation: slideInRight 0.3s var(--dt-animation-easing-out) both; }
-.toast-exit { animation: fadeOut 0.22s ease-in both; }
+.toast-exit {
+  animation: fadeOut var(--dt-animation-duration-fast) var(--dt-animation-easing-in) both;
+}
 @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; transform: translateY(4px); } }
+
+/* A notification is the one surface that reports a result in the colour of the result, so its tint, its
+   edge, the glyph in it and the bar that counts it down are one published pair rather than four values a
+   component assembles. Assembled in JavaScript they stayed legible and went unseen by every gate. */
+.toast { box-shadow: var(--dt-shadow-xl); }
+.toast-success { background-color: var(--dt-colors-status-success-bg); border-color: var(--dt-colors-status-success); }
+.toast-success .toast-icon { color: var(--dt-colors-status-success); }
+.toast-success .toast-progress { background-color: var(--dt-colors-status-success); }
+.toast-error { background-color: var(--dt-colors-status-error-bg); border-color: var(--dt-colors-status-error); }
+.toast-error .toast-icon { color: var(--dt-colors-status-error); }
+.toast-error .toast-progress { background-color: var(--dt-colors-status-error); }
+.toast-info { background-color: var(--dt-colors-bg-secondary); border-color: var(--dt-colors-border-default); }
+.toast-info .toast-icon { color: var(--dt-colors-text-primary); }
+.toast-info .toast-progress { background-color: var(--dt-colors-accent-default); }
 
 .toast-progress {
   height: 2px;
@@ -254,10 +288,10 @@ p code {
   line-height: 1.25;
   margin: 1rem 0 0.5rem;
 }
-.prose h1 { font-size: 1.25rem; }
-.prose h2 { font-size: 1.125rem; }
-.prose h3 { font-size: 1rem; }
-.prose h4, .prose h5, .prose h6 { font-size: 0.875rem; }
+.prose h1 { font-size: var(--dt-typography-font-size-xl); }
+.prose h2 { font-size: var(--dt-typography-font-size-lg); }
+.prose h3 { font-size: var(--dt-typography-font-size-base); }
+.prose h4, .prose h5, .prose h6 { font-size: var(--dt-typography-font-size-sm); }
 .prose ul, .prose ol { margin: 0.5rem 0; padding-left: 1.35rem; }
 .prose ul { list-style: disc; }
 .prose ol { list-style: decimal; }
@@ -313,6 +347,7 @@ p code {
 .hover\:text-danger:hover { color: var(--dt-colors-status-error); }
 .hover\:border-accent:hover { border-color: var(--dt-colors-border-focus); }
 .focus\:border-accent:focus { border-color: var(--dt-colors-border-focus); }
+.placeholder\:text-tertiary::placeholder { color: var(--dt-colors-text-tertiary); }
 
 .text-danger { color: var(--dt-colors-status-error); }
 .text-success { color: var(--dt-colors-status-success); }
@@ -334,22 +369,50 @@ p code {
 .bg-danger-subtle { background-color: color-mix(in srgb, var(--dt-colors-status-error) 15%, transparent); }
 .bg-success-muted { background-color: var(--dt-colors-status-success-bg); }
 .bg-warning-muted { background-color: var(--dt-colors-status-warning-bg); }
+.bg-info-muted { background-color: var(--dt-colors-status-info-bg); }
+.bg-warning { background-color: var(--dt-colors-status-warning); }
+.bg-hover { background-color: var(--dt-colors-bg-hover); }
+.bg-card { background-color: var(--dt-colors-surface-card); }
+.bg-paper { background-color: var(--dt-colors-surface-paper); }
+.bg-scrim { background-color: var(--dt-colors-overlay-scrim); }
+.hover\:bg-hover:hover { background-color: var(--dt-colors-bg-hover); }
+.border-success { border-color: var(--dt-colors-status-success); }
+.border-warning { border-color: var(--dt-colors-status-warning); }
+.border-error { border-color: var(--dt-colors-status-error); }
+.border-info { border-color: var(--dt-colors-status-info); }
+.border-accent-muted { border-color: var(--dt-colors-accent-muted); }
+.border-accent-subtle { border-color: var(--dt-colors-accent-subtle); }
+
+/* The diff table: a row's tint, the ink of the line it reports and the line-number gutter are one
+   decision, so they live together. The ink-on-its-own-tint pair is what
+   `test_status_inks_clear_aa_on_their_own_tint` measures; written inline it was a pair no gate read. */
+.diff-add { background-color: var(--dt-colors-status-success-bg); }
+.diff-del { background-color: var(--dt-colors-status-error-bg); }
+.diff-gutter {
+  color: var(--dt-colors-text-tertiary);
+  background-color: var(--dt-colors-bg-secondary);
+  border-right: 1px solid var(--dt-colors-border-default);
+}
 
 .btn-tertiary { background-color: var(--dt-colors-bg-tertiary); color: var(--dt-colors-text-primary); }
 .btn-secondary-text { background-color: var(--dt-colors-bg-tertiary); color: var(--dt-colors-text-secondary); }
 
 .card-bordered {
-  background-color: var(--dt-colors-surface-card);
   border: 1px solid var(--dt-colors-border-default);
-  border-radius: 0.75rem;
-  transition: border-color 150ms ease, box-shadow 200ms ease;
+  border-radius: var(--dt-border-radius-xl);
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--dt-colors-surface-card) 88%, transparent),
+    color-mix(in srgb, var(--dt-colors-surface-elevated) 72%, transparent)
+  );
+  transition: border-color var(--dt-animation-duration-fast) var(--dt-animation-easing-out), box-shadow var(--dt-animation-duration-normal) var(--dt-animation-easing-out);
 }
 .card-bordered:hover {
   border-color: var(--dt-colors-border-focus);
   box-shadow: 0 0 0 1px var(--dt-colors-border-focus);
 }
 
-.tab-active { color: var(--dt-colors-accent-default); border-bottom: 2px solid var(--dt-colors-accent-default); }
+.tab-active { color: var(--dt-colors-text-link); border-bottom: 2px solid var(--dt-colors-accent-default); }
 .tab-inactive { color: var(--dt-colors-text-secondary); border-bottom: 2px solid transparent; }
 .tab-inactive:hover {
   color: var(--dt-colors-text-primary);
@@ -362,27 +425,38 @@ p code {
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
-  border-radius: 0.625rem;
-  font-size: 0.875rem;
+  border-radius: var(--dt-border-radius-sm);
+  font-size: var(--dt-typography-font-size-sm);
   font-weight: 500;
-  color: var(--dt-colors-accent-default);
+  color: var(--dt-colors-text-link);
   background-color: var(--dt-colors-accent-muted);
-  transition: filter 150ms ease, transform 150ms ease, box-shadow 200ms ease;
+  transition: filter var(--dt-animation-duration-fast) var(--dt-animation-easing-out), transform var(--dt-animation-duration-fast) var(--dt-animation-easing-out), box-shadow var(--dt-animation-duration-normal) var(--dt-animation-easing-out);
   cursor: pointer;
 }
 .btn-soft:hover {
   filter: brightness(1.12);
-  box-shadow: 0 0 14px var(--dt-shadow-glow-accent);
+  box-shadow: var(--dt-shadow-glow-accent);
 }
 .btn-soft:active { transform: translateY(1px); }
 .btn-soft:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+
+/* The soft action in a status colour -- the same ink-on-its-own-tint pair the badges publish, written once in
+   the sheet so the pair a control ships with is the pair the contract measures, not one assembled inline. */
+.btn-soft-success {
+  color: var(--dt-colors-status-success);
+  background-color: var(--dt-colors-status-success-bg);
+}
+.btn-soft-warning {
+  color: var(--dt-colors-status-warning);
+  background-color: var(--dt-colors-status-warning-bg);
+}
 
 /* Git commit list card */
 .commit-card {
   background-color: var(--dt-colors-bg-secondary);
   border: 1px solid var(--dt-colors-border-default);
   color: var(--dt-colors-text-primary);
-  transition: border-color 150ms ease, transform 150ms ease, box-shadow 200ms ease;
+  transition: border-color var(--dt-animation-duration-fast) var(--dt-animation-easing-out), transform var(--dt-animation-duration-fast) var(--dt-animation-easing-out), box-shadow var(--dt-animation-duration-normal) var(--dt-animation-easing-out);
 }
 .commit-card:hover {
   border-color: var(--dt-colors-border-focus);
@@ -394,7 +468,7 @@ p code {
 .empty-state {
   padding: 2.5rem 1rem;
   text-align: center;
-  font-size: 0.875rem;
+  font-size: var(--dt-typography-font-size-sm);
   color: var(--dt-colors-text-tertiary);
   border: 1px dashed var(--dt-colors-border-default);
   border-radius: var(--dt-border-radius-lg);
@@ -406,42 +480,81 @@ p code {
 /* ------------------------------------------------------------------ */
 
 .card {
-  background-color: var(--dt-colors-surface-card);
   border: 1px solid var(--dt-colors-border-default);
   border-radius: var(--dt-border-radius-lg);
+  /* The storefront's panel recipe, not a filled rectangle: a ramp between the two published card
+     colours, kept translucent so the ambient glow behind the shell reads through it and the panel
+     becomes a surface with something lit behind it. */
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--dt-colors-surface-card) 88%, transparent),
+    color-mix(in srgb, var(--dt-colors-surface-elevated) 72%, transparent)
+  );
 }
 
 .card,
 .card-bordered,
 .stat-card {
+  /* The pointer wash is anchored to the card, so every card has to be the containing block it paints
+     inside. Without this the ::before below resolves against `main` and the light lands off-centre. */
+  position: relative;
+  --gx: 50%;
+  --gy: 50%;
   box-shadow: inset 0 1px 0 var(--dt-colors-surface-inset-highlight);
 }
 
+/* Pointer light: the card answers where the cursor is, so the surface reads as glass under a lamp
+   rather than as a border that changes colour. `pointerLight.ts` writes the two coordinates through
+   the CSSOM for whichever card is under the pointer and leaves them at the centre otherwise. */
+.card::before,
+.card-bordered::before,
+.stat-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(260px circle at var(--gx) var(--gy), var(--dt-colors-accent-subtle), transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dt-animation-duration-normal) var(--dt-animation-easing-out);
+}
+
+.card:hover::before,
+.card-bordered:hover::before,
+.stat-card:hover::before {
+  opacity: 1;
+}
+
 .card-hover {
-  transition: border-color 150ms var(--dt-animation-easing-default),
-    transform 150ms var(--dt-animation-easing-default),
-    box-shadow 200ms var(--dt-animation-easing-default);
+  transition: border-color var(--dt-animation-duration-fast) var(--dt-animation-easing-out),
+    transform var(--dt-animation-duration-fast) var(--dt-animation-easing-spring),
+    box-shadow var(--dt-animation-duration-normal) var(--dt-animation-easing-out);
 }
 .card-hover:hover {
   border-color: var(--dt-colors-border-focus);
-  transform: translateY(-1px);
-  box-shadow: var(--dt-shadow-md);
+  transform: translateY(-4px);
+  /* The landing's lifted card, kept honest: the violet bloom under the panel and the lift are the landing's
+     own, but the edge that says "this one is answering" is the focus role, because a 12% wash of the panel
+     it sits on changes state at 1.2:1 -- the card moves and nothing you can see has happened. */
+  box-shadow:
+    inset 0 1px 0 var(--dt-colors-surface-inset-highlight),
+    0 8px 32px color-mix(in srgb, var(--dt-colors-accent-default) 15%, transparent);
 }
 
 .page-title {
-  font-size: 1.5rem;
+  font-size: var(--dt-typography-font-size-2xl);
   line-height: 1.2;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
 
 .page-subtitle {
-  font-size: 0.875rem;
+  font-size: var(--dt-typography-font-size-sm);
   color: var(--dt-colors-text-tertiary);
 }
 
 .gradient-text {
-  background: linear-gradient(120deg, var(--dt-colors-accent-default), var(--dt-colors-accent-hover));
+  background: linear-gradient(120deg, var(--dt-colors-text-link), var(--dt-colors-brand-secondary));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -453,18 +566,18 @@ p code {
   justify-content: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  border-radius: 0.625rem;
-  font-size: 0.875rem;
+  border-radius: var(--dt-border-radius-sm);
+  font-size: var(--dt-typography-font-size-sm);
   font-weight: 600;
   color: var(--dt-colors-text-on-accent);
   background-image: linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-accent-active));
   border: 1px solid transparent;
-  transition: filter 150ms ease, transform 150ms ease, box-shadow 200ms ease;
+  transition: filter var(--dt-animation-duration-fast) var(--dt-animation-easing-out), transform var(--dt-animation-duration-fast) var(--dt-animation-easing-out), box-shadow var(--dt-animation-duration-normal) var(--dt-animation-easing-out);
   cursor: pointer;
 }
 .btn-primary:hover {
   filter: brightness(1.1);
-  box-shadow: 0 0 16px var(--dt-shadow-glow-accent);
+  box-shadow: var(--dt-shadow-glow-accent);
 }
 .btn-primary:active {
   transform: translateY(1px);
@@ -481,13 +594,13 @@ p code {
   justify-content: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  border-radius: 0.625rem;
-  font-size: 0.875rem;
+  border-radius: var(--dt-border-radius-sm);
+  font-size: var(--dt-typography-font-size-sm);
   font-weight: 500;
   color: var(--dt-colors-text-secondary);
   background-color: transparent;
   border: 1px solid var(--dt-colors-border-default);
-  transition: border-color 150ms ease, color 150ms ease, background-color 150ms ease;
+  transition: border-color var(--dt-animation-duration-fast) var(--dt-animation-easing-out), color var(--dt-animation-duration-fast) var(--dt-animation-easing-out), background-color var(--dt-animation-duration-fast) var(--dt-animation-easing-out);
   cursor: pointer;
 }
 .btn-outline:hover {
@@ -496,19 +609,32 @@ p code {
   background-color: var(--dt-colors-accent-subtle);
 }
 
+/* The outline action that stops something: the same button in the state colour it reports, so a control
+   that ends a capture is not drawn in the brand's invite colour. Declared after .btn-outline and its hover,
+   where the later rule of equal weight wins, so the call site ships one class and gets both states. */
+.btn-outline-danger {
+  color: var(--dt-colors-status-error);
+  border-color: var(--dt-colors-status-error);
+}
+.btn-outline-danger:hover {
+  color: var(--dt-colors-status-error);
+  border-color: var(--dt-colors-status-error);
+  background-color: var(--dt-colors-status-error-bg);
+}
+
 .btn-ghost {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  border-radius: 0.625rem;
-  font-size: 0.875rem;
+  border-radius: var(--dt-border-radius-sm);
+  font-size: var(--dt-typography-font-size-sm);
   font-weight: 500;
   color: var(--dt-colors-text-secondary);
   background: transparent;
   border: 1px solid transparent;
-  transition: background-color 150ms ease, color 150ms ease;
+  transition: background-color var(--dt-animation-duration-fast) var(--dt-animation-easing-out), color var(--dt-animation-duration-fast) var(--dt-animation-easing-out);
   cursor: pointer;
 }
 .btn-ghost:hover {
@@ -520,11 +646,11 @@ p code {
   width: 100%;
   background-color: var(--dt-colors-bg-secondary);
   border: 1px solid var(--dt-colors-border-default);
-  border-radius: 0.625rem;
+  border-radius: var(--dt-border-radius-sm);
   padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
+  font-size: var(--dt-typography-font-size-sm);
   color: var(--dt-colors-text-primary);
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition: border-color var(--dt-animation-duration-fast) var(--dt-animation-easing-out), box-shadow var(--dt-animation-duration-fast) var(--dt-animation-easing-out);
 }
 .input-base::placeholder {
   color: var(--dt-colors-text-tertiary);
@@ -540,26 +666,73 @@ p code {
   align-items: center;
   gap: 0.375rem;
   padding: 0.25rem 0.625rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
+  border-radius: var(--dt-border-radius-full);
+  font-size: var(--dt-typography-font-size-xs);
   font-weight: 500;
   color: var(--dt-colors-text-secondary);
   background-color: var(--dt-colors-bg-tertiary);
   border: 1px solid var(--dt-colors-border-default);
-  transition: border-color 150ms ease, color 150ms ease, background-color 150ms ease;
+  transition: border-color var(--dt-animation-duration-fast) var(--dt-animation-easing-out), color var(--dt-animation-duration-fast) var(--dt-animation-easing-out), background-color var(--dt-animation-duration-fast) var(--dt-animation-easing-out);
 }
 .chip:hover {
   border-color: var(--dt-colors-border-focus);
   color: var(--dt-colors-text-primary);
 }
 
+/* A selectable filter pill, painted only: the page keeps its own size and shape classes. The active state
+   is a wash under the readable violet, never the button fill spent as text. The idle border is transparent
+   rather than absent so picking a pill does not move its label by a pixel. */
+.pill {
+  border: 1px solid transparent;
+  background-color: var(--dt-colors-bg-secondary);
+  color: var(--dt-colors-text-secondary);
+}
+.pill-active {
+  border-color: var(--dt-colors-accent-subtle);
+  background-color: var(--dt-colors-accent-muted);
+  color: var(--dt-colors-text-link);
+}
+
+/* The loading shimmer: the panel it replaces, lit once across its width by the skeleton's own highlight,
+   swept by the published keyframe. The page keeps width, height and radius -- the sheet keeps the paint, so
+   a block that was assembled in JavaScript cannot outlive the theme it was measured against. */
+.skeleton {
+  background-image: linear-gradient(90deg, var(--dt-colors-bg-tertiary) 0%, var(--dt-colors-skeleton-highlight) 50%, var(--dt-colors-bg-tertiary) 100%);
+  background-size: 400px 100%;
+  background-repeat: no-repeat;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* The loading ring's paint: a full accent border with one quarter taken away, so the gap reads as motion
+   before anything animates. The page sizes it and spins it. */
+.spinner-accent {
+  border-color: var(--dt-colors-accent-default);
+  border-top-color: transparent;
+}
+
+/* The loading ring that keeps the panel's own edge and lights one quarter in the accent -- the palette's
+   spinner, whose track should not compete with the command list it is spinning over. */
+.spinner-lit {
+  border-color: var(--dt-colors-border-default);
+  border-top-color: var(--dt-colors-accent-default);
+}
+
+/* A status dot: the state's colour spent as a fill, which is what a dot is for. The page gives it size and
+   roundness and chooses the state. Ink and fill for one status live in one place, so a health row and the
+   badge beside it cannot drift to two different greens. */
+.dot-success { background-color: var(--dt-colors-status-success); }
+.dot-warning { background-color: var(--dt-colors-status-warning); }
+.dot-info { background-color: var(--dt-colors-status-info); }
+.dot-error { background-color: var(--dt-colors-status-error); }
+.dot-idle { background-color: var(--dt-colors-text-tertiary); }
+
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
   padding: 0.125rem 0.5rem;
-  border-radius: 9999px;
-  font-size: 0.6875rem;
+  border-radius: var(--dt-border-radius-full);
+  font-size: var(--dt-typography-font-size-caption);
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -568,32 +741,59 @@ p code {
 .badge-error { color: var(--dt-colors-status-error); background-color: var(--dt-colors-status-error-bg); }
 .badge-warning { color: var(--dt-colors-status-warning); background-color: var(--dt-colors-status-warning-bg); }
 .badge-info { color: var(--dt-colors-status-info); background-color: var(--dt-colors-status-info-bg); }
-.badge-accent { color: var(--dt-colors-accent-default); background-color: var(--dt-colors-accent-muted); }
+.badge-accent { color: var(--dt-colors-text-link); background-color: var(--dt-colors-accent-muted); }
+
+/* A category tag is the same device the chart series and the knowledge graph draw with: the hue is the data,
+   so it is the ground rather than the ink. Each theme publishes the label its hue can carry -- the light theme
+   darkens every hue for AA on the page, which puts a light label on a dark ground instead of a dark one on a
+   light ground -- so the pair travels with the sheet and no component measures contrast at the call site. */
+.tag-blue { background-color: var(--dt-colors-category-blue); color: var(--dt-colors-text-on-category-blue); }
+.tag-green { background-color: var(--dt-colors-category-green); color: var(--dt-colors-text-on-category-green); }
+.tag-amber { background-color: var(--dt-colors-category-amber); color: var(--dt-colors-text-on-category-amber); }
+.tag-violet { background-color: var(--dt-colors-category-violet); color: var(--dt-colors-text-on-category-violet); }
+.tag-pink { background-color: var(--dt-colors-category-pink); color: var(--dt-colors-text-on-category-pink); }
+.tag-grey { background-color: var(--dt-colors-category-grey); color: var(--dt-colors-text-on-category-grey); }
 
 .stat-card {
-  background-color: var(--dt-colors-surface-card);
   border: 1px solid var(--dt-colors-border-default);
   border-radius: var(--dt-border-radius-xl);
   padding: 1rem 1.25rem;
-  position: relative;
   overflow: hidden;
-  transition: border-color 150ms ease, transform 150ms ease, box-shadow 200ms ease;
+  /* Corner wash and glass ramp as one background stack, because `::before` belongs to the pointer
+     light and `::after` to the rule that grows under the tile. */
+  background-image:
+    radial-gradient(240px 120px at 100% 0%, var(--dt-colors-accent-subtle), transparent 70%),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--dt-colors-surface-card) 88%, transparent),
+      color-mix(in srgb, var(--dt-colors-surface-elevated) 72%, transparent)
+    );
+  transition: border-color var(--dt-animation-duration-fast) var(--dt-animation-easing-out), transform var(--dt-animation-duration-fast) var(--dt-animation-easing-spring), box-shadow var(--dt-animation-duration-normal) var(--dt-animation-easing-out);
 }
 .stat-card::after {
   content: "";
   position: absolute;
-  inset: 0;
-  background: radial-gradient(240px 120px at 100% 0%, var(--dt-colors-accent-subtle), transparent 70%);
-  pointer-events: none;
+  left: 1.25rem;
+  bottom: 0.7rem;
+  width: 22px;
+  height: 2px;
+  border-radius: var(--dt-border-radius-full);
+  background: linear-gradient(90deg, var(--dt-colors-accent-default), var(--dt-colors-brand-secondary));
+  transition: width var(--dt-animation-duration-slow) var(--dt-animation-easing-out);
 }
 .stat-card:hover {
   border-color: var(--dt-colors-border-focus);
-  transform: translateY(-1px);
-  box-shadow: var(--dt-shadow-md);
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 var(--dt-colors-surface-inset-highlight),
+    0 8px 28px color-mix(in srgb, var(--dt-colors-accent-default) 14%, transparent);
+}
+.stat-card:hover::after {
+  width: calc(100% - 2.5rem);
 }
 
 .stat-card-label {
-  font-size: 0.75rem;
+  font-size: var(--dt-typography-font-size-xs);
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -602,18 +802,26 @@ p code {
 
 .stat-card-value {
   margin-top: 0.375rem;
-  font-size: 1.5rem;
+  font-size: var(--dt-typography-font-size-2xl);
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--dt-colors-text-primary);
 }
 
+/* A tile that reports its number in the tone of what it counts. The tone rides on the card, not the
+   number, because a plain `.text-danger` next to `.stat-card-value` is a coin toss about which rule the
+   sheet put last. */
+.stat-card-accent .stat-card-value { color: var(--dt-colors-text-link); }
+.stat-card-success .stat-card-value { color: var(--dt-colors-status-success); }
+.stat-card-warning .stat-card-value { color: var(--dt-colors-status-warning); }
+.stat-card-danger .stat-card-value { color: var(--dt-colors-status-error); }
+
 .kbd {
   display: inline-block;
   padding: 0.125rem 0.375rem;
-  border-radius: 0.375rem;
-  font-size: 0.6875rem;
-  font-family: "JetBrains Mono", "Fira Code", monospace;
+  border-radius: var(--dt-border-radius-sm);
+  font-size: var(--dt-typography-font-size-caption);
+  font-family: var(--dt-typography-font-family-mono);
   color: var(--dt-colors-text-secondary);
   background-color: var(--dt-colors-bg-tertiary);
   border: 1px solid var(--dt-colors-border-default);
@@ -622,7 +830,7 @@ p code {
 
 .nav-section-label {
   padding: 0.5rem 0.75rem 0.25rem;
-  font-size: 0.625rem;
+  font-size: var(--dt-typography-font-size-micro);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -632,7 +840,9 @@ p code {
 /* Sidebar navigation items */
 .nav-item {
   color: var(--dt-colors-text-secondary);
-  transition: background-color 140ms ease, color 140ms ease;
+  transition:
+    background-color var(--dt-animation-duration-fast) var(--dt-animation-easing-out),
+    color var(--dt-animation-duration-fast) var(--dt-animation-easing-out);
 }
 .nav-item:hover {
   background-color: var(--dt-colors-bg-hover);
@@ -641,5 +851,167 @@ p code {
 .nav-item-active,
 .nav-item-active:hover {
   background-color: var(--dt-colors-accent-muted);
-  color: var(--dt-colors-accent-default);
+  color: var(--dt-colors-text-link);
+}
+
+/* ------------------------------------------------------------------ */
+/* Landing devices                                                    */
+/* ------------------------------------------------------------------ */
+
+/* Grain: the storefront's turbulence tile, the same bytes at the same 2.5%. A console painted on a
+   flat colour reads as a wireframe of a product; the same console with a little noise in it reads as
+   a photographed one. It rides above the page ground and below every layer the product raises
+   itself, which is where the landing puts it too. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 200px 200px;
+}
+
+/* The sidebar is the storefront's sticky nav: translucent so the ambient glow is still behind it,
+   blurred so the page it covers on a phone stays unreadable through it. */
+.shell-aside {
+  background-color: color-mix(in srgb, var(--dt-colors-bg-secondary) 88%, transparent);
+  backdrop-filter: blur(14px) saturate(180%);
+}
+
+/* The storefront's ambient lights. A page places and sizes them; only the sheet decides what they are
+   painted with, so an accent that moves in the tokens moves the room too. */
+.ambient {
+  background-image: radial-gradient(closest-side, var(--dt-colors-accent-muted), transparent);
+}
+.ambient-quiet {
+  background-image: radial-gradient(closest-side, var(--dt-colors-accent-subtle), transparent);
+}
+
+/* A card the storefront lifts off the page rather than only ruling: the inset highlight the other cards
+   carry, plus the published elevation under it. */
+.card-raised {
+  box-shadow: inset 0 1px 0 var(--dt-colors-surface-inset-highlight), var(--dt-shadow-xl);
+}
+
+/* The panel a command palette or a modal floats: its own edge, the storefront's radius and the published
+   elevation, in one rule. Composing these from utility soup at the call site put the edge colour in a
+   bracket and the shadow in a variable reference, which no gate could read back. */
+.panel-raised {
+  border: 1px solid var(--dt-colors-border-default);
+  border-radius: var(--dt-border-radius-xl);
+  box-shadow: var(--dt-shadow-xl);
+}
+
+/* The box a chart is read through. Recharts' own tooltip writes its panel as an inline style -- a white card
+   with black text that answers to no theme -- and colours every item name with the series hue, which the
+   token scale only guarantees to 3:1. Panel, edge, elevation and ink are the sheet's here, so the pair is the
+   one every other floating surface is measured against. */
+.chart-tooltip {
+  background-color: var(--dt-colors-bg-secondary);
+  border: 1px solid var(--dt-colors-border-default);
+  border-radius: var(--dt-border-radius-lg);
+  box-shadow: var(--dt-shadow-float);
+  padding: 0.375rem 0.625rem;
+  font-size: var(--dt-typography-font-size-xs);
+}
+.chart-tooltip-label {
+  color: var(--dt-colors-text-tertiary);
+  margin-bottom: 0.25rem;
+}
+.chart-tooltip-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.125rem;
+}
+.chart-tooltip-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--dt-colors-text-secondary);
+}
+.chart-tooltip-value {
+  color: var(--dt-colors-text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The brand tile: the ramp the wordmark is set in, lit by the accent's own glow. One surface for every
+   place the product shows its own face, so the sign-in mark, the chat hero and the user's avatar are the
+   same object at three sizes. */
+.brand-surface {
+  background-image: linear-gradient(135deg, var(--dt-colors-accent-default), var(--dt-colors-brand-secondary));
+  box-shadow: var(--dt-shadow-glow-accent);
+}
+
+/* A rule drawn as a fill rather than a border, for the hairline between two halves of a row. */
+.hairline {
+  background-color: var(--dt-colors-border-default);
+}
+
+/* The quiet rule between rows of a read-only list, lighter than the rule that closes a section. */
+.row-rule { border-bottom: 1px solid var(--dt-colors-border-muted); }
+
+/* The wash a card lifts off its own panel: a radial sized to the card rather than to a page. The page
+   places and sizes the element; only the sheet decides what it is painted with. */
+.card-wash {
+  background-image: radial-gradient(600px 220px at 90% -20%, var(--dt-colors-accent-subtle), transparent 70%);
+}
+
+/* A tile the reader picks out of a grid of choices — the theme cards, a mode. Idle it is a panel; chosen it
+   is the accent's wash under the readable violet, with the same inset light the cards carry. The idle border
+   is a real border rather than none, so picking a tile does not move its label. */
+.pick {
+  border: 1px solid var(--dt-colors-border-default);
+  background-color: var(--dt-colors-bg-tertiary);
+  color: var(--dt-colors-text-secondary);
+}
+.pick-active {
+  border-color: var(--dt-colors-accent-muted);
+  background-color: var(--dt-colors-accent-muted);
+  color: var(--dt-colors-text-link);
+  box-shadow: inset 0 1px 0 var(--dt-colors-skeleton-highlight);
+}
+
+/* The ring around the chosen accent swatch: a gap the colour of the page, then the colour the swatch
+   carries, then its glow. --swatch-color and --swatch-glow are the reader's own data, not design-system
+   tokens, so they arrive from the call site; everything about how the ring is built stays here. */
+.swatch-active {
+  box-shadow: 0 0 0 2px var(--dt-colors-bg-primary), 0 0 0 4px var(--swatch-color), 0 0 10px var(--swatch-glow);
+}
+
+/* The storefront's kicker: a monospaced label announced by a rule instead of a bullet. */
+.nav-section-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  font-family: var(--dt-typography-font-family-mono);
+  letter-spacing: 0.14em;
+  color: var(--dt-colors-text-link);
+}
+.nav-section-label::before {
+  content: "";
+  width: 1.5em;
+  height: 1px;
+  flex-shrink: 0;
+  background: var(--dt-colors-accent-default);
+}
+
+/* The headline the storefront lit with a moving gradient. Both stops are readable violets, so a
+   frozen ramp — which is what `prefers-reduced-motion` leaves behind — still clears the floor. */
+.page-title {
+  background-image: linear-gradient(110deg, var(--dt-colors-text-primary) 35%, var(--dt-colors-text-link) 50%, var(--dt-colors-brand-secondary) 62%, var(--dt-colors-text-link) 74%, var(--dt-colors-text-primary) 88%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sheen 14s linear infinite;
+}
+@keyframes sheen {
+  from { background-position: 130% 0; }
+  to { background-position: -30% 0; }
 }

@@ -110,7 +110,7 @@ font host and needs no `preconnect` for one.
 | --- | --- | --- | --- |
 | IBM Plex Sans | prose, labels | `400 600` | `fonts/IBMPlexSans-latin.woff2` |
 | Space Grotesk | wordmark, headings, the pitch line | `300 700` | `fonts/SpaceGrotesk-latin.woff2` |
-| IBM Plex Mono | code, tool names, JSON | 400, 500, 600 | `fonts/IBMPlexMono-latin-<weight>.woff2` |
+| IBM Plex Mono | code, tool names, JSON | 400, 500, 600 | `fonts/IBMPlexMono-<weight>-latin.woff2` |
 
 113 KB across five files. Plex Sans and Space Grotesk are variable files: one face each, declaring
 the *range* the axis covers. A pinned `font-weight: 700` matches exactly one weight, and Chrome

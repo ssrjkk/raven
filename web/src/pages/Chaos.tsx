@@ -1,8 +1,10 @@
 import { useMutation } from "@tanstack/react-query";
+import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
+import { StatusMark } from "../components/StatusMark";
 import { errorMessage } from "../lib/errors";
 
 type Tab = "inject" | "experiment" | "history";
@@ -175,7 +177,7 @@ export default function Chaos() {
                       <span className="font-medium">{f.config?.fault_type}</span>
                       <span className="ml-2 text-xs text-tertiary">{f.config?.target || "system"}</span>
                     </div>
-                    <button onClick={() => recoverMutation.mutate(f.id)} className="px-2 py-1 rounded text-xs" style={{ backgroundColor: "var(--dt-colors-status-success-bg)", color: "var(--dt-colors-status-success)" }}>
+                    <button onClick={() => recoverMutation.mutate(f.id)} className="px-2 py-1 rounded text-xs bg-success-muted text-success">
                       Recover
                     </button>
                   </div>
@@ -210,7 +212,10 @@ export default function Chaos() {
               <div className="space-y-2 text-sm">
                 <p>Status: <span className="font-medium">{expResult.status}</span></p>
                 <p>Resilience: <span className="font-medium">{expResult.resilience_score?.toFixed(4)}</span></p>
-                <p>Hypothesis validated: <span className="font-medium">{expResult.hypothesis_validated ? "✓" : "✗"}</span></p>
+                <p className="flex items-center gap-1.5">
+                  Hypothesis validated:
+                  <StatusMark ok={!!expResult.hypothesis_validated} />
+                </p>
                 <p>Faults injected: {expResult.faults_injected}</p>
                 <p>Faults recovered: {expResult.faults_recovered}</p>
                 <p>Experiment ID: <code className="text-xs">{expResult.experiment_id}</code></p>
@@ -248,7 +253,14 @@ export default function Chaos() {
                   <div key={h.id} className="p-2 rounded-lg text-sm bg-tertiary">
                     <span className="font-medium">{h.config?.fault_type}</span>
                     <span className="ml-2">{h.config?.target || "system"}</span>
-                    <span className="ml-2 text-xs">{h.recovered ? "✓ recovered" : "⚠  active"}</span>
+                    <span className="ml-2 inline-flex items-center gap-1 text-xs">
+                      {h.recovered ? (
+                        <StatusMark ok={!!h.recovered} size={12} />
+                      ) : (
+                        <AlertTriangle size={12} className="flex-shrink-0 text-warning" />
+                      )}
+                      {h.recovered ? "recovered" : "active"}
+                    </span>
                   </div>
                 ))}
               </div>

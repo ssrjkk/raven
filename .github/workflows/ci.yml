@@ -137,6 +137,14 @@ jobs:
       - name: Build
         working-directory: web
         run: npm run build
+      # The editor extension is packaged by vsce, which type-checks only when a VSIX is built, so a
+      # type error in extension/vscode/src passed every other gate in this workflow.
+      - name: Install editor extension dependencies
+        working-directory: extension/vscode
+        run: npm ci --no-audit --no-fund
+      - name: TypeScript check (editor extension)
+        working-directory: extension/vscode
+        run: npx tsc -p . --noEmit
       - name: Upload web dist
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

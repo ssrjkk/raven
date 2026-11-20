@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api/client";
+import { StatusMark } from "../components/StatusMark";
 import { errorMessage } from "../lib/errors";
 
 interface EmailThread {
@@ -73,8 +74,7 @@ export default function EmailPage() {
       <div className="flex gap-1 mb-6 border-b border-default">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className="px-4 py-2 text-sm font-medium rounded-t-lg transition"
-            style={{ color: tab === t.key ? "var(--dt-colors-accent-default)" : "var(--dt-colors-text-secondary)", borderBottom: tab === t.key ? "2px solid var(--dt-colors-accent-default)" : "2px solid transparent" }}>
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition ${tab === t.key ? "tab-active" : "tab-inactive"}`}>
             {t.label}
           </button>
         ))}
@@ -142,19 +142,31 @@ export default function EmailPage() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between p-2 rounded-lg bg-tertiary">
                 <span>SMTP</span>
-                <span>{config.smtp_configured ? `✓ ${config.smtp_host}` : "✗ Not configured"}</span>
+                <span className="flex items-center gap-1.5">
+                  <StatusMark ok={!!config.smtp_configured} />
+                  {config.smtp_configured ? config.smtp_host : "Not configured"}
+                </span>
               </div>
               <div className="flex justify-between p-2 rounded-lg bg-tertiary">
                 <span>IMAP</span>
-                <span>{config.imap_configured ? `✓ ${config.imap_host}` : "✗ Not configured"}</span>
+                <span className="flex items-center gap-1.5">
+                  <StatusMark ok={!!config.imap_configured} />
+                  {config.imap_configured ? config.imap_host : "Not configured"}
+                </span>
               </div>
               <div className="flex justify-between p-2 rounded-lg bg-tertiary">
                 <span>SMTP Library</span>
-                <span>{config.smtp_lib_available ? "✓ Installed" : "✗ Not installed"}</span>
+                <span className="flex items-center gap-1.5">
+                  <StatusMark ok={!!config.smtp_lib_available} />
+                  {config.smtp_lib_available ? "Installed" : "Not installed"}
+                </span>
               </div>
               <div className="flex justify-between p-2 rounded-lg bg-tertiary">
                 <span>IMAP Library</span>
-                <span>{config.imap_lib_available ? "✓ Installed" : "✗ Not installed"}</span>
+                <span className="flex items-center gap-1.5">
+                  <StatusMark ok={!!config.imap_lib_available} />
+                  {config.imap_lib_available ? "Installed" : "Not installed"}
+                </span>
               </div>
             </div>
           )}

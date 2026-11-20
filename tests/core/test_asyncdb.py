@@ -100,6 +100,11 @@ def _aiosqlite_workers() -> set[int]:
     }
 
 
+_WORKER_EXIT_TIMEOUT = 5.0
+"""How long a worker gets to stop before the verdict calls it a leak — the same budget the session
+reporter in `tests/conftest.py` gives one before it names the process as hung."""
+
+
 class TestFailedOpenReleasesItsWorker:
     """`aiosqlite.connect()` starts a non-daemon worker thread, and that thread only stops when
     `close()` hands it the stop sentinel. A file that is not a database fails inside `_ensure`,
@@ -118,6 +123,20 @@ class TestFailedOpenReleasesItsWorker:
             for t in threading.enumerate()
             if not t.daemon and getattr(getattr(t, "_target", None), "__qualname__", "") == "_connection_worker_thread"
         }
+
+    def _survivors(self, candidates: set[int]) -> set[int]:
+        """Workers still alive once given the chance to stop.
+
+        `close()` hands a worker its stop sentinel and returns; the thread's own exit is not part of that
+        await, so reading `threading.enumerate()` on the next line measures scheduling, not cleanup. The
+        session reporter in `tests/conftest.py` rules on a leak by joining first, and this test disagreed
+        with it: red once in 8468 cases on a starved box, green in every run since. A worker the cleanup
+        never told to stop is still red, after the whole timeout.
+        """
+        threads = [t for t in threading.enumerate() if id(t) in candidates]
+        for thread in threads:
+            thread.join(timeout=_WORKER_EXIT_TIMEOUT)
+        return {id(thread) for thread in threads if thread.is_alive()}
 
     def _open(self, path: Path) -> None:
         async def _run() -> None:
@@ -138,7 +157,7 @@ class TestFailedOpenReleasesItsWorker:
         before = self._workers()
         with pytest.raises(sqlite3.DatabaseError):
             self._open(self._corrupt(tmp_path))
-        leaked = self._workers() - before
+        leaked = self._survivors(self._workers() - before)
         assert not leaked, f"{len(leaked)} aiosqlite worker(s) survived a failed open"
 
     def test_a_healthy_open_keeps_its_worker_until_closed(self, tmp_path: Path) -> None:

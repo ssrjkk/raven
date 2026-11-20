@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 
 import App from "./App";
 import { ToastProvider } from "./components/Toast";
+import { wirePointerLight } from "./design/pointerLight";
 
 // The tracer configures itself on import, so it is only pulled in when the bundle was
 // built with an endpoint. Without this the OpenTelemetry packages sit in node_modules
@@ -27,3 +28,7 @@ createRoot(document.getElementById("root")!).render(
     </ToastProvider>
   </StrictMode>
 );
+
+// One listener for the whole console. The cards the sheet lights come and go with routing, so the
+// wiring lives beside the root rather than in a component that would attach one per mount.
+wirePointerLight();

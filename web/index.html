@@ -7,25 +7,29 @@
     <meta name="description" content="Raven AI — Self-hosted corporate AI assistant. 12 messengers, RAG, monitors, coding tools, RBAC. by ssrjkk" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ws: wss: http://localhost:18888; font-src 'self' data:" />
     <title>Raven AI</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F426;</text></svg>" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="alternate icon" href="/favicon.ico" type="image/vnd.microsoft.icon" />
+    <meta name="theme-color" content="#0a0812" />
     <script>
       (function() {
-        var theme = 'dark';
+        var theme = null;
         try { var s = localStorage.getItem('raven-theme'); if (s === 'light' || s === 'dark' || s === 'midnight') theme = s; }
         catch(e) {}
-        if (theme === 'light' && window.matchMedia('(prefers-color-scheme: light)').matches) theme = 'light';
+        if (theme === null) {
+          theme = 'dark';
+          try { if (window.matchMedia('(prefers-color-scheme: light)').matches) theme = 'light'; }
+          catch(e) {}
+        }
         document.documentElement.setAttribute('data-theme', theme);
-        document.documentElement.className = theme;
         var meta = document.querySelector('meta[name=theme-color]');
-        if (meta) { meta.setAttribute('content', theme === 'midnight' ? '#050507' : theme === 'light' ? '#f6f7fb' : '#0f1117'); }
+        if (meta) { meta.setAttribute('content', theme === 'midnight' ? '#06040c' : theme === 'light' ? '#f4f2fa' : '#0a0812'); }
       })();
     </script>
-    <meta name="theme-color" content="#0f1117" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Raven AI" />
     <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
   </head>
   <body>
     <div id="root"></div>

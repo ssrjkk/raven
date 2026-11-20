@@ -63,11 +63,7 @@ export default function Insights() {
       <div className="flex gap-1 mb-6 p-1 rounded-lg bg-tertiary">
         {(["coding", "llm", "workspace"] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className="px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-all"
-            style={{
-              backgroundColor: tab === t ? "var(--dt-colors-accent-default)" : "transparent",
-              color: tab === t ? "var(--dt-colors-text-on-accent)" : "var(--dt-colors-text-secondary)",
-            }}>
+            className={`px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-all ${tab === t ? "bg-accent on-accent" : "text-secondary"}`}>
             {t === "llm" ? "LLM Usage" : t === "workspace" ? "Workspace" : "Coding Activity"}
           </button>
         ))}
@@ -108,13 +104,12 @@ function CodingInsights({ data }: { data: CodingInsights | null }) {
         <div className="flex items-end gap-1 h-32">
           {(data.commits_per_day || []).slice(-30).map((d) => (
             <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
-              <div className="w-full rounded-t transition-all duration-200" style={{
+              <div className="w-full rounded-t transition-all duration-200 bg-accent" style={{
                 height: `${(d.count / maxCommit) * 100}%`,
                 minHeight: d.count > 0 ? 4 : 0,
-                backgroundColor: "var(--dt-colors-accent-default)",
                 opacity: 0.7 + (d.count / maxCommit) * 0.3,
               }} title={`${d.date}: ${d.count} commits`} />
-              <span className="text-[10px] text-tertiary">
+              <span className="text-micro text-tertiary">
                 {d.date.slice(5)}
               </span>
             </div>
@@ -131,13 +126,12 @@ function CodingInsights({ data }: { data: CodingInsights | null }) {
               const count = h?.count || 0;
               return (
                 <div key={i} className="flex-1 flex flex-col items-center">
-                  <div className="w-full rounded-t transition-all" style={{
+                  <div className="w-full rounded-t transition-all bg-accent" style={{
                     height: `${(count / maxHour) * 100}%`,
                     minHeight: count > 0 ? 2 : 0,
-                    backgroundColor: "var(--dt-colors-accent-default)",
                     opacity: 0.4 + (count / maxHour) * 0.6,
                   }} title={`${i}:00 — ${count} commits`} />
-                  <span className="text-[10px] mt-0.5 text-tertiary">{i}</span>
+                  <span className="text-micro mt-0.5 text-tertiary">{i}</span>
                 </div>
               );
             })}
@@ -186,13 +180,12 @@ function LLMInsights({ data }: { data: LlmInsights | null }) {
           <div className="flex items-end gap-1 h-28">
             {(data.calls_per_day || []).slice(-30).map((d) => (
               <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
-                <div className="w-full rounded-t transition-all" style={{
+                <div className="w-full rounded-t transition-all bg-accent" style={{
                   height: `${(d.calls / maxCalls) * 100}%`,
                   minHeight: d.calls > 0 ? 2 : 0,
-                  backgroundColor: "var(--dt-colors-accent-default)",
                   opacity: 0.6 + (d.calls / maxCalls) * 0.4,
                 }} />
-                <span className="text-[10px] text-tertiary">{d.date.slice(5)}</span>
+                <span className="text-micro text-tertiary">{d.date.slice(5)}</span>
               </div>
             ))}
           </div>
@@ -205,9 +198,8 @@ function LLMInsights({ data }: { data: LlmInsights | null }) {
               <div key={m.model} className="flex items-center gap-2">
                 <span className="text-xs font-mono w-32 truncate text-secondary">{m.model}</span>
                 <div className="flex-1 h-4 rounded bg-primary">
-                  <div className="h-full rounded transition-all" style={{
+                  <div className="h-full rounded transition-all bg-accent" style={{
                     width: `${(m.calls / maxModel) * 100}%`,
-                    backgroundColor: "var(--dt-colors-accent-default)",
                   }} />
                 </div>
                 <span className="text-xs shrink-0 text-tertiary">{m.calls}</span>
@@ -228,13 +220,12 @@ function LLMInsights({ data }: { data: LlmInsights | null }) {
             const count = h?.calls || 0;
             return (
               <div key={i} className="flex-1 flex flex-col items-center">
-                <div className="w-full rounded-t" style={{
+                <div className="w-full rounded-t bg-accent" style={{
                   height: `${(count / maxHour) * 100}%`,
                   minHeight: count > 0 ? 2 : 0,
-                  backgroundColor: "var(--dt-colors-accent-default)",
                   opacity: 0.3 + (count / maxHour) * 0.7,
                 }} />
-                <span className="text-[10px] mt-0.5 text-tertiary">{i}</span>
+                <span className="text-micro mt-0.5 text-tertiary">{i}</span>
               </div>
             );
           })}
@@ -267,9 +258,8 @@ function WorkspaceInsights({ data }: { data: { total_files: number; total_dirs: 
               <div key={ext} className="flex items-center gap-2">
                 <span className="text-xs font-mono w-20 shrink-0 text-secondary">{ext}</span>
                 <div className="flex-1 h-3 rounded bg-primary">
-                  <div className="h-full rounded transition-all" style={{
+                  <div className="h-full rounded transition-all bg-accent" style={{
                     width: `${(count / maxExt) * 100}%`,
-                    backgroundColor: "var(--dt-colors-accent-default)",
                   }} />
                 </div>
                 <span className="text-xs shrink-0 text-tertiary">{count}</span>
@@ -287,7 +277,7 @@ function WorkspaceInsights({ data }: { data: { total_files: number; total_dirs: 
               {data.recently_modified.map((f) => (
                 <div key={f.path} className="flex justify-between text-xs py-0.5">
                   <span className="truncate flex-1 font-mono text-secondary">{f.path}</span>
-                  <span className="ml-2 shrink-0 text-[10px] text-tertiary">
+                  <span className="ml-2 shrink-0 text-micro text-tertiary">
                     {f.modified_at?.slice(0, 10)}
                   </span>
                 </div>

@@ -55,13 +55,14 @@ every message — a session id the editor invents itself is outside that namespa
 
 ## Icons
 
-All PNG icons (browser + VS Code) and the PyInstaller `scripts/raven.ico` come from the
-same renderer (`scripts/icon_render.py`) so the branding stays identical everywhere:
+Every raster the packages ship -- browser, VS Code, the PyInstaller executable and the installable app --
+comes from the same renderer (`scripts/icon_render.py`), so the branding stays identical everywhere:
 
 ```bash
-python scripts/make_icon.py                 # scripts/raven.ico (skip if present)
+python scripts/make_icon.py                 # scripts/raven.ico, rewritten on every run
 python scripts/make_extension_icons.py      # write missing extension icons
 python scripts/make_extension_icons.py --force   # regenerate every extension icon
+python scripts/make_web_icons.py            # the installable app's favicon and manifest icons
 ```
 
 The generated PNGs are committed — `manifest.json` and `vscode/package.json` reference them at

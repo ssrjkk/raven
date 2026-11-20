@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { api } from "../api/client";
 import PageHeader from "../components/PageHeader";
+import { StatusMark } from "../components/StatusMark";
 import { useApiQuery } from "../hooks/useApiQuery";
 import { errorMessage } from "../lib/errors";
 
@@ -233,8 +234,11 @@ export default function Voice() {
             </button>
             {verifyResult && (
               <div className="mt-3 p-3 rounded-lg text-sm bg-tertiary">
-                <p className={verifyResult.verified ? "text-success" : "text-danger"}>
-                  {verifyResult.verified ? "✓ VERIFIED" : "✗ REJECTED"}
+                <p className="flex items-center gap-1.5">
+                  <StatusMark ok={!!verifyResult.verified} />
+                  <span className={verifyResult.verified ? "text-success" : "text-danger"}>
+                    {verifyResult.verified ? "VERIFIED" : "REJECTED"}
+                  </span>
                 </p>
                 <p>Score: {verifyResult.score} (threshold: {verifyResult.threshold})</p>
                 <p>Latency: {verifyResult.latency_ms.toFixed(1)}ms</p>
@@ -269,7 +273,10 @@ export default function Voice() {
                   <div key={i} className="p-2 rounded-lg text-sm bg-tertiary">
                     <span className="font-medium">{r.speaker_id}</span>
                     <span className="ml-2">score={r.score}</span>
-                    <span className="ml-2">{r.verified ? "✓" : "✗"}</span>
+                    <span className="ml-2 inline-flex items-center gap-1">
+                      <StatusMark ok={!!r.verified} />
+                      {r.verified ? "match" : "no match"}
+                    </span>
                   </div>
                 ))}
               </div>
