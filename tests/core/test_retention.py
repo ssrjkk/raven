@@ -424,7 +424,9 @@ def test_a_cutoff_is_shaped_the_way_the_column_stores_time() -> None:
     assert isinstance(text, str) and re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d", text)
 
     stamp = cutoff(POLICIES["messages"], 30, "postgresql")
-    assert isinstance(stamp, datetime) and stamp.tzinfo is None, "asyncpg binds a TIMESTAMP as a naive datetime"
+    assert isinstance(stamp, datetime) and stamp.tzinfo is UTC, (
+        "the column is timestamptz and asyncpg re-reads a naive bind in the server's zone"
+    )
 
 
 def test_the_columns_stamped_differently_per_dialect_say_so() -> None:

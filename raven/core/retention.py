@@ -197,8 +197,10 @@ def cutoff(policy: TablePolicy, days: float, dialect: Dialect) -> float | str | 
         case "sql_datetime":
             return moment.strftime("%Y-%m-%d %H:%M:%S")
         case "timestamp":
-            # asyncpg binds a TIMESTAMP parameter as a naive datetime and rejects the string form.
-            return moment.replace(tzinfo=None)
+            # Postgres holds these columns as `timestamptz` (migration 13) and the writers bind aware
+            # UTC. A naive bind is not refused: asyncpg reads it as wall time in the server's zone,
+            # measured here as a three-hour shift, so the offset has to survive to the driver.
+            return moment
     raise AssertionError(f"unreachable unit for {policy.table}")
 
 

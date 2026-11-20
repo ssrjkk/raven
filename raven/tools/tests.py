@@ -7,6 +7,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from raven.core.security.secret_paths import credential_reason
 from raven.core.task_engine.tool_registry import ToolRegistry, ToolSpec
 from raven.core.workspace import workspace_root
 
@@ -42,6 +43,13 @@ def _confine(path: str) -> Path:
     except ValueError:
         msg = f"Access denied: path outside workspace: {p}"
         raise PermissionError(msg) from None
+    # `generate_tests` opens the path it is given and puts what it finds in a prompt, so this
+    # resolver answers the credential question the other resolvers answer. A rule only some of
+    # them know is a rule that can be walked past by calling the others.
+    reason = credential_reason(p, ws)
+    if reason is not None:
+        msg = f"Access denied: {path} {reason}. Credentials stay out of what the model can read."
+        raise PermissionError(msg)
     return p
 
 

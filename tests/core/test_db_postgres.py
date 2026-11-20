@@ -31,3 +31,25 @@ def test_create_short_dsn_truncated_in_log():
             with patch("raven.core.db_postgres.PostgresDatabase"):
                 DatabaseFactory.create()
                 mock_logger.info.assert_called_once()
+
+
+def test_declared_postgres_ddl_never_holds_a_naive_timestamp() -> None:
+    """The writes above bind `datetime.now(UTC)`, and asyncpg refuses that against a bare TIMESTAMP.
+
+    Measured on Postgres 16.14 with asyncpg 0.32: aware -> `timestamp` raises DataError on the first
+    session insert, so a real install could not store its first conversation. Every other test here
+    mocks the driver and cannot see it, which is why the declared DDL is read as text.
+    """
+    import inspect
+    import re
+
+    from raven.core import migrations
+    from raven.core.db_postgres import PostgresDatabase, _PostgresMigrator
+
+    declared = {
+        "the core tables": inspect.getsource(PostgresDatabase._create_tables),
+        "the migration ledger": inspect.getsource(_PostgresMigrator.get_current_version),
+        "MIGRATIONS_TABLE_POSTGRES": migrations.MIGRATIONS_TABLE_POSTGRES,
+    }
+    for name, text in declared.items():
+        assert not re.search(r"\bTIMESTAMP\b", text), f"{name} declares a timestamp without time zone"

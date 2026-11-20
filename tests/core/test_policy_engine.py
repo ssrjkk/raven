@@ -476,15 +476,25 @@ class TestAdversarialNamespacePolicy:
         engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
         assert not engine.check("tools", {"tool": "totally-unknown-tool", "profile": "full", "action": "call"})
 
-    def test_allow_messaging_profile_access_files_read(self):
+    def test_the_ruleset_does_not_claim_file_read_for_messaging(self):
+        """An `allow` line here grants nothing — but it used to state an intent the profile refuses."""
         engine = PolicyEngine()
         engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
-        assert engine.check("tools", {"tool": "files.read", "profile": "messaging", "action": "call"})
+        assert not engine.check("tools", {"tool": "files.read", "profile": "messaging", "action": "call"})
 
     def test_allow_messaging_profile_access_memory_recall(self):
         engine = PolicyEngine()
         engine.load_ruleset("tools", str(Path(__file__).resolve().parent.parent.parent / "policy" / "tools.json"))
         assert engine.check("tools", {"tool": "memory.recall", "profile": "messaging", "action": "call"})
+
+    def test_the_messaging_profile_refuses_file_read_however_the_ruleset_answers(self):
+        from raven.core.security.tool_policy import ExecSecurity, ToolPolicyEvaluator
+
+        for level in (ExecSecurity.DENY, ExecSecurity.ASK, ExecSecurity.FULL):
+            p = ToolPolicyEvaluator(profile="messaging", exec_security=level)
+            assert not p.is_tool_allowed("files.read"), level
+            reason = p.denial_reason("files.read")
+            assert reason is not None and "messaging" in reason, reason
 
 
 class TestAdversarialToolPolicyDenyByDefault:

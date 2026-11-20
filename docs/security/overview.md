@@ -65,12 +65,19 @@ An invalid value is a startup error, not a silent fallback (`Settings.model_post
   `ask_confirmation()` — thirteen of the fifteen adapters, including webchat — denies instead of
   answering for the user
 - **tool profiles** (`messaging` / `minimal` / `full`) — an allow-list over the plugin
-  tools on the agent path. `messaging` allows exactly `files.read`, `api.http_get`,
-  `memory.recall` and `browser.search`: it can read a file in the workspace and cannot write one.
-  `browser.search` is exec-class, so with the shipped `EXEC_SECURITY=deny` the offer drops it and
-  the messaging deployment keeps three tools; raising the level to `ask` or `full` is the operator
-  decision that gives search back. `minimal` and the `full` profile contain no exec-class tool.
-  `full` ignores the list
+  tools on the agent path. `messaging` allows exactly `api.http_get`, `memory.recall` and
+  `browser.search`: it can read the deployment's own memory and cannot read a file. The read tool
+  left this profile because it takes any path inside the root, and on a default install the root is
+  the launch directory — the same one that holds `.env`. The credential name table in
+  `raven/core/security/secret_paths.py` refuses the well-known secret names in every resolver, but a
+  name table is a blocklist: a database file, a token pasted into a note, a `prod-secrets.yaml`, all
+  read the same way, and whatever a tool reads goes into the prompt and out through the channel that
+  asked. `browser.search` is exec-class, so with the shipped `EXEC_SECURITY=deny` the offer drops it
+  and the messaging deployment keeps two tools; raising the level to `ask` or `full` is the operator
+  decision that gives search back. A deployment that wants file read on its DM surface says so:
+  `TOOLS_ALLOW` names the tools it means (the list replaces the profile's, so name the ones you were
+  relying on too), or `TOOLS_PROFILE` moves it off `messaging`. `minimal` and the `full` profile
+  contain no exec-class tool. `full` ignores the list
 - **the tool ruleset** (`policy/tools.json`) — the file-shaped gate the two lists above are
   enforced through. `ToolPolicyEvaluator` asks `PolicyEngine` on every tool call and every exec
   check, so a tool the file denies is refused even with an empty `TOOLS_DENY` and `profile=full`,
@@ -122,8 +129,11 @@ that one root:
   directory, deliberately the strictest of the three.
 - `raven/core/security/tool_policy.py:ToolPolicyEvaluator.path_denial_reason` — the check the policy
   layer runs over every path-shaped argument before `EXEC_SECURITY` lets a tool start.
+- `raven/tools/tests.py:_confine` — the test tools, which take the stricter of the roots (workspace
+  only, no temp directory) and add the credential names because `generate_tests` opens the source it
+  is handed and puts what it finds in a prompt.
 
-The four of them refuse the same names, from one list in
+The five of them refuse the same names, from one list in
 `raven/core/security/secret_paths.py:credential_reason`: `.env` and its per-environment variants,
 `id_rsa`/`id_ecdsa`/`id_ed25519`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.kdbx`,
 `.git-credentials`, `.npmrc`, `.pypirc`, `netrc`, the `web_secret_key` file Raven writes its own HMAC
@@ -133,7 +143,7 @@ readable (`.env.example`, `id_rsa.pub`, `*.template`), because the setup step is
 The rule is by name, before the read, because whatever a tool returns is put into a model prompt and
 then into a channel answer: a key the agent can open is a key the agent can send. Only the segments
 below the root are judged, so a checkout that happens to live under a directory in the list still
-works. `tests/core/test_secret_paths.py` drives all four resolvers over the same names.
+works. `tests/core/test_secret_paths.py` drives all five resolvers over the same names.
 
 Where a tool names a directory, that directory is confined before the process starts:
 `raven/tools/tests.py:run_tests` and `test_coverage` collect from the workspace root rather than

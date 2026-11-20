@@ -28,7 +28,7 @@
       "name": "allow-messaging-tools",
       "condition": {
         "or": [
-          {"tool": "files.read", "profile": "messaging"},
+          {"tool": "api.http_get", "profile": "messaging"},
           {"tool": "memory.recall", "profile": "messaging"},
           {"tool": "memory.search_memory", "profile": "messaging"},
           {"tool": "browser.search", "profile": "messaging"}

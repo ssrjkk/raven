@@ -316,7 +316,10 @@ def test_ask_mode_offers_them_because_confirmation_is_a_per_call_question(
     assert "shell" in _offered(orch)
 
 
-MESSAGING_OFFER = ("files.read", "api.http_get", "memory.recall", "browser.search")
+# The tools a messaging deployment could be handed. `files.read` is among them and must not be
+# offered: it takes any path inside the root, and on a default install the root is the launch
+# directory — the one that holds `.env`.
+MESSAGING_PROBE = ("files.read", "api.http_get", "memory.recall", "browser.search")
 
 
 def _plugin_tools(*names: str) -> list[PluginTool]:
@@ -336,15 +339,22 @@ def _agent(policy: ToolPolicyEvaluator, *names: str) -> Agent:
 
 
 def test_the_agent_offer_drops_the_exec_tool_the_messaging_profile_declares(shipped: None) -> None:
-    agent = _agent(_policy(ExecSecurity.DENY, profile="messaging"), *MESSAGING_OFFER)
+    agent = _agent(_policy(ExecSecurity.DENY, profile="messaging"), *MESSAGING_PROBE)
     offered = {s["function"]["name"] for s in agent._tool_schemas()}
-    assert offered == {"files.read", "api.http_get", "memory.recall"}, offered
+    assert offered == {"api.http_get", "memory.recall"}, offered
 
 
 def test_raising_the_level_gives_search_back(shipped: None) -> None:
-    agent = _agent(_policy(ExecSecurity.FULL, profile="messaging"), *MESSAGING_OFFER)
+    agent = _agent(_policy(ExecSecurity.FULL, profile="messaging"), *MESSAGING_PROBE)
     offered = {s["function"]["name"] for s in agent._tool_schemas()}
     assert "browser.search" in offered, offered
+
+
+def test_the_messaging_offer_has_no_arbitrary_file_read_at_any_level(shipped: None) -> None:
+    """The hole this closes was reachable without raising anything: an admitted DM user read `.env`."""
+    for level in (ExecSecurity.DENY, ExecSecurity.ASK, ExecSecurity.FULL):
+        agent = _agent(_policy(level, profile="messaging"), *MESSAGING_PROBE)
+        assert "files.read" not in {s["function"]["name"] for s in agent._tool_schemas()}, level
 
 
 def test_both_offer_builders_consult_the_level() -> None:

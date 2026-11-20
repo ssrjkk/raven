@@ -1,10 +1,11 @@
 """The credential rule, checked at every resolver that confines a tool path.
 
-Four places decide whether a path a tool named may be opened: `raven/core/workspace.py` (the plugin
+Five places decide whether a path a tool named may be opened: `raven/core/workspace.py` (the plugin
 tools and the aios bridge), `ravencode/runtime/workspace.py` (the coding agent and the MCP surface),
-`raven/core/security/path_guard.py` (the registry file tools, the debugger, git) and the tool policy's
-containment. A rule only some of them know is a rule an injected message walks past by asking the
-twin tool, so this file drives all four against the same names.
+`raven/core/security/path_guard.py` (the registry file tools, the debugger, git), the tool policy's
+containment, and `raven/tools/tests.py` (the test generator, which opens the source it is handed and
+puts it in a prompt). A rule only some of them know is a rule an injected message walks past by
+asking the twin tool, so this file drives all five against the same names.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from raven.core.security.path_guard import confine_path
 from raven.core.security.secret_paths import credential_reason
 from raven.core.security.tool_policy import ToolPolicyEvaluator
 from raven.core.workspace import confine as tool_confine
+from raven.tools.tests import _confine as confine_tests_tool_path
 from ravencode.runtime.workspace import confine as agent_confine
 from ravencode.runtime.workspace import reset_workspace_root, set_workspace_root
 
@@ -81,6 +83,17 @@ def test_the_tool_policy_refuses_a_credential_argument(ws: Path, name: str) -> N
     policy = ToolPolicyEvaluator(profile="full", workspace_only=True, workspace_root=str(ws))
     assert policy.check_path(str(ws / name)) is False
     assert "credential" in str(policy.path_denial_reason(str(ws / name)))
+
+
+@pytest.mark.parametrize("name", CREDENTIALS)
+def test_the_test_generator_resolver_refuses_a_credential(ws: Path, name: str) -> None:
+    with pytest.raises(PermissionError, match="credential"):
+        confine_tests_tool_path(str(ws / name))
+
+
+def test_the_test_generator_keeps_ordinary_sources(ws: Path) -> None:
+    assert confine_tests_tool_path(str(ws / "notes.md")).name == "notes.md"
+    assert confine_tests_tool_path(str(ws / ".env.example")).name == ".env.example"
 
 
 def test_the_rule_bends_for_ordinary_files(ws: Path) -> None:

@@ -296,3 +296,49 @@ async def test_persister_crud(pg_dsn: str, pg_schema: None) -> None:
         assert await persister.delete("widgets", obj_id) is True
     finally:
         await persister.close()
+
+
+async def test_an_aware_write_survives_the_conversation_path(pg_dsn: str, pg_schema: None) -> None:
+    """Storing a person's first conversation is the first thing an install on Postgres does.
+
+    Nothing here exercised `sessions` or `messages`, which is how a bind every writer makes
+    (`datetime.now(UTC)`) went refused by the driver for as long as the backend existed. The round trip
+    is checked, not only the insert: asyncpg takes a naive datetime against timestamptz and hands back
+    the same instant shifted into the server's zone.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from raven.core.db_postgres import PostgresDatabase
+    from raven.core.models import Message
+
+    session_id = f"pgtz-{uuid.uuid4().hex[:10]}"
+    moment = datetime.now(UTC) - timedelta(days=2)
+    db = PostgresDatabase(pg_dsn)
+    try:
+        await db.connect()
+        session = await db.get_or_create_session(session_id, "telegram", "u-1")
+        assert session.created_at.tzinfo is UTC, "the stored instant came back without its offset"
+
+        await db.save_message(Message(session_id=session_id, role="user", content="older", created_at=moment))
+        stored = await db.get_session_messages(session_id, limit=10)
+        assert [msg.content for msg in stored] == ["older"]
+        assert stored[0].created_at == moment, "the instant moved between the bind and the read"
+    finally:
+        await db.delete_session(session_id)
+        await db.disconnect()
+
+
+async def test_the_live_postgres_schema_holds_no_naive_timestamp(pg_dsn: str, pg_schema: None) -> None:
+    """Whatever DDL a store or a migration reaches, an offset-less column cannot take these binds."""
+    from raven.core.asyncdb import connect_backend
+
+    db = connect_backend(pg_dsn)
+    await db.connect()
+    try:
+        rows = await db.fetchall(
+            "SELECT table_name, column_name FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND data_type = 'timestamp without time zone'"
+        )
+    finally:
+        await db.close()
+    assert not rows, f"aware binds raise DataError on {[(r['table_name'], r['column_name']) for r in rows]}"

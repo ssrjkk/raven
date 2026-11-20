@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import tempfile
 from collections.abc import Awaitable, Callable
@@ -65,15 +66,23 @@ class WakeWordDetector:
         while self._running:
             try:
                 audio = await asyncio.to_thread(self._capture, mic, recognizer)
-                temp = Path(tempfile.gettempdir()) / "raven_wake.wav"
-                async with aiofiles.open(temp, "wb") as f:
-                    await f.write(audio.get_wav_data())
+                # One file per capture. The name used to be fixed inside the world-writable temp
+                # directory, so a second detector, another install of Raven or a stray cleaner could
+                # delete it between the write and the unlink - and the retry below turned that into a
+                # loop that never left, because nothing on that path ever clears `_running`.
+                fd, name = tempfile.mkstemp(prefix="raven_wake_", suffix=".wav")
+                os.close(fd)
+                temp = Path(name)
+                try:
+                    async with aiofiles.open(temp, "wb") as f:
+                        await f.write(audio.get_wav_data())
 
-                from raven.voice.stt import SpeechToText
+                    from raven.voice.stt import SpeechToText
 
-                stt = SpeechToText()
-                text = await asyncio.to_thread(stt.transcribe, str(temp))
-                await asyncio.to_thread(temp.unlink)
+                    stt = SpeechToText()
+                    text = await asyncio.to_thread(stt.transcribe, str(temp))
+                finally:
+                    await asyncio.to_thread(temp.unlink, missing_ok=True)
 
                 if not text:
                     continue

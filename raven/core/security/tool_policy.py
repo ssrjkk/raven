@@ -129,7 +129,12 @@ class ToolPolicyEvaluator:
         self._workspace_root = resolve_within_root(workspace_root) if workspace_root else None
 
         self._profiles: dict[str, set[str]] = {
-            "messaging": {"files.read", "api.http_get", "memory.recall", "browser.search"},
+            # `files.read` is deliberately absent. It takes any path inside the root, and the root is
+            # the launch directory on a default install — the same directory that holds `.env`. The
+            # credential name table below refuses the well-known names, but a name table is a blocklist:
+            # `prod-secrets.yaml`, a database file, a token pasted into a note, all read the same way.
+            # The messaging profile is the surface an uninvited DM reaches, so it does not get the tool.
+            "messaging": {"api.http_get", "memory.recall", "browser.search"},
             "minimal": {"api.http_get"},
             "full": set(),
         }

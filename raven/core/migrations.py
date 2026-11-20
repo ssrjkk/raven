@@ -13,7 +13,7 @@ MIGRATIONS_TABLE_SQLITE = (
     "(version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
 )
 MIGRATIONS_TABLE_POSTGRES = (
-    "CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT NOW())"
+    "CREATE TABLE IF NOT EXISTS _migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT NOW())"
 )
 
 MigrateFn = Callable[[AsyncDB], Awaitable[None]]
@@ -503,6 +503,40 @@ async def _migration_12(db: AsyncDB) -> None:
     await db.run_script("DELETE FROM auth_sessions")
     await db.run_script("CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions(user_id)")
     logger.warning("Revoked {} session(s): they were stored as plaintext bearer tokens", outstanding or 0)
+
+
+# The columns Postgres declared as `timestamp without time zone` while every writer in this project
+# binds `datetime.now(UTC)`. asyncpg refuses that pair: the first session insert raised DataError, so
+# an install on Postgres never had a working conversation store at all.
+_NAIVE_TIMESTAMP_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("_migrations", "applied_at"),
+    ("messages", "created_at"),
+    ("rss_seen_items", "seen_at"),
+    ("secrets", "created_at"),
+    ("secrets", "updated_at"),
+    ("sessions", "created_at"),
+    ("sessions", "updated_at"),
+    ("users", "created_at"),
+)
+
+
+@register(13, "Give Postgres timestamps the UTC offset every writer already binds them with")
+async def _migration_13(db: AsyncDB) -> None:
+    if db.dialect != "postgresql":
+        return
+    for table, column in _NAIVE_TIMESTAMP_COLUMNS:
+        stored_as = await db.fetchval(
+            "SELECT data_type FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND table_name = ? AND column_name = ?",
+            (table, column),
+        )
+        if stored_as != "timestamp without time zone":
+            continue
+        # The rows already here were stamped by NOW() on a server running UTC, the only reading that
+        # does not move them; AT TIME ZONE labels the offset instead of shifting the wall time.
+        statement = f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMPTZ USING {column} AT TIME ZONE 'UTC'"
+        await db.execute(statement)
+        logger.info("Migration 13: {}.{} now stores its offset", table, column)
 
 
 async def apply_pending_migrations(db: AsyncDB) -> None:

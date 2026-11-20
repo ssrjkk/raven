@@ -736,6 +736,34 @@ class TestGenerateTests:
         result = await generate_tests(str(tmp_path.parent / "evil.py"))
         assert result == "Access denied: invalid path"
 
+    async def test_a_credential_inside_the_workspace_is_never_opened(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The proven hole: with the default root, a DM-admitted caller read `.env` through a tool."""
+        import sys
+        import types
+
+        from raven.tools.tests import generate_tests
+
+        monkeypatch.setenv("RAVEN_WORKSPACE", str(tmp_path))
+        secret = tmp_path / ".env"
+        secret.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
+        opened: list[str] = []
+
+        class _Gen:
+            async def generate_tests(self, fp: str) -> str:
+                opened.append(fp)
+                return "def test_x():\n    pass\n"
+
+            async def save_tests(self, _fp: str, _content: str) -> str:
+                return "Saved 1 test"
+
+        ns: Any = types.ModuleType("raven.coding.test_generator")
+        ns.TestGenerator = _Gen
+        monkeypatch.setitem(sys.modules, "raven.coding.test_generator", ns)
+        assert await generate_tests(str(secret)) == "Access denied: invalid path"
+        assert opened == [], "the generator was handed the credential anyway"
+
     async def test_file_not_found(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from raven.tools.tests import generate_tests
 

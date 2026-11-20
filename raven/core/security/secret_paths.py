@@ -1,8 +1,9 @@
 """The path names that mean a credential, so every confine in the project refuses them the same way.
 
-Three resolvers guard a filesystem path today (`raven/core/workspace.py`, `ravencode/runtime/workspace.py`,
-`raven/core/security/path_guard.py`) and a fourth decides it in the tool policy, so the rule belongs in
-one module the four of them import rather than in whichever one a given tool happens to call.
+Five resolvers decide a path a tool named — `raven/core/workspace.py`, `ravencode/runtime/workspace.py`,
+`raven/core/security/path_guard.py`, `raven/tools/tests.py` and the containment in the tool policy — so
+the rule belongs in one module they all import rather than in whichever one a given tool happens to
+call.
 """
 
 from __future__ import annotations

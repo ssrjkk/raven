@@ -1,7 +1,7 @@
 """Postgres parity for the lifecycle sweep: one policy, two backends, four timestamp shapes.
 
 The sweep's SQL is written once against `?` placeholders and translated for Postgres, and its cutoff
-changes type per dialect — an epoch float for `monitor_checks`, a naive `datetime` for `messages`.
+changes type per dialect — an epoch float for `monitor_checks`, an aware `datetime` for `messages`.
 Neither of those is testable on SQLite, so they run here against the CI Postgres service and skip when
 no server answers.
 
@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from raven.core.analytics import AnalyticsEngine
 from raven.core.asyncdb import connect_backend, postgres_dsn
 from raven.core.db_postgres import PostgresDatabase
 from raven.core.models import Message
@@ -99,7 +100,8 @@ async def test_the_sweep_ages_telemetry_on_postgres(pg_dsn: str, pg_schema: None
 
 
 async def test_the_history_cutoff_binds_a_datetime_on_postgres(pg_dsn: str, pg_schema: None) -> None:
-    """`messages.created_at` is a TIMESTAMP there and ISO text on SQLite, so the bind cannot be a string."""
+    """`messages.created_at` is a TIMESTAMPTZ there and ISO text on SQLite, so the bind is neither a
+    string nor a naive datetime: the naive one is accepted and then re-read in the server's zone."""
     session_id = f"{_run_prefix()}-s1"
     db = PostgresDatabase(pg_dsn)
     sweeper = RetentionSweeper(pg_dsn, telemetry_days=0, telemetry_rows=0, history_days=30)
@@ -130,12 +132,24 @@ async def test_the_history_cutoff_binds_a_datetime_on_postgres(pg_dsn: str, pg_s
 
 
 async def test_the_present_table_probe_reads_the_postgres_catalog(pg_dsn: str, pg_schema: None) -> None:
-    """The sweep skips what is not there, so on Postgres that list comes from pg_catalog."""
+    """The sweep skips what is not there, so on Postgres that list comes from pg_catalog.
+
+    `analytics_snapshots` is the case that matters: the core schema does not create it, the analytics
+    engine does on its first start, so the probe has to report the install as it is and pick the table
+    up when it appears rather than from a list written next to the DDL.
+    """
     db = connect_backend(pg_dsn)
+    engine = AnalyticsEngine(pg_dsn, snapshot_interval=3600)
     await db.connect()
     try:
         present = await _present_tables(db)
-        assert {"monitor_checks", "messages", "analytics_snapshots"} <= present, "the catalog probe found nothing"
+        assert {"monitor_checks", "messages", "sessions"} <= present, "the catalog probe found nothing"
         assert all(name == name.lower() for name in present)
+
+        await engine.start()
+        try:
+            assert "analytics_snapshots" in await _present_tables(db), "the probe stayed at what it started with"
+        finally:
+            await engine.stop()
     finally:
         await db.close()

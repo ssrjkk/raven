@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import tempfile
 import time
 import types
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -85,7 +87,7 @@ def _install_wake_sr(
     return state
 
 
-def _install_fake_stt(monkeypatch: pytest.MonkeyPatch, texts: list[str]) -> dict[str, Any]:
+def _install_fake_stt(monkeypatch: pytest.MonkeyPatch, texts: list[str], steal: bool = False) -> dict[str, Any]:
     state: dict[str, Any] = {"transcribe_calls": 0, "paths": []}
 
     class FakeSTT:
@@ -95,6 +97,10 @@ def _install_fake_stt(monkeypatch: pytest.MonkeyPatch, texts: list[str]) -> dict
         def transcribe(self, path: str) -> str:
             state["transcribe_calls"] += 1
             state["paths"].append(path)
+            if steal:
+                # The way a temp cleaner reaches the capture file: gone between the write and the
+                # unlink, which is the only moment the detector has no business surviving.
+                Path(path).unlink(missing_ok=True)
             return texts.pop(0) if texts else ""
 
     monkeypatch.setattr(stt_module, "SpeechToText", FakeSTT)
@@ -185,6 +191,67 @@ class TestListenLoop:
         asyncio.run(scenario())
         assert got == ["hey raven"]
         assert stt_state["transcribe_calls"] == 2
+
+    def test_each_capture_gets_its_own_file(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Two detectors, one after the other, must not be handed the same capture file.
+
+        The path used to be a single fixed name in the shared temp dir, so whatever removed it between
+        the write and the unlink - a second detector, another install of Raven, a temp cleaner - sent
+        the loop into a retry that nothing on that path could end.
+        """
+        _install_wake_sr(monkeypatch, [b"wav-1", b"wav-2"])
+        stt_state = _install_fake_stt(monkeypatch, ["hey raven", "ok raven"])
+        got: list[str] = []
+
+        async def scenario() -> None:
+            d = WakeWordDetector()
+
+            async def cb(text: str) -> None:
+                got.append(text)
+                d._running = False
+
+            d.callback = cb  # type: ignore[assignment]
+            d._running = True
+            await d._listen_loop()
+
+        asyncio.run(scenario())
+        asyncio.run(scenario())
+
+        assert got == ["hey raven", "ok raven"]
+        paths = [Path(p) for p in stt_state["paths"]]
+        assert len({str(p) for p in paths}) == 2, "both detectors transcribed one shared capture file"
+        assert all(not p.exists() for p in paths), "a capture file outlived its transcription"
+
+    def test_a_capture_file_cleaned_during_transcription_does_not_end_the_detector(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """A capture file that leaves mid-flight must not cost the person the wake word.
+
+        The capture used to be one fixed name in the shared temp dir, so it could disappear between the
+        write and the unlink - a temp cleaner, a second detector - and the unlink then raised inside the
+        retry branch: the wake word was never delivered, and the loop spent an extra listen saying so.
+        """
+        monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
+        holder: list[Any] = []
+        state = _install_wake_sr(monkeypatch, [b"wav-hey"], holder=holder)
+        _install_fake_stt(monkeypatch, ["hey raven"], steal=True)
+        got: list[str] = []
+
+        async def scenario() -> None:
+            d = WakeWordDetector()
+
+            async def cb(text: str) -> None:
+                got.append(text)
+                d._running = False
+
+            d.callback = cb  # type: ignore[assignment]
+            holder.append(d)
+            d._running = True
+            await d._listen_loop()
+
+        asyncio.run(scenario())
+        assert got == ["hey raven"], "the wake word was lost with the capture file"
+        assert state["listen_calls"] == 1, "the lost file sent the detector through its retry branch"
 
     def test_wait_timeout_continue(self, monkeypatch: pytest.MonkeyPatch) -> None:
         holder: list[Any] = []

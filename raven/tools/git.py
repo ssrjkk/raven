@@ -15,7 +15,11 @@ def _get_git() -> GitIntegration:
 
 
 def _confined_workspace(workspace: str) -> Path:
-    """Resolve a tool-supplied repo path; a repo outside the workspace root is refused, not redirected."""
+    """Resolve a tool-supplied repo path; a repo outside the workspace root is refused, not redirected.
+
+    Containment only, with no credential name table: this argument names a repository directory that
+    `git` is asked to run in, not a file whose contents reach a prompt.
+    """
     base = workspace_root()
     target = Path(workspace).expanduser().resolve()
     try:

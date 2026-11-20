@@ -140,7 +140,7 @@ the two: it does not open the system temp directory. A path outside the root rai
 
 A refused call answers `[denied] ...` with `isError: true` over JSON-RPC and HTTP 403 on
 `POST /mcp/tools/{name}`. The one thing MCP does not inherit is `TOOLS_PROFILE`: the named
-profiles list plugin tool names (`files.read`, `api.http_get`), this registry serves `read`
+profiles list plugin tool names (`api.http_get`, `memory.recall`), this registry serves `read`
 and `http_get`, and an allow-list of names that can never match reads as a blanket refuse.
  The orchestrator builds the same policy with `profile="full"` for the same reason.
 
