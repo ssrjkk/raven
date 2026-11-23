@@ -16,6 +16,15 @@ _MAX_CONNECT_RETRIES = 3
 _CONNECT_RETRY_DELAY_S = 2.0
 
 
+def _postgres_timestamp(value: datetime) -> datetime:
+    """asyncpg expects naive UTC for TIMESTAMP WITHOUT TIME ZONE columns."""
+    return value.astimezone(UTC).replace(tzinfo=None) if value.tzinfo else value
+
+
+def _utc_datetime(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
 class _PostgresMigrator:
     def __init__(self, db: PostgresDatabase):
         self.db = db
@@ -217,8 +226,8 @@ class PostgresDatabase:
                 user_id,
                 agent_id,
                 "[]",
-                now,
-                now,
+                _postgres_timestamp(now),
+                _postgres_timestamp(now),
             )
             row = await conn.fetchrow("SELECT * FROM sessions WHERE id = $1", session_id)
         if row:
@@ -236,8 +245,8 @@ class PostgresDatabase:
                 agent_id=row["agent_id"] or "default",
                 agent_skills=skills,
                 system_prompt=row["system_prompt"],
-                created_at=created if isinstance(created, datetime) else datetime.now(UTC),
-                updated_at=updated if isinstance(updated, datetime) else datetime.now(UTC),
+                created_at=_utc_datetime(created) if isinstance(created, datetime) else datetime.now(UTC),
+                updated_at=_utc_datetime(updated) if isinstance(updated, datetime) else datetime.now(UTC),
             )
         now2 = datetime.now(UTC)
         session = Session(
@@ -253,8 +262,8 @@ class PostgresDatabase:
                 session.user_id,
                 session.agent_id,
                 json.dumps(session.agent_skills),
-                session.created_at,
-                session.updated_at,
+                _postgres_timestamp(session.created_at),
+                _postgres_timestamp(session.updated_at),
             )
         return session
 
@@ -270,11 +279,11 @@ class PostgresDatabase:
                 msg.role,
                 msg.content,
                 json.dumps(msg.metadata),
-                msg.created_at,
+                _postgres_timestamp(msg.created_at),
             )
             await conn.execute(
                 "UPDATE sessions SET updated_at = $1 WHERE id = $2",
-                datetime.now(UTC),
+                _postgres_timestamp(datetime.now(UTC)),
                 msg.session_id,
             )
 
@@ -296,7 +305,9 @@ class PostgresDatabase:
                     role=row["role"],
                     content=row["content"],
                     metadata=json.loads(metadata_raw) if metadata_raw else {},
-                    created_at=row["created_at"] if isinstance(row["created_at"], datetime) else datetime.now(UTC),
+                    created_at=_utc_datetime(row["created_at"])
+                    if isinstance(row["created_at"], datetime)
+                    else datetime.now(UTC),
                 )
             )
         return result
@@ -370,8 +381,8 @@ class PostgresDatabase:
                     agent_id=r["agent_id"] or "default",
                     agent_skills=skills,
                     system_prompt=r["system_prompt"],
-                    created_at=created if isinstance(created, datetime) else datetime.now(UTC),
-                    updated_at=updated if isinstance(updated, datetime) else datetime.now(UTC),
+                    created_at=_utc_datetime(created) if isinstance(created, datetime) else datetime.now(UTC),
+                    updated_at=_utc_datetime(updated) if isinstance(updated, datetime) else datetime.now(UTC),
                 )
             )
         return result
@@ -419,11 +430,11 @@ class PostgresDatabase:
                     m.role,
                     m.content,
                     json.dumps(m.metadata),
-                    m.created_at,
+                    _postgres_timestamp(m.created_at),
                 )
 
     async def save_secret(self, key: str, value_enc: str):
-        now = datetime.now(UTC)
+        now = _postgres_timestamp(datetime.now(UTC))
         async with self._p.acquire() as conn:
             await conn.execute(
                 "INSERT INTO secrets (key, value_enc, updated_at) VALUES ($1, $2, $3) "
