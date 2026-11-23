@@ -101,6 +101,24 @@ async def test_apply_pending_catches_a_migration_added_below_the_max(db_path):
     await db.close()
 
 
+@pytest.mark.asyncio
+async def test_migration_13_creates_analytics_snapshots_and_indexes(db_path):
+    mig13 = next(m for m in _MIGRATIONS if m.version == 13)
+    assert mig13.migrate_fn is not None
+    db = SQLiteDB(db_path)
+    await db.connect()
+    await mig13.migrate_fn(db)
+    await db.commit()
+
+    table = await db.fetchone("SELECT name FROM sqlite_master WHERE type='table' AND name='analytics_snapshots'")
+    indexes = await db.fetchall("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='analytics_snapshots'")
+    await db.close()
+
+    assert table is not None
+    assert table[0] == "analytics_snapshots"
+    assert {"idx_analytics_snapshots_ts", "idx_analytics_snapshots_name"} <= {row[0] for row in indexes}
+
+
 def test_register_rejects_a_duplicate_version():
     from raven.core.migrations import register
 
