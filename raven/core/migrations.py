@@ -505,6 +505,34 @@ async def _migration_12(db: AsyncDB) -> None:
     logger.warning("Revoked {} session(s): they were stored as plaintext bearer tokens", outstanding or 0)
 
 
+@register(13, "Create analytics snapshots table")
+async def _migration_13(db: AsyncDB) -> None:
+    if db.dialect == "postgresql":
+        await db.run_script(
+            """
+            CREATE TABLE IF NOT EXISTS analytics_snapshots (
+                id BIGSERIAL PRIMARY KEY,
+                ts BIGINT NOT NULL,
+                metric_name TEXT NOT NULL,
+                metric_value DOUBLE PRECISION NOT NULL
+            )
+            """
+        )
+    else:
+        await db.run_script(
+            """
+            CREATE TABLE IF NOT EXISTS analytics_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts INTEGER NOT NULL,
+                metric_name TEXT NOT NULL,
+                metric_value REAL NOT NULL
+            )
+            """
+        )
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_ts ON analytics_snapshots(ts)")
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_name ON analytics_snapshots(metric_name)")
+
+
 async def apply_pending_migrations(db: AsyncDB) -> None:
     table = MIGRATIONS_TABLE_POSTGRES if db.dialect == "postgresql" else MIGRATIONS_TABLE_SQLITE
     await db.execute(table)
