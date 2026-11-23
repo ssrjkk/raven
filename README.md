@@ -244,6 +244,9 @@ tail -f data/raven.log
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 - [License](LICENSE)
+- [Changelog](CHANGELOG.md)
+- [Docs](https://ssrjkk.github.io/raven/docs/)
+- [Security overview](https://ssrjkk.github.io/raven/security.html)
 
 ## Contact
 
