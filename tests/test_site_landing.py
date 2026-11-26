@@ -39,6 +39,7 @@ from html.parser import HTMLParser
 from itertools import pairwise
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import urlparse
 
 import pytest
 import yaml
@@ -1404,11 +1405,15 @@ def test_documentation_loads_no_third_party_font() -> None:
     assert mkdocs_config()["theme"].get("font") is False
     assert "fonts.googleapis.com" not in read(MKDOCS_YML)
     for doc in sorted((ROOT / "docs").rglob("*.md")):
-        offenders = [
-            line.strip()[:120]
-            for line in read(doc).splitlines()
-            if "fonts.googleapis.com" in line and re.search(r"(?:href|src)=|[\"'(]@import|url\(", line)
-        ]
+        offenders = []
+        for line in read(doc).splitlines():
+            refs = re.findall(
+                r"(?:href|src)\s*=\s*[\"']([^\"']+)[\"']|@import\s+(?:url\()?\s*[\"']([^\"']+)[\"']|url\(\s*[\"']?([^\"')]+)",
+                line,
+                flags=re.IGNORECASE,
+            )
+            if any(urlparse(next(part for part in ref if part)).hostname == "fonts.googleapis.com" for ref in refs):
+                offenders.append(line.strip()[:120])
         assert offenders == [], (doc, offenders)
 
 
