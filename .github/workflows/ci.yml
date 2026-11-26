@@ -264,6 +264,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
+      id-token: write
 
     services:
       postgres:
@@ -322,9 +323,9 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
           files: ./coverage-e2e.xml
-          fail_ci_if_error: false
+          fail_ci_if_error: true
           verbose: true
 
   security:
