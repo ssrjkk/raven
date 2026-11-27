@@ -111,7 +111,7 @@ export default function Login() {
           >
             R
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">Raven AI</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Raven</h1>
           <p className="text-sm text-tertiary">
             {isRegister ? "Create an account" : "Sign in to your account"}
           </p>

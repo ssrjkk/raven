@@ -1,11 +1,11 @@
 {
-  "name": "Raven AI",
+  "name": "Raven",
   "short_name": "Raven",
-  "description": "Self-hosted corporate AI assistant — 12 messengers, RAG, monitors, coding tools, RBAC",
+  "description": "Self-hosted MCP server with 66 tools, a request console and a focused operator workspace.",
   "start_url": "/?source=pwa",
   "display": "standalone",
-  "background_color": "#0f1117",
-  "theme_color": "#0f1117",
+  "background_color": "#0a0812",
+  "theme_color": "#0a0812",
   "orientation": "any",
   "categories": ["productivity", "business", "developer tools"],
   "icons": [

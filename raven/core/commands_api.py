@@ -49,7 +49,7 @@ class ThemeScheme(BaseModel):
 
 
 _HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
-_DEFAULT_ACCENT = "#7c3aed"
+_DEFAULT_ACCENT = "#8b5cf6"
 _DATA_DIR_OVERRIDE: str | None = None
 
 

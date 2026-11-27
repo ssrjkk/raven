@@ -26,7 +26,7 @@ class TestThemeEndpoints:
 
         response = client.get("/api/v1/commands/theme")
         assert response.status_code == 200
-        assert response.json() == {"accentColor": "#7c3aed"}
+        assert response.json() == {"accentColor": "#8b5cf6"}
 
     def test_save_theme_persists(self, tmp_path):
         from fastapi import FastAPI

@@ -16,7 +16,7 @@ type ThemeContextValue = {
   resetScheme: () => void;
 };
 
-const DEFAULT_ACCENT = "#7c3aed";
+const DEFAULT_ACCENT = "#8b5cf6";
 
 const THEME_ORDER: Theme[] = ["dark", "light", "midnight"];
 

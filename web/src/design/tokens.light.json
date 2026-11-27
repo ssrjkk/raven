@@ -4,35 +4,35 @@
   "version": "1.0.0",
   "colors": {
     "bg": {
-      "primary": "#f6f7fb",
+      "primary": "#f7f5fb",
       "secondary": "#ffffff",
-      "tertiary": "#eef0f6",
-      "hover": "#e7e9f1",
-      "active": "#dde0ea",
-      "inverse": "#0f1117"
+      "tertiary": "#efeaf7",
+      "hover": "#e7e0f2",
+      "active": "#ddd3ed",
+      "inverse": "#0a0812"
     },
     "surface": {
       "default": "#ffffff",
-      "elevated": "#f1f3f8",
+      "elevated": "#f7f5fb",
       "card": "#ffffff",
-      "tooltip": "#1a1d2e",
+      "tooltip": "#1a1226",
       "modal": "#ffffff",
-      "inset-highlight": "rgba(0, 0, 0, 0.04)"
+      "inset-highlight": "rgba(22, 18, 31, 0.04)"
     },
     "accent": {
       "default": "#7c3aed",
       "hover": "#6d28d9",
       "active": "#5b21b6",
-      "muted": "rgba(124, 58, 237, 0.1)",
-      "subtle": "rgba(124, 58, 237, 0.05)"
+      "muted": "rgba(124, 58, 237, 0.12)",
+      "subtle": "rgba(124, 58, 237, 0.06)"
     },
     "text": {
-      "primary": "#17171d",
-      "secondary": "#52525c",
-      "tertiary": "#707080",
+      "primary": "#16121f",
+      "secondary": "#5c5468",
+      "tertiary": "#746b80",
       "inverse": "#ffffff",
-      "link": "#7c3aed",
-      "link-hover": "#6d28d9",
+      "link": "#6d28d9",
+      "link-hover": "#5b21b6",
       "on-status-success": "#ffffff",
       "on-status-warning": "#ffffff",
       "on-status-error": "#ffffff",
@@ -40,15 +40,15 @@
       "on-accent": "#ffffff"
     },
     "border": {
-      "default": "#e5e7ee",
-      "hover": "#d3d6e0",
+      "default": "rgba(22, 18, 31, 0.10)",
+      "hover": "rgba(22, 18, 31, 0.18)",
       "focus": "#7c3aed",
-      "muted": "#f0f1f6"
+      "muted": "rgba(22, 18, 31, 0.06)"
     },
     "status": {
-      "success": "#12833c",
-      "warning": "#996803",
-      "error": "#dc2626",
+      "success": "#0f7536",
+      "warning": "#805600",
+      "error": "#c81e1e",
       "info": "#2563eb",
       "success-bg": "rgba(18, 131, 60, 0.08)",
       "warning-bg": "rgba(153, 104, 3, 0.08)",
@@ -57,8 +57,8 @@
     },
     "chart": {
       "series-1": "#7c3aed",
-      "series-2": "#d946ef",
-      "series-3": "#059db6",
+      "series-2": "#be13d8",
+      "series-3": "#048197",
       "series-4": "#1ca44e",
       "series-5": "#b28806",
       "series-6": "#e56a14",
@@ -91,7 +91,7 @@
       "scrim": "rgba(0, 0, 0, 0.45)"
     },
     "skeleton": {
-      "highlight": "rgba(0, 0, 0, 0.06)"
+      "highlight": "rgba(22, 18, 31, 0.06)"
     }
   },
   "spacing": {
@@ -105,8 +105,9 @@
   },
   "typography": {
     "font-family": {
-      "sans": "\"Inter\", system-ui, -apple-system, sans-serif",
-      "mono": "\"JetBrains Mono\", \"Fira Code\", monospace"
+      "sans": "\"IBM Plex Sans\", ui-sans-serif, system-ui, \"Segoe UI\", sans-serif",
+      "display": "\"Space Grotesk\", \"IBM Plex Sans\", ui-sans-serif, system-ui, sans-serif",
+      "mono": "\"IBM Plex Mono\", ui-monospace, \"Cascadia Mono\", Consolas, monospace"
     },
     "font-size": {
       "xs": "0.75rem",
@@ -131,30 +132,30 @@
   },
   "border-radius": {
     "none": "0",
-    "sm": "0.25rem",
-    "md": "0.5rem",
-    "lg": "0.75rem",
-    "xl": "1rem",
+    "sm": "0.125rem",
+    "md": "0.25rem",
+    "lg": "0.375rem",
+    "xl": "0.625rem",
     "full": "9999px"
   },
   "shadow": {
-    "sm": "0 1px 2px 0 rgba(16, 18, 27, 0.05)",
-    "md": "0 4px 8px -1px rgba(16, 18, 27, 0.07)",
-    "lg": "0 10px 18px -3px rgba(16, 18, 27, 0.08)",
-    "xl": "0 24px 32px -8px rgba(16, 18, 27, 0.1)",
-    "glow-accent": "0 0 12px rgba(124, 58, 237, 0.2)",
-    "float": "0 4px 16px rgba(15, 17, 23, 0.16)"
+    "sm": "0 1px 2px rgba(22,18,31,.05)",
+    "md": "0 8px 24px rgba(22,18,31,.08)",
+    "lg": "0 18px 48px rgba(22,18,31,.10)",
+    "xl": "0 28px 72px rgba(22,18,31,.12)",
+    "glow-accent": "0 0 16px rgba(124,58,237,.16)",
+    "float": "0 8px 24px rgba(22,18,31,.12)"
   },
   "animation": {
     "duration": {
-      "fast": "150ms",
-      "normal": "250ms",
-      "slow": "400ms"
+      "fast": "160ms",
+      "normal": "320ms",
+      "slow": "620ms"
     },
     "easing": {
-      "default": "cubic-bezier(0.4, 0, 0.2, 1)",
+      "default": "cubic-bezier(0.16, 1, 0.3, 1)",
       "in": "cubic-bezier(0.4, 0, 1, 1)",
-      "out": "cubic-bezier(0, 0, 0.2, 1)",
+      "out": "cubic-bezier(0.16, 1, 0.3, 1)",
       "spring": "cubic-bezier(0.34, 1.56, 0.64, 1)"
     }
   },

@@ -44,9 +44,11 @@ export default function PWAInstallPrompt() {
       }}
     >
       <div className="flex items-center gap-3 mb-3">
-        <span className="text-2xl">📲</span>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 17v3h14v-3" />
+        </svg>
         <div>
-          <div className="font-medium">Install Raven AI</div>
+          <div className="font-medium">Install Raven</div>
           <div className="text-tertiary">
             Add to home screen for the best experience
           </div>

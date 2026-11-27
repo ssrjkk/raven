@@ -604,6 +604,33 @@ def test_token_files_validate_against_their_schema() -> None:
         assert data["colors"]["chart"], f"{theme} declares no chart series"
 
 
+def test_web_console_uses_the_landing_brand_tokens() -> None:
+    css = _site_css()
+
+    def site_var(name: str) -> str:
+        match = re.search(rf"{re.escape(name)}:\s*([^;]+);", css)
+        assert match, f"landing declares no {name}"
+        return match.group(1).strip()
+
+    dark = json.loads((DESIGN / "tokens.json").read_text(encoding="utf-8"))
+    colors = dark["colors"]
+    assert colors["bg"]["primary"] == site_var("--bg")
+    assert colors["bg"]["secondary"] == site_var("--bg-panel")
+    assert colors["bg"]["tertiary"] == site_var("--bg-card")
+    assert colors["surface"]["card"] == site_var("--bg-card")
+    assert colors["text"]["primary"] == site_var("--ink")
+    assert colors["text"]["secondary"] == site_var("--ink-mute")
+    assert colors["accent"]["default"] == site_var("--violet-surface")
+    assert colors["accent"]["hover"] == site_var("--violet-deep")
+    assert colors["text"]["link"] == site_var("--violet-text")
+    assert colors["brand"]["secondary"] == site_var("--fuchsia")
+    fonts = dark["typography"]["font-family"]
+    assert "Space Grotesk" in fonts["display"]
+    assert "IBM Plex Sans" in fonts["sans"]
+    assert "IBM Plex Mono" in fonts["mono"]
+    assert float(dark["border-radius"]["lg"].removesuffix("rem")) * 16 == float(site_var("--radius").removesuffix("px"))
+
+
 def test_shipped_iframes_are_sandboxed_without_a_self_escape() -> None:
     """allow-scripts together with allow-same-origin hands the embedder its own origin back."""
     offenders: list[str] = []
