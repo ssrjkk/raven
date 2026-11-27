@@ -149,7 +149,7 @@ def test_spa_fonts_are_vendored_with_a_cyrillic_subset() -> None:
         found = re.search(r"font-family: '([^']+)'", rule)
         assert found is not None
         families.add(found.group(1))
-    assert families == {"Inter", "JetBrains Mono"}, "the cyrillic subset must cover both families"
+    assert families == {"IBM Plex Sans", "IBM Plex Mono"}, "the cyrillic subset must cover both families"
 
 
 def test_extension_manifest_forbids_remote_and_inline_code() -> None:
